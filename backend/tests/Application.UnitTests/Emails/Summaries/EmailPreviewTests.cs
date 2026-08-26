@@ -49,17 +49,41 @@ public sealed class EmailPreviewTests
     }
 
     /// <summary>Collapsing shortens a preview and never lengthens one, which is what makes the bound a ceiling rather than a size.</summary>
+    /// <remarks>
+    /// The arrangement is longer than the bound before its whitespace is collapsed and shorter than it afterwards, so a
+    /// preview that arrived cut would fail here while the test above still passed.
+    /// </remarks>
     [Fact]
-    public void Bounded_TextAtTheBoundCarryingWhitespace_StaysInsideIt()
+    public void Bounded_TextThatOnlyCollapsingBringsInsideTheBound_IsNotCutAtAll()
     {
         // Arrange
-        var body = string.Join("\n", Enumerable.Repeat("word", EmailPreview.MaximumCharacters / 2));
+        const int wordCount = 40;
+        var words = Enumerable.Repeat("word", wordCount).ToArray();
+        var body = string.Join("  \r\n  ", words);
 
         // Act
         var preview = EmailPreview.Bounded(body);
 
         // Assert
-        Assert.NotNull(preview);
-        Assert.True(preview.Length <= EmailPreview.MaximumCharacters);
+        Assert.True(body.Length > EmailPreview.MaximumCharacters);
+        Assert.Equal(string.Join(' ', words), preview);
+    }
+
+    /// <summary>
+    /// The query cuts in codepoints, so the text this receives can hold more UTF-16 characters than the bound and the
+    /// bound can fall between the two halves of one of them.
+    /// </summary>
+    [Fact]
+    public void Bounded_TextWhoseBoundFallsInsideACharacter_CutsBeforeItRatherThanThroughIt()
+    {
+        // Arrange
+        var opening = new string('a', EmailPreview.MaximumCharacters - 1);
+        var body = $"{opening}\U0001F642tail";
+
+        // Act
+        var preview = EmailPreview.Bounded(body);
+
+        // Assert
+        Assert.Equal(opening, preview);
     }
 }

@@ -254,6 +254,12 @@ every filter it considered rather than for the rows it returned.
 It reads the trimmed text rather than the untrimmed reading beside it, because quoted history and a signature block are
 what the opening two hundred characters of a reply would otherwise be.
 
+The bound is then applied again where the text is reflowed, and it is applied on a character boundary rather than at an
+index. PostgreSQL counts its own cut in codepoints, so a message carrying an emoji arrives with more UTF-16 characters
+than were asked for; cutting that by index would end inside one character and publish half of it, which a JSON writer
+refuses to serialize. Collapsing only ever shortens what arrived, so a preview shorter than the bound is a message that
+was wrapped rather than one that was cut.
+
 **The bound is fixed rather than configured**, and it is a data-minimization control before it is a display decision: a
 caller who could raise it could lift what limits how much mail one page draws out. Being the message's own text, a
 preview is scanned wherever a sensitive-content scanner is switched on, at the `client_mail_listing` egress point

@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Emails;
+
 namespace MailFathom.Application.Emails.Summaries;
 
 /// <summary>The bounded extract of a message's own text that a list row shows under its subject.</summary>
@@ -36,7 +38,11 @@ public static class EmailPreview
     /// two hundred characters of line breaks. That makes a preview shorter than the bound rather than longer, which is
     /// why the cut belongs to the query and this belongs here: the query is what keeps a body out of this process, and
     /// reflowing what it returned cannot put one back. The bound is applied here as well, because a control that holds
-    /// only while every query asks for the right number of characters is not a control.
+    /// only while every query asks for the right number of characters is not a control — and it is applied through
+    /// <see cref="MailTextBounds.TruncateAtTextElementBoundary" /> rather than by index, because PostgreSQL counts its
+    /// own cut in codepoints and can therefore answer with more UTF-16 characters than were asked for. A raw slice of
+    /// that would end inside a surrogate pair, and the lone surrogate left behind is what a JSON writer rejects on the
+    /// way out of this boundary.
     /// </remarks>
     public static string? Bounded(string? text)
     {
@@ -47,6 +53,6 @@ public static class EmailPreview
 
         var collapsed = string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
-        return collapsed.Length <= MaximumCharacters ? collapsed : collapsed[..MaximumCharacters];
+        return MailTextBounds.TruncateAtTextElementBoundary(collapsed, MaximumCharacters);
     }
 }
