@@ -247,13 +247,27 @@ carrying *more* migrations than a build defines has no pending migration for tha
 version keeps serving. What it does not do is use the new columns, which is why the window is a rollout rather than a
 resting state.
 
-**Two migrations narrow that window rather than closing it.** `AddOwnerAccounts` makes the owner of a mail account a
+**Three migrations narrow that window rather than closing it.** `AddOwnerAccounts` makes the owner of a mail account a
 required column, and a build older than the release carrying it does not know the column exists — so against this
 schema such a build serves the mail already stored and still fails the moment it has to bind a folder for an account it
 has never synchronized, because the row it writes states no owner. `AddContactOwner` does the same for the contact
 book: an older build reads and amends the contacts already stored and fails the moment it records a new person or adds
-an address, because the row it writes states no owner either. Keep the middle of the rollout short on these releases,
-and do not treat a previous image as something that can be left running against them.
+an address, because the row it writes states no owner either. `KeyMailAccountByOwnerAndIdentifier` moves the owner into
+seven primary keys, and the one an older build writes through by name is the sealed OAuth refresh token: its upsert
+names the account identifier as the conflict target, no unique constraint matches that column alone any more, and the
+statement is refused — so a rotation an older build receives against this schema is logged as a failure to store rather
+than stored. Keep the middle of the rollout short on these releases, and do not treat a previous image as something
+that can be left running against them.
+
+**`KeyMailAccountByOwnerAndIdentifier` also asks one thing of you after the rollout: authorize every OAuth mailbox
+again.** A sealed refresh token is bound to the account it was stored for, and the account is now the owner and the
+identifier together rather than the identifier alone — so a token sealed by an earlier release no longer opens, and the
+account answers as though its stored grant had been rejected. The repair is the ordinary one and needs no database
+access: `mfctl mailbox authorize --account <id>` for each of them, as [mailbox OAuth](mailbox-oauth.md#rotation)
+describes. Nothing else in the migration touches data — no column is added, dropped, or filled, and no table is
+rewritten. What it costs while it runs is an index rebuild per key it moves and a brief `ACCESS EXCLUSIVE` lock on each
+of the seven tables; only `email_thread_identifiers` is proportional to the size of the mail corpus, and the rest are
+proportional to the number of accounts.
 
 ## When the host refuses to start
 

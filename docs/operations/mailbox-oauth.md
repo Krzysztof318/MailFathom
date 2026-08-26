@@ -300,10 +300,15 @@ longer accepts, and it needs no database access and no restart: the next token r
 $ mfctl mailbox authorize --provider google --client-id <client-id> --account workspace
 ```
 
-To make an account fall back to its configured reference instead, delete its row with any PostgreSQL client:
+To make an account fall back to its configured reference instead, delete its row with any PostgreSQL client. A stored
+token is held per owner and account rather than per account identifier — an identifier names one mailbox within the
+owner who declared it — so the statement names both, and reading the owner out of `settings_accounts` refuses rather
+than guesses if a deployment ever holds more than one:
 
 ```sql
-DELETE FROM mailbox_refresh_tokens WHERE "MailboxAccountId" = 'workspace';
+DELETE FROM mailbox_refresh_tokens
+WHERE "MailboxAccountId" = 'workspace'
+  AND "OwnerId" = (SELECT "Id" FROM settings_accounts);
 ```
 
 The next token request then reads the reference again, and stores whatever the authorization server rotates to next.

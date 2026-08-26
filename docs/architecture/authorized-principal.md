@@ -66,8 +66,10 @@ section below.
 **Work that runs for nobody still has to know whose mail it touches.** Synchronization and embedding are performed
 under this process's own identity, which carries no owner by construction — so a bound stated per owner cannot be read
 off the principal, and asking `RequireOwner` there would refuse the work rather than answer it. `IMailOwnership` is what
-answers instead: it resolves the owner of a mail account or of a stored message from the mail graph, where ownership
-lives on the account row, and it is the only way to reach that fact without a caller. Reading it is not an authorization
+answers instead: it resolves the owner of a stored message from the mail graph, where ownership lives on the row itself,
+and it is the only way to reach that fact without a caller. It has nothing to resolve an owner *from an account* with,
+and deliberately so — an account identifier names one mailbox within its owner rather than across the deployment, so a
+question that names the identifier alone has no single answer, and whoever holds the account already holds the pair. Reading it is not an authorization
 decision and grants nothing — a worker was already admitted by name — and it is deliberately not a way for a caller to
 act for somebody else, because nothing published to a caller consults it.
 

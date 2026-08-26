@@ -22,7 +22,9 @@ internal sealed class MailboxRefreshTokenConfiguration : IEntityTypeConfiguratio
     public void Configure(EntityTypeBuilder<MailboxRefreshTokenEntity> entity)
     {
         entity.ToTable("mailbox_refresh_tokens");
-        entity.HasKey(token => token.MailboxAccountId);
+        // One token per account, and an account is the owner and the identifier together — so the key is the pair
+        // rather than the identifier, which names one mailbox within its owner and another within the next.
+        entity.HasKey(token => new { token.OwnerId, token.MailboxAccountId });
         entity.Property(token => token.MailboxAccountId).HasMaxLength(128).ValueGeneratedNever();
         entity.Property(token => token.SealedRefreshToken).HasColumnType("bytea").IsRequired();
         entity.Property(token => token.DataEncryptionKeyId)

@@ -310,8 +310,17 @@ public sealed class MailSynchronizationOptionsTests
         Assert.Equal(MailAccountId.Create("primary"), Assert.Single(ConfiguredMailAccounts.CatalogOver(options).ServedAccounts).Id);
     }
 
-    [Fact]
-    public void ValidateForSynchronization_AccountIdsDifferingOnlyByNormalization_ReportsThemAsDuplicates()
+    /// <summary>Two spellings of one identifier are one account's name written twice, and the owner may hold it once.</summary>
+    /// <remarks>
+    /// Case joins the whitespace the identifier is already normalized of, because the shared naming space it belongs
+    /// to is compared without regard to case: a display name colliding with an identifier is refused that way, and two
+    /// identifiers differing only in case would leave the same ambiguity in the half this owns.
+    /// </remarks>
+    [Theory]
+    [InlineData("  primary  ")]
+    [InlineData("PRIMARY")]
+    public void ValidateForSynchronization_AccountIdsDifferingOnlyByNormalizationOrCase_ReportsThemAsDuplicates(
+        string secondSpelling)
     {
         // Arrange
         var options = new MailSynchronizationOptions
@@ -319,7 +328,7 @@ public sealed class MailSynchronizationOptionsTests
             Accounts =
             [
                 CreateAccount("primary"),
-                CreateAccount("  primary  "),
+                CreateAccount(secondSpelling),
             ],
         };
 
@@ -327,7 +336,32 @@ public sealed class MailSynchronizationOptionsTests
         var results = options.ValidateForSynchronization().ToArray();
 
         // Assert
-        Assert.Contains(results, result => result.ErrorMessage!.Contains("unique after normalization", StringComparison.Ordinal));
+        Assert.Contains(
+            results,
+            result => result.ErrorMessage!.Contains("names one mailbox within its owner", StringComparison.Ordinal));
+    }
+
+    /// <summary>Two accounts whose identifiers genuinely differ are two mailboxes, and nothing is reported about them.</summary>
+    [Fact]
+    public void ValidateForSynchronization_DistinctAccountIds_ReportsNoDuplicate()
+    {
+        // Arrange
+        var options = new MailSynchronizationOptions
+        {
+            Accounts =
+            [
+                CreateAccount("primary"),
+                CreateAccount("secondary"),
+            ],
+        };
+
+        // Act
+        var results = options.ValidateForSynchronization().ToArray();
+
+        // Assert
+        Assert.DoesNotContain(
+            results,
+            result => result.ErrorMessage!.Contains("names one mailbox within its owner", StringComparison.Ordinal));
     }
 
     [Fact]

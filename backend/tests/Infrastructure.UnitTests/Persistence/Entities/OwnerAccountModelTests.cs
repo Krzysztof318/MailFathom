@@ -37,20 +37,29 @@ public sealed class OwnerAccountModelTests
     }
 
     /// <summary>
-    /// The index the owner column carries, stated with the read that uses it: which mail accounts one owner owns, which
-    /// erasing an owner asks before taking the rows no cascade reaches.
+    /// The account is keyed by its owner and the identifier its operator chose, so the identifier names one mailbox
+    /// within its owner and nothing across the deployment.
     /// </summary>
+    /// <remarks>
+    /// The key is also the structure the read that used to need an index of its own is served from — which mail
+    /// accounts one owner owns, which erasing an owner asks before taking the rows no cascade reaches — so the model
+    /// declares no separate index over the owner and this asserts that it does not.
+    /// </remarks>
     [Fact]
-    public void MailboxAccountModel_OwnerIndex_CoversTheOwnersOwnAccounts()
+    public void MailboxAccountModel_Key_IsTheOwnerAndTheIdentifierAndCoversTheOwnersOwnAccounts()
     {
         // Arrange
         using var context = CreateContext();
+        var entityType = EntityTypeOf<MailboxAccountEntity>(context);
 
         // Act
-        var index = Assert.Single(EntityTypeOf<MailboxAccountEntity>(context).GetIndexes());
+        var key = entityType.FindPrimaryKey();
 
         // Assert
-        Assert.Equal(["OwnerId"], index.Properties.Select(property => property.Name));
+        Assert.NotNull(key);
+        Assert.Equal(["OwnerId", "Id"], key.Properties.Select(property => property.Name));
+        Assert.Equal(PersistenceConstraintNames.MailboxAccountPrimaryKeyConstraintName, key.GetName());
+        Assert.Empty(entityType.GetIndexes());
     }
 
     /// <summary>One row per owner, keyed by an identity whoever provisions the owner decides.</summary>

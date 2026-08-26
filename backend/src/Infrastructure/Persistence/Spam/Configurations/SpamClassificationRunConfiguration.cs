@@ -20,7 +20,10 @@ internal sealed class SpamClassificationRunConfiguration : IEntityTypeConfigurat
     public void Configure(EntityTypeBuilder<SpamClassificationRunEntity> entity)
     {
         entity.ToTable("spam_classification_runs");
-        entity.HasKey(run => run.MailboxAccountId).HasName(PersistenceConstraintNames.SpamClassificationRunPrimaryKeyConstraintName);
+        // One row per account, and an account is its owner and its identifier together: the key leads with the owner
+        // so that one person's outstanding run does not stand in for another person's mailbox of the same name.
+        entity.HasKey(run => new { run.OwnerId, run.MailboxAccountId })
+            .HasName(PersistenceConstraintNames.SpamClassificationRunPrimaryKeyConstraintName);
         entity.Property(run => run.MailboxAccountId).HasMaxLength(128).ValueGeneratedNever();
         entity.Property(run => run.FolderAliases).IsRequired();
         entity.Property(run => run.Posture).HasConversion<string>().HasMaxLength(64).IsRequired();

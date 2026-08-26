@@ -20,7 +20,10 @@ internal sealed class MailRederivationPositionConfiguration : IEntityTypeConfigu
     public void Configure(EntityTypeBuilder<MailRederivationPositionEntity> entity)
     {
         entity.ToTable("mail_rederivation_positions");
-        entity.HasKey(position => new { position.MailboxAccountId, position.FolderAlias })
+        // The owner leads the key for the reason it leads every other structure an account identifier appears in:
+        // the identifier names one mailbox within its owner, so a cursor keyed without it would have two owners'
+        // walks of their own `work` share one row.
+        entity.HasKey(position => new { position.OwnerId, position.MailboxAccountId, position.FolderAlias })
             .HasName(PersistenceConstraintNames.MailRederivationPositionPrimaryKeyConstraintName);
         entity.Property(position => position.MailboxAccountId).HasMaxLength(128);
         entity.Property(position => position.FolderAlias).HasMaxLength(128);

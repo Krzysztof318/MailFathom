@@ -59,8 +59,11 @@ internal static class MailFolderEntityResolver
         MailFolderResolution resolution,
         CancellationToken cancellationToken)
     {
-        // The account is keyed by the identifier itself, so FindAsync already resolves a pending insert without a query.
-        var accountRow = await dbContext.MailboxAccounts.FindAsync([account.Id.Value], cancellationToken);
+        // The account is keyed by the identity itself, so FindAsync already resolves a pending insert without a query.
+        // The key is the owner and the identifier in that order, which is the order MailAccountIdentity states them in.
+        var accountRow = await dbContext.MailboxAccounts.FindAsync(
+            [account.Owner.Value, account.Id.Value],
+            cancellationToken);
 
         // The row is composed rather than looked up when it is not there yet, and the owner comes from the identity the
         // caller resolved the account through rather than from a read of the deployment's owner record. That is what

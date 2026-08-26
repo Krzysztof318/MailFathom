@@ -73,7 +73,7 @@ public sealed class StoredEmailTombstoneTests
 
     private static StoredEmailEntity CreateEmail()
     {
-        var account = new MailboxAccountEntity { Id = "personal" };
+        var account = new MailboxAccountEntity { OwnerId = SyntheticMailOwner.Deployment.Value, Id = "personal" };
 
         return new StoredEmailEntity
         {

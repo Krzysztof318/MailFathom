@@ -16,10 +16,9 @@ namespace MailFathom.Infrastructure.Persistence.Owners;
 /// owner's own configurable record, and nothing that asks how many owners there are has any business materializing one.
 /// </para>
 /// <para>
-/// The order is the one <see cref="OwnerAccountResolver" /> reads in, so "the first owner" means the same owner to both.
-/// They stay two readers because they answer differently and run in different places: that one runs inside the caller's
-/// transaction while a folder binding is being written and refuses a deployment holding zero or several, and this one
-/// reports what is there to a caller that decides for itself what to do about the count.
+/// The order is by the instant an owner was recorded, so "the first owner" is a stable answer rather than whichever
+/// row the database returned first. What a caller does about the count is theirs to decide: this reports what is
+/// there, and the startup gate is what refuses a deployment holding none or several.
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]

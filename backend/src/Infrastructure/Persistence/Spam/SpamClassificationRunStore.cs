@@ -69,7 +69,7 @@ internal sealed class SpamClassificationRunStore(MailFathomDbContext dbContext) 
 
         var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var stored = await sessionContext.SpamClassificationRuns.FindAsync(
-            [run.AccountId.Value],
+            [run.Account.Owner.Value, run.Account.Id.Value],
             cancellationToken);
 
         if (stored is null)

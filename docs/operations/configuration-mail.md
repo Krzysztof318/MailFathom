@@ -48,7 +48,7 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `…:AccountId` | string | — | Required; unique across accounts after normalization | reload |
+| `…:AccountId` | string | — | Required; unique within the owner declaring it, after normalization and without regard to case | reload |
 | `…:DisplayName` | string | — | Required, with no default; at most 128 characters, no control characters, and it may not be another account's identifier or display name compared without regard to case | reload |
 | `…:Host` | string | — | Required when synchronization is enabled | reload |
 | `…:Port` | int | `993` | 1 – 65535 | reload |
@@ -157,6 +157,14 @@ There is deliberately no default, because a name MailFathom invented would be pu
 chosen it. The two share one naming space so that a name can never select two mailboxes, which is why startup refuses a
 display name that another account's identifier or display name already carries; a display name equal to the account's
 *own* identifier is fine, since both spellings then reach the same mailbox.
+
+**That naming space belongs to the owner, not to the deployment.** An account identifier names one mailbox within the
+owner who declared it, and MailFathom stores it that way — the account row is keyed by the owner and the identifier
+together — so two people served by one deployment may each call an account `work` and neither reaches the other's mail.
+Startup refuses a *repeat* within one owner, comparing after normalization and without regard to case, by the same rule
+that governs the display names beside it; it has nothing to refuse across two owners. What follows for you is that an
+identifier is only ever quoted with the owner it belongs to: a support question, a log line, or an ad-hoc SQL statement
+that names the identifier alone names a mailbox per owner rather than a mailbox.
 
 A folder entry names `Alias` (required — your stable name for the folder) and **at least one** of `RemotePath` (the
 server's own path) or `SpecialUse` (`Inbox`, `Archive`, `Drafts`, `Sent`, `Junk`, `Trash`, `All`, `Flagged`,

@@ -36,9 +36,10 @@ namespace MailFathom.IntegrationTests.Persistence;
 /// for the account.
 /// </para>
 /// <para>
-/// The identifiers are this class's own. <c>mailbox_accounts</c> still keeps a single-column key, so an identifier one
-/// owner holds is an identifier no other owner may hold — which is why the strongest form of this claim, two owners
-/// each calling an account <c>work</c>, belongs to the change that takes the key rather than to this one.
+/// The strongest form of the claim is the second test here: two owners each holding an account under one identifier,
+/// which the composite key on <c>mailbox_accounts</c> is what permits. It is stated separately because the first test
+/// gives every owner identifiers of its own, so the account term could account for the separation there and only the
+/// owner column can account for it in the second.
 /// </para>
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
@@ -69,7 +70,36 @@ public sealed class OrchestratedMailOwnershipTests(MailFathomOrchestrationFixtur
     /// </remarks>
     private const uint ServedOwnerControlUid = 60_900;
 
+    /// <summary>The alias the shared-identifier claim owns, so its two mailboxes are told from every other row here.</summary>
+    private const string SharedNameFolderAlias = "shared-account-name";
+
+    /// <summary>
+    /// The occurrence both owners store, deliberately the same UID under the same alias and the same account
+    /// identifier: what separates the two rows is the folder each owner's account bound, and nothing else.
+    /// </summary>
+    private const uint SharedNameUid = 61_000;
+
+    private const string ServedOwnerSharedNameSubject = "mail-ownership-shared-served";
+
+    private const string ForeignOwnerSharedNameSubject = "mail-ownership-shared-foreign";
+
     private const int PageSize = 50;
+
+    /// <summary>Counts one owner's stored mail of one account within one folder alias, which is the claim's narrowing.</summary>
+    /// <remarks>
+    /// Bounded by the alias as well as by the pair, because the account identifier is the deployment's own here and
+    /// the class's other test stores under it too: a count over the whole table would report those rows and say
+    /// nothing about the two this claim is over.
+    /// </remarks>
+    private const string OwnedFolderMailCountSql =
+        """
+        SELECT count(*)
+        FROM stored_emails
+        JOIN mail_folders ON mail_folders."Id" = stored_emails."MailFolderId"
+        WHERE stored_emails."OwnerId" = @ownerId
+          AND stored_emails."MailboxAccountId" = @accountId
+          AND mail_folders."Alias" = @alias
+        """;
 
     /// <summary>The subject prefix every seeded foreign message carries, which is how one is recognized in a page.</summary>
     private const string ForeignSubjectPrefix = "mail-ownership-foreign-";
@@ -132,7 +162,7 @@ public sealed class OrchestratedMailOwnershipTests(MailFathomOrchestrationFixtur
             var underTheirOwner = await CountAsync(services, foreignOwnerId, FirstForeignAccount, cancellationToken);
             var underOurs = await CountAsync(services, servedOwner.Value, FirstForeignAccount, cancellationToken);
 
-            var ourPage = await ReadServedOwnerPageAsync(services, cancellationToken);
+            var ourPage = await ReadServedOwnerPageAsync(services, FolderAlias, cancellationToken);
 
             var timelinePlan = await OrchestratedQueryPlans.ReadAsync(
                 services,
@@ -172,6 +202,152 @@ public sealed class OrchestratedMailOwnershipTests(MailFathomOrchestrationFixtur
             await OrchestratedForeignOwner.EraseAsync(services, foreignOwnerId);
         }
     }
+
+    /// <summary>
+    /// Two owners each declaring an account under one identifier hold two mailboxes, and neither owner's read reaches
+    /// the other's mail.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is what keying the account by its owner and its identifier is for. Under the single-column key the second
+    /// insert violated the primary key, so the first owner to claim a name claimed it for the deployment; here both
+    /// rows exist, both bind the same alias, and both store an occurrence carrying the same UID.
+    /// </para>
+    /// <para>
+    /// The account term is identical in every read below, which is what makes the separation attributable to the owner
+    /// column alone. The served owner's page is read through the production timeline reader rather than by statement,
+    /// because what a caller sees is what the claim is about.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task MailboxAccounts_TwoOwnersDeclaringOneIdentifier_AreTwoMailboxesNeitherOwnerReadsTheOtherOf()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var servedOwner = services.ServedOwner;
+        var foreignOwnerId = Guid.CreateVersion7();
+        var foreignOwner = MailOwnerId.Create(foreignOwnerId);
+        var sharedAccountId = SyntheticMailAccount.AccountId;
+
+        try
+        {
+            Assert.Equal(
+                PersistenceCommitResult.Committed,
+                await OrchestratedForeignOwner.ProvisionAsync(services, foreignOwnerId, cancellationToken));
+
+            await SeedSharedNameMailAsync(
+                services,
+                MailAccountIdentity.Create(servedOwner, sharedAccountId),
+                ServedOwnerSharedNameSubject,
+                cancellationToken);
+
+            await SeedSharedNameMailAsync(
+                services,
+                MailAccountIdentity.Create(foreignOwner, sharedAccountId),
+                ForeignOwnerSharedNameSubject,
+                cancellationToken);
+
+            // Act
+            var accountOwners = await ReadAccountOwnersOfAsync(services, sharedAccountId.Value, cancellationToken);
+            var underTheirs = await CountInFolderAsync(
+                services,
+                foreignOwnerId,
+                sharedAccountId.Value,
+                SharedNameFolderAlias,
+                cancellationToken);
+            var underOurs = await CountInFolderAsync(
+                services,
+                servedOwner.Value,
+                sharedAccountId.Value,
+                SharedNameFolderAlias,
+                cancellationToken);
+
+            var ourPage = await ReadServedOwnerPageAsync(services, SharedNameFolderAlias, cancellationToken);
+
+            // Assert
+            // One identifier, two accounts, one per owner. This is the insert the previous key refused.
+            Assert.Equal(2, accountOwners.Count);
+            Assert.Contains(servedOwner.Value, accountOwners);
+            Assert.Contains(foreignOwnerId, accountOwners);
+
+            // One message each, counted with the same account term. The difference is the owner column and nothing else.
+            Assert.Equal(1, underTheirs);
+            Assert.Equal(1, underOurs);
+
+            // The served owner's own read reaches their message and not the other owner's, over one alias of one
+            // account identifier — so the absence is the owner narrowing rather than an account term that missed.
+            Assert.Contains(ourPage, summary => summary.Subject == ServedOwnerSharedNameSubject);
+            Assert.DoesNotContain(ourPage, summary => summary.Subject == ForeignOwnerSharedNameSubject);
+        }
+        finally
+        {
+            await OrchestratedForeignOwner.EraseAsync(services, foreignOwnerId);
+        }
+    }
+
+    /// <summary>Binds the shared alias for one owner's account of the shared identifier and stores one message in it.</summary>
+    private static async Task SeedSharedNameMailAsync(
+        OrchestratedMailFathomServices services,
+        MailAccountIdentity account,
+        string subject,
+        CancellationToken cancellationToken)
+    {
+        var binding = await OrchestratedFolderBinding.CommitAsync(
+            services,
+            account,
+            SharedNameFolderAlias,
+            SharedNameFolderAlias,
+            cancellationToken);
+
+        var occurrence = SyntheticEmail.OccurrenceIn(account.Id, binding, SharedNameUid);
+
+        var commitResult = await services.CommitAsync(
+            (scope, session, token) => scope.GetRequiredService<IEmailMetadataRepository>().UpsertMetadataAsync(
+                session,
+                account.Owner,
+                SyntheticEmail.RemoteMetadataOf(occurrence, subject),
+                SyntheticEmail.ExtractionOf(
+                    occurrence,
+                    subject,
+                    SyntheticEmail.BodyTextContaining("shared", wordCount: 20),
+                    "recipient@mailfathom.test"),
+                StoredEmailContentAvailability.Available,
+                token),
+            cancellationToken);
+
+        Assert.Equal(PersistenceCommitResult.Committed, commitResult);
+    }
+
+    private static Task<List<Guid>> ReadAccountOwnersOfAsync(
+        OrchestratedMailFathomServices services,
+        string accountId,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<MailFathomDbContext>().MailboxAccounts
+                .AsNoTracking()
+                .Where(account => account.Id == accountId)
+                .Select(account => account.OwnerId)
+                .ToListAsync(token),
+            cancellationToken);
+
+    /// <summary>Counts one owner's mail of one account within one folder, through the connection the scoped context owns.</summary>
+    private static Task<long> CountInFolderAsync(
+        OrchestratedMailFathomServices services,
+        Guid ownerId,
+        string accountId,
+        string folderAlias,
+        CancellationToken cancellationToken) => OrchestratedQueryPlans.WithConnectionAsync(
+            services,
+            async (connection, token) =>
+            {
+                await using var command = OrchestratedQueryPlans.CreateCommand(
+                    connection,
+                    OwnedFolderMailCountSql,
+                    [OwnerParameter(ownerId), AccountParameter(accountId), AliasParameter(folderAlias)]);
+
+                return (long)(await command.ExecuteScalarAsync(token))!;
+            },
+            cancellationToken);
 
     private static MailAccountId[] ForeignAccountIds() =>
         [MailAccountId.Create(FirstForeignAccount), MailAccountId.Create(SecondForeignAccount)];
@@ -310,13 +486,14 @@ public sealed class OrchestratedMailOwnershipTests(MailFathomOrchestrationFixtur
             },
             cancellationToken);
 
-    /// <summary>Reads the served owner's own timeline over this class's folder, the way a deployment resolves it.</summary>
+    /// <summary>Reads the served owner's own timeline over one of this class's folders, the way a deployment resolves it.</summary>
     private static Task<IReadOnlyList<EmailSummary>> ReadServedOwnerPageAsync(
         OrchestratedMailFathomServices services,
+        string folderAlias,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<IStoredEmailTimelineReader>().ReadPageAsync(
                 EmailTimelineFilter.Create(
-                    OrchestratedMailboxScope.Readable(scope, [FolderAlias]),
+                    OrchestratedMailboxScope.Readable(scope, [folderAlias]),
                     senderAddress: null,
                     recipientAddress: null,
                     subjectFragment: null,
@@ -337,6 +514,9 @@ public sealed class OrchestratedMailOwnershipTests(MailFathomOrchestrationFixtur
 
     private static NpgsqlParameter AccountParameter(string accountId) =>
         new("accountId", NpgsqlDbType.Text) { Value = accountId };
+
+    private static NpgsqlParameter AliasParameter(string folderAlias) =>
+        new("alias", NpgsqlDbType.Text) { Value = folderAlias };
 
     private static NpgsqlParameter PageSizeParameter() =>
         new("pageSize", NpgsqlDbType.Integer) { Value = PageSize };

@@ -2980,8 +2980,7 @@ public sealed class MailboxSynchronizerTests
             occurrence.Uid,
             inventory: new InMemoryStoredEmailContentInventory { StoredContentBytes = 900 },
             storedContentCeiling: ceiling,
-            ownerContentLedger: new InMemoryOwnerStoredContentLedger().Holding(SyntheticMailOwner.Deployment, 900),
-            ownership: new StubMailOwnership().Owns(accountId, SyntheticMailOwner.Deployment));
+            ownerContentLedger: new InMemoryOwnerStoredContentLedger().Holding(SyntheticMailOwner.Deployment, 900));
 
         // Act
         var result = await arrangement.Synchronizer.SynchronizeAsync(MailAccountIdentity.Create(SyntheticMailOwner.Deployment, accountId), InboxMapping, CancellationToken.None);
