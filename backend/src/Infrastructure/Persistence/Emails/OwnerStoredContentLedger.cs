@@ -93,6 +93,7 @@ internal sealed class OwnerStoredContentLedger(MailFathomDbContext dbContext) : 
 
     /// <summary>Moves one account's owner's figure by a difference the caller already knows.</summary>
     /// <param name="writeContext">The context of the transaction the payload itself is written in.</param>
+    /// <param name="ownerId">The owner the account belongs to, which is the half of its identity the identifier alone leaves open.</param>
     /// <param name="mailboxAccountId">The account the message belongs to, which is where the owner is recorded.</param>
     /// <param name="byteDelta">What to add, which is negative where a payload shrank.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
@@ -104,6 +105,7 @@ internal sealed class OwnerStoredContentLedger(MailFathomDbContext dbContext) : 
     /// </remarks>
     internal static Task MoveAsync(
         MailFathomDbContext writeContext,
+        Guid ownerId,
         string mailboxAccountId,
         long byteDelta,
         CancellationToken cancellationToken)
@@ -115,12 +117,13 @@ internal sealed class OwnerStoredContentLedger(MailFathomDbContext dbContext) : 
             ? Task.CompletedTask
             : writeContext.Database.ExecuteSqlRawAsync(
                 MoveStatement(writeContext.Model),
-                [mailboxAccountId, byteDelta],
+                [ownerId, mailboxAccountId, byteDelta],
                 cancellationToken);
     }
 
     /// <summary>Moves one account's owner's figure to account for a payload about to replace what is stored.</summary>
     /// <param name="writeContext">The context of the transaction the payload itself is written in.</param>
+    /// <param name="ownerId">The owner the account belongs to, which is the half of its identity the identifier alone leaves open.</param>
     /// <param name="mailboxAccountId">The account the message belongs to, which is where the owner is recorded.</param>
     /// <param name="storedEmailId">The message whose payload is being written.</param>
     /// <param name="byteLength">What the payload about to be written holds.</param>
@@ -133,6 +136,7 @@ internal sealed class OwnerStoredContentLedger(MailFathomDbContext dbContext) : 
     /// </remarks>
     internal static Task AdoptLengthAsync(
         MailFathomDbContext writeContext,
+        Guid ownerId,
         string mailboxAccountId,
         Guid storedEmailId,
         long byteLength,
@@ -143,7 +147,7 @@ internal sealed class OwnerStoredContentLedger(MailFathomDbContext dbContext) : 
 
         return writeContext.Database.ExecuteSqlRawAsync(
             AdoptLengthStatement(writeContext.Model),
-            [mailboxAccountId, storedEmailId, byteLength],
+            [ownerId, mailboxAccountId, storedEmailId, byteLength],
             cancellationToken);
     }
 
@@ -184,9 +188,10 @@ internal sealed class OwnerStoredContentLedger(MailFathomDbContext dbContext) : 
 
         return $$"""
             INSERT INTO {{names.Totals}} ({{names.TotalsOwnerColumn}}, {{names.TotalsCountColumn}})
-            SELECT account.{{names.AccountOwnerColumn}}, {1}
+            SELECT account.{{names.AccountOwnerColumn}}, {2}
             FROM {{names.Accounts}} AS account
-            WHERE account.{{names.AccountIdColumn}} = {0}
+            WHERE account.{{names.AccountOwnerColumn}} = {0}
+              AND account.{{names.AccountIdColumn}} = {1}
             ON CONFLICT ({{names.TotalsOwnerColumn}}) DO UPDATE
             SET {{names.TotalsCountColumn}} = {{names.Totals}}.{{names.TotalsCountColumn}} + EXCLUDED.{{names.TotalsCountColumn}}
             """;
@@ -205,11 +210,12 @@ internal sealed class OwnerStoredContentLedger(MailFathomDbContext dbContext) : 
 
         return $$"""
             INSERT INTO {{names.Totals}} ({{names.TotalsOwnerColumn}}, {{names.TotalsCountColumn}})
-            SELECT account.{{names.AccountOwnerColumn}}, {2} - COALESCE(content.{{names.ContentLengthColumn}}, 0)
+            SELECT account.{{names.AccountOwnerColumn}}, {3} - COALESCE(content.{{names.ContentLengthColumn}}, 0)
             FROM {{names.Accounts}} AS account
             LEFT JOIN {{names.Contents}} AS content
-                ON content.{{names.ContentEmailColumn}} = {1}
-            WHERE account.{{names.AccountIdColumn}} = {0}
+                ON content.{{names.ContentEmailColumn}} = {2}
+            WHERE account.{{names.AccountOwnerColumn}} = {0}
+              AND account.{{names.AccountIdColumn}} = {1}
             ON CONFLICT ({{names.TotalsOwnerColumn}}) DO UPDATE
             SET {{names.TotalsCountColumn}} = {{names.Totals}}.{{names.TotalsCountColumn}} + EXCLUDED.{{names.TotalsCountColumn}}
             """;

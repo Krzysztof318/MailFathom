@@ -13,12 +13,13 @@ internal sealed class MailboxAccountEntity
 {
     public required string Id { get; set; }
 
-    /// <summary>The owner this mailbox belongs to, and the axis every read of its mail is narrowed by.</summary>
+    /// <summary>The owner this mailbox belongs to, which leads the key and the axis every read of its mail is narrowed by.</summary>
     /// <remarks>
     /// A relational column rather than a value inside the owner's document, so ownership, lookup, uniqueness, and
-    /// cascade erasure are decided by the database rather than by a predicate over JSON.
+    /// cascade erasure are decided by the database rather than by a predicate over JSON. It is half of what identifies
+    /// the account: <see cref="Id" /> alone names one mailbox within this owner and a different one within another.
     /// </remarks>
-    public Guid OwnerId { get; set; }
+    public required Guid OwnerId { get; set; }
 
     public ICollection<MailFolderEntity> MailFolders { get; } = [];
 }

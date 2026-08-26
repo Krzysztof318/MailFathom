@@ -50,7 +50,14 @@ internal sealed class JobConfiguration : IEntityTypeConfiguration<JobEntity>
     /// <inheritdoc />
     public void Configure(EntityTypeBuilder<JobEntity> entity)
     {
-        entity.ToTable("jobs");
+        // A queue row names an account and its owner or neither, which the check states because the foreign key
+        // cannot: both columns are optional, so PostgreSQL leaves a row supplying only one of them unchecked, and a
+        // row carrying an identifier without an owner would then reference a mailbox nothing resolved.
+        entity.ToTable(
+            "jobs",
+            table => table.HasCheckConstraint(
+                PersistenceConstraintNames.JobAccountOwnerCheckConstraintName,
+                $"(\"{nameof(JobEntity.OwnerId)}\" IS NULL) = (\"{nameof(JobEntity.MailboxAccountId)}\" IS NULL)"));
         entity.HasKey(job => job.Id);
         entity.Property(job => job.Id).ValueGeneratedNever();
         entity.Property(job => job.JobType).HasMaxLength(64).IsRequired();
@@ -104,9 +111,12 @@ internal sealed class JobConfiguration : IEntityTypeConfiguration<JobEntity>
             .HasDatabaseName(PersistenceConstraintNames.JobDeadLetterIndexName)
             .HasFilter($"\"{nameof(JobEntity.State)}\" = '{nameof(JobState.DeadLettered)}'");
 
+        // The reference is the pair, an account being identified by its owner and its identifier together. Both
+        // columns are optional, so PostgreSQL enforces the constraint only on a row supplying both — which is why the
+        // table above carries the check that states the invariant the enforcement rests on.
         entity.HasOne(job => job.MailboxAccount)
             .WithMany()
-            .HasForeignKey(job => job.MailboxAccountId)
+            .HasForeignKey(job => new { job.OwnerId, job.MailboxAccountId })
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

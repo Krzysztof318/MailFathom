@@ -20,7 +20,9 @@ internal sealed class MailRederivationRunConfiguration : IEntityTypeConfiguratio
     public void Configure(EntityTypeBuilder<MailRederivationRunEntity> entity)
     {
         entity.ToTable("mail_rederivation_runs");
-        entity.HasKey(run => new { run.MailboxAccountId, run.FolderAlias })
+        // The owner leads the key, because the account identifier after it names one mailbox within that owner and a
+        // different one within the next: two owners re-deriving the same folder of their own `work` are two runs.
+        entity.HasKey(run => new { run.OwnerId, run.MailboxAccountId, run.FolderAlias })
             .HasName(PersistenceConstraintNames.MailRederivationRunPrimaryKeyConstraintName);
         entity.Property(run => run.MailboxAccountId).HasMaxLength(128);
         entity.Property(run => run.FolderAlias).HasMaxLength(128);

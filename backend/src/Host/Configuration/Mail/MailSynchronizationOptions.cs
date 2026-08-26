@@ -617,12 +617,9 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
             yield return new ValidationResult("At least one account is required when synchronization is enabled.", [nameof(this.Accounts)]);
         }
 
-        if (this.Accounts
-            .Where(account => !string.IsNullOrWhiteSpace(account.AccountId))
-            .GroupBy(account => MailAccountId.Create(account.AccountId).Value, StringComparer.Ordinal)
-            .Any(group => group.Count() > 1))
+        foreach (var result in this.FindAccountIdCollisions())
         {
-            yield return new ValidationResult("Account IDs must be unique after normalization.", [nameof(this.Accounts)]);
+            yield return result;
         }
 
         foreach (var result in this.FindDisplayNameCollisions())
@@ -633,6 +630,42 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
         foreach (var result in this.Accounts.SelectMany(account => account.ValidateForSynchronization(this.Enabled)))
         {
             yield return result;
+        }
+    }
+
+    /// <summary>Reports every account identifier this section declares more than once within its owner.</summary>
+    /// <returns>One result naming the colliding identifiers, empty when each names one account.</returns>
+    /// <remarks>
+    /// <para>
+    /// An account identifier is unique within the owner it belongs to and nowhere else, so this is a statement about
+    /// one person's mailboxes rather than about a deployment-wide namespace. Every account a file declares belongs to
+    /// the one owner such a deployment serves, which is why the whole section is one namespace here; a second owner
+    /// declaring an account of the same name is not a collision and never reaches this, because their accounts are
+    /// not in this list.
+    /// </para>
+    /// <para>
+    /// Compared without regard to case, which is the rule the shared naming space already runs on: a caller may name
+    /// an account by its identifier or by a display name, a display name colliding with either is refused below
+    /// without regard to case, and two identifiers differing only in case would leave that same ambiguity in the half
+    /// this check owns. Resolution itself stays exact — the identifier is a configured key — so what is refused here
+    /// is the configuration that would make an exact match a coin toss for whoever retyped it.
+    /// </para>
+    /// </remarks>
+    private IEnumerable<ValidationResult> FindAccountIdCollisions()
+    {
+        var repeated = this.Accounts
+            .Where(static account => !string.IsNullOrWhiteSpace(account.AccountId))
+            .Select(static account => MailAccountId.Create(account.AccountId).Value)
+            .GroupBy(static accountId => accountId, StringComparer.OrdinalIgnoreCase)
+            .Where(static group => group.Count() > 1)
+            .Select(static group => group.Key)
+            .ToArray();
+
+        if (repeated.Length > 0)
+        {
+            yield return new ValidationResult(
+                $"An account identifier names one mailbox within its owner, and this owner declares more than one account under each of: {string.Join(", ", repeated)}. Identifiers are compared after normalization and without regard to case.",
+                [nameof(this.Accounts)]);
         }
     }
 

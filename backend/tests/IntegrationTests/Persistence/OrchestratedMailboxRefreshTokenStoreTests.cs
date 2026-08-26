@@ -5,6 +5,8 @@
 using System.Security.Cryptography;
 using System.Text;
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Persistence;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Infrastructure.Persistence;
 using MailFathom.IntegrationTests.Orchestration;
@@ -31,6 +33,9 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
     private const string MovedRowAccount = "refresh-token-binding";
 
     private const string OtherAccount = "refresh-token-binding-other";
+
+    /// <summary>The one identifier two owners each hold an account under, which is what the composite key permits.</summary>
+    private const string SharedNameAccount = "refresh-token-shared-name";
 
     /// <summary>One test covers the whole write path, because storing twice is the same operation as storing once.</summary>
     [Fact]
@@ -143,6 +148,85 @@ public sealed class OrchestratedMailboxRefreshTokenStoreTests(MailFathomOrchestr
                     MailAccountIdentity.Create(SyntheticMailAccount.Owner, MailAccountId.Create(OtherAccount)),
                     token),
             cancellationToken));
+    }
+
+    /// <summary>
+    /// Two owners each holding a token for an account of one name keep two rows, each opens only its own, and a row
+    /// copied between them refuses to open.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Both halves are new with the composite key. The two rows exist because the table is keyed by the owner and the
+    /// identifier together — under the single-column key the second save would have overwritten the first owner's
+    /// credential — and the refusal is what keeps the binding meaningful once one identifier no longer names one
+    /// account: bound to the identifier alone, both owners' tokens would carry the same associated data and each
+    /// would open as the other's.
+    /// </para>
+    /// <para>
+    /// The copy is written as the database sees it, which is what a restored dump or a mistaken repair amounts to, and
+    /// it is the shape a stolen credential would be planted in.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task FindTokenAsync_TwoOwnersHoldingOneAccountName_EachOpensOnlyTheirOwnToken()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var foreignOwnerId = Guid.CreateVersion7();
+        var accountId = MailAccountId.Create(SharedNameAccount);
+        var ours = MailAccountIdentity.Create(SyntheticMailAccount.Owner, accountId);
+        var theirs = MailAccountIdentity.Create(MailOwnerId.Create(foreignOwnerId), accountId);
+
+        try
+        {
+            Assert.Equal(
+                PersistenceCommitResult.Committed,
+                await OrchestratedForeignOwner.ProvisionAsync(services, foreignOwnerId, cancellationToken));
+
+            // Act
+            await SaveAsync(services, ours, "our-refresh-token", cancellationToken);
+            await SaveAsync(services, theirs, "their-refresh-token", cancellationToken);
+
+            using var ourToken = await services.InScopeAsync(
+                (scope, token) => scope.GetRequiredService<IMailboxRefreshTokenStore>().FindTokenAsync(ours, token),
+                cancellationToken);
+            using var theirToken = await services.InScopeAsync(
+                (scope, token) => scope.GetRequiredService<IMailboxRefreshTokenStore>().FindTokenAsync(theirs, token),
+                cancellationToken);
+
+            // Assert
+            // Two rows under one identifier, which the single-column key made impossible.
+            Assert.Equal(2, (await ReadRowsAsync(services, SharedNameAccount, cancellationToken)).Count);
+            Assert.NotNull(ourToken);
+            Assert.NotNull(theirToken);
+            Assert.Equal("our-refresh-token", ourToken.RevealAsString());
+            Assert.Equal("their-refresh-token", theirToken.RevealAsString());
+
+            // The other owner's ciphertext put under ours: bound to the identifier alone it would open as ours.
+            await services.InScopeAsync(
+                (scope, token) => scope.GetRequiredService<MailFathomDbContext>().Database.ExecuteSqlAsync(
+                    $"""
+                     UPDATE mailbox_refresh_tokens AS ours
+                     SET "SealedRefreshToken" = theirs."SealedRefreshToken",
+                         "DataEncryptionKeyId" = theirs."DataEncryptionKeyId"
+                     FROM mailbox_refresh_tokens AS theirs
+                     WHERE ours."MailboxAccountId" = {SharedNameAccount}
+                       AND ours."OwnerId" = {SyntheticMailAccount.Owner.Value}
+                       AND theirs."MailboxAccountId" = {SharedNameAccount}
+                       AND theirs."OwnerId" = {foreignOwnerId}
+                     """,
+                    token),
+                cancellationToken);
+
+            await Assert.ThrowsAnyAsync<CryptographicException>(() => services.InScopeAsync(
+                (scope, token) => scope.GetRequiredService<IMailboxRefreshTokenStore>().FindTokenAsync(ours, token),
+                cancellationToken));
+        }
+        finally
+        {
+            await OrchestratedForeignOwner.EraseAsync(services, foreignOwnerId);
+        }
     }
 
     private static async Task SaveAsync(

@@ -106,14 +106,13 @@ internal static class ReleasedContentObjects
     {
         var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
-        var ownedAccountIds = sessionContext.MailboxAccounts
-            .Where(account => account.OwnerId == ownerId)
-            .Select(account => account.Id);
-
+        // Narrowed on the owner each payload's own row carries rather than on the identifiers of the accounts that
+        // owner holds. An identifier names one mailbox within its owner and another within the next, so a membership
+        // test on it would release a second owner's objects whenever the two had named an account alike.
         await ReleaseAsync(
             session,
             sessionContext.EmailMessageContents
-                .Where(content => ownedAccountIds.Contains(content.StoredEmail.MailboxAccountId)
+                .Where(content => content.StoredEmail.OwnerId == ownerId
                     && content.Backend == ContentStorageBackend.ObjectStorage)
                 .Select(content => content.ObjectLocator!),
             cancellationToken);
@@ -121,7 +120,7 @@ internal static class ReleasedContentObjects
         await ReleaseAsync(
             session,
             sessionContext.OutgoingEmailContents
-                .Where(content => ownedAccountIds.Contains(content.OutgoingEmail.MailboxAccountId)
+                .Where(content => content.OutgoingEmail.OwnerId == ownerId
                     && content.Backend == ContentStorageBackend.ObjectStorage)
                 .Select(content => content.ObjectLocator!),
             cancellationToken);
@@ -129,7 +128,7 @@ internal static class ReleasedContentObjects
         await ReleaseAsync(
             session,
             sessionContext.MailDraftContents
-                .Where(content => ownedAccountIds.Contains(content.MailDraft.MailboxAccountId)
+                .Where(content => content.MailDraft.OwnerId == ownerId
                     && content.Backend == ContentStorageBackend.ObjectStorage)
                 .Select(content => content.ObjectLocator!),
             cancellationToken);
@@ -137,7 +136,7 @@ internal static class ReleasedContentObjects
         await ReleaseAsync(
             session,
             sessionContext.RecurringSendDrafts
-                .Where(draft => ownedAccountIds.Contains(draft.RecurringSend.MailboxAccountId)
+                .Where(draft => draft.RecurringSend.OwnerId == ownerId
                     && draft.Backend == ContentStorageBackend.ObjectStorage)
                 .Select(draft => draft.ObjectLocator!),
             cancellationToken);

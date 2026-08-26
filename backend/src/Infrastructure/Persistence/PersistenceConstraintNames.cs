@@ -350,6 +350,14 @@ internal static class PersistenceConstraintNames
     /// <summary>The index an operator reads what has stopped through, filtered to the one state that waits for them.</summary>
     internal const string JobDeadLetterIndexName = "ix_jobs_dead_lettered";
 
+    /// <summary>The rule that a queue row names an account and its owner together, or names neither.</summary>
+    /// <remarks>
+    /// Stated as a constraint because the foreign key onto the account cannot state it. An account is referenced by
+    /// the pair, both columns are optional on this table, and PostgreSQL leaves a row supplying only one of them
+    /// unchecked — so this is what keeps the reference enforced rather than merely declared.
+    /// </remarks>
+    internal const string JobAccountOwnerCheckConstraintName = "ck_jobs_account_owner";
+
     /// <summary>The key that binds one message identifier of one account to exactly one thread.</summary>
     /// <remarks>
     /// Named because it is what a losing writer is recognized by. Two arrivals referring to the same identifier for the

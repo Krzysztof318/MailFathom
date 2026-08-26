@@ -15,9 +15,9 @@ namespace MailFathom.Infrastructure.Persistence.Accounts;
 /// <remarks>
 /// <para>
 /// This is the adapter the port's contract describes: the ciphertext, the key identifier, the binding, and every Npgsql
-/// type stay here, and what leaves is a domain value. The binding is the account's own identifier under the
-/// refresh-token purpose, so a row copied to another account, moved into another column, or restored from another
-/// deployment fails to open rather than opening as somebody else's credential.
+/// type stay here, and what leaves is a domain value. The binding is the account's own identity — its owner and its
+/// identifier together — under the refresh-token purpose, so a row copied to another account, moved into another
+/// column, or restored from another deployment fails to open rather than opening as somebody else's credential.
 /// </para>
 /// <para>
 /// The write is one <c>INSERT ... ON CONFLICT DO UPDATE</c> for the reason
@@ -54,7 +54,7 @@ internal sealed class MailboxRefreshTokenStore(
         }
 
         var material = await fieldEncryptor.OpenAsync(
-            BindingFor(account.Id),
+            BindingFor(account),
             new SealedValue(stored.DataEncryptionKeyId, stored.SealedRefreshToken),
             cancellationToken);
 
@@ -86,7 +86,7 @@ internal sealed class MailboxRefreshTokenStore(
         SealedValue sealedToken;
         try
         {
-            sealedToken = await fieldEncryptor.SealAsync(BindingFor(account.Id), plaintext, cancellationToken);
+            sealedToken = await fieldEncryptor.SealAsync(BindingFor(account), plaintext, cancellationToken);
         }
         finally
         {
@@ -106,7 +106,7 @@ internal sealed class MailboxRefreshTokenStore(
              INSERT INTO mailbox_refresh_tokens
                  ("OwnerId", "MailboxAccountId", "SealedRefreshToken", "DataEncryptionKeyId", "UpdatedAt")
              VALUES ({storedOwnerId}, {storedAccountId}, {ciphertext}, {keyId}, {updatedAt})
-             ON CONFLICT ("MailboxAccountId") DO UPDATE SET
+             ON CONFLICT ("OwnerId", "MailboxAccountId") DO UPDATE SET
                  "SealedRefreshToken" = EXCLUDED."SealedRefreshToken",
                  "DataEncryptionKeyId" = EXCLUDED."DataEncryptionKeyId",
                  "UpdatedAt" = EXCLUDED."UpdatedAt"
@@ -115,6 +115,16 @@ internal sealed class MailboxRefreshTokenStore(
             cancellationToken);
     }
 
-    private static DataEncryptionBinding BindingFor(MailAccountId accountId) =>
-        DataEncryptionBinding.Create(DataEncryptionPurpose.MailboxRefreshToken, accountId.Value);
+    /// <summary>Composes what a token is bound to, which is the whole of the account rather than the name it goes by.</summary>
+    /// <remarks>
+    /// The owner leads the subject because the identifier after it names one mailbox within that owner and a different
+    /// one within the next: bound to the identifier alone, two people's <c>work</c> accounts would share a binding and
+    /// one's sealed token would open as the other's credential, which is the one thing the binding exists to refuse.
+    /// The owner is a GUID in its fixed 36-character form, so the separator cannot be read as part of either half and
+    /// no two identities compose one subject.
+    /// </remarks>
+    private static DataEncryptionBinding BindingFor(MailAccountIdentity account) =>
+        DataEncryptionBinding.Create(
+            DataEncryptionPurpose.MailboxRefreshToken,
+            $"{account.Owner.Value:D}/{account.Id.Value}");
 }

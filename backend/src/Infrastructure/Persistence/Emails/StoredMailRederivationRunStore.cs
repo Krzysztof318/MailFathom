@@ -55,12 +55,13 @@ internal sealed class StoredMailRederivationRunStore(MailFathomDbContext dbConte
         ArgumentNullException.ThrowIfNull(run);
 
         var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
+        var owner = run.Scope.Account.Owner.Value;
         var account = run.Scope.Account.Id.Value;
         var folder = KeyedFolderOf(run.Scope);
 
         // FindAsync resolves a row this session already staged from the change tracker, so a session that writes the
         // run twice updates one row rather than inserting a second under the same key.
-        var recorded = await sessionContext.MailRederivationRuns.FindAsync([account, folder], cancellationToken);
+        var recorded = await sessionContext.MailRederivationRuns.FindAsync([owner, account, folder], cancellationToken);
 
         if (recorded is null)
         {
@@ -69,7 +70,7 @@ internal sealed class StoredMailRederivationRunStore(MailFathomDbContext dbConte
                 MailboxAccountId = account,
 
                 // Written from the scope the request resolved, which named the owner beside the identifier.
-                OwnerId = run.Scope.Account.Owner.Value,
+                OwnerId = owner,
                 FolderAlias = folder,
             };
 

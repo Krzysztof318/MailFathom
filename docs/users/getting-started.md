@@ -89,8 +89,9 @@ Points worth knowing before you adapt it:
   message uses, so pick names you are happy to see in a diagnostic.
 - **`DisplayName` is the name an assistant reads back to you.** It is required and has no default: the identifier above
   is a key, and a person hearing "the email came from `acct-2`" learns nothing. It travels beside the identifier in
-  every tool result, and either spelling narrows a listing, a search, or a question to that mailbox. No two accounts may
-  share one, and none may take another account's identifier, so a name always names one mailbox.
+  every tool result, and either spelling narrows a listing, a search, or a question to that mailbox. No two of your accounts may
+  share one, and none may take another of your accounts' identifiers, so a name always names one mailbox. Both names
+  belong to you rather than to the deployment: they are compared against your own accounts and against nobody else's.
 - **Folders are best named by role.** `SpecialUse` lets discovery find the folder whatever the server calls it —
   a German server's `Gesendet` is still `Sent` — and configuring no folder at all synchronizes the inbox. Naming an
   exact server path is the alternative for folders with no role, and you may name both: the path finds the folder and

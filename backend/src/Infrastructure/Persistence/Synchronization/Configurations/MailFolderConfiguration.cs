@@ -39,9 +39,12 @@ internal sealed class MailFolderConfiguration : IEntityTypeConfiguration<MailFol
                 })
             .IsUnique()
             .HasDatabaseName(PersistenceConstraintNames.MailFolderBindingUniqueIndexName);
+        // The reference is the pair, because that is what identifies an account: a key naming the identifier alone
+        // would point at one mailbox in one owner's hands and at a different one in another's. The unique index
+        // above already leads with the same two columns, so the constraint needs no structure of its own.
         entity.HasOne(folder => folder.MailboxAccount)
             .WithMany(account => account.MailFolders)
-            .HasForeignKey(folder => folder.MailboxAccountId)
+            .HasForeignKey(folder => new { folder.OwnerId, folder.MailboxAccountId })
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

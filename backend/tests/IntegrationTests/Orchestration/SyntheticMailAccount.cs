@@ -137,6 +137,7 @@ internal sealed class SyntheticMailAccount(
         "rule-evaluation",
         "rule-evaluation-parked",
         "seen-state-provenance",
+        "shared-account-name",
         "spam-scan",
         "stale-derived-data",
         "synchronized",

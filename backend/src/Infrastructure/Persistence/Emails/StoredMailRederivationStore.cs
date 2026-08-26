@@ -136,7 +136,7 @@ internal sealed class StoredMailRederivationStore(
         // FindAsync resolves a row this session already staged from the change tracker, so a pass that commits several
         // batches through one session updates one row rather than inserting a second under the same key.
         var recorded = await sessionContext.MailRederivationPositions.FindAsync(
-            [account, folder],
+            [scope.Account.Owner.Value, account, folder],
             cancellationToken);
 
         if (recorded is null)
@@ -170,7 +170,7 @@ internal sealed class StoredMailRederivationStore(
 
         var sessionContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var recorded = await sessionContext.MailRederivationPositions.FindAsync(
-            [scope.Account.Id.Value, KeyedFolderOf(scope)],
+            [scope.Account.Owner.Value, scope.Account.Id.Value, KeyedFolderOf(scope)],
             cancellationToken);
 
         // A scope whose walk finished in one invocation never recorded a position, and clearing one that is not there

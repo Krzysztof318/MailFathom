@@ -22,8 +22,13 @@ public sealed class EmailThreadModelTests
     /// read-then-write: an arrival re-registering an identifier it already registered is refused by the key rather than
     /// duplicated, and a genuine race between two first arrivals is reported as the conflict it is.
     /// </summary>
+    /// <remarks>
+    /// The owner leads it because an account identifier names one mailbox within its owner. Without it two owners
+    /// whose mailboxes carry the same message identifier would compete for one row, and one of their arrivals would
+    /// be threaded into the other's conversation.
+    /// </remarks>
     [Fact]
-    public void EmailThreadIdentifierModel_Key_IsTheAccountAndTheDigestUnderTheNameAConflictIsRecognizedBy()
+    public void EmailThreadIdentifierModel_Key_IsTheOwnedAccountAndTheDigestUnderTheNameAConflictIsRecognizedBy()
     {
         // Arrange
         using var context = CreateContext();
@@ -33,7 +38,9 @@ public sealed class EmailThreadModelTests
 
         // Assert
         Assert.NotNull(key);
-        Assert.Equal(["MailboxAccountId", "IdentifierHash"], key.Properties.Select(property => property.Name));
+        Assert.Equal(
+            ["OwnerId", "MailboxAccountId", "IdentifierHash"],
+            key.Properties.Select(property => property.Name));
         Assert.Equal(PersistenceConstraintNames.EmailThreadIdentifierPrimaryKeyConstraintName, key.GetName());
     }
 
@@ -75,6 +82,10 @@ public sealed class EmailThreadModelTests
     }
 
     /// <summary>A conversation is an assembly of one account's mail and outlives none of it.</summary>
+    /// <remarks>
+    /// The account it names is the owner and the identifier together, because that is what identifies one: keyed onto
+    /// the identifier alone the conversation would hang on whichever owner's mailbox of that name the database held.
+    /// </remarks>
     [Fact]
     public void EmailThreadModel_Account_ErasesTheConversationsWithIt()
     {
@@ -87,7 +98,7 @@ public sealed class EmailThreadModelTests
             candidate => candidate.Properties.Any(property => property.Name == "MailboxAccountId"));
 
         // Assert
-        Assert.Equal(["MailboxAccountId"], reference.Properties.Select(property => property.Name));
+        Assert.Equal(["OwnerId", "MailboxAccountId"], reference.Properties.Select(property => property.Name));
         Assert.Equal(DeleteBehavior.Cascade, reference.DeleteBehavior);
     }
 

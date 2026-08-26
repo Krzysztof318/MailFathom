@@ -317,7 +317,7 @@ public sealed class StoredEmailChunkingSelectionTests
                 MailboxAccountId = accountId,
                 Alias = alias,
                 RemotePath = alias,
-                MailboxAccount = new MailboxAccountEntity { Id = accountId },
+                MailboxAccount = new MailboxAccountEntity { OwnerId = Owner, Id = accountId },
             },
             StoredAt = Now,
             ContentAvailability = StoredEmailContentAvailability.Available,

@@ -209,7 +209,7 @@ public sealed class DerivedWorkAdmittedEmailsTests
                 MailboxAccountId = accountId,
                 Alias = alias,
                 RemotePath = alias,
-                MailboxAccount = new MailboxAccountEntity { Id = accountId },
+                MailboxAccount = new MailboxAccountEntity { OwnerId = SyntheticMailOwner.Deployment.Value, Id = accountId },
             },
             StoredAt = storedAt,
             ContentAvailability = StoredEmailContentAvailability.Available,

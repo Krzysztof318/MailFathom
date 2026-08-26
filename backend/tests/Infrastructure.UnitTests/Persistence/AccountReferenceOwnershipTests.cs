@@ -17,10 +17,11 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence;
 /// </summary>
 /// <remarks>
 /// <para>
-/// A bare <c>MailboxAccountId</c> names one account only while one namespace serves the deployment. Under several
-/// owners two people may each call an account <c>work</c>, so a table that records the identifier alone stops naming a
-/// row — and a new table gaining the identifier without the owner is exactly how that would come back. Reading it off
-/// the model rather than off a list is what makes the rule hold for a table nobody remembered to add here.
+/// A bare <c>MailboxAccountId</c> names one account only while one namespace serves the deployment, and it no longer
+/// does: two people served by one instance may each call an account <c>work</c>, so a table that records the
+/// identifier alone stops naming a row — and a new table gaining the identifier without the owner is exactly how that
+/// would come back. Reading it off the model rather than off a list is what makes the rule hold for a table nobody
+/// remembered to add here.
 /// </para>
 /// <para>
 /// The model is built in memory by the real PostgreSQL provider and no connection is opened, so what these assertions
@@ -91,6 +92,8 @@ public sealed class AccountReferenceOwnershipTests
     /// indexes are entered by something else entirely — an answering entry by its run, an outgoing message by when it
     /// was recorded — and the account is a narrowing term inside them rather than the way in. What the rule holds in
     /// both shapes is that the pair is never split, so no read walks one owner's identifier through another's rows.
+    /// It carries no exception: the index backing a foreign key onto the account used to be one, because that key
+    /// named one column, and it names the pair now.
     /// </remarks>
     [Fact]
     public void Model_EveryIndexNamingAnAccount_PlacesTheOwnerImmediatelyBeforeIt()
@@ -103,8 +106,7 @@ public sealed class AccountReferenceOwnershipTests
         [
             .. EntityTypesNamingAnAccount(context)
                 .SelectMany(entityType => entityType.GetIndexes())
-                .Where(index => !BacksTheForeignKeyOntoTheAccountTable(index))
-                .Where(index => !PlacesTheOwnerBeforeTheAccount(index))
+                .Where(index => !PlacesTheOwnerBeforeTheAccount(index.Properties))
                 .Select(DatabaseNameOf)
                 .Order(StringComparer.Ordinal),
         ];
@@ -113,58 +115,132 @@ public sealed class AccountReferenceOwnershipTests
         Assert.Empty(splittingThePair);
     }
 
-    /// <summary>The index a foreign key onto the account table is backed by is the one place the pair is not together.</summary>
+    /// <summary>A key that names an account identifier names the owner first, so the key names one account.</summary>
     /// <remarks>
     /// <para>
-    /// It is the key's own column and nothing else, because <c>mailbox_accounts</c> still keeps a single-column key
-    /// here: this change adds the owner beside every reference and leaves which identifiers are legal alone. Until the
-    /// key itself becomes the pair, a composite index cannot back this constraint, so the exception is not one a
-    /// better index would close.
+    /// Six keys were led by the identifier alone — the thread binding, the two re-derivation cursors, the rule
+    /// evaluation run, the refresh token, and the spam classification run — and each of them meant "one row per
+    /// account". That sentence is only true of a key that says whose account, so each now leads with the owner.
     /// </para>
     /// <para>
-    /// Named rather than filtered away silently, so the exception reads as the scope boundary it is and so an index
-    /// that stopped backing a foreign key would fail the rule above instead of inheriting its licence.
+    /// Read off the model rather than listed, for the reason every other rule here is: a table added later with a key
+    /// over the identifier alone would silently make two owners share a row, and this is what says so.
     /// </para>
     /// </remarks>
     [Fact]
-    public void Model_TheIndexesBackingAForeignKeyOntoTheAccountTable_AreTheOnlyOnesTheOwnerIsAbsentFrom()
+    public void Model_EveryKeyNamingAnAccount_PlacesTheOwnerImmediatelyBeforeIt()
     {
         // Arrange
         using var context = CreateContext();
 
         // Act
-        string[] withoutTheOwner =
+        string[] splittingThePair =
         [
             .. EntityTypesNamingAnAccount(context)
-                .SelectMany(entityType => entityType.GetIndexes())
-                .Where(index => !PlacesTheOwnerBeforeTheAccount(index))
-                .Select(DatabaseNameOf)
+                .SelectMany(entityType => entityType.GetKeys())
+                .Where(key => !PlacesTheOwnerBeforeTheAccount(key.Properties))
+                .Select(key => $"{key.DeclaringEntityType.ClrType.Name}.{key.GetName()}")
                 .Order(StringComparer.Ordinal),
         ];
 
         // Assert
-        Assert.Equal(
-            [
-                "IX_email_threads_MailboxAccountId",
-                "IX_jobs_MailboxAccountId",
-                "IX_mail_folders_MailboxAccountId",
-            ],
-            withoutTheOwner);
+        Assert.Empty(splittingThePair);
     }
+
+    /// <summary>A queue row names an account and its owner together, or names neither.</summary>
+    /// <remarks>
+    /// The one table where the reference is optional, and therefore the one where the foreign key onto the account
+    /// cannot enforce itself: PostgreSQL leaves a row supplying only one of the two columns unchecked, so a row
+    /// carrying an identifier and no owner would reference a mailbox nothing resolved. The check is what closes that,
+    /// which makes it part of the reference rather than a separate rule about nullability.
+    /// </remarks>
+    [Fact]
+    public void JobModel_TheOwnerBesideTheAccount_IsPresentForExactlyTheRowsTheAccountIs()
+    {
+        // Arrange
+        using var context = CreateContext();
+
+        // Act
+        var check = Assert.Single(
+            context.GetService<IDesignTimeModel>().Model.FindEntityType(typeof(JobEntity))!.GetCheckConstraints());
+
+        // Assert
+        Assert.Equal(PersistenceConstraintNames.JobAccountOwnerCheckConstraintName, check.Name);
+        Assert.Equal($"(\"{OwnerColumn}\" IS NULL) = (\"{AccountColumn}\" IS NULL)", check.Sql);
+    }
+
+    /// <summary>The account itself is identified by the owner and the identifier together, in that order.</summary>
+    /// <remarks>
+    /// This is the claim every other one here rests on. An identifier is the readable string an operator wrote and it
+    /// names one mailbox within its owner, so a key naming it alone would let the first owner to declare <c>work</c>
+    /// take the word from everybody served beside them.
+    /// </remarks>
+    [Fact]
+    public void Model_TheMailboxAccountKey_IsTheOwnerAndThenTheIdentifier()
+    {
+        // Arrange
+        using var context = CreateContext();
+
+        // Act
+        var key = context.GetService<IDesignTimeModel>()
+            .Model
+            .FindEntityType(typeof(MailboxAccountEntity))!
+            .FindPrimaryKey()!;
+
+        // Assert
+        Assert.Equal([OwnerColumn, "Id"], key.Properties.Select(property => property.Name));
+    }
+
+    /// <summary>Every foreign key onto the account table names the pair, which is what makes a reference resolvable.</summary>
+    /// <remarks>
+    /// Read off the model rather than listed, for the reason the rules above are: a table added later that keyed onto
+    /// the identifier alone would no longer name one account, and nothing but this would say so. The principal
+    /// columns are asserted as well as the dependent ones, because a key pointing at the right pair in the wrong order
+    /// would resolve one owner's mailbox through another owner's identifier.
+    /// </remarks>
+    [Fact]
+    public void Model_EveryForeignKeyOntoTheAccountTable_NamesTheOwnerAndTheIdentifier()
+    {
+        // Arrange
+        using var context = CreateContext();
+
+        // Act
+        string[] namingSomethingElse =
+        [
+            .. ForeignKeysOntoTheAccountTable(context)
+                .Where(foreignKey => !NamesThePair(foreignKey.Properties)
+                    || !NamesThePrincipalPair(foreignKey.PrincipalKey.Properties))
+                .Select(foreignKey => foreignKey.DeclaringEntityType.ClrType.Name)
+                .Order(StringComparer.Ordinal),
+        ];
+
+        // Assert
+        Assert.Empty(namingSomethingElse);
+        Assert.NotEmpty(ForeignKeysOntoTheAccountTable(context));
+    }
+
+    private static bool NamesThePair(IReadOnlyList<IProperty> properties) =>
+        properties.Select(property => property.Name).SequenceEqual([OwnerColumn, AccountColumn]);
+
+    private static bool NamesThePrincipalPair(IReadOnlyList<IProperty> properties) =>
+        properties.Select(property => property.Name).SequenceEqual([OwnerColumn, "Id"]);
+
+    private static IReadOnlyList<IForeignKey> ForeignKeysOntoTheAccountTable(MailFathomDbContext context) =>
+    [
+        .. context.GetService<IDesignTimeModel>()
+            .Model
+            .GetEntityTypes()
+            .SelectMany(entityType => entityType.GetForeignKeys())
+            .Where(foreignKey => foreignKey.PrincipalEntityType.ClrType == typeof(MailboxAccountEntity)),
+    ];
 
     /// <summary>Reports whether the pair reads as one thing: the owner, then the identifier it qualifies.</summary>
-    private static bool PlacesTheOwnerBeforeTheAccount(IIndex index)
+    private static bool PlacesTheOwnerBeforeTheAccount(IReadOnlyList<IProperty> properties)
     {
-        var account = index.Properties.Select(property => property.Name).ToList().IndexOf(AccountColumn);
+        var account = properties.Select(property => property.Name).ToList().IndexOf(AccountColumn);
 
-        return account < 0 || (account > 0 && index.Properties[account - 1].Name == OwnerColumn);
+        return account < 0 || (account > 0 && properties[account - 1].Name == OwnerColumn);
     }
-
-    private static bool BacksTheForeignKeyOntoTheAccountTable(IIndex index) =>
-        index.DeclaringEntityType
-            .GetForeignKeys()
-            .Where(foreignKey => foreignKey.PrincipalEntityType.ClrType == typeof(MailboxAccountEntity))
-            .Any(foreignKey => foreignKey.Properties.SequenceEqual(index.Properties));
 
     private static string DatabaseNameOf(IIndex index) =>
         index.GetDatabaseName() ?? string.Join('_', index.Properties.Select(property => property.Name));

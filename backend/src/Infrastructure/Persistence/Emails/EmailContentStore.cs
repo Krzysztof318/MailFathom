@@ -180,6 +180,7 @@ internal sealed class EmailContentStore(
             // payload this session is replacing a second time.
             await OwnerStoredContentLedger.MoveAsync(
                 dbContext,
+                storedEmail.OwnerId,
                 storedEmail.MailboxAccountId,
                 placedContent.ByteLength - trackedEntity.MimeByteLength,
                 cancellationToken);
@@ -201,6 +202,7 @@ internal sealed class EmailContentStore(
         // transaction, so a rolled-back store leaves the figure exactly where it found it.
         await OwnerStoredContentLedger.AdoptLengthAsync(
             dbContext,
+            storedEmail.OwnerId,
             storedEmail.MailboxAccountId,
             storedEmailId.Value,
             placedContent.ByteLength,

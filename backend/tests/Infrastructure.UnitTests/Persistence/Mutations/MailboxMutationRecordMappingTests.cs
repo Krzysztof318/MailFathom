@@ -202,7 +202,7 @@ public sealed class MailboxMutationRecordMappingTests
             Alias = "INBOX",
             ResolutionGeneration = 1,
             RemotePath = "INBOX",
-            MailboxAccount = new MailboxAccountEntity { Id = "primary" },
+            MailboxAccount = new MailboxAccountEntity { OwnerId = SyntheticMailOwner.Deployment.Value, Id = "primary" },
         };
 
         return new MailboxMutationEntity

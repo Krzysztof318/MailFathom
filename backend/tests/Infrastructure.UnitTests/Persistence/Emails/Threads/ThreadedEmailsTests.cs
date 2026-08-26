@@ -65,7 +65,7 @@ public sealed class ThreadedEmailsTests
             MailboxAccountId = "primary",
             Alias = "inbox",
             RemotePath = "INBOX",
-            MailboxAccount = new MailboxAccountEntity { Id = "primary" },
+            MailboxAccount = new MailboxAccountEntity { OwnerId = SyntheticMailOwner.Deployment.Value, Id = "primary" },
         },
     };
 }

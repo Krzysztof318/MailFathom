@@ -300,10 +300,15 @@ longer accepts, and it needs no database access and no restart: the next token r
 $ mfctl mailbox authorize --provider google --client-id <client-id> --account workspace
 ```
 
-To make an account fall back to its configured reference instead, delete its row with any PostgreSQL client:
+To make an account fall back to its configured reference instead, delete its row with any PostgreSQL client. A stored
+token is held per owner and account rather than per account identifier — an identifier names one mailbox within the
+owner who declared it — so the statement names both, and reading the owner out of `settings_accounts` refuses rather
+than guesses if a deployment ever holds more than one:
 
 ```sql
-DELETE FROM mailbox_refresh_tokens WHERE "MailboxAccountId" = 'workspace';
+DELETE FROM mailbox_refresh_tokens
+WHERE "MailboxAccountId" = 'workspace'
+  AND "OwnerId" = (SELECT "Id" FROM settings_accounts);
 ```
 
 The next token request then reads the reference again, and stores whatever the authorization server rotates to next.
@@ -325,6 +330,7 @@ the account eventually answers `invalid_grant`, and the repair is to authorize t
 | `answered … rather than storing the token` | The endpoint was reached and answered with neither an acceptance nor a refusal it explained. The token was not stored; nothing about the account changed. A `500` is most often a deployment with no key ring, since that is what a stored token seals under — configure `DataEncryption`, or provision the token at the configured reference instead. |
 | `The rotated refresh token … could not be stored` | The database was unreachable, or the key ring the value seals under is not configured. The account keeps working until the previous token stops being accepted, so fix the cause and it recovers on the next rotation. |
 | `The data-encryption key ring configures no key` | A stored token names a key the ring no longer holds. Restore that key entry; a stored value cannot be opened without it. |
+| A token request failing with a cryptographic error, and no `invalid_grant` | The stored token does not open. A sealed token is bound to the account it was stored for — the owner and the identifier together — so this is what a row copied between accounts, restored from another deployment, or altered in place meets, and it is also what a token sealed before the release that keyed the account by its owner meets. Nothing falls back to the configured reference. Authorize the account again with `--account`, which replaces what is stored. |
 | `invalid_client` | The client ID or client secret does not match the registration, or a confidential client was authorized as a public one. |
 | `non_json_response_http_…` | The authorization server's token endpoint, or its device authorization endpoint on `--mode device`, answered something that is not the response the flow expects, and the number is the HTTP status it answered with. A proxy, a login page, or an error page in front of the server looks like this, and so does an answer naming a character set this platform does not carry. Check that the endpoint the run was using came from the provider's own discovery document rather than being typed. |
 | `state_mismatch` | The redirect came from a different authorization run. Start the command again and use one browser tab. |
