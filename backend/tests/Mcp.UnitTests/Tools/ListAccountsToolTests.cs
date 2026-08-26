@@ -95,6 +95,39 @@ public sealed class ListAccountsToolTests
         Assert.Equal("Work mail", folder.AccountDisplayName);
     }
 
+    /// <summary>
+    /// Both names are the owner's own and unique within them, so two owners may each declare an account under the same
+    /// identifier and the same display name. Each caller is published their own, and nothing in either answer says the
+    /// other exists.
+    /// </summary>
+    [Fact]
+    public async Task ListAccountsAsync_TwoOwnersHoldingIdenticallyNamedAccounts_PublishesEachOwnerOnlyTheirOwn()
+    {
+        // Arrange
+        var studio = SyntheticServedAccount.Of("studio", SyntheticMailOwner.Deployment);
+        var ledger = SyntheticServedAccount.Of("ledger", SyntheticMailOwner.Another);
+        var toOneOwner = ToolOver(CatalogServing(SharedlyNamedAccountOf(SyntheticMailOwner.Deployment), studio));
+        var toAnotherOwner = ToolOver(CatalogServing(ledger, SharedlyNamedAccountOf(SyntheticMailOwner.Another)));
+
+        // Act
+        var forOneOwner = await toOneOwner.ListAccountsAsync(TestContext.Current.CancellationToken);
+        var forAnotherOwner = await toAnotherOwner.ListAccountsAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(["shared", "studio"], forOneOwner.Accounts.Select(static account => account.AccountId));
+        Assert.Equal(["ledger", "shared"], forAnotherOwner.Accounts.Select(static account => account.AccountId));
+
+        foreach (var nameOnlyTheOtherOwnerCarries in new[] { ledger.Id.Value, ledger.DisplayName.Value })
+        {
+            Assert.DoesNotContain(nameOnlyTheOtherOwnerCarries, PublishedNamesOf(forOneOwner), StringComparer.OrdinalIgnoreCase);
+        }
+
+        foreach (var nameOnlyTheOtherOwnerCarries in new[] { studio.Id.Value, studio.DisplayName.Value })
+        {
+            Assert.DoesNotContain(nameOnlyTheOtherOwnerCarries, PublishedNamesOf(forAnotherOwner), StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
     /// <summary>An empty folder list says synchronization has never reached the account, which an empty mailbox answer cannot say for itself.</summary>
     [Fact]
     public async Task ListAccountsAsync_AnAccountSynchronizationHasNeverReached_PublishesItWithNoFolder()
@@ -170,6 +203,21 @@ public sealed class ListAccountsToolTests
     {
         ServedAccounts = [.. servedAccounts],
     };
+
+    /// <summary>Builds the account two owners each declare, under one identifier and one display name.</summary>
+    private static ServedMailAccount SharedlyNamedAccountOf(MailOwnerId owner) => new(
+        owner,
+        MailAccountId.Create("shared"),
+        MailAccountDisplayName.Create("The shared mailbox"),
+        MailSynchronizationMode.Polling);
+
+    /// <summary>Reads every name the answer published, wherever it named an account, so a leak anywhere in it is caught.</summary>
+    private static IReadOnlyList<string> PublishedNamesOf(ListAccountsToolResult result) =>
+    [
+        .. result.Accounts.SelectMany(static account =>
+            new[] { account.AccountId, account.DisplayName }.Concat(
+                account.Folders.SelectMany(static folder => new[] { folder.AccountId, folder.AccountDisplayName }))),
+    ];
 
     private static ListAccountsTool ToolOver(
         StubMailAccountCatalog catalog,

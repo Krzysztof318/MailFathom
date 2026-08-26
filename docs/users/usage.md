@@ -54,11 +54,18 @@ caller asks for more, and none of them is a client argument to widen.
 
 ## `list_accounts` — which mailboxes exist
 
-Takes no arguments and returns the mailboxes this deployment serves. Call it first: every other tool narrows by account,
+Takes no arguments and returns the mailboxes you may read. Call it first: every other tool narrows by account,
 and this is where the names to narrow with come from. Each entry carries two of them — the `accountId` an operator
 configured and the `displayName` they gave it — and **either one names the account** in a later call, the display name
 matched without regard to case. Quote the display name to a person; the identifier is what other results report and what
 stays stable if the readable name is changed.
+
+**Both names belong to the account's owner and are unique within that owner rather than across the deployment.** Either
+one may be stored to remember which mailbox somebody meant, and the identifier is the one to store, because it survives
+a rename. What neither may be treated as is a name for the mailbox on its own: two owners may each call an account
+`work`, so a stored name is only ever this owner's name and is never compared with one read for somebody else or from a
+second deployment. A name that reaches none of your own accounts is refused rather than answered emptily, and it is the
+same refusal whether nothing carries that name or somebody else's mailbox does.
 
 Each account also lists its folders with the same freshness statement a listing carries, and the result says whether
 synchronization is running at all. An account with no folders listed has never been synchronized, which is a different
@@ -573,7 +580,7 @@ The codes a user meets in practice:
 | `51016` | The `outgoingEmailId` you passed is no identifier this system issues — blank, truncated, or invented | Pass the value a sending tool answered with, verbatim |
 | `52001` / `52002` | A cursor this system did not issue, or one reused after the filters changed | Restart the walk from the first page |
 | `52003` | A contact listing's cursor is not one this system issued | Restart the walk; changing the search or the origin mid-walk is allowed and is not what caused it |
-| `53001` | The named account is not served here | Call `list_accounts` and use an `accountId` or `displayName` it returns |
+| `53001` | The name reaches none of the accounts you may read | One answer whether nothing carries that name or somebody else's mailbox does. Call `list_accounts` and use an `accountId` or `displayName` it returns |
 | `53002` | No such email in the local copy | The identifier is stale, or the mail was removed; list again |
 | `53003` | A folder was named by a role no folder in scope carries | Name the folder's alias instead, or ask the operator to map the role on that account |
 | `53005` | There is no email here you can reply to or forward under that identifier | One answer for four situations, deliberately: no such identifier, an account no longer served, a folder withheld from tools, or content no longer readable. Nothing tells you which — list again, and ask the operator if the message is one you expected to be able to answer |

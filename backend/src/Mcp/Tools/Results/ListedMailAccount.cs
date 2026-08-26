@@ -8,22 +8,29 @@ using MailFathom.Domain.Synchronization;
 
 namespace MailFathom.Mcp.Tools.Results;
 
-/// <summary>Publishes one account this deployment serves.</summary>
+/// <summary>Publishes one account the caller's owner owns.</summary>
 /// <remarks>
+/// <para>
 /// It carries the two names a caller may use for the account and how current its local copy is, and nothing about how
 /// MailFathom reaches the mailbox. The mail server, the port, the user name, and every credential are deliberately
 /// absent: they are the operator's connection detail rather than a property of the mailbox, and a caller choosing which
 /// mailbox to ask about needs none of them.
+/// </para>
+/// <para>
+/// Both names belong to the account's owner and are unique within it rather than across the deployment, and both
+/// descriptions say so because a client stores what it reads here. The owner itself is not published: a caller learns
+/// which mailboxes are theirs to name, never that another owner spells one the same way.
+/// </para>
 /// </remarks>
-[Description("One mail account this deployment serves, with the names a request may use for it and how current the local copy of each of its folders is.")]
+[Description("One mail account you may read, with the names a request may use for it and how current the local copy of each of its folders is.")]
 internal sealed record ListedMailAccount
 {
-    /// <summary>Gets the stable identifier the account is configured under.</summary>
-    [Description("The configured MailFathom account identifier. It is what every other result reports as accountId, and it is stable across a change of the display name.")]
+    /// <summary>Gets the stable identifier the account is configured under, within its owner.</summary>
+    [Description("The configured MailFathom account identifier. It is what every other result reports as accountId, and it is stable across a change of the display name. It is unique within the account's owner rather than across the deployment, so store it as this owner's name for the mailbox and never treat it as distinct from an identifier that reached you from another owner or another deployment.")]
     public required string AccountId { get; init; }
 
-    /// <summary>Gets the name the account is published under.</summary>
-    [Description("The display name the operator gave the account, which is the readable name for the mailbox. Either this or accountId may be used to name the account when narrowing a listing, a search, or a question; the display name is matched without regard to case.")]
+    /// <summary>Gets the name the account is published under, within its owner.</summary>
+    [Description("The display name the operator gave the account, which is the readable name for the mailbox. Either this or accountId may be used to name the account when narrowing a listing, a search, or a question; the display name is matched without regard to case. It is unique within the account's owner in the same way accountId is, and the two names share one naming space there, so either spelling names one mailbox.")]
     public required string DisplayName { get; init; }
 
     /// <summary>Gets what the operator asked to start the account's next synchronization pass.</summary>

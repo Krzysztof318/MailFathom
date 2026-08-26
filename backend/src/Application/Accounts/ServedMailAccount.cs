@@ -51,6 +51,13 @@ public sealed record ServedMailAccount(
     /// the display name without regard to case because it is prose an operator wrote for a person to retype. Both are
     /// compared against the whole value: a display name is never matched as a fragment, so naming one account can never
     /// select another whose name contains it.
+    /// <para>
+    /// It answers about one account and says nothing about which set the account was drawn from, which is what makes
+    /// asking it of another owner's accounts a mistake rather than a refusal. Both names are unique within the owner
+    /// that gave them and nowhere wider, so two owners may each answer to <c>work</c>: a caller-facing resolution asks
+    /// this only of the accounts the caller's owner owns, and one that asked it of the deployment's would resolve the
+    /// caller's word to whichever owner's account came first.
+    /// </para>
     /// </remarks>
     public bool IsNamedBy(MailAccountSelector selector) =>
         StringComparer.Ordinal.Equals(this.Id.Value, selector.Value)

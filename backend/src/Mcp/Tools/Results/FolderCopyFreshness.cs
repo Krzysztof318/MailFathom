@@ -17,11 +17,11 @@ namespace MailFathom.Mcp.Tools.Results;
 internal sealed record FolderCopyFreshness
 {
     /// <summary>Gets the account the folder belongs to.</summary>
-    [Description("The configured MailFathom account identifier the folder belongs to.")]
+    [Description("The configured MailFathom account identifier the folder belongs to, unique within that account's owner rather than across the deployment.")]
     public required string AccountId { get; init; }
 
-    /// <summary>Gets the name that account is published under.</summary>
-    [Description("The display name the account is published under, which is the operator's own name for the mailbox.")]
+    /// <summary>Gets the name that account is published under, within its owner.</summary>
+    [Description("The display name the account is published under, which is the operator's own name for the mailbox. It is unique within that account's owner in the same way the identifier is.")]
     public required string AccountDisplayName { get; init; }
 
     /// <summary>Gets MailFathom's own name for the folder.</summary>

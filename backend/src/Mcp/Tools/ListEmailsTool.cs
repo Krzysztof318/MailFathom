@@ -54,7 +54,7 @@ internal sealed class ListEmailsTool(
     public static McpToolCategory Category => McpToolCategory.Mailbox;
 
     /// <summary>Lists a bounded page of summaries from the local mailbox copy.</summary>
-    /// <param name="accounts">The accounts to read, named by identifier or display name, or none to read every account this deployment serves.</param>
+    /// <param name="accounts">The accounts to read, named by identifier or display name, or none to read every account the caller's owner owns.</param>
     /// <param name="folders">The folders to read, each named by alias or by role, or none to read every folder of those accounts.</param>
     /// <param name="senderAddress">The address the sender must carry.</param>
     /// <param name="recipientAddress">The address a <c>To</c> or <c>Cc</c> recipient must carry.</param>
@@ -94,7 +94,7 @@ internal sealed class ListEmailsTool(
         + "summaries per call, with an opaque cursor for the next page and a per-folder statement of how current the "
         + "local copy is.")]
     public async Task<ListEmailsToolResult> ListEmailsAsync(
-        [Description("MailFathom accounts to read, each named by its configured account identifier or by the display name it is published under. Omit to read every account this deployment serves; call list_accounts to see what they are. At most 64 may be named, and a name this deployment does not serve is refused rather than answered with an empty page.")]
+        [Description("MailFathom accounts to read, each named by its configured account identifier or by the display name it is published under; both are unique within the account's owner rather than across the deployment. Omit to read every account you may read; call list_accounts to see what they are. At most 64 may be named, and a name that resolves to none of them is refused rather than answered with an empty page — the same refusal whether nothing carries that name or it names a mailbox that is not yours.")]
         string[]? accounts = null,
         [Description("MailFathom folders to read, each named by its alias, such as INBOX, or by the role it plays, written as role:Junk. Roles are Inbox, Archive, Drafts, Sent, Junk, Trash, All, Flagged, Important, and Outbox; naming one reads whichever folder each account in scope maps with that role, whatever it is called there. Omit to read every folder of the accounts in scope. At most 64 may be named. An alias is MailFathom's own name for a folder and is matched without regard to case.")]
         string[]? folders = null,
