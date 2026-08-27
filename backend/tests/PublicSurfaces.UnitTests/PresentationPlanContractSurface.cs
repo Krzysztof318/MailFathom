@@ -64,6 +64,7 @@ internal static class PresentationPlanContractSurface
         ["blockCitations"] = PresentationEvidence.MaxCitations,
         ["textLength"] = PresentationText.MaxLength,
         ["citationIdentifierLength"] = PresentationCitationId.MaxLength,
+        ["addressOctets"] = EmailAddressJsonConverter.MaxOctets,
         ["evidenceListEntries"] = EvidenceListBlock.MaxEntries,
         ["timelineEntries"] = TimelineBlock.MaxEntries,
         ["factTableColumns"] = FactTableBlock.MaxColumns,

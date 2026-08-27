@@ -144,6 +144,49 @@ public sealed class PresentationPlanSerializationTests
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<PresentationPlan>(written.ToJsonString(), Contract));
     }
 
+    /// <summary>A citation with nothing to resolve to invites a reader to follow a source that is not there.</summary>
+    [Fact]
+    public void Deserialization_ACitationMissingItsTarget_IsRefused()
+    {
+        // Arrange
+        var written = JsonNode.Parse(JsonSerializer.Serialize(PresentationPlanExample.Compose(), Contract))!.AsObject();
+        written["citations"]!.AsArray()[0]!.AsObject().Remove("target");
+
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(() => JsonSerializer.Deserialize<PresentationPlan>(written.ToJsonString(), Contract));
+    }
+
+    /// <summary>An address arrives from a producer this deployment does not control, so its length is bounded like every other text here.</summary>
+    [Fact]
+    public void Deserialization_AnAddressLongerThanTheBound_IsRefused()
+    {
+        // Arrange
+        var oversized = new string('a', EmailAddressJsonConverter.MaxOctets) + "@northwind.example";
+        var written = JsonNode.Parse(JsonSerializer.Serialize(PresentationPlanExample.Compose(), Contract))!.AsObject();
+        written["blocks"]!.AsArray()[4]!.AsObject()["entries"]!.AsArray()[0]!.AsObject()["address"] = oversized;
+
+        // Act, Assert
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<PresentationPlan>(written.ToJsonString(), Contract));
+    }
+
+    /// <summary>The bound is what RFC 5321 leaves room for, so an address using all of it is still read.</summary>
+    [Fact]
+    public void Deserialization_AnAddressAsLongAsTheBoundAllows_IsRead()
+    {
+        // Arrange
+        var domain = new string('d', EmailAddressJsonConverter.MaxOctets - 64 - 1 - ".example".Length) + ".example";
+        var longest = new string('a', 64) + "@" + domain;
+        var written = JsonNode.Parse(JsonSerializer.Serialize(PresentationPlanExample.Compose(), Contract))!.AsObject();
+        written["blocks"]!.AsArray()[4]!.AsObject()["entries"]!.AsArray()[0]!.AsObject()["address"] = longest;
+
+        // Act
+        var read = JsonSerializer.Deserialize<PresentationPlan>(written.ToJsonString(), Contract);
+
+        // Assert
+        Assert.NotNull(read);
+        Assert.Equal(longest, ((PeopleBlock)read.Blocks[4]).Entries[0].Address?.Address);
+    }
+
     /// <summary>The structural rules are the constructor's, and deserialization goes through it.</summary>
     [Fact]
     public void Deserialization_APlanNamingACitationItDoesNotDeclare_IsRefused()

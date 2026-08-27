@@ -16,10 +16,38 @@ namespace MailFathom.Application.Discovery.Presentation.Citations;
 /// carry the same label and still resolve to different places.
 /// </para>
 /// </remarks>
-/// <param name="Id">The name blocks refer to this citation by.</param>
-/// <param name="Target">What the citation resolves to.</param>
-/// <param name="Label">What a client prints where the source is named.</param>
-public sealed record PresentationCitation(
-    PresentationCitationId Id,
-    PresentationCitationTarget Target,
-    PresentationText Label);
+public sealed record PresentationCitation
+{
+    /// <summary>Initializes one source a plan declares.</summary>
+    /// <param name="id">The name blocks refer to this citation by.</param>
+    /// <param name="target">What the citation resolves to.</param>
+    /// <param name="label">What a client prints where the source is named.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="target" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="label" /> is the unspecified default.</exception>
+    /// <remarks>
+    /// The identifier is checked by <see cref="PresentationPlan" /> rather than here, because what makes a name usable
+    /// is that the plan declares it once and no block names anything else — a claim about the set rather than about
+    /// one citation, and one this constructor could not make.
+    /// </remarks>
+    public PresentationCitation(
+        PresentationCitationId id,
+        PresentationCitationTarget target,
+        PresentationText label)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        PresentationRequirement.Specified(label, nameof(label));
+
+        this.Id = id;
+        this.Target = target;
+        this.Label = label;
+    }
+
+    /// <summary>Gets the name blocks refer to this citation by.</summary>
+    public PresentationCitationId Id { get; }
+
+    /// <summary>Gets what the citation resolves to.</summary>
+    public PresentationCitationTarget Target { get; }
+
+    /// <summary>Gets what a client prints where the source is named.</summary>
+    public PresentationText Label { get; }
+}

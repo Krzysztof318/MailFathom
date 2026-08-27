@@ -11,6 +11,7 @@
     "timeline": 1
   },
   "bounds": {
+    "addressOctets": 320,
     "attachmentGalleryEntries": 50,
     "blockCitations": 24,
     "citationIdentifierLength": 32,

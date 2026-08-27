@@ -120,7 +120,9 @@ The contract holds this by construction rather than by review.
   deliberately does not sanitize prose that merely mentions an angle bracket: mail quoted from a developer's inbox
   contains one, and the client draws the value into a typed text element rather than into a parser.
 - Everything else is a number, a timestamp, an identity, or a value from a closed set. There is no member anywhere in
-  the contract whose meaning is "render this".
+  the contract whose meaning is "render this". An address is the one of those whose validity is a domain rule rather
+  than this contract's, and that rule is about the shape of an address rather than its length, so the length is bounded
+  here — like every other text arriving from outside, and before anything expands it.
 
 Those rules hold for a plan read off the wire exactly as for one composed in process, because deserialization goes
 through the same constructors.

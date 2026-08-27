@@ -23,8 +23,22 @@ namespace MailFathom.Application.Discovery.Presentation;
 /// </remarks>
 public sealed class EmailAddressJsonConverter : JsonConverter<EmailAddress>
 {
+    /// <summary>The greatest number of octets an address may arrive as.</summary>
+    /// <remarks>
+    /// What RFC 5321 leaves room for and nothing more: sixty-four octets of local part, the separator, and two hundred
+    /// and fifty-five of domain. An address is the one member of this contract whose validity is a domain rule rather
+    /// than this boundary's, and that rule is about the shape of an address rather than its length — so the bound is
+    /// stated here, beside the two the contract already puts on text arriving from outside it.
+    /// </remarks>
+    public const int MaxOctets = 320;
+
     /// <inheritdoc />
-    /// <exception cref="JsonException">Thrown when the token is not a string or does not name a usable address.</exception>
+    /// <exception cref="JsonException">Thrown when the token is not a string, is longer than <see cref="MaxOctets" />, or does not name a usable address.</exception>
+    /// <remarks>
+    /// The bound is read off the token rather than off the string it decodes to, so an oversized value is refused
+    /// before anything expands it. That leaves the ceiling marginally stricter for a value written with escapes, which
+    /// an address has no reason to be.
+    /// </remarks>
     public override EmailAddress Read(
         ref Utf8JsonReader reader,
         Type typeToConvert,
@@ -33,6 +47,13 @@ public sealed class EmailAddressJsonConverter : JsonConverter<EmailAddress>
         if (reader.TokenType != JsonTokenType.String)
         {
             throw new JsonException($"An address must be a JSON string, but the token was {reader.TokenType}.");
+        }
+
+        var octets = reader.HasValueSequence ? reader.ValueSequence.Length : reader.ValueSpan.Length;
+
+        if (octets > MaxOctets)
+        {
+            throw new JsonException($"An address is at most {MaxOctets} octets.");
         }
 
         if (!EmailAddress.TryCreate(displayName: null, reader.GetString(), out var address))
