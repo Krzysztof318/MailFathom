@@ -31,6 +31,10 @@ public sealed class ConfigurationCommandTests : IDisposable
     private const string Endpoint = CliCommandHarness.Endpoint;
     private const string SnippetsPerEmail = "MailboxSearch:SnippetsPerEmail";
 
+    /// <summary>A document as the deployment answers with one, with the marker where a secret reference stands.</summary>
+    /// <remarks>Named once so the buffer a test opens and the document the fake answered with are visibly the same string, which is the whole of what the editing session is asserted to do with it.</remarks>
+    private const string RedactedChatDocument = """{ "Chat": { "ApiKey": { "SecretReference": "(redacted)" } } }""";
+
     private readonly CliCommandHarness harness = new(new DateTimeOffset(2026, 8, 27, 12, 0, 0, TimeSpan.Zero));
 
     /// <summary>
@@ -349,17 +353,19 @@ public sealed class ConfigurationCommandTests : IDisposable
         Assert.Equal(edited, sent.GetProperty("document").GetString());
     }
 
-    /// <summary>The buffer carries no secret material, whatever the deployment's document holds.</summary>
+    /// <summary>
+    /// The buffer is the document the deployment answered with, byte for byte. What the buffer may carry is the
+    /// deployment's decision — <c>SettingRedaction.ApplyToDocument</c> makes it, and its own suite covers it — so what
+    /// is asserted here is that this command neither composes a document of its own nor rewrites the one it was given.
+    /// </summary>
     [Fact]
-    public async Task Edit_ADocumentCarryingASecret_OpensABufferHoldingTheMarkerAndNotTheReference()
+    public async Task Edit_ADocumentTheDeploymentRedacted_OpensTheBufferOnWhatTheDeploymentAnswered()
     {
         // Arrange
         using var deployment = FakeConfigurationDeployment.Holding(
             documents:
             [
-                FakeConfigurationDeployment.Document(
-                    version: 1,
-                    """{ "Chat": { "ApiKey": { "SecretReference": "(redacted)" } } }"""),
+                FakeConfigurationDeployment.Document(version: 1, RedactedChatDocument),
             ]);
 
         var opened = string.Empty;
@@ -375,7 +381,7 @@ public sealed class ConfigurationCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Contains("(redacted)", opened, StringComparison.Ordinal);
+        Assert.Equal(RedactedChatDocument, opened);
         Assert.Equal(0, deployment.ConfigurationWriteCount());
     }
 

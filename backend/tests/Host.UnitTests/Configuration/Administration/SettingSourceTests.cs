@@ -37,8 +37,10 @@ public sealed class SettingSourceTests
     public void All_ListsEveryDeclaredSource()
     {
         // Arrange
+        // Both accessibilities, so the guard keeps inspecting something when a member is later declared public: a
+        // query matching only today's accessibility would leave the sequence empty and Assert.Empty passing over it.
         var declared = typeof(SettingSource)
-            .GetProperties(BindingFlags.NonPublic | BindingFlags.Static)
+            .GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
             .Where(property => property.PropertyType == typeof(SettingSource))
             .Select(property => (SettingSource)property.GetValue(null)!);
 

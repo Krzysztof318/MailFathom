@@ -22,6 +22,21 @@ public sealed class SettingRedactionTests
     public void Redacts_ASettingNamingASecret_ReportsTrue(string path) => Assert.True(SettingRedaction.Redacts(path));
 
     /// <summary>
+    /// The second half of the rule, and the one no property name announces: a bootstrap-only setting is where the
+    /// deployment is reached from — its database, the file its own configuration is read out of, how it interprets a
+    /// secret reference — and it is redacted because it is that rather than because of what it is called. Reading a
+    /// connection string names the host, the database, and often the user; reading the directory names where the
+    /// material on disk is. Neither last segment carries a word <c>SecretPropertyNaming</c> would recognize, so a rule
+    /// written against the name alone would hand every one of them back.
+    /// </summary>
+    [Theory]
+    [InlineData("ConnectionStrings:mailfathom")]
+    [InlineData("Persistence:CommandTimeoutSeconds")]
+    [InlineData("ConfigurationSources:Directory")]
+    [InlineData("Secrets:Interpretation:Scheme")]
+    public void Redacts_ABootstrapOnlySetting_ReportsTrue(string path) => Assert.True(SettingRedaction.Redacts(path));
+
+    /// <summary>
     /// A name that locates something rather than holding it is not a secret, and neither is the handle beside one. The
     /// second is what makes a redacted document still readable: an operator sees which secret a setting names without
     /// seeing where its material is kept.
@@ -82,7 +97,12 @@ public sealed class SettingRedactionTests
         Assert.Contains(SettingRedaction.Marker, redacted, StringComparison.Ordinal);
     }
 
-    /// <summary>Everything that is not a secret is handed over unchanged, including the handle a secret is named by.</summary>
+    /// <summary>
+    /// Everything that is not a secret is handed over unchanged, including the handle a secret is named by. The secret
+    /// here is a chat provider's key rather than the database's, because a database setting is bootstrap-only and the
+    /// rule above redacts the whole of one — handle included, since a bootstrap-only setting is withheld for where it
+    /// points rather than for what its last segment is called.
+    /// </summary>
     [Fact]
     public void ApplyToDocument_ASettingHoldingNoSecret_CarriesItThrough()
     {
@@ -90,7 +110,7 @@ public sealed class SettingRedactionTests
         const string persisted = """
             {
               "MailboxSearch": { "SnippetsPerEmail": "3" },
-              "Persistence": { "Password": { "Name": "postgres", "SecretReference": "file:/run/secrets/postgres" } }
+              "Chat": { "ApiKey": { "Name": "chat-provider", "SecretReference": "file:/run/secrets/chat" } }
             }
             """;
 
@@ -99,8 +119,30 @@ public sealed class SettingRedactionTests
 
         // Assert
         Assert.Contains("\"SnippetsPerEmail\"", redacted, StringComparison.Ordinal);
-        Assert.Contains("postgres\"", redacted, StringComparison.Ordinal);
-        Assert.DoesNotContain("/run/secrets/postgres", redacted, StringComparison.Ordinal);
+        Assert.Contains("chat-provider\"", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("/run/secrets/chat", redacted, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A bootstrap-only setting is withheld whole, so the handle beside one goes with it. That is the one place the
+    /// rule above stops holding, and it is deliberate: what a database secret is called is part of what an operator
+    /// would need in order to reach the database, and the persisted layer refuses to carry the setting either way.
+    /// </summary>
+    [Fact]
+    public void ApplyToDocument_ABootstrapOnlySettingsHandle_IsWithheldWithIt()
+    {
+        // Arrange
+        const string persisted = """
+            {
+              "Persistence": { "Password": { "Name": "postgres", "SecretReference": "file:/run/secrets/postgres" } }
+            }
+            """;
+
+        // Act
+        var redacted = SettingRedaction.ApplyToDocument(persisted);
+
+        // Assert
+        Assert.DoesNotContain("postgres", redacted, StringComparison.Ordinal);
     }
 
     /// <summary>A row that is not a JSON object describes no settings, and is refused rather than reported as an empty one.</summary>

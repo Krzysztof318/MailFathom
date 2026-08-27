@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -108,10 +109,15 @@ internal static class SettingRedaction
     /// <exception cref="FormatException">Thrown when the document is not a JSON object.</exception>
     /// <exception cref="JsonException">Thrown when the document is not JSON at all.</exception>
     /// <remarks>
-    /// The property name decides, exactly as it does for a single setting, and the walk reaches a value wherever it
-    /// sits — an array element's property included, since a mail account's secret block is written inside one. What is
-    /// left is the shape of the document unchanged: an operator editing it sees which settings bear secrets and where,
-    /// and what they never see is the material or the path to it.
+    /// <see cref="Redacts" /> decides each leaf, exactly as it does for a single setting, and the walk carries the
+    /// colon-delimited path down so that it can: the second of that method's two rules is stated over a whole path
+    /// rather than over a property name, and a walk deciding by the property name alone would hand back
+    /// <c>ConnectionStrings:mailfathom</c> from a row somebody wrote by hand while the keyed reading beside it
+    /// redacted the same value. The walk reaches a value wherever it sits — an array element's property included,
+    /// since a mail account's secret block is written inside one, and the position becomes a path segment there for
+    /// the same reason the configuration binder makes it one. What is left is the shape of the document unchanged: an
+    /// operator editing it sees which settings bear secrets and where, and what they never see is the material or the
+    /// path to it.
     /// </remarks>
     internal static string ApplyToDocument(string json)
     {
@@ -123,28 +129,30 @@ internal static class SettingRedaction
                 "The persisted configuration document is not a JSON object of configuration keys, so there is nothing to read back.");
         }
 
-        RedactWithin(document);
+        RedactWithin(document, prefix: string.Empty);
 
         return document.ToJsonString(BufferFormat);
     }
 
     /// <summary>Replaces every secret-bearing value the object holds, descending into what it nests.</summary>
-    private static void RedactWithin(JsonObject document)
+    private static void RedactWithin(JsonObject document, string prefix)
     {
         foreach (var property in document.ToList())
         {
+            var path = Beneath(prefix, property.Key);
+
             switch (property.Value)
             {
                 case JsonObject nested:
-                    RedactWithin(nested);
+                    RedactWithin(nested, path);
                     break;
 
                 case JsonArray elements:
-                    RedactWithin(elements);
+                    RedactWithin(elements, path);
                     break;
 
                 default:
-                    if (SecretPropertyNaming.NamesASecret(property.Key))
+                    if (Redacts(path))
                     {
                         document[property.Key] = JsonValue.Create(Marker);
                     }
@@ -156,18 +164,20 @@ internal static class SettingRedaction
 
     /// <summary>Replaces every secret-bearing value the array's elements hold.</summary>
     /// <remarks>An element is never itself a secret-bearing setting, because a secret is announced by a property name and a position has none; what carries one is a property of an element.</remarks>
-    private static void RedactWithin(JsonArray elements)
+    private static void RedactWithin(JsonArray elements, string prefix)
     {
-        foreach (var element in elements)
+        foreach (var (position, element) in elements.Index())
         {
+            var path = Beneath(prefix, position.ToString(CultureInfo.InvariantCulture));
+
             switch (element)
             {
                 case JsonObject nested:
-                    RedactWithin(nested);
+                    RedactWithin(nested, path);
                     break;
 
                 case JsonArray nested:
-                    RedactWithin(nested);
+                    RedactWithin(nested, path);
                     break;
 
                 default:
@@ -175,4 +185,7 @@ internal static class SettingRedaction
             }
         }
     }
+
+    private static string Beneath(string prefix, string segment) =>
+        prefix.Length == 0 ? segment : $"{prefix}:{segment}";
 }

@@ -93,7 +93,26 @@ internal static class EditConfigurationCommand
         }
         finally
         {
+            Discard(buffer);
+        }
+    }
+
+    /// <summary>Removes the buffer, letting the invocation's own outcome stand where it cannot be removed.</summary>
+    /// <remarks>
+    /// The case is the one this command's own guidance anticipates: a graphical editor started without its wait flag
+    /// returns while still holding the file open, so the delete throws on Windows over an invocation that had already
+    /// decided what it did. Turning that into a stack trace would report a failure to somebody whose command worked,
+    /// or replace the sentence naming why nothing was written — which is the rule <c>CliRunner.Record</c> states for a
+    /// full disk. What is left behind is a redacted document readable by its owner alone, in a temporary directory.
+    /// </remarks>
+    private static void Discard(string buffer)
+    {
+        try
+        {
             File.Delete(buffer);
+        }
+        catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
+        {
         }
     }
 

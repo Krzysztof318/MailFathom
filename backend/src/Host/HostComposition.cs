@@ -176,7 +176,11 @@ internal static class HostComposition
         // as IConfiguration, and the layer is told apart from a candidate's provider by identity.
         builder.Services.AddSingleton(
             new EffectiveSettingsReader(builder.Configuration, layer.Provider));
-        builder.Services.AddSingleton<PersistedSettingsAdministration>();
+        // Scoped rather than a singleton, because it asks AccessAuthorization for the permission each of its
+        // operations is published under and that service is scoped to whatever admitted the caller. The reader above
+        // stays a singleton: which layer supplies a value is a property of the pipeline this host built and is the
+        // same answer for every caller.
+        builder.Services.AddScoped<PersistedSettingsAdministration>();
     }
 
     /// <summary>Registers the telemetry, resilience, clock, and secret resolution every other stage assumes.</summary>

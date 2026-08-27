@@ -2,11 +2,14 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Configuration;
+using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Administration;
 using MailFathom.Host.Configuration.Provisioning;
 using MailFathom.Host.Configuration.RootSettings;
 using MailFathom.Infrastructure.Persistence.Settings;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
@@ -20,6 +23,11 @@ namespace MailFathom.Host.UnitTests.TestDoubles;
 /// because that is what the layer's insertion point recognizes as the lowest of the operator's sources. The persisted
 /// layer therefore sits below it and above the deployment's own file, exactly as it does in a running process — which
 /// is the whole of what a reading reports and what a write is refused by.
+/// </para>
+/// <para>
+/// The caller is the deployment administrator, granted both permissions the configuration surface is published under,
+/// because that is what every test about a reading or a write is arranging around. A test about the grant itself names
+/// what it wants through <c>granted</c>, and states the refusal it expects.
 /// </para>
 /// <para>
 /// The writer behind the administration is the real one rather than a substitute. What the administration adds —
@@ -41,7 +49,8 @@ internal sealed class ComposedConfigurationDeployment : IDisposable
     private ComposedConfigurationDeployment(
         ConfigurationManager configuration,
         RootSettingsConfigurationSource layer,
-        InMemoryRootSettingsRow row)
+        InMemoryRootSettingsRow row,
+        AccessAuthorization authorization)
     {
         this.configuration = configuration;
         this.Row = row;
@@ -56,7 +65,7 @@ internal sealed class ComposedConfigurationDeployment : IDisposable
             DeclaredSecretScheme.Registered,
             new RecordingLogger<RootSettingsWriter>());
 
-        this.Administration = new PersistedSettingsAdministration(this.Reader, row, writer);
+        this.Administration = new PersistedSettingsAdministration(authorization, this.Reader, row, writer);
     }
 
     /// <summary>Gets the reading side, which reports where each value the deployment composed came from.</summary>
@@ -76,12 +85,14 @@ internal sealed class ComposedConfigurationDeployment : IDisposable
     /// <param name="persisted">The persisted configuration document, as JSON.</param>
     /// <param name="operatorOverride">An override composed above the persisted layer, as JSON, or nothing.</param>
     /// <param name="version">The version the persisted document stands at.</param>
+    /// <param name="granted">What the entry that admitted the caller resolved to, defaulting to both permissions the configuration surface is published under.</param>
     /// <returns>The composed deployment.</returns>
     public static ComposedConfigurationDeployment Composed(
         string provisioned,
         string persisted,
         string? operatorOverride = null,
-        long version = 1)
+        long version = 1,
+        MailFathomPermission[]? granted = null)
     {
         var configuration = new ConfigurationManager();
         var files = new InMemoryConfigurationFileProvider().WithFile(DeploymentFileName, provisioned);
@@ -110,7 +121,9 @@ internal sealed class ComposedConfigurationDeployment : IDisposable
         return new ComposedConfigurationDeployment(
             configuration,
             configuration.Sources.OfType<RootSettingsConfigurationSource>().Last(),
-            new InMemoryRootSettingsRow(persisted, version));
+            new InMemoryRootSettingsRow(persisted, version),
+            AccessAuthorizations.ForAdministratorGranted(
+                granted ?? [MailFathomPermission.AdminRead, MailFathomPermission.AdminConfigurationWrite]));
     }
 
     /// <summary>Applies keyed changes over the version the row currently stands at.</summary>

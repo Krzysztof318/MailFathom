@@ -66,19 +66,23 @@ reverse proxy, write the public URL and keep the path: `https://mail.example.tes
 > Weigh that against what the operations are. The endpoint serves reads — who a credential makes the caller, two
 > records of what a mailbox has had done to it and what has been read from it, where semantic search stands, and what
 > synchronization is doing — and
-> writes that store a mailbox refresh token, start a provider bill, and erase what a folder has stored. An unnarrowed
-> credential can do all of them, so it is as sensitive as the mailbox credentials it can place, the histories it can
-> read, the spend it can begin, and the mail it can dispose of.
+> writes that store a mailbox refresh token, start a provider bill, erase what a folder has stored, and change the
+> deployment's own persisted configuration. An unnarrowed credential can do all of them, so it is as sensitive as the
+> mailbox credentials it can place, the histories it can read, the spend it can begin, the mail it can dispose of, and
+> the deployment it can redefine — the last of those reaching every other, since a configuration write can widen
+> another credential's grant.
 
 ## What a credential may do
 
 Each entry states what the credentials it admits may do, as `Permissions`. This surface's half of the published set is
-six names — `mailfathom.admin.read`, `mailfathom.admin.audit.read`, `mailfathom.admin.operate`,
-`mailfathom.admin.credentials.write`, `mailfathom.admin.spend`, and `mailfathom.admin.erase` — allocated so that the
+seven names — `mailfathom.admin.read`, `mailfathom.admin.audit.read`, `mailfathom.admin.operate`,
+`mailfathom.admin.credentials.write`, `mailfathom.admin.spend`, `mailfathom.admin.erase`, and
+`mailfathom.admin.configuration.write` — allocated so that the
 separations an operator would plausibly want to make are the ones they can: reading state, reading what was derived
-from mail, causing work, placing a credential, starting a bill, and destroying what the deployment holds.
-[What a credential may do](permissions.md) states what each name reaches, which two permissions the seven commands that
-read before they write need together, how a grant is written, and what fails startup;
+from mail, causing work, placing a credential, starting a bill, destroying what the deployment holds, and changing
+what the deployment itself is.
+[What a credential may do](permissions.md) states what each name reaches, which two permissions the twelve commands
+that read before they write need together, how a grant is written, and what fails startup;
 [what the endpoint serves](#what-the-endpoint-serves) names the permission every route is published under.
 
 `GET /api/admin/session` is the one route that requires none, which is what lets a credential granted nothing still
@@ -106,7 +110,7 @@ server, or a subject: a grant is what the deployment wrote, never who presented 
 
 The contact book needed no name of its own on this surface and is reachable from the other one under that surface's
 name — [the contact book draws from both halves](permissions.md#the-contact-book-draws-from-both-halves) is why, and
-which of the six each of its routes falls under.
+which of the seven each of its routes falls under.
 
 ### What a refusal says
 

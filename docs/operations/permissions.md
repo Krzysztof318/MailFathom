@@ -72,9 +72,9 @@ alone gets an agent that can write a message of its own and cannot answer anythi
 The contact permissions are separate from the mailbox ones and from each other, because the book is a different body of
 personal data from the mail: an assembled record about identified third parties rather than correspondence that
 arrived, and a credential that may look somebody up is not thereby one that may erase them. On the administrative half
-the six names are allocated so that the separations an operator would plausibly want are the ones they can make:
-reading state, reading what was derived from mail, causing work, placing a credential, starting a bill, and destroying
-what the deployment holds.
+the seven names are allocated so that the separations an operator would plausibly want are the ones they can make:
+reading state, reading what was derived from mail, causing work, placing a credential, starting a bill, destroying
+what the deployment holds, and changing what the deployment itself is.
 
 **A name is published when the capability exists.** Adding one is a configuration-schema change under
 [ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md),

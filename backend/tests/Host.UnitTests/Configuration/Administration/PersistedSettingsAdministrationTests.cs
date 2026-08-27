@@ -2,7 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Application.Configuration;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration.Administration;
 using MailFathom.Host.UnitTests.TestDoubles;
@@ -334,6 +336,150 @@ public sealed class PersistedSettingsAdministrationTests
         // Assert
         Assert.DoesNotContain("/run/secrets/chat", document.Json, StringComparison.Ordinal);
         Assert.Contains(SettingRedaction.Marker, document.Json, StringComparison.Ordinal);
+    }
+
+
+    /// <summary>
+    /// A marker stands for the value at the path it was saved at, so a save that moved the path it sits at is refused
+    /// rather than committed. An array position is the one part of a path an edit can move: deleting the first account
+    /// leaves the second one's marker sitting where the first one's stood, and placing it would write one mailbox's
+    /// credential onto another mailbox.
+    /// </summary>
+    [Fact]
+    public async Task ApplyDocumentAsync_AMarkerWhoseArrayElementMoved_IsRefusedNamingTheElement()
+    {
+        // Arrange
+        using var deployment = Composed(
+            provisioned: "{}",
+            persisted: """
+                {
+                  "MailSynchronization": {
+                    "Accounts": [
+                      { "AccountId": "first", "Secrets": { "Password": { "SecretReference": "file:/run/secrets/first" } } },
+                      { "AccountId": "second", "Secrets": { "Password": { "SecretReference": "file:/run/secrets/second" } } }
+                    ]
+                  }
+                }
+                """);
+
+        var opened = await deployment.ReadDocumentAsync();
+
+        // Act
+        var outcome = await deployment.ApplyDocumentAsync(
+            """
+            {
+              "MailSynchronization": {
+                "Accounts": [
+                  { "AccountId": "second", "Secrets": { "Password": { "SecretReference": "(redacted)" } } }
+                ]
+              }
+            }
+            """,
+            opened.Version);
+
+        // Assert
+        Assert.False(outcome.Committed);
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome.Refusal);
+        Assert.Equal(0, deployment.Row.AcceptedCommits);
+
+        var refusal = Assert.Single(outcome.Messages);
+        Assert.Contains("MailSynchronization:Accounts:0", refusal, StringComparison.Ordinal);
+        Assert.Contains("mfctl config set", refusal, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The marker means "the value the document already carries here", so writing one where the document carries
+    /// nothing names no value at all. Committing it would persist the marker's own text as though it were deliberate.
+    /// </summary>
+    [Fact]
+    public async Task ApplyDocumentAsync_AMarkerWhereTheDocumentCarriesNothing_IsRefused()
+    {
+        // Arrange
+        using var deployment = Composed(provisioned: "{}", persisted: "{}");
+        var opened = await deployment.ReadDocumentAsync();
+
+        // Act
+        var outcome = await deployment.ApplyDocumentAsync(
+            """{ "Chat": { "ApiKey": { "SecretReference": "(redacted)" } } }""",
+            opened.Version);
+
+        // Assert
+        Assert.False(outcome.Committed);
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome.Refusal);
+        Assert.Equal(0, deployment.Row.AcceptedCommits);
+        Assert.Contains(
+            "Chat:ApiKey:SecretReference",
+            Assert.Single(outcome.Messages),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A bootstrap-only setting is one the persisted layer may not carry, so offering it for adoption would preview a
+    /// change the commit behind it refuses. What the preview leaves out is what the operator would otherwise take for
+    /// an adoption that half worked.
+    /// </summary>
+    [Fact]
+    public void ReadAdoptable_ABootstrapOnlySettingAFileDecides_IsNotOffered()
+    {
+        // Arrange
+        using var deployment = Composed(
+            provisioned: """{ "Persistence": { "CommandTimeoutSeconds": "45", "TextSearchConfiguration": "english" } }""",
+            persisted: "{}");
+
+        // Act
+        var adoptable = deployment.Administration.ReadAdoptable("Persistence");
+
+        // Assert
+        var setting = Assert.Single(adoptable.Settings);
+        Assert.Equal("Persistence:TextSearchConfiguration", setting.Path);
+    }
+
+    /// <summary>
+    /// Every reading asks for the permission it is published under with the transport absent, so a route filter is not
+    /// the only thing standing between a credential and the deployment's own configuration — which is where a
+    /// connection string, a secret reference, and every other credential's grant are named.
+    /// </summary>
+    [Fact]
+    public async Task Read_ACallerGrantedNothing_IsRefusedOnEveryReading()
+    {
+        // Arrange
+        using var deployment = ComposedConfigurationDeployment.Composed(
+            provisioned: "{}",
+            persisted: "{}",
+            granted: []);
+
+        // Act & Assert
+        Assert.Throws<PrincipalNotAuthorizedException>(() => deployment.Administration.Read(prefix: null));
+        Assert.Throws<PrincipalNotAuthorizedException>(() => deployment.Administration.ReadAdoptable("MailboxSearch"));
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => deployment.ReadDocumentAsync());
+    }
+
+    /// <summary>
+    /// Reading the configuration and changing it are separate grants, so a credential narrowed to the reading half is
+    /// refused by every write rather than by the route alone.
+    /// </summary>
+    [Fact]
+    public async Task ApplyAsync_ACallerGrantedOnlyTheReading_IsRefusedOnEveryWrite()
+    {
+        // Arrange
+        using var deployment = ComposedConfigurationDeployment.Composed(
+            provisioned: "{}",
+            persisted: "{}",
+            granted: [MailFathomPermission.AdminRead]);
+
+        // Act & Assert
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            deployment.ApplyAsync(ConfigurationEdit.SetTo("MailboxSearch:SnippetsPerEmail", "3")));
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            deployment.ApplyDocumentAsync("{}", deployment.Row.Version));
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() =>
+            deployment.Administration.AdoptAsync(
+                "MailboxSearch",
+                deployment.Row.Version,
+                evenIfShadowed: false,
+                TestContext.Current.CancellationToken));
+
+        Assert.Equal(0, deployment.Row.AcceptedCommits);
     }
 
     /// <summary>Composes the deployment these tests write against.</summary>
