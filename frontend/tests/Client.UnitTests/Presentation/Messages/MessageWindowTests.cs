@@ -60,8 +60,7 @@ public sealed class MessageWindowTests
         var extended = window.Extended(
             Page(3, next: "after-3", previous: "before-3", readCursor: "after-1"),
             MailTimelinePageDirection.Forward,
-            Inbox,
-            MessageListArrangement.Default);
+            window);
 
         // Assert
         Assert.Equal(
@@ -85,8 +84,7 @@ public sealed class MessageWindowTests
         var extended = window.Extended(
             Page(1, next: "after-1", previous: null, readCursor: "before-3"),
             MailTimelinePageDirection.Backward,
-            Inbox,
-            MessageListArrangement.Default);
+            window);
 
         // Assert
         Assert.Equal(
@@ -119,8 +117,7 @@ public sealed class MessageWindowTests
                     previous: $"before-{page + 1}",
                     readCursor: $"after-{page}"),
                 MailTimelinePageDirection.Forward,
-                Inbox,
-                MessageListArrangement.Default);
+                window);
         }
 
         // Assert
@@ -147,8 +144,7 @@ public sealed class MessageWindowTests
         var extended = window.Extended(
             EmptyPage(),
             MailTimelinePageDirection.Forward,
-            Inbox,
-            MessageListArrangement.Default);
+            window);
 
         // Assert
         Assert.Equal(2, extended.Messages.Count);
@@ -169,24 +165,49 @@ public sealed class MessageWindowTests
             MessageListArrangement.Default,
             Page(1, next: "after-1", previous: null, readCursor: null));
 
+        var elsewhereWindow = MessageWindow.Opening(
+            new MessagePlace("home", "INBOX", Role: null),
+            MessageListArrangement.Default,
+            Page(1, next: "after-1", previous: null, readCursor: null));
+
+        var rearrangedWindow = MessageWindow.Opening(
+            Inbox,
+            MessageListArrangement.Default with { UnreadOnly = true },
+            Page(1, next: "after-1", previous: null, readCursor: null));
+
         var page = Page(3, next: "after-3", previous: "before-3", readCursor: "after-1");
 
         // Act
-        var elsewhere = window.Extended(
-            page,
-            MailTimelinePageDirection.Forward,
-            new MessagePlace("home", "INBOX", Role: null),
-            MessageListArrangement.Default);
-
-        var rearranged = window.Extended(
-            page,
-            MailTimelinePageDirection.Forward,
-            Inbox,
-            MessageListArrangement.Default with { UnreadOnly = true });
+        var elsewhere = window.Extended(page, MailTimelinePageDirection.Forward, elsewhereWindow);
+        var rearranged = window.Extended(page, MailTimelinePageDirection.Forward, rearrangedWindow);
 
         // Assert
         Assert.Equal(2, elsewhere.Messages.Count);
         Assert.Equal(2, rearranged.Messages.Count);
+    }
+
+    /// <summary>
+    /// A list somebody asked to be read again is opened afresh under the place and the arrangement it already had, so
+    /// the reading rather than either of those is what a page in flight is held against.
+    /// </summary>
+    [Fact]
+    public void Extended_APageFromAnEarlierReadingOfTheSameList_IsDeclinedRatherThanTaken()
+    {
+        // Arrange
+        var leading = Page(1, next: "after-1", previous: null, readCursor: null);
+        var read = MessageWindow.Opening(Inbox, MessageListArrangement.Default, leading);
+        var reopened = MessageWindow.Opening(Inbox, MessageListArrangement.Default, leading);
+
+        // Act
+        var extended = reopened.Extended(
+            Page(3, next: "after-3", previous: "before-3", readCursor: "after-1"),
+            MailTimelinePageDirection.Forward,
+            read);
+
+        // Assert
+        Assert.Equal(2, extended.Messages.Count);
+        Assert.False(reopened.IsOf(read));
+        Assert.True(reopened.IsOf(reopened));
     }
 
     /// <summary>
@@ -206,8 +227,7 @@ public sealed class MessageWindowTests
         var extended = window.Extended(
             Page(3, next: null, previous: "before-3", readCursor: "after-1"),
             MailTimelinePageDirection.Forward,
-            Inbox,
-            MessageListArrangement.Default);
+            window);
 
         // Assert
         Assert.Null(extended.LeadingPage?.ReadCursor);

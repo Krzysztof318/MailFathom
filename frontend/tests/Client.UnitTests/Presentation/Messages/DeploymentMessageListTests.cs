@@ -254,6 +254,59 @@ public sealed class DeploymentMessageListTests
         Assert.False(await over.List.PagingFailed);
     }
 
+    /// <summary>
+    /// Asking for a list to be read again opens it afresh under the place and the arrangement it already had, so a page
+    /// still in flight from before belongs to neither the window nor the indicator that reopening produced.
+    /// </summary>
+    [Fact]
+    public async Task ShowMoreAsync_APageFromBeforeTheListWasReadAgain_IsNotSplicedOntoIt()
+    {
+        // Arrange
+        var cancellation = TestContext.Current.CancellationToken;
+
+        using var reached = new ManualResetEventSlim(false);
+        using var released = new ManualResetEventSlim(false);
+
+        var openings = 0;
+
+        // The second opening answers with other mail, so the reopened list is the one the assertion can see rather than
+        // one the test has to infer from a request count.
+        using var over = new ListOver(request =>
+        {
+            if (Cursor(request) is null)
+            {
+                return Answer(Interlocked.Increment(ref openings) is 1
+                    ? Page(1, 2, next: "after-2", previous: null)
+                    : Page(5, 2, next: "after-6", previous: null));
+            }
+
+            reached.Set();
+            released.Wait(Patience, cancellation);
+
+            return Answer(Page(9, 2, next: null, previous: "before-9"));
+        });
+
+        await over.List.Rows;
+
+        var paging = Task.Run(
+            async () => await over.List.ShowMoreAsync(TestContext.Current.CancellationToken),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(reached.Wait(Patience, cancellation));
+
+        // Act
+        await over.List.AskAgainAsync(TestContext.Current.CancellationToken);
+
+        await over.Until(async () => await over.List.Rows is [{ } first, _] && first.Key == MailMessages.Key(5));
+
+        released.Set();
+        await paging;
+
+        // Assert
+        var rows = await over.List.Rows;
+        Assert.Equal([MailMessages.Key(5), MailMessages.Key(6)], rows!.Select(row => row.Key));
+    }
+
     /// <summary>Coming back to a folder is coming back: the leading page it was left on is what is asked for again.</summary>
     [Fact]
     public async Task Rows_APlaceSomebodyHasBeenInBefore_ReopensWhereItWasLeft()

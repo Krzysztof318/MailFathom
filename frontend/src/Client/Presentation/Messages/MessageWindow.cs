@@ -21,9 +21,9 @@ namespace MailFathom.Client.Presentation.Messages;
 /// having kept it. That is why paging runs in both directions here where a list that only ever grew would need one.
 /// </para>
 /// <para>
-/// The place and the arrangement travel on the window because a page arriving for a list somebody has already left is
-/// an ordinary race rather than an error: a request in flight when the folder changed is answered by a window that
-/// declines to take it, without the caller having to hold a token to compare.
+/// The reading travels on the window because a page arriving for a list somebody has already left, or for one they
+/// asked to be read again, is an ordinary race rather than an error: a request in flight when either happened is
+/// answered by a window that declines to take it, without the caller having to hold a token to compare.
 /// </para>
 /// </remarks>
 internal sealed record MessageWindow
@@ -39,10 +39,12 @@ internal sealed record MessageWindow
     private MessageWindow(
         MessagePlace place,
         MessageListArrangement arrangement,
+        MessageReading reading,
         IImmutableList<MessagePage> pages)
     {
         this.Place = place;
         this.Arrangement = arrangement;
+        this.Reading = reading;
         this.Pages = pages;
 
         // Materialized once here rather than projected on each read, because the view binds it, the shape reduces it,
@@ -55,6 +57,9 @@ internal sealed record MessageWindow
 
     /// <summary>Gets the order and the filters the loaded pages were read under.</summary>
     internal MessageListArrangement Arrangement { get; }
+
+    /// <summary>Gets the reading these pages were taken during, which a later reading of the same list does not share.</summary>
+    internal MessageReading Reading { get; }
 
     /// <summary>Gets the loaded pages, in the order the list is read in.</summary>
     internal IImmutableList<MessagePage> Pages { get; }
@@ -80,6 +85,7 @@ internal sealed record MessageWindow
         return new MessageWindow(
             place,
             arrangement,
+            new MessageReading(),
             page.IsEmpty ? [] : [page]);
     }
 
@@ -93,7 +99,7 @@ internal sealed record MessageWindow
         ArgumentNullException.ThrowIfNull(place);
         ArgumentNullException.ThrowIfNull(arrangement);
 
-        return new MessageWindow(place, arrangement, []);
+        return new MessageWindow(place, arrangement, new MessageReading(), []);
     }
 
     /// <summary>Gets the cursor the page after this window is asked with, or <see langword="null" /> at the end of the list.</summary>
@@ -115,24 +121,28 @@ internal sealed record MessageWindow
     /// <remarks>What is written down when somebody leaves the folder, and what puts them back where they were when they return.</remarks>
     internal MessagePage? LeadingPage => this.Pages.Count is 0 ? null : this.Pages[0];
 
-    /// <summary>Answers whether this window is of a given list.</summary>
-    /// <param name="place">Where a read was asked for.</param>
-    /// <param name="arrangement">What that read ran under.</param>
-    /// <returns><see langword="true" /> where this window is of that same list.</returns>
+    /// <summary>Answers whether this window is of the reading a read was started during.</summary>
+    /// <param name="read">The window that read was started from.</param>
+    /// <returns><see langword="true" /> where this window belongs to that same reading.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="read" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// What a caller asks before acting on a read it started: a window loaded for a different place or under a
-    /// different arrangement is a list somebody has already left, and everything the abandoned read would have said
-    /// about it is stale.
+    /// What a caller asks before acting on a read it started. The reading rather than the place is what it is held
+    /// against, because a list somebody asked to be read again is loaded afresh under the place and the arrangement it
+    /// already had — so a page in flight from before that would pass a comparison of the two and be spliced onto a
+    /// window that deliberately holds nothing of it.
     /// </remarks>
-    internal bool IsOf(MessagePlace place, MessageListArrangement arrangement) =>
-        this.Place == place && this.Arrangement == arrangement;
+    internal bool IsOf(MessageWindow read)
+    {
+        ArgumentNullException.ThrowIfNull(read);
+
+        return ReferenceEquals(this.Reading, read.Reading);
+    }
 
     /// <summary>Takes one more page onto the window, dropping the far one where the bound is reached.</summary>
     /// <param name="page">The page that was read.</param>
     /// <param name="direction">Which end of the window it was read from.</param>
-    /// <param name="place">Where the read was asked for, which has to be this window's own.</param>
-    /// <param name="arrangement">What the read ran under, which has to be this window's own.</param>
-    /// <returns>The extended window, or this one unchanged where the page belongs to a list this window is no longer of.</returns>
+    /// <param name="read">The window the read was started from, whose reading has to be this window's own.</param>
+    /// <returns>The extended window, or this one unchanged where the page belongs to a reading this window is not of.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     /// <remarks>
     /// A page that came back empty is the list having ended between two requests rather than a page to keep: mail can be
@@ -142,14 +152,12 @@ internal sealed record MessageWindow
     internal MessageWindow Extended(
         MessagePage page,
         MailTimelinePageDirection direction,
-        MessagePlace place,
-        MessageListArrangement arrangement)
+        MessageWindow read)
     {
         ArgumentNullException.ThrowIfNull(page);
-        ArgumentNullException.ThrowIfNull(place);
-        ArgumentNullException.ThrowIfNull(arrangement);
+        ArgumentNullException.ThrowIfNull(read);
 
-        if (!this.IsOf(place, arrangement))
+        if (!this.IsOf(read))
         {
             return this;
         }
@@ -186,5 +194,5 @@ internal sealed record MessageWindow
     }
 
     private MessageWindow With(IImmutableList<MessagePage> pages) =>
-        new(this.Place, this.Arrangement, pages);
+        new(this.Place, this.Arrangement, this.Reading, pages);
 }

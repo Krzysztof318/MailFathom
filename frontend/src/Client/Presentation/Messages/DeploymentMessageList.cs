@@ -266,10 +266,11 @@ internal sealed class DeploymentMessageList : IMessageList
     /// the screen over one request.
     /// </para>
     /// <para>
-    /// Everything the read says afterwards is said about the window it was started for, so each of them is written only
-    /// while that is still the window loaded. A request in flight when somebody opens another folder is answered by a
-    /// list that has already reopened and cleared its own indicator, and letting the abandoned read finish onto it
-    /// would clear a failure it never saw or raise one over mail that arrived.
+    /// Everything the read says afterwards is said about the reading it was started during, so each of them is written
+    /// only while that reading is still the one loaded. A request in flight when somebody opens another folder — or asks
+    /// for this one to be read again — is answered by a list that has already opened afresh, and letting the abandoned
+    /// read finish onto it would splice a page onto a window that holds nothing of it, or move an indicator over a
+    /// reading it never saw.
     /// </para>
     /// </remarks>
     private async ValueTask PageAsync(
@@ -308,7 +309,7 @@ internal sealed class DeploymentMessageList : IMessageList
         }
 
         await this.loaded.UpdateAsync(
-            loaded => loaded?.Extended(page, direction, window.Place, window.Arrangement),
+            loaded => loaded?.Extended(page, direction, window),
             cancellationToken).ConfigureAwait(false);
 
         if (await this.StillLoadedAsync(window, cancellationToken).ConfigureAwait(false) is not { } extended)
@@ -331,7 +332,7 @@ internal sealed class DeploymentMessageList : IMessageList
     {
         var current = await this.loaded.Value(cancellationToken).ConfigureAwait(false);
 
-        return current?.IsOf(window.Place, window.Arrangement) is true ? current : null;
+        return current?.IsOf(window) is true ? current : null;
     }
 
     /// <summary>Writes what is selected in the list into the scope every other space reads.</summary>
