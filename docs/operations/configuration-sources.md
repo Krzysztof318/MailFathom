@@ -110,6 +110,8 @@ That number is the only record of which document the process actually read — t
 
 ## Changing a persisted setting
 
+**This release carries the writer and no surface that drives it.** `IConfigurationWriter` is composed into the host and nothing calls it — no MCP tool, no HTTP endpoint, and no `mfctl` command — so a persisted setting is still changed by editing the `settings_root` row and restarting the deployment over it. What follows describes what a write does once a surface issues one, and the refusals it answers with, so the contract is readable before the first caller exists.
+
 **A setting is changed through one writer, and that writer proves the configuration before it commits.** Nothing in MailFathom assigns a configuration value in place: `configuration["key"] = value` mutates one process's copy, takes effect having been proved by nothing, and is gone at the next reload. What a change is instead is a sequence, and each step exists to keep the next from being reached with something it could not undo.
 
 1. **Where it lands is resolved first**, against the catalog above. A path MailFathom persists nowhere is refused here, before anything is read.

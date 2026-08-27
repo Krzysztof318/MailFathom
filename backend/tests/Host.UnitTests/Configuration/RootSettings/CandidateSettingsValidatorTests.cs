@@ -234,6 +234,30 @@ public sealed class CandidateSettingsValidatorTests
     }
 
     /// <summary>
+    /// A start reads the mail rules before it reads the providers, so a candidate faulty in both is refused for the
+    /// rule first. The provider reading raises rather than returning where a key is misspelled, and the refusal a start
+    /// would have reported is what has to survive that — otherwise a write answers the same candidate with the second
+    /// of its two mistakes while a start answers with the first.
+    /// </summary>
+    [Fact]
+    public void FindErrors_AMailRuleThatWillNotCompileBesideAnUnknownChatKey_KeepsTheRuleRefusal()
+    {
+        // Arrange
+        var validator = Validator();
+
+        // Act
+        var errors = validator.FindErrors(Compose(new()
+        {
+            ["MailRules:Rules:0:Name"] = "unreadable",
+            ["MailRules:Rules:0:Condition"] = "NoSuchFact == (",
+            ["Chat:ModelName"] = "gpt-4o-mini",
+        }));
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("MailRules:Rules", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// Part of what a start refuses over is decided while the sections are being registered rather than when they are
     /// validated. A resilience section naming no dependency class is that shape, and it is the same operator's mistake
     /// as a value a validator refuses — so it comes back as an error rather than as an exception the write raises.

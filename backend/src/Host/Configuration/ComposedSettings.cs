@@ -36,7 +36,7 @@ internal static class ComposedSettings
     /// <param name="configuration">The configuration to judge.</param>
     /// <returns>One refusal per section that would stop a start, empty when none would.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when a section will not bind at all, which stops the reading where it stood.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when a section will not bind at all and no earlier group had already answered with a refusal, which is the only case in which nothing better than the binder's own sentence is held.</exception>
     public static IReadOnlyList<SettingsRefusal> FindRefusals(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
@@ -45,12 +45,22 @@ internal static class ComposedSettings
         // `AddPersistenceAndProviders`, which runs before the surfaces are mapped. An operator whose candidate carries
         // a mistake in two of them is shown the same one first by a write and by a start, which is what the summary
         // promises and the only thing that makes the promise worth anything.
-        return
-        [
-            .. FindMailRuleRefusals(configuration, new NCalcMailRuleConditionCompiler()),
-            .. FindProviderRefusals(configuration),
-            .. FindSurfaceRefusals(configuration),
-        ];
+        List<SettingsRefusal> refusals = [.. FindMailRuleRefusals(configuration, new NCalcMailRuleConditionCompiler())];
+
+        // A group that will not bind at all raises rather than returning, and a start meeting an earlier refusal never
+        // reaches it — so what is already held is what a start would have reported, and discarding it for the binder's
+        // sentence would answer a two-section candidate with the second of its mistakes.
+        try
+        {
+            refusals.AddRange(FindProviderRefusals(configuration));
+            refusals.AddRange(FindSurfaceRefusals(configuration));
+        }
+        catch (InvalidOperationException) when (refusals.Count > 0)
+        {
+            return refusals;
+        }
+
+        return refusals;
     }
 
     /// <summary>Finds what the declared AI endpoints and the ceilings around them would be refused for.</summary>
