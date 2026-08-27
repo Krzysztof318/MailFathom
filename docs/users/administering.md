@@ -13,15 +13,20 @@ cannot do yet. The full contract — every asset name, every stored path, every 
 runs on the machine you administer *from* rather than the one the service runs on — your laptop against a container on
 a server, or against a pod in a cluster.
 
-It is **not** how MailFathom is configured. Configuration is files and environment variables read at startup, described
-in [configuration sources](../operations/configuration-sources.md); the command never reads them, never opens the
-database, and never touches the secret store. Nothing you do with it changes what the service will do on its next
-restart.
+It reads and changes the deployment's **persisted configuration layer** — one document in the database, composed at
+startup like every other source — through `mfctl config`, which is [changing a setting without a
+restart](#changing-a-setting-without-a-restart) below. It reaches nothing else about how the deployment is configured:
+the files and environment variables a deployment provisions are the deployment's own, described in [configuration
+sources](../operations/configuration-sources.md), and the command never reads them, never edits one, never opens the
+database directly, and never touches the secret store.
 
-> **What it does change is the deployment's own state rather than its configuration**: it can place a mailbox
-> credential, ask for work to be run, dispose of a folder's stored mail, and maintain the contact book. None of that is
-> a setting, and none of it survives as one — [configuration sources](../operations/configuration-sources.md) stays the
-> only place a deployment's behaviour is decided.
+> **Which layer decided a setting is the thing to read before changing one.** Three sources outrank the persisted
+> layer — .NET User Secrets, unprefixed environment variables, and command-line arguments — so a value one of them
+> supplies goes on coming from there whatever the layer is made to say, and `mfctl config` refuses such a write rather
+> than committing a version that changes nothing. `mfctl config get` names the source beside the value, which is what
+> that decision is made from. Everything else the command does is the deployment's own state rather than its
+> configuration: placing a mailbox credential, asking for work to be run, disposing of a folder's stored mail, and
+> maintaining the contact book.
 
 **What it prints is meant to be read and safe to capture.** A command's result goes to standard output and everything
 else to standard error, so redirecting one captures the answer alone, and a redirected run — like any run whose

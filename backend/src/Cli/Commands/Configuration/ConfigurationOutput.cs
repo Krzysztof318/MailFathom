@@ -45,20 +45,33 @@ internal static class ConfigurationOutput
         }
     }
 
-    /// <summary>Writes one setting in full, or says that no source supplies it.</summary>
+    /// <summary>Writes one setting in full, or says why the deployment reported none at that exact path.</summary>
     /// <param name="context">What the command needs from its surroundings.</param>
     /// <param name="path">The path the operator asked about.</param>
     /// <param name="setting">The setting the deployment reported, or <see langword="null" /> where it reported none.</param>
+    /// <param name="coveredCount">How many settings the deployment reported at or beneath the path.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="context" /> or <paramref name="path" /> is <see langword="null" />.</exception>
-    internal static void WriteSetting(CliContext context, string path, EffectiveSettingRecord? setting)
+    /// <remarks>
+    /// The absent case has two readings and the count is what tells them apart. A path nothing covers is a setting no
+    /// source supplies, which is the sentence below. A path several settings sit beneath is a section rather than a
+    /// setting, and saying no source supplies it would be false in the one case this command can already see is false:
+    /// the reading it discarded is the proof. Naming the count and the command that reads a section is what an operator
+    /// who typed a section does next, and what a misspelling never produces.
+    /// </remarks>
+    internal static void WriteSetting(
+        CliContext context,
+        string path,
+        EffectiveSettingRecord? setting,
+        int coveredCount)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(path);
 
         if (setting is null)
         {
-            context.Console.WriteLine(
-                $"No source supplies {path}. The deployment reads whatever the setting's own default is, which is stated in the configuration reference rather than here.");
+            context.Console.WriteLine(coveredCount > 0
+                ? $"No source supplies {path} itself, and {coveredCount} setting{(coveredCount == 1 ? " sits" : "s sit")} beneath it. Read them with 'mfctl config show {path}'."
+                : $"No source supplies {path}. The deployment reads whatever the setting's own default is, which is stated in the configuration reference rather than here.");
 
             return;
         }

@@ -5,6 +5,7 @@
 using System.Text.Json;
 using MailFathom.Cli.Administration.Configuration;
 using MailFathom.Cli.Commands.Configuration;
+using MailFathom.Cli.Transport;
 using MailFathom.Domain.Failures;
 using MailFathom.TestSupport;
 using Xunit;
@@ -69,14 +70,24 @@ public sealed class ConfigurationCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(this.harness.Console.Lines, line => line.Contains("10-deployment.json", StringComparison.Ordinal));
         Assert.Contains(this.harness.Console.Lines, line => line.Contains(SnippetsPerEmail, StringComparison.Ordinal));
+
+        // The prefix reaches the deployment rather than being applied to a whole reading here. A command that dropped
+        // it would ask for every setting the deployment composed and be answered with all of them or with the
+        // too-broad refusal, and every assertion above would still hold.
+        Assert.Equal(
+            $"?prefix={Uri.EscapeDataString(SnippetsPerEmail)}",
+            deployment.LastReadingQuery());
     }
 
     /// <summary>
     /// A path is a prefix of the settings beneath it, so a reading that matched a section reports nothing about the
-    /// path itself. Handing back the first entry the prefix matched would answer a question nobody asked.
+    /// path itself. Handing back the first entry the prefix matched would answer a question nobody asked — and saying
+    /// no source supplies it would be false in the one case the command can already see is false, since the reading it
+    /// discarded is the proof. What the operator typed was a section, so it names how many settings sit beneath it and
+    /// the command that reads them.
     /// </summary>
     [Fact]
-    public async Task Get_APathTheReadingCoversOnlyAsASection_SaysNoSourceSuppliesIt()
+    public async Task Get_APathTheReadingCoversOnlyAsASection_PointsAtTheCommandThatReadsASection()
     {
         // Arrange
         using var deployment = FakeConfigurationDeployment.Holding(
@@ -91,7 +102,38 @@ public sealed class ConfigurationCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Contains(
             this.harness.Console.Lines,
-            line => line.Contains("No source supplies MailboxSearch", StringComparison.Ordinal));
+            line => line.Contains("1 setting sits beneath it", StringComparison.Ordinal)
+                && line.Contains("mfctl config show MailboxSearch", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A deployment answering more than this command buffers is sorted apart from one that could not be reached. The
+    /// two send an operator to different places, and this one is reachable from a deployment behaving exactly as its
+    /// own contract allows — a persisted document up to a megabyte, or a reading of every setting it composed — so
+    /// reporting it as an unreachable host would send them after the address, the port, and the firewall for a
+    /// deployment that answered correctly.
+    /// </summary>
+    [Fact]
+    public async Task Get_ADeploymentAnsweringPastWhatTheCommandBuffers_SaysSoRatherThanThatItCouldNotBeReached()
+    {
+        // Arrange
+        using var deployment = FakeConfigurationDeployment.Holding(
+            reading: FakeConfigurationDeployment.Reading(
+                version: 1,
+                (SnippetsPerEmail, new string('9', DeploymentTransport.ResponseSizeLimitInBytes + 1), "file", null, false)));
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "config", "get", SnippetsPerEmail, "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Contains(
+            this.harness.Console.Errors,
+            line => line.Contains("answered with more than", StringComparison.Ordinal)
+                && line.Contains("KiB this command reads", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            this.harness.Console.Errors,
+            line => line.Contains("could not be reached", StringComparison.Ordinal));
     }
 
     /// <summary>A secret-bearing setting says so, because a marker read as a value is a value an operator would persist.</summary>
@@ -140,6 +182,7 @@ public sealed class ConfigurationCommandTests : IDisposable
         Assert.Contains(this.harness.Console.Lines, line => line == "  SnippetsPerEmail = 3 [persisted-layer]");
         Assert.Contains(this.harness.Console.Lines, line => line == "  WordsPerSnippet = 12 [file (10-deployment.json)]");
         Assert.Contains(this.harness.Console.Lines, line => line.Contains("version 6", StringComparison.Ordinal));
+        Assert.Equal("?prefix=MailboxSearch", deployment.LastReadingQuery());
     }
 
     /// <summary>A path no source supplies is a fact about the deployment rather than a failure of the command.</summary>
@@ -326,7 +369,11 @@ public sealed class ConfigurationCommandTests : IDisposable
         Assert.Contains(
             this.harness.Console.Errors,
             line => line.Contains(OperatorEditor.VisualVariable, StringComparison.Ordinal));
-        Assert.Equal(0, deployment.ConfigurationWriteCount());
+
+        // Every request rather than the writes alone. Reading the document is a GET, so a command reordered to fetch
+        // before it looks for an editor would write a full description of the deployment's persisted configuration
+        // into a temporary file on a run that was always going to refuse, and a write count would report nothing.
+        Assert.Empty(deployment.RecordedRequests);
     }
 
     /// <summary>What the operator saved is what is committed, over the version the buffer was opened at.</summary>
@@ -383,6 +430,45 @@ public sealed class ConfigurationCommandTests : IDisposable
         Assert.Equal(CliExitCode.Success, exitCode);
         Assert.Equal(RedactedChatDocument, opened);
         Assert.Equal(0, deployment.ConfigurationWriteCount());
+    }
+
+    /// <summary>
+    /// The buffer is a complete description of what a deployment does, and it is written into the machine's temporary
+    /// directory — which on a shared host belongs to everybody. It is created readable by its owner alone, and the
+    /// command deliberately leaves it there when the delete fails, so the mode is the whole of what protects it.
+    /// </summary>
+    [Fact]
+    public async Task Edit_OnAPlatformWithFileModes_OpensABufferReadableByItsOwnerAlone()
+    {
+        // Arrange
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var deployment = FakeConfigurationDeployment.Holding(
+            documents: [FakeConfigurationDeployment.Document(version: 1, RedactedChatDocument)]);
+
+        UnixFileMode mode = default;
+        this.OpensTheBufferWith((_, path) =>
+        {
+            // Guarded again inside the callback, which is the only place the mode can be read: the buffer is deleted
+            // when the session ends. The platform analyzer reads a guard within the body it is protecting rather than
+            // one in the method that supplied the callback, so the early return above cannot stand for this.
+            if (!OperatingSystem.IsWindows())
+            {
+                mode = File.GetUnixFileMode(path);
+            }
+
+            return true;
+        });
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "config", "edit", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, mode);
     }
 
     /// <summary>An emptied buffer is how every editor-driven command an operator has met is abandoned, and it is honoured as one.</summary>

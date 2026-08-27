@@ -145,6 +145,25 @@ public sealed class SettingRedactionTests
         Assert.DoesNotContain("postgres", redacted, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A null leaf is left as it is, whatever its name says. It contributes no configuration key, so there is nothing
+    /// there to withhold — and marking it would open an editing buffer whose marker stands for no setting, which the
+    /// save then refuses for naming a path the document carries nothing at, including a save of the buffer unchanged.
+    /// </summary>
+    [Fact]
+    public void ApplyToDocument_ASecretNamedPathHoldingNull_LeavesItAlone()
+    {
+        // Arrange
+        const string persisted = """{ "Chat": { "ApiKey": { "SecretReference": null } } }""";
+
+        // Act
+        var redacted = SettingRedaction.ApplyToDocument(persisted);
+
+        // Assert
+        Assert.DoesNotContain(SettingRedaction.Marker, redacted, StringComparison.Ordinal);
+        Assert.Contains("null", redacted, StringComparison.Ordinal);
+    }
+
     /// <summary>A row that is not a JSON object describes no settings, and is refused rather than reported as an empty one.</summary>
     [Fact]
     public void ApplyToDocument_ADocumentThatIsNotAnObject_IsRefused() =>

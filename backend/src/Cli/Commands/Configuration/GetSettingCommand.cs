@@ -64,7 +64,7 @@ internal static class GetSettingCommand
         var setting = reading.Settings?.FirstOrDefault(
             candidate => string.Equals(candidate.Path, path, StringComparison.OrdinalIgnoreCase));
 
-        ConfigurationOutput.WriteSetting(context, path, setting);
+        ConfigurationOutput.WriteSetting(context, path, setting, reading.Settings?.Count ?? 0);
 
         return CliExitCode.Success;
     }

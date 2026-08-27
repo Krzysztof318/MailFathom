@@ -151,6 +151,14 @@ internal static class SettingRedaction
                     RedactWithin(elements, path);
                     break;
 
+                // Left exactly as it is, whatever the path says. A null leaf contributes no configuration key — the
+                // flattening a save is differenced against drops a null value — so there is nothing there to withhold,
+                // and marking it would open a buffer whose marker stands for no setting: the save would then be refused
+                // for naming a path the document carries nothing at, including a save of the buffer unchanged, with no
+                // action the refusal names that would clear it.
+                case null:
+                    break;
+
                 default:
                     if (Redacts(path))
                     {

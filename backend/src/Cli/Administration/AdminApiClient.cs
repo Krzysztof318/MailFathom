@@ -1288,6 +1288,12 @@ internal sealed class AdminApiClient
         {
             throw new CliFailure($"The deployment at {this.transport.Client.BaseAddress} did not answer in time.");
         }
+        catch (HttpRequestException failure) when (ExceededTheResponseBound(failure))
+        {
+            throw new CliFailure(
+                $"The deployment at {this.transport.Client.BaseAddress} answered with more than the {DeploymentTransport.ResponseSizeLimitInBytes / 1024} KiB this command reads, so nothing was read. Ask for a narrower path — 'mfctl config show <prefix>' rather than the whole configuration — and read a document past that bound from the deployment itself.",
+                failure);
+        }
         catch (HttpRequestException failure)
         {
             throw new CliFailure(
@@ -1296,6 +1302,30 @@ internal sealed class AdminApiClient
                 failure);
         }
     }
+
+    /// <summary>Reports whether the deployment answered correctly with more than this command buffers.</summary>
+    /// <remarks>
+    /// <para>
+    /// Sorted apart from an unreachable deployment because the two send an operator to different places: this one
+    /// answered, over a connection that worked, and the arm below would send them after the address, the port, and the
+    /// firewall. It is reachable from a deployment behaving exactly as its own contract allows — a persisted document
+    /// up to <c>RootSettingsDocument.MaximumOctets</c>, and a reading of up to
+    /// <c>EffectiveSettingsReader.MaximumSettings</c> settings each carrying a path, a value, a source, and an origin —
+    /// both of which pass the bound in <see cref="DeploymentTransport.ResponseSizeLimitInBytes" /> before the
+    /// deployment's own refuses.
+    /// </para>
+    /// <para>
+    /// Recognized by <see cref="HttpRequestError.ConfigurationLimitExceeded" /> rather than by the message, which is
+    /// localized, and through the inner exception as well because the framework wraps a read failure in a second
+    /// <see cref="HttpRequestException" /> on some paths.
+    /// </para>
+    /// </remarks>
+    private static bool ExceededTheResponseBound(HttpRequestException failure) =>
+        failure.HttpRequestError == HttpRequestError.ConfigurationLimitExceeded
+        || failure.InnerException is HttpRequestException
+        {
+            HttpRequestError: HttpRequestError.ConfigurationLimitExceeded,
+        };
 
     /// <summary>Reads the sentence a refusal carries, when it carries one.</summary>
     /// <remarks>

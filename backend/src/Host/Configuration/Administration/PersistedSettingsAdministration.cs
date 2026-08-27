@@ -86,6 +86,19 @@ internal sealed class PersistedSettingsAdministration(
     {
         authorization.RequirePermission(MailFathomPermission.AdminRead);
 
+        return this.Adoptable(prefix);
+    }
+
+    /// <summary>Reads what an adoption would copy, asking for no permission of its own.</summary>
+    /// <remarks>
+    /// Split from <see cref="ReadAdoptable" /> so the commit does not ask for the preview's permission on the way past.
+    /// The two routes publish one name each — the preview <see cref="MailFathomPermission.AdminRead" />, the commit
+    /// <see cref="MailFathomPermission.AdminConfigurationWrite" /> — and a use case that called the other's entry point
+    /// would refuse a caller granted exactly what its own route publishes, inside the use case, after the transport had
+    /// admitted them.
+    /// </remarks>
+    private SettingsReading Adoptable(string? prefix)
+    {
         var beneath = reader.ReadBeneathTheLayer(prefix);
 
         return beneath.IsTooBroad
@@ -257,7 +270,7 @@ internal sealed class PersistedSettingsAdministration(
         ArgumentException.ThrowIfNullOrWhiteSpace(prefix);
         authorization.RequirePermission(MailFathomPermission.AdminConfigurationWrite);
 
-        var adoptable = this.ReadAdoptable(prefix);
+        var adoptable = this.Adoptable(prefix);
 
         if (adoptable.IsTooBroad)
         {

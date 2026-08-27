@@ -11,6 +11,8 @@ using MailFathom.Host.Configuration.RootSettings;
 using MailFathom.Infrastructure.Persistence.Settings;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.CommandLine;
+using Microsoft.Extensions.Configuration.EnvironmentVariables;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
@@ -23,6 +25,15 @@ namespace MailFathom.Host.UnitTests.TestDoubles;
 /// because that is what the layer's insertion point recognizes as the lowest of the operator's sources. The persisted
 /// layer therefore sits below it and above the deployment's own file, exactly as it does in a running process — which
 /// is the whole of what a reading reports and what a write is refused by.
+/// </para>
+/// <para>
+/// The other two overrides a real deployment uses — environment variables and command-line arguments — are composed on
+/// request, above the layer where the host puts them. Both are the framework's own provider types rather than
+/// substitutes, because what a reading answers about a source is decided by the type the composition built it as: a
+/// double that composed a JSON file in their place would resolve every override assertion through the user-secrets arm
+/// and leave the two arms that matter reached by nothing. The environment provider is the framework's with its data
+/// stated rather than read, since the process environment is shared by every test in this assembly and a test that
+/// wrote to it would not be safe to run beside another.
 /// </para>
 /// <para>
 /// The caller is the deployment administrator, granted both permissions the configuration surface is published under,
@@ -86,13 +97,17 @@ internal sealed class ComposedConfigurationDeployment : IDisposable
     /// <param name="operatorOverride">An override composed above the persisted layer, as JSON, or nothing.</param>
     /// <param name="version">The version the persisted document stands at.</param>
     /// <param name="granted">What the entry that admitted the caller resolved to, defaulting to both permissions the configuration surface is published under.</param>
+    /// <param name="environmentVariables">The variables an environment provider supplies above the layer, keyed as configuration paths, or nothing.</param>
+    /// <param name="commandLineArguments">The arguments a command-line provider supplies above every other source, or nothing.</param>
     /// <returns>The composed deployment.</returns>
     public static ComposedConfigurationDeployment Composed(
         string provisioned,
         string persisted,
         string? operatorOverride = null,
         long version = 1,
-        MailFathomPermission[]? granted = null)
+        MailFathomPermission[]? granted = null,
+        IReadOnlyDictionary<string, string?>? environmentVariables = null,
+        string[]? commandLineArguments = null)
     {
         var configuration = new ConfigurationManager();
         var files = new InMemoryConfigurationFileProvider().WithFile(DeploymentFileName, provisioned);
@@ -117,6 +132,18 @@ internal sealed class ComposedConfigurationDeployment : IDisposable
         }
 
         configuration.AddRootSettings(new RootSettingsDocument(persisted, version));
+
+        // Appended after the layer was inserted, which is where the host composes them: the insertion point recognizes
+        // the user-secrets file above, so the layer is already below every override by the time these arrive.
+        if (environmentVariables is not null)
+        {
+            configuration.Sources.Add(new StatedEnvironmentVariables(environmentVariables));
+        }
+
+        if (commandLineArguments is not null)
+        {
+            configuration.Sources.Add(new CommandLineConfigurationSource { Args = commandLineArguments });
+        }
 
         return new ComposedConfigurationDeployment(
             configuration,
@@ -147,14 +174,57 @@ internal sealed class ComposedConfigurationDeployment : IDisposable
     /// <summary>Saves an edited document back over the version it was opened at.</summary>
     /// <param name="document">The document as the editing session left it.</param>
     /// <param name="version">The version the buffer was opened over.</param>
+    /// <param name="evenIfShadowed">Whether a write to a setting an outranking source supplies is meant deliberately.</param>
     /// <returns>What the write did.</returns>
-    public Task<SettingsWriteOutcome> ApplyDocumentAsync(string document, long version) =>
+    public Task<SettingsWriteOutcome> ApplyDocumentAsync(
+        string document,
+        long version,
+        bool evenIfShadowed = false) =>
         this.Administration.ApplyDocumentAsync(
             document,
             version,
-            evenIfShadowed: false,
+            evenIfShadowed,
+            TestContext.Current.CancellationToken);
+
+    /// <summary>Copies what the files supply beneath a path into the persisted layer.</summary>
+    /// <param name="prefix">The colon-delimited path to adopt beneath.</param>
+    /// <param name="evenIfShadowed">Whether a write to a setting an outranking source supplies is meant deliberately.</param>
+    /// <returns>What the write did.</returns>
+    public Task<SettingsWriteOutcome> AdoptAsync(string prefix, bool evenIfShadowed = false) =>
+        this.Administration.AdoptAsync(
+            prefix,
+            this.Row.Version,
+            evenIfShadowed,
             TestContext.Current.CancellationToken);
 
     /// <inheritdoc />
     public void Dispose() => this.configuration.Dispose();
+
+    /// <summary>The framework's environment provider over variables a test states rather than the process's own.</summary>
+    /// <remarks>
+    /// The real provider type, because <c>EffectiveSettingsReader</c> decides which layer supplied a value from the type
+    /// the composition built — a substitute would be classified as no source at all. What is replaced is only where the
+    /// variables come from: reading the process environment would make every test in this assembly depend on what the
+    /// others put there, and writing to it would make them unsafe to run in parallel.
+    /// </remarks>
+    private sealed class StatedEnvironmentVariables(IReadOnlyDictionary<string, string?> variables) : IConfigurationSource
+    {
+        public IConfigurationProvider Build(IConfigurationBuilder builder) => new StatedProvider(variables);
+
+        private sealed class StatedProvider : EnvironmentVariablesConfigurationProvider
+        {
+            internal StatedProvider(IReadOnlyDictionary<string, string?> variables)
+            {
+                foreach (var variable in variables)
+                {
+                    this.Data[variable.Key] = variable.Value;
+                }
+            }
+
+            public override void Load()
+            {
+                // Stated once at construction. Loading would replace them with the process's own.
+            }
+        }
+    }
 }

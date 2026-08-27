@@ -149,7 +149,12 @@ internal static class HostComposition
         return AddNetworkSurfaces(builder);
     }
 
-    /// <summary>Registers the writer a configuration change is made through, and the seam it republishes the layer through.</summary>
+    /// <summary>Registers the reading and writing sides of the deployment's persisted configuration, and the seam the layer is republished through.</summary>
+    /// <remarks>
+    /// The writer a change is committed by, the reader that reports which layer supplies each value, and the
+    /// administration service the configuration routes resolve, which composes the two into what an operator asks
+    /// for.
+    /// </remarks>
     /// <remarks>
     /// The provider is found among the sources rather than handed in, because the layer is composed while the builder
     /// is being made and the composition root is called after that. A host built without the layer — the graph a unit

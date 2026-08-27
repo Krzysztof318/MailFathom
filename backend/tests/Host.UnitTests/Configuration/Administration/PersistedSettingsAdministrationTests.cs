@@ -482,6 +482,123 @@ public sealed class PersistedSettingsAdministrationTests
         Assert.Equal(0, deployment.Row.AcceptedCommits);
     }
 
+
+    /// <summary>
+    /// The adoption commit asks for the one permission its own route publishes and no more. The preview it reads on
+    /// the way past is the same code the preview route serves, so a use case reaching it through that route's entry
+    /// point would refuse a caller the transport had already admitted — inside the use case, on a route whose published
+    /// metadata names a permission they hold.
+    /// </summary>
+    [Fact]
+    public async Task AdoptAsync_ACallerGrantedTheWriteAlone_Commits()
+    {
+        // Arrange
+        using var deployment = ComposedConfigurationDeployment.Composed(
+            provisioned: """{ "MailboxSearch": { "SnippetsPerEmail": "2" } }""",
+            persisted: "{}",
+            granted: [MailFathomPermission.AdminConfigurationWrite]);
+
+        // Act
+        var outcome = await deployment.AdoptAsync("MailboxSearch");
+
+        // Assert
+        Assert.True(outcome.Committed);
+        Assert.Equal("2", Assert.Single(outcome.Changes).After?.Value);
+    }
+
+    /// <summary>The preview is the reading half and stays published under the reading permission.</summary>
+    [Fact]
+    public void ReadAdoptable_ACallerGrantedTheWriteAlone_IsRefused()
+    {
+        // Arrange
+        using var deployment = ComposedConfigurationDeployment.Composed(
+            provisioned: """{ "MailboxSearch": { "SnippetsPerEmail": "2" } }""",
+            persisted: "{}",
+            granted: [MailFathomPermission.AdminConfigurationWrite]);
+
+        // Act & Assert
+        Assert.Throws<PrincipalNotAuthorizedException>(() => deployment.Administration.ReadAdoptable("MailboxSearch"));
+    }
+
+    /// <summary>
+    /// Staging a value beneath an override about to be removed is a thing an operator means on every command that
+    /// writes, not only on the keyed one. This is the saved-buffer half of that: without it, the endpoint and the
+    /// command could both drop the flag on the way through and <c>mfctl config edit --even-if-shadowed</c> would be
+    /// refused under <c>12012</c> forever with every test still passing.
+    /// </summary>
+    [Fact]
+    public async Task ApplyDocumentAsync_AShadowedSettingStatedDeliberately_Commits()
+    {
+        // Arrange
+        using var deployment = Composed(
+            provisioned: "{}",
+            persisted: "{}",
+            operatorOverride: """{ "MailboxSearch": { "SnippetsPerEmail": "9" } }""");
+
+        var opened = await deployment.ReadDocumentAsync();
+
+        // Act
+        var outcome = await deployment.ApplyDocumentAsync(
+            """{ "MailboxSearch": { "SnippetsPerEmail": "5" } }""",
+            opened.Version,
+            evenIfShadowed: true);
+
+        // Assert
+        Assert.True(outcome.Committed);
+        Assert.Equal(1, deployment.Row.AcceptedCommits);
+    }
+
+    /// <summary>A saved buffer that stages a shadowed setting without saying so is refused, naming the source.</summary>
+    [Fact]
+    public async Task ApplyDocumentAsync_AShadowedSettingNotStated_IsRefusedNamingTheSource()
+    {
+        // Arrange
+        using var deployment = Composed(
+            provisioned: "{}",
+            persisted: "{}",
+            operatorOverride: """{ "MailboxSearch": { "SnippetsPerEmail": "9" } }""");
+
+        var opened = await deployment.ReadDocumentAsync();
+
+        // Act
+        var outcome = await deployment.ApplyDocumentAsync(
+            """{ "MailboxSearch": { "SnippetsPerEmail": "5" } }""",
+            opened.Version);
+
+        // Assert
+        Assert.False(outcome.Committed);
+        Assert.Equal(MailFathomErrorCode.ConfigurationWriteShadowed, outcome.Refusal);
+        Assert.Equal(0, deployment.Row.AcceptedCommits);
+    }
+
+    /// <summary>The adoption half of the same flag, which no other test reaches.</summary>
+    [Fact]
+    public async Task AdoptAsync_AShadowedSettingStatedDeliberately_Commits()
+    {
+        // Arrange
+        using var deployment = Composed(
+            provisioned: """{ "MailboxSearch": { "SnippetsPerEmail": "2" } }""",
+            persisted: "{}",
+            operatorOverride: """{ "MailboxSearch": { "SnippetsPerEmail": "9" } }""");
+
+        // Act
+        var refused = await deployment.AdoptAsync("MailboxSearch");
+        var committed = await deployment.AdoptAsync("MailboxSearch", evenIfShadowed: true);
+
+        // Assert
+        Assert.False(refused.Committed);
+        Assert.Equal(MailFathomErrorCode.ConfigurationWriteShadowed, refused.Refusal);
+        Assert.True(committed.Committed);
+        Assert.Equal(1, deployment.Row.AcceptedCommits);
+
+        // The setting still reads as the override supplies it, which is the whole of what the flag says an operator
+        // means: the value is staged beneath an override they are about to remove, and until they do the reading is
+        // unchanged.
+        var change = Assert.Single(committed.Changes);
+        Assert.Equal("9", change.After?.Value);
+        Assert.Equal(SettingSource.UserSecrets, change.After?.Source);
+    }
+
     /// <summary>Composes the deployment these tests write against.</summary>
     private static ComposedConfigurationDeployment Composed(
         string provisioned,

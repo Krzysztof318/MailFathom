@@ -30,7 +30,14 @@ internal static class FakeDeploymentTransport
         Uri address,
         StoredTransportTrust trust) =>
         new(
-            new HttpClient(handler, disposeHandler: false) { BaseAddress = address },
+            // The real bound rather than the framework's default, because a command that reads more than it buffers
+            // fails against a real deployment and would succeed here. The network is the part being substituted; what
+            // the client refuses to read is a decision of the code under test.
+            new HttpClient(handler, disposeHandler: false)
+            {
+                BaseAddress = address,
+                MaxResponseContentBufferSize = DeploymentTransport.ResponseSizeLimitInBytes,
+            },
             new ServerCertificatePolicy(trust.PinnedCertificateFingerprint));
 
     /// <summary>Builds a transport that has already met the certificate a host presents.</summary>

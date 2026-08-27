@@ -221,6 +221,119 @@ public sealed class EffectiveSettingsReaderTests
     }
 
     /// <summary>Composes one section holding the stated number of settings, each a value of its own.</summary>
+
+    /// <summary>
+    /// An environment variable is the override a deployment reaches for most often, and the reading names it as one.
+    /// The classification is by the provider's own type, so this is what keeps that arm of the source table reached:
+    /// without it the reader would fall through to the unclassified arm and <c>mfctl config get</c> would print
+    /// <c>[unclassified]</c> beside a value an operator repairs in their unit file.
+    /// </summary>
+    [Fact]
+    public void Read_ASettingAnEnvironmentVariableSupplies_NamesTheEnvironment()
+    {
+        // Arrange
+        using var deployment = ComposedConfigurationDeployment.Composed(
+            provisioned: """{ "MailboxSearch": { "SnippetsPerEmail": "2" } }""",
+            persisted: """{ "MailboxSearch": { "SnippetsPerEmail": "5" } }""",
+            environmentVariables: new Dictionary<string, string?>
+            {
+                ["MailboxSearch:SnippetsPerEmail"] = "9",
+            });
+
+        // Act
+        var setting = Assert.Single(deployment.Reader.Read("MailboxSearch").Settings);
+
+        // Assert
+        Assert.Equal("9", setting.Value);
+        Assert.Equal(SettingSource.EnvironmentVariable, setting.Source);
+        Assert.Null(setting.Origin);
+    }
+
+    /// <summary>A command-line argument outranks everything, and is named as itself for the same reason.</summary>
+    [Fact]
+    public void Read_ASettingACommandLineArgumentSupplies_NamesTheCommandLine()
+    {
+        // Arrange
+        using var deployment = ComposedConfigurationDeployment.Composed(
+            provisioned: "{}",
+            persisted: """{ "MailboxSearch": { "SnippetsPerEmail": "5" } }""",
+            environmentVariables: new Dictionary<string, string?>
+            {
+                ["MailboxSearch:SnippetsPerEmail"] = "9",
+            },
+            commandLineArguments: ["--MailboxSearch:SnippetsPerEmail=11"]);
+
+        // Act
+        var setting = Assert.Single(deployment.Reader.Read("MailboxSearch").Settings);
+
+        // Assert
+        Assert.Equal("11", setting.Value);
+        Assert.Equal(SettingSource.CommandLine, setting.Source);
+    }
+
+    /// <summary>
+    /// The framework composes an unprefixed environment provider, so every variable of the host process is a path the
+    /// composed configuration carries. A reading names those and withholds what they hold: they are a neighbouring
+    /// process's business rather than this deployment's settings, and no naming rule could recognize a name this
+    /// project never chose.
+    /// </summary>
+    [Fact]
+    public void Read_AVariableOfTheProcessNamingNoMailFathomSection_WithholdsItsValue()
+    {
+        // Arrange
+        using var deployment = ComposedConfigurationDeployment.Composed(
+            provisioned: "{}",
+            persisted: "{}",
+            environmentVariables: new Dictionary<string, string?>
+            {
+                ["OPENAI_API_KEY"] = "sk-the-neighbouring-process-key",
+                ["GH_PAT"] = "ghp-a-personal-access-token",
+                ["SOMETHING__Nested"] = "a value under a section nobody here declared",
+            });
+
+        // Act
+        var reading = deployment.Reader.Read(prefix: null);
+
+        // Assert
+        Assert.DoesNotContain(
+            reading.Settings,
+            setting => setting.Value.Contains("token", StringComparison.OrdinalIgnoreCase)
+                || setting.Value.StartsWith("sk-", StringComparison.Ordinal));
+        Assert.All(
+            reading.Settings.Where(setting => setting.Source == SettingSource.EnvironmentVariable),
+            setting =>
+            {
+                Assert.True(setting.IsRedacted);
+                Assert.Equal(SettingRedaction.Marker, setting.Value);
+            });
+    }
+
+    /// <summary>
+    /// The rule is about the section rather than about the source, so an override an operator wrote on purpose reads
+    /// back as what it is. A rule that withheld every environment value would make the reading useless for the one
+    /// question it exists to answer.
+    /// </summary>
+    [Fact]
+    public void Read_AVariableNamingAMailFathomSection_ReportsItsValue()
+    {
+        // Arrange
+        using var deployment = ComposedConfigurationDeployment.Composed(
+            provisioned: "{}",
+            persisted: "{}",
+            environmentVariables: new Dictionary<string, string?>
+            {
+                ["MailboxSearch:WordsPerSnippet"] = "24",
+            });
+
+        // Act
+        var setting = Assert.Single(deployment.Reader.Read("MailboxSearch").Settings);
+
+        // Assert
+        Assert.Equal("24", setting.Value);
+        Assert.False(setting.IsRedacted);
+        Assert.Equal(SettingSource.EnvironmentVariable, setting.Source);
+    }
+
     private static string SectionOf(string section, int settings)
     {
         var written = string.Join(

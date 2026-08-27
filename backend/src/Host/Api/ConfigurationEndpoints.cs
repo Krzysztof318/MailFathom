@@ -171,6 +171,12 @@ internal static class ConfigurationEndpoints
             return NotAcceptable(stated);
         }
 
+        if (NamedTwice(changes) is { } repeated)
+        {
+            return NotAcceptable(
+                $"The change names '{repeated}' more than once, so what the write would leave at that path depends on which of them the deployment keeps. State one change per path.");
+        }
+
         IReadOnlyList<ConfigurationEdit> edits;
 
         try
@@ -300,6 +306,24 @@ internal static class ConfigurationEndpoints
     private static ConfigurationEdit Stated(ConfigurationChangeRequest change) => change.Value is { } value
         ? ConfigurationEdit.SetTo(change.Path ?? string.Empty, value)
         : ConfigurationEdit.Removing(change.Path ?? string.Empty);
+
+    /// <summary>Names the first path a change states twice, or nothing where each path is stated once.</summary>
+    /// <remarks>
+    /// A repeated path is refused rather than resolved, because the two layers behind this route disagree about what it
+    /// means: <see cref="IConfigurationWriter.WriteAsync" /> applies the edits in the order
+    /// given, so the last one would win, while the administration drops an edit that would change nothing about the
+    /// document as it currently stands — so <c>A=y</c> followed by <c>A=x</c> over a persisted <c>x</c> keeps the first
+    /// and drops the second, committing the value the caller asked to be rid of. Which of the two readings is right is
+    /// not a question this boundary should answer on the caller's behalf: a change that names a path twice is a caller
+    /// that has not decided what it wants there.
+    /// </remarks>
+    private static string? NamedTwice(IReadOnlyList<ConfigurationChangeRequest> changes) =>
+        changes
+            .Select(change => change.Path!)
+            .GroupBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .Where(named => named.Count() > 1)
+            .Select(named => named.Key)
+            .FirstOrDefault();
 
     /// <summary>Says why one stated change is not a change this boundary accepts, or nothing where it is.</summary>
     /// <remarks>

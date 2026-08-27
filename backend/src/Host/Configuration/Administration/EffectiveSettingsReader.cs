@@ -26,8 +26,17 @@ namespace MailFathom.Host.Configuration.Administration;
 /// </para>
 /// <para>
 /// Every value leaves through <see cref="SettingRedaction" />, so a secret-bearing setting reports the marker whichever
-/// reading asked for it. That is the whole of the disclosure boundary here: a caller holding the administrative reading
-/// permission learns which settings exist, where each one is decided, and what the non-secret ones say.
+/// reading asked for it. A second rule withholds a value for the same reason and by a different test: the framework
+/// composes an unprefixed environment provider, which turns every variable of the host process into a configuration
+/// path, and those are not this deployment's settings at all. A value an environment provider supplies at a path
+/// <see cref="MailFathomConfigurationSections" /> does not name is therefore reported as the marker, with the path and
+/// the source still named — the same shape a secret already takes, because the operator's question is where a setting
+/// is decided rather than what a neighbouring process put in the environment.
+/// </para>
+/// <para>
+/// Those two rules are the whole of the disclosure boundary here: a caller holding the administrative reading
+/// permission learns which settings exist, where each one is decided, and what the non-secret ones this deployment
+/// defines say.
 /// </para>
 /// </remarks>
 internal sealed class EffectiveSettingsReader(
@@ -253,13 +262,25 @@ internal sealed class EffectiveSettingsReader(
     {
         _ = supplier.TryGet(path, out var value);
 
+        var withheld = SettingRedaction.Redacts(path) || IsTheProcessEnvironment(path, supplier);
+
         return new EffectiveSetting(
             path,
-            SettingRedaction.Apply(path, value ?? string.Empty),
+            withheld ? SettingRedaction.Marker : value ?? string.Empty,
             SourceOf(supplier),
             OriginOf(supplier),
-            SettingRedaction.Redacts(path));
+            withheld);
     }
+
+    /// <summary>Reports whether a value is a variable of the process rather than a setting of the deployment.</summary>
+    /// <remarks>
+    /// Every environment provider rather than the unprefixed one alone, because a provider does not publish the prefix
+    /// its source was built with — <see cref="OperatorOverrideBoundary" /> can ask because it reads sources. The
+    /// prefixed ones carry the host's own <c>DOTNET_</c> and <c>ASPNETCORE_</c> settings, which are not MailFathom's
+    /// either, so the wider test withholds nothing this reading is for.
+    /// </remarks>
+    private static bool IsTheProcessEnvironment(string path, IConfigurationProvider supplier) =>
+        supplier is EnvironmentVariablesConfigurationProvider && !MailFathomConfigurationSections.Name(path);
 
     /// <summary>Says which layer a provider is, by the type the composition built it as.</summary>
     /// <remarks>

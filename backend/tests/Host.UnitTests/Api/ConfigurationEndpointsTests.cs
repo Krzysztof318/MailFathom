@@ -240,6 +240,43 @@ public sealed class ConfigurationEndpointsTests
         Assert.Equal(0, deployment.Row.AcceptedCommits);
     }
 
+    /// <summary>
+    /// A change naming one path twice is refused, because the two layers behind this route disagree about what it
+    /// means: the writer applies the edits in the order given, and the administration drops an edit that would change
+    /// nothing about the document as it stands — so the second of a pair would be dropped and the first committed,
+    /// leaving the value the caller asked to be rid of.
+    /// </summary>
+    [Fact]
+    public async Task WriteAsync_AChangeNamingOnePathTwice_IsRefusedAsTheCallersMistake()
+    {
+        // Arrange
+        using var deployment = ComposedConfigurationDeployment.Composed(
+            provisioned: "{}",
+            persisted: """{ "MailboxSearch": { "SnippetsPerEmail": "5" } }""");
+
+        // Act
+        var result = await ConfigurationEndpoints.WriteAsync(
+            deployment.Administration,
+            new ConfigurationWriteRequest(
+                Version: 1,
+                Changes:
+                [
+                    new ConfigurationChangeRequest("MailboxSearch:SnippetsPerEmail", "9"),
+                    new ConfigurationChangeRequest("mailboxsearch:snippetsperemail", "5"),
+                ],
+                EvenIfShadowed: false),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+        Assert.Contains(
+            "MailboxSearch:SnippetsPerEmail",
+            refusal.ProblemDetails.Detail ?? string.Empty,
+            StringComparison.Ordinal);
+        Assert.Equal(0, deployment.Row.AcceptedCommits);
+    }
+
     /// <summary>A change the deployment binds commits, and the answer carries what the setting reads as on each side.</summary>
     [Fact]
     public async Task WriteAsync_AChangeTheConfigurationBinds_AnswersWithTheCommitAndBothReadings()

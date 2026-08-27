@@ -1078,6 +1078,16 @@ answers the marker for it and for every other path on that list. The consequence
 `mfctl config get ConnectionStrings:mailfathom` reports `(redacted)`, as do the connection and secret-interpretation
 settings beside it; where those values are set is the deployment's own manifest rather than this surface.
 
+**A reading answers the deployment's settings rather than the host process's environment.** That same enumeration would
+otherwise reach every environment variable of the process, because the framework composes an unprefixed environment
+provider and it turns each one into a configuration path — so an unrelated `OPENAI_API_KEY` or a database password
+some sidecar exported under a name of its own would be handed to a credential holding `mailfathom.admin.read` alone.
+The naming rule above cannot help there: it decides by MailFathom's own vocabulary, and none of those names is
+MailFathom's. So a value an environment provider supplies at a path whose first segment names no MailFathom
+configuration section reports the marker, with the path and the source still named — the same shape a secret takes,
+because what an operator asks this surface is where a setting is decided. An environment variable that does name a
+MailFathom setting, which is every override written for this deployment on purpose, is reported in full.
+
 ## Rate limiting
 
 An enabled endpoint is bounded, whether or not anyone wrote a number. That is what stops an administrative surface
