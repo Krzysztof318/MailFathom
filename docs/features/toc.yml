@@ -58,6 +58,9 @@
 - name: Contacts
   href: contacts.md
   description: What the contact book holds about a person, when two addresses are the same address, who may amend which record, and what erasing somebody removes.
+- name: The presentation plan
+  href: presentation-plan.md
+  description: The typed contract an answer about a mailbox takes — the nine block types it may hold, how every fact leads back to a message, how it says what it cannot support, and how a client behind the service reads one.
 - name: MCP tools
   href: mcp-tools.md
   description: The conventions every tool follows, the contract of each tool that exists, and what a client reads when a call fails.

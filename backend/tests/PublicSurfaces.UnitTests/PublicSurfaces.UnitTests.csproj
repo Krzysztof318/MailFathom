@@ -12,9 +12,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The two surfaces this suite records live in two boundaries: the tool descriptors are composed by Mcp and the
-         configuration sections are bound by Host. Both are referenced so a renamed options type or a renamed tool
+    <!-- The surfaces this suite records live in three boundaries: the tool descriptors are composed by Mcp, the
+         configuration sections and the HTTP routes are bound by Host, and the presentation plan is declared by
+         Application. All three are referenced so a renamed options type, a renamed tool, or a renamed part of the plan
          breaks the build here rather than silently emptying a golden file. -->
+    <ProjectReference Include="..\..\src\Application\Application.csproj" />
     <ProjectReference Include="..\..\src\Host\Host.csproj" />
     <ProjectReference Include="..\..\src\Mcp\Mcp.csproj" />
   </ItemGroup>
