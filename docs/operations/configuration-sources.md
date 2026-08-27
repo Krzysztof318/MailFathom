@@ -164,9 +164,9 @@ Six commands, all under `mfctl config`, all reaching [the administrative endpoin
 
 ```
 $ mfctl config get MailboxSearch:SnippetsPerEmail
-Setting  MailboxSearch:SnippetsPerEmail
-Value    3
-Source   file (10-deployment.json)
+Setting: MailboxSearch:SnippetsPerEmail
+Value:   3
+Source:  file (10-deployment.json)
 ```
 
 **A write to a setting an outranking source supplies is refused rather than committed.** The refusal is `12012` and it exists because such a write would succeed, spend a version, and change nothing the deployment reads — which reads as a setting that will not take. What to do is almost always to change the value where it is decided; the exception is staging a value beneath an override that is about to be removed, which is stated with `--even-if-shadowed` and is the only case in which persisting a value nothing currently reads is right. The flag is stated on `set`, `unset`, `edit`, and `adopt` alike, and the deployment rather than the command is what applies it.

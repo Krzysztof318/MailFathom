@@ -84,8 +84,4 @@ internal static class MailFathomConfigurationSections
 
         return Named.Contains(section, StringComparer.OrdinalIgnoreCase);
     }
-
-    /// <summary>Gets the sections this deployment's configuration is written under, ordered by name.</summary>
-    /// <remarks>Published for the guard in <c>PublicSurfaces.UnitTests</c> that holds this list against the rendered key set.</remarks>
-    internal static IReadOnlyList<string> All => Named;
 }

@@ -13,12 +13,13 @@ cannot do yet. The full contract — every asset name, every stored path, every 
 runs on the machine you administer *from* rather than the one the service runs on — your laptop against a container on
 a server, or against a pod in a cluster.
 
-It reads and changes the deployment's **persisted configuration layer** — one document in the database, composed at
-startup like every other source — through `mfctl config`, which is [changing a setting without a
-restart](#changing-a-setting-without-a-restart) below. It reaches nothing else about how the deployment is configured:
-the files and environment variables a deployment provisions are the deployment's own, described in [configuration
-sources](../operations/configuration-sources.md), and the command never reads them, never edits one, never opens the
-database directly, and never touches the secret store.
+It reports how the deployment is configured and changes one layer of it. `mfctl config` reads the settings the
+deployment composed from every source and names the layer that decided each — a provisioned file, an environment
+variable, a command-line argument, .NET User Secrets, or the persisted layer — and it writes to the **persisted
+configuration layer** alone, one document in the database composed at startup like every other source. That is
+[changing a setting without a restart](#changing-a-setting-without-a-restart) below. The deployment's own files and
+environment, described in [configuration sources](../operations/configuration-sources.md), are read and reported but
+never edited; the command never opens the database directly and never touches the secret store.
 
 > **Which layer decided a setting is the thing to read before changing one.** Three sources outrank the persisted
 > layer — .NET User Secrets, unprefixed environment variables, and command-line arguments — so a value one of them

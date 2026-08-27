@@ -103,7 +103,9 @@ internal static class EditConfigurationCommand
     /// returns while still holding the file open, so the delete throws on Windows over an invocation that had already
     /// decided what it did. Turning that into a stack trace would report a failure to somebody whose command worked,
     /// or replace the sentence naming why nothing was written — which is the rule <c>CliRunner.Record</c> states for a
-    /// full disk. What is left behind is a redacted document readable by its owner alone, in a temporary directory.
+    /// full disk. What is left behind is the buffer as the editor last wrote it, in a temporary directory — which is
+    /// whatever the operator saved rather than the redacted document this command opened, and under whatever mode the
+    /// editor created it with where it saved by writing a new file and renaming it over the original.
     /// </remarks>
     private static void Discard(string buffer)
     {

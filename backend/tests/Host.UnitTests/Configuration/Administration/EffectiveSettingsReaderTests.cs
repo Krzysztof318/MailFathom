@@ -220,8 +220,6 @@ public sealed class EffectiveSettingsReaderTests
         Assert.Equal("Wide:0", Assert.Single(reading.Settings).Path);
     }
 
-    /// <summary>Composes one section holding the stated number of settings, each a value of its own.</summary>
-
     /// <summary>
     /// An environment variable is the override a deployment reaches for most often, and the reading names it as one.
     /// The classification is by the provider's own type, so this is what keeps that arm of the source table reached:
@@ -288,7 +286,7 @@ public sealed class EffectiveSettingsReaderTests
             {
                 ["OPENAI_API_KEY"] = "sk-the-neighbouring-process-key",
                 ["GH_PAT"] = "ghp-a-personal-access-token",
-                ["SOMETHING__Nested"] = "a value under a section nobody here declared",
+                ["SOMETHING:Nested"] = "a value under a section nobody here declared",
             });
 
         // Act
@@ -334,6 +332,7 @@ public sealed class EffectiveSettingsReaderTests
         Assert.Equal(SettingSource.EnvironmentVariable, setting.Source);
     }
 
+    /// <summary>Composes one section holding the stated number of settings, each a value of its own.</summary>
     private static string SectionOf(string section, int settings)
     {
         var written = string.Join(

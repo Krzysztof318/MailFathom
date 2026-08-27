@@ -130,10 +130,49 @@ public sealed class ConfigurationCommandTests : IDisposable
         Assert.Contains(
             this.harness.Console.Errors,
             line => line.Contains("answered with more than", StringComparison.Ordinal)
-                && line.Contains("KiB this command reads", StringComparison.Ordinal));
+                && line.Contains("KiB this command reads", StringComparison.Ordinal)
+                && line.Contains("mfctl config show <prefix>", StringComparison.Ordinal));
         Assert.DoesNotContain(
             this.harness.Console.Errors,
             line => line.Contains("could not be reached", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// The same answer over a write says only that the answer was not read, because an adoption commits before it
+    /// answers: the version has moved, so telling the operator nothing was read — or sending them to narrow a reading
+    /// — would invite them to run a committed adoption a second time.
+    /// </summary>
+    [Fact]
+    public async Task Adopt_ADeploymentAnsweringPastWhatTheCommandBuffers_DoesNotSayTheWriteDidNothing()
+    {
+        // Arrange
+        using var deployment = FakeConfigurationDeployment.Holding(
+            adoptable: FakeConfigurationDeployment.Reading(
+                version: 8,
+                (SnippetsPerEmail, "3", "file", "10-deployment.json", false)),
+            write: FakeConfigurationDeployment.Committed(
+                version: 9,
+                before: ("3", "file"),
+                after: (new string('9', DeploymentTransport.ResponseSizeLimitInBytes + 1), "persisted-layer")));
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "config",
+            "adopt",
+            "MailboxSearch",
+            "--yes",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Contains(
+            this.harness.Console.Errors,
+            line => line.Contains("cannot say what the deployment did with the request", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            this.harness.Console.Errors,
+            line => line.Contains("mfctl config show <prefix>", StringComparison.Ordinal));
     }
 
     /// <summary>A secret-bearing setting says so, because a marker read as a value is a value an operator would persist.</summary>

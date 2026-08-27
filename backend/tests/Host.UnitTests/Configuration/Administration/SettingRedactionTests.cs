@@ -164,6 +164,42 @@ public sealed class SettingRedactionTests
         Assert.Contains("null", redacted, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A scalar sitting directly in an array is decided by its path like any other value. A position announces no
+    /// secret, so the name rule never reaches one — but the bootstrap-only rule matches a path prefix-wise, and
+    /// <c>Persistence:Password:0</c> is a path a write is refused at. A hand-written row is what puts an array there,
+    /// and it reaches this walk from the database rather than through the layer that would have refused it.
+    /// </summary>
+    [Fact]
+    public void ApplyToDocument_ABootstrapOnlySettingHoldingAnArrayOfScalars_WithholdsEachElement()
+    {
+        // Arrange
+        const string persisted = """{ "Persistence": { "Password": ["postgres", "second"] } }""";
+
+        // Act
+        var redacted = SettingRedaction.ApplyToDocument(persisted);
+
+        // Assert
+        Assert.DoesNotContain("postgres", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("second", redacted, StringComparison.Ordinal);
+    }
+
+    /// <summary>An array element at a path no rule names is carried through, which is what says the assertion above reports a rule rather than the walk.</summary>
+    [Fact]
+    public void ApplyToDocument_AnArrayOfScalarsAtAnOrdinaryPath_CarriesEachElementThrough()
+    {
+        // Arrange
+        const string persisted = """{ "MailboxSearch": { "Stopwords": ["ordinary", "value"] } }""";
+
+        // Act
+        var redacted = SettingRedaction.ApplyToDocument(persisted);
+
+        // Assert
+        Assert.Contains("ordinary", redacted, StringComparison.Ordinal);
+        Assert.Contains("value", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain(SettingRedaction.Marker, redacted, StringComparison.Ordinal);
+    }
+
     /// <summary>A row that is not a JSON object describes no settings, and is refused rather than reported as an empty one.</summary>
     [Fact]
     public void ApplyToDocument_ADocumentThatIsNotAnObject_IsRefused() =>

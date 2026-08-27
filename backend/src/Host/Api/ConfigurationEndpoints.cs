@@ -152,28 +152,28 @@ internal static class ConfigurationEndpoints
 
         if (request.Version < 0)
         {
-            return NotAcceptable("A configuration write states the version it was composed over, which is never negative.");
+            return Refusal("A configuration write states the version it was composed over, which is never negative.");
         }
 
         if (request.Changes is not { Count: > 0 } changes)
         {
-            return NotAcceptable("A configuration write states at least one change.");
+            return Refusal("A configuration write states at least one change.");
         }
 
         if (changes.Count > IConfigurationWriter.MaximumEdits)
         {
-            return NotAcceptable(
+            return Refusal(
                 $"A configuration write carries at most {IConfigurationWriter.MaximumEdits} changes, and this one carries {changes.Count}.");
         }
 
         if (changes.Select(Unacceptable).FirstOrDefault(refusal => refusal is not null) is { } stated)
         {
-            return NotAcceptable(stated);
+            return Refusal(stated);
         }
 
         if (NamedTwice(changes) is { } repeated)
         {
-            return NotAcceptable(
+            return Refusal(
                 $"The change names '{repeated}' more than once, so what the write would leave at that path depends on which of them the deployment keeps. State one change per path.");
         }
 
@@ -188,7 +188,7 @@ internal static class ConfigurationEndpoints
             // A shape the sentences above do not state yet, which is a rule this boundary has fallen behind on rather
             // than anything the caller can read out of the framework's own wording. The exception carries a parameter
             // name and BCL phrasing, so it is not what an administrative surface answers with.
-            return NotAcceptable(
+            return Refusal(
                 "One of the changes does not name a setting this deployment can persist. Check that each path is a colon-delimited configuration key and that each value is text the deployment can hold.");
         }
 
@@ -231,12 +231,12 @@ internal static class ConfigurationEndpoints
 
         if (request.Version < 0)
         {
-            return NotAcceptable("A configuration write states the version it was composed over, which is never negative.");
+            return Refusal("A configuration write states the version it was composed over, which is never negative.");
         }
 
         if (request.Document is not { Length: > 0 } document)
         {
-            return NotAcceptable(
+            return Refusal(
                 "A saved configuration document carries the document. An editing session that means to change nothing sends nothing at all.");
         }
 
@@ -264,7 +264,7 @@ internal static class ConfigurationEndpoints
         // reading for '   ' would tell an operator their files supply nothing beneath a path that is not a path.
         if (string.IsNullOrWhiteSpace(prefix))
         {
-            return NotAcceptable("An adoption names the path it covers. There is no adoption of the whole configuration.");
+            return Refusal("An adoption names the path it covers. There is no adoption of the whole configuration.");
         }
 
         var reading = settings.ReadAdoptable(prefix);
@@ -289,12 +289,12 @@ internal static class ConfigurationEndpoints
 
         if (request.Version < 0)
         {
-            return NotAcceptable("A configuration write states the version it was composed over, which is never negative.");
+            return Refusal("A configuration write states the version it was composed over, which is never negative.");
         }
 
         if (request.Prefix is not { } prefix || string.IsNullOrWhiteSpace(prefix))
         {
-            return NotAcceptable("An adoption names the path it covers. There is no adoption of the whole configuration.");
+            return Refusal("An adoption names the path it covers. There is no adoption of the whole configuration.");
         }
 
         return TypedResults.Ok(ConfigurationWriteResponse.For(
@@ -360,6 +360,6 @@ internal static class ConfigurationEndpoints
     private static string Named(string? prefix) =>
         prefix is { Length: > 0 } named ? $"The path '{named}'" : "The whole configuration";
 
-    private static ProblemHttpResult NotAcceptable(string detail) =>
+    private static ProblemHttpResult Refusal(string detail) =>
         TypedResults.Problem(detail, statusCode: StatusCodes.Status400BadRequest);
 }

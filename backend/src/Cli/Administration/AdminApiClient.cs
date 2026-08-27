@@ -1042,7 +1042,8 @@ internal sealed class AdminApiClient
             $"{AdminEndpointRoutes.ConfigurationPath}{new AdminQueryString().Add("prefix", prefix)}",
             token,
             CliJsonContext.Default.ConfigurationReading,
-            cancellationToken);
+            cancellationToken,
+            overBoundRemedy: "Ask for a narrower path — 'mfctl config show <prefix>' reads one section rather than every setting the deployment composed.");
 
     /// <summary>Asks the deployment what adopting a path would copy out of its files.</summary>
     /// <param name="token">The bearer credential to present.</param>
@@ -1063,7 +1064,8 @@ internal sealed class AdminApiClient
             $"{AdminEndpointRoutes.ConfigurationAdoptionPath}{new AdminQueryString().Add("prefix", prefix)}",
             token,
             CliJsonContext.Default.ConfigurationReading,
-            cancellationToken);
+            cancellationToken,
+            overBoundRemedy: "Ask for a narrower path — 'mfctl config show <prefix>' reads one section rather than every setting the deployment composed.");
     }
 
     /// <summary>Asks the deployment for the persisted configuration document itself.</summary>
@@ -1080,7 +1082,8 @@ internal sealed class AdminApiClient
             AdminEndpointRoutes.ConfigurationDocumentPath,
             token,
             CliJsonContext.Default.ConfigurationDocument,
-            cancellationToken);
+            cancellationToken,
+            overBoundRemedy: "A persisted document that large is read from the deployment itself; 'mfctl config show <prefix>' reads what it decides one section at a time.");
 
     /// <summary>Asks the deployment to apply keyed changes to its persisted configuration.</summary>
     /// <param name="token">The bearer credential to present.</param>
@@ -1171,6 +1174,11 @@ internal sealed class AdminApiClient
     /// send by identity, so its absence is the absence of the thing addressed, and telling that operator to check the
     /// port would send them after a deployment that is answering perfectly well.
     /// </para>
+    /// <para>
+    /// <paramref name="overBoundRemedy" /> is the same shape for an answer past what this command buffers: a route
+    /// whose caller can narrow the reading says how, and a route that commits before it answers offers nothing rather
+    /// than sending an operator to repeat a write that may already have landed.
+    /// </para>
     /// </remarks>
     private async Task<TAnswer> RequestAsync<TAnswer>(
         HttpMethod method,
@@ -1179,7 +1187,8 @@ internal sealed class AdminApiClient
         JsonTypeInfo<TAnswer> answerContract,
         CancellationToken cancellationToken,
         HttpContent? content = null,
-        string? absenceMessage = null)
+        string? absenceMessage = null,
+        string? overBoundRemedy = null)
         where TAnswer : class
     {
         ArgumentNullException.ThrowIfNull(token);
@@ -1189,7 +1198,7 @@ internal sealed class AdminApiClient
         using var request = new HttpRequestMessage(method, path) { Content = content };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        using var response = await this.SendAsync(request, cancellationToken);
+        using var response = await this.SendAsync(request, cancellationToken, overBoundRemedy);
 
         if (response.StatusCode is HttpStatusCode.Unauthorized)
         {
@@ -1273,12 +1282,28 @@ internal sealed class AdminApiClient
 
     /// <summary>Turns a transport failure into something the operator can act on.</summary>
     /// <remarks>
+    /// <para>
     /// A cancelled request is left alone: the operator interrupted it, and reporting that as a deployment problem would
     /// be wrong. A refused certificate is the one transport failure that has a cause worth naming rather than a
     /// message to repeat, because the platform reports it as an ordinary connection failure and the operator would
     /// otherwise go looking at the address, the port, and the firewall.
+    /// </para>
+    /// <para>
+    /// An answer past the bound says nothing about what the deployment did with the request, and this arm is on every
+    /// route rather than on the readings alone: a write commits before it answers, so an adoption or a saved editing
+    /// buffer of a few hundred settings can pass the bound with the version already moved. The sentence therefore
+    /// reports what was and was not established, and <paramref name="overBoundRemedy" /> carries the remedy of
+    /// whichever route has one; a route that cannot honestly offer one passes none rather than borrowing a reading's
+    /// and telling an operator to run a committed write again.
+    /// </para>
     /// </remarks>
-    private async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    /// <param name="request">The request to send.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <param name="overBoundRemedy">What the caller of this route can do about an answer past the bound, or <see langword="null" /> where the route has nothing to offer.</param>
+    private async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken,
+        string? overBoundRemedy = null)
     {
         try
         {
@@ -1291,7 +1316,7 @@ internal sealed class AdminApiClient
         catch (HttpRequestException failure) when (ExceededTheResponseBound(failure))
         {
             throw new CliFailure(
-                $"The deployment at {this.transport.Client.BaseAddress} answered with more than the {DeploymentTransport.ResponseSizeLimitInBytes / 1024} KiB this command reads, so nothing was read. Ask for a narrower path — 'mfctl config show <prefix>' rather than the whole configuration — and read a document past that bound from the deployment itself.",
+                $"The deployment at {this.transport.Client.BaseAddress} answered with more than the {DeploymentTransport.ResponseSizeLimitInBytes / 1024} KiB this command reads, so the answer was not read and this command cannot say what the deployment did with the request.{(overBoundRemedy is null ? string.Empty : $" {overBoundRemedy}")}",
                 failure);
         }
         catch (HttpRequestException failure)

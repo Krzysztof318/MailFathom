@@ -599,10 +599,50 @@ public sealed class PersistedSettingsAdministrationTests
         Assert.Equal(SettingSource.UserSecrets, change.After?.Source);
     }
 
+    /// <summary>
+    /// An adoption refuses a prefix beneath which the files decide more settings than one adoption carries. Nothing
+    /// else reaches this branch: a too-broad reading carries an empty settings list, so a dropped or inverted guard
+    /// leaves no edits at all and the adoption would answer that the files supply nothing beneath the prefix — a false
+    /// statement about the operator's own configuration, made with an exit code that says it succeeded.
+    /// </summary>
+    [Fact]
+    public async Task AdoptAsync_APrefixTheFilesDecideMoreSettingsBeneathThanOneAdoptionCarries_RefusesWithTheCount()
+    {
+        // Arrange
+        var beyondTheBound = EffectiveSettingsReader.MaximumSettings + 1;
+
+        using var deployment = Composed(
+            provisioned: SectionOf("Wide", beyondTheBound),
+            persisted: "{}");
+
+        // Act
+        var outcome = await deployment.AdoptAsync("Wide");
+
+        // Assert
+        Assert.False(outcome.Committed);
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome.Refusal);
+        Assert.Equal(0, deployment.Row.AcceptedCommits);
+        Assert.Contains(
+            outcome.Messages,
+            message => message.Contains(
+                $"The files supply {beyondTheBound} settings beneath 'Wide'",
+                StringComparison.Ordinal));
+    }
+
     /// <summary>Composes the deployment these tests write against.</summary>
     private static ComposedConfigurationDeployment Composed(
         string provisioned,
         string persisted,
         string? operatorOverride = null) =>
         ComposedConfigurationDeployment.Composed(provisioned, persisted, operatorOverride);
+
+    /// <summary>Composes one section holding the stated number of settings, each a value of its own.</summary>
+    private static string SectionOf(string section, int settings)
+    {
+        var written = string.Join(
+            ", ",
+            Enumerable.Range(0, settings).Select(position => $"\"{position}\": \"value\""));
+
+        return $$"""{ "{{section}}": { {{written}} } }""";
+    }
 }

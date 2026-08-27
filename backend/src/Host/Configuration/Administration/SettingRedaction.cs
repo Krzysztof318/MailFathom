@@ -171,10 +171,16 @@ internal static class SettingRedaction
     }
 
     /// <summary>Replaces every secret-bearing value the array's elements hold.</summary>
-    /// <remarks>An element is never itself a secret-bearing setting, because a secret is announced by a property name and a position has none; what carries one is a property of an element.</remarks>
+    /// <remarks>
+    /// A position announces nothing, so the name rule never makes an element a secret by itself and what carries one
+    /// under that rule is a property of an element. The second rule is not about a name: it matches a path prefix-wise,
+    /// so <c>Persistence:Password:0</c> and <c>ConnectionStrings:mailfathom:0</c> are settings a write is refused at
+    /// and are therefore settings a reading withholds. A hand-edited row reaches this walk from the database rather
+    /// than through the layer, which is what makes an array at such a path something the document can actually hold.
+    /// </remarks>
     private static void RedactWithin(JsonArray elements, string prefix)
     {
-        foreach (var (position, element) in elements.Index())
+        foreach (var (position, element) in elements.ToList().Index())
         {
             var path = Beneath(prefix, position.ToString(CultureInfo.InvariantCulture));
 
@@ -188,7 +194,17 @@ internal static class SettingRedaction
                     RedactWithin(nested, path);
                     break;
 
+                // Left exactly as it is, for the reason the object walk states: a null leaf is no configuration key,
+                // so a marker there would stand for no setting and the save of an unchanged buffer would be refused.
+                case null:
+                    break;
+
                 default:
+                    if (Redacts(path))
+                    {
+                        elements[position] = JsonValue.Create(Marker);
+                    }
+
                     break;
             }
         }
