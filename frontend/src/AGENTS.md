@@ -416,13 +416,15 @@ what keeps that from being a rule somebody has to enforce by reading.
   process does not own, and a screen that repeated it would be putting an attacker's words in MailFathom's voice.
 - **The surface it reaches is `/api/client`**, the backend's third transport surface, served only where a deployment
   enabled `ClientEndpoint`. It is not the MCP endpoint and not the administrative one: a credential admitted by either
-  of those authenticates nothing here. This client calls three of its routes today — `GET /api/client/session`,
+  of those authenticates nothing here. This client calls four of its routes today — `GET /api/client/session`,
   reporting the running version and the grant the caller's credential carries and nothing that identifies that
   credential; `GET /api/client/accounts`, reporting the signed-in owner's own mailboxes and how current the copy of
-  each one is; and `GET /api/client/folders`, reporting the folder hierarchy beneath each of those mailboxes with the
-  role the service gave each folder and how much mail it holds. The surface publishes more than the client has reached
-  yet, so [the client endpoint](../../docs/operations/client-endpoint.md) rather than this file is what says what is
-  there. No route reaches a mail server, so no screen here can wait on IMAP or set the remote `\Seen` flag.
+  each one is; `GET /api/client/folders`, reporting the folder hierarchy beneath each of those mailboxes with the
+  role the service gave each folder and how much mail it holds; and `GET /api/client/emails`, serving one page of the
+  message list by cursor, which is the route the mail screen then spends its time in. The surface publishes more than
+  the client has reached yet, so [the client endpoint](../../docs/operations/client-endpoint.md) rather than this file
+  is what says what is there. No route reaches a mail server, so no screen here can wait on IMAP or set the remote
+  `\Seen` flag.
 - **Signing in is authorization code with PKCE**, which is the grant `mfctl` performs against the administrative
   surface and for the same reason: a desktop binary and a WebAssembly bundle are both readable by whoever runs them, so
   this is a public client and holds no secret. Where to sign in is discovered rather than configured — the deployment's
