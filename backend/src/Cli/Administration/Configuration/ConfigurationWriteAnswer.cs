@@ -35,7 +35,7 @@ internal sealed record ConfigurationWriteAnswer(
 
     /// <summary>The deployment's code for a write to a setting a source above the persisted layer supplies.</summary>
     /// <remarks>Named here because the refusal has a flag that answers it, and the command that offers the flag is what tells the operator so.</remarks>
-    internal const int WriteShadowed = 12012;
+    internal const int WriteShadowed = 12013;
 
     /// <summary>States what the deployment said about a write that did not commit.</summary>
     /// <returns>One sentence per reason, or a single sentence where the deployment gave none.</returns>

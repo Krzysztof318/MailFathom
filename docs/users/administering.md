@@ -649,7 +649,7 @@ value an environment variable is supplying is refused rather than persisted, nam
 persisted layer, because persisting it would spend a version and change nothing you read.
 
 `mfctl config unset` gives one setting back to the file beneath it. `mfctl config edit` opens the whole persisted
-document in your `$EDITOR` and commits what you saved as one change, which is what you want when a change spans half a
+document in your `$VISUAL` or `$EDITOR` and commits what you saved as one change, which is what you want when a change spans half a
 section — set it up as `VISUAL="code --wait"` if your editor is a graphical one, since the command reads the file back
 when the editor exits. And `mfctl config adopt` copies what your files decide beneath a path into the database, which
 is the one thing here that stops a file deciding a value; it shows you exactly what it would take and asks first.

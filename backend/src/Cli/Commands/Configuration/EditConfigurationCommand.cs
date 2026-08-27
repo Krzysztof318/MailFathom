@@ -77,16 +77,14 @@ internal static class EditConfigurationCommand
 
         try
         {
-            OwnerOnlyStorage.CreateDirectory(session);
-
-            SettingsBuffer.Write(buffer, document);
+            Open(session, buffer, document);
 
             if (context.Edit(editor, buffer) is { Saved: false } ended)
             {
                 throw new CliFailure(WhyNothingWasWritten(editor, ended));
             }
 
-            var saved = await File.ReadAllTextAsync(buffer, cancellationToken);
+            var saved = await ReadBackAsync(buffer, cancellationToken);
 
             if (Abandoned(context, document, saved))
             {
@@ -98,6 +96,44 @@ internal static class EditConfigurationCommand
         finally
         {
             Discard(session);
+        }
+    }
+
+    /// <summary>Opens the session's own directory and writes the document into it, readable by their owner alone.</summary>
+    /// <exception cref="CliFailure">Thrown when the temporary directory cannot be written, which is a situation rather than a defect.</exception>
+    /// <remarks>
+    /// A temporary directory that is full, read-only, or on a filesystem that will not take an owner-only mode is
+    /// something the operator can act on, so it is reported as a sentence naming the path rather than left to reach
+    /// <c>CliRunner</c> as a stack trace — the same answer the credential store and the token protector give for the
+    /// same situation.
+    /// </remarks>
+    private static void Open(string session, string buffer, string document)
+    {
+        try
+        {
+            OwnerOnlyStorage.CreateDirectory(session);
+
+            SettingsBuffer.Write(buffer, document);
+        }
+        catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
+        {
+            throw new CliFailure($"The editing buffer at {buffer} could not be written.", failure);
+        }
+    }
+
+    /// <summary>Reads back what the editor saved.</summary>
+    /// <exception cref="CliFailure">Thrown when the buffer cannot be read, which the editor rather than this command left it as.</exception>
+    private static async Task<string> ReadBackAsync(string buffer, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await File.ReadAllTextAsync(buffer, cancellationToken);
+        }
+        catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
+        {
+            throw new CliFailure(
+                $"The editing buffer at {buffer} could not be read back after the editor exited, so nothing was written.",
+                failure);
         }
     }
 

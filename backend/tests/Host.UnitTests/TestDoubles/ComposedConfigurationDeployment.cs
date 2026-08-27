@@ -5,6 +5,7 @@
 using MailFathom.Application.Access;
 using MailFathom.Application.Configuration;
 using MailFathom.Domain.Access;
+using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Administration;
 using MailFathom.Host.Configuration.Provisioning;
 using MailFathom.Host.Configuration.RootSettings;
@@ -73,7 +74,7 @@ internal sealed class ComposedConfigurationDeployment : IDisposable
             new CandidateConfigurationComposer(configuration, layer),
             new CandidateSettingsValidator(new FakeTimeProvider(AnyInstant), []),
             new RootSettingsReloader(layer.Provider, row, new RecordingLogger<RootSettingsReloader>()),
-            DeclaredSecretScheme.Registered,
+            new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
             new RecordingLogger<RootSettingsWriter>());
 
         this.Administration = new PersistedSettingsAdministration(authorization, this.Reader, row, writer);

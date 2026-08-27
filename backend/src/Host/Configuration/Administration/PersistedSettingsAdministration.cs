@@ -77,9 +77,12 @@ internal sealed class PersistedSettingsAdministration(
     /// </para>
     /// <para>
     /// A path the writer would refuse is left out for the stronger reason: a preview reports what the commit would do,
-    /// and a bootstrap-only setting is layer-absent by construction, so offering one would ask an operator to confirm
-    /// an adoption that can only ever answer <c>12006</c>. Those settings are read from beneath the layer at every
-    /// start and are not the layer's to carry at all.
+    /// so offering one would ask an operator to confirm an adoption that can only ever answer <c>12006</c>. What the
+    /// writer refuses is asked of <see cref="ConfigurationStorageCatalog" /> rather than restated here, because it is
+    /// two rules and the second one grows: a bootstrap-only setting is read from beneath the layer at every start and
+    /// is not the layer's to carry at all, and a setting the catalog routes to a store other than the root document is
+    /// persisted somewhere this build does not write. An entry added to that catalog therefore leaves the preview and
+    /// the commit still agreeing.
     /// </para>
     /// </remarks>
     internal SettingsReading ReadAdoptable(string? prefix)
@@ -107,8 +110,20 @@ internal sealed class PersistedSettingsAdministration(
             [
                 .. beneath.Settings
                     .Where(setting => reader.PersistedValue(setting.Path) is null)
-                    .Where(setting => !BootstrapOnlySettings.TryFindCovering(setting.Path, out _)),
+                    .Where(setting => PersistedInTheRootDocument(setting.Path)),
             ]);
+    }
+
+    /// <summary>Reports whether a path is one the persisted document carries, which is the whole of what an adoption can commit.</summary>
+    /// <remarks>
+    /// Both halves of <c>RootSettingsWriter.WhyNothingPersists</c>, asked of the catalog rather than restated: a path
+    /// the catalog refuses outright, and one it routes to a store this build does not write.
+    /// </remarks>
+    private static bool PersistedInTheRootDocument(string path)
+    {
+        var target = ConfigurationStorageCatalog.ResolveWriteTarget(path);
+
+        return target is { IsWritable: true } && target.Route == ConfigurationStorageRoute.RootDocument;
     }
 
     /// <summary>Reads the persisted document itself, as the sparse JSON an editing session opens.</summary>
@@ -323,8 +338,23 @@ internal sealed class PersistedSettingsAdministration(
 
         if (edits.Count == 0)
         {
+            // The same guard, and for the same reason, as the branch in ApplyAsync above: this one leaves without
+            // reaching the writer, and what decided there is nothing to adopt is the layer this process composed —
+            // which a replica that has not itself written holds as it started.
+            var nothingAdoptable = await documents.ReadAsync(cancellationToken);
+
+            if (nothingAdoptable.Version != expectedVersion)
+            {
+                return SettingsWriteOutcome.Refused(
+                    MailFathomErrorCode.ConfigurationVersionSuperseded,
+                    nothingAdoptable.Version,
+                    [
+                        $"The adoption was previewed over persisted configuration version {expectedVersion}, and version {nothingAdoptable.Version} is in force. Preview the adoption again against that.",
+                    ]);
+            }
+
             return SettingsWriteOutcome.NothingToChange(
-                reader.ComposedVersion,
+                nothingAdoptable.Version,
                 $"The deployment's files supply nothing beneath '{prefix}' that the persisted layer does not already carry, so nothing was adopted.");
         }
 

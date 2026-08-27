@@ -435,6 +435,62 @@ public sealed class PersistedSettingsAdministrationTests
     }
 
     /// <summary>
+    /// The other half of what the writer refuses on: a setting the storage catalog routes somewhere other than the
+    /// root document. The top-level <c>Accounts</c> section is one owner document per owner rather than a settings
+    /// row, so adopting it could only ever be refused — and the catalog is built to grow, which is why the preview
+    /// asks it rather than restating the rule.
+    /// </summary>
+    [Fact]
+    public void ReadAdoptable_ASettingTheCatalogPersistsOutsideTheRootDocument_IsNotOffered()
+    {
+        // Arrange
+        using var deployment = Composed(
+            provisioned: """{ "Accounts": { "owner": { "Address": "someone@example.test" } } }""",
+            persisted: "{}");
+
+        // Act
+        var adoptable = deployment.Administration.ReadAdoptable("Accounts");
+
+        // Assert
+        Assert.Empty(adoptable.Settings);
+    }
+
+    /// <summary>
+    /// The adoption's own no-writer branch, which leaves without reaching the writer exactly as the keyed change's
+    /// does. A replica that has not itself written composes the layer it started with, so it finds nothing adoptable
+    /// beneath a prefix the row actually needs — and would otherwise answer that with an exit code saying it
+    /// succeeded, over a version the operator's next write is then refused as superseded.
+    /// </summary>
+    [Fact]
+    public async Task AdoptAsync_NothingAdoptableComposedOverASupersededVersion_IsRefusedRatherThanReportedAsNothingToAdopt()
+    {
+        // Arrange
+        using var deployment = ComposedConfigurationDeployment.Composed(
+            provisioned: """{ "MailboxSearch": { "SnippetsPerEmail": "3" } }""",
+            persisted: """{ "MailboxSearch": { "SnippetsPerEmail": "3" } }""",
+            version: 3);
+
+        // Act
+        var refused = await deployment.Administration.AdoptAsync(
+            "MailboxSearch",
+            expectedVersion: 2,
+            evenIfShadowed: false,
+            TestContext.Current.CancellationToken);
+
+        var reported = await deployment.AdoptAsync("MailboxSearch");
+
+        // Assert
+        Assert.False(refused.Committed);
+        Assert.Equal(MailFathomErrorCode.ConfigurationVersionSuperseded, refused.Refusal);
+        Assert.Equal(3, refused.Version);
+
+        // The same preview over the version in force is what the branch is actually for.
+        Assert.False(reported.Committed);
+        Assert.False(reported.Refusal.IsSpecified);
+        Assert.Equal(0, deployment.Row.AcceptedCommits);
+    }
+
+    /// <summary>
     /// Every reading asks for the permission it is published under with the transport absent, so a route filter is not
     /// the only thing standing between a credential and the deployment's own configuration — which is where a
     /// connection string, a secret reference, and every other credential's grant are named.
@@ -524,7 +580,7 @@ public sealed class PersistedSettingsAdministrationTests
     /// Staging a value beneath an override about to be removed is a thing an operator means on every command that
     /// writes, not only on the keyed one. This is the saved-buffer half of that: without it, the endpoint and the
     /// command could both drop the flag on the way through and <c>mfctl config edit --even-if-shadowed</c> would be
-    /// refused under <c>12012</c> forever with every test still passing.
+    /// refused under <c>12013</c> forever with every test still passing.
     /// </summary>
     [Fact]
     public async Task ApplyDocumentAsync_AShadowedSettingStatedDeliberately_Commits()

@@ -328,6 +328,37 @@ public sealed class ConfigurationEndpointsTests
         Assert.Equal(0, deployment.Row.AcceptedCommits);
     }
 
+    /// <summary>
+    /// A shape the stated checks do not name yet — an empty path segment, which <c>ConfigurationEdit</c> refuses — is
+    /// answered by the catch behind them rather than reaching the caller as a failure. Nothing else in the suite
+    /// states such a change, so narrowing that catch would leave an authenticated administrator meeting a <c>500</c>
+    /// carrying the framework's own parameter-name wording where this route publishes a <c>400</c>.
+    /// </summary>
+    [Fact]
+    public async Task WriteAsync_APathTheStatedChecksDoNotName_IsRefusedRatherThanRaised()
+    {
+        // Arrange
+        using var deployment = ComposedConfigurationDeployment.Composed(provisioned: "{}", persisted: "{}");
+
+        // Act
+        var result = await ConfigurationEndpoints.WriteAsync(
+            deployment.Administration,
+            new ConfigurationWriteRequest(
+                Version: 1,
+                Changes: [new ConfigurationChangeRequest("MailboxSearch::SnippetsPerEmail", "5")],
+                EvenIfShadowed: false),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+        Assert.Contains(
+            "does not name a setting this deployment can persist",
+            refusal.ProblemDetails.Detail ?? string.Empty,
+            StringComparison.Ordinal);
+        Assert.Equal(0, deployment.Row.AcceptedCommits);
+    }
+
     /// <summary>A change the deployment binds commits, and the answer carries what the setting reads as on each side.</summary>
     [Fact]
     public async Task WriteAsync_AChangeTheConfigurationBinds_AnswersWithTheCommitAndBothReadings()

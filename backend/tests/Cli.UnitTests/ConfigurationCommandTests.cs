@@ -346,6 +346,62 @@ public sealed class ConfigurationCommandTests : IDisposable
     }
 
     /// <summary>
+    /// The same claim on the other two commands that state the flag. Each composes a request record of its own, so a
+    /// command that bound the option and sent <c>false</c> would leave the operator refused under <c>12013</c> with no
+    /// way past — and the keyed write's own assertion above would say nothing about it.
+    /// </summary>
+    [Fact]
+    public async Task Edit_TheShadowingFlag_StatesItInTheDocumentSave()
+    {
+        // Arrange
+        using var deployment = FakeConfigurationDeployment.Holding(
+            documents: [FakeConfigurationDeployment.Document(version: 1, """{ "MailboxSearch": { "SnippetsPerEmail": "3" } }""")],
+            write: FakeConfigurationDeployment.Committed(version: 2));
+
+        this.EditsTheBufferInto("""{ "MailboxSearch": { "SnippetsPerEmail": "5" } }""");
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "config",
+            "edit",
+            "--even-if-shadowed",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.True(SentWrite(deployment).GetProperty("evenIfShadowed").GetBoolean());
+    }
+
+    /// <summary>The adoption half of the same claim, over the request record an adoption composes.</summary>
+    [Fact]
+    public async Task Adopt_TheShadowingFlag_StatesItInTheAdoptionRequest()
+    {
+        // Arrange
+        using var deployment = FakeConfigurationDeployment.Holding(
+            adoptable: FakeConfigurationDeployment.Reading(
+                version: 8,
+                (SnippetsPerEmail, "3", "file", "10-deployment.json", false)),
+            write: FakeConfigurationDeployment.Committed(version: 9));
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "config",
+            "adopt",
+            "MailboxSearch",
+            "--even-if-shadowed",
+            "--yes",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.True(SentWrite(deployment).GetProperty("evenIfShadowed").GetBoolean());
+    }
+
+    /// <summary>
     /// A write that changed nothing is a success, because the deployment already reads as the operator asked for and a
     /// script repeating a command is not a script that has gone wrong.
     /// </summary>

@@ -228,8 +228,11 @@ internal static class ConfigurationEndpoints
         }
         catch (Exception refusal) when (refusal is FormatException or JsonException)
         {
+            // The parser's own message names the offending token, the JSON path it stopped at, and a byte position,
+            // and the path is composed from the row's own key names. None of that is this surface's to publish, for
+            // the same reason the wording of a rejected change is not.
             return Refusal(
-                $"The persisted configuration row is not a document of configuration settings, so it cannot be read or edited: {refusal.Message} Correct the row where it was written.");
+                "The persisted configuration row is not a document of configuration settings, so it cannot be read or edited. Correct the row where it was written.");
         }
 
         return TypedResults.Ok(new ConfigurationDocumentResponse(document.Version, document.Json));
