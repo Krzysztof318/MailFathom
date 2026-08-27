@@ -17,10 +17,11 @@ namespace MailFathom.Infrastructure.Persistence.Settings;
 /// </para>
 /// <para>
 /// Which of the two entry points below a failure arrives at is decided by the caller rather than by the exception,
-/// because the driver reports a connect timeout and a command timeout as the same shape — an
-/// <see cref="NpgsqlException" /> carrying a <see cref="TimeoutException" /> — and the two are opposite diagnoses.
-/// Only the caller knows whether the statement was ever issued, so the writer opens its connection in a step of its
-/// own and each step reports what its own failure can mean.
+/// because the driver reports a failure before the statement and a failure during it as the same shapes — an
+/// <see cref="NpgsqlException" /> carrying a <see cref="TimeoutException" />, or one carrying a transport failure —
+/// and the two are opposite diagnoses. Only the caller knows whether the statement was ever issued, and that is the
+/// whole of what separates "nothing was written" from "whether it applied is not known", so the writer opens its
+/// connection in a step of its own and each step reports what its own failure can mean.
 /// </para>
 /// <para>
 /// Pure over the exception, so what the operator is told is decided in the unit suite while the statement itself is
@@ -33,26 +34,36 @@ internal static class RootSettingsWriteFailures
     private const string Unreachable =
         "The database holding the persisted configuration could not be reached, so nothing was written. The deployment goes on serving the configuration it already composed, and the write is safe to attempt again.";
 
+    /// <summary>What both of the write's own uncertain endings say, so the two cannot drift into two answers.</summary>
+    private const string WhetherItApplied =
+        "whether it applied is not known from here. Read the version now in force to find out, and attempt the write again over the version it was composed on — which the version guard refuses if the first attempt did commit.";
+
     /// <summary>Diagnoses a write refused once the statement had been issued.</summary>
     /// <param name="exception">The exception the statement raised.</param>
     /// <returns>What the operator is told, which names the one place the correction is made.</returns>
     /// <remarks>
-    /// Every arm but the timeout one says the statement was refused before it applied, so the deployment's settings are
-    /// exactly what they were. The timeout arm deliberately does not: the server accepted the statement and stopped
-    /// answering, so whether the row moved is unknown from here — and the version guard is what makes that safe to
-    /// resolve by reading rather than by guessing, since a retry over the version the write was composed on is refused
-    /// as superseded if the first attempt did commit.
+    /// An arm that reads a state the server answered with says the statement was refused before it applied, so the
+    /// deployment's settings are exactly what they were. Neither of the other two can: by the time this entry point is
+    /// reached the statement had been sent, so a bound that expired and a connection that broke both leave whether the
+    /// row moved unknown from here. The version guard is what makes that safe to resolve by reading rather than by
+    /// guessing, since a retry over the version the write was composed on is refused as superseded if the first attempt
+    /// did commit.
     /// </remarks>
     internal static string Diagnose(NpgsqlException exception) =>
         WhatTheServerAnswered(exception)
         ?? exception switch
         {
-            // The bound on the statement expiring. Unlike every arm above, this one cannot say the row stood still: the
-            // server accepted the statement and did not answer within the bound.
+            // The bound on the statement expiring. Unlike every arm the server answered, this one cannot say the row
+            // stood still: the server accepted the statement and did not answer within the bound.
             { InnerException: TimeoutException } =>
-                "The statement writing the persisted configuration did not finish within the configured command timeout, so whether it applied is not known from here. Read the version now in force to find out, and attempt the write again over the version it was composed on — which the version guard refuses if the first attempt did commit. What to look at is Persistence:CommandTimeoutSeconds and whatever is holding the settings_root row, rather than the network.",
+                $"The statement writing the persisted configuration did not finish within the configured command timeout, so {WhetherItApplied} What to look at is Persistence:CommandTimeoutSeconds and whatever is holding the settings_root row, rather than the network.",
 
-            _ => Unreachable,
+            // A connection that broke while the statement was in flight, which arrives carrying no state at all because
+            // the server never got to answer one. It cannot claim the row stood still either: the statement had been
+            // sent, and the server may have applied and committed it before the socket died. This is where the write's
+            // fallback parts from the connect step's, which can say nothing was sent because nothing was.
+            _ =>
+                $"The connection to the database was lost while the statement writing the persisted configuration was in flight, so {WhetherItApplied} What to look at is the network and the database's own log, rather than anything MailFathom composed.",
         };
 
     /// <summary>Diagnoses a write refused before the statement could be issued, while the connection was being opened.</summary>

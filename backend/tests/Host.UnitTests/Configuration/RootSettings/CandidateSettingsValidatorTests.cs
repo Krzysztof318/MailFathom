@@ -187,6 +187,31 @@ public sealed class CandidateSettingsValidatorTests
     }
 
     /// <summary>
+    /// Composing the listeners reads each profile as though its own validator had already passed — a domain unique
+    /// because validation proved it so — so a section that answered with a refusal is one whose declarations cannot be
+    /// built at all. Two profiles that both omit a domain is that shape: each is refused on its own, and declaring them
+    /// anyway would collide on the empty key and leave this port raising rather than refusing.
+    /// </summary>
+    [Fact]
+    public void FindErrors_TwoHttpsProfilesTheSectionAlreadyRefuses_IsAnErrorRatherThanAnException()
+    {
+        // Arrange
+        var validator = Validator();
+
+        // Act
+        var errors = validator.FindErrors(Compose(new()
+        {
+            ["McpEndpoint:Enabled"] = "true",
+            ["McpEndpoint:Transport"] = "HttpAndHttps",
+            ["McpEndpoint:Https:Endpoints:0:Port"] = "8443",
+            ["McpEndpoint:Https:Endpoints:1:Port"] = "8444",
+        }));
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("McpEndpoint:Https:Endpoints", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// The chat section is registered without <c>ValidateOnStart</c>, so the startup validator never materializes it
     /// and nothing in the throwaway container reads it strictly. A start still refuses a misspelled key there — the
     /// snapshot hosted service reads the monitor's current value while hosted services are resolved — so this reading

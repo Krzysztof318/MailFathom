@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.CodeCoverage;
+using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Entities;
 using Npgsql;
 
@@ -31,7 +32,10 @@ namespace MailFathom.Infrastructure.Persistence.Settings;
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this writer.")]
 [RequiresIntegrationCoverage]
-internal sealed class RootSettingsDocumentWriter(NpgsqlDataSource dataSource, TimeProvider timeProvider)
+internal sealed class RootSettingsDocumentWriter(
+    NpgsqlDataSource dataSource,
+    DatabaseCommandTimeout commandTimeout,
+    TimeProvider timeProvider)
     : IRootSettingsDocumentWriter
 {
     /// <summary>Replaces the document only where the row still stands at the version the candidate was composed over.</summary>
@@ -80,6 +84,14 @@ internal sealed class RootSettingsDocumentWriter(NpgsqlDataSource dataSource, Ti
             try
             {
                 await using var command = new NpgsqlCommand(CommitDocument, connection);
+
+                // Written onto the command rather than inherited from the pool, because nothing puts the configured
+                // bound onto this data source: the setting reaches EF Core's commands through the enrichment that
+                // configures its context, and this statement is not one of those. Without it the write would be bounded
+                // by the driver's own default, or by nothing at all where a connection string carries `Command
+                // Timeout=0` — while the diagnosis of a timeout sends the operator to a setting that governed nothing.
+                command.CommandTimeout = (int)commandTimeout.Value.TotalSeconds;
+
                 command.Parameters.AddWithValue("document", json);
                 command.Parameters.AddWithValue("updatedAt", timeProvider.GetUtcNow());
                 command.Parameters.AddWithValue("id", RootSettingsEntity.SingletonId);

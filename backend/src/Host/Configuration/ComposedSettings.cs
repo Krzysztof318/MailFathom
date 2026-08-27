@@ -136,7 +136,7 @@ internal static class ComposedSettings
         var client = ClientEndpointOptions.ReadFrom(configuration);
         var health = HealthEndpointOptions.ReadFrom(configuration);
 
-        return
+        List<SettingsRefusal> refusals =
         [
             .. Refusal<ReverseProxyOptions>(ReverseProxyOptions.SectionName, reverseProxy.FindConfigurationErrors()),
             .. Refusal<ConnectionLimitsOptions>(ConnectionLimitsOptions.SectionName, connectionLimits.FindConfigurationErrors()),
@@ -157,9 +157,23 @@ internal static class ComposedSettings
             .. Refusal<AdminEndpointOptions>(AdminEndpointOptions.SectionName, admin.FindConfigurationErrors()),
             .. Refusal<ClientEndpointOptions>(ClientEndpointOptions.SectionName, client.FindConfigurationErrors()),
             .. Refusal<HealthEndpointOptions>(HealthEndpointOptions.SectionName, health.FindConfigurationErrors()),
+        ];
 
-            // Surfaces may share a socket — which is what lets a single-node deployment publish one port rather than three
-            // — but they may not disagree about it, and this is where that is settled before anything binds.
+        // Composing the listeners is what a section's own validator has already earned the right to: declaring one reads
+        // a profile as though it were valid — a domain that is unique because validation proved it so — so a section
+        // that answered with a refusal is a section whose declarations cannot be built at all. The composition root
+        // short-circuited on each section's errors before it ever declared a listener; a collection expression
+        // evaluates every element, so a candidate carrying two colliding profiles would leave this port raising the
+        // framework's key-collision message instead of returning the two sentences naming the profiles.
+        if (refusals.Count > 0)
+        {
+            return refusals;
+        }
+
+        // Surfaces may share a socket — which is what lets a single-node deployment publish one port rather than three
+        // — but they may not disagree about it, and this is where that is settled before anything binds.
+        return
+        [
             .. Refusal<McpEndpointOptions>(
                 McpEndpointOptions.SectionName,
                 ListenerComposition.Compose(

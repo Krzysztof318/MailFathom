@@ -10,12 +10,15 @@ namespace MailFathom.Infrastructure.UnitTests.Persistence.Settings;
 
 /// <summary>
 /// Covers what a refused write of the persisted configuration tells the operator. The statement needs a database, but
-/// which of seven places it sends somebody to is a decision — and the two that matter most are the two the read never
-/// meets: a role granted only <c>SELECT</c>, which serves every start and refuses every write, and a timeout, which is
-/// the one failure here that cannot say the row stood still.
+/// which place it sends somebody to is a decision — and what matters most is the pair the read never meets: a role
+/// granted only <c>SELECT</c>, which serves every start and refuses every write, and the two endings that cannot say
+/// the row stood still, because by then the statement had already been sent.
 /// </summary>
 public sealed class RootSettingsWriteFailuresTests
 {
+    /// <summary>What the server said, which no diagnosis may repeat: a provider sentence can name the database.</summary>
+    private const string ServerSentence = "the server said something";
+
     /// <summary>The commonest failure on a working deployment, and the reason this diagnosis is not the read's.</summary>
     [Fact]
     public void Diagnose_PrivilegeRefused_SendsTheOperatorToTheUpdateGrant()
@@ -123,24 +126,31 @@ public sealed class RootSettingsWriteFailuresTests
         Assert.Contains("reached and answered", diagnosis, StringComparison.Ordinal);
         Assert.DoesNotContain("could not be reached", diagnosis, StringComparison.Ordinal);
         Assert.DoesNotContain("safe to attempt again", diagnosis, StringComparison.Ordinal);
+
+        // The arm names the state and leaves the provider's own sentence in the inner exception, which is what keeps a
+        // server message that can name the database out of what an operator reads. Observed rather than only stated.
+        Assert.DoesNotContain(ServerSentence, diagnosis, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// A driver failure carrying no state at all is the one case nothing was answered, and the only one the operator is
-    /// sent to the network for and told to retry.
+    /// A connection lost while the statement was in flight carries no state, because the server never got to answer
+    /// one — and it cannot claim the row stood still either: the statement had been sent, and the server may have
+    /// applied and committed it before the socket died. It is settled by reading the version, exactly as a timeout is.
     /// </summary>
     [Fact]
-    public void Diagnose_AFailureCarryingNoServerState_ReportsTheDatabaseAsUnreached()
+    public void Diagnose_AConnectionLostAfterTheStatementWasSent_DoesNotClaimTheRowStoodStill()
     {
         // Arrange
-        var exception = new NpgsqlException("the connection was never established");
+        var exception = new NpgsqlException("the connection was reset", new IOException("the socket died"));
 
         // Act
         var diagnosis = RootSettingsWriteFailures.Diagnose(exception);
 
         // Assert
-        Assert.Contains("could not be reached", diagnosis, StringComparison.Ordinal);
-        Assert.Contains("safe to attempt again", diagnosis, StringComparison.Ordinal);
+        Assert.Contains("not known from here", diagnosis, StringComparison.Ordinal);
+        Assert.Contains("Read the version now in force", diagnosis, StringComparison.Ordinal);
+        Assert.DoesNotContain("nothing was written", diagnosis, StringComparison.Ordinal);
+        Assert.DoesNotContain("safe to attempt again", diagnosis, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -186,7 +196,7 @@ public sealed class RootSettingsWriteFailuresTests
 
     private static PostgresException ProviderFailure(string sqlState) =>
         new(
-            messageText: "the server said something",
+            messageText: ServerSentence,
             severity: "ERROR",
             invariantSeverity: "ERROR",
             sqlState: sqlState);

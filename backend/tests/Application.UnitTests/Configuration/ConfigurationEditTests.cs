@@ -156,7 +156,41 @@ public sealed class ConfigurationEditTests
         Assert.Contains("NUL", refusal.Message, StringComparison.Ordinal);
     }
 
-    /// <summary>A path past the bound is refused, which is what keeps the document a path produces shallow enough to read back.</summary>
+    /// <summary>
+    /// A record renders every member it holds into every log line and diagnostic dump the value reaches, and the value
+    /// here is whatever an operator stated — a credential wherever the setting is one. What identifies the change is
+    /// printed; what would disclose it is not.
+    /// </summary>
+    [Fact]
+    public void ToString_AChangeSettingAValue_PrintsThePathAndNotTheValue()
+    {
+        // Arrange
+        var edit = ConfigurationEdit.SetTo("MailboxSearch:SnippetsPerEmail", "s3cret-looking-value");
+
+        // Act
+        var printed = edit.ToString();
+
+        // Assert
+        Assert.Contains("MailboxSearch:SnippetsPerEmail", printed, StringComparison.Ordinal);
+        Assert.DoesNotContain("s3cret-looking-value", printed, StringComparison.Ordinal);
+    }
+
+    /// <summary>A removal has no value to withhold, and what it is has to survive the printing.</summary>
+    [Fact]
+    public void ToString_ARemoval_SaysThatItRemovesTheSetting()
+    {
+        // Arrange
+        var edit = ConfigurationEdit.Removing("MailboxSearch:SnippetsPerEmail");
+
+        // Act
+        var printed = edit.ToString();
+
+        // Assert
+        Assert.Contains("MailboxSearch:SnippetsPerEmail", printed, StringComparison.Ordinal);
+        Assert.Contains("True", printed, StringComparison.Ordinal);
+    }
+
+    /// <summary>A path past the bound is refused as a caller that has lost track of the path it is asking for.</summary>
     [Fact]
     public void SetTo_APathPastTheBound_IsRefused()
     {

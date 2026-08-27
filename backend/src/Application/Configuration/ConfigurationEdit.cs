@@ -100,6 +100,17 @@ public sealed record ConfigurationEdit
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="path" /> is longer than <see cref="MaximumPathLength" />.</exception>
     public static ConfigurationEdit Removing(string path) => new(Validated(path), value: null);
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// The synthesized record printing is replaced because <see cref="Value" /> is whatever an operator stated, which
+    /// is a credential wherever the setting is one — and a record renders every member it holds into every log line,
+    /// exception message, and diagnostic dump the value reaches. The port's own refusal path already records only the
+    /// code, the version, and the count of settings, but that care would stop at this type: a consumer holding an edit
+    /// meets it before any of it. What is printed instead is what identifies the change without disclosing it.
+    /// </remarks>
+    public override string ToString() =>
+        $"{nameof(ConfigurationEdit)} {{ {nameof(this.Path)} = {this.Path}, {nameof(this.RemovesTheSetting)} = {this.RemovesTheSetting} }}";
+
     /// <summary>Refuses a path that is not a configuration key, which is a caller's mistake rather than a rejected write.</summary>
     /// <remarks>
     /// A key with an empty segment addresses nothing: the configuration binder splits on the colon and would be handed
