@@ -50,6 +50,14 @@ public sealed class PublicSurfaceGoldenTests
             "published HTTP API contract",
             await HttpApiContractSurface.RenderAsync(TestContext.Current.CancellationToken));
 
+    /// <summary>The presentation plan a Discover run produces, as the contract's own serializer writes it.</summary>
+    [Fact]
+    public void PresentationPlanContract_AsItsSerializerWritesIt_MatchesTheCommittedRecord() =>
+        PublicSurfaceGolden.AssertMatches(
+            "presentation-plan-contract.json",
+            "published presentation plan contract",
+            PresentationPlanContractSurface.Render());
+
     /// <summary>Two renderings of one surface are the same text, which is what makes a diff mean a change.</summary>
     /// <remarks>
     /// The control for the tests above. Reflection promises no ordering, a schema generator none either, and a
@@ -62,11 +70,13 @@ public sealed class PublicSurfaceGoldenTests
         // Arrange, Act
         var tools = McpToolContractSurface.Render();
         var keys = ConfigurationKeySurface.Render();
+        var presentationPlan = PresentationPlanContractSurface.Render();
         var httpApi = await HttpApiContractSurface.RenderAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(tools, McpToolContractSurface.Render(), StringComparer.Ordinal);
         Assert.Equal(keys, ConfigurationKeySurface.Render(), StringComparer.Ordinal);
+        Assert.Equal(presentationPlan, PresentationPlanContractSurface.Render(), StringComparer.Ordinal);
         Assert.Equal(
             httpApi,
             await HttpApiContractSurface.RenderAsync(TestContext.Current.CancellationToken),

@@ -1,0 +1,846 @@
+{
+  "blockCatalogue": {
+    "answer": 1,
+    "attachmentGallery": 1,
+    "draft": 1,
+    "evidenceList": 1,
+    "factTable": 1,
+    "people": 1,
+    "suggestedAction": 1,
+    "threadState": 1,
+    "timeline": 1
+  },
+  "bounds": {
+    "attachmentGalleryEntries": 50,
+    "blockCitations": 24,
+    "citationIdentifierLength": 32,
+    "draftRecipients": 20,
+    "evidenceListEntries": 50,
+    "factTableColumns": 8,
+    "factTableRows": 50,
+    "peopleEntries": 30,
+    "planBlocks": 20,
+    "planCitations": 200,
+    "textLength": 4000,
+    "threadStateParticipants": 30,
+    "threadStateStatements": 25,
+    "timelineEntries": 50
+  },
+  "factTableColumns": {
+    "amount": "Amount",
+    "date": "Date",
+    "document": "Text",
+    "party": "Text",
+    "quantity": "Number",
+    "reference": "Text",
+    "status": "Text",
+    "subject": "Text",
+    "term": "Text",
+    "version": "Text"
+  },
+  "schema": {
+    "properties": {
+      "blocks": {
+        "items": {
+          "anyOf": [
+            {
+              "properties": {
+                "confidence": {
+                  "enum": [
+                    "High",
+                    "Moderate",
+                    "Low"
+                  ]
+                },
+                "evidence": {
+                  "properties": {
+                    "citations": {
+                      "type": "array"
+                    },
+                    "freshness": {
+                      "properties": {
+                        "observedAt": {
+                          "format": "date-time",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "staleness": {
+                          "enum": [
+                            "Current",
+                            "Stale",
+                            "Unknown"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "staleness",
+                        "observedAt"
+                      ],
+                      "type": "object"
+                    },
+                    "support": {
+                      "enum": [
+                        "Supported",
+                        "Unsupported",
+                        "Conflicting"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "support",
+                    "citations",
+                    "freshness"
+                  ],
+                  "type": "object"
+                },
+                "text": true,
+                "type": {
+                  "const": "answer"
+                },
+                "version": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "text",
+                "confidence",
+                "evidence"
+              ]
+            },
+            {
+              "properties": {
+                "entries": {
+                  "items": {
+                    "properties": {
+                      "fragment": true,
+                      "freshness": {
+                        "properties": {
+                          "observedAt": {
+                            "format": "date-time",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "staleness": {
+                            "enum": [
+                              "Current",
+                              "Stale",
+                              "Unknown"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "staleness",
+                          "observedAt"
+                        ],
+                        "type": "object"
+                      },
+                      "relevance": {
+                        "type": "number"
+                      },
+                      "source": true
+                    },
+                    "required": [
+                      "source",
+                      "fragment",
+                      "relevance",
+                      "freshness"
+                    ],
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "type": "array"
+                },
+                "evidence": {
+                  "properties": {
+                    "citations": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/citations"
+                    },
+                    "freshness": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/freshness"
+                    },
+                    "support": {
+                      "enum": [
+                        "Supported",
+                        "Unsupported",
+                        "Conflicting"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "support",
+                    "citations",
+                    "freshness"
+                  ],
+                  "type": "object"
+                },
+                "referencedCitations": {
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                },
+                "type": {
+                  "const": "evidenceList"
+                },
+                "version": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "entries",
+                "evidence"
+              ]
+            },
+            {
+              "properties": {
+                "entries": {
+                  "items": {
+                    "properties": {
+                      "occurredAt": {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      "sources": {
+                        "type": "array"
+                      },
+                      "subject": true,
+                      "summary": true
+                    },
+                    "required": [
+                      "occurredAt",
+                      "summary",
+                      "subject",
+                      "sources"
+                    ],
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "type": "array"
+                },
+                "evidence": {
+                  "properties": {
+                    "citations": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/citations"
+                    },
+                    "freshness": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/freshness"
+                    },
+                    "support": {
+                      "enum": [
+                        "Supported",
+                        "Unsupported",
+                        "Conflicting"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "support",
+                    "citations",
+                    "freshness"
+                  ],
+                  "type": "object"
+                },
+                "referencedCitations": {
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                },
+                "type": {
+                  "const": "timeline"
+                },
+                "version": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "entries",
+                "evidence"
+              ]
+            },
+            {
+              "properties": {
+                "columns": {
+                  "type": "array"
+                },
+                "evidence": {
+                  "properties": {
+                    "citations": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/citations"
+                    },
+                    "freshness": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/freshness"
+                    },
+                    "support": {
+                      "enum": [
+                        "Supported",
+                        "Unsupported",
+                        "Conflicting"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "support",
+                    "citations",
+                    "freshness"
+                  ],
+                  "type": "object"
+                },
+                "referencedCitations": {
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                },
+                "rows": {
+                  "items": {
+                    "properties": {
+                      "cells": {
+                        "items": {
+                          "properties": {
+                            "sources": {
+                              "type": "array"
+                            },
+                            "value": true
+                          },
+                          "required": [
+                            "value",
+                            "sources"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "cells"
+                    ],
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "type": "array"
+                },
+                "type": {
+                  "const": "factTable"
+                },
+                "version": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "columns",
+                "rows",
+                "evidence"
+              ]
+            },
+            {
+              "properties": {
+                "entries": {
+                  "items": {
+                    "properties": {
+                      "address": true,
+                      "displayName": true,
+                      "lastContactAt": {
+                        "format": "date-time",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "relationship": true,
+                      "sources": {
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "displayName",
+                      "address",
+                      "relationship",
+                      "lastContactAt",
+                      "sources"
+                    ],
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "type": "array"
+                },
+                "evidence": {
+                  "properties": {
+                    "citations": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/citations"
+                    },
+                    "freshness": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/freshness"
+                    },
+                    "support": {
+                      "enum": [
+                        "Supported",
+                        "Unsupported",
+                        "Conflicting"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "support",
+                    "citations",
+                    "freshness"
+                  ],
+                  "type": "object"
+                },
+                "referencedCitations": {
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                },
+                "type": {
+                  "const": "people"
+                },
+                "version": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "entries",
+                "evidence"
+              ]
+            },
+            {
+              "properties": {
+                "agreements": {
+                  "items": {
+                    "properties": {
+                      "sources": {
+                        "type": "array"
+                      },
+                      "text": true
+                    },
+                    "required": [
+                      "text",
+                      "sources"
+                    ],
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "type": "array"
+                },
+                "commitments": {
+                  "items": {
+                    "properties": {
+                      "dueAt": {
+                        "format": "date-time",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "owedBy": {
+                        "properties": {
+                          "address": true,
+                          "displayName": true
+                        },
+                        "required": [
+                          "displayName",
+                          "address"
+                        ],
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "sources": {
+                        "type": "array"
+                      },
+                      "text": true
+                    },
+                    "required": [
+                      "text",
+                      "owedBy",
+                      "dueAt",
+                      "sources"
+                    ],
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "type": "array"
+                },
+                "evidence": {
+                  "properties": {
+                    "citations": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/citations"
+                    },
+                    "freshness": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/freshness"
+                    },
+                    "support": {
+                      "enum": [
+                        "Supported",
+                        "Unsupported",
+                        "Conflicting"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "support",
+                    "citations",
+                    "freshness"
+                  ],
+                  "type": "object"
+                },
+                "openQuestions": {
+                  "items": {
+                    "$ref": "#/properties/blocks/items/anyOf/5/properties/agreements/items"
+                  },
+                  "type": "array"
+                },
+                "participants": {
+                  "items": {
+                    "properties": {
+                      "address": true,
+                      "displayName": true
+                    },
+                    "required": [
+                      "displayName",
+                      "address"
+                    ],
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "type": "array"
+                },
+                "referencedCitations": {
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                },
+                "type": {
+                  "const": "threadState"
+                },
+                "version": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "participants",
+                "agreements",
+                "openQuestions",
+                "commitments",
+                "evidence"
+              ]
+            },
+            {
+              "properties": {
+                "entries": {
+                  "items": {
+                    "properties": {
+                      "availability": {
+                        "enum": [
+                          "Stored",
+                          "NotStored",
+                          "Removed"
+                        ]
+                      },
+                      "mediaType": true,
+                      "name": true,
+                      "sizeOctets": {
+                        "type": "integer"
+                      },
+                      "source": true
+                    },
+                    "required": [
+                      "source",
+                      "name",
+                      "mediaType",
+                      "sizeOctets",
+                      "availability"
+                    ],
+                    "type": [
+                      "object",
+                      "null"
+                    ]
+                  },
+                  "type": "array"
+                },
+                "evidence": {
+                  "properties": {
+                    "citations": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/citations"
+                    },
+                    "freshness": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/freshness"
+                    },
+                    "support": {
+                      "enum": [
+                        "Supported",
+                        "Unsupported",
+                        "Conflicting"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "support",
+                    "citations",
+                    "freshness"
+                  ],
+                  "type": "object"
+                },
+                "referencedCitations": {
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                },
+                "type": {
+                  "const": "attachmentGallery"
+                },
+                "version": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "entries",
+                "evidence"
+              ]
+            },
+            {
+              "properties": {
+                "body": true,
+                "disposition": {
+                  "enum": [
+                    "Composed",
+                    "Saved",
+                    "Queued"
+                  ]
+                },
+                "evidence": {
+                  "properties": {
+                    "citations": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/citations"
+                    },
+                    "freshness": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/freshness"
+                    },
+                    "support": {
+                      "enum": [
+                        "Supported",
+                        "Unsupported",
+                        "Conflicting"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "support",
+                    "citations",
+                    "freshness"
+                  ],
+                  "type": "object"
+                },
+                "recipients": {
+                  "type": "array"
+                },
+                "subject": true,
+                "type": {
+                  "const": "draft"
+                },
+                "version": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "recipients",
+                "subject",
+                "body",
+                "disposition",
+                "evidence"
+              ]
+            },
+            {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "ReplyToThread",
+                    "ForwardEmail",
+                    "ComposeEmail",
+                    "FlagEmail",
+                    "OpenThread",
+                    "SearchAgain",
+                    "CreateMailRule"
+                  ]
+                },
+                "evidence": {
+                  "properties": {
+                    "citations": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/citations"
+                    },
+                    "freshness": {
+                      "$ref": "#/properties/blocks/items/anyOf/0/properties/evidence/properties/freshness"
+                    },
+                    "support": {
+                      "enum": [
+                        "Supported",
+                        "Unsupported",
+                        "Conflicting"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "support",
+                    "citations",
+                    "freshness"
+                  ],
+                  "type": "object"
+                },
+                "impact": {
+                  "enum": [
+                    "ReadsOnly",
+                    "ChangesMailbox",
+                    "SendsMail"
+                  ]
+                },
+                "reason": true,
+                "requiresConfirmation": {
+                  "type": "boolean"
+                },
+                "type": {
+                  "const": "suggestedAction"
+                },
+                "version": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "action",
+                "reason",
+                "impact",
+                "requiresConfirmation",
+                "evidence"
+              ]
+            }
+          ],
+          "required": [
+            "type"
+          ],
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "type": "array"
+      },
+      "citations": {
+        "items": {
+          "properties": {
+            "id": true,
+            "label": true,
+            "target": {
+              "anyOf": [
+                {
+                  "properties": {
+                    "email": true,
+                    "kind": {
+                      "const": "email"
+                    }
+                  },
+                  "required": [
+                    "email"
+                  ]
+                },
+                {
+                  "properties": {
+                    "email": true,
+                    "fragment": true,
+                    "kind": {
+                      "const": "fragment"
+                    }
+                  },
+                  "required": [
+                    "fragment",
+                    "email"
+                  ]
+                },
+                {
+                  "properties": {
+                    "attachmentPosition": {
+                      "type": "integer"
+                    },
+                    "email": true,
+                    "kind": {
+                      "const": "attachment"
+                    }
+                  },
+                  "required": [
+                    "attachmentPosition",
+                    "email"
+                  ]
+                }
+              ],
+              "required": [
+                "kind"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "id",
+            "target",
+            "label"
+          ],
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "type": "array"
+      },
+      "limitations": {
+        "items": {
+          "enum": [
+            "RetrievalTruncated",
+            "SourcesUnavailable",
+            "SemanticRankingUnavailable",
+            "LocalCopyBehind",
+            "BlocksOmitted",
+            "OutsideRetainedMail"
+          ]
+        },
+        "type": "array"
+      },
+      "schemaVersion": {
+        "type": "integer"
+      }
+    },
+    "required": [
+      "schemaVersion",
+      "blocks",
+      "citations",
+      "limitations"
+    ],
+    "type": [
+      "object",
+      "null"
+    ]
+  },
+  "schemaVersion": 1
+}
