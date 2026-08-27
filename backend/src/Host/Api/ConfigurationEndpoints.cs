@@ -166,15 +166,24 @@ internal static class ConfigurationEndpoints
                 $"A configuration write carries at most {IConfigurationWriter.MaximumEdits} changes, and this one carries {changes.Count}.");
         }
 
+        if (changes.Select(Unacceptable).FirstOrDefault(refusal => refusal is not null) is { } stated)
+        {
+            return NotAcceptable(stated);
+        }
+
         IReadOnlyList<ConfigurationEdit> edits;
 
         try
         {
             edits = [.. changes.Select(Stated)];
         }
-        catch (ArgumentException refusal)
+        catch (ArgumentException)
         {
-            return NotAcceptable(refusal.Message);
+            // A shape the sentences above do not state yet, which is a rule this boundary has fallen behind on rather
+            // than anything the caller can read out of the framework's own wording. The exception carries a parameter
+            // name and BCL phrasing, so it is not what an administrative surface answers with.
+            return NotAcceptable(
+                "One of the changes does not name a setting this deployment can persist. Check that each path is a colon-delimited configuration key and that each value is text the deployment can hold.");
         }
 
         return TypedResults.Ok(ConfigurationWriteResponse.For(
@@ -244,7 +253,10 @@ internal static class ConfigurationEndpoints
     {
         ArgumentNullException.ThrowIfNull(settings);
 
-        if (prefix is not { Length: > 0 })
+        // The same rule the commit guards by, rather than a weaker one. A preview exists to report what the commit
+        // would do, so a prefix the commit refuses has to be refused here as well: a preview answering an empty
+        // reading for '   ' would tell an operator their files supply nothing beneath a path that is not a path.
+        if (string.IsNullOrWhiteSpace(prefix))
         {
             return NotAcceptable("An adoption names the path it covers. There is no adoption of the whole configuration.");
         }
@@ -274,7 +286,7 @@ internal static class ConfigurationEndpoints
             return NotAcceptable("A configuration write states the version it was composed over, which is never negative.");
         }
 
-        if (request.Prefix is not { Length: > 0 } prefix || string.IsNullOrWhiteSpace(prefix))
+        if (request.Prefix is not { } prefix || string.IsNullOrWhiteSpace(prefix))
         {
             return NotAcceptable("An adoption names the path it covers. There is no adoption of the whole configuration.");
         }
@@ -288,6 +300,34 @@ internal static class ConfigurationEndpoints
     private static ConfigurationEdit Stated(ConfigurationChangeRequest change) => change.Value is { } value
         ? ConfigurationEdit.SetTo(change.Path ?? string.Empty, value)
         : ConfigurationEdit.Removing(change.Path ?? string.Empty);
+
+    /// <summary>Says why one stated change is not a change this boundary accepts, or nothing where it is.</summary>
+    /// <remarks>
+    /// The same rules <see cref="ConfigurationEdit" /> enforces, stated as sentences an administrator reads. The type
+    /// raises each as an argument failure, which is right for a caller that composed the change in process and wrong
+    /// for one that arrived over HTTP: the message names a parameter of a constructor and words the bound as the base
+    /// class library does, and neither is something this surface publishes. The bounds themselves are read from that
+    /// type rather than repeated, so a rule moves in one place.
+    /// </remarks>
+    private static string? Unacceptable(ConfigurationChangeRequest change)
+    {
+        if (change.Path is not { Length: > 0 } path || string.IsNullOrWhiteSpace(path))
+        {
+            return "A configuration change names the path it targets.";
+        }
+
+        if (path.Length > ConfigurationEdit.MaximumPathLength)
+        {
+            return $"A configuration path carries at most {ConfigurationEdit.MaximumPathLength} characters, and this one carries {path.Length}.";
+        }
+
+        if (change.Value is { Length: > ConfigurationEdit.MaximumValueLength } value)
+        {
+            return $"The value for '{path}' carries {value.Length} characters, past the {ConfigurationEdit.MaximumValueLength} a configuration value may hold.";
+        }
+
+        return null;
+    }
 
     private static ProblemHttpResult TooBroad(SettingsReading reading, string? prefix) => TypedResults.Problem(
         $"{Named(prefix)} matches {reading.MatchedCount} settings, past the {EffectiveSettingsReader.MaximumSettings} one reading answers with. Read a narrower path.",

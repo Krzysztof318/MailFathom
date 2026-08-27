@@ -172,4 +172,61 @@ public sealed class EffectiveSettingsReaderTests
         Assert.False(deployment.Reader.LayerCarries("MailboxSearch:SnippetsPerEmail"));
         Assert.True(deployment.Reader.LayerCarries("Deployment"));
     }
+
+    /// <summary>
+    /// A reading refuses a prefix past its own bound rather than answering with the deployment's whole configuration.
+    /// Nothing else in the change reaches the bound, so an inverted comparison here would let one request serialize
+    /// every setting a deployment composed and no test would report it.
+    /// </summary>
+    [Fact]
+    public void Read_APrefixMatchingMoreSettingsThanTheBound_RefusesAndReportsHowManyItMatched()
+    {
+        // Arrange
+        var beyondTheBound = EffectiveSettingsReader.MaximumSettings + 1;
+
+        using var deployment = ComposedConfigurationDeployment.Composed(
+            provisioned: SectionOf("Wide", beyondTheBound),
+            persisted: "{}");
+
+        // Act
+        var reading = deployment.Reader.Read("Wide");
+
+        // Assert
+        Assert.True(reading.IsTooBroad);
+        Assert.Equal(beyondTheBound, reading.MatchedCount);
+        Assert.Empty(reading.Settings);
+    }
+
+    /// <summary>
+    /// The adoption bound is measured against what the reading answers with rather than against the paths it started
+    /// from, because a source above the layer supplies settings an adoption would never copy — and the refusal would
+    /// then report that number back to the operator as what their files supply.
+    /// </summary>
+    [Fact]
+    public void ReadBeneathTheLayer_APrefixTheLayerDecidesMostOf_MeasuresTheBoundAgainstWhatTheFilesSupply()
+    {
+        // Arrange
+        var beyondTheBound = EffectiveSettingsReader.MaximumSettings + 1;
+
+        using var deployment = ComposedConfigurationDeployment.Composed(
+            provisioned: """{ "Wide": { "0": "supplied" } }""",
+            persisted: SectionOf("Wide", beyondTheBound));
+
+        // Act
+        var reading = deployment.Reader.ReadBeneathTheLayer("Wide");
+
+        // Assert
+        Assert.False(reading.IsTooBroad);
+        Assert.Equal("Wide:0", Assert.Single(reading.Settings).Path);
+    }
+
+    /// <summary>Composes one section holding the stated number of settings, each a value of its own.</summary>
+    private static string SectionOf(string section, int settings)
+    {
+        var written = string.Join(
+            ", ",
+            Enumerable.Range(0, settings).Select(position => $"\"{position}\": \"value\""));
+
+        return $$"""{ "{{section}}": { {{written}} } }""";
+    }
 }

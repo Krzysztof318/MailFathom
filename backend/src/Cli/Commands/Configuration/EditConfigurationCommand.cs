@@ -77,10 +77,9 @@ internal static class EditConfigurationCommand
         {
             SettingsBuffer.Write(buffer, document);
 
-            if (!context.Edit(editor, buffer))
+            if (context.Edit(editor, buffer) is { Saved: false } ended)
             {
-                throw new CliFailure(
-                    $"The editor '{editor}' did not finish successfully, so nothing was written. A graphical editor needs the flag that makes it wait — '{OperatorEditor.VisualVariable}=\"code --wait\"', for instance — because this command reads the file back when the editor exits.");
+                throw new CliFailure(WhyNothingWasWritten(editor, ended));
             }
 
             var saved = await File.ReadAllTextAsync(buffer, cancellationToken);
@@ -185,6 +184,17 @@ internal static class EditConfigurationCommand
             context.Console.WriteNotice($"  {path}");
         }
     }
+
+    /// <summary>Says why an editing session that did not finish wrote nothing, in terms the operator can act on.</summary>
+    /// <remarks>
+    /// The two endings need different advice. A wait flag is what repairs an editor that ran and returned before the
+    /// operator had finished; it repairs nothing for an editor the operating system never started, where the value in
+    /// the variable is the thing to correct and the system's own words are what name which way it is wrong.
+    /// </remarks>
+    private static string WhyNothingWasWritten(string editor, EditingSession ended) =>
+        ended.WhyItNeverStarted is { Length: > 0 } reason
+            ? $"The editor '{editor}' could not be started, so nothing was written: {reason}. Correct ${OperatorEditor.VisualVariable} or ${OperatorEditor.EditorVariable} to name a program on this machine."
+            : $"The editor '{editor}' did not finish successfully, so nothing was written. A graphical editor needs the flag that makes it wait — '{OperatorEditor.VisualVariable}=\"code --wait\"', for instance — because this command reads the file back when the editor exits.";
 
     /// <summary>Finds the editor the operator's shell names, refusing rather than choosing one for them.</summary>
     /// <exception cref="CliFailure">Thrown when neither variable names an editor.</exception>

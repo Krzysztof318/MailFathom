@@ -634,8 +634,8 @@ $ mfctl config set MailboxSearch:SnippetsPerEmail 5
 **Every value comes with where it was decided**, and that is half the answer. A deployment reads its settings from
 files, from that persisted document, and from an environment variable or a command-line argument somebody put beside
 the process — so before changing anything, the reading tells you which of those you would actually have to edit. A
-value an environment variable is supplying is refused rather than persisted, naming the variable, because persisting it
-would spend a version and change nothing you read.
+value an environment variable is supplying is refused rather than persisted, naming the source that outranks the
+persisted layer, because persisting it would spend a version and change nothing you read.
 
 `mfctl config unset` gives one setting back to the file beneath it. `mfctl config edit` opens the whole persisted
 document in your `$EDITOR` and commits what you saved as one change, which is what you want when a change spans half a

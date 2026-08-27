@@ -98,18 +98,23 @@ internal sealed class EffectiveSettingsReader(
     internal SettingsReading ReadBeneathTheLayer(string? prefix)
     {
         var providers = this.Providers();
-        var paths = this.PathsBeneath(prefix);
         var layerPosition = PositionOfLayer(providers, layer);
 
-        return paths.Count > MaximumSettings
-            ? SettingsReading.TooBroad(paths.Count)
-            : SettingsReading.Of(
-            [
-                .. paths
-                    .Select(path => (Path: path, Supplier: SupplierBelow(providers, path, layerPosition)))
-                    .Where(found => found.Supplier is not null)
-                    .Select(found => Describe(found.Path, found.Supplier!)),
-            ]);
+        // Measured against what this reading answers with rather than against the paths it started from. The two are
+        // different sets here and not in Read: a path the composed configuration carries may be supplied only by a
+        // source above the layer, and counting those would refuse a prefix as too broad on the strength of settings
+        // an adoption was never going to copy — and then report that number back as what the files supply.
+        EffectiveSetting[] beneath =
+        [
+            .. this.PathsBeneath(prefix)
+                .Select(path => (Path: path, Supplier: SupplierBelow(providers, path, layerPosition)))
+                .Where(found => found.Supplier is not null)
+                .Select(found => Describe(found.Path, found.Supplier!)),
+        ];
+
+        return beneath.Length > MaximumSettings
+            ? SettingsReading.TooBroad(beneath.Length)
+            : SettingsReading.Of(beneath);
     }
 
     /// <summary>Reports the source that outranks the persisted layer at a path, so a write knows before it commits.</summary>
@@ -177,10 +182,24 @@ internal sealed class EffectiveSettingsReader(
     {
         ArgumentNullException.ThrowIfNull(path);
 
-        return this.PathsBeneath(path).Any(beneath => layer.TryGet(beneath, out _));
+        return layer.TryGet(path, out _) || CarriedBeneath(layer, path);
     }
 
     private IReadOnlyList<IConfigurationProvider> Providers() => [.. configuration.Providers];
+
+    /// <summary>Reports whether one provider carries a value anywhere beneath a path, walking its own keys alone.</summary>
+    /// <remarks>
+    /// A question about the persisted layer is answered from the layer. Walking the composed configuration instead
+    /// costs an enumeration of every provider and a sort of the whole key set, and a keyed write may carry a thousand
+    /// removals — each of which asks this — so the work was proportional to the deployment's whole configuration times
+    /// the size of the change rather than to the subtree the change names.
+    /// </remarks>
+    private static bool CarriedBeneath(IConfigurationProvider provider, string parentPath) =>
+        provider
+            .GetChildKeys([], parentPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(child => $"{parentPath}:{child}")
+            .Any(beneath => provider.TryGet(beneath, out _) || CarriedBeneath(provider, beneath));
 
     /// <summary>Names every path any source supplies a value at, within the prefix.</summary>
     /// <remarks>

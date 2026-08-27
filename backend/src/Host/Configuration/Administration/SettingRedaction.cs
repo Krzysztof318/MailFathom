@@ -5,6 +5,7 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using MailFathom.Application.Configuration;
 using MailFathom.Infrastructure.Secrets.Discovery;
 
 namespace MailFathom.Host.Configuration.Administration;
@@ -12,10 +13,13 @@ namespace MailFathom.Host.Configuration.Administration;
 /// <summary>Decides which configuration values leave this process with their content, and what stands in for the rest.</summary>
 /// <remarks>
 /// <para>
-/// A setting announces that it bears a secret through its own name, which is the rule
-/// <see cref="SecretPropertyNaming" /> already states for the bound options graph and the rule the configuration
-/// writer refuses material by. Reading applies the same one, so nothing here decides a second time what a secret is
-/// and no reading can disclose what a write would have refused.
+/// The promise is that no reading discloses what a write would have refused, and it is kept by applying the write's
+/// own two rules rather than by deciding a second time what a secret is. A setting announces that it bears a secret
+/// through its own name, which is what <see cref="SecretPropertyNaming" /> states for the bound options graph and
+/// what the configuration writer refuses material by; and a setting the persisted layer is itself reached through is
+/// named by <see cref="BootstrapOnlySettings" />, which is what makes it unwritable. A reading enumerates every
+/// composed key rather than the ones MailFathom named, so the second rule is not redundant with the first:
+/// <c>ConnectionStrings:mailfathom</c> carries a database credential under a key no name rule recognizes.
 /// </para>
 /// <para>
 /// It redacts the reference rather than only material, and deliberately. Under the default interpretation a
@@ -53,20 +57,36 @@ internal static class SettingRedaction
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    /// <summary>Reports whether a configuration path names a setting that bears a secret.</summary>
+    /// <summary>Reports whether a configuration path names a setting this process will not disclose.</summary>
     /// <param name="path">The colon-delimited configuration path.</param>
     /// <returns><see langword="true" /> when the value at the path is redacted wherever it is read back.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="path" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// The last segment decides, because that is the property name the setting binds to: a path ending in
-    /// <c>SecretReference</c> bears one and the <c>Name</c> and <c>Lifetime</c> beside it are the non-secret handles
-    /// that exist so a secret can be discussed without being read.
+    /// <para>
+    /// Two rules, and the second is what makes the promise above this class true rather than nearly true. The name
+    /// rule comes first: the last segment decides, because that is the property name the setting binds to, so a path
+    /// ending in <c>SecretReference</c> bears one and the <c>Name</c> and <c>Lifetime</c> beside it are the non-secret
+    /// handles that exist so a secret can be discussed without being read.
+    /// </para>
+    /// <para>
+    /// The bootstrap rule covers what the name rule structurally cannot. A reading enumerates the whole composed
+    /// configuration, and the settings the layer is itself reached through are named by the framework and by the
+    /// operator's orchestrator rather than by MailFathom — <c>ConnectionStrings:mailfathom</c> is the worked case, a
+    /// key whose last segment is the database's name and whose value is the credential a deployment following
+    /// <c>docs/operations/secret-rotation.md</c> writes inline. No name rule reaches it, and it is exactly the path
+    /// <see cref="BootstrapOnlySettings" /> makes unwritable — so redacting what a write refuses is what stops the
+    /// weaker of the two permissions this surface publishes from yielding the credential the stronger one was
+    /// separated out to protect. The two settings it also covers that carry no material are redacted with them rather
+    /// than picked out: a rule stated as *what a write refuses* is one a reader can check against a list, and one
+    /// stated as *the credential-bearing half of what a write refuses* is a second list to keep true.
+    /// </para>
     /// </remarks>
     internal static bool Redacts(string path)
     {
         ArgumentNullException.ThrowIfNull(path);
 
-        return SecretPropertyNaming.NamesASecret(path.Split(':')[^1]);
+        return SecretPropertyNaming.NamesASecret(path.Split(':')[^1])
+            || (!string.IsNullOrWhiteSpace(path) && BootstrapOnlySettings.TryFindCovering(path, out _));
     }
 
     /// <summary>Reports the value as it may leave this process.</summary>

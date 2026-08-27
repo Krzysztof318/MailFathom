@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Cli.Commands.Configuration;
 using MailFathom.Cli.Credentials;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
@@ -46,10 +47,10 @@ internal sealed class CliCommandHarness : IDisposable
     /// <summary>Gets or sets what an editing session does to the buffer, or <see langword="null" /> where no test opens one.</summary>
     /// <remarks>
     /// The seam that stands in for the operator: it is handed the editor the shell named and the file the command
-    /// wrote, and reports whether the editor finished. A test drives an editing session by writing into that file what
-    /// the operator would have typed.
+    /// wrote, and reports what became of the session. A test drives an editing session by writing into that file what
+    /// the operator would have typed, and drives the two endings apart by answering with the one it means.
     /// </remarks>
-    internal Func<string, string, bool>? Editor { get; set; }
+    internal Func<string, string, EditingSession>? Editor { get; set; }
 
     /// <summary>Runs one invocation against a deployment, with the credential a signed-in operator would hold.</summary>
     /// <param name="deployment">The deployment the command meets instead of a server.</param>

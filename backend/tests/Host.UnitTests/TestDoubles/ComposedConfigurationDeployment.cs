@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Configuration;
 using MailFathom.Host.Configuration.Administration;
+using MailFathom.Host.Configuration.Provisioning;
 using MailFathom.Host.Configuration.RootSettings;
 using MailFathom.Infrastructure.Persistence.Settings;
 using Microsoft.Extensions.Configuration;
@@ -85,7 +86,18 @@ internal sealed class ComposedConfigurationDeployment : IDisposable
         var configuration = new ConfigurationManager();
         var files = new InMemoryConfigurationFileProvider().WithFile(DeploymentFileName, provisioned);
 
-        configuration.AddJsonFile(files, DeploymentFileName, optional: false, reloadOnChange: false);
+        // The provisioned source the host constructs rather than a plain JSON one, because that type is how a reading
+        // tells the deployment's own file from the operator's User Secrets store — which the framework identifies by
+        // the file name 'secrets.json' alone, a name a deployment is free to give its own ConfigMap key. Composing a
+        // plain source here would leave every File assertion resolving through the fall-through arm of SourceOf, so
+        // deleting the arm that makes the distinction would break nothing in the suite.
+        configuration.Sources.Add(new ProvisionedJsonConfigurationSource
+        {
+            FileProvider = files,
+            Path = DeploymentFileName,
+            Optional = false,
+            ReloadOnChange = false,
+        });
 
         if (operatorOverride is not null)
         {

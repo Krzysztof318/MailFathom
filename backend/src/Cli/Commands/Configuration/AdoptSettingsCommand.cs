@@ -93,9 +93,12 @@ internal static class AdoptSettingsCommand
 
         if (!Agreed(context, prefix, adoptable.Count, confirmedUpFront))
         {
-            context.Console.WriteLine("Nothing was adopted.");
+            // Reported on standard error and with a failing code, which is what every other command does when it did
+            // not do what it was asked. A wrapper reading exit 0 with a sentence in its captured output could not tell
+            // a declined adoption from one that committed.
+            context.Console.WriteError("Nothing was adopted.");
 
-            return CliExitCode.Success;
+            return CliExitCode.Failure;
         }
 
         var answer = await client.AdoptConfigurationAsync(

@@ -34,14 +34,21 @@ internal static class OperatorEditor
     /// <summary>Runs an editor over a file and waits for it to finish.</summary>
     /// <param name="editor">The editor as the shell names it, which may carry arguments of its own.</param>
     /// <param name="path">The file to open.</param>
-    /// <returns><see langword="true" /> when the editor ran and reported success.</returns>
+    /// <returns>What became of the session, which distinguishes an editor that never started from one that ended badly.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="editor" /> or <paramref name="path" /> is <see langword="null" />, empty, or white space.</exception>
     /// <remarks>
+    /// <para>
     /// The command line is split on spaces so that <c>code --wait</c> and <c>emacs -nw</c> work, which is what an
     /// operator writes into the variable. A path with a space in it is passed as one argument regardless, because it is
     /// added after the split rather than into it.
+    /// </para>
+    /// <para>
+    /// The failure to start is carried out rather than swallowed. What the operating system says — no such file, not
+    /// executable, no such directory — is the only thing that names why an editor an operator believes in did nothing,
+    /// and it is the operator's own configured value being reported back rather than anything about this deployment.
+    /// </para>
     /// </remarks>
-    internal static bool Run(string editor, string path)
+    internal static EditingSession Run(string editor, string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(editor);
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -62,16 +69,16 @@ internal static class OperatorEditor
 
             if (session is null)
             {
-                return false;
+                return EditingSession.NeverStarted("the operating system started no process for it");
             }
 
             session.WaitForExit();
 
-            return session.ExitCode == 0;
+            return session.ExitCode == 0 ? EditingSession.Finished : EditingSession.Failed;
         }
         catch (Exception failure) when (failure is Win32Exception or InvalidOperationException or PlatformNotSupportedException)
         {
-            return false;
+            return EditingSession.NeverStarted(failure.Message);
         }
     }
 }

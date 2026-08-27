@@ -222,6 +222,12 @@ third parties. `mailfathom.mail.send` is the same shape and the sharpest case of
 and with it a credential that can send mail from the deployment's mailboxes to anybody. `mailfathom.mail.drafts.write`
 arrived the same way and is milder for the reason it exists: what an entry gains with it is the ability to put a
 message in the owner's own Drafts folder, which the owner sees and can delete.
+`mailfathom.admin.configuration.write` is the administrative surface's case of it and the sharpest one there: an
+administrative entry that wrote no key gains it on upgrade, and with it a credential that can change what the
+deployment *is* rather than what it does next — widen another credential's grant, repoint a model provider, or turn a
+surface off. An operator who granted an administrative credential the operating work and meant to withhold the power
+to redefine the deployment narrows that entry to the names it actually needs, because the absent key does not withhold
+it.
 Writing `Permissions: []` grants nothing, which is how a credential is retired without deleting its
 entry: it still authenticates, and on the administrative surface it still reads `GET /api/admin/session`, which is
 where an operator reads that the credential now holds nothing.

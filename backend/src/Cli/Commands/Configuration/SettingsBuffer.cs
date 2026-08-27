@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using MailFathom.Cli.Credentials;
@@ -102,7 +103,7 @@ internal static class SettingsBuffer
             case JsonArray elements:
                 foreach (var (element, position) in elements.Select((element, position) => (element, position)))
                 {
-                    Describe(element, Beneath(prefix, position.ToString(System.Globalization.CultureInfo.InvariantCulture)), settings);
+                    Describe(element, Beneath(prefix, position.ToString(CultureInfo.InvariantCulture)), settings);
                 }
 
                 break;

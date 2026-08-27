@@ -436,6 +436,32 @@ public sealed class ConfigurationCommandTests : IDisposable
     }
 
     /// <summary>
+    /// An editor the operating system never started is a different repair from one that ran and returned early, so the
+    /// system's own words are reported and the wait flag — which fixes nothing here — is not.
+    /// </summary>
+    [Fact]
+    public async Task Edit_AnEditorThatNeverStarted_ReportsWhyRatherThanTheWaitFlag()
+    {
+        // Arrange
+        using var deployment = FakeConfigurationDeployment.Holding();
+
+        this.OpensTheBufferWith((_, _) => EditingSession.NeverStarted("No such file or directory"));
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "config", "edit", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Contains(
+            this.harness.Console.Errors,
+            line => line.Contains("No such file or directory", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            this.harness.Console.Errors,
+            line => line.Contains("--wait", StringComparison.Ordinal));
+        Assert.Equal(0, deployment.ConfigurationWriteCount());
+    }
+
+    /// <summary>
     /// A session refused for a version somebody else moved past is told what they changed, because that is the one
     /// thing the operator cannot work out from the buffer in front of them. Nothing of this session is applied on top.
     /// </summary>
@@ -473,9 +499,13 @@ public sealed class ConfigurationCommandTests : IDisposable
             line => line.Contains("MailboxSearch:WordsPerSnippet", StringComparison.Ordinal));
     }
 
-    /// <summary>An adoption is previewed before it is agreed to, because afterwards the files stop deciding those settings.</summary>
+    /// <summary>
+    /// An adoption is previewed before it is agreed to, because afterwards the files stop deciding those settings. A
+    /// declined one ends on standard error with a failing code, as every other confirmation-driven command does, so a
+    /// wrapper cannot read it as an adoption that committed.
+    /// </summary>
     [Fact]
-    public async Task Adopt_TheQuestionAnsweredNo_PreviewsAndAdoptsNothing()
+    public async Task Adopt_TheQuestionAnsweredNo_PreviewsAndFailsWithoutAdoptingAnything()
     {
         // Arrange
         using var deployment = FakeConfigurationDeployment.Holding(
@@ -487,9 +517,9 @@ public sealed class ConfigurationCommandTests : IDisposable
         var exitCode = await this.RunAsync(deployment, "config", "adopt", "MailboxSearch", "--endpoint", Endpoint);
 
         // Assert
-        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Equal(CliExitCode.Failure, exitCode);
         Assert.Contains(this.harness.Console.Lines, line => line.Contains("10-deployment.json", StringComparison.Ordinal));
-        Assert.Contains(this.harness.Console.Lines, line => line.Contains("Nothing was adopted", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains("Nothing was adopted", StringComparison.Ordinal));
         Assert.Equal(0, deployment.ConfigurationWriteCount());
     }
 
@@ -570,7 +600,12 @@ public sealed class ConfigurationCommandTests : IDisposable
     /// Both halves, because the command reads the variable before it opens anything: a session scripted without one
     /// never reaches the editor at all, and the refusal it meets instead is the subject of a test of its own.
     /// </remarks>
-    private void OpensTheBufferWith(Func<string, string, bool> session)
+    private void OpensTheBufferWith(Func<string, string, bool> session) =>
+        this.OpensTheBufferWith((editor, path) =>
+            session(editor, path) ? EditingSession.Finished : EditingSession.Failed);
+
+    /// <summary>Names an editor for the shell and states what became of the session it opens.</summary>
+    private void OpensTheBufferWith(Func<string, string, EditingSession> session)
     {
         this.harness.Variables[OperatorEditor.VisualVariable] = "vi";
         this.harness.Editor = session;

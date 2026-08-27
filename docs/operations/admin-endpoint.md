@@ -1065,6 +1065,15 @@ Secret-bearing values never leave this endpoint. `get`, `show`, and the editing 
 and a marker saved back leaves the setting exactly as it was — so an editing session over a document carrying a
 credential reference is safe, and no reading of this surface discloses where material is kept.
 
+**The redaction covers the settings a write refuses as well as the ones a name announces**, which is what makes that
+last sentence true rather than nearly true. A reading enumerates every key the deployment composed rather than only the
+ones MailFathom named, so `ConnectionStrings:mailfathom` — the connection string an orchestrator injects, whose
+password a deployment may legitimately have written inline — arrives under a key no naming rule recognizes. It is one
+of the settings the persisted layer is itself reached through and therefore one no write may persist, so a reading
+answers the marker for it and for every other path on that list. The consequence to expect is that
+`mfctl config get ConnectionStrings:mailfathom` reports `(redacted)`, as do the connection and secret-interpretation
+settings beside it; where those values are set is the deployment's own manifest rather than this surface.
+
 ## Rate limiting
 
 An enabled endpoint is bounded, whether or not anyone wrote a number. That is what stops an administrative surface

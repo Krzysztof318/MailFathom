@@ -10,7 +10,10 @@ namespace MailFathom.Cli.Commands.Configuration;
 /// <remarks>
 /// One of them, and it is here rather than repeated because the sentence it carries is the whole of what an operator
 /// learns about the refusal it answers: three sources outrank the persisted layer, and a write beneath one of them
-/// commits without changing anything the deployment reads.
+/// commits without changing anything the deployment reads. It is worded as the act rather than as a persist, because
+/// the four commands it is attached to do four different things to the document — <c>set</c> writes a value,
+/// <c>unset</c> takes one out, <c>edit</c> carries a whole saved buffer, and <c>adopt</c> copies many at once — and a
+/// description written from any one of them is wrong in the other three's help.
 /// </remarks>
 internal static class ConfigurationOptions
 {
@@ -18,6 +21,6 @@ internal static class ConfigurationOptions
     /// <returns>The option.</returns>
     internal static Option<bool> EvenIfShadowed() => new("--even-if-shadowed")
     {
-        Description = "Persist the setting even where a command-line argument, an environment variable, or User Secrets already supplies it — which the deployment refuses by default, because the value it persists would change nothing it reads.",
+        Description = "Commit the change even where a command-line argument, an environment variable, or User Secrets supplies the setting — which the deployment refuses by default, because what it would write changes nothing it reads.",
     };
 }

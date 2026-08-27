@@ -99,9 +99,13 @@ internal sealed class PersistedSettingsAdministration(
 
         if (effective.Count == 0)
         {
+            // The version this process composed rather than the one the caller stated. Nothing was read here, so the
+            // caller's number is unchecked — and the answer publishes the version now in force, which is what the next
+            // change is composed over. Reporting theirs back would hand a client that guessed 999 a number to author
+            // against that the writer then refuses as superseded.
             return SettingsWriteOutcome.NothingToChange(
-                expectedVersion,
-                $"Nothing in the change would alter the persisted document — each setting either already stands as it was asked to, or names one the layer does not carry — so nothing was written and version {expectedVersion} stays in force.");
+                reader.ComposedVersion,
+                $"Nothing in the change would alter the persisted document — each setting either already stands as it was asked to, or names one the layer does not carry — so nothing was written and version {reader.ComposedVersion} stays in force.");
         }
 
         return await this.CommitAsync(effective, expectedVersion, evenIfShadowed, cancellationToken);
@@ -214,7 +218,7 @@ internal sealed class PersistedSettingsAdministration(
         {
             return SettingsWriteOutcome.Refused(
                 MailFathomErrorCode.ConfigurationCandidateInvalid,
-                expectedVersion,
+                reader.ComposedVersion,
                 [
                     $"The files supply {adoptable.MatchedCount} settings beneath '{prefix}', past the {EffectiveSettingsReader.MaximumSettings} one adoption carries. Adopt a narrower path.",
                 ]);
@@ -229,7 +233,7 @@ internal sealed class PersistedSettingsAdministration(
         if (edits.Count == 0)
         {
             return SettingsWriteOutcome.NothingToChange(
-                expectedVersion,
+                reader.ComposedVersion,
                 $"The deployment's files supply nothing beneath '{prefix}' that the persisted layer does not already carry, so nothing was adopted.");
         }
 
@@ -237,7 +241,7 @@ internal sealed class PersistedSettingsAdministration(
         {
             return SettingsWriteOutcome.Refused(
                 MailFathomErrorCode.ConfigurationCandidateInvalid,
-                expectedVersion,
+                reader.ComposedVersion,
                 [
                     $"Adopting '{prefix}' would write {edits.Count} settings in one change, past the {IConfigurationWriter.MaximumEdits} a write carries. Adopt a narrower path.",
                 ]);

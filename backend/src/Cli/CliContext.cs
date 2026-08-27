@@ -27,7 +27,7 @@ namespace MailFathom.Cli;
 /// <param name="Clock">Decides whether a stored access token is still usable, and paces a device sign-in's polling.</param>
 /// <param name="Log">Where the record of this invocation is appended, or <see langword="null" /> to keep none — which is what a test not about the log wants.</param>
 /// <param name="ReadEnvironmentVariable">Reads a variable of the shell the command was run from, or <see langword="null" /> for the process's own environment.</param>
-/// <param name="OpenEditor">Runs the named editor over a file and waits for it, reporting whether it succeeded, or <see langword="null" /> to start a real process. A seam for the same reason the browser is one: a test drives an editing session by substituting what the operator would have typed into the buffer.</param>
+/// <param name="OpenEditor">Runs the named editor over a file and waits for it, reporting what became of the session, or <see langword="null" /> to start a real process. A seam for the same reason the browser is one: a test drives an editing session by substituting what the operator would have typed into the buffer.</param>
 internal sealed record CliContext(
     ICliConsole Console,
     CredentialStore Store,
@@ -37,7 +37,7 @@ internal sealed record CliContext(
     TimeProvider Clock,
     ICliInvocationLog? Log = null,
     Func<string, string?>? ReadEnvironmentVariable = null,
-    Func<string, string, bool>? OpenEditor = null)
+    Func<string, string, EditingSession>? OpenEditor = null)
 {
     /// <summary>Gets what this invocation turns out to have done, filled in by the layers that each know part of it.</summary>
     /// <remarks>
@@ -76,9 +76,9 @@ internal sealed record CliContext(
     /// <summary>Runs the operator's editor over a file this command wrote, and waits for it.</summary>
     /// <param name="editor">The editor as the shell names it, which may carry arguments of its own.</param>
     /// <param name="path">The file to open.</param>
-    /// <returns><see langword="true" /> when the editor ran and reported success.</returns>
+    /// <returns>What became of the session, which distinguishes an editor that never started from one that ended badly.</returns>
     /// <exception cref="ArgumentException">Thrown when an argument is <see langword="null" />, empty, or white space.</exception>
-    internal bool Edit(string editor, string path) => this.OpenEditor is { } open
+    internal EditingSession Edit(string editor, string path) => this.OpenEditor is { } open
         ? open(editor, path)
         : OperatorEditor.Run(editor, path);
 
