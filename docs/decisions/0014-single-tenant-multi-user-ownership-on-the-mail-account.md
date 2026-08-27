@@ -13,7 +13,7 @@ informed:
 
 ## Context and Problem Statement
 
-MailFathom serves one owner's mail. Accounts are declared in read-only configuration, no persisted entity carries a discriminator for whose data a row is, and ADR 0012 names *the deployment serves one owner's mail* as a decision driver — which is why issue 880 cut the account-restriction axis out of that record and left issue 588 waiting on a decision nobody had made. Issue 889 is that decision, and this record is its answer.
+MailFathom serves one owner's mail. Accounts are declared in read-only configuration, no persisted entity carries a discriminator for whose data a row is, and ADR 0012 names *the deployment serves one owner's mail* as a decision driver — which is why issue 880 cut the account-restriction axis out of that record and left issue 588 waiting on a decision nobody had made. Issue 889 is that decision, and this record is its answer. Issue 588 has since been closed as not planned, because the section below refuses the axis it was left holding rather than leaving it standing there.
 
 Two target shapes were on the table and they are layers rather than alternatives: one tenant with several users, each owning a set of mail accounts; and several tenants, with the option of a PostgreSQL database per tenant. The second does not remove the need for the first — if a tenant holds several users, the axis of *whose data is this* has to exist in the rows regardless, and a database per tenant only adds routing above it. So the question is not only which shape to build but whether the second is worth building at all, and the answer decides how much of the first has to anticipate it.
 
@@ -61,7 +61,11 @@ A **credential** belongs to a user and reaches that user's accounts. The bound i
 
 `AuthorizedPrincipal` gains the user it is acting for and carries nothing else new. Its permissions stay ADR 0012's closed set, unchanged in vocabulary and in meaning. The process identity acquires no user, because work no caller requested is not acting for one; a use case reachable by a caller refuses it exactly as it does today.
 
-**Narrowing one credential within its user's own accounts is a second axis, and this record does not take it.** It is what issue 588's first story asks for once the two-mailbox case is answered by two users — an owner who wants an agent confined to part of their *own* mail — and it is a bound on a credential rather than a statement about who owns what. It is permitted by everything here and required by nothing here; issue 588 is where it stays.
+**Narrowing one credential within its user's own accounts is refused rather than left open.** It is what issue 588 asked for once the two-mailbox case is answered by two users — an owner confining an agent to a corner of their *own* mail — and that issue is closed as not planned. A credential reaches every account the user it resolved to owns, and nothing narrows it further. Neither reason is that the bound would be hard to build. The first is that a second bound is a second scoping rule standing beside the owner narrowing, which every narrowing site this record names — the four mail-returning paths and the one method the four identifier reads ask — would then have to keep consistent with the first forever; that is how isolation stops being a property of the system and becomes a property of the care taken at each site, which is the decision driver above read the other way round. The second is that the unit mail belongs to is the user, so two mailboxes an operator wants separated are two users, which this record already provides and which nothing else has to say a second time.
+
+**The scope is transparent to the caller, and that is what makes one rule enough.** A surface a user reaches resolves exactly one user from the credential that authenticated, and every MCP tool call and every request to the client API is answered within the accounts that user owns. The scope is therefore never something such a caller states: no tool argument, no request field, and no header names it, nothing they send widens it, and an agent holding a credential is correctly bounded without knowing that any of this happened. What a request may still do is name accounts, and that stays a filter over what the caller already reaches — the caller choosing what to look at — rather than becoming a statement of what it may look at. An account the caller's user does not own is refused exactly as an account this deployment does not serve, which is what keeps the filter from being read as a bound in either direction.
+
+**The administrative operations below stand outside every sentence of that paragraph**, which is why they are named here rather than left for a reader to notice. A deployment administrator acts for no user, so nothing resolves one from their credential; the operations they reach reference the deployment-wide catalog rather than the caller-scoped one; and such an operation names an account by its owner and its identifier together, which is a request field stating whose accounts it runs against. *Ownership is not part of the permission vocabulary, and here is where the check runs* decides that per operation rather than per surface, and *An account is keyed by its owner and the identifier its operator chose* is where the naming is settled.
 
 ### Ownership is a column on the account, and a term beside every reference to one
 
@@ -255,7 +259,7 @@ The user owns accounts, the account carries the owner, and the resolution that a
 - Neutral, because carrying the owner beside every account reference is a column and an index rebuild on every table that names one, which is the cost this record takes in exchange for a key that cannot mean two accounts at once.
 - Good, because the scoped reads share one predicate and the identifier reads share one method, so the number of places ownership has to be got right is small and each is named: the shared predicate, the thread read that keeps its own copy of it, the one method the four identifier reads ask, the ticket the attachment download redeems, the account the send resolves, and the set the account listing publishes.
 - Good, because it leaves one database, which keeps the schema contract, the pooling assumptions, and the upgrade artifact exactly as they are.
-- Neutral, because it does not answer narrowing one credential within its user's accounts, which stays open on issue 588.
+- Good, because narrowing one credential within its user's accounts is refused rather than left open, so what a caller reaches is one scoping rule rather than two that would have to agree; issue 588 is closed as not planned.
 - Bad, because isolation is enforced by the application rather than by the database, so a mail-reading path written outside the shared predicate would bypass it.
 
 ### Several tenants, a PostgreSQL database per tenant, with a role per tenant
@@ -288,12 +292,12 @@ Leave accounts in configuration and the deployment serving one owner's mail.
 
 - Good, because it is free and nothing is at risk.
 - Neutral, because it is what every release so far has shipped and nothing is broken by it.
-- Bad, because it leaves issue 588 waiting on a decision indefinitely, and every issue presupposing more than one principal fixes the answer in its own implementation diff.
+- Bad, because it leaves the question waiting on a decision indefinitely — issue 588 stood open on it for exactly that reason — and every issue presupposing more than one principal fixes the answer in its own implementation diff.
 - Bad, because the ownership axis only gets more expensive as the corpus grows, and refusing to decide is itself a decision to pay more later.
 
 ## More Information
 
-- Issue 889 asks the question this record answers; issue 588 waits on it and is unblocked by it, narrowed to the one axis this record deliberately leaves open.
+- Issue 889 asks the question this record answers. Issue 588 waited on it and is closed as not planned: the one axis this record was once read as leaving to it is refused above, and issue 1313 is where that refusal was written into this record and into ADR 0012.
 - Issue 1249 is where the correction to the account identity was decided, on 2026-08-24. It is recorded in this record rather than in a superseding one because this record is `proposed` and an ADR at that status is editable — the same ground on which this record amends ADR 0012's context. Issues 1247, 1248, and 988 carry the work: the owner beside every account reference, the composite key, and publishing an account under the names its owner gave it. Issue 1247 also takes the measurement that settles the timeline index shape this record deliberately leaves open.
 - ADR 0002 closes the configuration write side and sends state a program modifies to PostgreSQL, which is the authority under which accounts, users, and credentials move.
 - ADR 0004 permits every break named here and requires each to be recorded against its surface.
