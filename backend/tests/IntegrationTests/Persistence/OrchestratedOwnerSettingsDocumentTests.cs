@@ -62,7 +62,7 @@ public sealed class OrchestratedOwnerSettingsDocumentTests(MailFathomOrchestrati
         Assert.NotNull(record);
         Assert.Equal(ProvisionedOwnerLabel, record.DisplayName);
         Assert.Equal("{}", record.Json);
-        Assert.True(record.Version > 0);
+        Assert.Equal(1, record.Version);
         Assert.False(record.WrittenAtRuntime);
     }
 

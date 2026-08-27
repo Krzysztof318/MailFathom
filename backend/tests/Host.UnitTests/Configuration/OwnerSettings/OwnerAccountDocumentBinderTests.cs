@@ -16,8 +16,10 @@ namespace MailFathom.Host.UnitTests.Configuration.OwnerSettings;
 
 /// <summary>
 /// Asserts what an owner's document has to be before it is a record this deployment acts on. The binder is the one
-/// place both directions meet — a row read back and a candidate about to be written — so every rule proved here is a
-/// rule a write is refused by and a rule a read refuses to act on.
+/// place both directions are meant to meet — a row read back and a candidate about to be written — so every rule
+/// proved here is one rule rather than a pair that could drift. This release carries no path that drives it: the read
+/// bounds the column and hands the text back unjudged, and a write is still refused under <c>12006</c>, so what these
+/// tests hold is the rule each direction arrives by once <c>#1223</c> and <c>#1224</c> reach it.
 /// </summary>
 public sealed class OwnerAccountDocumentBinderTests
 {
@@ -59,26 +61,13 @@ public sealed class OwnerAccountDocumentBinderTests
         Assert.Equal("imap.example.test", account.Host);
     }
 
-    /// <summary>
-    /// The identifier and the display name are unique within the owner and nowhere else, so two owners each declaring
-    /// <c>work</c> is a pair of ordinary records rather than a collision either of them is refused for.
-    /// </summary>
-    [Fact]
-    public void Bind_TwoOwnersDeclaringTheSameAccountName_BindsBothRecords()
-    {
-        // Arrange
-        var binder = CreateBinder();
-
-        // Act
-        var first = binder.Bind(DocumentDeclaring(("work", "The work mailbox")));
-        var second = binder.Bind(DocumentDeclaring(("work", "The work mailbox")));
-
-        // Assert
-        Assert.True(first.IsBound);
-        Assert.True(second.IsBound);
-    }
-
     /// <summary>Within one owner the same identifier twice is a name that could select either mailbox.</summary>
+    /// <remarks>
+    /// Within one owner, and nowhere wider: the collision is read from the declarations of the document in front of
+    /// the binder, which takes no owner and keeps nothing between calls, so two owners each declaring <c>work</c> is a
+    /// pair of ordinary records. That is a property of the subject rather than a claim a test could break, which is
+    /// why it is stated here instead of asserted by binding one document twice.
+    /// </remarks>
     [Fact]
     public void Bind_OneOwnerDeclaringAnIdentifierTwice_IsRefused()
     {
@@ -166,6 +155,29 @@ public sealed class OwnerAccountDocumentBinderTests
         Assert.DoesNotContain("Database error", refusal, StringComparison.Ordinal);
         Assert.DoesNotContain('\n', refusal);
         Assert.Contains("does not bind to an owner's settings", refusal, StringComparison.Ordinal);
+    }
+
+    /// <summary>A property naming nothing is a record refused like any other rather than a failure thrown at a caller.</summary>
+    /// <remarks>
+    /// JSON admits an empty property name and the configuration parser carries it through verbatim, so a row written
+    /// by hand flattens to a section whose path is the empty string. The scan for secret material runs ahead of the
+    /// binding and asks a rule that refuses to be asked about a path that is not one, so a key naming nothing is
+    /// passed over there and answered by the binding, which is the only way out of this class a caller handles.
+    /// </remarks>
+    [Theory]
+    [InlineData("""{ "": 1 }""")]
+    [InlineData("""{ "   ": 1 }""")]
+    public void Bind_PropertyNamingNothing_IsRefusedRatherThanThrown(string json)
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind(json);
+
+        // Assert
+        Assert.False(binding.IsBound);
+        Assert.NotEmpty(binding.Refusals);
     }
 
     /// <summary>
@@ -257,7 +269,7 @@ public sealed class OwnerAccountDocumentBinderTests
         Assert.Contains(binding.Refusals, refusal => refusal.Contains("not a JSON object", StringComparison.Ordinal));
     }
 
-    /// <summary>The ceiling is applied before the parse, so a payload in the column costs the expansion it refuses.</summary>
+    /// <summary>The ceiling is applied before the parse, so a payload never costs the expansion it is refused for.</summary>
     [Fact]
     public void Bind_DocumentPastTheCeiling_IsRefusedNamingTheBound()
     {

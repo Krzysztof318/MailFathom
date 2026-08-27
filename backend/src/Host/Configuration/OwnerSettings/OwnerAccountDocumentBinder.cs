@@ -241,11 +241,18 @@ internal sealed class OwnerAccountDocumentBinder(PersistedSecretMaterial secretM
     /// about the next only by writing the record again. The message names the setting and says what belongs there, and
     /// repeats neither the value nor its length, because a length is what turns a guess about a credential into a
     /// shorter list of guesses.
+    /// <para>
+    /// A property name the parser took verbatim is not necessarily a path — a record holding <c>{"": 1}</c> flattens
+    /// to a section named by an empty string — so a key that names nothing is passed over here and refused by the
+    /// strict binding as a property nothing binds, which is the refusal this class answers with rather than the
+    /// argument failure the rule would raise on it.
+    /// </para>
     /// </remarks>
     private IReadOnlyList<string> FindMaterialWrittenWhereAReferenceBelongs(IConfiguration document) =>
     [
         .. document.AsEnumerable()
-            .Where(setting => secretMaterial.IsCarriedBy(setting.Key, setting.Value))
+            .Where(setting =>
+                !string.IsNullOrWhiteSpace(setting.Key) && secretMaterial.IsCarriedBy(setting.Key, setting.Value))
             .Select(setting =>
                 $"MailFathom does not persist secret material: {setting.Key} carries the value itself rather than a <scheme>:<target> reference this deployment resolves. Provision the secret and persist the reference to it."),
     ];
