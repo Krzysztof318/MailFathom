@@ -3,10 +3,13 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Globalization;
+using System.Text;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.OwnerSettings;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Owners;
+using MailFathom.Infrastructure.Persistence.Settings;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.OwnerSettings;
@@ -19,6 +22,9 @@ namespace MailFathom.Host.UnitTests.Configuration.OwnerSettings;
 public sealed class OwnerAccountDocumentBinderTests
 {
     private const string PasswordReference = "file:/run/secrets/work-password";
+
+    /// <summary>The instant every binding here is judged against, so a date-bound rule is decided rather than drawn.</summary>
+    private static readonly DateTimeOffset Today = new(2026, 3, 1, 9, 0, 0, TimeSpan.Zero);
 
     /// <summary>An owner is provisioned before their first mailbox, so the empty record is an ordinary one.</summary>
     [Fact]
@@ -247,6 +253,67 @@ public sealed class OwnerAccountDocumentBinderTests
         Assert.Contains(OwnerSettingsDocument.MaximumOctets.ToString(CultureInfo.InvariantCulture), refusal, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A record that fits as it was written and not as the database stores it is refused here rather than persisted
+    /// and then refused on every read. PostgreSQL renders <c>jsonb</c> with a space after every colon and every comma,
+    /// so a page of short pairs grows by two octets a pair — which is why the ceiling is measured over that rendering
+    /// and this document, compact and under the bound, is over it once stored.
+    /// </summary>
+    [Fact]
+    public void Bind_DocumentPastTheCeilingOnlyAsTheDatabaseStoresIt_IsRefused()
+    {
+        // Arrange
+        var binder = CreateBinder();
+        var manySmallPairs = DocumentOfShortPairsUnderTheCeilingAsWritten();
+
+        // Act
+        var binding = binder.Bind(manySmallPairs);
+
+        // Assert
+        Assert.True(Encoding.UTF8.GetByteCount(manySmallPairs) <= OwnerSettingsDocument.MaximumOctets);
+        Assert.True(RootSettingsCommitRules.PersistedOctetsOf(manySmallPairs) > OwnerSettingsDocument.MaximumOctets);
+        Assert.False(binding.IsBound);
+        var refusal = Assert.Single(binding.Refusals);
+        Assert.Contains("as the database stores it", refusal, StringComparison.Ordinal);
+        Assert.Contains(OwnerSettingsDocument.MaximumOctets.ToString(CultureInfo.InvariantCulture), refusal, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A synchronization bound in the future excludes every email the mailbox holds, and the deployment's own section
+    /// refuses one at startup. A record judged by every rule but that one would accept from a row what configuration
+    /// refuses from a file.
+    /// </summary>
+    [Fact]
+    public void Bind_EarliestReceivedDateAfterToday_IsRefused()
+    {
+        // Arrange
+        var binder = CreateBinder();
+        var tomorrow = DateOnly.FromDateTime(Today.UtcDateTime).AddDays(1);
+
+        // Act
+        var binding = binder.Bind(
+            $$"""
+              {
+                "MailAccounts": [
+                  {
+                    "AccountId": "work",
+                    "DisplayName": "The work mailbox",
+                    "Host": "imap.example.test",
+                    "UserName": "mailfathom@example.test",
+                    "EarliestEmailReceivedDate": "{{tomorrow:yyyy-MM-dd}}",
+                    "Secrets": { "Password": { "Name": "work-password", "SecretReference": "{{PasswordReference}}" } }
+                  }
+                ]
+              }
+              """);
+
+        // Assert
+        Assert.False(binding.IsBound);
+        Assert.Contains(
+            binding.Refusals,
+            refusal => refusal.Contains("would exclude every email in the mailbox", StringComparison.Ordinal));
+    }
+
     /// <summary>An absent document is not an empty record: every row this reads carries at least the empty object.</summary>
     [Theory]
     [InlineData("")]
@@ -263,8 +330,23 @@ public sealed class OwnerAccountDocumentBinderTests
         Assert.IsType<ArgumentException>(rejected);
     }
 
+    /// <summary>Composes a page of short pairs whose written form fits and whose stored rendering does not.</summary>
+    /// <remarks>
+    /// Each pair costs fourteen octets written and sixteen stored — a space after its colon and one after the comma
+    /// before it — so a count near a fifteenth of the bound leaves the written form inside it while the rendering
+    /// passes it. The test asserts both halves rather than trusting the arithmetic here.
+    /// </remarks>
+    private static string DocumentOfShortPairsUnderTheCeilingAsWritten()
+    {
+        var pairs = Enumerable
+            .Range(0, OwnerSettingsDocument.MaximumOctets / 15)
+            .Select(index => string.Create(CultureInfo.InvariantCulture, $"\"k{index:D6}\":\"v\""));
+
+        return $$"""{"MailAccounts":[],{{string.Join(",", pairs)}}}""";
+    }
+
     private static OwnerAccountDocumentBinder CreateBinder() =>
-        new(new PersistedSecretMaterial(DeclaredSecretScheme.Registered));
+        new(new PersistedSecretMaterial(DeclaredSecretScheme.Registered), new FakeTimeProvider(Today));
 
     private static string DocumentDeclaring(
         params (string AccountId, string DisplayName)[] accounts) =>

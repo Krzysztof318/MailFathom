@@ -37,7 +37,7 @@ namespace MailFathom.Host.Configuration.OwnerSettings;
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this binder.")]
-internal sealed class OwnerAccountDocumentBinder(PersistedSecretMaterial secretMaterial)
+internal sealed class OwnerAccountDocumentBinder(PersistedSecretMaterial secretMaterial, TimeProvider timeProvider)
 {
     /// <summary>Binds an owner's document and judges the record it produces.</summary>
     /// <param name="json">The owner's document, as the JSON object their row holds.</param>
@@ -54,7 +54,10 @@ internal sealed class OwnerAccountDocumentBinder(PersistedSecretMaterial secretM
 
         if (writtenOctets > OwnerSettingsDocument.MaximumOctets)
         {
-            return OwnerAccountBinding.Refused([PastTheCeiling(writtenOctets)]);
+            return OwnerAccountBinding.Refused(
+            [
+                $"The owner record is {writtenOctets} octets as it was written, past the {OwnerSettingsDocument.MaximumOctets} MailFathom binds an owner's document from — and the database stores it larger still. An owner record is a page of declarations rather than a payload: check what wrote the settings_accounts row.",
+            ]);
         }
 
         int persistedOctets;
@@ -97,7 +100,7 @@ internal sealed class OwnerAccountDocumentBinder(PersistedSecretMaterial secretM
 
             return this.FindMaterialWrittenWhereAReferenceBelongs(document) is { Count: > 0 } material
                 ? OwnerAccountBinding.Refused(material)
-                : Judge(document);
+                : this.Judge(document);
         }
         finally
         {
@@ -110,7 +113,11 @@ internal sealed class OwnerAccountDocumentBinder(PersistedSecretMaterial secretM
         "The owner record is not a JSON object MailFathom can read. An owner record is a document of settings, so check what wrote the settings_accounts row rather than the settings themselves.";
 
     /// <summary>Says a document is past the ceiling, naming what it measured and what the ceiling is.</summary>
-    /// <remarks>The figure is the document as the database renders it, which is larger than the form it was written in.</remarks>
+    /// <remarks>
+    /// The figure is the document as the database renders it, which is larger than the form it was written in. The
+    /// guard in front of the measurement says the same thing about the written form in its own words, because a
+    /// figure under a sentence naming the other measurement would understate what the column holds.
+    /// </remarks>
     private static string PastTheCeiling(int octets) =>
         $"The owner record is {octets} octets as the database stores it, past the {OwnerSettingsDocument.MaximumOctets} MailFathom binds an owner's document from. An owner record is a page of declarations rather than a payload: check what wrote the settings_accounts row.";
 
@@ -178,7 +185,7 @@ internal sealed class OwnerAccountDocumentBinder(PersistedSecretMaterial secretM
         new([new JsonStreamConfigurationSource { Stream = json }.Build(new ConfigurationBuilder())]);
 
     /// <summary>Binds the document strictly and puts the record through the rules a mail account is declared under.</summary>
-    private static OwnerAccountBinding Judge(IConfiguration document)
+    private OwnerAccountBinding Judge(IConfiguration document)
     {
         OwnerAccountOptions owner;
 
@@ -195,6 +202,12 @@ internal sealed class OwnerAccountDocumentBinder(PersistedSecretMaterial secretM
         var refusals = new List<ValidationResult>();
 
         Validator.TryValidateObject(owner, new ValidationContext(owner), refusals, validateAllProperties: true);
+
+        // The rule the bound graph cannot reach, supplied its clock here for the reason the deployment's own section
+        // supplies one through a custom validator: a record judged by every rule but this one would accept a
+        // synchronization bound that the identical declaration in configuration refuses at startup.
+        refusals.AddRange(owner.FindSynchronizationWindowErrors(
+            DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime)));
 
         return refusals.Count > 0
             ? OwnerAccountBinding.Refused([.. refusals.Select(refusal => refusal.ErrorMessage ?? "The owner record is invalid.")])

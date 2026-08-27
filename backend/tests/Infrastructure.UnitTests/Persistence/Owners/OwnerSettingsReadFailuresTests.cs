@@ -17,13 +17,13 @@ public sealed class OwnerSettingsReadFailuresTests
 {
     /// <summary>A table this build's migration has not reached is the migrations rather than anything to check over.</summary>
     [Fact]
-    public void Diagnose_TableDoesNotExist_SendsTheOperatorToTheMigrations()
+    public void DiagnoseWhileReading_TableDoesNotExist_SendsTheOperatorToTheMigrations()
     {
         // Arrange
         var exception = ProviderFailure(PostgresErrorCodes.UndefinedTable);
 
         // Act
-        var diagnosis = OwnerSettingsReadFailures.Diagnose(exception);
+        var diagnosis = OwnerSettingsReadFailures.DiagnoseWhileReading(exception);
 
         // Assert
         Assert.Contains("settings_accounts", diagnosis, StringComparison.Ordinal);
@@ -35,13 +35,13 @@ public sealed class OwnerSettingsReadFailuresTests
     /// cover a table a later one adds — which is exactly the shape settings_accounts arrives in.
     /// </summary>
     [Fact]
-    public void Diagnose_PrivilegeRefused_SendsTheOperatorToTheGrant()
+    public void DiagnoseWhileReading_PrivilegeRefused_SendsTheOperatorToTheGrant()
     {
         // Arrange
         var exception = ProviderFailure(PostgresErrorCodes.InsufficientPrivilege);
 
         // Act
-        var diagnosis = OwnerSettingsReadFailures.Diagnose(exception);
+        var diagnosis = OwnerSettingsReadFailures.DiagnoseWhileReading(exception);
 
         // Assert
         Assert.Contains("no privilege on settings_accounts", diagnosis, StringComparison.Ordinal);
@@ -50,13 +50,13 @@ public sealed class OwnerSettingsReadFailuresTests
 
     /// <summary>A rejected password is the secret block's, and saying so is what keeps the network out of the search.</summary>
     [Fact]
-    public void Diagnose_PasswordRefused_SendsTheOperatorToTheSecretBlock()
+    public void DiagnoseWhileReading_PasswordRefused_SendsTheOperatorToTheSecretBlock()
     {
         // Arrange
         var exception = ProviderFailure(PostgresErrorCodes.InvalidPassword);
 
         // Act
-        var diagnosis = OwnerSettingsReadFailures.Diagnose(exception);
+        var diagnosis = OwnerSettingsReadFailures.DiagnoseWhileReading(exception);
 
         // Assert
         Assert.Contains("Persistence secret block", diagnosis, StringComparison.Ordinal);
@@ -65,13 +65,13 @@ public sealed class OwnerSettingsReadFailuresTests
 
     /// <summary>A connection no authorization rule admits is neither the credential nor the network.</summary>
     [Fact]
-    public void Diagnose_ConnectionNotAdmitted_SaysTheCredentialAndTheNetworkAreBesideThePoint()
+    public void DiagnoseWhileReading_ConnectionNotAdmitted_SaysTheCredentialAndTheNetworkAreBesideThePoint()
     {
         // Arrange
         var exception = ProviderFailure(PostgresErrorCodes.InvalidAuthorizationSpecification);
 
         // Act
-        var diagnosis = OwnerSettingsReadFailures.Diagnose(exception);
+        var diagnosis = OwnerSettingsReadFailures.DiagnoseWhileReading(exception);
 
         // Assert
         Assert.Contains("admits no connection", diagnosis, StringComparison.Ordinal);
@@ -80,13 +80,13 @@ public sealed class OwnerSettingsReadFailuresTests
 
     /// <summary>A database that was never created is provisioning rather than the network.</summary>
     [Fact]
-    public void Diagnose_DatabaseDoesNotExist_SendsTheOperatorToTheProvisioning()
+    public void DiagnoseWhileReading_DatabaseDoesNotExist_SendsTheOperatorToTheProvisioning()
     {
         // Arrange
         var exception = ProviderFailure(PostgresErrorCodes.InvalidCatalogName);
 
         // Act
-        var diagnosis = OwnerSettingsReadFailures.Diagnose(exception);
+        var diagnosis = OwnerSettingsReadFailures.DiagnoseWhileReading(exception);
 
         // Assert
         Assert.Contains("no database of the configured name", diagnosis, StringComparison.Ordinal);
@@ -98,13 +98,13 @@ public sealed class OwnerSettingsReadFailuresTests
     /// failure that does: the server accepted the connection and answered everything up to the statement.
     /// </summary>
     [Fact]
-    public void Diagnose_CommandTimeoutExpired_SendsTheOperatorToTheBoundRatherThanTheNetwork()
+    public void DiagnoseWhileReading_CommandTimeoutExpired_SendsTheOperatorToTheBoundRatherThanTheNetwork()
     {
         // Arrange
         var exception = new NpgsqlException("exception while reading from stream", new TimeoutException());
 
         // Act
-        var diagnosis = OwnerSettingsReadFailures.Diagnose(exception);
+        var diagnosis = OwnerSettingsReadFailures.DiagnoseWhileReading(exception);
 
         // Assert
         Assert.Contains("Persistence:CommandTimeoutSeconds", diagnosis, StringComparison.Ordinal);
@@ -113,13 +113,13 @@ public sealed class OwnerSettingsReadFailuresTests
 
     /// <summary>An unrecognized state is a database that could not be read, and it says nothing it cannot support.</summary>
     [Fact]
-    public void Diagnose_UnrecognizedProviderState_ReportsTheDatabaseAsUnreached()
+    public void DiagnoseWhileReading_UnrecognizedProviderState_ReportsTheDatabaseAsUnreached()
     {
         // Arrange
         var exception = ProviderFailure(PostgresErrorCodes.SyntaxError);
 
         // Act
-        var diagnosis = OwnerSettingsReadFailures.Diagnose(exception);
+        var diagnosis = OwnerSettingsReadFailures.DiagnoseWhileReading(exception);
 
         // Assert
         Assert.Contains("could not be reached", diagnosis, StringComparison.Ordinal);
@@ -138,7 +138,7 @@ public sealed class OwnerSettingsReadFailuresTests
     [InlineData(PostgresErrorCodes.InvalidAuthorizationSpecification)]
     [InlineData(PostgresErrorCodes.InsufficientPrivilege)]
     [InlineData(PostgresErrorCodes.SyntaxError)]
-    public void Diagnose_AnyRecognizedOrUnrecognizedState_CarriesNothingTheServerSaid(string sqlState)
+    public void DiagnoseWhileReading_AnyRecognizedOrUnrecognizedState_CarriesNothingTheServerSaid(string sqlState)
     {
         // Arrange
         var exception = new PostgresException(
@@ -148,11 +148,52 @@ public sealed class OwnerSettingsReadFailuresTests
             sqlState: sqlState);
 
         // Act
-        var diagnosis = OwnerSettingsReadFailures.Diagnose(exception);
+        var diagnosis = OwnerSettingsReadFailures.DiagnoseWhileReading(exception);
 
         // Assert
         Assert.DoesNotContain("db.internal", diagnosis, StringComparison.Ordinal);
         Assert.DoesNotContain("mailfathom\"", diagnosis, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A bound that expired before the connection was open is the opposite diagnosis from one that expired on the
+    /// statement: nothing was sent, so the server was never reached — and a pool with nothing left to hand out
+    /// arrives in exactly the same shape.
+    /// </summary>
+    [Fact]
+    public void DiagnoseWhileConnecting_TimeoutExpired_ReportsTheDatabaseAsUnreached()
+    {
+        // Arrange
+        var exception = new NpgsqlException("the connection pool has been exhausted", new TimeoutException());
+
+        // Act
+        var diagnosis = OwnerSettingsReadFailures.DiagnoseWhileConnecting(exception);
+
+        // Assert
+        Assert.Contains("could not be reached", diagnosis, StringComparison.Ordinal);
+        Assert.DoesNotContain("Persistence:CommandTimeoutSeconds", diagnosis, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A state the server answered the connection attempt with is diagnosed exactly as it is on the statement,
+    /// because the correction is the same one: the credential, the authorization rules, the database that is not
+    /// there.
+    /// </summary>
+    [Theory]
+    [InlineData(PostgresErrorCodes.InvalidCatalogName, "no database of the configured name")]
+    [InlineData(PostgresErrorCodes.InvalidPassword, "Persistence secret block")]
+    [InlineData(PostgresErrorCodes.InvalidAuthorizationSpecification, "admits no connection")]
+    public void DiagnoseWhileConnecting_AStateTheServerAnswered_SaysWhatTheStatementWould(string sqlState, string expected)
+    {
+        // Arrange
+        var exception = ProviderFailure(sqlState);
+
+        // Act
+        var diagnosis = OwnerSettingsReadFailures.DiagnoseWhileConnecting(exception);
+
+        // Assert
+        Assert.Contains(expected, diagnosis, StringComparison.Ordinal);
+        Assert.Equal(OwnerSettingsReadFailures.DiagnoseWhileReading(exception), diagnosis);
     }
 
     private static PostgresException ProviderFailure(string sqlState) =>

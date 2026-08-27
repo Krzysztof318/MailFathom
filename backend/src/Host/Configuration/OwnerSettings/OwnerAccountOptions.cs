@@ -44,13 +44,16 @@ internal sealed class OwnerAccountOptions : IValidatableObject
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) => this.FindRefusals();
 
-    /// <summary>Judges this record by every rule a mail account is declared under.</summary>
+    /// <summary>Judges this record by every rule a mail account is declared under that needs no clock.</summary>
     /// <returns>One result per refusal, empty when the record could be this owner's.</returns>
     /// <remarks>
     /// Each account is judged as one that will be synchronized, which is the strict reading, because a declaration in
     /// an owner's record is an account they own rather than one a deployment-wide switch left unread. The naming space
     /// is judged within this owner alone, which is what makes two owners each declaring <c>work</c> an ordinary pair
-    /// of records rather than a collision.
+    /// of records rather than a collision. The one rule that is not here is the one that cannot be:
+    /// <see cref="FindSynchronizationWindowErrors" /> asks a question about the current date, so it is supplied a
+    /// clock by whoever runs it — exactly as the deployment's own section is, where the same rule is a custom
+    /// validator rather than part of the bound graph.
     /// </remarks>
     internal IEnumerable<ValidationResult> FindRefusals()
     {
@@ -65,4 +68,15 @@ internal sealed class OwnerAccountOptions : IValidatableObject
             .. this.MailAccounts.SelectMany(account => account.ValidateForSynchronization(synchronizationEnabled: true)),
         ];
     }
+
+    /// <summary>Finds every declared earliest received date that could not mean anything on the supplied date.</summary>
+    /// <param name="today">The current date the declared bounds are read against.</param>
+    /// <returns>One result per account whose bound lies in the future, empty when every bound is usable.</returns>
+    /// <remarks>
+    /// The rule is the deployment's own, applied to a persisted record so that the two cannot drift apart: a future
+    /// bound excludes every email the mailbox holds, which is indistinguishable from synchronization doing nothing,
+    /// and a record that would be refused as configuration must not be accepted as a row.
+    /// </remarks>
+    internal IEnumerable<ValidationResult> FindSynchronizationWindowErrors(DateOnly today) =>
+        this.MailAccounts?.SelectMany(account => account.ValidateSynchronizationWindow(today)) ?? [];
 }

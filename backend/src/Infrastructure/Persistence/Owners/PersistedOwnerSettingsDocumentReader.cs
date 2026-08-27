@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Access;
+using MailFathom.Infrastructure.Persistence.Connections;
 using Npgsql;
 
 namespace MailFathom.Infrastructure.Persistence.Owners;
@@ -38,12 +39,17 @@ namespace MailFathom.Infrastructure.Persistence.Owners;
 /// Every way the database declines to answer arrives as one refusal naming a place to look, because the caller of a
 /// port is holding an owner rather than a connection: what a failed read tells the operator is
 /// <see cref="OwnerSettingsReadFailures" />'s decision, and the driver's own text — which can name the database, the
-/// role, or the table — stays in the inner failure.
+/// role, or the table — stays in the inner failure. The connection is opened in a step of its own so that the two
+/// stages can be told apart, and the statement carries the deployment's configured command timeout, which nothing
+/// puts onto this data source.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this reader.")]
 [RequiresIntegrationCoverage]
-internal sealed class PersistedOwnerSettingsDocumentReader(NpgsqlDataSource dataSource) : IOwnerSettingsDocumentReader
+internal sealed class PersistedOwnerSettingsDocumentReader(
+    NpgsqlDataSource dataSource,
+    DatabaseCommandTimeout commandTimeout)
+    : IOwnerSettingsDocumentReader
 {
     /// <summary>Reads the row, and the document with it only when the document is small enough to bind.</summary>
     /// <remarks>
@@ -72,38 +78,69 @@ internal sealed class PersistedOwnerSettingsDocumentReader(NpgsqlDataSource data
             throw new ArgumentException("An owner record is read for an owner, and the value names nobody.", nameof(owner));
         }
 
+        // Opened in a step of its own rather than left to the command, because the driver reports a connect timeout, a
+        // pool with nothing left to hand out, and a statement the server never answered as the same shape — and the
+        // first two are a database that could not be reached while the third is one that was. Only this side knows
+        // which stage failed, so each stage reports what its own failure can mean.
+        NpgsqlConnection connection;
+
         try
         {
-            await using var command = dataSource.CreateCommand(SelectRecord);
-            command.Parameters.AddWithValue("owner", owner.Value);
-            command.Parameters.AddWithValue("maximumOctets", OwnerSettingsDocument.MaximumOctets);
-
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-
-            if (!await reader.ReadAsync(cancellationToken))
-            {
-                return null;
-            }
-
-            var documentOctets = reader.GetInt32(1);
-
-            if (documentOctets > OwnerSettingsDocument.MaximumOctets)
-            {
-                throw new OwnerSettingsUnreadableException(string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"The record of owner {owner.Value} is {documentOctets} octets, past the {OwnerSettingsDocument.MaximumOctets} MailFathom binds an owner's document from, so it was not read. An owner record is a page of declarations rather than a payload: check what wrote the settings_accounts row."));
-            }
-
-            return new OwnerSettingsDocument(
-                owner,
-                reader.GetString(0),
-                reader.GetString(2),
-                reader.GetInt64(3),
-                reader.GetBoolean(4));
+            connection = await dataSource.OpenConnectionAsync(cancellationToken);
         }
         catch (NpgsqlException exception)
         {
-            throw new OwnerSettingsUnreadableException(OwnerSettingsReadFailures.Diagnose(exception), exception);
+            throw new OwnerSettingsUnreadableException(
+                OwnerSettingsReadFailures.DiagnoseWhileConnecting(exception),
+                exception);
+        }
+
+        await using (connection)
+        {
+            try
+            {
+                await using var command = new NpgsqlCommand(SelectRecord, connection);
+
+                // Written onto the command rather than inherited from the pool, because nothing puts the configured
+                // bound onto this data source: the setting reaches EF Core's commands through the enrichment that
+                // configures its context, and this statement is not one of those. Without it the read would be
+                // bounded by the driver's own default, or by nothing at all where a connection string carries
+                // `Command Timeout=0` — while the diagnosis of a timeout sends the operator to a setting that
+                // governed nothing.
+                command.CommandTimeout = (int)commandTimeout.Value.TotalSeconds;
+
+                command.Parameters.AddWithValue("owner", owner.Value);
+                command.Parameters.AddWithValue("maximumOctets", OwnerSettingsDocument.MaximumOctets);
+
+                await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+                if (!await reader.ReadAsync(cancellationToken))
+                {
+                    return null;
+                }
+
+                var documentOctets = reader.GetInt32(1);
+
+                if (documentOctets > OwnerSettingsDocument.MaximumOctets)
+                {
+                    throw new OwnerSettingsUnreadableException(string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The record of owner {owner.Value} is {documentOctets} octets, past the {OwnerSettingsDocument.MaximumOctets} MailFathom binds an owner's document from, so it was not read. An owner record is a page of declarations rather than a payload: check what wrote the settings_accounts row."));
+                }
+
+                return new OwnerSettingsDocument(
+                    owner,
+                    reader.GetString(0),
+                    reader.GetString(2),
+                    reader.GetInt64(3),
+                    reader.GetBoolean(4));
+            }
+            catch (NpgsqlException exception)
+            {
+                throw new OwnerSettingsUnreadableException(
+                    OwnerSettingsReadFailures.DiagnoseWhileReading(exception),
+                    exception);
+            }
         }
     }
 }
