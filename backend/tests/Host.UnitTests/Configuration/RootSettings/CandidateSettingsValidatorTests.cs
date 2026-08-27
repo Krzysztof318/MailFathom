@@ -187,6 +187,28 @@ public sealed class CandidateSettingsValidatorTests
     }
 
     /// <summary>
+    /// The chat section is registered without <c>ValidateOnStart</c>, so the startup validator never materializes it
+    /// and nothing in the throwaway container reads it strictly. A start still refuses a misspelled key there — the
+    /// snapshot hosted service reads the monitor's current value while hosted services are resolved — so this reading
+    /// is what has to take that refusal for a candidate.
+    /// </summary>
+    [Fact]
+    public void FindErrors_AnUnknownKeyInTheChatSection_IsRefused()
+    {
+        // Arrange
+        var validator = Validator();
+
+        // Act
+        var errors = validator.FindErrors(Compose(new()
+        {
+            ["Chat:ModelName"] = "gpt-4o-mini",
+        }));
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains("ModelName", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// Part of what a start refuses over is decided while the sections are being registered rather than when they are
     /// validated. A resilience section naming no dependency class is that shape, and it is the same operator's mistake
     /// as a value a validator refuses — so it comes back as an error rather than as an exception the write raises.

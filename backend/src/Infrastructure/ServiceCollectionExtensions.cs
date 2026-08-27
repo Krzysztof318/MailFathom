@@ -1165,10 +1165,12 @@ public static class ServiceCollectionExtensions
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// <para>
-    /// A catalog is a declaration rather than a detector: it assembles no corpus, compiles no expression, opens no
-    /// client, and holds nothing an unused registration would cost. What reads one selects by the switches — a plan is
-    /// composed only for a scanner that is on — so registering all of them changes nothing about what a deployment
-    /// scans.
+    /// A catalog is a declaration rather than a detector: it registers no scanner, compiles no expression, and opens no
+    /// client. What it does read is the corpus behind the declaration, whenever one is constructed — and one is
+    /// constructed on every start, because the host validates the declarations under <c>ValidateOnStart</c>. So the
+    /// unconditional registration is not free of that reading; what it is free of is a
+    /// detector nothing would use. What reads a catalog selects by the switches — a plan is composed only for a scanner
+    /// that is on — so registering all of them changes nothing about what a deployment scans.
     /// </para>
     /// <para>
     /// Unconditional because of what depends on the answer, which is the rule rather than the scanning: startup refuses

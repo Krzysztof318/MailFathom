@@ -58,19 +58,39 @@ internal sealed class RootSettingsDocumentWriter(NpgsqlDataSource dataSource, Ti
     {
         RootSettingsCommitRules.RefuseWhatCannotBeCommitted(json, expectedVersion);
 
+        // Opened in a step of its own rather than left to the command, because the driver reports a connect timeout and
+        // a command timeout as the same shape and the two are opposite answers: one is a database that could not be
+        // reached and a row that certainly stood still, the other a statement the server accepted and never answered.
+        // Only this side knows which stage failed, so each stage reports what its own failure can mean.
+        NpgsqlConnection connection;
+
         try
         {
-            await using var command = dataSource.CreateCommand(CommitDocument);
-            command.Parameters.AddWithValue("document", json);
-            command.Parameters.AddWithValue("updatedAt", timeProvider.GetUtcNow());
-            command.Parameters.AddWithValue("id", RootSettingsEntity.SingletonId);
-            command.Parameters.AddWithValue("expectedVersion", expectedVersion);
-
-            return await command.ExecuteScalarAsync(cancellationToken) as long?;
+            connection = await dataSource.OpenConnectionAsync(cancellationToken);
         }
         catch (NpgsqlException exception)
         {
-            throw new RootSettingsUnwritableException(RootSettingsWriteFailures.Diagnose(exception), exception);
+            throw new RootSettingsUnwritableException(
+                RootSettingsWriteFailures.DiagnoseWhileConnecting(exception),
+                exception);
+        }
+
+        await using (connection)
+        {
+            try
+            {
+                await using var command = new NpgsqlCommand(CommitDocument, connection);
+                command.Parameters.AddWithValue("document", json);
+                command.Parameters.AddWithValue("updatedAt", timeProvider.GetUtcNow());
+                command.Parameters.AddWithValue("id", RootSettingsEntity.SingletonId);
+                command.Parameters.AddWithValue("expectedVersion", expectedVersion);
+
+                return await command.ExecuteScalarAsync(cancellationToken) as long?;
+            }
+            catch (NpgsqlException exception)
+            {
+                throw new RootSettingsUnwritableException(RootSettingsWriteFailures.Diagnose(exception), exception);
+            }
         }
     }
 }

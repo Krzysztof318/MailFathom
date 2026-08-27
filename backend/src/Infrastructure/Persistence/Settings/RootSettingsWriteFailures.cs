@@ -16,6 +16,13 @@ namespace MailFathom.Infrastructure.Persistence.Settings;
 /// this build issues against it.
 /// </para>
 /// <para>
+/// Which of the two entry points below a failure arrives at is decided by the caller rather than by the exception,
+/// because the driver reports a connect timeout and a command timeout as the same shape — an
+/// <see cref="NpgsqlException" /> carrying a <see cref="TimeoutException" /> — and the two are opposite diagnoses.
+/// Only the caller knows whether the statement was ever issued, so the writer opens its connection in a step of its
+/// own and each step reports what its own failure can mean.
+/// </para>
+/// <para>
 /// Pure over the exception, so what the operator is told is decided in the unit suite while the statement itself is
 /// proved against a real server. Every message names a place to look and no value read from configuration, so nothing
 /// here can carry a credential, a host name, or a database name.
@@ -23,7 +30,10 @@ namespace MailFathom.Infrastructure.Persistence.Settings;
 /// </remarks>
 internal static class RootSettingsWriteFailures
 {
-    /// <summary>Diagnoses a refused write of the persisted configuration.</summary>
+    private const string Unreachable =
+        "The database holding the persisted configuration could not be reached, so nothing was written. The deployment goes on serving the configuration it already composed, and the write is safe to attempt again.";
+
+    /// <summary>Diagnoses a write refused once the statement had been issued.</summary>
     /// <param name="exception">The exception the statement raised.</param>
     /// <returns>What the operator is told, which names the one place the correction is made.</returns>
     /// <remarks>
@@ -33,7 +43,33 @@ internal static class RootSettingsWriteFailures
     /// resolve by reading rather than by guessing, since a retry over the version the write was composed on is refused
     /// as superseded if the first attempt did commit.
     /// </remarks>
-    internal static string Diagnose(NpgsqlException exception) => exception switch
+    internal static string Diagnose(NpgsqlException exception) =>
+        WhatTheServerAnswered(exception)
+        ?? exception switch
+        {
+            // The bound on the statement expiring. Unlike every arm above, this one cannot say the row stood still: the
+            // server accepted the statement and did not answer within the bound.
+            { InnerException: TimeoutException } =>
+                "The statement writing the persisted configuration did not finish within the configured command timeout, so whether it applied is not known from here. Read the version now in force to find out, and attempt the write again over the version it was composed on — which the version guard refuses if the first attempt did commit. What to look at is Persistence:CommandTimeoutSeconds and whatever is holding the settings_root row, rather than the network.",
+
+            _ => Unreachable,
+        };
+
+    /// <summary>Diagnoses a write refused before the statement could be issued, while the connection was being opened.</summary>
+    /// <param name="exception">The exception opening the connection raised.</param>
+    /// <returns>What the operator is told, which names the one place the correction is made.</returns>
+    /// <remarks>
+    /// Nothing here can leave the commit undecided, which is the whole reason this is a second entry point: no
+    /// statement was sent, so the row certainly stood still, and a timeout at this stage is a database that could not
+    /// be reached within the bound rather than one holding a statement it never answered. The states a server answers
+    /// a connection attempt with — a database of that name, the credential, the authorization rules — are diagnosed
+    /// exactly as they are on the statement, because the correction is the same one.
+    /// </remarks>
+    internal static string DiagnoseWhileConnecting(NpgsqlException exception) =>
+        WhatTheServerAnswered(exception) ?? Unreachable;
+
+    /// <summary>Says what a state the server answered with means, or nothing when the server answered no state at all.</summary>
+    private static string? WhatTheServerAnswered(NpgsqlException exception) => exception switch
     {
         // The server answered and holds no such database, which is provisioning that never ran rather than anything
         // about the network.
@@ -63,11 +99,6 @@ internal static class RootSettingsWriteFailures
         PostgresException { SqlState: PostgresErrorCodes.ReadOnlySqlTransaction } =>
             "The database refuses to write in this session, so nothing was written. MailFathom is connected to a standby or to a session that is read-only by default; point the connection at the primary, or lift the read-only default for the serving role.",
 
-        // The bound on the statement expiring. Unlike every arm above, this one cannot say the row stood still: the
-        // server accepted the statement and did not answer within the bound.
-        { InnerException: TimeoutException } =>
-            "The statement writing the persisted configuration did not finish within the configured command timeout, so whether it applied is not known from here. Read the version now in force to find out, and attempt the write again over the version it was composed on — which the version guard refuses if the first attempt did commit. What to look at is Persistence:CommandTimeoutSeconds and whatever is holding the settings_root row, rather than the network.",
-
         // The server answered and refused, with a state none of the arms above names. Saying which state it gave is the
         // whole of what this side knows, and it is what separates a statement to correct from a database to reach: a
         // value the column cannot hold (a NUL in a configuration value renders as `22P05`), a full disk, a deadlock.
@@ -76,6 +107,6 @@ internal static class RootSettingsWriteFailures
         PostgresException { SqlState: { Length: > 0 } sqlState } =>
             $"The database refused the statement that would have persisted the configuration write, answering SQLSTATE {sqlState}, so nothing was written. The server was reached and answered, so what to correct is the statement's own subject rather than the network; the provider's own text is the inner exception.",
 
-        _ => "The database holding the persisted configuration could not be reached, so nothing was written. The deployment goes on serving the configuration it already composed, and the write is safe to attempt again.",
+        _ => null,
     };
 }

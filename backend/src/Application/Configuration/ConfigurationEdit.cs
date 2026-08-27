@@ -30,10 +30,11 @@ public sealed record ConfigurationEdit
     /// <summary>How long a configuration path may be.</summary>
     /// <remarks>
     /// A path is a sequence of section and property names, and the longest a MailFathom setting actually reaches is a
-    /// secret nested inside an account's own block. The bound is generous against that and is here rather than at the
-    /// write because it is what keeps the depth of the document a path produces bounded as well: a store writes one
-    /// object per segment, and a document nested past what a JSON reader accepts is one the deployment could no longer
-    /// read back.
+    /// secret nested inside an account's own block. The bound is generous against that, and what it refuses is a caller
+    /// that has lost track of the path it is asking for, before the process pays for expanding it. It is not a bound on
+    /// how deep the document a path produces is nested — a store writes one object per segment, and this admits far
+    /// more segments than a JSON reader admits levels — so a document nested past what the reader accepts is refused
+    /// where it is measured rather than here.
     /// </remarks>
     public const int MaximumPathLength = 512;
 

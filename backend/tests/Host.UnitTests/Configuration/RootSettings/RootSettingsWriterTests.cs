@@ -278,6 +278,36 @@ public sealed class RootSettingsWriterTests
     }
 
     /// <summary>
+    /// A row somebody edited directly in the database, which the operator page says is possible. Every case above is
+    /// answered before the row is read, by the path the caller named; this one is answered by the composition, because
+    /// the offending setting is one the *row* carries and the write named an unrelated path. Without the refusal an
+    /// ordinary write would leave the port as an exception rather than as a refusal naming the setting.
+    /// </summary>
+    /// <param name="rowSomebodyEdited">A persisted document carrying a setting the layer may not carry.</param>
+    /// <param name="named">The declared setting the refusal has to name for the operator to find it in the row.</param>
+    [Theory]
+    [InlineData("""{ "Persistence": { "Password": { "SecretReference": "file:/run/secrets/db" } } }""", "Persistence:Password")]
+    [InlineData("""{ "Accounts": { "0": { "DisplayName": "owner" } } }""", "Accounts")]
+    public async Task WriteAsync_ARowAlreadyCarryingASettingTheLayerMayNotCarry_IsRefusedRatherThanRaised(
+        string rowSomebodyEdited,
+        string named)
+    {
+        // Arrange
+        using var deployment = Deployment.WithPersisted("{}", version: 4);
+
+        deployment.Row.CommitFromElsewhere(rowSomebodyEdited);
+
+        // Act
+        var result = await deployment.WriteAsync(ConfigurationEdit.SetTo("MailboxSearch:SnippetsPerEmail", "3"));
+
+        // Assert
+        Assert.False(result.IsCommitted);
+        Assert.Equal(MailFathomErrorCode.ConfigurationPathNotWritable, result.Refusal);
+        Assert.Equal(1, deployment.Row.AcceptedCommits);
+        Assert.Contains(result.RefusalMessages, message => message.Contains(named, StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// A section a registration refuses before any validator runs — a resilience section naming no dependency class —
     /// leaves the write as a refusal rather than as an exception. It is the same operator's mistake as a value a
     /// validator turns away, and a start meets it at the same point.

@@ -57,7 +57,7 @@ internal static class ComposedSettings
     /// <param name="configuration">The configuration to judge.</param>
     /// <returns>One refusal per section that would stop a start, in the order a start meets them.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when a section will not bind at all.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the chat section will not bind at all, which the strict reading below is what decides.</exception>
     /// <remarks>
     /// The chat section is the one bound without <c>ValidateDataAnnotations</c> and without <c>ValidateOnStart</c>,
     /// deliberately and for the reason <see cref="BoundSettings" /> gives — it reloads, and the framework validator has
@@ -69,7 +69,14 @@ internal static class ComposedSettings
         ArgumentNullException.ThrowIfNull(configuration);
 
         var embeddings = configuration.GetSection(EmbeddingOptions.SectionName).Get<EmbeddingOptions>();
-        var chat = configuration.GetSection(ChatModelOptions.SectionName).Get<ChatModelOptions>();
+
+        // The one of the three read strictly, because it is the one nothing else binds strictly for a candidate: the
+        // other two are registered under ValidateOnStart, so the startup validator materializes them and reports an
+        // unknown key of its own. This section is not, so a lenient read here would drop a misspelled key that a start
+        // does refuse — the snapshot hosted service reads the monitor's current value, which runs the strict binder
+        // while hosted services are resolved.
+        var chat = configuration.GetSection(ChatModelOptions.SectionName)
+            .Get<ChatModelOptions>(binderOptions => binderOptions.ErrorOnUnknownConfiguration = true);
         var answering = configuration.GetSection(MailAnsweringOptions.SectionName).Get<MailAnsweringOptions>()
             ?? new MailAnsweringOptions();
 

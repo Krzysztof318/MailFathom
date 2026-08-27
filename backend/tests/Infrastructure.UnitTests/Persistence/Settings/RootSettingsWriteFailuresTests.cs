@@ -143,6 +143,47 @@ public sealed class RootSettingsWriteFailuresTests
         Assert.Contains("safe to attempt again", diagnosis, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The driver reports a connect timeout and a command timeout as the same shape, and the two are opposite answers.
+    /// A failure raised before the statement was issued cannot leave the commit undecided: nothing was sent, so the row
+    /// certainly stood still, and what expired was reaching the database rather than a statement it was holding.
+    /// </summary>
+    [Fact]
+    public void DiagnoseWhileConnecting_ATimeoutBeforeTheStatement_ReportsTheDatabaseAsUnreached()
+    {
+        // Arrange
+        var exception = new NpgsqlException("connecting", new TimeoutException("the attempt expired"));
+
+        // Act
+        var diagnosis = RootSettingsWriteFailures.DiagnoseWhileConnecting(exception);
+
+        // Assert
+        Assert.Contains("could not be reached", diagnosis, StringComparison.Ordinal);
+        Assert.Contains("safe to attempt again", diagnosis, StringComparison.Ordinal);
+        Assert.DoesNotContain("Persistence:CommandTimeoutSeconds", diagnosis, StringComparison.Ordinal);
+        Assert.DoesNotContain("not known", diagnosis, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A state the server answers a connection attempt with is the same operator's correction whichever stage met it,
+    /// which is why the two entry points share those arms rather than each carrying its own.
+    /// </summary>
+    /// <param name="sqlState">A state a server answers a connection attempt with.</param>
+    [Theory]
+    [InlineData(PostgresErrorCodes.InvalidPassword)]
+    [InlineData(PostgresErrorCodes.InvalidCatalogName)]
+    [InlineData(PostgresErrorCodes.InvalidAuthorizationSpecification)]
+    public void DiagnoseWhileConnecting_AStateTheServerAnswered_IsDiagnosedAsItIsOnTheStatement(string sqlState)
+    {
+        // Arrange
+        var exception = ProviderFailure(sqlState);
+
+        // Act & Assert
+        Assert.Equal(
+            RootSettingsWriteFailures.Diagnose(exception),
+            RootSettingsWriteFailures.DiagnoseWhileConnecting(exception));
+    }
+
     private static PostgresException ProviderFailure(string sqlState) =>
         new(
             messageText: "the server said something",
