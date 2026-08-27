@@ -29,8 +29,9 @@ given installation holds in order to know which file to apply — there is one f
 once.
 
 It writes two rows as well as creating tables, and each is written once and left alone afterwards. The chain provisions
-the **owner** every mailbox is bound to — one record, with the mail accounts this deployment already holds carried onto
-it — because a mailbox belongs to somebody from the moment its row exists. It also provisions the singleton row of
+the **owner** every mailbox is bound to — one record, labelled `owner`, with the mail accounts this deployment already holds carried onto
+it — because a mailbox belongs to somebody from the moment its row exists. The label is what an administrator tells owners
+apart by rather than anything that resolves one, so a deployment is free to rename it. It also provisions the singleton row of
 `settings_root`, the deployment's **persisted configuration** document, as an empty document at version 1, because the
 host reads that row before it opens any endpoint and a deployment that has configured nothing still has to start. Both
 inserts are guarded against a row already being there, so applying the file twice still provisions one owner and one

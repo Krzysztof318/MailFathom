@@ -7,8 +7,6 @@ using System.Text.Json;
 using MailFathom.Application.Configuration;
 using MailFathom.Domain.Failures;
 using MailFathom.Infrastructure.Persistence.Settings;
-using MailFathom.Infrastructure.Secrets.Discovery;
-using MailFathom.Infrastructure.Secrets.References;
 
 namespace MailFathom.Host.Configuration.RootSettings;
 
@@ -41,24 +39,9 @@ internal sealed partial class RootSettingsWriter(
     CandidateConfigurationComposer composer,
     CandidateSettingsValidator validator,
     RootSettingsReloader reloader,
-    IEnumerable<ISecretSchemeResolver> secretSchemeResolvers,
+    PersistedSecretMaterial secretMaterial,
     ILogger<RootSettingsWriter> logger) : IConfigurationWriter
 {
-    /// <summary>The schemes that name where material is kept rather than carrying it.</summary>
-    /// <remarks>
-    /// Read from what this deployment registered rather than from what the reference syntax admits, because those are
-    /// not the same set and the difference is the whole of the check. A scheme is minted for any name before the first
-    /// colon, so material carrying one — <c>Pa55:word</c>, a token with a colon in it — parses as a well-formed
-    /// reference to a scheme nothing serves. Matching the parse alone would admit it into the column; matching what a
-    /// resolver actually answers refuses it, and refuses in the direction that keeps a credential out.
-    /// </remarks>
-    private readonly HashSet<SecretReferenceScheme> schemesNamingWhereMaterialIsKept =
-    [
-        .. secretSchemeResolvers
-            .Select(resolver => resolver.Scheme)
-            .Where(scheme => scheme != SecretReferenceScheme.Plaintext),
-    ];
-
     /// <inheritdoc />
     /// <exception cref="RootSettingsUnreadableException">Thrown when the document the write would change could not be read.</exception>
     /// <exception cref="RootSettingsUnwritableException">Thrown when the commit did not complete. The deployment's configuration is unchanged in every case but a command timeout and a connection lost while the statement was in flight, where the statement had already been sent and the version now in force is what says whether it applied.</exception>
@@ -205,37 +188,19 @@ internal sealed partial class RootSettingsWriter(
 
     /// <summary>Finds the changes writing a secret's material where the document may only carry a reference to it.</summary>
     /// <remarks>
-    /// <para>
-    /// A setting announces that it holds a secret through its own name, which is the rule
-    /// <see cref="SecretPropertyNaming" /> already states for the bound options graph, so nothing here decides a second
-    /// time what counts as a secret. What it decides is the value: a reference to a scheme this deployment actually
-    /// resolves names where the material is kept, and anything else — a bare password, the one scheme whose target is
-    /// the literal itself, or a value that merely happens to carry a colon — is the material.
-    /// </para>
-    /// <para>
-    /// Refused whatever the deployment's secret interpretation says, unlike a value in a file. Under an inline
-    /// interpretation a configured value <em>is</em> the material and a file carrying one is the operator's own choice
-    /// about their own file; a write is MailFathom putting it into an unsealed column of its own database, which is a
-    /// choice this port does not make on their behalf.
-    /// </para>
-    /// <para>
-    /// The message names the setting and says what belongs there. It repeats neither the value nor its length, because
-    /// a length is what turns a guess about a credential into a shorter list of guesses.
-    /// </para>
+    /// What counts as material is <see cref="PersistedSecretMaterial" />'s, because an owner's record is judged by the
+    /// same rule and a credential kept out of one document and admitted into the other would be no rule at all. What
+    /// belongs here is the message: it names the setting and says what belongs there, and repeats neither the value
+    /// nor its length, because a length is what turns a guess about a credential into a shorter list of guesses.
     /// </remarks>
     private IReadOnlyList<string> FindMaterialWrittenWhereAReferenceBelongs(IReadOnlyList<ConfigurationEdit> edits) =>
     [
         .. edits
             .Where(edit => !edit.RemovesTheSetting)
-            .Where(edit => SecretPropertyNaming.NamesASecret(edit.Path.Split(':')[^1]))
-            .Where(edit => !this.NamesWhereTheMaterialIsKept(edit.Value!))
+            .Where(edit => secretMaterial.IsCarriedBy(edit.Path, edit.Value))
             .Select(edit =>
                 $"MailFathom does not persist secret material: {edit.Path} carries the value itself rather than a <scheme>:<target> reference this deployment resolves. Provision the secret and persist the reference to it."),
     ];
-
-    private bool NamesWhereTheMaterialIsKept(string value) =>
-        SecretReference.TryParse(value, out var reference, out _)
-        && this.schemesNamingWhereMaterialIsKept.Contains(reference.Scheme);
 
     private ConfigurationWriteResult RefuseAsSuperseded(long expectedVersion, long versionInForce) => this.Refuse(
         MailFathomErrorCode.ConfigurationVersionSuperseded,

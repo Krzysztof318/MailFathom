@@ -5,6 +5,7 @@
 using System.Globalization;
 using MailFathom.Application.Configuration;
 using MailFathom.Domain.Failures;
+using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.RootSettings;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Settings;
@@ -546,7 +547,7 @@ public sealed class RootSettingsWriterTests
                 new CandidateConfigurationComposer(configuration, layer),
                 new CandidateSettingsValidator(new FakeTimeProvider(AnyInstant), []),
                 new RootSettingsReloader(layer.Provider, row, new RecordingLogger<RootSettingsReloader>()),
-                DeclaredSecretScheme.Registered,
+                new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
                 this.writerLogger);
         }
 

@@ -43,6 +43,7 @@ internal static class OrchestratedForeignOwner
                 context.OwnerAccounts.Add(new OwnerAccountEntity
                 {
                     Id = ownerId,
+                    DisplayName = $"owner-{ownerId:N}",
                     Document = "{}",
                     Version = 1,
                     CreatedAt = ProvisionedAt,
