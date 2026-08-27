@@ -7,6 +7,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Rendering;
+using MailFathom.Application.EmailContent.Rendering.Document;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
@@ -278,7 +279,11 @@ public sealed class EmailContentReader
             new EmailContentRenderingBounds(
                 request.IncludeSanitizedHtml,
                 this.readOptions.MaxBodyCharacters,
-                remainingCharacters),
+                remainingCharacters)
+            {
+                IncludeMailDocument = request.IncludeMailDocument,
+                RetainRemoteImageReferences = request.RetainRemoteImageReferences,
+            },
             cancellationToken);
 
         if (rendering.Rendering is not { } rendered)
@@ -450,7 +455,41 @@ public sealed class EmailContentReader
             await this.GuardedAsync(body.PlainText, cancellationToken),
             body.SanitizedHtml is { } sanitizedHtml
                 ? await this.GuardedAsync(sanitizedHtml, cancellationToken)
+                : null,
+            body.Document is { } document
+                ? await this.GuardedAsync(document, cancellationToken)
                 : null);
+    }
+
+    /// <summary>Scans every text the reduced document holds, and writes the document back with what came out.</summary>
+    /// <remarks>
+    /// <para>
+    /// The document is a representation of the same body as the other two, so a read that redacted the plain text and
+    /// published the tree unscanned would hand a reader through one representation exactly what it withheld through the
+    /// other. It is guarded here rather than while it is built, because building it is an adapter's work and deciding
+    /// what may leave the deployment is the use case's.
+    /// </para>
+    /// <para>
+    /// The texts are guarded as a flat list and put back positionally rather than joined into one pass, for the reason
+    /// every value here is scanned on its own: a finding straddling the join between two runs would redact across words
+    /// that have nothing to do with each other. Nothing is dropped and no count is capped, so a long newsletter costs a
+    /// scan per run — which is why the whole projection is opt-in and why no tool asks for it.
+    /// </para>
+    /// </remarks>
+    private async Task<MailDocument> GuardedAsync(MailDocument document, CancellationToken cancellationToken)
+    {
+        var texts = MailDocumentTexts.Collect(document);
+        if (texts.Count == 0)
+        {
+            return document;
+        }
+
+        return MailDocumentTexts.Rewrite(
+            document,
+            await this.egressGuard.GuardAllAsync(
+                SensitiveContentEgressPoint.McpEmailContent,
+                texts,
+                cancellationToken));
     }
 
     /// <summary>Scans one representation and states the analyzed ceiling as the bound it is.</summary>
@@ -598,7 +637,10 @@ public sealed class EmailContentReader
             Headers = rendering.Headers,
             Body = rendering.BodyIsEncrypted
                 ? EmailContentBody.EncryptedNotReadableLocally
-                : EmailContentBody.Readable(rendering.PlainTextBody, rendering.SanitizedHtmlBody),
+                : EmailContentBody.Readable(
+                    rendering.PlainTextBody,
+                    rendering.SanitizedHtmlBody,
+                    rendering.Document),
             AttachmentSummary = SummaryOf(rendering.AttachmentSummary),
             Attachments = attachments,
             RemoteFlags = summary.RemoteFlags,

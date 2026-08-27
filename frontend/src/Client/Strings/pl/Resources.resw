@@ -633,4 +633,128 @@
     <value>Ma załączniki.</value>
     <comment>Appended on the same terms for a row carrying an attachment.</comment>
   </data>
+  <data name="MailBody.Block.Unsupported" xml:space="preserve">
+    <value>Ta część wiadomości wymaga nowszej wersji MailFathom, aby ją pokazać.</value>
+    <comment>What stands where a block of the document is one this build does not implement. It names the absence rather than the block's own identity, which would be a name from a service the reader does not run.</comment>
+  </data>
+  <data name="MailBody.Image.Undrawn" xml:space="preserve">
+    <value>Obraz, którego nie udało się pokazać</value>
+    <comment>What a picture is described as where the message said nothing about it and nothing could be drawn from it.</comment>
+  </data>
+  <data name="MailBody.Link.Title" xml:space="preserve">
+    <value>Otworzyć ten odnośnik?</value>
+    <comment>The question asked before any link in a message is followed.</comment>
+  </data>
+  <data name="MailBody.Link.DisplayText" xml:space="preserve">
+    <value>Wiadomość pokazuje</value>
+    <comment>Labels the words the sender put on the link, which is the half a deceptive link controls.</comment>
+  </data>
+  <data name="MailBody.Link.Target" xml:space="preserve">
+    <value>Prowadzi w rzeczywistości do</value>
+    <comment>Labels the address the link opens, as the deployment resolved it.</comment>
+  </data>
+  <data name="MailBody.Link.Punycode" xml:space="preserve">
+    <value>Ten sam adres zapisany w ASCII</value>
+    <comment>Labels the ASCII spelling of a host written in another script, shown only where the two spellings differ.</comment>
+  </data>
+  <data name="MailBody.Link.Deception" xml:space="preserve">
+    <value>Tekst tego odnośnika wskazuje inną witrynę niż ta, którą otworzy.</value>
+    <comment>The warning shown where the deployment established that the link's own text names one host and the link goes to another.</comment>
+  </data>
+  <data name="MailBody.Link.Open" xml:space="preserve">
+    <value>Otwórz w przeglądarce</value>
+    <comment>The answer that follows the link, which hands it to the platform and leaves the application.</comment>
+  </data>
+  <data name="MailBody.Link.Cancel" xml:space="preserve">
+    <value>Zostań tutaj</value>
+    <comment>The answer that does not follow the link.</comment>
+  </data>
+  <data name="MailBody.Refusal.NoHtmlPart" xml:space="preserve">
+    <value>Ta wiadomość została napisana zwykłym tekstem, więc to jest jej całość.</value>
+    <comment>Why a message is read as words. This one is not a shortcoming: the message carried nothing else.</comment>
+  </data>
+  <data name="MailBody.Refusal.ReductionFailed" xml:space="preserve">
+    <value>Nie udało się odczytać sformatowanej wersji tej wiadomości, więc jest pokazana jako tekst.</value>
+    <comment>Why a message is read as words where the deployment could not reduce its formatted version.</comment>
+  </data>
+  <data name="MailBody.Refusal.NothingRenderable" xml:space="preserve">
+    <value>Sformatowana wersja tej wiadomości nie zawierała nic do pokazania, więc jest pokazana jako tekst.</value>
+    <comment>Why a message is read as words where its formatted version reduced to no content at all.</comment>
+  </data>
+  <data name="MailBody.Availability.EncryptedNotReadableLocally" xml:space="preserve">
+    <value>Ta wiadomość dotarła zaszyfrowana, więc MailFathom nie może jej odczytać.</value>
+    <comment>Why there is no body at all. The deployment states the state and the client names it; a state added there is a missing string here rather than a blank pane.</comment>
+  </data>
+  <data name="MailBody.Availability.NotStoredExceededSizeLimit" xml:space="preserve">
+    <value>Ta wiadomość jest większa niż to, co przechowuje ta instalacja, więc jej treść nie została zachowana.</value>
+    <comment>Why there is no body at all, in the state a later refresh will not change.</comment>
+  </data>
+  <data name="MailBody.Availability.NotStoredAwaitingStorageHeadroom" xml:space="preserve">
+    <value>Ta instalacja nie miała jeszcze miejsca na treść tej wiadomości. Zostanie pobrana przy kolejnym odświeżeniu.</value>
+    <comment>Why there is no body at all, in the state that is temporary.</comment>
+  </data>
+  <data name="MailBody.Availability.Unrecognized" xml:space="preserve">
+    <value>Ta instalacja zgłosiła stan, którego ta wersja MailFathom nie zna, więc wiadomość nie jest pokazana.</value>
+    <comment>What a state named by a deployment ahead of this build is read as. It claims nothing about the message rather than reading as one that is fine.</comment>
+  </data>
+  <data name="MailBody.Notice.RemoteContent.Message" xml:space="preserve">
+    <value>Usunięte odwołania: {0}. Ich wczytanie ujawni serwerom nadawcy Twój adres sieciowy oraz to, że ta wiadomość została otwarta.</value>
+    <comment>What was withheld and what loading it would reveal. {0} is a count; the wording avoids a plural form the count would have to agree with.</comment>
+  </data>
+  <data name="MailBody.Notice.RemoteContentShown.Message" xml:space="preserve">
+    <value>Wczytano z obcych serwerów: {0}. Te serwery poznały Twój adres sieciowy oraz to, że wiadomość została otwarta.</value>
+    <comment>What this reading of the message did fetch, said plainly rather than left to be inferred. {0} is a count.</comment>
+  </data>
+  <data name="MailBody.Notice.UndrawnImages.Message" xml:space="preserve">
+    <value>Pominięte obrazy — zbyt duże lub zbyt liczne: {0}.</value>
+    <comment>What of the message's own pictures was left undrawn. {0} is a count.</comment>
+  </data>
+  <data name="MailBody.InfoBar.RemoteContent.Title" xml:space="preserve">
+    <value>Zablokowano treść zewnętrzną</value>
+    <comment>Heads the notice offering the reader the choice to load what the message asks for from somebody else's server.</comment>
+  </data>
+  <data name="MailBody.Button.ShowRemoteContent.Content" xml:space="preserve">
+    <value>Wczytaj jednorazowo</value>
+    <comment>The whole of the override: it re-reads this message with the references followed, and nothing writes the answer down.</comment>
+  </data>
+  <data name="MailBody.InfoBar.RemoteContentShown.Title" xml:space="preserve">
+    <value>Wczytano treść zewnętrzną</value>
+    <comment>Heads the notice stating that this reading of the message fetched from somebody else's server.</comment>
+  </data>
+  <data name="MailBody.InfoBar.PlainText.Title" xml:space="preserve">
+    <value>Pokazano jako tekst</value>
+    <comment>Heads the reason a message is read as words rather than drawn.</comment>
+  </data>
+  <data name="MailBody.InfoBar.Truncated.Title" xml:space="preserve">
+    <value>Skrócono</value>
+    <comment>Heads the notice that a bound stopped the rendering before the end of the message.</comment>
+  </data>
+  <data name="MailBody.InfoBar.Truncated.Message" xml:space="preserve">
+    <value>Ta wiadomość jest dłuższa niż to, co tu widać.</value>
+    <comment>States that a bound stopped the rendering, without claiming which one did.</comment>
+  </data>
+  <data name="MailBody.InfoBar.UndrawnImages.Title" xml:space="preserve">
+    <value>Pominięto część obrazów</value>
+    <comment>Heads the notice counting the message's own pictures that were left undrawn.</comment>
+  </data>
+  <data name="MailBody.InfoBar.DeploymentAhead.Title" xml:space="preserve">
+    <value>Nowsza niż ta wersja</value>
+    <comment>Heads the notice that the deployment writes a revision of the body contract this build does not read.</comment>
+  </data>
+  <data name="MailBody.InfoBar.DeploymentAhead.Message" xml:space="preserve">
+    <value>Twoja instalacja MailFathom opisuje wiadomości w nowszy sposób, niż odczytuje ta aplikacja. Części tej wiadomości mogą być pominięte.</value>
+    <comment>Says what a newer deployment costs the reader, which is parts of a message rather than the message.</comment>
+  </data>
+  <data name="MailBody.Empty.Text" xml:space="preserve">
+    <value>Wybierz wiadomość, aby przeczytać ją tutaj.</value>
+    <comment>What the reading pane is before anything is opened in it.</comment>
+  </data>
+  <data name="MailBody.Document.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Treść wiadomości</value>
+    <comment>What a screen reader announces the drawn document as.</comment>
+  </data>
+  <data name="MailBody.Words.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Treść wiadomości jako tekst</value>
+    <comment>What a screen reader announces the message as where it is read as words rather than drawn.</comment>
+  </data>
 </root>

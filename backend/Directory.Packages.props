@@ -50,8 +50,16 @@
          framework — a property is an ordinary [Fact] calling into it — so it costs one assembly in three unit-test
          projects and changes nothing about how the suite is discovered or run. -->
     <PackageVersion Include="CsCheck" Version="4.8.0" />
+    <!-- The HTML parser both readings of a message body run on. It used to arrive only behind HtmlSanitizer, which
+         is why the pin below notes that a direct reference was not foreclosed; backend/src/Infrastructure now holds a
+         parsed document to reduce into the client's MailDocument, so the version the code compiles against is decided
+         here rather than inherited from a dependency range. The two are held together deliberately: HtmlSanitizer
+         declares AngleSharp as a range, and a version resolved for the sanitizer that differed from the one this
+         reduction compiled against would be two readings of one body by two parsers, which is the thing the whole
+         projection exists to avoid. MIT, and recorded in THIRD_PARTY_LICENSES.md as a direct dependency. -->
+    <PackageVersion Include="AngleSharp" Version="1.6.0" />
     <!-- Brings AngleSharp 1.6.0 and AngleSharp.Css 1.0.0 transitively, both MIT. The 9.1 line replaced the exact
-         AngleSharp 0.17.1 pin the 9.0 line carried, so nothing here forecloses referencing AngleSharp directly, and
+         AngleSharp 0.17.1 pin the 9.0 line carried, which is what let the direct reference above be taken, and
          AngleSharp 1.6.0 publishes a net10.0 target of its own. -->
     <PackageVersion Include="HtmlSanitizer" Version="9.1.974" />
     <!-- The DNS client the local DKIM verification resolves published keys with. The platform offers no TXT lookup at

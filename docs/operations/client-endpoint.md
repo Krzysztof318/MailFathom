@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs -->
+<!-- describes: backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -69,6 +69,7 @@ for you.
 | `GET /api/client/emails` | `mailfathom.mail.read` |
 | `GET /api/client/emails/search` | `mailfathom.mail.read` |
 | `GET /api/client/threads/{threadId}` | `mailfathom.mail.read` |
+| `GET /api/client/messages/{storedEmailId}/body` | `mailfathom.mail.read` |
 
 There is no version segment in either path: the major version is `0` and
 [ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
@@ -622,6 +623,134 @@ UUID matches no route and is the same `404`. A credential whose grant does not c
 
 **The conversation is served from the local copy.** Nothing here contacts a mail server, so no screen waits on IMAP, and
 opening a thread cannot set the remote `\Seen` flag.
+
+### The message body route
+
+```http
+GET /api/client/messages/0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90/body
+```
+
+It answers with one message's body in both the renderings a reading pane draws from — the words, and the message
+reduced to a closed document tree:
+
+```jsonc
+{
+  "storedEmailId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90",
+  "availability": "Readable",
+  "plainText": {
+    "text": "The release went out this morning and the notes are attached.",
+    "originalCharacterCount": 61,
+    "truncation": "None"
+  },
+  "document": {
+    "schemaVersion": 1,
+    "refusal": "None",
+    "removedRemoteReferenceCount": 2,
+    "retainedRemoteImageCount": 0,
+    "inlineImageCount": 1,
+    "undrawnInlineImageCount": 0,
+    "truncated": false,
+    "blocks": [
+      {
+        "type": "heading",
+        "version": 1,
+        "level": 2,
+        "alignment": "Inherited",
+        "content": [ { "text": "Release 0.8.0", "emphasis": "None", "foreground": null, "link": null } ]
+      },
+      {
+        "type": "paragraph",
+        "version": 1,
+        "alignment": "Inherited",
+        "content": [
+          { "text": "The notes are ", "emphasis": "None", "foreground": null, "link": null },
+          {
+            "text": "on the site",
+            "emphasis": "Underline",
+            "foreground": "#0b57d0",
+            "link": {
+              "target": "https://example.test/notes",
+              "host": "example.test",
+              "asciiHost": null,
+              "deception": "None"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "remoteImagesRequested": false
+}
+```
+
+**Both renderings travel together**, because a pane needs both: `document` says whether it was refused and `plainText`
+is what it falls back to. A client that had to ask twice would draw an empty pane in between.
+
+**The document is a closed tree, and that is the whole of what makes it safe to draw.** It is not sanitized markup: it
+is a list of typed blocks, and every value in one is text, a number, a colour in `#rrggbb`, or a member of a fixed set.
+There is nowhere in it to put a script, an event handler, an embedded object, a form, a style sheet, or an element — so
+a construct nobody thought of cannot survive by being unfamiliar, and a renderer drawing it with its own typed controls
+cannot be steered by what a stranger wrote. `type` names the block and `version` names the revision of that block's own
+shape, so a client keys its renderers by the pair and shows a placeholder for a pair it does not implement rather than
+failing the message. The eight identities are `paragraph`, `heading`, `list`, `table`, `quote`, `image`, `separator`,
+and `preformatted`, each at revision `1`, and `schemaVersion` names the revision of the document itself.
+
+**Nothing in a body reaches somebody else's server unless the reader asked.** Every reference to a remote address is
+removed while the tree is built rather than left for a renderer to decline to follow, so a tracking pixel is defeated by
+the document not carrying it. `removedRemoteReferenceCount` is what survives instead — a count a pane can put in front
+of the reader — and it counts a remote `img`, a `url(` in a style declaration, and a `background` attribute alike. A
+picture the message carries itself is different and is resolved in the deployment: an inline part reached by
+`Content-Id` or `Content-Location` becomes a `data:` URI, bounded by count and by size, with `inlineImageCount` and
+`undrawnInlineImageCount` saying how many were drawn and how many were beyond a bound.
+
+**Asking for remote pictures is a second request, and nothing on either side remembers it:**
+
+```http
+GET /api/client/messages/0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90/body?remoteImages=true
+```
+
+The answer then carries the absolute addresses of the pictures the message asked for, counted in
+`retainedRemoteImageCount`, and echoes the request in `remoteImagesRequested`. Nothing is written down: there is no
+per-sender allowance, no per-message allowance, and no setting, so opening the message again asks again. That is
+deliberate rather than unfinished — a remembered allowance is a standing consent that outlives the reason it was given,
+and the reader's own act is what should decide, message by message, whether a sender's server is told they opened it.
+Only pictures are ever retained; a style declaration's reference and a `background` attribute are dropped under both
+readings, because neither has anywhere in the contract to go.
+
+**A link carries where it actually goes, and what the deployment made of how it was written.** `target` is the resolved
+absolute address, carrying only `http`, `https`, or `mailto` — a `javascript:`, `data:`, `vbscript:`, or `file:` target
+is dropped and the words it was written on are kept. `host` is the host as a reader recognizes it and `asciiHost` is
+the same host in its ASCII form, **present only where the two differ**, which is what a homograph looks like.
+`deception` is `DisplayedHostDiffers` where the link's own text names one host and the link goes to another,
+`NotApplicable` where the text is not a place, and `None` where the two agree. The determination is the deployment's
+rather than each client's, so two clients reading the same message cannot disagree about how loudly to warn.
+
+**A body the reduction refuses is answered as its plain text with the reason beside it**, in `refusal`: `NoHtmlPart`
+where the message carried no markup at all, `ReductionFailed` where the markup could not be read, `NothingRenderable`
+where it reduced to no content, and `None` where the document is the message. `truncated` says a bound stopped the
+reduction before the end of the body, and `truncation` on `plainText` says the same about the words.
+
+**`availability` is the same set the tool surface reports** — `Readable`, `EncryptedNotReadableLocally`,
+`NotStoredExceededSizeLimit`, and `NotStoredAwaitingStorageHeadroom` — and `document` is `null` for every value but the
+first, because there was no body to reduce.
+
+| Parameter | Accepts | Default |
+| --- | --- | --- |
+| `storedEmailId` | The message's identifier, as a list row or a conversation published it | required, in the path |
+| `remoteImages` | `true` to fetch what the message asks for from other servers on this read alone | `false` |
+
+**A message this owner does not hold is answered `404`**, and so is one no deployment ever held, and so is one whose
+stored content is missing or damaged: nothing in the answer separates somebody else's mail from mail that never existed
+or from this deployment's own defect. Text that is not a UUID matches no route and is the same `404`. A credential
+whose grant does not carry `mailfathom.mail.read` is answered `403`, as everywhere else on this surface.
+
+**The body is served from the local copy.** Nothing here contacts a mail server, so no screen waits on IMAP, and opening
+a message cannot set the remote `\Seen` flag. The words and the document both pass the same sensitive-content egress
+guard the tool surface's readings pass, so a redaction rule configured for this deployment applies to what a pane draws
+exactly as it applies to what a model reads.
+
+[Rendering mail HTML in the client](../decisions/0019-rendering-mail-html-in-the-client.md)
+is the decision this route implements, and it holds the reasoning for every paragraph above.
 
 ## Credentials do not cross surfaces
 

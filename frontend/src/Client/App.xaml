@@ -23,6 +23,11 @@ Project repository: https://github.com/Krzysztof318/MailFathom
             <ut:ThemeColors OverrideSource="ms-appx:///Styles/ColorPaletteOverride.xaml" />
           </utum:MaterialToolkitTheme.Colors>
         </utum:MaterialToolkitTheme>
+
+        <!-- What a message body is drawn with, merged after the design system so every style in it can be based on one
+             of Material's own. It is here rather than beside the pane because the drawing is computed in C#: a style a
+             page owns would be out of reach of the one place that needs it. -->
+        <ResourceDictionary Source="ms-appx:///Styles/MailBodyView.xaml" />
       </ResourceDictionary.MergedDictionaries>
 
       <!-- The two widths the client's composition changes at, written once and read by every adaptive trigger that

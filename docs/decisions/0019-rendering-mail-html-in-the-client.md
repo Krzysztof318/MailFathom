@@ -9,7 +9,7 @@ informed:
 
 # Render mail as a structured document by default, offer the sender's own HTML in an isolated engine on request, and let neither path fetch a remote resource unasked
 
-<!-- describes: backend/src/Infrastructure/Mail/Mime/**, backend/src/Application/Emails/GetEmailContent/** -->
+<!-- describes: backend/src/Application/EmailContent/Rendering/**, backend/src/Application/Emails/GetEmailContent/**, backend/src/Infrastructure/Mail/Mime/**, backend/src/Host/Api/ClientMailBodyEndpoint.cs, frontend/src/Client.Backend/Mail/**, frontend/src/Client/Presentation/Spaces/Mail/Reading/** -->
 
 ## Context and Problem Statement
 

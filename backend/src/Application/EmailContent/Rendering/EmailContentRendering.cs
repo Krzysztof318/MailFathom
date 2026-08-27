@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.EmailContent.Rendering.Document;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 
@@ -37,4 +38,14 @@ public sealed record EmailContentRendering(
     EmailBodyRepresentation? SanitizedHtmlBody,
     bool BodyIsEncrypted,
     EmailAttachmentSummary AttachmentSummary,
-    IReadOnlyList<ExtractedEmailAttachment> Attachments);
+    IReadOnlyList<ExtractedEmailAttachment> Attachments)
+{
+    /// <summary>Gets the body reduced to the document tree a reading pane draws, or <see langword="null" /> when none was asked for.</summary>
+    /// <remarks>
+    /// It comes from the same parse of the same document as <see cref="SanitizedHtmlBody" /> rather than from a second
+    /// reading of the markup that one produced. Two parses of one body by two different parsers is the structure
+    /// mutation attacks are built out of, and the point of holding one parsed document is that neither representation
+    /// is derived from the other's string.
+    /// </remarks>
+    public MailDocument? Document { get; init; }
+}

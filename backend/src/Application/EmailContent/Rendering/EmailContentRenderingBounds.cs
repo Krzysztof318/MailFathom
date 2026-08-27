@@ -28,4 +28,29 @@ namespace MailFathom.Application.EmailContent.Rendering;
 public sealed record EmailContentRenderingBounds(
     bool IncludeSanitizedHtml,
     int MaxCharactersPerRepresentation,
-    int RemainingCharactersForRead);
+    int RemainingCharactersForRead)
+{
+    /// <summary>Gets whether to also reduce the body to the document tree a reading pane draws.</summary>
+    /// <remarks>
+    /// Opt-in like the markup, and for a sharper reason: the reduction is what a person reading a message needs and it
+    /// is not what a model reading one needs, so a tool call pays for neither the walk nor the inlined pictures it
+    /// resolves. It is an init property rather than a constructor parameter so the callers that ask for neither say
+    /// nothing about it.
+    /// </remarks>
+    public bool IncludeMailDocument { get; init; }
+
+    /// <summary>Gets whether the reduced document may carry the message's remote picture references.</summary>
+    /// <remarks>
+    /// <para>
+    /// False by every default, which is what defeats a tracking pixel by construction rather than by a renderer
+    /// honouring a setting: the addresses are dropped while the document is built, so there is nothing for a rendering
+    /// defect to fetch. True only where the reader asked for this message's remote content, having been told what that
+    /// reveals to whoever wrote it.
+    /// </para>
+    /// <para>
+    /// It widens exactly one thing — <c>http</c> and <c>https</c> on a picture's source, and nowhere else. A link's
+    /// target is unaffected because it was never fetched, and no other reference exists in the tree to widen.
+    /// </para>
+    /// </remarks>
+    public bool RetainRemoteImageReferences { get; init; }
+}

@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.EmailContent.Rendering.Document;
+
 namespace MailFathom.Application.EmailContent.Rendering;
 
 /// <summary>States whether a reader was given the message body, or why it could not be.</summary>
@@ -46,11 +48,13 @@ public sealed record EmailContentBody
     private EmailContentBody(
         EmailBodyAvailability availability,
         EmailBodyRepresentation plainText,
-        EmailBodyRepresentation? sanitizedHtml)
+        EmailBodyRepresentation? sanitizedHtml,
+        MailDocument? document)
     {
         this.Availability = availability;
         this.PlainText = plainText;
         this.SanitizedHtml = sanitizedHtml;
+        this.Document = document;
     }
 
     /// <summary>Gets whether the body could be read, or why it could not.</summary>
@@ -62,35 +66,48 @@ public sealed record EmailContentBody
     /// <summary>Gets the sanitized HTML representation, or <see langword="null" /> when none was produced.</summary>
     public EmailBodyRepresentation? SanitizedHtml { get; }
 
+    /// <summary>Gets the body reduced to the document tree a reading pane draws, or <see langword="null" /> when none was produced.</summary>
+    /// <remarks>
+    /// A third representation rather than a reading of the second: it is produced from the same parse and it carries no
+    /// markup at all, which is what lets a client render a message without an HTML parser and without an engine. It is
+    /// absent unless a caller asked for it, so the two representations a model reads are unchanged by its existence.
+    /// </remarks>
+    public MailDocument? Document { get; }
+
     /// <summary>Gets the body of a message whose own body arrived encrypted.</summary>
     public static EmailContentBody EncryptedNotReadableLocally { get; } = new(
         EmailBodyAvailability.EncryptedNotReadableLocally,
         EmailBodyRepresentation.Empty,
-        sanitizedHtml: null);
+        sanitizedHtml: null,
+        document: null);
 
     /// <summary>Gets the body of a message whose raw MIME exceeded the size limit and was never stored.</summary>
     public static EmailContentBody NotStoredExceededSizeLimit { get; } = new(
         EmailBodyAvailability.NotStoredExceededSizeLimit,
         EmailBodyRepresentation.Empty,
-        sanitizedHtml: null);
+        sanitizedHtml: null,
+        document: null);
 
     /// <summary>Gets the body of a message whose content storage had no room for it yet.</summary>
     public static EmailContentBody NotStoredAwaitingStorageHeadroom { get; } = new(
         EmailBodyAvailability.NotStoredAwaitingStorageHeadroom,
         EmailBodyRepresentation.Empty,
-        sanitizedHtml: null);
+        sanitizedHtml: null,
+        document: null);
 
     /// <summary>Reports a body that was read from the stored message.</summary>
     /// <param name="plainText">The plain-text representation, bounded and carrying its truncation metadata.</param>
     /// <param name="sanitizedHtml">The sanitized HTML representation, or <see langword="null" /> when none was produced.</param>
+    /// <param name="document">The reduced document tree, or <see langword="null" /> when none was produced.</param>
     /// <returns>The readable body.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="plainText" /> is <see langword="null" />.</exception>
     public static EmailContentBody Readable(
         EmailBodyRepresentation plainText,
-        EmailBodyRepresentation? sanitizedHtml)
+        EmailBodyRepresentation? sanitizedHtml,
+        MailDocument? document = null)
     {
         ArgumentNullException.ThrowIfNull(plainText);
 
-        return new EmailContentBody(EmailBodyAvailability.Readable, plainText, sanitizedHtml);
+        return new EmailContentBody(EmailBodyAvailability.Readable, plainText, sanitizedHtml, document);
     }
 }

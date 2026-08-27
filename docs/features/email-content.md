@@ -18,7 +18,7 @@ tool that maps onto it is documented in [MCP tools](mcp-tools.md#get_email_conte
 
 ## The request contract
 
-`GetEmailContentRequest` carries four values and is built through `Create`, `CreateForThread`, or `CreateForSelection`,
+`GetEmailContentRequest` carries six values and is built through `Create`, `CreateForThread`, or `CreateForSelection`,
 which enforce the refusals below.
 
 | Field | Meaning | Absent means |
@@ -27,6 +27,8 @@ which enforce the refusals below.
 | `ThreadId` | The conversation whose messages to read, in the conversation's own order | the emails were named directly |
 | `IncludeSanitizedHtml` | Whether to also produce the sanitized HTML representation of each body | plain text only |
 | `IncludeAttachmentDownloadLinks` | Whether to mint a link for fetching each attachment, rather than only describe it | descriptions only |
+| `IncludeMailDocument` | Whether to also reduce each body to [the document tree a reading pane draws](#the-document-a-reading-pane-draws) | no document |
+| `RetainRemoteImageReferences` | Whether that document may carry this message's remote picture references | every remote reference removed |
 
 The first two are alternatives and exactly one of them is given. `CreateForSelection` is what a boundary offering both
 builds through, and it refuses a request carrying both or neither with `51007 EmailContentReadSelectionInvalid` rather
@@ -38,9 +40,12 @@ is resolved until that refusal has been decided, so a call carrying a list besid
 conversation identifier is told which of the two to drop rather than that the argument it will not be read by is too
 short or malformed.
 
-Both flags govern the whole call rather than one email each. A caller asking for markup or for the attached files wants
-them for what it is about to read, and a flag per identifier would make the argument list grow with the batch while
-answering a question no caller asks per email.
+Every flag governs the whole call rather than one email each. A caller asking for markup or for the attached files
+wants them for what it is about to read, and a flag per identifier would make the argument list grow with the batch
+while answering a question no caller asks per email.
+
+The last two are init properties rather than factory arguments, because one caller asks for them — the client
+endpoint a person's reading pane reads — and every other entrypoint would have to name them only to decline them.
 
 The HTML representation is opt-in because it costs a sanitization pass over untrusted markup and because plain text is
 what most callers want: a model reading mail is better served by the words than by the layout around them. The links
@@ -323,7 +328,9 @@ content storage stood at its ceiling, and the [refill pass](imap-synchronization
 of a later run fetches it as soon as there is room, after which this same read returns the body. A caller that collapses
 the two would either give up on mail that is arriving or keep asking about mail that never will.
 
-Plain text is the default representation and is always present, empty in each of the states where nothing could be read.
+Plain text is the default representation and is always present, empty in each of the states where nothing could be
+read. The other two are absent unless they were asked for, and both are absent in every state but `Readable`, there
+having been no body to sanitize or to reduce.
 A genuine `text/plain` part wins over every HTML alternative; HTML is read only when the message offered no plain-text
 one. Unlike the text the lexical index covers, nothing is trimmed: quoted history and a signature block are part of the
 message a person asked to read.
@@ -395,7 +402,11 @@ ordinary mail never reaches a second pass.
 
 Where [sensitive-content scanning](sensitive-content-scanning.md#reading-a-message-is-scanned-in-flight) is switched on,
 what the message's author wrote is scanned on every read and returned with each detection replaced by
-`[redacted:<category>]`: both body representations, the subject, and each participant's display name. The addresses
+`[redacted:<category>]`: every body representation the call asked for, the subject, and each participant's display
+name. The reduced document is scanned run by run and written back in place rather than joined into one pass, so a
+detection cannot straddle the seam between two pieces of text the message never put together — and a read that
+redacted the plain text while publishing the tree unscanned would hand a reader through one representation exactly
+what it withheld through the other. The addresses
 beside those names, the identifiers, the sizes, the flags, the two domains the sender verdict's evidence publishes, and
 every attachment's file name are left as they are, on the line that page draws between a routing identity and free text.
 
@@ -462,6 +473,64 @@ anyway, so removing an element is rare.
 One consequence follows from that choice and is worth stating: an unclosed disallowed container takes with it whatever
 the parser nested inside it. A message ending in an unclosed `<iframe>` loses the text after it, which is the same text
 a browser would not display either.
+
+## The document a reading pane draws
+
+The sanitization above answers what a model should be handed. A person reading the same message needs the layout the
+sender wrote, and giving a client that sanitized markup would put the decision the sanitizer just took back where it
+was taken from: a renderer resolves references, runs what it recognizes, and treats an unfamiliar construct as
+something to try. `MailDocument` is the other answer. It is opt-in through `IncludeMailDocument`, it is produced from
+the same parsed document the sanitizer reads rather than from the string that pass returns — two parses of one body by
+two parsers is the structure mutation attacks are built out of — and it carries no markup at all.
+
+**It is a closed tree.** A document is a list of typed blocks — `paragraph`, `heading`, `list`, `table`, `quote`,
+`image`, `separator`, `preformatted` — and every value inside one is text, a number, a colour normalized to `#rrggbb`,
+or a member of a fixed enumeration. There is nowhere in the contract to put a script, an event handler, an embedded
+object, a form, a style sheet, or an element, so a construct nobody anticipated cannot survive by being unfamiliar: it
+has no shape to arrive in. A client drawing the tree with its own typed controls is therefore not sanitizing anything,
+which is what makes a second sanitizer on the client unnecessary rather than merely absent.
+
+Each block names its own revision beside its identity, and `MailDocument.SchemaVersion` names the revision of the
+document itself. A client keys its renderers by the pair and draws a placeholder for a pair it does not implement, so a
+deployment ahead of the client on the other end of the connection costs that client one block rather than the message.
+[Rendering mail HTML in the client](../decisions/0019-rendering-mail-html-in-the-client.md) is the decision this
+implements, and it holds the reasoning for the whole of this section.
+
+### Nothing in a body reaches another server unless the reader asked
+
+Every reference to a remote address is removed while the tree is built, rather than left in it for a renderer to
+decline to follow. A tracking pixel is defeated by the document not carrying it, which is a stronger statement than a
+renderer honouring a setting, and it holds identically for a remote `img`, a `url(` inside a style declaration, and a
+`background` attribute on a table row or one of its cells. `RemovedRemoteReferenceCount` is what survives instead — a
+number a pane can put in front of the reader in place of what was removed.
+
+`RetainRemoteImageReferences` widens exactly one thing: `http` and `https` on a picture's source, counted in
+`RetainedRemoteImageCount`. It is a per-message act by a reader who was told what it reveals, and nothing on either
+side of the boundary writes it down, so opening the message again asks again. A link's target is unaffected because
+nothing ever fetched it, and no other reference in the tree has anywhere to be widened to.
+
+A picture the message carries itself is not remote and is resolved here rather than by a second request: a part reached
+by `Content-Id` or `Content-Location` becomes a `data:` URI, bounded both by how many are inlined and by how large each
+may be, with `InlineImageCount` and `UndrawnInlineImageCount` saying how many were drawn and how many a bound left out.
+
+### A link carries where it actually goes
+
+`MailDocumentLink` holds the resolved absolute `Target`, carrying only `http`, `https`, or `mailto` — a `javascript:`,
+`data:`, `vbscript:`, or `file:` target is dropped and the words it was written on stay as ordinary text. `Host` is the
+host as a reader recognizes it, and `AsciiHost` is the same host in its ASCII form, present only where the two differ,
+which is what a homograph looks like. `Deception` is `DisplayedHostDiffers` where the link's own text names one host
+and the link goes to another, `NotApplicable` where the text is not a place at all, and `None` where the two agree.
+
+The determination belongs here rather than to each client, so two clients reading one message cannot disagree about how
+loudly to warn, and a client that never learned what a homograph is still shows what this deployment found.
+
+### A refusal is a value rather than an exception
+
+`MailDocumentRefusal` says why a document holds nothing: `NoHtmlPart` where the message carried no markup at all,
+`ReductionFailed` where the markup could not be read, `NothingRenderable` where it reduced to no content, and `None`
+where the document is the message. The plain text travels beside it in every case, so a pane falls back to the words
+with a reason it can show rather than to an empty frame. `Truncated` says a bound stopped the reduction before the end
+of the body, the way `EmailBodyTruncation` says the same about a representation.
 
 ## When the local copy is unusable
 
@@ -667,10 +736,17 @@ configured bucket whether it answers, and the check that asks the stored content
   run that reached its ceiling to the segment after it, under a key no other segment of any sweep shares.
 - `MailFathom.Application.EmailContent.Rendering` — the renderer port, the body representations with their bounds, and
   the headers.
+- `MailFathom.Application.EmailContent.Rendering.Document` — the closed document tree: the block types and the values
+  they are made of, the refusal, and `MailDocumentTexts`, which collects every text one holds and writes a document
+  back from a rewritten list so the egress guard can scan a tree without knowing its shape.
 - `MailFathom.Application.EmailContent.Repair` — the repair-request port, the request it carries, and the defect that
   raises one.
 - `MailFathom.Infrastructure.Mail.Mime` — `MimeKitEmailContentRenderer` and `EmailHtmlSanitizer`, which own the MIME parser
   and the HTML sanitizer respectively. Neither type escapes that namespace.
+- `MailFathom.Infrastructure.Mail.Mime.Rendering` — the reduction from one parsed document to the closed tree:
+  `MailBodyProjection` over `MailBodyReducer` and `MailTableReducer`, the style and link readers that decide what a
+  node contributes, and `MailInlineImages`, which resolves a `cid:` part into a bounded `data:` URI. The HTML parser
+  stays behind this namespace exactly as the MIME parser stays behind the one above.
 - `MailFathom.Infrastructure.ObjectStorage` — `S3EmailContentObjectStore` and the two mechanisms that take a payload
   back out of it: `ReleasedContentObjectEraser`, which the persistence session calls once its transaction has
   committed, and `ObjectStorageContentReclamation`, which sweeps a listing.

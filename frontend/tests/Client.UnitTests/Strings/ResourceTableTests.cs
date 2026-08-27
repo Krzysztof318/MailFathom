@@ -3,10 +3,12 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Client.Backend;
+using MailFathom.Client.Backend.Mail;
 using MailFathom.Client.Deployment;
 using MailFathom.Client.Presentation;
 using MailFathom.Client.Presentation.Mailboxes;
 using MailFathom.Client.Presentation.Messages;
+using MailFathom.Client.Presentation.Spaces.Mail.Reading;
 using MailFathom.Client.Presentation.Workspace;
 
 namespace MailFathom.Client.UnitTests.Strings;
@@ -248,6 +250,45 @@ public sealed class ResourceTableTests
     {
         // Arrange
         var expected = MessageWords.ResourceKeys;
+
+        // Act
+        var table = DeclaredLanguages.TableOf(culture);
+
+        // Assert
+        Assert.All(expected, key => Assert.True(table.ContainsKey(key), key));
+    }
+
+    /// <summary>
+    /// The sentences the reading pane composes rather than authors against a control are named in one list, so a
+    /// sentence added without words behind it is reported here rather than drawn into a message as its own key.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Languages))]
+    public void Tables_TheSentencesTheReadingPaneComposes_AreWrittenInEveryLanguage(string culture)
+    {
+        // Act
+        var table = DeclaredLanguages.TableOf(culture);
+
+        // Assert
+        Assert.All(MailBodyWords.ResourceKeys, key => Assert.True(table.ContainsKey(key), key));
+    }
+
+    /// <summary>
+    /// Every reason a message is read as words rather than drawn carries a sentence, because the reason is shown: a
+    /// refusal a reader could see no explanation for is the thing this rendering exists to avoid.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="MailBodyRefusal.None" /> is excluded because it is the case where there is no reason to show, which
+    /// is the one value of the set that never reaches a reader.
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(Languages))]
+    public void Tables_EveryReasonAMessageIsReadAsWords_IsExplainedInEveryLanguage(string culture)
+    {
+        // Arrange
+        var expected = Enum.GetValues<MailBodyRefusal>()
+            .Where(refusal => refusal is not MailBodyRefusal.None)
+            .Select(MailBodyWords.RefusalResourceKeyFor);
 
         // Act
         var table = DeclaredLanguages.TableOf(culture);

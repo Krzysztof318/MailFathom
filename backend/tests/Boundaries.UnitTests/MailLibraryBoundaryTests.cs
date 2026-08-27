@@ -9,7 +9,7 @@ using static ArchUnitNET.Fluent.ArchRuleDefinition;
 
 namespace MailFathom.Boundaries.UnitTests;
 
-/// <summary>Covers where the mail library is allowed to be spoken.</summary>
+/// <summary>Covers where the libraries a message is read with are allowed to be spoken.</summary>
 /// <remarks>
 /// Root <c>AGENTS.md</c> keeps a third-party type inside the adapter that owns it, and MailKit is the case that
 /// decides most: a message, a folder, and a summary from it are the shapes every boundary above would otherwise start
@@ -20,7 +20,14 @@ public sealed class MailLibraryBoundaryTests
 {
     private const string MailAdapterPattern = @"^MailFathom\.Infrastructure\.Mail\.";
 
-    private const string MailLibraryPattern = @"^(MailKit|MimeKit)\.";
+    /// <summary>The libraries a message is read with, none of which may be named outside the adapter.</summary>
+    /// <remarks>
+    /// AngleSharp is here beside the two mail libraries because it is the same claim about a different parser: a
+    /// message's markup is read into a DOM inside this adapter and leaves it as the closed document tree, so an
+    /// AngleSharp element reaching a boundary above would mean somebody was handed markup to interpret — which is
+    /// exactly what the tree exists so that no client ever has to do.
+    /// </remarks>
+    private const string MailLibraryPattern = @"^(MailKit|MimeKit|AngleSharp)\.";
 
     /// <summary>
     /// The one type outside the adapter that reads a mail-library type, and it reads exactly one thing from it:

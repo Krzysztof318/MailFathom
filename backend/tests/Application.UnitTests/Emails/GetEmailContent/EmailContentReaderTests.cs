@@ -10,6 +10,8 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Rendering;
+using MailFathom.Application.EmailContent.Rendering.Document;
+using MailFathom.Application.EmailContent.Rendering.Document.Blocks;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
@@ -1094,6 +1096,34 @@ public sealed class EmailContentReaderTests
         Assert.Equal("<p>the key is [redacted:CloudKey]</p>", content.Body.SanitizedHtml?.Text);
     }
 
+    /// <summary>
+    /// The document is a third rendering of the same body, so it passes the same guard: a credential the markup carried
+    /// would otherwise reach a reading pane by the one representation nobody had put under a scanner.
+    /// </summary>
+    [Fact]
+    public async Task ReadContentAsync_ACredentialInTheDocument_ReturnsTheWordsOfEveryBlockRedacted()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var summary = SyntheticEmailSummaries.Create();
+        var reader = ReaderOver(
+            summary,
+            RendererReturning(RenderingOf(plainText: "Body") with { Document = DocumentSaying($"the key is {Marker}") }),
+            egressGuard: egress.Guard);
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId]) with { IncludeMailDocument = true },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var document = ContentOf(Assert.Single(result.Emails)).Body.Document;
+        Assert.NotNull(document);
+        Assert.Equal(
+            ["the key is [redacted:CloudKey]", "the key is [redacted:CloudKey]"],
+            MailDocumentTexts.Collect(document));
+    }
+
     /// <summary>The message is the unit a caller waits for, so its guarding is reported once rather than once per field.</summary>
     [Fact]
     public async Task ReadContentAsync_ASwitchedOnScanner_ReportsOneGuardedOperationForTheWholeMessage()
@@ -1796,6 +1826,26 @@ public sealed class EmailContentReaderTests
             carriesUnverifiedSignature: false,
             containsUnexpandedTnefPart: false),
         attachments ?? []);
+
+    /// <summary>A document saying the same thing twice, so a rewrite that lost a place would report the wrong words.</summary>
+    private static MailDocument DocumentSaying(string text) => MailDocument.Reduced(
+        [
+            new MailParagraphBlock(
+                [new MailInlineRun(text, MailTextEmphasis.None, Foreground: null, Link: null)],
+                MailBlockAlignment.Inherited),
+            new MailQuoteBlock(
+                1,
+                [
+                    new MailParagraphBlock(
+                        [new MailInlineRun(text, MailTextEmphasis.None, Foreground: null, Link: null)],
+                        MailBlockAlignment.Inherited),
+                ]),
+        ],
+        removedRemoteReferenceCount: 0,
+        retainedRemoteImageCount: 0,
+        inlineImageCount: 0,
+        undrawnInlineImageCount: 0,
+        truncated: false);
 
     /// <summary>The extraction the derived path performs over one body, which is the reading the index is built from.</summary>
     private static IEmailMimeReader MimeReaderYielding(string body)

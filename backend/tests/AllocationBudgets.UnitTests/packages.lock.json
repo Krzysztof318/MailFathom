@@ -77,11 +77,6 @@
           "xunit.v3.core.mtp-v2": "[3.2.2]"
         }
       },
-      "AngleSharp": {
-        "type": "Transitive",
-        "resolved": "1.6.0",
-        "contentHash": "kVnhnZlM4Yww2KWqW3uSL8isvhYsrTTBMSPAgoF8ZhMrLSoay6783AP6dQxAj1J9gvWKi3OIM4ZezdE2Y4ufCQ=="
-      },
       "AngleSharp.Css": {
         "type": "Transitive",
         "resolved": "1.0.0",
@@ -693,6 +688,7 @@
         "dependencies": {
           "AWSSDK.Core": "[4.0.102, )",
           "AWSSDK.S3": "[4.0.102.3, )",
+          "AngleSharp": "[1.6.0, )",
           "Aspire.Npgsql.EntityFrameworkCore.PostgreSQL": "[13.4.6, )",
           "BouncyCastle.Cryptography": "[2.6.2, )",
           "DnsClient": "[1.8.0, )",
@@ -725,6 +721,12 @@
           "MimeKit": "[4.17.0, )",
           "System.CommandLine": "[2.0.10, )"
         }
+      },
+      "AngleSharp": {
+        "type": "CentralTransitive",
+        "requested": "[1.6.0, )",
+        "resolved": "1.6.0",
+        "contentHash": "kVnhnZlM4Yww2KWqW3uSL8isvhYsrTTBMSPAgoF8ZhMrLSoay6783AP6dQxAj1J9gvWKi3OIM4ZezdE2Y4ufCQ=="
       },
       "Aspire.Npgsql.EntityFrameworkCore.PostgreSQL": {
         "type": "CentralTransitive",

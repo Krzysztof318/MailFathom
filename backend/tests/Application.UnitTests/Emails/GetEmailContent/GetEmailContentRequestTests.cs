@@ -32,6 +32,22 @@ public sealed class GetEmailContentRequestTests
         Assert.False(request.IncludeAttachmentDownloadLinks);
     }
 
+    /// <summary>
+    /// Both are off unless a caller asked, and the second of them is why that matters: retaining a message's remote
+    /// references is what tells the sender's servers the reader's address and that the message was opened, so it is a
+    /// choice a reader makes per message rather than a default a request inherits by saying nothing.
+    /// </summary>
+    [Fact]
+    public void Create_ARequestAskingForNeither_BuildsNoDocumentAndKeepsNoRemoteReference()
+    {
+        // Act
+        var request = GetEmailContentRequest.Create(IdentitiesOf(1));
+
+        // Assert
+        Assert.False(request.IncludeMailDocument);
+        Assert.False(request.RetainRemoteImageReferences);
+    }
+
     /// <summary>A read naming nothing and a read naming too much are one finding about a count the caller chose.</summary>
     [Theory]
     [InlineData(0)]

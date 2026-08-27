@@ -81,6 +81,23 @@ public sealed record GetEmailContentRequest
     /// </remarks>
     public bool IncludeAttachmentDownloadLinks { get; }
 
+    /// <summary>Gets whether to also reduce each body to the document tree a reading pane draws.</summary>
+    /// <remarks>
+    /// An init property rather than a factory argument, because it is asked for by one caller — the client endpoint a
+    /// person's reading pane reads — and every other entrypoint here would have to name it only to decline it. A model
+    /// reading mail wants the words, so the tool surface leaves it alone and pays for neither the walk nor the pictures
+    /// it inlines.
+    /// </remarks>
+    public bool IncludeMailDocument { get; init; }
+
+    /// <summary>Gets whether the reduced document may carry this message's remote picture references.</summary>
+    /// <remarks>
+    /// It is a per-message act by the reader and nothing else may set it: asking for it loads the sender's pictures,
+    /// which tells whoever wrote the message that it was opened and from where. Nothing remembers the answer, so it is
+    /// asked again the next time the message is opened.
+    /// </remarks>
+    public bool RetainRemoteImageReferences { get; init; }
+
     /// <summary>Creates a request from the emails a caller named.</summary>
     /// <param name="storedEmailIds">The emails to read, in the order they were named.</param>
     /// <param name="includeSanitizedHtml">Whether to also produce the sanitized HTML representation of each body.</param>

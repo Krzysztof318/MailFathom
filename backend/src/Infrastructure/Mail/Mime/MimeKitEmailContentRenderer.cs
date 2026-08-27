@@ -8,6 +8,7 @@ using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Domain.Emails;
+using MailFathom.Infrastructure.Mail.Mime.Rendering;
 using MimeKit;
 
 namespace MailFathom.Infrastructure.Mail.Mime;
@@ -143,7 +144,17 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
                 : null,
             bodyIsUnreadable,
             classification.Summary,
-            classification.Attachments);
+            classification.Attachments)
+        {
+            Document = bounds.IncludeMailDocument && !bodyIsUnreadable
+                ? await MailBodyProjection.ProduceAsync(
+                    message,
+                    [.. classification.BodyTextParts.Where(part => part.IsHtml).Select(part => part.Text)],
+                    bounds.RetainRemoteImageReferences,
+                    bounds.MaxCharactersPerRepresentation,
+                    cancellationToken)
+                : null,
+        };
     }
 
     /// <summary>Reads the body as words, preferring what the sender wrote to a reading of how it was displayed.</summary>
