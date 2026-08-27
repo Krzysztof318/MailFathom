@@ -127,6 +127,7 @@ internal static class HostComposition
         AddPlatformDefaults(builder);
         AddPersistedConfiguration(builder);
         BoundSettings.AddTo(builder.Services, builder.Configuration);
+        AddServedMailOwners(builder);
 
         var declaredSensitiveContent = AddSensitiveContentScanning(builder);
         var spamScannerIsConfigured = AddSpamClassification(builder);
@@ -147,6 +148,26 @@ internal static class HostComposition
         builder.Services.AddApiDocumentation(builder.Environment);
 
         return AddNetworkSurfaces(builder);
+    }
+
+    /// <summary>Refuses the owners this deployment declares before anything is registered against them, and puts the roster where a mail snapshot can read it.</summary>
+    /// <remarks>
+    /// Who this deployment serves decides what every other section is read for, so it is judged first among the groups
+    /// a start takes before its container exists. Nothing here reaches the database: what a declaration says is judged
+    /// on its own, and what the deployment already holds is reconciled against it by the startup gate that can read the
+    /// rows.
+    /// </remarks>
+    /// <exception cref="OptionsValidationException">Thrown when the declared owners could not be served, which fails startup with every problem in the collection at once.</exception>
+    private static void AddServedMailOwners(WebApplicationBuilder builder)
+    {
+        ComposedSettings.RefuseFirstOf(
+            ComposedSettings.FindOwnerDeclarationRefusals(builder.Configuration, TimeProvider.System));
+
+        // The roster reaches a mail snapshot through the options framework's own post-configuration seam rather than
+        // through the bound sections, because the two halves of a mail account's declaration are established at
+        // different moments: the deployment's own section binds while the host is composed, and an owner's own is
+        // reconciled against the database afterwards.
+        builder.Services.AddSingleton<IPostConfigureOptions<MailSynchronizationOptions>, ServedOwnerMailAccounts>();
     }
 
     /// <summary>Registers the reading and writing sides of the deployment's persisted configuration, and the seam the layer is republished through.</summary>
@@ -206,9 +227,9 @@ internal static class HostComposition
         // Whose mail an admitted caller is acting on. A singleton because it is a property of the deployment rather than
         // of a request: a startup gate settles it once, and the two registrations are the same object so nothing can
         // read an owner the gate has not established.
-        builder.Services.AddSingleton<DeploymentMailOwner>();
+        builder.Services.AddSingleton<ServedMailOwners>();
         builder.Services.AddSingleton<IDeploymentMailOwnerSource>(provider =>
-            provider.GetRequiredService<DeploymentMailOwner>());
+            provider.GetRequiredService<ServedMailOwners>());
         // ReferenceOnly is the default, so a deployment that configures nothing gets the mode under which a plain-text value
         // where a reference belongs fails startup instead of authenticating.
         builder.Services.AddSecretResolution(
@@ -435,7 +456,7 @@ internal static class HostComposition
         // state.
         builder.Services.AddScoped<IDeploymentMailAccountCatalog>(provider => new ConfiguredMailAccountCatalog(
             provider.GetRequiredService<MailSynchronizationOptions>(),
-            provider.GetRequiredService<IDeploymentMailOwnerSource>()));
+            provider.GetRequiredService<ServedMailOwners>()));
         builder.Services.AddScoped<ITrustedAuthenticationAuthorityReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.TrustedAuthenticationAuthorities);
         builder.Services.AddScoped<ISenderTrustPolicyReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.SenderTrustPolicies);
         // Resolved from the same snapshot as the verdicts above, so one work unit reads mail under one reload. Which of
@@ -633,7 +654,7 @@ internal static class HostComposition
         [
             HostStartupGate.SecretConfiguration,
             HostStartupGate.DatabaseSchema,
-            HostStartupGate.DeploymentMailOwner,
+            HostStartupGate.ServedMailOwners,
             .. spamScannerIsConfigured
                 ? (HostStartupGate[])[HostStartupGate.SpamScanner]
                 : [],
@@ -970,7 +991,7 @@ internal static class HostComposition
         // Behind the schema gate, because the owner records live in a table that migration creates, and ahead of
         // everything that serves a request, because a caller is admitted to act for an owner and there is nothing to
         // admit one for until this has run.
-        builder.Services.AddHostedService<DeploymentMailOwnerStartupGate>();
+        builder.Services.AddHostedService<ServedMailOwnersStartupGate>();
 
         // Ahead of the workers for a different reason from the gate above, because the spam scanner does not fail
         // closed: a deployment whose daemon is absent would classify every message from its headers alone and look

@@ -35,8 +35,13 @@ public sealed class MailSynchronizationOptionsTests
         Assert.Empty(results);
     }
 
+    /// <summary>
+    /// This section names no owner, so an operator who declared every mailbox under an owner leaves it empty and has
+    /// misconfigured nothing. Whether the deployment has anything at all to synchronize is decided where the effective
+    /// set is visible, which is the declared-owner rules rather than here.
+    /// </summary>
     [Fact]
-    public void ValidateForSynchronization_EnabledWithNoAccounts_RequiresAnAccount()
+    public void ValidateForSynchronization_EnabledWithNoAccountsOfItsOwn_LeavesTheQuestionToTheDeclaredOwners()
     {
         // Arrange
         var options = new MailSynchronizationOptions { Enabled = true };
@@ -45,8 +50,7 @@ public sealed class MailSynchronizationOptionsTests
         var results = options.ValidateForSynchronization().ToArray();
 
         // Assert
-        var result = Assert.Single(results);
-        Assert.Contains("At least one account", result.ErrorMessage, StringComparison.Ordinal);
+        Assert.Empty(results);
     }
 
     /// <summary>A run budget below what one message may cost leaves that message unfetchable on every later run too.</summary>

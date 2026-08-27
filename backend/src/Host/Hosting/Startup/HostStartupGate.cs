@@ -32,7 +32,7 @@ internal enum HostStartupGate
     /// <remarks>Expected only where the scanner switch is on, which is the only state in which anything asks a scanner for a score.</remarks>
     SpamScanner = 3,
 
-    /// <summary>This deployment holds exactly one owner, and every mail account it is configured with belongs to them.</summary>
-    /// <remarks>Expected on every deployment, because every caller a mail-reading surface admits is composed for that owner and a host that could not name them has nothing to admit a caller for.</remarks>
-    DeploymentMailOwner = 4,
+    /// <summary>Every owner this deployment serves has a record, and each of them is resolved to the source their mail accounts are read from.</summary>
+    /// <remarks>Expected on every deployment, because every mail account belongs to one of those owners and every caller a mail-reading surface admits is composed for one of them.</remarks>
+    ServedMailOwners = 4,
 }

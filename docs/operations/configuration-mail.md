@@ -15,7 +15,7 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `MailSynchronization:Enabled` | bool | `false` | Enabled requires at least one account | restart |
+| `MailSynchronization:Enabled` | bool | `false` | Enabled requires at least one account, here or under a [declared owner](configuration-runtime.md#accounts) | restart |
 | `MailSynchronization:Interval` | TimeSpan | `00:05:00` | 10 s – 1 day; measured end-of-run to start-of-run | restart |
 | `MailSynchronization:MaxFailureBackoff` | TimeSpan | `00:30:00` | 10 s – 1 day, and never below `Interval` | reload |
 | `MailSynchronization:MaxConcurrentAccounts` | int | `4` | 1 – 100 | restart |

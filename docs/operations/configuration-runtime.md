@@ -1,6 +1,6 @@
 # Storage, keys, jobs, and logging
 
-<!-- describes: backend/src/Host/Configuration/Provisioning/**, backend/src/Host/Configuration/Persistence/**, backend/src/Host/Configuration/DataEncryption/**, backend/src/Host/Configuration/Jobs/**, backend/src/Host/Configuration/DeploymentOptions.cs, backend/src/Infrastructure/Secrets/Resolution/SecretResolutionOptions.cs, backend/src/Infrastructure/Resilience/OutboundDependencyResilienceOptions.cs -->
+<!-- describes: backend/src/Host/Configuration/Provisioning/**, backend/src/Host/Configuration/OwnerSettings/**, backend/src/Host/Configuration/Persistence/**, backend/src/Host/Configuration/DataEncryption/**, backend/src/Host/Configuration/Jobs/**, backend/src/Host/Configuration/DeploymentOptions.cs, backend/src/Infrastructure/Secrets/Resolution/SecretResolutionOptions.cs, backend/src/Infrastructure/Resilience/OutboundDependencyResilienceOptions.cs -->
 
 Every key about the deployment itself rather than about the mail passing through it: where its configuration is read
 from and how a secret-bearing value is interpreted, the database it writes to, the key ring that seals what it stores,
@@ -20,6 +20,24 @@ Names JSON configuration provisioned outside the application — a mounted Confi
 | `ConfigurationSources:File` | string | unset | Must exist when named | restart |
 
 The *content* of files that existed at startup reloads; adding or removing a file is a restart.
+
+## `Accounts`
+
+The owners this deployment serves, each with the mail accounts they own. It is a top-level collection and is **not**
+`MailSynchronization:Accounts`, which is the deployment's own mailbox section and belongs to whichever sole owner a
+deployment declaring no owner holds. [The owners a deployment
+serves](configuration-sources.md#the-owners-a-deployment-serves) is the page: what the identifier is, how to generate
+one, what a start reports, and what an adoption costs.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `Accounts:<n>:Id` | string | *(required)* | A UUID, not the all-zero one, unique among the declared owners, and never changed for an owner the deployment already holds | restart |
+| `Accounts:<n>:DisplayName` | string | *(required)* | 1 – 128 characters, unique among the declared owners compared exactly | restart |
+| `Accounts:<n>:MailAccounts:<m>` | object | `[]` | Declared exactly as [one mail account](configuration-mail.md#one-account--mailsynchronizationaccountsn) is, and judged by the same rules | restart |
+
+At most 256 owners may be declared. Declaring any owner refuses a non-empty `MailSynchronization:Accounts`, no two
+owners may name a mail account alike, and only one owner may be served while the MCP or the client endpoint is
+enabled.
 
 ## `Secrets`
 

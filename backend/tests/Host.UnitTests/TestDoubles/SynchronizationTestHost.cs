@@ -45,6 +45,7 @@ using MailFathom.Domain.Transport;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Mail.Readers;
+using MailFathom.Host.Configuration.OwnerSettings;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Secrets.Discovery;
@@ -293,12 +294,13 @@ internal static class SynchronizationTestHost
         services.AddScoped<IMailSynchronizationWindowReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.SynchronizationWindows);
         services.AddScoped<IRemotelyDeletedEmailDispositionReader>(provider => provider.GetRequiredService<MailSynchronizationOptions>().Readers.RemotelyDeletedEmailDispositions);
         // Composed off the scoped snapshot rather than the container's own options, exactly as the composition root
-        // composes it, so the account list a supervision pass reads is the one the latest reload published. The owner
-        // is supplied rather than configured, because a configured account block names none.
-        services.AddSingleton<IDeploymentMailOwnerSource, StubDeploymentMailOwnerSource>();
+        // composes it, so the account list a supervision pass reads is the one the latest reload published. The roster
+        // is supplied rather than configured, because a configured account block names no owner.
+        services.AddSingleton(ResolvedServedMailOwners.TheSoleOwner());
+        services.AddSingleton<IDeploymentMailOwnerSource>(provider => provider.GetRequiredService<ServedMailOwners>());
         services.AddScoped<IDeploymentMailAccountCatalog>(provider => new ConfiguredMailAccountCatalog(
             provider.GetRequiredService<MailSynchronizationOptions>(),
-            provider.GetRequiredService<IDeploymentMailOwnerSource>()));
+            provider.GetRequiredService<ServedMailOwners>()));
 
         return services.BuildServiceProvider();
     }

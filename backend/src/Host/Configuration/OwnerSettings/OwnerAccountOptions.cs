@@ -47,27 +47,14 @@ internal sealed class OwnerAccountOptions : IValidatableObject
     /// <summary>Judges this record by every rule a mail account is declared under that needs no clock.</summary>
     /// <returns>One result per refusal, empty when the record could be this owner's.</returns>
     /// <remarks>
-    /// Each account is judged as one that will be synchronized, which is the strict reading, because a declaration in
-    /// an owner's record is an account they own rather than one a deployment-wide switch left unread. The naming space
-    /// is judged within this owner alone, which is what makes two owners each declaring <c>work</c> an ordinary pair
-    /// of records rather than a collision. The one rule that is not here is the one that cannot be:
-    /// <see cref="FindSynchronizationWindowErrors" /> asks a question about the current date, so it is supplied a
-    /// clock by whoever runs it — exactly as the deployment's own section is, where the same rule is a custom
-    /// validator rather than part of the bound graph.
+    /// The rules are <see cref="OwnerMailAccountRules" />' rather than this type's, because the same declarations
+    /// arrive here as a persisted record and arrive in the deployment's own file as an owner's declared section, and a
+    /// rule stated twice is a rule that comes to hold in one of the two places. The one rule that is not among them is
+    /// the one that cannot be: <see cref="FindSynchronizationWindowErrors" /> asks a question about the current date,
+    /// so it is supplied a clock by whoever runs it.
     /// </remarks>
-    internal IEnumerable<ValidationResult> FindRefusals()
-    {
-        if (this.MailAccounts is null)
-        {
-            return [new ValidationResult("An owner's mail accounts must be a list.", [nameof(this.MailAccounts)])];
-        }
-
-        return
-        [
-            .. MailAccountNamingSpace.FindCollisions(this.MailAccounts, nameof(this.MailAccounts)),
-            .. this.MailAccounts.SelectMany(account => account.ValidateForSynchronization(synchronizationEnabled: true)),
-        ];
-    }
+    internal IEnumerable<ValidationResult> FindRefusals() =>
+        OwnerMailAccountRules.FindRefusals(this.MailAccounts, nameof(this.MailAccounts));
 
     /// <summary>Finds every declared earliest received date that could not mean anything on the supplied date.</summary>
     /// <param name="today">The current date the declared bounds are read against.</param>
@@ -78,5 +65,5 @@ internal sealed class OwnerAccountOptions : IValidatableObject
     /// and a record that would be refused as configuration must not be accepted as a row.
     /// </remarks>
     internal IEnumerable<ValidationResult> FindSynchronizationWindowErrors(DateOnly today) =>
-        this.MailAccounts?.SelectMany(account => account.ValidateSynchronizationWindow(today)) ?? [];
+        OwnerMailAccountRules.FindSynchronizationWindowErrors(this.MailAccounts, today);
 }

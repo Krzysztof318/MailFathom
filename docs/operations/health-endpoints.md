@@ -80,7 +80,7 @@ Kestrel's own default address.
 
 | Probe | Path | Consults | A failure means |
 |---|---|---|---|
-| Startup | `/started` | The host's own startup gates: every secret reference resolved, the database schema verified, the deployment's one owner resolved, and — only where its own switch is on — the spam scanner naming the corpus it scores under | The process has not finished coming up; the grace period continues |
+| Startup | `/started` | The host's own startup gates: every secret reference resolved, the database schema verified, every owner the deployment serves reconciled against the rows it holds, and — only where its own switch is on — the spam scanner naming the corpus it scores under | The process has not finished coming up; the grace period continues |
 | Readiness | `/health` | The dependencies a request needs: the database, each declared AI provider, and — only where its own switch is on — the personal-data analyzer and the object-storage bucket, or, where no endpoint is configured, whether stored content points into one anyway | The instance stops receiving traffic; it is not restarted |
 | Liveness | `/alive` | Process-local state only | The container is restarted |
 
@@ -163,18 +163,29 @@ the `ContentStorage:ObjectStorage` block the content was stored through, and the
 reads no mail to find out** — the query asks which backend a row names and nothing about the message, the account, or
 the folder.
 
-**The owner gate refuses to start rather than reporting unready.** A mail account declared in configuration says
-nothing about whose mail it holds, so the deployment answers that by holding exactly one owner record for every
-configured account to belong to. The gate reads it while the host starts, behind the schema gate because it reads a
-table the schema creates, and a deployment holding any other number of owners does not come up:
+**The owner gate refuses to start rather than reporting unready.** A mail account says nothing about whose mail it
+holds unless the owner who owns it declares it, so the gate settles the question before anything serves a request: it
+reads the owners the file declares, gives each of them the `settings_accounts` row the mail graph's foreign keys hang
+on, and reports which of them is read from configuration and which from a document of their own. It runs behind the
+schema gate, because that table is the schema's, and a deployment it cannot reconcile does not come up:
 
 | What the gate found | What it means | What to do |
 |---|---|---|
-| No owner record | The release's schema has not been applied, since applying it is what provisions the owner | Apply the [schema artifact](database-schema.md), then start the process again |
-| Several owner records | The deployment has acquired owners while its mail accounts are still declared in a file that cannot say whose they are | Leave one owner while accounts live in configuration; serving this would attribute every configured account to whichever owner a query answered with first |
+| Several owner records and no owner declared | The deployment has acquired owners while its mail accounts are still in `MailSynchronization:Accounts`, which says whose none of them are | Declare each owner in the top-level `Accounts` collection with the mail accounts they own, so every mailbox says whose it is |
+| More owner records than a deployment serves | The roster is longer than the 256 one deployment may hold, which is a table something generated rather than provisioned | Find what wrote `settings_accounts`; nothing MailFathom ships writes a roster that long |
+| An owner declared under an identifier the deployment does not hold them under | The identifier every mail account, stored message, and job of theirs hangs on was changed in the file | Restore the identifier the deployment holds, or give the new one a label of its own if it is meant to be a second person |
+| A label declared for one owner while another still carries it | Two owners would be told apart by one label, which the unique index refuses | Free the label in one start — relabel or remove the owner holding it — and declare it for its new owner in the next |
+| Several owners while `McpEndpoint` or `ClientEndpoint` is on | Nothing this release admits a caller with names the owner they act for, so such a surface could not say whose mail it is answering about | Serve one owner while either surface is enabled, or disable them on a deployment serving several |
+| An owner's own document that will not bind | That owner is served from their document rather than from configuration, and it is not the settings a document holds | Repair the record; the refusal names each sentence of what must change |
 
-Both are refusals rather than degraded readiness, and deliberately: the alternative is a process that serves mail while
-it cannot say whose mail it is serving.
+Every one is a refusal rather than degraded readiness, and deliberately: the alternative is a process that serves mail
+while it cannot say whose mail it is serving.
+
+**A deployment that declares no owner is the ordinary shape and is not refused.** Its mail accounts stay in
+`MailSynchronization:Accounts` and belong to the one owner such a deployment holds — the row the release's schema
+provisions, or one the gate records where the deployment holds none at all. An owner the deployment holds and the file
+no longer declares is not refused either: they are kept, they are not served, and a warning names them, because their
+mail is neither read nor refreshed while they stay that way.
 
 The startup gates are reported rather than re-run. The probe reads a flag the gates set as they complete, so polling it
 opens no connection and costs nothing, and once it turns healthy it stays healthy.
