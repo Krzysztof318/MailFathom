@@ -132,7 +132,35 @@ public sealed class OwnerAccountDocumentBinderTests
 
         // Assert
         Assert.False(binding.IsBound);
-        Assert.Contains(binding.Refusals, refusal => refusal.Contains("TrustedSenders", StringComparison.Ordinal));
+        var refusal = Assert.Single(binding.Refusals);
+        Assert.Contains("TrustedSenders", refusal, StringComparison.Ordinal);
+
+        // What the framework says here names MailFathom's own type and the binder option that was set, neither of
+        // which is a thing whoever wrote the record can act on.
+        Assert.DoesNotContain(nameof(OwnerAccountOptions), refusal, StringComparison.Ordinal);
+        Assert.DoesNotContain("BinderOptions", refusal, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A value of the wrong type names the setting to correct and never the value, which is where the framework puts
+    /// it: the failure it raises quotes what it could not convert, and the setting whose value that is may be a
+    /// mailbox password rather than a port.
+    /// </summary>
+    [Fact]
+    public void Bind_ValueThatWillNotConvert_NamesTheSettingAndNotTheValue()
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind("""{ "MailAccounts": [ { "AccountId": "work", "Port": "hunter2" } ] }""");
+
+        // Assert
+        Assert.False(binding.IsBound);
+        var refusal = Assert.Single(binding.Refusals);
+        Assert.Contains("MailAccounts:0:Port", refusal, StringComparison.Ordinal);
+        Assert.DoesNotContain("hunter2", refusal, StringComparison.Ordinal);
+        Assert.DoesNotContain("System.Int32", refusal, StringComparison.Ordinal);
     }
 
     /// <summary>The record names where a credential is kept and never keeps one.</summary>

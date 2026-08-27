@@ -34,6 +34,12 @@ namespace MailFathom.Infrastructure.Persistence.Owners;
 /// The statement names the owner as a parameter and composes no identifier from anything a caller supplied, so there
 /// is nothing here for a value to reach.
 /// </para>
+/// <para>
+/// Every way the database declines to answer arrives as one refusal naming a place to look, because the caller of a
+/// port is holding an owner rather than a connection: what a failed read tells the operator is
+/// <see cref="OwnerSettingsReadFailures" />'s decision, and the driver's own text — which can name the database, the
+/// role, or the table — stays in the inner failure.
+/// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this reader.")]
 [RequiresIntegrationCoverage]
@@ -66,31 +72,38 @@ internal sealed class PersistedOwnerSettingsDocumentReader(NpgsqlDataSource data
             throw new ArgumentException("An owner record is read for an owner, and the value names nobody.", nameof(owner));
         }
 
-        await using var command = dataSource.CreateCommand(SelectRecord);
-        command.Parameters.AddWithValue("owner", owner.Value);
-        command.Parameters.AddWithValue("maximumOctets", OwnerSettingsDocument.MaximumOctets);
-
-        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-
-        if (!await reader.ReadAsync(cancellationToken))
+        try
         {
-            return null;
+            await using var command = dataSource.CreateCommand(SelectRecord);
+            command.Parameters.AddWithValue("owner", owner.Value);
+            command.Parameters.AddWithValue("maximumOctets", OwnerSettingsDocument.MaximumOctets);
+
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+            if (!await reader.ReadAsync(cancellationToken))
+            {
+                return null;
+            }
+
+            var documentOctets = reader.GetInt32(1);
+
+            if (documentOctets > OwnerSettingsDocument.MaximumOctets)
+            {
+                throw new OwnerSettingsUnreadableException(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The record of owner {owner.Value} is {documentOctets} octets, past the {OwnerSettingsDocument.MaximumOctets} MailFathom binds an owner's document from, so it was not read. An owner record is a page of declarations rather than a payload: check what wrote the settings_accounts row."));
+            }
+
+            return new OwnerSettingsDocument(
+                owner,
+                reader.GetString(0),
+                reader.GetString(2),
+                reader.GetInt64(3),
+                reader.GetBoolean(4));
         }
-
-        var documentOctets = reader.GetInt32(1);
-
-        if (documentOctets > OwnerSettingsDocument.MaximumOctets)
+        catch (NpgsqlException exception)
         {
-            throw new OwnerSettingsUnreadableException(string.Create(
-                CultureInfo.InvariantCulture,
-                $"The record of owner {owner.Value} is {documentOctets} octets, past the {OwnerSettingsDocument.MaximumOctets} MailFathom binds an owner's document from, so it was not read. An owner record is a page of declarations rather than a payload: check what wrote the settings_accounts row."));
+            throw new OwnerSettingsUnreadableException(OwnerSettingsReadFailures.Diagnose(exception), exception);
         }
-
-        return new OwnerSettingsDocument(
-            owner,
-            reader.GetString(0),
-            reader.GetString(2),
-            reader.GetInt64(3),
-            reader.GetBoolean(4));
     }
 }

@@ -10,13 +10,15 @@ namespace MailFathom.Infrastructure.Persistence.Owners;
 /// <remarks>
 /// <para>
 /// An owner this deployment holds no record of is not this: that is an absence the reader reports as one, because a
-/// caller acting for somebody who was never provisioned is an ordinary answer. What this covers is a row that is
-/// there and cannot be handed on — today, a document past what this build binds, which the statement refuses rather
-/// than transfers.
+/// caller acting for somebody who was never provisioned is an ordinary answer. What this covers is a record that
+/// could not be handed on — a document past what this build binds, which the statement refuses rather than transfers,
+/// and every way the database itself declines to answer the read.
 /// </para>
 /// <para>
-/// The message names the owner's identifier and the limit, and never the document beside it, which is that person's
-/// configuration rather than a diagnostic.
+/// The message is the operator's, so it names the owner's identifier, the limit, or the place a correction is made,
+/// and never the document beside it, which is that person's configuration rather than a diagnostic. What the driver
+/// said is carried as the inner failure rather than in the message, because a server's own text can name the
+/// database, the role, or the table.
 /// </para>
 /// </remarks>
 public sealed class OwnerSettingsUnreadableException : MailFathomException
@@ -25,6 +27,14 @@ public sealed class OwnerSettingsUnreadableException : MailFathomException
     /// <param name="operatorSafeMessage">A message naming the owner's record and the operator's next step.</param>
     public OwnerSettingsUnreadableException(string operatorSafeMessage)
         : base(operatorSafeMessage)
+    {
+    }
+
+    /// <summary>Initializes a new failure naming what could not be read, over the failure that refused it.</summary>
+    /// <param name="operatorSafeMessage">A message naming the owner's record and the operator's next step.</param>
+    /// <param name="innerException">What the database driver raised, which is where the server's own text stays.</param>
+    public OwnerSettingsUnreadableException(string operatorSafeMessage, Exception innerException)
+        : base(operatorSafeMessage, innerException)
     {
     }
 

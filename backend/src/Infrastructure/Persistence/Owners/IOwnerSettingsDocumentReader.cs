@@ -19,5 +19,6 @@ public interface IOwnerSettingsDocumentReader
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The owner's record, or <see langword="null" /> when this deployment holds no such owner.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
+    /// <exception cref="OwnerSettingsUnreadableException">Thrown when the deployment holds a record for this owner and it could not be handed on — a document past what this build binds, or a database that declined the read. An owner nobody provisioned is the <see langword="null" /> above rather than this.</exception>
     Task<OwnerSettingsDocument?> ReadAsync(MailOwnerId owner, CancellationToken cancellationToken);
 }

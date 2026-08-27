@@ -39,7 +39,10 @@ public sealed record OwnerSettingsDocument(
     /// bind accepts would persist a record the next read refuses, and the owner would be locked out by a change that
     /// had been accepted. It is applied in both places the document is expanded — in the statement that reads the row,
     /// where PostgreSQL measures the column and declines to send it, and in the binder, which is where a candidate
-    /// nothing has persisted yet is measured.
+    /// nothing has persisted yet is measured. Both measure the same value, which is the rendering the database
+    /// stores rather than the compact form a candidate is composed as: the binder gets it from
+    /// <c>RootSettingsCommitRules.PersistedOctetsOf</c>, whose own remark says what measuring the compact form would
+    /// cost.
     /// </para>
     /// </remarks>
     public const int MaximumOctets = 1024 * 1024;
