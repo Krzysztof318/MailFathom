@@ -27,6 +27,15 @@ internal sealed class OwnerAccountConfiguration : IEntityTypeConfiguration<Owner
         // surface after it — so the model never mints one behind a caller that meant to state it.
         entity.Property(owner => owner.Id).ValueGeneratedNever();
 
+        // The label an administrator reads a list of owners by, unique across the deployment and bounded, because a
+        // column nothing bounds is one an administrative surface could be handed a page of text for.
+        entity.Property(owner => owner.DisplayName)
+            .HasMaxLength(OwnerAccountEntity.MaximumDisplayNameLength)
+            .IsRequired();
+        entity.HasIndex(owner => owner.DisplayName)
+            .IsUnique()
+            .HasDatabaseName(PersistenceConstraintNames.OwnerAccountDisplayNameUniqueIndexName);
+
         // A document rather than a schema, for the reason the job payload is one: nothing here queries into it, and
         // what it holds is decided by the configuration layer that writes it.
         entity.Property(owner => owner.Document).HasColumnType("jsonb").IsRequired();

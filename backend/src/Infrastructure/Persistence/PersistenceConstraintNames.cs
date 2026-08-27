@@ -430,4 +430,11 @@ internal static class PersistenceConstraintNames
     /// took its settings from.
     /// </remarks>
     internal const string RootSettingsSingletonCheckConstraintName = "ck_settings_root_singleton";
+
+    /// <summary>The index that keeps one label to one owner across the deployment.</summary>
+    /// <remarks>
+    /// Stated rather than left to convention because the label is what an administrator reads a list of owners by, and
+    /// the refusal an insert of a second row under one label produces is worth naming the index it came from.
+    /// </remarks>
+    internal const string OwnerAccountDisplayNameUniqueIndexName = "ix_settings_accounts_display_name";
 }

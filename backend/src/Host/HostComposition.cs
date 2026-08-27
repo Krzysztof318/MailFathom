@@ -55,6 +55,7 @@ using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Jobs;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Mail.Readers;
+using MailFathom.Host.Configuration.OwnerSettings;
 using MailFathom.Host.Configuration.Persistence;
 using MailFathom.Host.Configuration.Providers;
 using MailFathom.Host.Configuration.RootSettings;
@@ -194,6 +195,11 @@ internal static class HostComposition
         // where a reference belongs fails startup instead of authenticating.
         builder.Services.AddSecretResolution(
             builder.Configuration.GetValue("Secrets:Interpretation", SecretValueInterpretation.ReferenceOnly));
+        // What a persisted document may carry where a credential belongs, read from the schemes the line above
+        // registered. Beside them rather than beside either document, because both are judged by it and neither owns
+        // it — the deployment's settings and every owner's record alike.
+        builder.Services.AddSingleton<PersistedSecretMaterial>();
+        builder.Services.AddSingleton<OwnerAccountDocumentBinder>();
     }
 
     /// <summary>Registers the scanners this deployment switched on, and reports what it declared.</summary>

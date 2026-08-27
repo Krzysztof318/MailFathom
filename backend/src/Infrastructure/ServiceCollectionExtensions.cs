@@ -443,6 +443,11 @@ public static class ServiceCollectionExtensions
         // is why nothing scoped to a request depends on it and why it is registered beside the schema inspector the same
         // startup step already resolves.
         services.AddScoped<IMailOwnerDirectory, PersistedMailOwnerDirectory>();
+        // One owner's own record, read by key and bounded in the statement rather than in the process. A singleton
+        // over the pool for the reason the persisted configuration layer's reader is one — the command holds no state
+        // between calls — and separate from the directory above because that answers for the deployment and this for
+        // a person.
+        services.AddSingleton<IOwnerSettingsDocumentReader, PersistedOwnerSettingsDocumentReader>();
         // Whose mail a background unit of work is acting on. A worker acts for nobody, so the ceilings it is bounded by
         // reach an owner through this rather than through a principal, and it is scoped because both reads are ordinary
         // queries on the caller's context.

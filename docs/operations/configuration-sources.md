@@ -1,6 +1,6 @@
 # Configuration sources
 
-<!-- describes: backend/src/Application/Configuration/**, backend/src/Host/Configuration/**, backend/src/Infrastructure/Persistence/Settings/** -->
+<!-- describes: backend/src/Application/Configuration/**, backend/src/Host/Configuration/**, backend/src/Infrastructure/Persistence/Settings/**, backend/src/Infrastructure/Persistence/Owners/** -->
 
 MailFathom reads its settings through the ordinary .NET configuration pipeline, plus two additions. A deployment may name a directory or a file of JSON configuration that it provisioned outside the application's own content root, which is what makes a Kubernetes ConfigMap mounted as a volume ordinary configuration rather than a shape the host cannot see. And the deployment's own persisted settings — one document in PostgreSQL, composed at startup like every other source — are layered in above those files, so a setting the deployment has persisted binds and validates exactly as one that came from a file. When an edit to that document takes effect is [its own section](#the-persisted-layer) below.
 
@@ -91,6 +91,12 @@ That is a property of the interpretation rather than of this layer. Under `Refer
 One entry exists in this release: the top-level `Accounts` collection of owner accounts, which is persisted per owner in the owner-accounts store rather than as a subtree of the deployment's document. It is **not** `MailSynchronization:Accounts` — the mailbox declarations carry the same word, are an ordinary deployment setting, and stay in `settings_root` with everything else.
 
 A `settings_root` document carrying `Accounts`, or anything beneath it, is therefore **refused** under error code `12005`, naming the path. It is the same choice the refusal above makes and for the same reason: a row an operator wrote by hand is a mistake, and a mistake composed with the duplicate silently dropped is one they go on believing they fixed.
+
+**This release carries the owner-accounts store's schema, the typed record its document binds to, and the read that loads one row, and no path that binds a document.** Each row holds the declarations and the owner-level settings that are one person's own. The binder those go through is composed into the host and nothing calls it: the read hands a caller the document as the row holds it, so a `settings_accounts` row edited by hand is neither judged nor refused on the way out. What follows is what that binder does once something drives it — importing what configuration declares and provisioning an owner over an endpoint are the changes that will — so the contract is readable before the first caller exists.
+
+Binding is strict, so a property nothing binds is a refusal rather than a value dropped, and the record is then judged by every rule a mail account is declared under. The account identifier and the published name are unique *within the owner*, so two people may each declare `work` and neither is refused for it. The document may carry no secret material: a mailbox password is a `<scheme>:<target>` reference naming where the material is kept, exactly as `settings_root` requires, and a value carrying the material itself is refused. None of it is a configuration layer — the record shadows no deployment setting, and a value that would need to is a deployment setting written into the wrong document.
+
+What the read does enforce is size. The row is measured by PostgreSQL in the statement that reads it, and a document past what this build binds is refused under error code `12012` rather than transferred, so a row something else wrote too large stops that request instead of the process.
 
 MailFathom writes `settings_root` and no other store: a write naming a path the catalog routes to the owner-accounts store is **refused** under error code `12006`, naming the store, because that store's document is provisioned rather than written. The settings [`settings_root` may not carry](#what-it-may-not-carry) are refused under the same code and for the reason that section gives.
 

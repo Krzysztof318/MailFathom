@@ -196,10 +196,26 @@ Nothing keys onto this row and nothing cascades from it. It describes the deploy
 
 | Column of `settings_accounts` | What it records |
 |---|---|
-| `Id` | The stable owner identity, and the primary key. Generated rather than chosen, so no two deployments share one and nothing downstream can come to depend on a well-known value |
+| `Id` | The stable owner identity, and the primary key. Generated rather than chosen, so no two deployments share one and nothing downstream can come to depend on a well-known value. It is a version 4 identifier rather than one of the version 7 values the rest of this page is keyed by, and deliberately so: an owner identifier reaches administrative APIs, audit records, and logs, and a time-ordered one would publish when each owner was provisioned and in what order relative to the others — which is a fact about people rather than about rows. Nothing reads these rows in identifier order, so the locality it would buy is worth nothing to pay for with that |
+| `DisplayName` | The label an operator tells this owner apart by, unique across the deployment and at most 128 characters. It is a label rather than an identity: nothing resolves an owner by it, every reference to an owner is the identifier above, and the uniqueness exists so that a list of owners can be read rather than so that a name can be looked up. It is exact rather than case-folded, because a comparison rule is owed by a value something resolves by. The migration that adds it labels the one owner an upgraded deployment already serves `owner` |
 | `Document` | The owner's configurable record, as one `jsonb` document — their mail-account declarations and their owner-level settings. Nothing queries into it, which is what makes it a document rather than a schema: the configuration layer that writes it is what reads it back |
 | `Version` | The version a write is accepted against. It is a number the writer states rather than the `xmin` token the rest of this page uses, because a rejected write has to be able to report which version it was refused against, and a token the database generates behind the write cannot be quoted back |
 | `CreatedAt`, `UpdatedAt` | When the owner was provisioned, and when their document last changed — which is the provisioning instant until it does |
+| `DocumentWrittenAtRuntime` | Whether anything has written the document while the deployment was running. An owner a deployment declares in configuration carries the envelope alone and the empty object the row was provisioned with, and an owner whose document was written and then emptied carries the same octets: the two are different facts and this is what tells them apart, so nothing has to read a deployment's files to find out which of them a row is |
+
+**The document has a typed record to bind to, and the envelope beside it never depends on reading one.** What the
+column holds is one owner's configurable record — their mail-account declarations today, and the settings that are
+their own rather than the deployment's as each moves out of the deployment's section. This release carries that record
+and the binder for it and no path that drives one: the read hands the document on as the row holds it, bounded by size
+and judged in no other way, so a row edited by hand is not refused on the way out. What the binder does once something
+drives it is bind strictly — a property nothing binds is a refusal rather than a value quietly dropped — and then judge
+the record by every rule a mail account is declared under: the identifier and the published name are unique *within the
+owner*, so two people may each declare `work` and neither is refused for it. The record may carry no secret material at
+all — a mailbox password is a reference naming where the material is kept, and a value carrying the material itself is
+refused. Nothing in it shadows a deployment setting, because there is no owner configuration layer: an owner-level
+setting is a property of this record, or it is a deployment setting somebody put in the wrong document. The label, the
+version, and the marker stay relational for the reason the identifier does — authenticating a request and joining an
+owner's mail must never wait on a document being parsed.
 
 **An account reference is the pair, not the identifier.** Every table that names a mail account carries `OwnerId`
 beside `MailboxAccountId`, and every index that used to lead with the identifier now leads with the two together. The

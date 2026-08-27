@@ -211,6 +211,7 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
         context.OwnerAccounts.Add(new OwnerAccountEntity
         {
             Id = ownerId,
+            DisplayName = $"owner-{ownerId:N}",
             Document = "{}",
             Version = 1,
             CreatedAt = now,

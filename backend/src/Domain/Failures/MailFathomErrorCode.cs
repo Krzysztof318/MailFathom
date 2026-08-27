@@ -134,6 +134,16 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode ConfigurationDocumentTooLarge { get; } = new(12011);
 
+    /// <summary>Gets subcategory 2, configuration sources: an owner's persisted record could not be read.</summary>
+    /// <remarks>
+    /// The per-owner counterpart of <see cref="RootSettingsUnreadable" />, and separate from it because what it stops
+    /// is different: the deployment's own layer is read before any endpoint opens and its absence stops a start, while
+    /// an owner's record is read for a caller and its absence stops that request alone. A record past what this build
+    /// binds is the case it exists for — the bound is applied in the statement, so the row is refused rather than
+    /// transferred, and the message names the limit and never the document.
+    /// </remarks>
+    public static MailFathomErrorCode OwnerSettingsUnreadable { get; } = new(12012);
+
     /// <summary>Gets subcategory 3, mailbox access tokens: an account's authorization server did not issue an access token its OAuth mechanisms require.</summary>
     public static MailFathomErrorCode MailAccessTokenUnavailable { get; } = new(13001);
 
@@ -937,6 +947,7 @@ public readonly record struct MailFathomErrorCode
         ConfigurationSecretMaterialRefused,
         RootSettingsUnwritable,
         ConfigurationDocumentTooLarge,
+        OwnerSettingsUnreadable,
         MailAccessTokenUnavailable,
         MailboxAuthorizationFailed,
         PrincipalNotAuthorized,

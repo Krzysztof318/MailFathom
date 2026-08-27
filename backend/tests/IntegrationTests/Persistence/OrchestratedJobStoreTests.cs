@@ -644,6 +644,7 @@ public sealed class OrchestratedJobStoreTests(MailFathomOrchestrationFixture orc
             context.OwnerAccounts.Add(new OwnerAccountEntity
             {
                 Id = ownerId,
+                DisplayName = $"owner-{ownerId:N}",
                 Document = "{}",
                 Version = 1,
                 CreatedAt = DateTimeOffset.UnixEpoch,

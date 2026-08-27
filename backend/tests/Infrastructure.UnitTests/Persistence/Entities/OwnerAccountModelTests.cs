@@ -80,6 +80,50 @@ public sealed class OwnerAccountModelTests
         Assert.Equal(ValueGenerated.Never, key.Properties[0].ValueGenerated);
     }
 
+    /// <summary>
+    /// The label is a relational column with one row per value, because an administrator reading a list of owners has
+    /// to be able to tell them apart — and because a label the database admits twice is one a person cannot.
+    /// </summary>
+    [Fact]
+    public void OwnerAccountModel_DisplayName_IsARequiredBoundedLabelHeldToOneOwner()
+    {
+        // Arrange
+        using var context = CreateContext();
+        var entityType = EntityTypeOf<OwnerAccountEntity>(context);
+
+        // Act
+        var displayName = entityType.FindProperty("DisplayName");
+        var index = Assert.Single(entityType.GetIndexes());
+
+        // Assert
+        Assert.NotNull(displayName);
+        Assert.False(displayName.IsNullable);
+        Assert.Equal(OwnerAccountEntity.MaximumDisplayNameLength, displayName.GetMaxLength());
+        Assert.Equal(["DisplayName"], index.Properties.Select(property => property.Name));
+        Assert.True(index.IsUnique);
+        Assert.Equal(PersistenceConstraintNames.OwnerAccountDisplayNameUniqueIndexName, index.GetDatabaseName());
+    }
+
+    /// <summary>
+    /// Whether the document has ever been written is a column rather than a reading of the document, because the two
+    /// states it separates hold the same octets: a row waiting for what configuration declares, and a record its owner
+    /// emptied on purpose.
+    /// </summary>
+    [Fact]
+    public void OwnerAccountModel_DocumentWrittenAtRuntime_IsARequiredMarkerBesideTheDocument()
+    {
+        // Arrange
+        using var context = CreateContext();
+
+        // Act
+        var marker = EntityTypeOf<OwnerAccountEntity>(context).FindProperty("DocumentWrittenAtRuntime");
+
+        // Assert
+        Assert.NotNull(marker);
+        Assert.Equal(typeof(bool), marker.ClrType);
+        Assert.False(marker.IsNullable);
+    }
+
     /// <summary>The owner's configurable record is one document, and the schema says nothing about what is in it.</summary>
     [Fact]
     public void OwnerAccountModel_Document_IsARequiredJsonbDocument()
