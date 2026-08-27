@@ -13,10 +13,11 @@ name: CI
 # is a draft, and the one required check. The work itself lives in three called workflows —
 # `build-test-format-and-migrations.yml` for the server, `build-test-frontend.yml` for the client, and
 # `repository-contracts.yml` for what neither stack's build can see — and the publishing pipeline calls all three, so a
-# release and a nightly are gated on the same build, unit-test, coverage, formatting, and contract checks a pull
-# request is, from one definition rather than from a copy. The two stacks share this gate and nothing else: separate
-# solutions, separate build contracts, separate package pins, and a change to either that cannot reach the other costs
-# nothing in it.
+# release and a nightly are gated on the same build, unit-test, coverage, and contract checks a pull request is, from
+# one definition rather than from a copy. Formatting is the one verdict no publication asks, for the reason the
+# `run-format` switch below carries: a pull request settles it for good. The two stacks share this gate and nothing
+# else: separate solutions, separate build contracts, separate package pins, and a change to either that cannot reach
+# the other costs nothing in it.
 on:
   pull_request:
     types:
@@ -173,17 +174,26 @@ jobs:
               - '.github/workflows/ci.yml'
 
   # The build, the unit-test and coverage gate, `dotnet format`, and the pending-model-changes check live
-  # in `build-test-format-and-migrations.yml`, which the publishing pipeline calls as well. What stays
-  # here is the part that is about the event: which of them this change can affect, and whether the pull
-  # request carrying it is still a draft.
+  # in `build-test-format-and-migrations.yml`, which the publishing pipeline calls as well for everything
+  # but the formatting pass. What stays here is the part that is about the event: which of them this
+  # change can affect, and whether the pull request carrying it is still a draft.
+  #
+  # It is named after the stack it gates rather than after the act of gating, which is the whole of what
+  # `Backend` buys over the `Verify` this job used to be called. A check arrives at a reader as one line —
+  # `Backend / dotnet format`, `Frontend / Build, format, and unit test the client` — and that line is
+  # where a skipped job is either read as work the change could not reach or misread as a stack nobody
+  # verified. Under the old name the two stacks were not comparable at a glance: `Verify` said which
+  # question was asked and never which half of the repository it was asked about, so a client-only change
+  # showed a skipped server formatting job beside a green client build and read as the client's formatting
+  # having been skipped. Both jobs now carry the stack in front of the question.
   #
   # The draft test is the whole condition, because `detect-changes` runs on every event this workflow
   # takes and the ordinary dependency semantics cover the rest: change detection that failed leaves this
   # job knowing nothing about the change, and skipping it is the right outcome. A pull request then fails
   # through the aggregate, which refuses a run whose change detection did not succeed, and a push through
   # the run's own conclusion.
-  verify:
-    name: Verify
+  backend:
+    name: Backend
     needs:
       - detect-changes
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
@@ -202,7 +212,7 @@ jobs:
 
   # The client stack's build and unit suite, in `build-test-frontend.yml` for the reason the server's work is in a
   # called workflow: the definition is one thing whatever comes to call it. What is here is the same pair of questions
-  # the `verify` job above answers — can this change affect the client, and is the pull request carrying it still a
+  # the `backend` job above answers — can this change affect the client, and is the pull request carrying it still a
   # draft — with both asked in the job's own condition rather than one of them passed inward, because there is a single
   # job on the other side and nothing for a switch to select between.
   #
@@ -241,7 +251,7 @@ jobs:
   # renders against is committed under `deploy/helm/mailfathom/ci/golden/`, which is why it can be narrowed where the
   # suite above cannot: a chart no file in the change touches renders to the manifests it already rendered to.
   #
-  # No draft condition on either, unlike `verify` above. A draft-exempt contract check would not run over the interval
+  # No draft condition on either, unlike `backend` above. A draft-exempt contract check would not run over the interval
   # during which the change is actually being written — which is the whole interval in which a broken contract is cheap
   # to fix — and neither job installs anything or costs more than seconds, so there is nothing to save by deferring
   # them.
@@ -259,7 +269,7 @@ jobs:
     name: Required CI
     needs:
       - detect-changes
-      - verify
+      - backend
       - frontend
       - contracts
     # `always()` rather than `success() || failure()`, because this job has to report on a run that was
@@ -282,7 +292,7 @@ jobs:
         shell: bash
         env:
           DETECT_CHANGES_RESULT: ${{ needs.detect-changes.result }}
-          VERIFY_RESULT: ${{ needs.verify.result }}
+          BACKEND_RESULT: ${{ needs.backend.result }}
           FRONTEND_RESULT: ${{ needs.frontend.result }}
           CONTRACTS_RESULT: ${{ needs.contracts.result }}
         run: |
@@ -316,7 +326,7 @@ jobs:
           }
 
           require_success 'Detect changes' "$DETECT_CHANGES_RESULT"
-          require_success_or_skipped 'Verify' "$VERIFY_RESULT"
+          require_success_or_skipped 'Backend' "$BACKEND_RESULT"
           # A change that reaches nothing the client build reads skips this one, exactly as a change that reaches no
           # server code skips the job above it.
           require_success_or_skipped 'Frontend' "$FRONTEND_RESULT"

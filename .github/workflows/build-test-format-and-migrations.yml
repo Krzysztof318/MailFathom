@@ -13,9 +13,13 @@ name: Build, test, format, and migrations
 # snapshot describes a schema no migration produces would start against a database it cannot have, and a nightly is
 # installable long before any tag.
 #
-# What is deliberately *not* here is the decision about whether to run: a pull request skips work its changed files
-# cannot affect, and a publication never does. That decision needs the pull request the caller has and this workflow
-# does not, so it arrives as the three switches below rather than as a second changed-file query.
+# What is deliberately *not* here is the decision about whether to run. A pull request skips work its changed files
+# cannot affect, and that decision needs the pull request the caller has and this workflow does not, so it arrives as
+# the three switches below rather than as a second changed-file query. A publication skips nothing on those grounds —
+# it never asks what a change touched — and turns exactly one switch off for a reason of its own: formatting is a
+# property of the files a change wrote, so the pull request that wrote them has already answered it, and it is the one
+# verdict here that two changes merging without seeing each other cannot break. `CI` exempts a push to `main` on the
+# same argument, and `ci.yml` is where it is stated at length.
 on:
   workflow_call:
     inputs:
@@ -45,7 +49,7 @@ permissions:
 
 jobs:
   build-and-unit-test:
-    name: Build and unit test
+    name: Build and unit test the service
     if: inputs.run-build
     runs-on: ubuntu-latest
     env:
@@ -103,6 +107,17 @@ jobs:
             artifacts/coverage/report/**
           if-no-files-found: ignore
 
+  # A job of its own rather than a step of the build above, which is the one place this workflow and the client's
+  # deliberately differ. What decides the shape is which of the two costs more: the setup a separate job pays, or the
+  # pass itself sitting on the path a pull request waits on. Here that is 25 seconds of checkout, SDK, cache, and
+  # restore against a 155-second pass, so a job of its own moves the longer of the two off the critical path. In
+  # `build-test-frontend.yml` the proportions are inverted — a 26-second pass behind roughly 70 seconds of setup, most
+  # of it the `wasm-tools` workload — and the pass is a step there for exactly that reason.
+  #
+  # Runner time is not what either decision spends. This repository is public and its minutes are free, so merging this
+  # job into the one above would buy nothing and would cost 155 seconds on every pull request that reaches the service.
+  # What it would also cost is the verdict: a job reports its own conclusion in the check list and a step reports none,
+  # so formatting would stop being something a reader can see the state of without opening a log.
   dotnet-format:
     name: dotnet format
     if: inputs.run-format

@@ -21,8 +21,9 @@ name: Build and test the frontend
 #
 # The one switch it takes is not about the changed files either. Formatting is the one verdict here that a pull
 # request settles for good — it is a property of the files a change wrote, and two changes that merged without seeing
-# each other cannot break it — so the server asks it on a pull request and never on a push to `main`, and the client
-# is held to the same rule from the same caller rather than to whichever one somebody remembered.
+# each other cannot break it — so it is asked on a pull request and nowhere else: not on a push to `main`, not on a
+# release, and not on a nightly. Both stacks are held to that from the same rule rather than to whichever one somebody
+# remembered, which is why every caller passes this switch to both workflows rather than to one.
 on:
   workflow_call:
     inputs:
@@ -42,7 +43,7 @@ permissions:
 
 jobs:
   build-and-unit-test-client:
-    name: Build and unit test the client
+    name: Build, format, and unit test the client
     runs-on: ubuntu-latest
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
@@ -103,9 +104,13 @@ jobs:
       # in front of it makes it cheaper.
       #
       # A step here rather than a job of its own, unlike the server. A second job would pay for a second checkout, a
-      # second SDK, a second `wasm-tools` workload install, and a second restore to run a pass that costs well under a
-      # minute; the server's `dotnet format` job is separate because three switches select between three jobs there,
-      # and this workflow has one job to select.
+      # second SDK, a second `wasm-tools` workload install, and a second restore — roughly 70 seconds — to run a pass
+      # that costs 26; the server's is a job of its own because its proportions are the other way round, and
+      # `build-test-format-and-migrations.yml` carries that half of the reasoning beside the job it decided.
+      #
+      # A step reports no conclusion of its own, so this job's name is what says formatting happened here. That is the
+      # whole of why it reads `Build, format, and unit test the client` rather than naming the two halves a reader
+      # would otherwise assume were all of it.
       - name: Verify formatting
         if: inputs.run-format
         run: dotnet format frontend/MailFathom.Client.slnx --no-restore --verify-no-changes --verbosity diagnostic

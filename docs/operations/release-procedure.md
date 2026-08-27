@@ -205,13 +205,15 @@ unavailable:
    rather than a run that fails. **Read a pushed tag that produced no run as a malformed tag**, and check its spelling
    before looking anywhere else. Before publishing anything the workflow asserts the tag against the tagged commit's
    `VersionPrefix`, against the highest existing tag on the same `major.minor` line, and against the changelog section
-   for that version — `scripts/assert-release-tag.sh` is that check. It then runs the same checks a pull request runs and
-   runs all of them: the server's build, unit tests, formatting, and migration check, the client's build and unit
-   suite beside them, and the repository contracts with the chart rendering, followed by the integration suite. It
-   builds nothing at all until the first two and the suite have passed. Only then does it build and gate the image,
-   with the contract gate named on that step as well, push it to
-   both registries under `<x.y.z>`, move `latest` onto the same digest, attest it, publish the Helm chart against
-   that digest, and open the GitHub release with that changelog section as its notes. Under the section it links
+   for that version — `scripts/assert-release-tag.sh` is that check. It then runs the same checks a pull request runs,
+   and runs all of them but one: the server's build, unit tests, and migration check, the client's build and unit
+   suite beside them, and the repository contracts with the chart rendering, followed by the integration suite. The
+   one it does not run is `dotnet format`, in either stack — formatting is a property of the files a change wrote, so
+   the pull request that wrote them settled it, and no commit reaches a tag without having been one. It builds nothing
+   at all until the first two and the suite have passed. Only then does it build and gate the image, with the contract
+   gate named on that step as well, push it to both registries under `<x.y.z>`, move `latest` onto the same digest,
+   attest it, publish the Helm chart against that digest, and open the GitHub release with that changelog section as
+   its notes. Under the section it links
    `CHANGELOG.md` at the tag, so a reader of an older release reaches the file as that release shipped it rather than a
    copy already describing versions they have not upgraded to.
 
@@ -264,9 +266,9 @@ half-published:
 | `mailfathom-client-<version>-<rid>.zip` for `win-x64` and `win-arm64`, plus one `.sha256` covering both | the GitHub release's assets | nothing else the release produces |
 
 The column names what each artifact needs from the other four. What all five need is the same and comes before any of
-them: the tag assertion, then the build, unit-test, formatting, and migration checks, then the integration suite, and
-for the two artifacts built out of the client stack the client's own build beside them. **No
-artifact is built until every one of those has passed**, so a commit a unit test rejects costs the gate that rejected
+them: the tag assertion, then the build, unit-test, and migration checks, then the integration suite, and for the two
+artifacts built out of the client stack the client's own build beside them. **No artifact is built until every one of
+those has passed**, so a commit a unit test rejects costs the gate that rejected
 it rather than six `dotnet publish` invocations and a schema generation beside a red build.
 
 The repository contracts run beside those gates and hold back the image alone rather than the artifacts. What they
