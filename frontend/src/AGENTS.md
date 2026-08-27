@@ -416,11 +416,13 @@ what keeps that from being a rule somebody has to enforce by reading.
   process does not own, and a screen that repeated it would be putting an attacker's words in MailFathom's voice.
 - **The surface it reaches is `/api/client`**, the backend's third transport surface, served only where a deployment
   enabled `ClientEndpoint`. It is not the MCP endpoint and not the administrative one: a credential admitted by either
-  of those authenticates nothing here. It answers two routes today — `GET /api/client/session`, reporting the running
-  version and the grant the caller's credential carries and nothing that identifies that credential, and
-  `GET /api/client/accounts`, reporting the signed-in owner's own mailboxes and how current the copy of each one is.
-  [The client endpoint](../../docs/operations/client-endpoint.md) is the page. Neither route reaches a mail server, so
-  no screen here can wait on IMAP or set the remote `\Seen` flag.
+  of those authenticates nothing here. This client calls three of its routes today — `GET /api/client/session`,
+  reporting the running version and the grant the caller's credential carries and nothing that identifies that
+  credential; `GET /api/client/accounts`, reporting the signed-in owner's own mailboxes and how current the copy of
+  each one is; and `GET /api/client/folders`, reporting the folder hierarchy beneath each of those mailboxes with the
+  role the service gave each folder and how much mail it holds. The surface publishes more than the client has reached
+  yet, so [the client endpoint](../../docs/operations/client-endpoint.md) rather than this file is what says what is
+  there. No route reaches a mail server, so no screen here can wait on IMAP or set the remote `\Seen` flag.
 - **Signing in is authorization code with PKCE**, which is the grant `mfctl` performs against the administrative
   surface and for the same reason: a desktop binary and a WebAssembly bundle are both readable by whoever runs them, so
   this is a public client and holds no secret. Where to sign in is discovered rather than configured — the deployment's
@@ -503,16 +505,29 @@ since Tuesday each need a different sentence, and none of them is served by a sp
   what the waits are drawn from; the attempts are published as they are made, so a client working its way back says so
   instead of appearing frozen. **Nothing composed over the session retries on top of it** — the root instructions
   refuse nested retry storms, so a screen whose own read failed renders its error and offers the same ask.
-- **Whether a mailbox is behind is per account, and it is two fields rather than one.** `MailAccountStanding` says
-  whether the deployment is still refreshing it, and the freshness gap says how old the copy is; an account failing
-  since yesterday and an account nobody has written to since yesterday carry the same instant and are not the same
-  situation. `FreshnessGap` states the gap in bands rather than as a count — one string per language rather than a
-  plural rule per language — and **nothing calls a mailbox stale**, because how old is too old is the reader's
-  judgement and not this client's. A standing the deployment named that this build does not know claims nothing about
-  the copy rather than reading as one that is current.
-- **What a mailbox row may carry is its own name and nothing else.** MailFathom's identifier and display name are what
-  a person recognizes a mailbox by; the address, the mail server, the folders, and every message stay where they are.
-  None of it reaches a log or telemetry, here as anywhere else in this stack.
+- **Whether a copy is behind is said per mailbox and per folder, and it is three fields rather than one.**
+  `MailSynchronizationStanding` says whether the deployment is still refreshing it and whether the mail server was
+  reachable at all, `Behind` says whether the last attempt ended with mail it had not yet taken in, and the freshness
+  gap says how old the copy is; an account failing since yesterday and an account nobody has written to since yesterday
+  carry the same instant and are not the same situation. The three travel separately because merging them would say the
+  wrong thing about half the rows: a mail server that did not answer is waited out, an attempt that went wrong is a
+  mapping or a credential, and mail can be outstanding under either. `FreshnessGap` states the gap in bands rather than
+  as a count — one string per language rather than a plural rule per language — and **nothing calls a mailbox stale**,
+  because how old is too old is the reader's judgement and not this client's. A standing the deployment named that this
+  build does not know claims nothing about the copy rather than reading as one that is current, and **none of the three
+  is ever drawn as a spinner**: a folder nobody has refreshed since Tuesday is not a folder that is loading.
+- **The mailbox tree is where all of that is read, and it is the client's scope selector.**
+  `src/Client/Presentation/Mailboxes/` holds it: `MailboxTreeShape` reduces the deployment's answer, what is expanded,
+  what the workspace is narrowed to, and when it is being read into one flat list of rows carrying their own depth, so
+  the shape is decided in one place a test reads directly and the list virtualizes. A folder is placed by the role the
+  service gave it and **never by matching its name**, because the names differ per provider and per language.
+  `IMailboxTreeMemory` is the one thing about a scope this client writes down — the chosen place and the opened rows,
+  in `ApplicationData.LocalSettings`, never what is selected inside the scope — and `SharedWorkspace` opens on the same
+  value, so the tree and the scope indicator cannot disagree about where somebody is.
+- **What a row of that tree may carry is a name and a count and nothing else.** MailFathom's identifier and display
+  name are what a person recognizes a mailbox by, and a folder's own last level is what they recognize a folder by;
+  the address, the mail server, and every message stay where they are — no subject, no correspondent, no port, no user
+  name, and no credential. None of it reaches a log or telemetry, here as anywhere else in this stack.
 - **An owner who owns no mailbox is a state rather than a failure**, rendered with what to do about it. It reaches a
   screen as an empty list and a credential that may not read reaches it as a refusal, so the two are never the same
   thing on a screen either.

@@ -6,143 +6,19 @@ Project repository: https://github.com/Krzysztof318/MailFathom
 <Page x:Class="MailFathom.Client.Presentation.Spaces.Mail.MailPage"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-      xmlns:mvux="using:Uno.Extensions.Reactive.UI"
-      xmlns:mail="using:MailFathom.Client.Presentation.Spaces.Mail"
       xmlns:spaces="using:MailFathom.Client.Presentation.Spaces"
       xmlns:workspace="using:MailFathom.Client.Presentation.Workspace"
       NavigationCacheMode="Required">
 
   <Grid>
     <!-- The list beside what is open on a wide window, and the list alone on a narrow one, where opening something is
-         a screen rather than a second column. What either column holds is #1159's to decide. -->
+         a screen rather than a second column. What either column holds is #1159's to decide.
+
+         Which mailbox and which folder the list is of is not asked here: the tree in the frame is the client's scope
+         selector, and this space reads the scope it wrote. -->
     <workspace:WorkspaceColumns>
       <workspace:WorkspaceColumns.Primary>
-        <Grid>
-          <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition />
-          </Grid.RowDefinitions>
-
-          <!-- The mailboxes this space reads, above the mail it reads out of them. It sits here rather than in a
-               screen of its own because the question it answers — is what I am looking at current — is asked while
-               somebody is looking at the mail, not while they are configuring anything. -->
-          <StackPanel Padding="16,12"
-                      Spacing="8"
-                      Background="{ThemeResource SurfaceBrush}">
-            <TextBlock x:Uid="MailPage.TextBlock.Accounts"
-                       Style="{StaticResource CaptionTextBlockStyle}"
-                       Foreground="{ThemeResource OnSurfaceVariantBrush}" />
-
-            <!-- A deployment that has stopped refreshing changes what every gap below means, so it is said once above
-                 them rather than repeated on each row. -->
-            <InfoBar x:Uid="MailPage.InfoBar.SynchronizationPaused"
-                     IsOpen="{Binding SynchronizationPaused}"
-                     IsClosable="False"
-                     Severity="Warning" />
-
-            <mvux:FeedView Source="{Binding Accounts}">
-              <mvux:FeedView.ValueTemplate>
-                <DataTemplate>
-                  <!-- Selection is off because nothing is selected here yet: narrowing the workspace to one account is
-                       the scope indicator's own act, and a row that highlighted without narrowing anything would say
-                       something had happened when nothing had. -->
-                  <ListView ItemsSource="{Binding Data}"
-                            SelectionMode="None"
-                            MaxHeight="240"
-                            IsItemClickEnabled="False">
-                    <ListView.ItemTemplate>
-                      <DataTemplate x:DataType="mail:MailAccountLine">
-                        <Grid Padding="0,8"
-                              ColumnSpacing="12">
-                          <Grid.ColumnDefinitions>
-                            <ColumnDefinition />
-                            <ColumnDefinition Width="Auto" />
-                          </Grid.ColumnDefinitions>
-
-                          <StackPanel Spacing="2">
-                            <TextBlock Text="{x:Bind DisplayName}"
-                                       Style="{StaticResource BodyTextBlockStyle}"
-                                       Foreground="{ThemeResource OnSurfaceBrush}"
-                                       TextTrimming="CharacterEllipsis" />
-                            <!-- Two lines rather than one: how old the copy is, and whether it is still being
-                                 refreshed. An account failing since yesterday and one nobody has written to since
-                                 yesterday carry the same gap and are not the same situation. -->
-                            <TextBlock Text="{x:Bind Freshness}"
-                                       Style="{StaticResource CaptionTextBlockStyle}"
-                                       Foreground="{ThemeResource OnSurfaceVariantBrush}"
-                                       TextWrapping="Wrap" />
-                          </StackPanel>
-
-                          <StackPanel Grid.Column="1"
-                                      Orientation="Horizontal"
-                                      Spacing="8"
-                                      VerticalAlignment="Center">
-                            <!-- A mark rather than a colour on the words, so the one row somebody has to act on is
-                                 findable without the sentence beside it depending on being read in colour. It is
-                                 shown on an outright yes and on nothing else, which is what keeps it off a row whose
-                                 standing has not been decided. -->
-                            <Border Width="8"
-                                    Height="8"
-                                    CornerRadius="4"
-                                    VerticalAlignment="Center"
-                                    Background="{ThemeResource ErrorBrush}"
-                                    Visibility="{x:Bind IsFailing, Converter={StaticResource AffirmedVisibility}}" />
-
-                            <TextBlock Text="{x:Bind Standing}"
-                                       VerticalAlignment="Center"
-                                       TextAlignment="Right"
-                                       TextWrapping="Wrap"
-                                       MaxWidth="200"
-                                       Style="{StaticResource CaptionTextBlockStyle}"
-                                       Foreground="{ThemeResource OnSurfaceVariantBrush}" />
-                          </StackPanel>
-                        </Grid>
-                      </DataTemplate>
-                    </ListView.ItemTemplate>
-                  </ListView>
-                </DataTemplate>
-              </mvux:FeedView.ValueTemplate>
-
-              <mvux:FeedView.ProgressTemplate>
-                <DataTemplate>
-                  <ProgressBar IsIndeterminate="True"
-                               HorizontalAlignment="Stretch" />
-                </DataTemplate>
-              </mvux:FeedView.ProgressTemplate>
-
-              <!-- Owning no mail account is a state rather than an empty list: it says what it is and what to do about
-                   it, which is a thing an operator does on the administrative surface rather than here. -->
-              <mvux:FeedView.NoneTemplate>
-                <DataTemplate>
-                  <InfoBar x:Uid="MailPage.InfoBar.NoAccount"
-                           IsOpen="True"
-                           IsClosable="False"
-                           Severity="Informational" />
-                </DataTemplate>
-              </mvux:FeedView.NoneTemplate>
-
-              <!-- What it means and what to try, in this application's own words: the failure carries an English
-                   message written for a log, and one of the four cases can carry text from a machine this process does
-                   not own. Asking again is the session's act, reached through the template's parent. -->
-              <mvux:FeedView.ErrorTemplate>
-                <DataTemplate>
-                  <InfoBar x:Uid="MailPage.InfoBar.AccountsUnavailable"
-                           IsOpen="True"
-                           IsClosable="False"
-                           Severity="Error">
-                    <InfoBar.ActionButton>
-                      <Button x:Uid="MailPage.Button.RetryAccounts"
-                              Command="{Binding Parent.RetryAccounts}" />
-                    </InfoBar.ActionButton>
-                  </InfoBar>
-                </DataTemplate>
-              </mvux:FeedView.ErrorTemplate>
-            </mvux:FeedView>
-          </StackPanel>
-
-          <spaces:SpacePlaceholder x:Uid="MailPage.Messages"
-                                   Grid.Row="1" />
-        </Grid>
+        <spaces:SpacePlaceholder x:Uid="MailPage.Messages" />
       </workspace:WorkspaceColumns.Primary>
       <workspace:WorkspaceColumns.Companion>
         <spaces:SpacePlaceholder x:Uid="MailPage.Reading" />

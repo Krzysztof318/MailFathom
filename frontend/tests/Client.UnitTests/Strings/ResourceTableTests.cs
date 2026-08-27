@@ -2,10 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Client.Backend.Accounts;
+using MailFathom.Client.Backend;
 using MailFathom.Client.Deployment;
 using MailFathom.Client.Presentation;
-using MailFathom.Client.Presentation.Spaces.Mail;
+using MailFathom.Client.Presentation.Mailboxes;
 using MailFathom.Client.Presentation.Workspace;
 
 namespace MailFathom.Client.UnitTests.Strings;
@@ -169,16 +169,16 @@ public sealed class ResourceTableTests
     }
 
     /// <summary>
-    /// Every way a mailbox's copy can stand is composed into a resource name by the row rather than named by a
-    /// <c>x:Uid</c>, so a standing added with no sentence behind it is named here rather than met as a key by somebody
-    /// deciding whether to trust what they are reading.
+    /// Every way a copy can stand is composed into a resource name by the tree rather than named by a <c>x:Uid</c>, so
+    /// a standing added with no sentence behind it is named here rather than met as a key by somebody deciding whether
+    /// to trust what they are reading.
     /// </summary>
     [Theory]
     [MemberData(nameof(Languages))]
-    public void Tables_EveryWayAMailboxCanStand_IsExplainedInEveryLanguage(string culture)
+    public void Tables_EveryWayACopyCanStand_IsExplainedInEveryLanguage(string culture)
     {
         // Arrange
-        var expected = Enum.GetValues<MailAccountStanding>().Select(MailAccountLine.StandingResourceKeyFor);
+        var expected = Enum.GetValues<MailSynchronizationStanding>().Select(MailboxWords.StandingResourceKeyFor);
 
         // Act
         var table = DeclaredLanguages.TableOf(culture);
@@ -193,13 +193,47 @@ public sealed class ResourceTableTests
     public void Tables_EveryBandAFreshnessGapFallsIn_IsExplainedInEveryLanguage(string culture)
     {
         // Arrange
-        var expected = Enum.GetValues<FreshnessGap>().Select(MailAccountLine.FreshnessResourceKeyFor);
+        var expected = Enum.GetValues<FreshnessGap>().Select(MailboxWords.FreshnessResourceKeyFor);
 
         // Act
         var table = DeclaredLanguages.TableOf(culture);
 
         // Assert
         Assert.All(expected, key => Assert.True(table.ContainsKey(key), key));
+    }
+
+    /// <summary>
+    /// A special-use role is placed by the service and named by the client, so every role the tree offers across
+    /// mailboxes carries a word here — a role gathered under its own key would otherwise reach a reader as the key.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Languages))]
+    public void Tables_EveryRoleTheTreeGathersMailUnder_IsNamedInEveryLanguage(string culture)
+    {
+        // Arrange
+        var expected = MailboxWords.RolesInReadingOrder.Select(MailboxWords.RoleResourceKeyFor);
+
+        // Act
+        var table = DeclaredLanguages.TableOf(culture);
+
+        // Assert
+        Assert.All(expected, key => Assert.True(table.ContainsKey(key), key));
+    }
+
+    /// <summary>
+    /// The two rows the tree draws for no folder of its own — everything, and a role taken across mailboxes — are
+    /// named in code rather than by a <c>x:Uid</c>, so their keys are asserted here with the rest.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Languages))]
+    public void Tables_TheRowsTheTreeDrawsForNoFolderOfItsOwn_AreNamedInEveryLanguage(string culture)
+    {
+        // Act
+        var table = DeclaredLanguages.TableOf(culture);
+
+        // Assert
+        Assert.True(table.ContainsKey(MailboxWords.EverythingKey), MailboxWords.EverythingKey);
+        Assert.True(table.ContainsKey(MailboxWords.UnifiedRoleKey), MailboxWords.UnifiedRoleKey);
     }
 
     private static IEnumerable<string> KeysOf(string culture) =>

@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Client.Presentation.Mailboxes;
 using MailFathom.Client.Session;
 using Microsoft.Extensions.Localization;
 
@@ -23,29 +24,35 @@ public partial record WorkspaceModel
 {
     private const string EverythingKey = "WorkspaceScope.Everything";
     private const string AccountFolderKey = "WorkspaceScope.AccountFolder";
+    private const string RoleKey = "WorkspaceScope.Role";
     private const string SelectedKey = "WorkspaceScope.Selected";
     private const string ConnectionAttemptKey = "Workspace.Connection.Attempt";
 
     private readonly IWorkspace workspace;
     private readonly IClientSession session;
+    private readonly IMailboxTree mailboxes;
     private readonly IStringLocalizer localizer;
 
-    /// <summary>Initializes the frame over the workspace its spaces share and the session that decides what it offers.</summary>
+    /// <summary>Initializes the frame over the workspace its spaces share, the session that decides what it offers, and the tree that narrows it.</summary>
     /// <param name="workspace">The question and the scope every space reads and writes.</param>
     /// <param name="session">What the deployment allows this caller, which is what the frame offers from.</param>
+    /// <param name="mailboxes">The tree somebody chooses the scope in, which the frame renders because every space reads what it chose.</param>
     /// <param name="localizer">Where the words describing a scope come from, since they are composed rather than per control.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public WorkspaceModel(
         IWorkspace workspace,
         IClientSession session,
+        IMailboxTree mailboxes,
         IStringLocalizer localizer)
     {
         ArgumentNullException.ThrowIfNull(workspace);
         ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(mailboxes);
         ArgumentNullException.ThrowIfNull(localizer);
 
         this.workspace = workspace;
         this.session = session;
+        this.mailboxes = mailboxes;
         this.localizer = localizer;
 
         this.ScopeDescription = workspace.Scope.Select(this.Describe);
@@ -77,6 +84,18 @@ public partial record WorkspaceModel
 
     /// <summary>What somebody is about to ask, held for the run rather than for the screen they typed it on.</summary>
     public IState<string> Intent => this.workspace.Intent;
+
+    /// <summary>The mailboxes and their folders as one tree, which is where the scope above is chosen.</summary>
+    /// <remarks>
+    /// Rendered by the frame rather than by the Mail space, because what it narrows is read by all three of them: the
+    /// list, the search, and the field a question is composed in are each about wherever this says somebody is. It is
+    /// the run's own tree read through this model rather than one built here, so moving between spaces keeps what was
+    /// open and costs no second read of the deployment.
+    /// </remarks>
+    public IListFeed<MailboxRow> Mailboxes => this.mailboxes.Rows;
+
+    /// <summary>Whether this deployment has stopped refreshing the mailboxes the tree draws.</summary>
+    public IFeed<bool> MailboxesPaused => this.mailboxes.SynchronizationPaused;
 
     /// <summary>The scope the question would be asked against, as the words the indicator beside the field shows.</summary>
     /// <remarks>
@@ -175,9 +194,10 @@ public partial record WorkspaceModel
     /// <remarks>
     /// A scope is described by composing words rather than by a <c>x:Uid</c> on a control, so these keys are asked
     /// for from code — which makes a typo in one of them the single way a reader would meet the key itself instead of
-    /// a sentence. The unit suite holds every authored table to naming all three.
+    /// a sentence. The unit suite holds every authored table to naming all four.
     /// </remarks>
-    internal static IReadOnlyList<string> ScopeResourceKeys { get; } = [EverythingKey, AccountFolderKey, SelectedKey];
+    internal static IReadOnlyList<string> ScopeResourceKeys { get; } =
+        [EverythingKey, AccountFolderKey, RoleKey, SelectedKey];
 
     /// <summary>The keys the connection notice's own words are resolved by, on the same terms as the scope's.</summary>
     internal static IReadOnlyList<string> ConnectionResourceKeys { get; } = [ConnectionAttemptKey];
@@ -185,6 +205,31 @@ public partial record WorkspaceModel
     /// <summary>Asks the deployment again for what this caller may do.</summary>
     /// <remarks>What the button on the failed state presses. It says nothing about what went wrong — the answer, or the next failure, arrives on <see cref="Session" /> exactly as the first one did.</remarks>
     public void RetrySession() => this.session.Refresh();
+
+    /// <summary>Shows or hides what is nested under one row of the tree.</summary>
+    /// <param name="key">The row's key, which the view hands over from the row it drew.</param>
+    /// <param name="cancellationToken">Abandons the change.</param>
+    /// <returns>A task completing once the tree says so.</returns>
+    /// <remarks>
+    /// It carries a parameter, so the command it is generated from runs in parallel for different rows and reports no
+    /// progress of its own — which is right here, because opening a row is local work over an answer the client already
+    /// holds and there is nothing to wait for.
+    /// </remarks>
+    public ValueTask ToggleMailbox(string key, CancellationToken cancellationToken) =>
+        this.mailboxes.ToggleAsync(key, cancellationToken);
+
+    /// <summary>Narrows the workspace to what one row of the tree stands for.</summary>
+    /// <param name="row">The row somebody chose.</param>
+    /// <param name="cancellationToken">Abandons the change.</param>
+    /// <returns>A task completing once the scope says so.</returns>
+    public ValueTask SelectMailbox(MailboxRow row, CancellationToken cancellationToken) =>
+        this.mailboxes.SelectAsync(row, cancellationToken);
+
+    /// <summary>Asks the deployment for the mailboxes again, which is what a person presses when the tree did not arrive.</summary>
+    /// <param name="cancellationToken">Abandons the ask.</param>
+    /// <returns>A task completing once the ask has been made.</returns>
+    public ValueTask RetryMailboxes(CancellationToken cancellationToken) =>
+        this.mailboxes.AskAgainAsync(cancellationToken);
 
     private IFeed<bool> Offers(ClientCapability capability) =>
         this.Session.Select(standing => standing.Offers(capability));
@@ -204,6 +249,11 @@ public partial record WorkspaceModel
         {
             { Account: { } account, Folder: { } folder } => this.localizer[AccountFolderKey, account, folder].Value,
             { Account: { } account } => account,
+
+            // One special-use folder taken across every mailbox, which is the one narrowing that is not a place in a
+            // single mailbox. The role is named in the language the application is being read in rather than by the
+            // word the deployment published it as.
+            { Role: { } role } => this.localizer[RoleKey, this.localizer[MailboxWords.RoleResourceKeyFor(role)].Value].Value,
 
             // A folder without an account is not a scope anything here builds, and the type refuses nothing, so it is
             // named rather than dropped: falling through to "everything" would say the opposite of what is in force.

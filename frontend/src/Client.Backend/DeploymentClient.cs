@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Client.Backend.Accounts;
+using MailFathom.Client.Backend.Folders;
 
 namespace MailFathom.Client.Backend;
 
@@ -16,9 +17,10 @@ namespace MailFathom.Client.Backend;
 /// written without one by accident.
 /// </para>
 /// <para>
-/// The two routes it carries are the two a client reads before it draws anything: what the deployment made of the
-/// caller, and which mailboxes that caller has beside a statement of how current each copy is. Neither reaches a mail
-/// server, so no screen here can wait on IMAP or set the remote <c>\Seen</c> flag.
+/// The three routes it carries are the ones a client reads before it draws anything: what the deployment made of the
+/// caller, which mailboxes that caller has beside a statement of how current each copy is, and the folders those
+/// mailboxes hold. None of them reaches a mail server, so no screen here can wait on IMAP or set the remote
+/// <c>\Seen</c> flag.
 /// </para>
 /// </remarks>
 public sealed class DeploymentClient
@@ -67,6 +69,23 @@ public sealed class DeploymentClient
             this.Transport(),
             new HttpRequestMessage(HttpMethod.Get, DeploymentRoutes.MailAccountsPath),
             DeploymentJsonContext.Default.DeploymentMailAccounts,
+            cancellationToken);
+
+    /// <summary>Asks the deployment for the owner's mailboxes and every folder in them, as the one tree a screen is drawn from.</summary>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The owner's accounts and their folders, empty where they own no account.</returns>
+    /// <exception cref="DeploymentFailure">Thrown when the deployment refused, was unreachable, did not answer in time, or answered with something else.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when nothing has pointed this client at a deployment yet.</exception>
+    /// <remarks>
+    /// A refused credential and an owner who owns no mailbox are kept apart here exactly as they are on the accounts
+    /// route: the first arrives as <see cref="DeploymentFailureReason.CredentialRefused" /> and the second as an empty
+    /// list, because they are two different things to put in front of somebody.
+    /// </remarks>
+    public Task<DeploymentMailFolders> ReadMailFoldersAsync(CancellationToken cancellationToken = default) =>
+        DeploymentExchange.ReadAsync(
+            this.Transport(),
+            new HttpRequestMessage(HttpMethod.Get, DeploymentRoutes.MailFoldersPath),
+            DeploymentJsonContext.Default.DeploymentMailFolders,
             cancellationToken);
 
     /// <summary>Takes a transport aimed at wherever the client is pointed right now.</summary>

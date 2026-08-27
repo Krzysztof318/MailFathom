@@ -21,19 +21,21 @@ public sealed class DeploymentMailAccountsTests
               "id": "work",
               "displayName": "Work mail",
               "synchronizationState": "Synchronized",
-              "lastSynchronizedAt": "2026-08-15T10:00:00+00:00"
+              "lastSynchronizedAt": "2026-08-15T10:00:00+00:00",
+              "behind": false
             },
             {
               "id": "private",
               "displayName": "Private mail",
               "synchronizationState": "Failing",
-              "lastSynchronizedAt": null
+              "lastSynchronizedAt": null,
+              "behind": true
             }
           ]
         }
         """;
 
-    /// <summary>Every field of the contract is read, because a screen shows all four of them about each mailbox.</summary>
+    /// <summary>Every field of the contract is read, because the tree shows each of them about a mailbox.</summary>
     [Fact]
     public async Task ReadMailAccountsAsync_ADeploymentAnswering_ReadsEveryFieldOfTheContract()
     {
@@ -50,12 +52,14 @@ public sealed class DeploymentMailAccountsTests
         var work = answered.Owned[0];
         Assert.Equal("work", work.Id);
         Assert.Equal("Work mail", work.DisplayName);
-        Assert.Equal(MailAccountStanding.Synchronized, work.Standing);
+        Assert.Equal(MailSynchronizationStanding.Synchronized, work.Standing);
         Assert.Equal(new DateTimeOffset(2026, 8, 15, 10, 0, 0, TimeSpan.Zero), work.LastSynchronizedAt);
+        Assert.False(work.Behind);
 
         var privateMail = answered.Owned[1];
-        Assert.Equal(MailAccountStanding.Failing, privateMail.Standing);
+        Assert.Equal(MailSynchronizationStanding.Failing, privateMail.Standing);
         Assert.Null(privateMail.LastSynchronizedAt);
+        Assert.True(privateMail.Behind);
     }
 
     /// <summary>The route is the client surface's own, rather than the administrative one that serves a different reader.</summary>
@@ -127,15 +131,23 @@ public sealed class DeploymentMailAccountsTests
         Assert.Equal(DeploymentFailureReason.CredentialRefused, failure.Reason);
     }
 
-    /// <summary>The three names the contract publishes are the three the client knows, matched exactly.</summary>
+    /// <summary>The four names the contract publishes are the four the client knows, matched exactly.</summary>
     [Theory]
-    [InlineData("NeverSynchronized", MailAccountStanding.NeverSynchronized)]
-    [InlineData("Synchronized", MailAccountStanding.Synchronized)]
-    [InlineData("Failing", MailAccountStanding.Failing)]
-    public void Standing_ANamePublishedByTheContract_IsReadAsItself(string published, MailAccountStanding expected)
+    [InlineData("NeverSynchronized", MailSynchronizationStanding.NeverSynchronized)]
+    [InlineData("Synchronized", MailSynchronizationStanding.Synchronized)]
+    [InlineData("Failing", MailSynchronizationStanding.Failing)]
+    [InlineData("Unreachable", MailSynchronizationStanding.Unreachable)]
+    public void Standing_ANamePublishedByTheContract_IsReadAsItself(
+        string published,
+        MailSynchronizationStanding expected)
     {
         // Arrange
-        var account = new DeploymentMailAccount("work", "Work mail", published, LastSynchronizedAt: null);
+        var account = new DeploymentMailAccount(
+            "work",
+            "Work mail",
+            published,
+            LastSynchronizedAt: null,
+            Behind: false);
 
         // Act, Assert
         Assert.Equal(expected, account.Standing);
@@ -144,7 +156,7 @@ public sealed class DeploymentMailAccountsTests
     /// <summary>
     /// A name this build does not know claims nothing about the copy. Reading it as synchronized would tell somebody
     /// their mail is current on the strength of a word the client cannot interpret, and the major version is zero, so
-    /// a deployment publishing a fourth standing before a client understands it is an ordinary case.
+    /// a deployment publishing a fifth standing before a client understands it is an ordinary case.
     /// </summary>
     [Theory]
     [InlineData("Paused")]
@@ -154,9 +166,14 @@ public sealed class DeploymentMailAccountsTests
     public void Standing_ANameThisClientDoesNotKnow_ClaimsNothingAboutTheCopy(string unknown)
     {
         // Arrange
-        var account = new DeploymentMailAccount("work", "Work mail", unknown, LastSynchronizedAt: null);
+        var account = new DeploymentMailAccount(
+            "work",
+            "Work mail",
+            unknown,
+            LastSynchronizedAt: null,
+            Behind: false);
 
         // Act, Assert
-        Assert.Equal(MailAccountStanding.Unrecognized, account.Standing);
+        Assert.Equal(MailSynchronizationStanding.Unrecognized, account.Standing);
     }
 }

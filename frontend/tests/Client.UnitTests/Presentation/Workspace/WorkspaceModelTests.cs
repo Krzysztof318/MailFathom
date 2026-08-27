@@ -5,6 +5,7 @@
 using System.Collections.Immutable;
 using System.Reflection;
 using MailFathom.Client.Backend;
+using MailFathom.Client.Presentation.Mailboxes;
 using MailFathom.Client.Presentation.Workspace;
 using MailFathom.Client.Session;
 using MailFathom.Client.UnitTests.TestDoubles;
@@ -32,7 +33,7 @@ public sealed class WorkspaceModelTests : IDisposable
     public async Task Intent_TypedIntoTheField_IsTheWorkspacesOwnQuestion()
     {
         // Arrange
-        var workspace = new SharedWorkspace();
+        var workspace = new SharedWorkspace(new StubMailboxTreeMemory());
         await using var model = this.ModelOver(workspace);
 
         // Act
@@ -48,7 +49,7 @@ public sealed class WorkspaceModelTests : IDisposable
     public async Task ScopeDescription_AWorkspaceNothingHasNarrowed_SaysEverything()
     {
         // Arrange
-        await using var model = this.ModelOver(new SharedWorkspace());
+        await using var model = this.ModelOver(new SharedWorkspace(new StubMailboxTreeMemory()));
 
         // Act
         var description = await model.ScopeDescription;
@@ -62,7 +63,7 @@ public sealed class WorkspaceModelTests : IDisposable
     public async Task ScopeDescription_AnAccountAlone_IsNamedAsItself()
     {
         // Arrange
-        var workspace = new SharedWorkspace();
+        var workspace = new SharedWorkspace(new StubMailboxTreeMemory());
         await using var model = this.ModelOver(workspace);
 
         // Act
@@ -79,7 +80,7 @@ public sealed class WorkspaceModelTests : IDisposable
     public async Task ScopeDescription_AFolderWithinAnAccount_NamesBoth()
     {
         // Arrange
-        var workspace = new SharedWorkspace();
+        var workspace = new SharedWorkspace(new StubMailboxTreeMemory());
         await using var model = this.ModelOver(workspace);
 
         // Act
@@ -99,7 +100,7 @@ public sealed class WorkspaceModelTests : IDisposable
     public async Task ScopeDescription_AFolderWithoutAnAccount_IsNamedRatherThanDropped()
     {
         // Arrange
-        var workspace = new SharedWorkspace();
+        var workspace = new SharedWorkspace(new StubMailboxTreeMemory());
         await using var model = this.ModelOver(workspace);
 
         // Act
@@ -116,7 +117,7 @@ public sealed class WorkspaceModelTests : IDisposable
     public async Task ScopeDescription_ASelectionWithinAFolder_CountsIt()
     {
         // Arrange
-        var workspace = new SharedWorkspace();
+        var workspace = new SharedWorkspace(new StubMailboxTreeMemory());
         await using var model = this.ModelOver(workspace);
 
         // Act
@@ -141,7 +142,7 @@ public sealed class WorkspaceModelTests : IDisposable
     public async Task ScopeDescription_AFrameBuiltAgainOverTheSameWorkspace_ReadsWhatWasNarrowedBefore()
     {
         // Arrange
-        var workspace = new SharedWorkspace();
+        var workspace = new SharedWorkspace(new StubMailboxTreeMemory());
         await using var narrowing = this.ModelOver(workspace);
         await workspace.Scope.UpdateAsync(
             _ => new WorkspaceScope { Account = "work@example.test", Folder = "Archive" },
@@ -156,6 +157,79 @@ public sealed class WorkspaceModelTests : IDisposable
     }
 
     /// <summary>
+    /// A role taken across mailboxes narrows no single account, so the indicator names the role in the reader's own
+    /// language rather than falling back to everything, which would say the opposite of what is in force.
+    /// </summary>
+    [Fact]
+    public async Task ScopeDescription_ARoleTakenAcrossMailboxes_NamesTheRoleRatherThanAnAccount()
+    {
+        // Arrange
+        var workspace = new SharedWorkspace(new StubMailboxTreeMemory());
+        await using var model = this.ModelOver(workspace);
+
+        // Act
+        await workspace.Scope.UpdateAsync(
+            _ => new WorkspaceScope { Role = "Sent" },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("Sent, every mailbox", await model.ScopeDescription);
+    }
+
+    /// <summary>
+    /// The tree is the client's scope selector, and the frame holds it rather than owning one of its own — so the rows
+    /// the pane binds to are the tree's, and every act on a row is handed straight on to it.
+    /// </summary>
+    [Fact]
+    public async Task Mailboxes_TheTreeInTheFramesPane_IsTheTreeRatherThanACopyOfIt()
+    {
+        // Arrange
+        var mailboxes = new StubMailboxTree { Paused = true };
+        await using var model = this.ModelOver(mailboxes: mailboxes);
+
+        // Act
+        await model.ToggleMailbox(MailboxTreeShape.AccountKey("work"), TestContext.Current.CancellationToken);
+        await model.RetryMailboxes(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Same(mailboxes.Rows, model.Mailboxes);
+        Assert.True(await model.MailboxesPaused);
+        Assert.Equal([MailboxTreeShape.AccountKey("work")], mailboxes.Toggled);
+        Assert.Equal(1, mailboxes.Asks);
+    }
+
+    /// <summary>Choosing a row is the tree's act, so the frame passes the row on rather than narrowing the scope itself.</summary>
+    [Fact]
+    public async Task SelectMailbox_ARowSomebodyChose_IsHandedToTheTree()
+    {
+        // Arrange
+        var mailboxes = new StubMailboxTree();
+        await using var model = this.ModelOver(mailboxes: mailboxes);
+        var row = new MailboxRow(
+            MailboxTreeShape.AccountKey("work"),
+            MailboxRowKind.Account,
+            Depth: 0,
+            "Work mail",
+            UnreadCount: 3,
+            StoredCount: 40,
+            Standing: "being refreshed",
+            Freshness: "updated within the last hour",
+            IsUnreachable: false,
+            IsFailing: false,
+            IsBehind: false,
+            IsExpandable: true,
+            IsExpanded: false,
+            IsSelected: false,
+            new WorkspaceScope { Account = "work" });
+
+        // Act
+        await model.SelectMailbox(row, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([row], mailboxes.Selected);
+    }
+
+    /// <summary>
     /// The description is built once rather than per read, because the indicator is bound to it and a second feed per
     /// read would leave the view and anything the model asked subscribed to two descriptions of one scope.
     /// </summary>
@@ -163,7 +237,7 @@ public sealed class WorkspaceModelTests : IDisposable
     public async Task ScopeDescription_ReadTwice_IsOneFeed()
     {
         // Arrange
-        await using var model = this.ModelOver(new SharedWorkspace());
+        await using var model = this.ModelOver(new SharedWorkspace(new StubMailboxTreeMemory()));
 
         // Act
         var (first, second) = (model.ScopeDescription, model.ScopeDescription);
@@ -325,14 +399,16 @@ public sealed class WorkspaceModelTests : IDisposable
     public void Constructor_AMissingService_IsRefused()
     {
         // Arrange
-        var workspace = new SharedWorkspace();
+        var workspace = new SharedWorkspace(new StubMailboxTreeMemory());
         using var session = SessionOffering();
+        var mailboxes = new StubMailboxTree();
         var words = ScopeWords();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new WorkspaceModel(null!, session, words));
-        Assert.Throws<ArgumentNullException>(() => new WorkspaceModel(workspace, null!, words));
-        Assert.Throws<ArgumentNullException>(() => new WorkspaceModel(workspace, session, null!));
+        Assert.Throws<ArgumentNullException>(() => new WorkspaceModel(null!, session, mailboxes, words));
+        Assert.Throws<ArgumentNullException>(() => new WorkspaceModel(workspace, null!, mailboxes, words));
+        Assert.Throws<ArgumentNullException>(() => new WorkspaceModel(workspace, session, null!, words));
+        Assert.Throws<ArgumentNullException>(() => new WorkspaceModel(workspace, session, mailboxes, null!));
     }
 
     /// <summary>
@@ -369,10 +445,12 @@ public sealed class WorkspaceModelTests : IDisposable
 
     private WorkspaceModel ModelOver(
         IWorkspace? workspace = null,
-        StubClientSession? session = null) =>
+        StubClientSession? session = null,
+        StubMailboxTree? mailboxes = null) =>
         new(
-            workspace ?? new SharedWorkspace(),
+            workspace ?? new SharedWorkspace(new StubMailboxTreeMemory()),
             session ?? this.offeringEverything,
+            mailboxes ?? new StubMailboxTree(),
             ScopeWords());
 
     private static StubClientSession SessionOffering(params string[] permissions) =>
@@ -382,7 +460,9 @@ public sealed class WorkspaceModelTests : IDisposable
     {
         ["WorkspaceScope.Everything"] = "All your mail",
         ["WorkspaceScope.AccountFolder"] = "{0} · {1}",
+        ["WorkspaceScope.Role"] = "{0}, every mailbox",
         ["WorkspaceScope.Selected"] = "{0} · {1} selected",
+        ["Mailboxes.Role.Sent"] = "Sent",
         ["Workspace.Connection.Attempt"] = "Attempt {0} of {1}",
     });
 }

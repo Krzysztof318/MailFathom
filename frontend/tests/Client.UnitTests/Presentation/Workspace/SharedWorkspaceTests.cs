@@ -3,7 +3,9 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Collections.Immutable;
+using MailFathom.Client.Presentation.Mailboxes;
 using MailFathom.Client.Presentation.Workspace;
+using MailFathom.Client.UnitTests.TestDoubles;
 
 namespace MailFathom.Client.UnitTests.Presentation.Workspace;
 
@@ -25,7 +27,7 @@ public sealed class SharedWorkspaceTests
     public void Intent_ReadTwice_IsOneState()
     {
         // Arrange
-        var workspace = new SharedWorkspace();
+        var workspace = new SharedWorkspace(new StubMailboxTreeMemory());
 
         // Act
         var (first, second) = (workspace.Intent, workspace.Intent);
@@ -39,7 +41,7 @@ public sealed class SharedWorkspaceTests
     public void Scope_ReadTwice_IsOneState()
     {
         // Arrange
-        var workspace = new SharedWorkspace();
+        var workspace = new SharedWorkspace(new StubMailboxTreeMemory());
 
         // Act
         var (first, second) = (workspace.Scope, workspace.Scope);
@@ -53,7 +55,7 @@ public sealed class SharedWorkspaceTests
     public async Task Scope_AWorkspaceNothingHasNarrowed_StartsAtEverything()
     {
         // Arrange
-        var workspace = new SharedWorkspace();
+        var workspace = new SharedWorkspace(new StubMailboxTreeMemory());
 
         // Act
         var scope = await workspace.Scope;
@@ -67,7 +69,7 @@ public sealed class SharedWorkspaceTests
     public async Task Intent_AWorkspaceNobodyHasTypedInto_StartsEmpty()
     {
         // Arrange
-        var workspace = new SharedWorkspace();
+        var workspace = new SharedWorkspace(new StubMailboxTreeMemory());
 
         // Act
         var intent = await workspace.Intent;
@@ -84,7 +86,7 @@ public sealed class SharedWorkspaceTests
     public async Task Scope_NarrowedOnce_IsWhatTheWorkspaceHolds()
     {
         // Arrange
-        var workspace = new SharedWorkspace();
+        var workspace = new SharedWorkspace(new StubMailboxTreeMemory());
         var narrowed = new WorkspaceScope
         {
             Account = "work",
@@ -99,12 +101,40 @@ public sealed class SharedWorkspaceTests
         Assert.Equal(narrowed, await workspace.Scope);
     }
 
+    /// <summary>
+    /// A run opens where the last one was left, because the tree writes the scope it narrowed to into the store and
+    /// this is the state every space then reads. Without it a restart would land on everything with the tree still
+    /// drawing the folder as selected.
+    /// </summary>
+    [Fact]
+    public async Task Scope_AWorkspaceOpenedAfterARunThatNarrowed_StartsWhereThatRunLeftIt()
+    {
+        // Arrange
+        var narrowed = new WorkspaceScope { Account = "work", Folder = "INBOX" };
+        var memory = new StubMailboxTreeMemory(new RememberedMailboxes(narrowed, ImmutableHashSet<string>.Empty));
+        var workspace = new SharedWorkspace(memory);
+
+        // Act
+        var scope = await workspace.Scope;
+
+        // Assert
+        Assert.Equal(narrowed, scope);
+    }
+
+    /// <summary>A workspace without the store it opens on would be one that cannot say where a run starts.</summary>
+    [Fact]
+    public void Constructor_AMissingStore_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(() => new SharedWorkspace(null!));
+    }
+
     /// <summary>A question travels with somebody between spaces rather than being retyped in each of them.</summary>
     [Fact]
     public async Task Intent_TypedOnce_IsWhatTheWorkspaceHolds()
     {
         // Arrange
-        var workspace = new SharedWorkspace();
+        var workspace = new SharedWorkspace(new StubMailboxTreeMemory());
 
         // Act
         await workspace.Intent.SetAsync("what did the auditor ask for", TestContext.Current.CancellationToken);

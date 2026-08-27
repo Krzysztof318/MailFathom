@@ -23,25 +23,29 @@ public sealed class WorkspaceScopeTests
         // Assert
         Assert.Null(scope.Account);
         Assert.Null(scope.Folder);
+        Assert.Null(scope.Role);
         Assert.Empty(scope.Selection);
         Assert.False(scope.NarrowsAnything);
     }
 
     /// <summary>
     /// An account in scope is a narrowing, whether or not anything within it is selected — and so is a folder named
-    /// without one, which nothing here refuses and which therefore must not read as everything.
+    /// without one, which nothing here refuses and which therefore must not read as everything. A role is one too: it
+    /// names no account and still leaves most of the mail out.
     /// </summary>
     [Fact]
-    public void NarrowsAnything_AnAccountAFolderOrASelection_IsANarrowing()
+    public void NarrowsAnything_AnAccountAFolderARoleOrASelection_IsANarrowing()
     {
         // Act
         var account = WorkspaceScope.Everything with { Account = "work" };
         var folder = WorkspaceScope.Everything with { Folder = "Inbox" };
+        var role = WorkspaceScope.Everything with { Role = "Sent" };
         var selection = WorkspaceScope.Everything with { Selection = ImmutableArray.Create("1") };
 
         // Assert
         Assert.True(account.NarrowsAnything);
         Assert.True(folder.NarrowsAnything);
+        Assert.True(role.NarrowsAnything);
         Assert.True(selection.NarrowsAnything);
     }
 
@@ -86,5 +90,39 @@ public sealed class WorkspaceScopeTests
 
         // Assert
         Assert.NotEqual(work, personal);
+    }
+
+    /// <summary>
+    /// A role taken across mailboxes is a place of its own rather than a folder under no account, so the two are not
+    /// one scope — reading them as one would mark every mailbox's own sent folder as the selected row.
+    /// </summary>
+    [Fact]
+    public void Equals_ARoleAcrossMailboxesAndAFolderOfThatName_AreNotOneScope()
+    {
+        // Arrange
+        var role = WorkspaceScope.Everything with { Role = "Sent" };
+        var folder = WorkspaceScope.Everything with { Folder = "Sent" };
+
+        // Assert
+        Assert.NotEqual(role, folder);
+    }
+
+    /// <summary>
+    /// The tree marks a row on the place a scope names rather than on the whole of it, because what is selected inside
+    /// a folder changes as somebody reads and the folder they are reading in does not.
+    /// </summary>
+    [Fact]
+    public void NamesSamePlaceAs_TwoScopesInOneFolderHoldingDifferentSelections_NameOnePlace()
+    {
+        // Arrange
+        var reading = new WorkspaceScope { Account = "work", Folder = "Inbox", Selection = ImmutableArray.Create("1") };
+        var chosen = new WorkspaceScope { Account = "work", Folder = "Inbox" };
+        var elsewhere = new WorkspaceScope { Account = "work", Folder = "Archive" };
+
+        // Assert
+        Assert.True(reading.NamesSamePlaceAs(chosen));
+        Assert.NotEqual(reading, chosen);
+        Assert.False(reading.NamesSamePlaceAs(elsewhere));
+        Assert.False(reading.NamesSamePlaceAs(null));
     }
 }
