@@ -449,10 +449,13 @@ identifier are the whole of it.
 
 ### Reading the rules, running them, and finding out what they did
 
-Five commands, and none of them writes a rule. A rule is authored in configuration, where an edit is reviewable in a
-diff before it reaches a mailbox, so `mfctl` runs the rules and reads what they concluded and never creates, edits,
-enables, disables, or deletes one. [`MailRules`](configuration-mail.md#mailrules) is the section they are declared
-in, and [mail rules](../features/mail-rules.md) is the whole authoring surface.
+Five commands, and none of *them* writes a rule: they run the rules and read what the rules concluded, and none of
+them creates, edits, enables, disables, or deletes one. A rule is authored in configuration, where an edit is
+reviewable in a diff before it reaches a mailbox, and that remains where a rule belongs — but `mfctl config` reaches
+those settings like any other, so `mfctl config set MailRules:Rules:1:Enabled false` is a change an operator can make
+without a restart and without a diff. [`MailRules`](configuration-mail.md#mailrules) is the section they are declared
+in, [mail rules](../features/mail-rules.md) is the whole authoring surface, and [reading and changing the
+configuration](#reading-and-changing-the-deployments-own-configuration) is what a persisted change is.
 
 **`mfctl rules list` is the command to run after editing rules.** A reload whose rules do not validate is refused and
 leaves the previous set running, which reaches the deployment's log and nothing else — so an edited file and an
@@ -542,10 +545,13 @@ to name and the rule's own words are what an operator has to correct.
 
 ### Classifying the mail you already have, and reading what was concluded
 
-Three commands, and none of them writes a setting. Whether mail is classified at all, what a scanner is judged by, and
-what happens to junk are configuration for the reason a rule is, so `mfctl` applies them to the mail a deployment
-already holds and reads what was decided. [`SpamClassification`](configuration-ai.md#spamclassification) is the
-section, and [spam classification](../features/spam-classification.md) is what the feature does.
+Three commands, and none of *them* writes a setting: they apply the deployment's classification settings to the mail
+it already holds and read what was decided. Whether mail is classified at all, what a scanner is judged by, and what
+happens to junk are configuration for the reason a rule is — which is what `mfctl config` reaches, so those settings
+are changeable without a restart through [reading and changing the
+configuration](#reading-and-changing-the-deployments-own-configuration) rather than through these three.
+[`SpamClassification`](configuration-ai.md#spamclassification) is the section, and [spam
+classification](../features/spam-classification.md) is what the feature does.
 
 **`mfctl spam run --account <id>` is a dry run unless you add `--apply`.** It returns as soon as the deployment has
 written the request down and never waits for the walk; the run is carried by the account's synchronization runs, so

@@ -115,6 +115,14 @@ internal sealed class PersistedSettingsAdministration(
     /// <param name="cancellationToken">Cancels the read.</param>
     /// <returns>The document with every secret-bearing value replaced by the redaction marker, and the version it was read at.</returns>
     /// <exception cref="RootSettingsUnreadableException">Thrown when the persisted configuration cannot be read.</exception>
+    /// <exception cref="FormatException">Thrown when the persisted row is JSON but not an object of configuration settings.</exception>
+    /// <exception cref="JsonException">Thrown when the persisted row is not JSON, or is nested past what a document may be.</exception>
+    /// <remarks>
+    /// The last two are what a row written outside MailFathom reaches this with — <c>jsonb</c> stores an array, a
+    /// scalar, and a hundred levels of nesting as happily as it stores a document — so the redaction walk refuses it
+    /// rather than disclosing what it could not judge. They are the same two <c>RootSettingsReloader</c> treats as an
+    /// expected outcome over the same input, and the caller answers them as a refusal rather than as a failure.
+    /// </remarks>
     internal async Task<PersistedSettingsDocument> ReadDocumentAsync(CancellationToken cancellationToken)
     {
         authorization.RequirePermission(MailFathomPermission.AdminRead);
@@ -146,13 +154,29 @@ internal sealed class PersistedSettingsAdministration(
 
         if (effective.Count == 0)
         {
-            // The version this process composed rather than the one the caller stated. Nothing was read here, so the
-            // caller's number is unchecked — and the answer publishes the version now in force, which is what the next
-            // change is composed over. Reporting theirs back would hand a client that guessed 999 a number to author
-            // against that the writer then refuses as superseded.
+            // This is the one branch a keyed change leaves by without reaching the writer, so it is where the version
+            // guard has to be applied rather than inherited. What decided the change alters nothing is the layer this
+            // process composed, and a replica that has not itself written holds the layer it started with — so a row
+            // another replica moved past leaves this one answering that a change it needs is already in place. Reading
+            // the row is what tells the two apart, and it costs a read on the branch that writes nothing rather than
+            // on every keyed change.
+            var inForce = await documents.ReadAsync(cancellationToken);
+
+            if (inForce.Version != expectedVersion)
+            {
+                return SettingsWriteOutcome.Refused(
+                    MailFathomErrorCode.ConfigurationVersionSuperseded,
+                    inForce.Version,
+                    [
+                        $"The change was composed over persisted configuration version {expectedVersion}, and version {inForce.Version} is in force. Read the configuration as it now stands and state the change again against that.",
+                    ]);
+            }
+
+            // The version in force rather than the one the caller stated, which the comparison above has just made the
+            // same number: the answer publishes what the next change is composed over.
             return SettingsWriteOutcome.NothingToChange(
-                reader.ComposedVersion,
-                $"Nothing in the change would alter the persisted document — each setting either already stands as it was asked to, or names one the layer does not carry — so nothing was written and version {reader.ComposedVersion} stays in force.");
+                inForce.Version,
+                $"Nothing in the change would alter the persisted document — each setting either already stands as it was asked to, or names one the layer does not carry — so nothing was written and version {inForce.Version} stays in force.");
         }
 
         return await this.CommitAsync(
@@ -197,10 +221,19 @@ internal sealed class PersistedSettingsAdministration(
         }
 
         IReadOnlyList<ConfigurationEdit> edits;
+        IReadOnlyList<string> unplaceable;
 
         try
         {
-            edits = DifferenceBetween(Flatten(inForce.Json), Flatten(documentJson));
+            // Each document is flattened once and both readings are used twice. Flattening encodes the document,
+            // builds a configuration root over it, and materializes a dictionary, and the buffer is bounded at
+            // RootSettingsDocument.MaximumOctets — so doing it per question would make a write-permitted caller pay
+            // for twice the parsing a save needs.
+            var standing = Flatten(inForce.Json);
+            var saved = Flatten(documentJson);
+
+            edits = DifferenceBetween(standing, saved);
+            unplaceable = FindMarkersTheSaveCannotPlace(standing, saved);
         }
         catch (Exception refusal)
             when (refusal is FormatException or JsonException or InvalidDataException or ArgumentException)
@@ -215,7 +248,7 @@ internal sealed class PersistedSettingsAdministration(
                 [$"The saved buffer is not a document of configuration settings this deployment can persist, so nothing was written: {refusal.Message}"]);
         }
 
-        if (FindMarkersTheSaveCannotPlace(Flatten(inForce.Json), Flatten(documentJson)) is { Count: > 0 } unplaceable)
+        if (unplaceable.Count > 0)
         {
             return SettingsWriteOutcome.Refused(
                 MailFathomErrorCode.ConfigurationCandidateInvalid,
@@ -387,7 +420,7 @@ internal sealed class PersistedSettingsAdministration(
         using var buffer = new MemoryStream(Encoding.UTF8.GetBytes(json));
 
         // Released with the stream. The root owns the provider it built and that provider's reload-token registration,
-        // and a save flattens twice; RootSettingsWriter.Judge disposes its own composition for the same reason.
+        // and a save flattens both documents; RootSettingsWriter.Judge disposes its own composition for the same reason.
         using var composed = (ConfigurationRoot)new ConfigurationBuilder().AddJsonStream(buffer).Build();
 
         return composed

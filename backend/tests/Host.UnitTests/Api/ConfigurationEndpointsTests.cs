@@ -160,6 +160,57 @@ public sealed class ConfigurationEndpointsTests
         Assert.Empty(reading.Value!.Settings);
     }
 
+    /// <summary>
+    /// The reader raises the flag and this route is what acts on it. Nothing else in the change proves the second half:
+    /// a too-broad reading carries an empty settings list, so a route that ignored the flag would answer <c>200</c>
+    /// with nothing beneath a path thousands of settings sit under — which a script reads as a deployment that
+    /// configures none of them.
+    /// </summary>
+    [Fact]
+    public void Read_APrefixPastTheReadingBound_RefusesWithTheCountRatherThanAnsweringAnEmptyReading()
+    {
+        // Arrange
+        var beyondTheBound = EffectiveSettingsReader.MaximumSettings + 1;
+
+        using var deployment = ComposedConfigurationDeployment.Composed(
+            provisioned: SectionOf("Wide", beyondTheBound),
+            persisted: "{}");
+
+        // Act
+        var result = ConfigurationEndpoints.Read(deployment.Administration, "Wide");
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+        Assert.Contains(
+            $"matches {beyondTheBound} settings",
+            refusal.ProblemDetails.Detail,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>The adoption preview answers the same bound the same way, and is a route of its own rather than a shape on the one above.</summary>
+    [Fact]
+    public void ReadAdoptable_APrefixPastTheReadingBound_RefusesWithTheCountRatherThanAnsweringAnEmptyReading()
+    {
+        // Arrange
+        var beyondTheBound = EffectiveSettingsReader.MaximumSettings + 1;
+
+        using var deployment = ComposedConfigurationDeployment.Composed(
+            provisioned: SectionOf("Wide", beyondTheBound),
+            persisted: "{}");
+
+        // Act
+        var result = ConfigurationEndpoints.ReadAdoptable(deployment.Administration, "Wide");
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+        Assert.Contains(
+            $"matches {beyondTheBound} settings",
+            refusal.ProblemDetails.Detail,
+            StringComparison.Ordinal);
+    }
+
     /// <summary>A secret-bearing setting leaves this surface as the marker, whichever route reports it.</summary>
     [Fact]
     public void Read_ASecretBearingSetting_ReportsTheMarkerAndSaysThatItDid()
@@ -352,9 +403,39 @@ public sealed class ConfigurationEndpointsTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(3, result.Value!.Version);
-        Assert.DoesNotContain("/run/secrets/chat", result.Value.Document, StringComparison.Ordinal);
-        Assert.Contains(SettingRedaction.Marker, result.Value.Document, StringComparison.Ordinal);
+        var document = Assert.IsType<Ok<ConfigurationDocumentResponse>>(result.Result);
+        Assert.Equal(3, document.Value!.Version);
+        Assert.DoesNotContain("/run/secrets/chat", document.Value.Document, StringComparison.Ordinal);
+        Assert.Contains(SettingRedaction.Marker, document.Value.Document, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The column holds any JSON, so a row written outside MailFathom can be something the redaction walk cannot judge
+    /// — an array, a scalar, or nesting past what the parser reads. It reaches this route rather than the start,
+    /// because a start refuses such a row outright and a reload keeps the layer it already had: the process goes on
+    /// running while the row it reads the document from is unreadable. Left to throw, that arrives as a failed request
+    /// and an editing command that will not open, with nothing naming what to correct.
+    /// </summary>
+    [Fact]
+    public async Task ReadDocumentAsync_APersistedRowThatIsNotADocumentOfSettings_IsRefusedWithWhatToCorrect()
+    {
+        // Arrange
+        using var deployment = ComposedConfigurationDeployment.Composed(provisioned: "{}", persisted: "{}");
+
+        deployment.Row.CommitFromElsewhere("[1, 2, 3]");
+
+        // Act
+        var result = await ConfigurationEndpoints.ReadDocumentAsync(
+            deployment.Administration,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+        Assert.Contains(
+            "not a document of configuration settings",
+            refusal.ProblemDetails.Detail,
+            StringComparison.Ordinal);
     }
 
     /// <summary>An editing session that means to change nothing sends nothing, so an empty body is a caller's mistake.</summary>
@@ -557,5 +638,15 @@ public sealed class ConfigurationEndpointsTests
         services.AddSingleton(deployment.Administration);
 
         return new TestEndpointRouteBuilder(services.BuildServiceProvider());
+    }
+
+    /// <summary>Composes one section holding the stated number of settings, each a value of its own.</summary>
+    private static string SectionOf(string section, int settings)
+    {
+        var written = string.Join(
+            ", ",
+            Enumerable.Range(0, settings).Select(position => $"\"{position}\": \"value\""));
+
+        return $$"""{ "{{section}}": { {{written}} } }""";
     }
 }

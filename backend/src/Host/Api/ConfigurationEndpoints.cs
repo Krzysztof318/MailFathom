@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Text.Json;
 using MailFathom.Application.Configuration;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Administration;
@@ -199,19 +200,37 @@ internal static class ConfigurationEndpoints
     /// <summary>Hands over the persisted document itself, as the sparse JSON an editing session opens.</summary>
     /// <param name="settings">The deployment's configuration administration.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns><c>200</c> with the document and the version it was read at.</returns>
+    /// <returns><c>200</c> with the document and the version it was read at, or <c>400</c> when the persisted row is not a document of configuration settings.</returns>
     /// <remarks>
+    /// <para>
     /// The document is read from the database rather than from the layer this process composed, because it is what the
     /// caller's save is judged against: composing an edit over what this process happens to hold would author it
     /// against a version another writer may already have replaced.
+    /// </para>
+    /// <para>
+    /// A row nothing here wrote is answered as a refusal rather than left to throw. The column holds any JSON, so a
+    /// row edited in the database can be an array, a scalar, or nested past what the parser reads — and an operator
+    /// meeting that needs the sentence naming what to correct rather than a failed request and an editing command that
+    /// will not open.
+    /// </para>
     /// </remarks>
-    internal static async Task<Ok<ConfigurationDocumentResponse>> ReadDocumentAsync(
+    internal static async Task<Results<Ok<ConfigurationDocumentResponse>, ProblemHttpResult>> ReadDocumentAsync(
         [FromServices] PersistedSettingsAdministration settings,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
-        var document = await settings.ReadDocumentAsync(cancellationToken);
+        PersistedSettingsDocument document;
+
+        try
+        {
+            document = await settings.ReadDocumentAsync(cancellationToken);
+        }
+        catch (Exception refusal) when (refusal is FormatException or JsonException)
+        {
+            return Refusal(
+                $"The persisted configuration row is not a document of configuration settings, so it cannot be read or edited: {refusal.Message} Correct the row where it was written.");
+        }
 
         return TypedResults.Ok(new ConfigurationDocumentResponse(document.Version, document.Json));
     }

@@ -1065,7 +1065,7 @@ internal sealed class AdminApiClient
             token,
             CliJsonContext.Default.ConfigurationReading,
             cancellationToken,
-            overBoundRemedy: "Ask for a narrower path — 'mfctl config show <prefix>' reads one section rather than every setting the deployment composed.");
+            overBoundRemedy: "Adopt beneath a narrower path — 'mfctl config adopt <prefix>' previews and adopts one section at a time.");
     }
 
     /// <summary>Asks the deployment for the persisted configuration document itself.</summary>

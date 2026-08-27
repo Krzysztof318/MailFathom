@@ -629,6 +629,97 @@ public sealed class PersistedSettingsAdministrationTests
                 StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A keyed change that alters nothing is the one branch a write leaves by without reaching the writer, so the
+    /// version guard is applied here rather than inherited from it. The case is a replica that has not itself written:
+    /// nothing on the read path reloads the layer, so it goes on composing the document it started with and would
+    /// otherwise answer that a change the row needs is already in place — with its own stale version, which the writer
+    /// then refuses as superseded on the operator's next attempt.
+    /// </summary>
+    [Fact]
+    public async Task ApplyAsync_AChangeAlteringNothingComposedOverASupersededVersion_IsRefusedRatherThanReportedAsNothingToDo()
+    {
+        // Arrange
+        using var deployment = ComposedConfigurationDeployment.Composed(
+            provisioned: "{}",
+            persisted: """{ "MailboxSearch": { "SnippetsPerEmail": "5" } }""",
+            version: 3);
+
+        // Act
+        var refused = await deployment.Administration.ApplyAsync(
+            [ConfigurationEdit.SetTo("MailboxSearch:SnippetsPerEmail", "5")],
+            expectedVersion: 2,
+            evenIfShadowed: false,
+            TestContext.Current.CancellationToken);
+
+        var reported = await deployment.ApplyAsync(ConfigurationEdit.SetTo("MailboxSearch:SnippetsPerEmail", "5"));
+
+        // Assert
+        Assert.False(refused.Committed);
+        Assert.Equal(MailFathomErrorCode.ConfigurationVersionSuperseded, refused.Refusal);
+        Assert.Equal(3, refused.Version);
+
+        // The same change over the version in force is what the branch is actually for.
+        Assert.False(reported.Committed);
+        Assert.False(reported.Refusal.IsSpecified);
+        Assert.Equal(0, deployment.Row.AcceptedCommits);
+    }
+
+    /// <summary>
+    /// An adoption beneath the reading bound can still be past what one write carries, and the window between the two
+    /// is live: a thousand edits is half of the two thousand settings a reading answers with. Nothing else reaches this
+    /// branch, and dropping it would hand the writer a change it refuses as an argument failure — which arrives at the
+    /// operator as a failed request rather than as the sentence naming the bound.
+    /// </summary>
+    [Fact]
+    public async Task AdoptAsync_APrefixTheFilesDecideMoreSettingsBeneathThanOneWriteCarries_RefusesWithTheCount()
+    {
+        // Arrange
+        var beyondTheWrite = IConfigurationWriter.MaximumEdits + 1;
+
+        using var deployment = Composed(
+            provisioned: SectionOf("Wide", beyondTheWrite),
+            persisted: "{}");
+
+        // Act
+        var outcome = await deployment.AdoptAsync("Wide");
+
+        // Assert
+        Assert.False(outcome.Committed);
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome.Refusal);
+        Assert.Equal(0, deployment.Row.AcceptedCommits);
+        Assert.Contains(
+            outcome.Messages,
+            message => message.Contains(
+                $"would write {beyondTheWrite} settings in one change",
+                StringComparison.Ordinal));
+    }
+
+    /// <summary>The same bound on the other surface that composes its edits from a document rather than from a caller's list.</summary>
+    [Fact]
+    public async Task ApplyDocumentAsync_ABufferDifferingInMoreSettingsThanOneWriteCarries_RefusesWithTheCount()
+    {
+        // Arrange
+        var beyondTheWrite = IConfigurationWriter.MaximumEdits + 1;
+
+        using var deployment = Composed(provisioned: "{}", persisted: "{}");
+
+        // Act
+        var outcome = await deployment.ApplyDocumentAsync(
+            SectionOf("Wide", beyondTheWrite),
+            deployment.Row.Version);
+
+        // Assert
+        Assert.False(outcome.Committed);
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome.Refusal);
+        Assert.Equal(0, deployment.Row.AcceptedCommits);
+        Assert.Contains(
+            outcome.Messages,
+            message => message.Contains(
+                $"differs from the document in force in {beyondTheWrite} settings",
+                StringComparison.Ordinal));
+    }
+
     /// <summary>Composes the deployment these tests write against.</summary>
     private static ComposedConfigurationDeployment Composed(
         string provisioned,

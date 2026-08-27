@@ -510,6 +510,49 @@ public sealed class ConfigurationCommandTests : IDisposable
         Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, mode);
     }
 
+    /// <summary>
+    /// The mode on the file does not survive the operator's first save: an editor that writes a sibling and renames it
+    /// over the target creates that sibling under the process umask. So the buffer sits in a directory of its own,
+    /// which the command creates readable by its owner alone and which keeps the protection whatever the editor left
+    /// on the file inside it.
+    /// </summary>
+    [Fact]
+    public async Task Edit_OnAPlatformWithFileModes_HoldsTheBufferInADirectoryReadableByItsOwnerAlone()
+    {
+        // Arrange
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        using var deployment = FakeConfigurationDeployment.Holding(
+            documents: [FakeConfigurationDeployment.Document(version: 1, RedactedChatDocument)]);
+
+        UnixFileMode mode = default;
+        var containing = string.Empty;
+        this.OpensTheBufferWith((_, path) =>
+        {
+            // Read inside the callback for the reason the sibling test states, and guarded again for the same one.
+            if (!OperatingSystem.IsWindows())
+            {
+                containing = Path.GetDirectoryName(path) ?? string.Empty;
+                mode = File.GetUnixFileMode(containing);
+            }
+
+            return true;
+        });
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "config", "edit", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute, mode);
+
+        // And the session takes its directory with it, rather than leaving one behind per invocation.
+        Assert.False(Directory.Exists(containing));
+    }
+
     /// <summary>An emptied buffer is how every editor-driven command an operator has met is abandoned, and it is honoured as one.</summary>
     [Fact]
     public async Task Edit_AnEmptiedBuffer_WritesNothingAndSucceeds()

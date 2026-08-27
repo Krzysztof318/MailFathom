@@ -151,15 +151,17 @@ internal static class HostComposition
 
     /// <summary>Registers the reading and writing sides of the deployment's persisted configuration, and the seam the layer is republished through.</summary>
     /// <remarks>
+    /// <para>
     /// The writer a change is committed by, the reader that reports which layer supplies each value, and the
     /// administration service the configuration routes resolve, which composes the two into what an operator asks
     /// for.
-    /// </remarks>
-    /// <remarks>
+    /// </para>
+    /// <para>
     /// The provider is found among the sources rather than handed in, because the layer is composed while the builder
     /// is being made and the composition root is called after that. A host built without the layer — the graph a unit
     /// test composes from files alone — registers none of these services, so nothing resolves a writer over a layer
     /// that is not there, and a deployment reading its settings from files alone offers no way to write one.
+    /// </para>
     /// </remarks>
     private static void AddPersistedConfiguration(WebApplicationBuilder builder)
     {

@@ -322,8 +322,11 @@ fires such a rule by itself, and `mfctl rules run` is how it is run. A rule with
 with the occasions it declares beside the trigger. It is also where a rule you meant to run over arriving mail shows
 that it never says `Arrival`.
 
-None of these writes a rule, and none ever will: rules are configuration, so you change one by editing the file your
-deployment reads. [Reading the rules, running them, and finding out what they
+None of these five writes a rule, and none ever will: they run the rules and read what the rules concluded. Rules are
+configuration, so what changes one is [changing a setting without a
+restart](#changing-a-setting-without-a-restart) or an edit to the file your deployment reads — the file is where a rule
+is reviewable in a diff before it reaches a mailbox, and the persisted layer is what changes one without a restart.
+[Reading the rules, running them, and finding out what they
 did](../operations/admin-endpoint.md#reading-the-rules-running-them-and-finding-out-what-they-did) is the operator's
 reference for all five, including what the history records and what it deliberately does not.
 
@@ -347,8 +350,10 @@ single thing MailFathom does to your mail, and the dry run tells you how much of
 The verdicts are recorded either way — what `--apply` adds is the mail server being written to.
 
 A second run while one is going does not start a second walk; you are told the first is still under way, on the terms
-it was started with. None of these writes a setting, and none ever will: whether mail is classified, what a scanner is
-judged by, and what happens to junk are configuration, so you change them by editing the file your deployment reads.
+it was started with. None of these three writes a setting, and none ever will: they apply the settings your deployment
+already holds. Whether mail is classified, what a scanner is judged by, and what happens to junk are configuration, so
+what changes them is [changing a setting without a restart](#changing-a-setting-without-a-restart) or an edit to the
+file your deployment reads.
 [Classifying the mail you already have, and reading what was
 concluded](../operations/admin-endpoint.md#classifying-the-mail-you-already-have-and-reading-what-was-concluded) is the
 operator's reference for all three.

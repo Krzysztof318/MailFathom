@@ -6,6 +6,7 @@ using System.CommandLine;
 using System.Globalization;
 using MailFathom.Cli.Administration;
 using MailFathom.Cli.Administration.Configuration;
+using MailFathom.Cli.Credentials;
 
 namespace MailFathom.Cli.Commands.Configuration;
 
@@ -71,10 +72,13 @@ internal static class EditConfigurationCommand
 
         var opened = await client.ReadConfigurationDocumentAsync(profile.Token, cancellationToken);
         var document = opened.Document ?? string.Empty;
-        var buffer = Path.Combine(Path.GetTempPath(), $"mailfathom-configuration-{Guid.NewGuid():N}.json");
+        var session = Path.Combine(Path.GetTempPath(), $"mailfathom-configuration-{Guid.NewGuid():N}");
+        var buffer = Path.Combine(session, "configuration.json");
 
         try
         {
+            OwnerOnlyStorage.CreateDirectory(session);
+
             SettingsBuffer.Write(buffer, document);
 
             if (context.Edit(editor, buffer) is { Saved: false } ended)
@@ -93,25 +97,33 @@ internal static class EditConfigurationCommand
         }
         finally
         {
-            Discard(buffer);
+            Discard(session);
         }
     }
 
-    /// <summary>Removes the buffer, letting the invocation's own outcome stand where it cannot be removed.</summary>
+    /// <summary>Removes the session's directory and the buffer in it, letting the invocation's own outcome stand where it cannot be removed.</summary>
     /// <remarks>
+    /// <para>
     /// The case is the one this command's own guidance anticipates: a graphical editor started without its wait flag
     /// returns while still holding the file open, so the delete throws on Windows over an invocation that had already
     /// decided what it did. Turning that into a stack trace would report a failure to somebody whose command worked,
     /// or replace the sentence naming why nothing was written — which is the rule <c>CliRunner.Record</c> states for a
-    /// full disk. What is left behind is the buffer as the editor last wrote it, in a temporary directory — which is
-    /// whatever the operator saved rather than the redacted document this command opened, and under whatever mode the
-    /// editor created it with where it saved by writing a new file and renaming it over the original.
+    /// full disk.
+    /// </para>
+    /// <para>
+    /// What is left behind on that path is the session's own directory, which is readable by its owner alone whatever
+    /// the editor did to the file inside it. That is why the buffer sits in a directory of its own rather than in the
+    /// temporary directory itself: an editor that saves by writing a sibling and renaming it over the target creates
+    /// that sibling under the process umask, so the mode this command set at creation does not survive the first save
+    /// — and what the file then holds is the deployment's whole persisted configuration plus anything the operator
+    /// typed over a marker.
+    /// </para>
     /// </remarks>
-    private static void Discard(string buffer)
+    private static void Discard(string session)
     {
         try
         {
-            File.Delete(buffer);
+            Directory.Delete(session, recursive: true);
         }
         catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
         {
