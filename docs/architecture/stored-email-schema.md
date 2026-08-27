@@ -203,14 +203,16 @@ Nothing keys onto this row and nothing cascades from it. It describes the deploy
 | `CreatedAt`, `UpdatedAt` | When the owner was provisioned, and when their document last changed — which is the provisioning instant until it does |
 | `DocumentWrittenAtRuntime` | Whether anything has written the document while the deployment was running. An owner a deployment declares in configuration carries the envelope alone and the empty object the row was provisioned with, and an owner whose document was written and then emptied carries the same octets: the two are different facts and this is what tells them apart, so nothing has to read a deployment's files to find out which of them a row is |
 
-**The document binds to a typed record, and the envelope beside it never depends on reading one.** What the column
-holds is one owner's configurable record — their mail-account declarations today, and the settings that are their own
-rather than the deployment's as each moves out of the deployment's section. It is bound strictly, so a property nothing
-binds is a refusal rather than a value quietly dropped, and the record is then judged by every rule a mail account is
-declared under: the identifier and the published name are unique *within the owner*, so two people may each declare
-`work` and neither is refused for it. The document carries no secret material at all — a mailbox password is a
-reference naming where the material is kept, and a value carrying the material itself is refused whichever direction it
-arrives from. Nothing in it shadows a deployment setting, because there is no owner configuration layer: an owner-level
+**The document has a typed record to bind to, and the envelope beside it never depends on reading one.** What the
+column holds is one owner's configurable record — their mail-account declarations today, and the settings that are
+their own rather than the deployment's as each moves out of the deployment's section. This release carries that record
+and the binder for it and no path that drives one: the read hands the document on as the row holds it, bounded by size
+and judged in no other way, so a row edited by hand is not refused on the way out. What the binder does once something
+drives it is bind strictly — a property nothing binds is a refusal rather than a value quietly dropped — and then judge
+the record by every rule a mail account is declared under: the identifier and the published name are unique *within the
+owner*, so two people may each declare `work` and neither is refused for it. The record may carry no secret material at
+all — a mailbox password is a reference naming where the material is kept, and a value carrying the material itself is
+refused. Nothing in it shadows a deployment setting, because there is no owner configuration layer: an owner-level
 setting is a property of this record, or it is a deployment setting somebody put in the wrong document. The label, the
 version, and the marker stay relational for the reason the identifier does — authenticating a request and joining an
 owner's mail must never wait on a document being parsed.

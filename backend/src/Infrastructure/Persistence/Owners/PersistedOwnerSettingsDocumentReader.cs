@@ -3,9 +3,10 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Access;
-using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace MailFathom.Infrastructure.Persistence.Owners;
 
@@ -23,18 +24,40 @@ namespace MailFathom.Infrastructure.Persistence.Owners;
 /// exists to refuse.
 /// </para>
 /// <para>
-/// The document is carried whatever its size, unlike the deployment's, and the difference is where the ceiling has to
-/// hold. <see cref="OwnerSettingsDocument.MaximumOctets" /> bounds what MailFathom binds, and every write is judged
-/// against it before it commits, so a row past it can only be one somebody wrote into the database by hand — and it is
-/// refused where the expansion happens rather than here, with the refusal reaching the caller who asked for the owner.
-/// The deployment's own document is read before any endpoint is open and bounded in the statement for exactly that
-/// reason: there, an oversized row is a start with no message rather than an answer somebody receives.
+/// The document is bounded before it is transferred rather than after, which is why this is a bare command over the
+/// data source rather than a query composed through the model: <c>jsonb</c> holds up to a gigabyte, the bound is a
+/// measurement PostgreSQL makes and the model cannot express, and a row past it read into the process is an allocation
+/// failure inside a request rather than a refusal naming the limit. It is the same statement shape the deployment's
+/// own document is read under, and for the same reason.
+/// </para>
+/// <para>
+/// The statement names the owner as a parameter and composes no identifier from anything a caller supplied, so there
+/// is nothing here for a value to reach.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this reader.")]
 [RequiresIntegrationCoverage]
-internal sealed class PersistedOwnerSettingsDocumentReader(MailFathomDbContext dbContext) : IOwnerSettingsDocumentReader
+internal sealed class PersistedOwnerSettingsDocumentReader(NpgsqlDataSource dataSource) : IOwnerSettingsDocumentReader
 {
+    /// <summary>Reads the row, and the document with it only when the document is small enough to bind.</summary>
+    /// <remarks>
+    /// The length decides whether the document is sent at all, in the one statement rather than in a second round
+    /// trip: a bound applied after the column reached the client would have paid the transfer it exists to refuse.
+    /// The cast is what makes both the measurement and the value the text the parser will read, rather than whatever
+    /// the driver would map <c>jsonb</c> to.
+    /// </remarks>
+    private const string SelectRecord =
+        """
+        SELECT
+            "DisplayName",
+            octet_length("Document"::text) AS "Length",
+            CASE WHEN octet_length("Document"::text) <= @maximumOctets THEN "Document"::text END AS "Document",
+            "Version",
+            "DocumentWrittenAtRuntime"
+        FROM settings_accounts
+        WHERE "Id" = @owner;
+        """;
+
     /// <inheritdoc />
     public async Task<OwnerSettingsDocument?> ReadAsync(MailOwnerId owner, CancellationToken cancellationToken)
     {
@@ -43,27 +66,31 @@ internal sealed class PersistedOwnerSettingsDocumentReader(MailFathomDbContext d
             throw new ArgumentException("An owner record is read for an owner, and the value names nobody.", nameof(owner));
         }
 
-        var ownerValue = owner.Value;
+        await using var command = dataSource.CreateCommand(SelectRecord);
+        command.Parameters.AddWithValue("owner", owner.Value);
+        command.Parameters.AddWithValue("maximumOctets", OwnerSettingsDocument.MaximumOctets);
 
-        var record = await dbContext.OwnerAccounts
-            .AsNoTracking()
-            .Where(candidate => candidate.Id == ownerValue)
-            .Select(candidate => new
-            {
-                candidate.DisplayName,
-                candidate.Document,
-                candidate.Version,
-                candidate.DocumentWrittenAtRuntime,
-            })
-            .SingleOrDefaultAsync(cancellationToken);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
-        return record is null
-            ? null
-            : new OwnerSettingsDocument(
-                owner,
-                record.DisplayName,
-                record.Document,
-                record.Version,
-                record.DocumentWrittenAtRuntime);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        var documentOctets = reader.GetInt32(1);
+
+        if (documentOctets > OwnerSettingsDocument.MaximumOctets)
+        {
+            throw new OwnerSettingsUnreadableException(string.Create(
+                CultureInfo.InvariantCulture,
+                $"The record of owner {owner.Value} is {documentOctets} octets, past the {OwnerSettingsDocument.MaximumOctets} MailFathom binds an owner's document from, so it was not read. An owner record is a page of declarations rather than a payload: check what wrote the settings_accounts row."));
+        }
+
+        return new OwnerSettingsDocument(
+            owner,
+            reader.GetString(0),
+            reader.GetString(2),
+            reader.GetInt64(3),
+            reader.GetBoolean(4));
     }
 }

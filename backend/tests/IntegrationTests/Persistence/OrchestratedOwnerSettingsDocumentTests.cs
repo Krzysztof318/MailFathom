@@ -75,6 +75,12 @@ public sealed class OrchestratedOwnerSettingsDocumentTests(MailFathomOrchestrati
     }
 
     /// <summary>Two owners under one label is refused by the schema, so a list of owners can be read.</summary>
+    /// <remarks>
+    /// The owner this test provisions is erased in a <c>finally</c>, including on a failure, for the reason
+    /// <c>OrchestratedForeignOwner</c> states: a deployment whose accounts come from configuration holds exactly one
+    /// owner record, and a second one left in <c>settings_accounts</c> refuses the folder bindings every later class in
+    /// this collection arranges. It is what keeps the first test in this class reading the provisioned owner too.
+    /// </remarks>
     [Fact]
     public async Task Insert_ASecondOwnerUnderALabelAlreadyHeld_IsRefusedByTheDatabase()
     {
@@ -82,33 +88,41 @@ public sealed class OrchestratedOwnerSettingsDocumentTests(MailFathomOrchestrati
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var contested = $"owner-{Guid.NewGuid():N}";
+        var holder = Guid.NewGuid();
 
-        await services.CommitAsync(
-            async (_, session, token) =>
-            {
-                var context = await EfCorePersistenceSessionAccessor.JoinAsync(session, token);
+        try
+        {
+            await services.CommitAsync(
+                async (_, session, token) =>
+                {
+                    var context = await EfCorePersistenceSessionAccessor.JoinAsync(session, token);
 
-                context.OwnerAccounts.Add(NewOwner(contested));
-            },
-            cancellationToken);
+                    context.OwnerAccounts.Add(NewOwner(holder, contested));
+                },
+                cancellationToken);
 
-        // Act
-        var refused = await Record.ExceptionAsync(() => services.CommitAsync(
-            async (_, session, token) =>
-            {
-                var context = await EfCorePersistenceSessionAccessor.JoinAsync(session, token);
+            // Act
+            var refused = await Record.ExceptionAsync(() => services.CommitAsync(
+                async (_, session, token) =>
+                {
+                    var context = await EfCorePersistenceSessionAccessor.JoinAsync(session, token);
 
-                context.OwnerAccounts.Add(NewOwner(contested));
-            },
-            cancellationToken));
+                    context.OwnerAccounts.Add(NewOwner(Guid.NewGuid(), contested));
+                },
+                cancellationToken));
 
-        // Assert
-        Assert.IsType<DbUpdateException>(refused);
+            // Assert
+            Assert.IsType<DbUpdateException>(refused);
+        }
+        finally
+        {
+            await OrchestratedForeignOwner.EraseAsync(services, holder);
+        }
     }
 
-    private static OwnerAccountEntity NewOwner(string displayName) => new()
+    private static OwnerAccountEntity NewOwner(Guid ownerId, string displayName) => new()
     {
-        Id = Guid.NewGuid(),
+        Id = ownerId,
         DisplayName = displayName,
         Document = "{}",
         Version = 1,

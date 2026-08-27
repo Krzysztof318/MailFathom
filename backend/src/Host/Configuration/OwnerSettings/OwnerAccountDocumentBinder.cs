@@ -23,9 +23,11 @@ namespace MailFathom.Host.Configuration.OwnerSettings;
 /// discarded, and only a document surviving all of it is judged by the rules a mail account is declared under.
 /// </para>
 /// <para>
-/// Both directions run through here, which is the point of it. A document read back is bound by exactly the rules a
-/// candidate is judged by, so a record this deployment would refuse to write is one it refuses to read rather than one
-/// it acts on — and the two answers cannot drift, because there is one of them.
+/// One binder rather than one per direction, which is the point of it. Whatever comes to read an owner's record and
+/// whatever comes to accept a new one are both meant to arrive here, so the rules a candidate is judged by and the
+/// rules a stored record is judged by cannot drift apart — there is one set of them. This release carries the binder
+/// and no path that drives it: the reader beside it hands a document on as the row holds it, bounded by size and
+/// judged in no other way.
 /// </para>
 /// <para>
 /// Nothing here composes a configuration layer over the deployment's. The record is bound from the document alone, so

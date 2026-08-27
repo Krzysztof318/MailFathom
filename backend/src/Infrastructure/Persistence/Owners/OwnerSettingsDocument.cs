@@ -28,16 +28,18 @@ public sealed record OwnerSettingsDocument(
     /// <summary>The largest owner document this build binds, and therefore the largest one it will persist.</summary>
     /// <remarks>
     /// <para>
-    /// <c>jsonb</c> holds up to a gigabyte, and this document is expanded twice over on its way to a bound aggregate —
-    /// the string the driver materializes and the UTF-8 bytes the parser is handed. A ceiling an owner's declarations
-    /// could plausibly reach would be the wrong ceiling; this one is far past every mail account and owner-level
-    /// setting one person configures, and far below anything the bind costs a thought, so a row past it is a row
-    /// something went wrong with.
+    /// <c>jsonb</c> holds up to a gigabyte, and this document is expanded three times over on its way to a bound
+    /// aggregate — the string the driver materializes, the UTF-8 bytes the parser is handed, and the flattened
+    /// dictionary the binder reads. A ceiling an owner's declarations could plausibly reach would be the wrong
+    /// ceiling; this one is far past every mail account and owner-level setting one person configures, and far below
+    /// anything the bind costs a thought, so a row past it is a row something went wrong with.
     /// </para>
     /// <para>
     /// One bound rather than two, for the reason the deployment's document states: a write permitted past what the
     /// bind accepts would persist a record the next read refuses, and the owner would be locked out by a change that
-    /// had been accepted.
+    /// had been accepted. It is applied in both places the document is expanded — in the statement that reads the row,
+    /// where PostgreSQL measures the column and declines to send it, and in the binder, which is where a candidate
+    /// nothing has persisted yet is measured.
     /// </para>
     /// </remarks>
     public const int MaximumOctets = 1024 * 1024;
