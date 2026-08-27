@@ -100,6 +100,17 @@ public sealed class PresentationCitationIdTests
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<PresentationCitationId>(json));
     }
 
+    /// <summary>A token no identifier could reach is refused before anything decodes it into a string.</summary>
+    [Fact]
+    public void Deserialization_ATokenLongerThanAnyIdentifierCouldBe_IsRefusedBeforeItIsRead()
+    {
+        // Arrange
+        var json = JsonSerializer.Serialize(new string('a', (PresentationCitationId.MaxLength * 6) + 1));
+
+        // Act, Assert
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<PresentationCitationId>(json));
+    }
+
     [Fact]
     public void Serialization_TheStructDefault_IsRefused()
     {

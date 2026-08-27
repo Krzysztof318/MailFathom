@@ -139,6 +139,31 @@ public sealed class PresentationTextTests
         Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<PresentationText>(json));
     }
 
+    /// <summary>A token no value of this length could reach is refused before anything decodes it into a string.</summary>
+    [Fact]
+    public void Deserialization_ATokenLongerThanAnyTextCouldBe_IsRefusedBeforeItIsRead()
+    {
+        // Arrange
+        var json = JsonSerializer.Serialize(new string('a', (PresentationText.MaxLength * 6) + 1));
+
+        // Act, Assert
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<PresentationText>(json));
+    }
+
+    /// <summary>The ceiling is loose by construction, so a text that is entirely multi-octet still reads.</summary>
+    [Fact]
+    public void Deserialization_ATextOfMultiOctetCharactersWithinTheBound_IsRead()
+    {
+        // Arrange
+        var json = JsonSerializer.Serialize(new string('ż', PresentationText.MaxLength));
+
+        // Act
+        var read = JsonSerializer.Deserialize<PresentationText>(json);
+
+        // Assert
+        Assert.Equal(PresentationText.MaxLength, read.Value.Length);
+    }
+
     [Fact]
     public void Serialization_TheStructDefault_IsRefused()
     {

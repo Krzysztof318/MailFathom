@@ -134,6 +134,8 @@ public sealed class PresentationTextJsonConverter : JsonConverter<PresentationTe
             throw new JsonException($"A presentation text must be a JSON string, but the token was {reader.TokenType}.");
         }
 
+        PresentationJsonBounds.EnsureCouldHoldAtMost(ref reader, PresentationText.MaxLength, "presentation text");
+
         return ParseOrThrow(reader.GetString());
     }
 
@@ -154,8 +156,12 @@ public sealed class PresentationTextJsonConverter : JsonConverter<PresentationTe
     public override PresentationText ReadAsPropertyName(
         ref Utf8JsonReader reader,
         Type typeToConvert,
-        JsonSerializerOptions options) =>
-        ParseOrThrow(reader.GetString());
+        JsonSerializerOptions options)
+    {
+        PresentationJsonBounds.EnsureCouldHoldAtMost(ref reader, PresentationText.MaxLength, "presentation text");
+
+        return ParseOrThrow(reader.GetString());
+    }
 
     /// <inheritdoc />
     /// <exception cref="JsonException">Thrown when the value is the unspecified struct default.</exception>

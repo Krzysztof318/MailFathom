@@ -122,10 +122,11 @@ The contract holds this by construction rather than by review.
 - Everything else is a number, a timestamp, an identity, or a value from a closed set. There is no member anywhere in
   the contract whose meaning is "render this". An address is the one of those whose validity is a domain rule rather
   than this contract's, and that rule is about the shape of an address rather than its length, so the length is bounded
-  here — like every other text arriving from outside, and before anything expands it.
+  here as well.
 
 Those rules hold for a plan read off the wire exactly as for one composed in process, because deserialization goes
-through the same constructors.
+through the same constructors. Where a rule is a length, the arriving token is measured before anything decodes it, so
+a value nothing here could accept is refused rather than built first and refused after.
 
 ## The form on the wire
 

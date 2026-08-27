@@ -107,6 +107,8 @@ public sealed class PresentationCitationIdJsonConverter : JsonConverter<Presenta
             throw new JsonException($"A citation identifier must be a JSON string, but the token was {reader.TokenType}.");
         }
 
+        PresentationJsonBounds.EnsureCouldHoldAtMost(ref reader, PresentationCitationId.MaxLength, "citation identifier");
+
         return ParseOrThrow(reader.GetString());
     }
 
@@ -127,8 +129,12 @@ public sealed class PresentationCitationIdJsonConverter : JsonConverter<Presenta
     public override PresentationCitationId ReadAsPropertyName(
         ref Utf8JsonReader reader,
         Type typeToConvert,
-        JsonSerializerOptions options) =>
-        ParseOrThrow(reader.GetString());
+        JsonSerializerOptions options)
+    {
+        PresentationJsonBounds.EnsureCouldHoldAtMost(ref reader, PresentationCitationId.MaxLength, "citation identifier");
+
+        return ParseOrThrow(reader.GetString());
+    }
 
     /// <inheritdoc />
     /// <exception cref="JsonException">Thrown when the value is the unspecified struct default.</exception>
