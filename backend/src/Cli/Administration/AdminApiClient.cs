@@ -7,6 +7,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
+using MailFathom.Cli.Administration.Configuration;
 using MailFathom.Cli.Administration.Contacts;
 using MailFathom.Cli.Administration.Content;
 using MailFathom.Cli.Administration.Embeddings;
@@ -1025,6 +1026,134 @@ internal sealed class AdminApiClient
             CliJsonContext.Default.ContactExport,
             cancellationToken);
 
+    /// <summary>Asks the deployment what its settings say at or beneath a path, and where each value is decided.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="prefix">The colon-delimited path to read beneath, or <see langword="null" /> for every setting the deployment composed.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The settings and the persisted version the deployment composed them over.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a reading.</exception>
+    internal Task<ConfigurationReading> ReadConfigurationAsync(
+        string token,
+        string? prefix,
+        CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Get,
+            $"{AdminEndpointRoutes.ConfigurationPath}{new AdminQueryString().Add("prefix", prefix)}",
+            token,
+            CliJsonContext.Default.ConfigurationReading,
+            cancellationToken,
+            overBoundRemedy: "Ask for a narrower path — 'mfctl config show <prefix>' reads one section rather than every setting the deployment composed.");
+
+    /// <summary>Asks the deployment what adopting a path would copy out of its files.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="prefix">The colon-delimited path the adoption would cover.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The settings the files decide beneath the path that the persisted layer does not already carry.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a reading.</exception>
+    internal Task<ConfigurationReading> ReadAdoptableConfigurationAsync(
+        string token,
+        string prefix,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(prefix);
+
+        return this.RequestAsync(
+            HttpMethod.Get,
+            $"{AdminEndpointRoutes.ConfigurationAdoptionPath}{new AdminQueryString().Add("prefix", prefix)}",
+            token,
+            CliJsonContext.Default.ConfigurationReading,
+            cancellationToken,
+            overBoundRemedy: "Adopt beneath a narrower path — 'mfctl config adopt <prefix>' previews and adopts one section at a time.");
+    }
+
+    /// <summary>Asks the deployment for the persisted configuration document itself.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The sparse document, secrets redacted, and the version it was read at.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a document.</exception>
+    internal Task<ConfigurationDocument> ReadConfigurationDocumentAsync(
+        string token,
+        CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Get,
+            AdminEndpointRoutes.ConfigurationDocumentPath,
+            token,
+            CliJsonContext.Default.ConfigurationDocument,
+            cancellationToken,
+            overBoundRemedy: "A persisted document that large is read from the deployment itself; 'mfctl config show <prefix>' reads what it decides one section at a time.");
+
+    /// <summary>Asks the deployment to apply keyed changes to its persisted configuration.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="request">The changes and the version they were composed over.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What the write did, which is a refusal the operator acts on as often as a commit.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
+    internal Task<ConfigurationWriteAnswer> WriteConfigurationAsync(
+        string token,
+        ConfigurationWriteRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.ConfigurationPath,
+            token,
+            CliJsonContext.Default.ConfigurationWriteAnswer,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.ConfigurationWriteRequest));
+    }
+
+    /// <summary>Hands the deployment the persisted configuration document an editing session saved.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="request">The document and the version the buffer was opened over.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What the write did.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
+    internal Task<ConfigurationWriteAnswer> SaveConfigurationDocumentAsync(
+        string token,
+        ConfigurationDocumentRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.ConfigurationDocumentPath,
+            token,
+            CliJsonContext.Default.ConfigurationWriteAnswer,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.ConfigurationDocumentRequest));
+    }
+
+    /// <summary>Asks the deployment to take the settings its files decide beneath a path into the persisted layer.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="request">The path and the version the preview was read over.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What the adoption did.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
+    internal Task<ConfigurationWriteAnswer> AdoptConfigurationAsync(
+        string token,
+        ConfigurationAdoptionRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.ConfigurationAdoptionPath,
+            token,
+            CliJsonContext.Default.ConfigurationWriteAnswer,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.ConfigurationAdoptionRequest));
+    }
+
     /// <summary>Sends one credentialed request and reads the answer, or turns the refusal into a sentence.</summary>
     /// <remarks>
     /// <para>
@@ -1045,6 +1174,11 @@ internal sealed class AdminApiClient
     /// send by identity, so its absence is the absence of the thing addressed, and telling that operator to check the
     /// port would send them after a deployment that is answering perfectly well.
     /// </para>
+    /// <para>
+    /// <paramref name="overBoundRemedy" /> is the same shape for an answer past what this command buffers: a route
+    /// whose caller can narrow the reading says how, and a route that commits before it answers offers nothing rather
+    /// than sending an operator to repeat a write that may already have landed.
+    /// </para>
     /// </remarks>
     private async Task<TAnswer> RequestAsync<TAnswer>(
         HttpMethod method,
@@ -1053,7 +1187,8 @@ internal sealed class AdminApiClient
         JsonTypeInfo<TAnswer> answerContract,
         CancellationToken cancellationToken,
         HttpContent? content = null,
-        string? absenceMessage = null)
+        string? absenceMessage = null,
+        string? overBoundRemedy = null)
         where TAnswer : class
     {
         ArgumentNullException.ThrowIfNull(token);
@@ -1063,7 +1198,7 @@ internal sealed class AdminApiClient
         using var request = new HttpRequestMessage(method, path) { Content = content };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-        using var response = await this.SendAsync(request, cancellationToken);
+        using var response = await this.SendAsync(request, cancellationToken, overBoundRemedy);
 
         if (response.StatusCode is HttpStatusCode.Unauthorized)
         {
@@ -1147,12 +1282,28 @@ internal sealed class AdminApiClient
 
     /// <summary>Turns a transport failure into something the operator can act on.</summary>
     /// <remarks>
+    /// <para>
     /// A cancelled request is left alone: the operator interrupted it, and reporting that as a deployment problem would
     /// be wrong. A refused certificate is the one transport failure that has a cause worth naming rather than a
     /// message to repeat, because the platform reports it as an ordinary connection failure and the operator would
     /// otherwise go looking at the address, the port, and the firewall.
+    /// </para>
+    /// <para>
+    /// An answer past the bound says nothing about what the deployment did with the request, and this arm is on every
+    /// route rather than on the readings alone: a write commits before it answers, so an adoption or a saved editing
+    /// buffer of a few hundred settings can pass the bound with the version already moved. The sentence therefore
+    /// reports what was and was not established, and <paramref name="overBoundRemedy" /> carries the remedy of
+    /// whichever route has one; a route that cannot honestly offer one passes none rather than borrowing a reading's
+    /// and telling an operator to run a committed write again.
+    /// </para>
     /// </remarks>
-    private async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    /// <param name="request">The request to send.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <param name="overBoundRemedy">What the caller of this route can do about an answer past the bound, or <see langword="null" /> where the route has nothing to offer.</param>
+    private async Task<HttpResponseMessage> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken,
+        string? overBoundRemedy = null)
     {
         try
         {
@@ -1162,6 +1313,12 @@ internal sealed class AdminApiClient
         {
             throw new CliFailure($"The deployment at {this.transport.Client.BaseAddress} did not answer in time.");
         }
+        catch (HttpRequestException failure) when (ExceededTheResponseBound(failure))
+        {
+            throw new CliFailure(
+                $"The deployment at {this.transport.Client.BaseAddress} answered with more than the {DeploymentTransport.ResponseSizeLimitInBytes / 1024} KiB this command reads, so the answer was not read and this command cannot say what the deployment did with the request.{(overBoundRemedy is null ? string.Empty : $" {overBoundRemedy}")}",
+                failure);
+        }
         catch (HttpRequestException failure)
         {
             throw new CliFailure(
@@ -1170,6 +1327,30 @@ internal sealed class AdminApiClient
                 failure);
         }
     }
+
+    /// <summary>Reports whether the deployment answered correctly with more than this command buffers.</summary>
+    /// <remarks>
+    /// <para>
+    /// Sorted apart from an unreachable deployment because the two send an operator to different places: this one
+    /// answered, over a connection that worked, and the arm below would send them after the address, the port, and the
+    /// firewall. It is reachable from a deployment behaving exactly as its own contract allows — a persisted document
+    /// up to <c>RootSettingsDocument.MaximumOctets</c>, and a reading of up to
+    /// <c>EffectiveSettingsReader.MaximumSettings</c> settings each carrying a path, a value, a source, and an origin —
+    /// both of which pass the bound in <see cref="DeploymentTransport.ResponseSizeLimitInBytes" /> before the
+    /// deployment's own refuses.
+    /// </para>
+    /// <para>
+    /// Recognized by <see cref="HttpRequestError.ConfigurationLimitExceeded" /> rather than by the message, which is
+    /// localized, and through the inner exception as well because the framework wraps a read failure in a second
+    /// <see cref="HttpRequestException" /> on some paths.
+    /// </para>
+    /// </remarks>
+    private static bool ExceededTheResponseBound(HttpRequestException failure) =>
+        failure.HttpRequestError == HttpRequestError.ConfigurationLimitExceeded
+        || failure.InnerException is HttpRequestException
+        {
+            HttpRequestError: HttpRequestError.ConfigurationLimitExceeded,
+        };
 
     /// <summary>Reads the sentence a refusal carries, when it carries one.</summary>
     /// <remarks>

@@ -13,15 +13,21 @@ cannot do yet. The full contract — every asset name, every stored path, every 
 runs on the machine you administer *from* rather than the one the service runs on — your laptop against a container on
 a server, or against a pod in a cluster.
 
-It is **not** how MailFathom is configured. Configuration is files and environment variables read at startup, described
-in [configuration sources](../operations/configuration-sources.md); the command never reads them, never opens the
-database, and never touches the secret store. Nothing you do with it changes what the service will do on its next
-restart.
+It reports how the deployment is configured and changes one layer of it. `mfctl config` reads the settings the
+deployment composed from every source and names the layer that decided each — a provisioned file, an environment
+variable, a command-line argument, .NET User Secrets, or the persisted layer — and it writes to the **persisted
+configuration layer** alone, one document in the database composed at startup like every other source. That is
+[changing a setting without a restart](#changing-a-setting-without-a-restart) below. The deployment's own files and
+environment, described in [configuration sources](../operations/configuration-sources.md), are read and reported but
+never edited; the command never opens the database directly and never touches the secret store.
 
-> **What it does change is the deployment's own state rather than its configuration**: it can place a mailbox
-> credential, ask for work to be run, dispose of a folder's stored mail, and maintain the contact book. None of that is
-> a setting, and none of it survives as one — [configuration sources](../operations/configuration-sources.md) stays the
-> only place a deployment's behaviour is decided.
+> **Which layer decided a setting is the thing to read before changing one.** Three sources outrank the persisted
+> layer — .NET User Secrets, unprefixed environment variables, and command-line arguments — so a value one of them
+> supplies goes on coming from there whatever the layer is made to say, and `mfctl config` refuses such a write rather
+> than committing a version that changes nothing. `mfctl config get` names the source beside the value, which is what
+> that decision is made from. Everything else the command does is the deployment's own state rather than its
+> configuration: placing a mailbox credential, asking for work to be run, disposing of a folder's stored mail, and
+> maintaining the contact book.
 
 **What it prints is meant to be read and safe to capture.** A command's result goes to standard output and everything
 else to standard error, so redirecting one captures the answer alone, and a redirected run — like any run whose
@@ -176,12 +182,12 @@ Documentation for that version: https://krzysztof318.github.io/MailFathom/v0.2.0
 ```
 
 A credential is granted a set of named permissions on the deployment, and each command needs the one its operation is
-published under — two, for the seven commands that read something before they change it. Signing in
+published under — two, for the twelve commands that read something before they change it. Signing in
 needs none, so a key that reads `It holds no administrative permission` still signs in and is refused everywhere else —
 which is how a credential is retired without its entry being removed. When a command is refused for want of one, it
 names the permission to add and where it is written, so the answer is to widen that credential's grant rather than to
 replace the key.
-[What a credential may do](../operations/permissions.md) lists the names, what each covers, and which seven commands need
+[What a credential may do](../operations/permissions.md) lists the names, what each covers, and which twelve commands need
 a second one; [what the endpoint serves](../operations/admin-endpoint.md#what-the-endpoint-serves) names the permission
 every route is published under.
 
@@ -316,8 +322,11 @@ fires such a rule by itself, and `mfctl rules run` is how it is run. A rule with
 with the occasions it declares beside the trigger. It is also where a rule you meant to run over arriving mail shows
 that it never says `Arrival`.
 
-None of these writes a rule, and none ever will: rules are configuration, so you change one by editing the file your
-deployment reads. [Reading the rules, running them, and finding out what they
+None of these five writes a rule, and none ever will: they run the rules and read what the rules concluded. Rules are
+configuration, so what changes one is [changing a setting without a
+restart](#changing-a-setting-without-a-restart) or an edit to the file your deployment reads — the file is where a rule
+is reviewable in a diff before it reaches a mailbox, and the persisted layer is what changes one without a restart.
+[Reading the rules, running them, and finding out what they
 did](../operations/admin-endpoint.md#reading-the-rules-running-them-and-finding-out-what-they-did) is the operator's
 reference for all five, including what the history records and what it deliberately does not.
 
@@ -341,8 +350,10 @@ single thing MailFathom does to your mail, and the dry run tells you how much of
 The verdicts are recorded either way — what `--apply` adds is the mail server being written to.
 
 A second run while one is going does not start a second walk; you are told the first is still under way, on the terms
-it was started with. None of these writes a setting, and none ever will: whether mail is classified, what a scanner is
-judged by, and what happens to junk are configuration, so you change them by editing the file your deployment reads.
+it was started with. None of these three writes a setting, and none ever will: they apply the settings your deployment
+already holds. Whether mail is classified, what a scanner is judged by, and what happens to junk are configuration, so
+what changes them is [changing a setting without a restart](#changing-a-setting-without-a-restart) or an edit to the
+file your deployment reads.
 [Classifying the mail you already have, and reading what was
 concluded](../operations/admin-endpoint.md#classifying-the-mail-you-already-have-and-reading-what-was-concluded) is the
 operator's reference for all three.
@@ -615,9 +626,45 @@ people that account corresponds with as its mail is synchronized. Those records 
 about the whole thing, `mfctl contact delete-collected` erases everything it collected and keeps everything you entered
 — and switching collection off in configuration is the separate act that stops the book filling again.
 
+## Changing a setting without a restart
+
+Most of what MailFathom reads comes from the files your deployment provisioned, and those stay yours: nothing in the
+process edits one. What a deployment persists for itself is a document in the database, layered above those files, and
+`mfctl config` is where you read and change it:
+
+```console
+$ mfctl config show MailboxSearch
+MailboxSearch:
+  SnippetsPerEmail = 3 [file (10-deployment.json)]
+  WordsPerSnippet = 12 [persisted-layer]
+2 settings, over persisted configuration version 7.
+
+$ mfctl config set MailboxSearch:SnippetsPerEmail 5
+```
+
+**Every value comes with where it was decided**, and that is half the answer. A deployment reads its settings from
+files, from that persisted document, and from an environment variable or a command-line argument somebody put beside
+the process — so before changing anything, the reading tells you which of those you would actually have to edit. A
+value an environment variable is supplying is refused rather than persisted, naming the source that outranks the
+persisted layer, because persisting it would spend a version and change nothing you read.
+
+`mfctl config unset` gives one setting back to the file beneath it. `mfctl config edit` opens the whole persisted
+document in your `$VISUAL` or `$EDITOR` and commits what you saved as one change, which is what you want when a change spans half a
+section — set it up as `VISUAL="code --wait"` if your editor is a graphical one, since the command reads the file back
+when the editor exits. And `mfctl config adopt` copies what your files decide beneath a path into the database, which
+is the one thing here that stops a file deciding a value; it shows you exactly what it would take and asks first.
+
+A setting that holds a credential reads back as `(redacted)` everywhere, including in the editor — the document holds a
+reference to where the material is kept rather than the material, and neither reaches your screen.
+
+[Configuration sources](../operations/configuration-sources.md#reading-and-changing-settings-from-mfctl) is the whole
+of what a write proves before it commits and every refusal it can answer with.
+
 ## Where to go next
 
 - [Administering a deployment](../operations/admin-endpoint.md) — the operator's reference for everything above
+- [Configuration sources](../operations/configuration-sources.md) — where every setting can come from, and what
+  `mfctl config` changes
 - [Contacts](../features/contacts.md) — what the contact book holds, and every rule a writer of it obeys
 - [Mail rules](../features/mail-rules.md) — every fact, operator, and action a rule can use
 - [Mailbox OAuth](../operations/mailbox-oauth.md) — registering the application, and every mode of the sign-in above

@@ -144,6 +144,16 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode OwnerSettingsUnreadable { get; } = new(12012);
 
+    /// <summary>Gets subcategory 2, configuration sources: a configuration write named a setting a source above the persisted layer already supplies.</summary>
+    /// <remarks>
+    /// The one refusal here that is about nothing being wrong. The document would have taken the value, the candidate
+    /// would have validated, and the deployment would have gone on reading the value the higher source supplies — so
+    /// what it protects is the operator's belief that a committed write changed something. It is refused by default and
+    /// committed on request, because staging a value beneath an override that is about to be removed is a thing an
+    /// administrator legitimately means.
+    /// </remarks>
+    public static MailFathomErrorCode ConfigurationWriteShadowed { get; } = new(12013);
+
     /// <summary>Gets subcategory 3, mailbox access tokens: an account's authorization server did not issue an access token its OAuth mechanisms require.</summary>
     public static MailFathomErrorCode MailAccessTokenUnavailable { get; } = new(13001);
 
@@ -948,6 +958,7 @@ public readonly record struct MailFathomErrorCode
         RootSettingsUnwritable,
         ConfigurationDocumentTooLarge,
         OwnerSettingsUnreadable,
+        ConfigurationWriteShadowed,
         MailAccessTokenUnavailable,
         MailboxAuthorizationFailed,
         PrincipalNotAuthorized,

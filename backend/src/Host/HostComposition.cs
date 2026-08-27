@@ -47,6 +47,7 @@ using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Host.Api;
 using MailFathom.Host.Api.Documentation;
 using MailFathom.Host.Configuration;
+using MailFathom.Host.Configuration.Administration;
 using MailFathom.Host.Configuration.Answering;
 using MailFathom.Host.Configuration.Chat;
 using MailFathom.Host.Configuration.DataEncryption;
@@ -148,12 +149,19 @@ internal static class HostComposition
         return AddNetworkSurfaces(builder);
     }
 
-    /// <summary>Registers the writer a configuration change is made through, and the seam it republishes the layer through.</summary>
+    /// <summary>Registers the reading and writing sides of the deployment's persisted configuration, and the seam the layer is republished through.</summary>
     /// <remarks>
+    /// <para>
+    /// The writer a change is committed by, the reader that reports which layer supplies each value, and the
+    /// administration service the configuration routes resolve, which composes the two into what an operator asks
+    /// for.
+    /// </para>
+    /// <para>
     /// The provider is found among the sources rather than handed in, because the layer is composed while the builder
     /// is being made and the composition root is called after that. A host built without the layer — the graph a unit
     /// test composes from files alone — registers none of these services, so nothing resolves a writer over a layer
     /// that is not there, and a deployment reading its settings from files alone offers no way to write one.
+    /// </para>
     /// </remarks>
     private static void AddPersistedConfiguration(WebApplicationBuilder builder)
     {
@@ -170,6 +178,16 @@ internal static class HostComposition
         builder.Services.AddSingleton(new CandidateConfigurationComposer(builder.Configuration, layer));
         builder.Services.AddSingleton<CandidateSettingsValidator>();
         builder.Services.AddSingleton<IConfigurationWriter, RootSettingsWriter>();
+        // The composed configuration and the layer's own provider, for the same reason the composer takes them: which
+        // source supplies a value is a property of the pipeline this host built rather than of whatever was registered
+        // as IConfiguration, and the layer is told apart from a candidate's provider by identity.
+        builder.Services.AddSingleton(
+            new EffectiveSettingsReader(builder.Configuration, layer.Provider));
+        // Scoped rather than a singleton, because it asks AccessAuthorization for the permission each of its
+        // operations is published under and that service is scoped to whatever admitted the caller. The reader above
+        // stays a singleton: which layer supplies a value is a property of the pipeline this host built and is the
+        // same answer for every caller.
+        builder.Services.AddScoped<PersistedSettingsAdministration>();
     }
 
     /// <summary>Registers the telemetry, resilience, clock, and secret resolution every other stage assumes.</summary>

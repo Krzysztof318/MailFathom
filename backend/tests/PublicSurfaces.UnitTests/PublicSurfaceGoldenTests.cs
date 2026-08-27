@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Host.Configuration.Administration;
 using Xunit;
 
 namespace MailFathom.PublicSurfaces.UnitTests;
@@ -41,6 +42,37 @@ public sealed class PublicSurfaceGoldenTests
             "configuration-keys.txt",
             "published configuration key set",
             ConfigurationKeySurface.Render());
+
+    /// <summary>
+    /// Every section the key set names is one the administrative reading recognizes as this deployment's.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="MailFathomConfigurationSections" /> is what stops <c>GET /api/admin/configuration</c> handing back a
+    /// value the unprefixed environment provider supplied under a name MailFathom never chose, and it is a written list
+    /// rather than a discovery because the reading runs per request. This is the mechanism that keeps the list honest:
+    /// the section set is discovered here, from the <c>SectionName</c> constant of every bound options class, so a
+    /// section added without a line there fails this rather than silently withholding its own settings from the one
+    /// surface an operator reads them through. The reverse is deliberately not asserted — the list names
+    /// <c>Logging</c>, <c>ConnectionStrings</c>, and <c>Accounts</c>, which the key set leaves out for reasons of its
+    /// own.
+    /// </remarks>
+    [Fact]
+    public void ConfigurationKeySet_EverySectionItNames_IsOneTheAdministrativeReadingRecognizes()
+    {
+        // Arrange
+        var rendered = ConfigurationKeySurface.Render()
+            .Split('\n')
+            .Where(line => !line.StartsWith('#'))
+            .Select(line => line.Split([':', ' '], 2)[0])
+            .Where(section => section.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+
+        // Act
+        var unrecognized = rendered.Where(section => !MailFathomConfigurationSections.Name(section)).ToArray();
+
+        // Assert
+        Assert.Empty(unrecognized);
+    }
 
     /// <summary>Every HTTP operation both API surfaces publish, as the host's own OpenAPI document describes it.</summary>
     [Fact]

@@ -53,8 +53,9 @@ public sealed class MailFathomPermissionTests
     /// <remarks>
     /// ADR 0012 fixed the first eight and the rule the set grows under: a name is published when the capability it names
     /// exists. The two contact permissions were allocated under that rule when the contact tools arrived, the flag
-    /// permission when the tool that writes a mailbox did, the send permission when the outbox began requiring one, and
-    /// the drafting permission when the tools that write a draft arrived beside it.
+    /// permission when the tool that writes a mailbox did, the send permission when the outbox began requiring one, the
+    /// drafting permission when the tools that write a draft arrived beside it, and the configuration permission when
+    /// the commands that change a persisted setting did.
     /// </remarks>
     [Fact]
     public void All_CarriesThePublishedNames() =>
@@ -73,6 +74,7 @@ public sealed class MailFathomPermissionTests
                 "mailfathom.admin.credentials.write",
                 "mailfathom.admin.spend",
                 "mailfathom.admin.erase",
+                "mailfathom.admin.configuration.write",
             ],
             MailFathomPermission.All.Select(permission => permission.Name));
 

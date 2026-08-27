@@ -190,6 +190,24 @@ internal static class AdminEndpointRoutes
     /// <returns>The path.</returns>
     internal static string ContactExportPath(Guid contactId) => $"{ContactPath(contactId)}/export";
 
+    /// <summary>Where a deployment's settings are read with the layer each value came from, and where a keyed change is written.</summary>
+    /// <remarks>
+    /// One path read with <c>GET</c> and written with <c>POST</c>, which is what keeps the value an operator was shown
+    /// and the value a write is judged against the same reading rather than two that happen to agree.
+    /// </remarks>
+    internal const string ConfigurationPath = $"{Prefix}/configuration";
+
+    /// <summary>Where the persisted configuration document is read whole, and where an edited one is saved back.</summary>
+    /// <remarks>
+    /// A path of its own rather than a shape on the one above, because the two are different transactions: that one
+    /// names the settings it changes, and this one carries the whole document and is judged against the version it was
+    /// opened over.
+    /// </remarks>
+    internal const string ConfigurationDocumentPath = $"{ConfigurationPath}/document";
+
+    /// <summary>Where an adoption of the deployment's file-decided settings is previewed, and where it is performed.</summary>
+    internal const string ConfigurationAdoptionPath = $"{ConfigurationPath}/adoption";
+
     /// <summary>Where a deployment publishes the document naming its authorization servers, resource, and required scopes.</summary>
     /// <remarks>
     /// Composed rather than discovered from a challenge, because a client that knows which routes it is about to call

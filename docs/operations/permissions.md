@@ -28,12 +28,13 @@ two disjoint halves, and the prefix after `mailfathom.` says which half a name b
 | `mailfathom.mail.send` | mail | Asking this deployment to send mail from an account it holds. It is the one grant here whose effect leaves the deployment and cannot be recalled, which is why it follows from nothing: reading a mailbox is not writing from it, and marking mail reaches the owner's own server rather than a stranger's. It covers `send_email`, which queues a message for a mailbox this deployment holds, and `reply_to_email` and `forward_email`, which queue one anchored to mail it already holds — those two also need `mailfathom.mail.read`, because an answer is derived from the message it answers. It covers `get_outgoing_email` and `cancel_outgoing_email` as well, which report what became of a queued send and stop one that is still waiting: a caller may read back and withdraw exactly what it was allowed to queue, and what this mailbox has written to whom is not something the reading grant confers. It covers `send_draft`, which queues the message a draft holds, and the promotion beneath it, because promoting a draft is asking for mail to leave. It is asked for again by the use cases behind all six and by the outbox beneath the four that send, so it governs the act rather than only the tool |
 | `mailfathom.mail.contacts.read` | mail | `list_contacts` and `get_contact`, which read the deployment's own contact book: names, addresses, and the notes an owner wrote about identified third parties |
 | `mailfathom.mail.contacts.write` | mail | `create_contact`, `update_contact`, `delete_contact`, and `promote_contact`, which record, amend, erase, and take on a person in that book. The erasure is here rather than apart, because a grant that cannot edit the book cannot be trusted to take somebody out of it |
-| `mailfathom.admin.read` | administrative | The reads reporting the deployment's own state and no mail: what synchronization is doing per account and per folder, embedding status and the activation preview, the loaded rules, a run's progress, what a rewind would cost, where a re-derivation has got to, the stopped-job list, and the outbox counted by stage and listed without naming anybody |
+| `mailfathom.admin.read` | administrative | The reads reporting the deployment's own state and no mail: what synchronization is doing per account and per folder, embedding status and the activation preview, the loaded rules, a run's progress, what a rewind would cost, where a re-derivation has got to, the stopped-job list, and the outbox counted by stage and listed without naming anybody. It also reads the deployment's **own configuration** — the three routes under `/api/admin/configuration`, which report every setting the deployment composed with the layer that decided each one, the persisted document an editing session opens, and what an adoption would copy. Read without a prefix that is the whole composed configuration: authorization-entry names, OAuth issuers and authorized subjects, provisioned file paths, mail account addresses, and folder mappings. A secret-bearing setting and a bootstrap-only one report the redaction marker rather than their value, and so does a variable of the host process that no MailFathom section names — but the rest is read in full, so a credential holding this name is one that may read how the deployment is put together |
 | `mailfathom.admin.audit.read` | administrative | Everything derived from somebody's mail: the mailbox-mutation audit, the answering audit, the rules history, the spam classifications, one queued message with the addresses it is offered to, and reading the contact book — a listing, one person, or their export |
 | `mailfathom.admin.operate` | administrative | Asking the deployment to do work it can already do: running rules over an account, classifying an account, retrying or dropping a stopped job, cancelling a reindex, rewinding synchronization, re-deriving stored mail, carrying stored content into the object backend, withdrawing or re-queueing one queued message, and writing to the contact book |
 | `mailfathom.admin.credentials.write` | administrative | Storing a mailbox refresh token |
 | `mailfathom.admin.spend` | administrative | Activating the declared embedding model, which is the one operation that starts a provider bill |
 | `mailfathom.admin.erase` | administrative | Disposing of what this deployment holds: the mail stored for a folder an account no longer mirrors, one person and everything the contact book derived from them, and the database copies a finished move left beside the objects it verified |
+| `mailfathom.admin.configuration.write` | administrative | Changing the deployment's own [persisted configuration](configuration-sources.md#changing-a-persisted-setting): persisting a setting, stopping the document carrying one, saving an edited document, and adopting what the files decide beneath a path. Reading the settings is `mailfathom.admin.read`, so a credential may be told where a value is decided without being able to decide it |
 
 **Three surfaces draw on those two halves.** The MCP endpoint and the client endpoint each draw on the mail half — the
 client reads the mail an agent reads, and a second vocabulary for one authority would be two things to keep in step —
@@ -71,9 +72,9 @@ alone gets an agent that can write a message of its own and cannot answer anythi
 The contact permissions are separate from the mailbox ones and from each other, because the book is a different body of
 personal data from the mail: an assembled record about identified third parties rather than correspondence that
 arrived, and a credential that may look somebody up is not thereby one that may erase them. On the administrative half
-the six names are allocated so that the separations an operator would plausibly want are the ones they can make:
-reading state, reading what was derived from mail, causing work, placing a credential, starting a bill, and destroying
-what the deployment holds.
+the seven names are allocated so that the separations an operator would plausibly want are the ones they can make:
+reading state, reading what was derived from mail, causing work, placing a credential, starting a bill, destroying
+what the deployment holds, and changing what the deployment itself is.
 
 **A name is published when the capability exists.** Adding one is a configuration-schema change under
 [ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md),
@@ -146,7 +147,7 @@ Every administrative route publishes the one permission it requires as endpoint 
 [what the endpoint serves](admin-endpoint.md#what-the-endpoint-serves) states it route by route beside what each route
 does. Two consequences of that mapping belong here rather than to any one route.
 
-**Eight `mfctl` commands make two requests and therefore need two permissions**, because what such a command reads is
+**Twelve `mfctl` commands make two requests and therefore need two permissions**, because what such a command reads is
 what it puts in front of you or amends from:
 
 | Command | Needs |
@@ -157,9 +158,14 @@ what it puts in front of you or amends from:
 | `mfctl content move` | `mailfathom.admin.read` beside `mailfathom.admin.operate` |
 | `mfctl content release` | `mailfathom.admin.read` beside `mailfathom.admin.erase` |
 | `mfctl embedding activate` | `mailfathom.admin.read` beside `mailfathom.admin.spend` |
+| `mfctl config set`, `mfctl config unset`, `mfctl config edit`, `mfctl config adopt` | `mailfathom.admin.read` beside `mailfathom.admin.configuration.write` |
 
 A credential granted only the permission the operation itself is published under meets the refusal at the first request
 and nothing is done — the safe half of it, and still not what the operator intended.
+
+The four configuration writes read for a reason of their own: what they read carries the version the change is composed
+over, and a version fetched apart from the values it describes is the lost update the deployment's version guard exists
+to refuse. `mfctl config get` and `mfctl config show` make one request and need `mailfathom.admin.read` alone.
 
 **`GET /api/admin/session` sits outside the model and needs no permission.** It reports the credential the caller
 already presented, the version this deployment already publishes, and the permissions that credential holds, all of
@@ -185,8 +191,8 @@ which is the arrangement the split exists for.
 The book is reachable from both surfaces, and it needed a name of its own on neither. On the administrative surface,
 reading the book, reading one person, and exporting them are `mailfathom.admin.audit.read`, because what the book holds
 is derived from mail; recording, amending, and promoting are `mailfathom.admin.operate`; erasing somebody is
-`mailfathom.admin.erase`. What the book needed was not a seventh name but for each of its routes to be placed against
-the separations the six already draw.
+`mailfathom.admin.erase`. What the book needed was not a name of its own but for each of its routes to be placed
+against the separations the others already draw.
 
 Recording, amending, and erasing a person are performed by the contact tools as well as by those routes, so the use case
 behind them admits the administrative name *or* `mailfathom.mail.contacts.write`. The two halves are disjoint, so
@@ -216,6 +222,14 @@ third parties. `mailfathom.mail.send` is the same shape and the sharpest case of
 and with it a credential that can send mail from the deployment's mailboxes to anybody. `mailfathom.mail.drafts.write`
 arrived the same way and is milder for the reason it exists: what an entry gains with it is the ability to put a
 message in the owner's own Drafts folder, which the owner sees and can delete.
+`mailfathom.admin.configuration.write` is the administrative surface's case of it and the sharpest one there: an
+administrative entry that wrote no key gains it on upgrade, and with it a credential that can change what the
+deployment *is* rather than what it does next — widen another credential's grant, repoint a model provider, or turn a
+surface off. An entry that wrote `mailfathom.admin.*` gains it on the same upgrade and for the same reason, since a
+pattern is resolved against the published set on every start; that is the shape to check first, because it reads as a
+deliberate grant rather than as an omission. An operator who granted an administrative credential the operating work
+and meant to withhold the power to redefine the deployment narrows that entry to the names it actually needs, because
+neither the absent key nor the covering pattern withholds it.
 Writing `Permissions: []` grants nothing, which is how a credential is retired without deleting its
 entry: it still authenticates, and on the administrative surface it still reads `GET /api/admin/session`, which is
 where an operator reads that the credential now holds nothing.
@@ -241,7 +255,10 @@ sharper one, since the same pattern now also carries the grant to send from the 
 `send_email`, through the two tools that answer stored mail, and through `send_draft`. `mailfathom.mail.drafts.write`
 is the third and the case that shows why the two names are worth writing out rather than patterned over: an operator
 who narrowed an entry to drafting by writing `mailfathom.mail.*` narrowed it to nothing, because that pattern carries
-the sending grant beside the drafting one and the whole separation is gone. Everything that reads a grant back states
+the sending grant beside the drafting one and the whole separation is gone. `mailfathom.admin.configuration.write` is
+the fourth and the administrative half's own case: an entry reading `mailfathom.admin.*` reaches it on upgrade, so a
+credential granted the operating work by a pattern becomes one that can change what the deployment is — including what
+every other credential may do. Everything that reads a grant back states
 what a pattern resolved to and never the pattern — the startup line, `GET /api/admin/session`, and `scopes_supported` —
 so no reader has to expand one by hand.
 
