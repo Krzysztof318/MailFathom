@@ -3,6 +3,7 @@ PR NUMBER: {{PULL_REQUEST_NUMBER}}
 HEAD SHA: {{HEAD_SHA}}
 SNAPSHOT TAKEN: {{SNAPSHOT_TAKEN}}
 GROUP: {{GROUP_INDEX}} of {{GROUP_COUNT}}
+REVIEW POSTURE: {{REVIEW_POSTURE}}
 
 You are reading part of a pull request in MailFathom, a .NET 10 clean-architecture modular
 monolith on its `0.x` line that serves a local copy of a mailbox over MCP.
@@ -96,6 +97,14 @@ enough.
 Equally, do not manufacture one. A group with nothing wrong in it returns no candidates and
 that is a complete answer: the judge weighs what comes back from every reader, and an entry
 written to fill a list costs somebody a confirmation pass over a file that was fine.
+
+`REVIEW POSTURE` at the top of this prompt reads `full` or `settling`, the run resolves it
+from how many passes this pull request has already had, and it changes exactly one thing
+for you: the wide sweep the `security` label asks for, which the rubric below scopes. It
+changes nothing about what you write down. The bar a late pass raises is a bar on
+*severity*, the judge is the only one here who assigns one, and a reader that started
+filtering candidates by how serious they felt would be deciding a verdict from a sixth of
+the change.
 
 {{RUBRICS}}
 

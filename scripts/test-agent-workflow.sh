@@ -1952,6 +1952,55 @@ fathom_review_counts_the_marker_only_where_the_submission_writes_it() {
   assert_contains 'review=true' "$step_output_file"
 }
 
+# The bar a pass applies is resolved once, here, from the same count the ceiling reads. These three
+# fix it in every direction it can be got wrong: an early pass, the pass the threshold names, and a
+# review somebody asked for at a count that would otherwise settle it.
+fathom_review_reads_an_early_pass_at_the_full_bar() {
+  local output_file="$test_directory/fathom-review-posture-early-output"
+  local step_output_file="$test_directory/fathom-review-posture-early-step-output"
+  local reviews_file="$test_directory/fathom-review-posture-early-reviews"
+
+  write_fathom_review_history 2 0 "$reviews_file"
+
+  run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file" 'Krzysztof318' '' "$reviews_file"
+
+  assert_contains 'review=true' "$step_output_file"
+  assert_contains 'posture=full' "$step_output_file"
+}
+
+# Three published passes means this run is the fourth, which is where the measurement in the gate put
+# the threshold: of the reviews published at pass 4 or later, the overwhelming majority withheld
+# approval without a P1 among them.
+fathom_review_settles_the_bar_from_the_fourth_pass() {
+  local output_file="$test_directory/fathom-review-posture-settling-output"
+  local step_output_file="$test_directory/fathom-review-posture-settling-step-output"
+  local reviews_file="$test_directory/fathom-review-posture-settling-reviews"
+
+  write_fathom_review_history 3 0 "$reviews_file"
+
+  run_fathom_review_gate 'synchronize' "$output_file" "$step_output_file" 'Krzysztof318' '' "$reviews_file"
+
+  assert_contains 'posture=settling' "$step_output_file"
+  # The reason is said in the log beside the decision, because a maintainer reading a run that
+  # approved a change carrying a P2 has to be able to see which bar produced that.
+  assert_contains 'posture: settling after 3 automatic passes' "$output_file"
+}
+
+# A requested pass is `full` however many automatic ones came before it, for the same reason it is
+# unbounded in scope: somebody spent usage asking for the reading a first pass performs.
+fathom_review_keeps_a_requested_review_at_the_full_bar() {
+  local output_file="$test_directory/fathom-review-posture-requested-output"
+  local step_output_file="$test_directory/fathom-review-posture-requested-step-output"
+  local reviews_file="$test_directory/fathom-review-posture-requested-reviews"
+
+  write_fathom_review_history 5 0 "$reviews_file"
+
+  run_fathom_review_gate 'labeled' "$output_file" "$step_output_file" 'Krzysztof318' 'fathom-review' "$reviews_file"
+
+  assert_contains 'explicit=true' "$step_output_file"
+  assert_contains 'posture=full' "$step_output_file"
+}
+
 fathom_review_answers_a_request_past_the_automatic_ceiling() {
   local output_file="$test_directory/fathom-review-request-past-ceiling-output"
   local step_output_file="$test_directory/fathom-review-request-past-ceiling-step-output"
@@ -2785,6 +2834,9 @@ run_fathom_review_submit() {
   # Which marker the published review carries. A push is the ordinary case, and the gate of the next
   # run counts exactly the reviews carrying this one.
   local trigger_marker="${6:-<!-- fathom-review: automatic -->}"
+  # The bar the gate resolved for this pass. `full` is the first three passes and every requested
+  # one, which is what most of these contracts are about; the settling contracts name the other.
+  local posture="${7:-full}"
   local step_script="$test_directory/fathom-review-submit.sh"
   local review_directory="$test_directory/fathom-review-submit-review"
   local coverage_file="$test_directory/fathom-review-submit-coverage"
@@ -2817,6 +2869,7 @@ run_fathom_review_submit() {
     export REVIEW_DIRECTORY="$review_directory"
     export COVERAGE_FILE="$coverage_file"
     export TRIGGER_MARKER="$trigger_marker"
+    export REVIEW_POSTURE="$posture"
     export FAKE_REVIEW_PAYLOAD="$payload_file"
     # The verdict the board job reads. It is written only where a review was posted, so a contract
     # that asserts on an empty file is asserting that nothing was published.
@@ -2895,6 +2948,59 @@ fathom_review_approves_a_first_pass_carrying_only_deferred_findings() {
   assert_json '"APPROVE"' '.event' "$payload_file"
   assert_json '["backend/src/Sample.cs"]' '[.comments[].path]' "$payload_file"
   assert_contains 'verdict=approved' "$submit_step_output_file"
+}
+
+# From the fourth pass the same review lands the other way round. A P2 is owed by a rule and still
+# reported, but by then the author is answering threads rather than writing the change, and the
+# measurement in the gate is that 27 of the 33 reviews published that late withheld approval with no
+# P1 among them. So it arrives under an approval, exactly as a P3 does at any pass.
+fathom_review_approves_a_settling_pass_carrying_a_rule_owed_finding() {
+  local output_file="$test_directory/fathom-review-submit-settling-output"
+  local payload_file="$test_directory/fathom-review-submit-settling-payload"
+
+  run_fathom_review_submit \
+    '{"summary":"Fourth pass.","findings":[{"severity":"P2","path":"backend/src/Sample.cs","start_line":null,"line":14,"title":"Bound the sequence","impact":"A remote list is expanded without a ceiling.","correction":"Take the first hundred.","rule":"`AGENTS.md`, \"Reliability, security, and performance\""}]}' \
+    "$output_file" "$payload_file" 'success' '' '<!-- fathom-review: automatic -->' 'settling'
+
+  ((submit_status == 0))
+  assert_json '"APPROVE"' '.event' "$payload_file"
+  # Reported, anchored, and answerable: what the posture moved is the verdict above the finding, not
+  # whether the finding reaches the author.
+  assert_json '["backend/src/Sample.cs"]' '[.comments[].path]' "$payload_file"
+  assert_contains '# APPROVED' "$payload_file"
+  assert_contains '**Findings** — P2: 1' "$payload_file"
+  assert_contains 'This is a settling pass, so nothing below P1 holds the change' "$payload_file"
+  assert_contains 'verdict=approved' "$submit_step_output_file"
+}
+
+fathom_review_holds_a_settling_pass_that_found_something_broken() {
+  local output_file="$test_directory/fathom-review-submit-settling-held-output"
+  local payload_file="$test_directory/fathom-review-submit-settling-held-payload"
+
+  run_fathom_review_submit \
+    '{"summary":"Fourth pass.","findings":[{"severity":"P1","path":"backend/src/Sample.cs","start_line":null,"line":12,"title":"Refuse the empty case","impact":"An empty list reaches the loop and the guard passes.","correction":"Return early when the list is empty.","rule":"`AGENTS.md`, \"Reliability, security, and performance\""},{"severity":"P2","path":"backend/src/Sample.cs","start_line":null,"line":14,"title":"Bound the sequence","impact":"A remote list is expanded without a ceiling.","correction":"Take the first hundred.","rule":"`AGENTS.md`"}]}' \
+    "$output_file" "$payload_file" 'success' '' '<!-- fathom-review: automatic -->' 'settling'
+
+  ((submit_status == 0))
+  assert_json '"COMMENT"' '.event' "$payload_file"
+  assert_contains '# NEEDS CHANGES' "$payload_file"
+  assert_contains 'verdict=changes_requested' "$submit_step_output_file"
+}
+
+# The posture reaches this step from the gate through two job outputs, so the value arriving empty is
+# a defect in this workflow rather than an attack. It still has a safe reading, and the safe reading
+# is the bar that withholds approval for more rather than for less.
+fathom_review_reads_an_unset_posture_as_the_full_bar() {
+  local output_file="$test_directory/fathom-review-submit-posture-unset-output"
+  local payload_file="$test_directory/fathom-review-submit-posture-unset-payload"
+
+  run_fathom_review_submit \
+    '{"summary":"Unset posture.","findings":[{"severity":"P2","path":"backend/src/Sample.cs","start_line":null,"line":14,"title":"Bound the sequence","impact":"A remote list is expanded without a ceiling.","correction":"Take the first hundred.","rule":"`AGENTS.md`"}]}' \
+    "$output_file" "$payload_file" 'success' '' '<!-- fathom-review: automatic -->' ''
+
+  ((submit_status == 0))
+  assert_json '"COMMENT"' '.event' "$payload_file"
+  assert_contains '# NEEDS CHANGES' "$payload_file"
 }
 
 fathom_review_moves_a_finding_with_no_line_into_the_body() {
@@ -5265,6 +5371,7 @@ fathom_review_composes_a_reader_prompt_naming_only_its_group() {
     export SNAPSHOT_TAKEN='2026-08-18T09:00:00Z'
     export GROUP_INDEX='1'
     export GROUP_COUNT='2'
+    export REVIEW_POSTURE='settling'
     export REVIEW_DIRECTORY="$review_directory"
     export TEMPLATE_FILE="$source_repository_root/.github/fathom-review/reader-prompt.md"
     export RUBRICS_FILE="$source_repository_root/.github/fathom-review/review-rubrics.md"
@@ -5292,6 +5399,9 @@ fathom_review_composes_a_reader_prompt_naming_only_its_group() {
   assert_contains 'Security and privacy' "$prompt_file"
   assert_excludes '{{' "$prompt_file"
   assert_contains 'GROUP: 1 of 2' "$prompt_file"
+  # The bar the gate resolved reaches the reader as the word itself. A reader deriving it from the
+  # conversation would be reading a bar out of the very passes it was given to save.
+  assert_contains 'REVIEW POSTURE: settling' "$prompt_file"
 }
 
 # A group index the split never produced means the matrix and `groups.json` have come apart, and a
@@ -5315,6 +5425,7 @@ fathom_review_refuses_a_reader_group_that_holds_no_files() {
     export SNAPSHOT_TAKEN='2026-08-18T09:00:00Z'
     export GROUP_INDEX='4'
     export GROUP_COUNT='1'
+    export REVIEW_POSTURE='full'
     export REVIEW_DIRECTORY="$review_directory"
     export TEMPLATE_FILE="$source_repository_root/.github/fathom-review/reader-prompt.md"
     export RUBRICS_FILE="$source_repository_root/.github/fathom-review/review-rubrics.md"
@@ -7853,6 +7964,9 @@ run_test fathom_review_reviews_a_push_below_the_automatic_ceiling
 run_test fathom_review_stops_reviewing_a_push_at_the_automatic_ceiling
 run_test fathom_review_never_counts_a_requested_review_against_the_ceiling
 run_test fathom_review_counts_the_marker_only_where_the_submission_writes_it
+run_test fathom_review_reads_an_early_pass_at_the_full_bar
+run_test fathom_review_settles_the_bar_from_the_fourth_pass
+run_test fathom_review_keeps_a_requested_review_at_the_full_bar
 run_test fathom_review_answers_a_request_past_the_automatic_ceiling
 run_test fathom_review_refuses_a_closed_pull_request
 run_test fathom_review_refuses_a_pull_request_the_updater_opened
@@ -7885,6 +7999,9 @@ run_test fathom_review_anchors_a_finding_to_its_line
 run_test fathom_review_approves_a_pass_carrying_only_deferred_findings
 run_test fathom_review_holds_a_pass_that_still_found_something_owed
 run_test fathom_review_approves_a_first_pass_carrying_only_deferred_findings
+run_test fathom_review_approves_a_settling_pass_carrying_a_rule_owed_finding
+run_test fathom_review_holds_a_settling_pass_that_found_something_broken
+run_test fathom_review_reads_an_unset_posture_as_the_full_bar
 run_test fathom_review_moves_a_finding_with_no_line_into_the_body
 run_test fathom_review_approves_when_it_finds_nothing
 run_test fathom_review_reports_the_files_a_review_never_named

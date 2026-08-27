@@ -101,6 +101,19 @@ It is the one input here that changes how you work rather than only what you jud
   findings. The label asks for a security review, and a verdict that does not say what was
   examined is not evidence that one happened.
 
+**The sweep is what the first three passes are for.** `REVIEW POSTURE` at the top of your
+prompt says which kind of pass this is, and where it reads `settling` — a fourth automatic
+pass or later — the four points above narrow to one: apply the security rubric to what the
+change touches, as every other rubric here is applied, and leave the wide sweep behind. It
+earns its cost while the change is still being shaped and stops earning it once the author
+is answering threads, because a fifth reading of a path no fix moved finds what the four
+before it already read and let through. Nothing else about the label changes: the costlier
+model still performs the pass, the rubric above still applies in full to what the pass
+reads, and a security defect is still the most serious kind there is. Say in your notes or
+your summary that the pass was a settling one and what it covered, for the same reason the
+fourth point gives — a verdict that does not say what was examined is not evidence of
+anything.
+
 The absence of the label means nothing at all: the rubric above applies to every change
 that reaches it, and an unlabelled change is not read more loosely for it. An entry of
 `issues.json` whose `labels` are `null` is an issue nobody was given, so the judge says
