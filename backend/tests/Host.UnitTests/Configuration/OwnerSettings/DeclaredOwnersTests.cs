@@ -49,7 +49,7 @@ public sealed class DeclaredOwnersTests
         var configuration = Configuration(new Dictionary<string, string?>
         {
             ["Accounts:0:Id"] = Alex,
-            ["Accounts:0:DisplayNaem"] = "alex",
+            ["Accounts:0:DisplayNames"] = "alex",
         });
 
         // Act & Assert

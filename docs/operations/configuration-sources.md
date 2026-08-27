@@ -150,7 +150,7 @@ Owners are the top-level `Accounts` collection. It is **not** `MailSynchronizati
 | `Accounts:<n>:DisplayName` | Yes | The label an administrator tells owners apart by, at most 128 characters and unique across the deployment |
 | `Accounts:<n>:MailAccounts` | No | The mail accounts this owner owns, each declared exactly as one in `MailSynchronization:Accounts` is |
 
-An owner declaring no mailbox is an ordinary state rather than an unfinished one: an owner exists before their first mailbox does, and one whose last mailbox is withdrawn is still an owner. Binding is strict, so a property nothing binds — a misspelled `DisplayNaem` — fails the start naming it rather than leaving the host running on a default.
+An owner declaring no mailbox is an ordinary state rather than an unfinished one: an owner exists before their first mailbox does, and one whose last mailbox is withdrawn is still an owner. Binding is strict, so a property nothing binds — a `DisplayNames` where `DisplayName` belongs — fails the start naming it rather than leaving the host running on a default.
 
 At most **256** owners may be declared. A file past that was generated rather than written, which is worth stopping for on its own.
 
