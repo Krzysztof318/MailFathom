@@ -47,9 +47,11 @@ internal sealed partial class RootSettingsReloader(
             return false;
         }
 
+        bool published;
+
         try
         {
-            provider.Apply(candidate);
+            published = provider.Apply(candidate);
         }
         // Four exception types for one outcome, which is a candidate the layer will not publish: the framework's
         // parser reports a document that is not an object of configuration keys as a FormatException and leaves a
@@ -67,6 +69,16 @@ internal sealed partial class RootSettingsReloader(
             return false;
         }
 
+        if (!published)
+        {
+            // A writer that committed before this one and finished after it. Nothing is wrong and nothing is lost: the
+            // version in force is at least as new as this candidate, so the deployment already reads what this reload
+            // came to publish.
+            this.LogVersionSuperseded(candidate.Version, provider.Version);
+
+            return false;
+        }
+
         this.LogVersionPublished(candidate.Version);
 
         return true;
@@ -76,6 +88,11 @@ internal sealed partial class RootSettingsReloader(
         Level = LogLevel.Information,
         Message = "Persisted configuration version {PublishedVersion} is in force.")]
     private partial void LogVersionPublished(long publishedVersion);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Persisted configuration version {SupersededVersion} was read after version {ActiveVersion} was already in force, so nothing was republished.")]
+    private partial void LogVersionSuperseded(long supersededVersion, long activeVersion);
 
     [LoggerMessage(
         Level = LogLevel.Error,

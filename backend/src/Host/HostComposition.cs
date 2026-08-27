@@ -8,6 +8,7 @@ using MailFathom.AI.Providers;
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
+using MailFathom.Application.Configuration;
 using MailFathom.Application.Contacts.Collection;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Move;
@@ -74,7 +75,6 @@ using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.ObjectStorage;
 using MailFathom.Infrastructure.Persistence.Connections;
-using MailFathom.Infrastructure.Resilience;
 using MailFathom.Infrastructure.Rules;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using MailFathom.Mcp;
@@ -124,7 +124,7 @@ internal static class HostComposition
 
         AddPlatformDefaults(builder);
         AddPersistedConfiguration(builder);
-        AddBoundSettings(builder);
+        BoundSettings.AddTo(builder.Services, builder.Configuration);
 
         var declaredSensitiveContent = AddSensitiveContentScanning(builder);
         var spamScannerIsConfigured = AddSpamClassification(builder);
@@ -147,12 +147,12 @@ internal static class HostComposition
         return AddNetworkSurfaces(builder);
     }
 
-    /// <summary>Registers the seam a committed configuration write republishes the persisted layer through.</summary>
+    /// <summary>Registers the writer a configuration change is made through, and the seam it republishes the layer through.</summary>
     /// <remarks>
     /// The provider is found among the sources rather than handed in, because the layer is composed while the builder
     /// is being made and the composition root is called after that. A host built without the layer — the graph a unit
-    /// test composes from files alone — registers neither service, so nothing resolves a reloader over a layer that is
-    /// not there.
+    /// test composes from files alone — registers none of these services, so nothing resolves a writer over a layer
+    /// that is not there, and a deployment reading its settings from files alone offers no way to write one.
     /// </remarks>
     private static void AddPersistedConfiguration(WebApplicationBuilder builder)
     {
@@ -163,6 +163,12 @@ internal static class HostComposition
 
         builder.Services.AddSingleton(layer.Provider);
         builder.Services.AddSingleton<RootSettingsReloader>();
+        // The source list and the layer's own place in it are what a candidate is composed over, and both are the
+        // builder's rather than the container's. Handing the composer the instance settles which configuration a
+        // candidate is judged against, instead of leaving it to a cast of whatever was registered as IConfiguration.
+        builder.Services.AddSingleton(new CandidateConfigurationComposer(builder.Configuration, layer));
+        builder.Services.AddSingleton<CandidateSettingsValidator>();
+        builder.Services.AddSingleton<IConfigurationWriter, RootSettingsWriter>();
     }
 
     /// <summary>Registers the telemetry, resilience, clock, and secret resolution every other stage assumes.</summary>
@@ -188,164 +194,6 @@ internal static class HostComposition
         // where a reference belongs fails startup instead of authenticating.
         builder.Services.AddSecretResolution(
             builder.Configuration.GetValue("Secrets:Interpretation", SecretValueInterpretation.ReferenceOnly));
-        // The non-HTTP dependency classes only. HttpClient traffic, which is how the AI provider clients reach a hosted
-        // model, is already wrapped once by AddStandardResilienceHandler in the service defaults above.
-        builder.Services.AddOutboundResiliencePipelines(builder.Configuration.GetSection("Resilience"));
-    }
-
-    /// <summary>Binds every configuration section whose value is read through the options framework.</summary>
-    private static void AddBoundSettings(WebApplicationBuilder builder)
-    {
-        // Bound strictly: mail transport is security-sensitive, and a misspelled key such as a singular
-        // "PermittedAuthenticationMechanism" would otherwise be ignored and silently replaced by the default allow-list.
-        builder.Services.AddOptions<MailSynchronizationOptions>()
-            .Bind(
-                builder.Configuration.GetSection(MailSynchronizationOptions.SectionName),
-                binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
-        // The one mail synchronization rule that needs the current date, which no attribute on a bound options graph can
-        // reach, arrives through the options framework's own validator seam rather than as a second validation mechanism.
-        builder.Services.AddSingleton<IValidateOptions<MailSynchronizationOptions>, MailSynchronizationWindowValidator>();
-        // The host stops awaiting StopAsync once its own shutdown budget expires, so a drain configured beyond that budget
-        // would be accepted and never honored: the process would exit with the work still running. The budget is therefore
-        // derived from the configured drain instead of being left on the framework default. Read from configuration
-        // directly for the same reason the text search configuration below is — the value has to be known while the host
-        // is being built, before a container that could resolve an options snapshot exists. It is restart-required, which
-        // is what a shutdown budget is by nature.
-        builder.Services.Configure<HostOptions>(hostOptions => hostOptions.ShutdownTimeout =
-            MailSynchronizationOptions.ResolveHostShutdownBudget(builder.Configuration.GetValue(
-                $"{MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.ShutdownDrainTimeout)}",
-                new MailSynchronizationOptions().ShutdownDrainTimeout)));
-        // Bound strictly for the same reason as mail transport: a misspelled "Passwrod" would leave the secret block
-        // undiscovered, start the host on a passwordless connection string, and surface as an authentication failure later.
-        builder.Services.AddOptions<PersistenceOptions>()
-            .Bind(
-                builder.Configuration.GetSection(PersistenceOptions.SectionName),
-                binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
-        // Bound strictly like the blocks above: a misspelled "SnippetsPerEmails" would leave the configured bound
-        // undiscovered and search would quietly keep showing the default amount of every matched message.
-        builder.Services.AddOptions<MailboxSearchOptions>()
-            .Bind(
-                builder.Configuration.GetSection(MailboxSearchOptions.SectionName),
-                binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
-        builder.Services.AddOptions<MailExtractionBackfillOptions>()
-            .Bind(
-                builder.Configuration.GetSection(MailExtractionBackfillOptions.SectionName),
-                binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
-        builder.Services.AddOptions<EmailContentOptions>()
-            .Bind(
-                builder.Configuration.GetSection(EmailContentOptions.SectionName),
-                binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
-        builder.Services.AddOptions<MailDeliveryOptions>()
-            .Bind(
-                builder.Configuration.GetSection(MailDeliveryOptions.SectionName),
-                binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
-        // A configuration root of its own rather than a block inside Persistence, because what it selects is whether
-        // message payloads are in the database at all: a deployment writing them into a bucket still runs every metadata
-        // row, every index, and every job through PostgreSQL. A root is also what gives the endpoint's credentials their
-        // own secret-name uniqueness scope. An absent section is the database backend, which is what every deployment
-        // that has never heard of the setting is already running.
-        builder.Services.AddOptions<ContentStorageOptions>()
-            .Bind(
-                builder.Configuration.GetSection(ContentStorageOptions.SectionName),
-                binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
-        // A configuration root of its own rather than a block inside the feature that first needed it. The address clients
-        // reach this deployment at is a property of the installation, so an operator answers it once and whatever else has
-        // to hand back an absolute address later reads the same key instead of adding a second one beside it.
-        builder.Services.AddOptions<DeploymentOptions>()
-            .Bind(
-                builder.Configuration.GetSection(DeploymentOptions.SectionName),
-                binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
-        // A configuration root of its own, because what a deployment embeds with is a property of that deployment rather
-        // than of its database or its mail accounts, and a root is also what gives its keys their own secret-name
-        // uniqueness scope. An absent section is a deployment that embeds nothing and serves lexical search, which
-        // ADR 0006 makes a supported state rather than a startup failure.
-        builder.Services.AddOptions<EmbeddingOptions>()
-            .Bind(
-                builder.Configuration.GetSection(EmbeddingOptions.SectionName),
-                binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
-        // A configuration root of its own beside Embeddings rather than a section inside it, because the two are separate
-        // choices with separate consequences: an instance may generate and not embed, or embed and not generate, and each
-        // is a working deployment with a different set of capabilities. An absent section is one of those states rather
-        // than a startup failure.
-        // Bound without ValidateDataAnnotations, unlike every section around it, because this one reloads and the framework
-        // validator is the wrong place for a reloadable group's rules: it runs while the options monitor materializes a
-        // reloaded value, on the thread the configuration provider reported the change from, where a failure has nowhere to
-        // be reported and the candidate is dropped in silence. ChatDeclarationRules runs the same validator from the two
-        // places that can report it — composition below, which fails startup with every problem at once, and the reload
-        // validator, which logs the refusal and leaves the previous declaration serving.
-        builder.Services.AddOptions<ChatModelOptions>()
-            .Bind(
-                builder.Configuration.GetSection(ChatModelOptions.SectionName),
-                binderOptions => binderOptions.ErrorOnUnknownConfiguration = true);
-        // A configuration root of its own beside Chat rather than a block inside it, because the two answer different
-        // questions: Chat says which endpoint generates text and what one call to it may carry, while this says what
-        // answering a question is allowed to cost and how much of a mailbox may leave the process to do it. Unlike the
-        // provider sections, an absent section is not an absent capability — every deployment has these ceilings, and
-        // writing nothing takes the conservative defaults rather than none.
-        builder.Services.AddOptions<MailAnsweringOptions>()
-            .Bind(
-                builder.Configuration.GetSection(MailAnsweringOptions.SectionName),
-                binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
-        // Beside the declaration rather than inside it: what an instance embeds with is a commitment, and how fast it works
-        // through the mail it already had is a rate an operator changes while watching a provider bill.
-        builder.Services.AddOptions<EmbeddingBackfillOptions>()
-            .Bind(
-                builder.Configuration.GetSection(EmbeddingBackfillOptions.SectionName),
-                binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
-        // A configuration root of its own, because durable background work is a mechanism every consumer shares rather than
-        // a property of any one of them: what a job does belongs to the feature that enqueues it, and how much of the
-        // instance the queue may take belongs here.
-        builder.Services.AddOptions<JobQueueOptions>()
-            .Bind(
-                builder.Configuration.GetSection(JobQueueOptions.SectionName),
-                binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
-        // A configuration root of its own rather than a section of Persistence: the database is the first thing sealed
-        // under the ring and there is no reason it is the last, and a root is also what gives the key material its own
-        // secret-name uniqueness scope. ADR 0005 records the whole decision.
-        builder.Services.AddOptions<DataEncryptionOptions>()
-            .Bind(
-                builder.Configuration.GetSection(DataEncryptionOptions.SectionName),
-                binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
-        // A configuration root of its own, because what a deployment scans mail for before copying it or handing it out is
-        // a property of that deployment rather than of its database, its accounts, or its providers, and the two switches
-        // it holds reach several of those at once. Both are off by default, and an absent section is that default rather
-        // than a startup failure.
-        builder.Services.AddOptions<SensitiveContentOptions>()
-            .Bind(
-                builder.Configuration.GetSection(SensitiveContentOptions.SectionName),
-                binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
-        // The category and rule names an operator wrote are judged against what the registered scanners declare, which no
-        // attribute on the bound graph can reach. Registered whatever the switches say, because a switch turned on with no
-        // detector behind it is exactly what it refuses.
-        builder.Services.AddSingleton<IValidateOptions<SensitiveContentOptions>, SensitiveContentCatalogValidator>();
     }
 
     /// <summary>Registers the scanners this deployment switched on, and reports what it declared.</summary>
@@ -359,6 +207,12 @@ internal static class HostComposition
         var declaredSensitiveContent = builder.Configuration
             .GetSection(SensitiveContentOptions.SectionName)
             .Get<SensitiveContentOptions>() ?? new SensitiveContentOptions();
+
+        // Registered whichever way the switches read, unlike the detectors below them. What a scanner declares it can
+        // find is what the startup rule and a configuration write are both judged against, so binding that answer to the
+        // switches this process started with would make a candidate turning a scanner on refusable on a deployment that
+        // had it off — which is every deployment that would ever want to turn one on.
+        builder.Services.AddSensitiveContentCatalogs();
 
         if (declaredSensitiveContent.Secrets.Enabled)
         {
@@ -412,20 +266,6 @@ internal static class HostComposition
     /// <returns><see langword="true" /> when classification is on and asks a scanner, which is the only state in which the daemon is reached.</returns>
     private static bool AddSpamClassification(WebApplicationBuilder builder)
     {
-        // Bound strictly for the reason the rule section is: a misspelled key here would leave classification looking
-        // configured while it was off, and an operator reading their own file as proof of it.
-        builder.Services.AddOptions<SpamClassificationOptions>()
-            .Bind(
-                builder.Configuration.GetSection(SpamClassificationOptions.SectionName),
-                binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
-        // Whether the junk folder a filing names exists is a claim about the synchronization section, which no attribute on
-        // this graph can reach. Registered whatever the switches say, because a filing switched on with no folder behind it
-        // is exactly what it refuses.
-        builder.Services.AddSingleton<IValidateOptions<SpamClassificationOptions>>(
-            new SpamJunkFolderValidator(builder.Configuration));
-
         // Read while the services are being registered, for the reason the scanner declarations above are: whether a
         // scanner exists at all decides which services this process has, and that is decided before a container that could
         // resolve an options snapshot. With the switch off no daemon conversation is constructed, no socket is opened, and
@@ -467,36 +307,15 @@ internal static class HostComposition
     /// <summary>Reads the declared rule set, refuses one that cannot be compiled, and registers what evaluates it.</summary>
     private static void AddMailRules(WebApplicationBuilder builder)
     {
-        // Rules are authored in configuration rather than in a table, which ADR 0010 records: what an instance will do to a
-        // mailbox is then reviewable in a diff before it runs and reproducible from a repository afterwards. Bound strictly
-        // for the reason mail transport is — a misspelled key would otherwise be ignored, and the rule it belonged to would
-        // go on running while meaning something its author did not write.
-        builder.Services.AddOptions<MailRulesOptions>()
-            .Bind(
-                builder.Configuration.GetSection(MailRulesOptions.SectionName),
-                binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
-            .ValidateDataAnnotations()
-            .ValidateOnStart();
-        // Every condition is read here, while the host is being composed, because the condition language has no static type
+        // Every condition is read while the host is being composed, because the condition language has no static type
         // checker of its own: an unknown fact or a comparison that could never hold would otherwise be discovered on real
-        // mail. A rule set that cannot be read is a startup failure, and one compiler serves composition, every reload, and
-        // every pass, because it holds no state.
+        // mail. A rule set that cannot be read is a startup failure, stated in ComposedSettings so that a configuration
+        // write is refused by it as well, and one compiler serves composition, every reload, and every pass, because it
+        // holds no state.
         var mailRuleConditionCompiler = new NCalcMailRuleConditionCompiler();
-        var declaredMailRules = builder.Configuration
-            .GetSection(MailRulesOptions.SectionName)
-            .Get<MailRulesOptions>(binderOptions => binderOptions.ErrorOnUnknownConfiguration = true);
-        var mailRuleDeclarationErrors = MailRuleDeclarationRules.FindDeclarationErrors(
-            declaredMailRules,
-            mailRuleConditionCompiler,
-            DeclaredMailAccounts.ReadFrom(builder.Configuration));
 
-        if (mailRuleDeclarationErrors.Count > 0)
-        {
-            throw new OptionsValidationException(
-                MailRulesOptions.SectionName,
-                typeof(MailRulesOptions),
-                mailRuleDeclarationErrors);
-        }
+        ComposedSettings.RefuseFirstOf(
+            ComposedSettings.FindMailRuleRefusals(builder.Configuration, mailRuleConditionCompiler));
 
         builder.Services.AddSingleton<IMailRuleConditionCompiler>(mailRuleConditionCompiler);
         builder.Services.AddSingleton<MailRuleSetEvaluator>();
@@ -881,40 +700,14 @@ internal static class HostComposition
         var declaredAnswering = builder.Configuration.GetSection(MailAnsweringOptions.SectionName).Get<MailAnsweringOptions>()
             ?? new MailAnsweringOptions();
 
-        // Validated here rather than through ValidateOnStart, for the reason the endpoint sections below are: the mapping
-        // on the next line happens while the builder is being composed, so the container that would have run the pipeline
-        // does not exist yet. Without this a typo would first be noticed by an ArgumentOutOfRangeException out of a Create
-        // method and reach an operator as a framework stack trace instead of the aggregated report every other section
-        // produces.
-        var answeringConfigurationErrors = declaredAnswering.FindConfigurationErrors();
-
-        if (answeringConfigurationErrors.Count > 0)
-        {
-            throw new OptionsValidationException(
-                MailAnsweringOptions.SectionName,
-                typeof(MailAnsweringOptions),
-                answeringConfigurationErrors);
-        }
+        // Validated in ComposedSettings rather than through ValidateOnStart and rather than here, for two reasons that
+        // meet: the mapping below happens while the builder is being composed, so the container that would have run the
+        // pipeline does not exist yet, and a rule this file kept to itself is one a configuration write would not be
+        // judged by. Chat is the section that makes that matter most — it is bound without the framework's validator at
+        // all, so these are the only rules it has.
+        ComposedSettings.RefuseFirstOf(ComposedSettings.FindProviderRefusals(builder.Configuration));
 
         var answeringBudget = MailAnsweringBudgetMapper.Map(declaredAnswering);
-
-        // Every rule the chat declaration answers to, in one reading: the section's own bounds, the alias that names one AI
-        // endpoint across the whole deployment because a credential, a resilience circuit, and a log line are all keyed by
-        // it, and the filter's candidate count against what a lookup actually hands over. Judged here rather than through
-        // ValidateOnStart so the same rules judge a reloaded candidate, and reported together so an operator who wrote two
-        // mistakes reads both.
-        var chatConfigurationErrors = ChatDeclarationRules.FindDeclarationErrors(
-            declaredChat,
-            declaredEmbeddings,
-            declaredAnswering);
-
-        if (chatConfigurationErrors.Count > 0)
-        {
-            throw new OptionsValidationException(
-                ChatModelOptions.SectionName,
-                typeof(ChatModelOptions),
-                chatConfigurationErrors);
-        }
 
         // Registered whether or not a chat endpoint was declared, because the credential source below reads it on behalf of
         // an embedding-only deployment too, and because an instance that declared nothing is the one whose operator has to
@@ -1221,22 +1014,16 @@ internal static class HostComposition
     /// <returns>The decisions the request pipeline is built from.</returns>
     private static ComposedHostSurfaces AddNetworkSurfaces(WebApplicationBuilder builder)
     {
+        // Every refusal these sections carry is decided before the first of them is registered, and it is decided in
+        // ComposedSettings rather than here so that a configuration write is judged by the same rules. What stays here is
+        // the reading each registration needs: a section is read again for its own value, never for its own verdict.
+        ComposedSettings.RefuseFirstOf(ComposedSettings.FindSurfaceRefusals(builder.Configuration));
+
         // Read before the surfaces, because it is the one posture they all sit behind: which peers this process accepts a
         // public scheme and host from. Read once for the same reason every section below is — the pipeline's
         // forwarded-header policy is composed from it, and the encryption warning states the posture this settles.
         var reverseProxySettings = ReverseProxyOptions.ReadFrom(builder.Configuration);
         builder.Services.AddSingleton(Options.Create(reverseProxySettings));
-
-        var reverseProxyConfigurationErrors = reverseProxySettings.FindConfigurationErrors();
-
-        if (reverseProxyConfigurationErrors.Count > 0)
-        {
-            throw new OptionsValidationException(
-                ReverseProxyOptions.SectionName,
-                typeof(ReverseProxyOptions),
-                reverseProxyConfigurationErrors);
-        }
-
         builder.Services.AddTrustedReverseProxy(reverseProxySettings);
 
         // Read beside the reverse-proxy posture rather than with the endpoint sections, because it is the other setting
@@ -1244,16 +1031,6 @@ internal static class HostComposition
         // which endpoint it was for. Bound strictly like every section that settles a security posture.
         var connectionLimitSettings = ConnectionLimitsOptions.ReadFrom(builder.Configuration);
         builder.Services.AddSingleton(Options.Create(connectionLimitSettings));
-
-        var connectionLimitConfigurationErrors = connectionLimitSettings.FindConfigurationErrors();
-
-        if (connectionLimitConfigurationErrors.Count > 0)
-        {
-            throw new OptionsValidationException(
-                ConnectionLimitsOptions.SectionName,
-                typeof(ConnectionLimitsOptions),
-                connectionLimitConfigurationErrors);
-        }
 
         // Read once and registered, so the value that decides the route is the one every consumer resolves. Whether the
         // endpoint exists is decided while the application is being built, before a container that could resolve a snapshot
@@ -1285,85 +1062,6 @@ internal static class HostComposition
         var healthEndpointSettings = HealthEndpointOptions.ReadFrom(builder.Configuration);
         builder.Services.AddSingleton(Options.Create(healthEndpointSettings));
 
-        // Every listener this process opens is bound in code, from the section of the surface it belongs to, so the host's
-        // own ways of naming one decide nothing here and are refused rather than ignored. Read at the root, before any
-        // section's own errors, because an operator who stated a port that no longer binds anything needs to be told that
-        // first — every message below would otherwise describe a section they had not been using.
-        var externalListenerConfigurationErrors = ExternalListenerConfiguration.FindConfigurationErrors(builder.Configuration);
-
-        if (externalListenerConfigurationErrors.Count > 0)
-        {
-            throw new OptionsValidationException(
-                ExternalListenerConfiguration.KestrelEndpointsSectionName,
-                typeof(McpEndpointOptions),
-                externalListenerConfigurationErrors);
-        }
-
-        // A process serving none of its surfaces opens no listener at all, and Kestrel answers that by binding its own
-        // default address — and, where an ASP.NET Core development certificate happens to be installed, a TLS one beside it.
-        // That is a socket no section describes, serving whatever a route happens to match, so it is refused here instead.
-        if (!mcpEndpointSettings.Enabled
-            && !adminEndpointSettings.Enabled
-            && !clientEndpointSettings.Enabled
-            && !healthEndpointSettings.Enabled)
-        {
-            throw new OptionsValidationException(
-                McpEndpointOptions.SectionName,
-                typeof(McpEndpointOptions),
-                [
-                    $"No network surface is enabled: '{McpEndpointOptions.SectionName}:Enabled', "
-                    + $"'{AdminEndpointOptions.SectionName}:Enabled', '{ClientEndpointOptions.SectionName}:Enabled', and "
-                    + $"'{HealthEndpointOptions.SectionName}:Enabled' "
-                    + "are all off, so the process would serve nothing while still holding a socket. Enable the surface this "
-                    + "deployment exists to serve.",
-                ]);
-        }
-
-        // Validated here rather than through ValidateOnStart, because the sections are read before a container exists and
-        // the decisions they carry — which sockets to open, whether to map an endpoint, which scheme protects it — are taken
-        // during composition. The secrets they name are proven separately, by the startup validator that proves every other
-        // section's. Each section answers for itself first, so a message about a misspelled key is not delayed behind a
-        // question about a socket the deployment may not even share.
-        var mcpEndpointConfigurationErrors = mcpEndpointSettings.FindConfigurationErrors();
-
-        if (mcpEndpointConfigurationErrors.Count > 0)
-        {
-            throw new OptionsValidationException(
-                McpEndpointOptions.SectionName,
-                typeof(McpEndpointOptions),
-                mcpEndpointConfigurationErrors);
-        }
-
-        var adminEndpointConfigurationErrors = adminEndpointSettings.FindConfigurationErrors();
-
-        if (adminEndpointConfigurationErrors.Count > 0)
-        {
-            throw new OptionsValidationException(
-                AdminEndpointOptions.SectionName,
-                typeof(AdminEndpointOptions),
-                adminEndpointConfigurationErrors);
-        }
-
-        var clientEndpointConfigurationErrors = clientEndpointSettings.FindConfigurationErrors();
-
-        if (clientEndpointConfigurationErrors.Count > 0)
-        {
-            throw new OptionsValidationException(
-                ClientEndpointOptions.SectionName,
-                typeof(ClientEndpointOptions),
-                clientEndpointConfigurationErrors);
-        }
-
-        var healthEndpointConfigurationErrors = healthEndpointSettings.FindConfigurationErrors();
-
-        if (healthEndpointConfigurationErrors.Count > 0)
-        {
-            throw new OptionsValidationException(
-                HealthEndpointOptions.SectionName,
-                typeof(HealthEndpointOptions),
-                healthEndpointConfigurationErrors);
-        }
-
         // Composed once, from what every enabled surface asked for. Surfaces may share a socket — which is what lets a
         // single-node deployment publish one port rather than three, and why both request-serving surfaces default to the
         // same ones — but they may not disagree about it, and this is where that is settled before anything binds.
@@ -1374,14 +1072,6 @@ internal static class HostComposition
             .. clientEndpointSettings.DeclareListeners(),
             .. healthEndpointSettings.DeclareListeners(),
         ]);
-
-        if (composedListeners.Errors.Count > 0)
-        {
-            throw new OptionsValidationException(
-                McpEndpointOptions.SectionName,
-                typeof(McpEndpointOptions),
-                composedListeners.Errors);
-        }
 
         // Registered whether or not the endpoint is enabled, because it is the warning that decides whether it has
         // anything to say — the same reason the MCP warnings above are registered unconditionally.

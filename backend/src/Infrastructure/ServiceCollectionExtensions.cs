@@ -342,6 +342,9 @@ public static class ServiceCollectionExtensions
         // bootstrap read that composed the configuration happened before this container existed and built its own
         // data source for it; this registration is the same statement over the pool everything else uses.
         services.AddSingleton<IRootSettingsDocumentReader, RootSettingsDocumentReader>();
+        // The other direction of travel over the same row, registered beside the read because it is the same one
+        // statement over the same pool. Nothing resolves it unless a configuration write is composed above it.
+        services.AddSingleton<IRootSettingsDocumentWriter, RootSettingsDocumentWriter>();
         // The counter every session reports its ending to is a singleton, because the instrument it holds belongs to the
         // process rather than to a scope: one per request would create the same instrument again on every call.
         services.AddSingleton<PersistenceCommitTelemetry>();
@@ -1134,27 +1137,57 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    /// <summary>Registers the in-process detector of credentials in mail text, and what it declares it can find.</summary>
+    /// <summary>Registers the in-process detector of credentials in mail text.</summary>
     /// <param name="services">The service collection.</param>
     /// <returns>The service collection, for chaining.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// <para>
-    /// Called only where the <c>Secrets</c> switch is on, which is what makes an opt-in nobody took cost nothing: with
-    /// it off no corpus is assembled, no expression is compiled, and neither descriptor exists.
+    /// Called only where the <c>Secrets</c> switch is on, so with it off no expression is compiled and the scanner does
+    /// not exist. What the scanner declares it can find is registered by <see cref="AddSensitiveContentCatalogs" />
+    /// whatever the switch says, for the reason stated there — so the corpus behind the declaration is read on every
+    /// start, and what the switch decides is whether anything scans with it rather than whether it is assembled.
     /// </para>
     /// <para>
-    /// The catalog is registered beside the scanner rather than always, because startup refuses a switch that is on
-    /// with nothing behind it, and a catalog present without a detector would turn that refusal into a scanner that
-    /// runs and finds nothing. Both are singletons: the corpus is compiled once and the scanner holds it.
+    /// The scanner is a singleton, because the corpus is compiled once and the scanner holds it.
     /// </para>
     /// </remarks>
     public static IServiceCollection AddSecretContentScanning(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.AddSingleton<ISensitiveContentCatalog, SecretContentCatalog>();
         services.AddSingleton<ISensitiveContentScanner, SecretContentScanner>();
+
+        return services;
+    }
+
+    /// <summary>Registers what every scanner declares it can find, whichever scanners this deployment switched on.</summary>
+    /// <param name="services">The service collection.</param>
+    /// <returns>The service collection, for chaining.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// A catalog is a declaration rather than a detector: it registers no scanner, compiles no expression, and opens no
+    /// client. What it does read is the corpus behind the declaration, whenever one is constructed — and one is
+    /// constructed on every start, because the host validates the declarations under <c>ValidateOnStart</c>. So the
+    /// unconditional registration is not free of that reading; what it is free of is a
+    /// detector nothing would use. What reads a catalog selects by the switches — a plan is composed only for a scanner
+    /// that is on — so registering all of them changes nothing about what a deployment scans.
+    /// </para>
+    /// <para>
+    /// Unconditional because of what depends on the answer, which is the rule rather than the scanning: startup refuses
+    /// a scanner switched on with nothing behind it, and a configuration write is judged by that same rule against the
+    /// catalogs this process holds. Registering them with their scanners would make that rule read the switches the
+    /// process started with, so on a deployment that scans nothing every candidate turning a scanner on would be refused
+    /// as having no detector — a sentence false about the candidate, and a setting no write could ever change.
+    /// </para>
+    /// </remarks>
+    public static IServiceCollection AddSensitiveContentCatalogs(this IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddSingleton<ISensitiveContentCatalog, SecretContentCatalog>();
+        services.AddSingleton<ISensitiveContentCatalog, PersonalDataContentCatalog>();
 
         return services;
     }
@@ -1165,22 +1198,21 @@ public static class ServiceCollectionExtensions
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// <para>
-    /// Called only where the <c>Pii</c> switch is on, which is what makes an opt-in nobody took cost nothing: with it off
-    /// no client is registered, no analyzer address is read, and none of the three descriptors below exists. The composed
-    /// <see cref="PersonalDataAnalyzerProfile" /> is the host's to register, because where the analyzer is comes from
-    /// configuration this project does not bind.
+    /// Called only where the <c>Pii</c> switch is on, which is what keeps an opt-in nobody took from opening anything:
+    /// with it off no client is registered, no analyzer address is read, and none of the three descriptors below exists.
+    /// The composed <see cref="PersonalDataAnalyzerProfile" /> is the host's to register, because where the analyzer is
+    /// comes from configuration this project does not bind.
     /// </para>
     /// <para>
-    /// The probe is registered beside the scanner rather than always, for the reason the catalog is: startup refuses a
-    /// switch that is on with nothing behind it, and either one present without the other would turn that refusal into a
-    /// scanner that runs and finds nothing.
+    /// The probe is registered beside the scanner rather than always, because it answers for a client this deployment
+    /// only opens where the switch is on: a probe without a scanner would report on an analyzer nothing reaches. The
+    /// catalog is neither here nor conditional, for the reason <see cref="AddSensitiveContentCatalogs" /> gives.
     /// </para>
     /// </remarks>
     public static IServiceCollection AddPersonalDataContentScanning(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.AddSingleton<ISensitiveContentCatalog, PersonalDataContentCatalog>();
         services.AddSingleton<ISensitiveContentScanner, PresidioContentScanner>();
         services.AddSingleton<IPersonalDataAnalyzerProbe, PresidioAnalyzerProbe>();
         AddPersonalDataAnalyzerClient(services);

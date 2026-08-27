@@ -160,6 +160,34 @@ public sealed class RootSettingsReloaderTests
         Assert.Contains(logger.Messages, message => message.Contains("could not be re-read", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A reload racing a newer one loses, and losing is an ordinary outcome rather than a failure: the version it read
+    /// was already superseded by the time it came to publish, so the newer document stays in force and the reload
+    /// reports that it published nothing. The record of it is written at information rather than at warning, because
+    /// nothing about the deployment is wrong.
+    /// </summary>
+    [Fact]
+    public async Task ReloadAsync_CandidateSupersededBeforeItWasPublished_KeepsTheNewerVersionInForce()
+    {
+        // Arrange
+        var provider = LoadedProvider();
+        var reader = ReaderReturning(new RootSettingsDocument("""{ "Layered": { "Setting": "superseded" } }""", Version: 2));
+        var logger = new RecordingLogger<RootSettingsReloader>();
+
+        // Act
+        var published = await new RootSettingsReloader(provider, reader, logger).ReloadAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(published);
+        Assert.Equal(3, provider.Version);
+        provider.TryGet("Layered:Setting", out var effective);
+        Assert.Equal("inForce", effective);
+        Assert.Contains(
+            logger.Messages,
+            message => message.Contains("version 2", StringComparison.Ordinal)
+                && message.Contains("version 3", StringComparison.Ordinal));
+    }
+
     /// <summary>Composes an object nested to the given depth, which PostgreSQL accepts and the JSON reader stops at.</summary>
     private static string NestedDocument(int depth) =>
         string.Concat(Enumerable.Repeat("""{ "Nested": """, depth))
