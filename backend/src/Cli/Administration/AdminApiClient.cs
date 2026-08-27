@@ -7,6 +7,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
+using MailFathom.Cli.Administration.Configuration;
 using MailFathom.Cli.Administration.Contacts;
 using MailFathom.Cli.Administration.Content;
 using MailFathom.Cli.Administration.Embeddings;
@@ -1024,6 +1025,131 @@ internal sealed class AdminApiClient
             token,
             CliJsonContext.Default.ContactExport,
             cancellationToken);
+
+    /// <summary>Asks the deployment what its settings say at or beneath a path, and where each value is decided.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="prefix">The colon-delimited path to read beneath, or <see langword="null" /> for every setting the deployment composed.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The settings and the persisted version the deployment composed them over.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a reading.</exception>
+    internal Task<ConfigurationReading> ReadConfigurationAsync(
+        string token,
+        string? prefix,
+        CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Get,
+            $"{AdminEndpointRoutes.ConfigurationPath}{new AdminQueryString().Add("prefix", prefix)}",
+            token,
+            CliJsonContext.Default.ConfigurationReading,
+            cancellationToken);
+
+    /// <summary>Asks the deployment what adopting a path would copy out of its files.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="prefix">The colon-delimited path the adoption would cover.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The settings the files decide beneath the path that the persisted layer does not already carry.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a reading.</exception>
+    internal Task<ConfigurationReading> ReadAdoptableConfigurationAsync(
+        string token,
+        string prefix,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(prefix);
+
+        return this.RequestAsync(
+            HttpMethod.Get,
+            $"{AdminEndpointRoutes.ConfigurationAdoptionPath}{new AdminQueryString().Add("prefix", prefix)}",
+            token,
+            CliJsonContext.Default.ConfigurationReading,
+            cancellationToken);
+    }
+
+    /// <summary>Asks the deployment for the persisted configuration document itself.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The sparse document, secrets redacted, and the version it was read at.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a document.</exception>
+    internal Task<ConfigurationDocument> ReadConfigurationDocumentAsync(
+        string token,
+        CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Get,
+            AdminEndpointRoutes.ConfigurationDocumentPath,
+            token,
+            CliJsonContext.Default.ConfigurationDocument,
+            cancellationToken);
+
+    /// <summary>Asks the deployment to apply keyed changes to its persisted configuration.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="request">The changes and the version they were composed over.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What the write did, which is a refusal the operator acts on as often as a commit.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
+    internal Task<ConfigurationWriteAnswer> WriteConfigurationAsync(
+        string token,
+        ConfigurationWriteRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.ConfigurationPath,
+            token,
+            CliJsonContext.Default.ConfigurationWriteAnswer,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.ConfigurationWriteRequest));
+    }
+
+    /// <summary>Hands the deployment the persisted configuration document an editing session saved.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="request">The document and the version the buffer was opened over.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What the write did.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
+    internal Task<ConfigurationWriteAnswer> SaveConfigurationDocumentAsync(
+        string token,
+        ConfigurationDocumentRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.ConfigurationDocumentPath,
+            token,
+            CliJsonContext.Default.ConfigurationWriteAnswer,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.ConfigurationDocumentRequest));
+    }
+
+    /// <summary>Asks the deployment to take the settings its files decide beneath a path into the persisted layer.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="request">The path and the version the preview was read over.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What the adoption did.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
+    internal Task<ConfigurationWriteAnswer> AdoptConfigurationAsync(
+        string token,
+        ConfigurationAdoptionRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.ConfigurationAdoptionPath,
+            token,
+            CliJsonContext.Default.ConfigurationWriteAnswer,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.ConfigurationAdoptionRequest));
+    }
 
     /// <summary>Sends one credentialed request and reads the answer, or turns the refusal into a sentence.</summary>
     /// <remarks>

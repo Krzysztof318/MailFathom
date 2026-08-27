@@ -1,0 +1,301 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.Application.Configuration;
+using MailFathom.Domain.Access;
+using MailFathom.Host.Configuration.Administration;
+using MailFathom.Host.Security.Endpoints;
+using MailFathom.Infrastructure.Persistence.Settings;
+using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
+
+namespace MailFathom.Host.Api;
+
+/// <summary>Serves the deployment's own configuration: what it reads, where each value is decided, and how one changes.</summary>
+/// <remarks>
+/// <para>
+/// Three paths, each read with <c>GET</c> and performed with <c>POST</c> where there is anything to perform. The first
+/// reads the settings by path and takes keyed changes; the second hands over the persisted document itself and takes
+/// it back edited; the third previews what the deployment's files decide beneath a path and takes that decision into
+/// the database. Together they are the whole of what an operator does to configuration without opening the row.
+/// </para>
+/// <para>
+/// <b>The readings are <c>mailfathom.admin.read</c> and every write is
+/// <c>mailfathom.admin.configuration.write</c></b>, which is the one place this surface allocates a name for a single
+/// group of routes. A persisted setting decides what the deployment is rather than what it does next: the same write
+/// that corrects a search bound can widen a credential's grant or repoint a model provider, so a credential that may
+/// operate this deployment must not thereby be able to redefine it.
+/// </para>
+/// <para>
+/// Nothing here writes a setting itself. Every commit is one <see cref="IConfigurationWriter" /> call over one version,
+/// so the deny-list, the route catalog, the secret rule, the candidate binding, the validators, and the version guard
+/// judge a change reaching this surface exactly as they judge one reaching any other.
+/// </para>
+/// <para>
+/// A deployment composing no persisted layer serves none of them. That is not a state a deployment reaches — the host
+/// reads the layer before it composes anything else — but a host built from files alone, which is what a test composes,
+/// would otherwise answer these routes with a resolution failure instead of the absence it actually has.
+/// </para>
+/// </remarks>
+internal static class ConfigurationEndpoints
+{
+    /// <summary>The route the settings are read at and keyed changes are written to, relative to the administrative prefix.</summary>
+    internal const string ConfigurationRoute = "/configuration";
+
+    /// <summary>The route the persisted document is read at and saved back to.</summary>
+    /// <remarks>
+    /// A path of its own rather than a shape on the route above, because the two are different transactions: one names
+    /// the settings it changes, and this one carries the whole document and is judged against the version it was
+    /// opened over. A body carrying which of the two was meant would make a mistyped field the difference between
+    /// changing one setting and replacing every one of them.
+    /// </remarks>
+    internal const string DocumentRoute = $"{ConfigurationRoute}/document";
+
+    /// <summary>The route an adoption is previewed at and performed on.</summary>
+    internal const string AdoptionRoute = $"{ConfigurationRoute}/adoption";
+
+    /// <summary>The greatest request body the three write routes read before refusing it.</summary>
+    /// <remarks>
+    /// Twice what the persisted document may be, because a body larger than that can compose no document this
+    /// deployment would accept: the layer refuses a candidate past
+    /// <see cref="RootSettingsDocument.MaximumOctets" /> whatever it binds to, and the doubling is the room JSON string
+    /// escaping and the request envelope take on the way. Stated because the server's own default is measured in tens
+    /// of megabytes, which would let an authenticated client make the process buffer a body far larger than any
+    /// configuration this deployment could hold.
+    /// </remarks>
+    internal const int MaxWriteRequestBytes = 2 * RootSettingsDocument.MaximumOctets;
+
+    /// <summary>Maps the configuration routes into the administrative group, so they inherit its authorization.</summary>
+    /// <param name="api">The administrative route group.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="api" /> is <see langword="null" />.</exception>
+    internal static void MapConfiguration(this RouteGroupBuilder api)
+    {
+        ArgumentNullException.ThrowIfNull(api);
+
+        // Whether the service is registered, never the service itself. Mapping runs before the host has started, and
+        // resolving this one would construct the persisted-settings reader and through it the connection provider,
+        // which refuses to answer until a startup lifecycle event has composed the connection string — so asking for
+        // the instance here would stop every deployment that composes a layer, which is all of them. The provider is
+        // reached through the interface because that is where a group publishes it.
+        if (((IEndpointRouteBuilder)api).ServiceProvider.GetService<IServiceProviderIsService>()
+            is not { } registrations || !registrations.IsService(typeof(PersistedSettingsAdministration)))
+        {
+            return;
+        }
+
+        api.MapGet(ConfigurationRoute, Read)
+            .RequirePermission(MailFathomPermission.AdminRead);
+
+        // The attribute is reached for its metadata rather than as an MVC filter: it implements
+        // IRequestSizeLimitMetadata, which the routing pipeline applies to the request body feature, so a body over the
+        // bound is answered 413 before the handler is reached.
+        api.MapPost(ConfigurationRoute, WriteAsync)
+            .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
+            .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+
+        api.MapGet(DocumentRoute, ReadDocumentAsync)
+            .RequirePermission(MailFathomPermission.AdminRead);
+
+        api.MapPost(DocumentRoute, SaveDocumentAsync)
+            .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
+            .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+
+        api.MapGet(AdoptionRoute, ReadAdoptable)
+            .RequirePermission(MailFathomPermission.AdminRead);
+
+        api.MapPost(AdoptionRoute, AdoptAsync)
+            .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
+            .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+    }
+
+    /// <summary>Reports the deployment's settings at or beneath a path, with the layer each value came from.</summary>
+    /// <param name="settings">The deployment's configuration administration.</param>
+    /// <param name="prefix">The colon-delimited path to read beneath, or nothing for every setting the deployment composed.</param>
+    /// <returns><c>200</c> with the settings, or <c>400</c> when the prefix matched more than one reading answers with.</returns>
+    /// <remarks>
+    /// A prefix matching nothing answers with an empty reading rather than <c>404</c>, because a setting nobody
+    /// configured is a fact about the deployment rather than an address that does not exist — and it is the answer an
+    /// operator checking whether a setting is set at all is asking for.
+    /// </remarks>
+    internal static Results<Ok<ConfigurationReadingResponse>, ProblemHttpResult> Read(
+        [FromServices] PersistedSettingsAdministration settings,
+        [FromQuery] string? prefix)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        var reading = settings.Read(prefix);
+
+        return reading.IsTooBroad
+            ? TooBroad(reading, prefix)
+            : TypedResults.Ok(ConfigurationReadingResponse.For(settings.ComposedVersion, reading));
+    }
+
+    /// <summary>Applies keyed changes to the deployment's persisted configuration.</summary>
+    /// <param name="settings">The deployment's configuration administration.</param>
+    /// <param name="request">The changes and the version they were composed over.</param>
+    /// <param name="cancellationToken">Cancels the read and the commit, leaving the configuration unchanged unless the commit was already in flight.</param>
+    /// <returns><c>200</c> with what the write did, or <c>400</c> when the request states no change this boundary accepts.</returns>
+    /// <remarks>
+    /// A change the boundary itself will not accept — an empty list, a path that names no setting, a value past the
+    /// bound, either half carrying a NUL — is a caller's mistake and answers <c>400</c>. Every refusal about the
+    /// configuration itself answers <c>200</c> with the outcome, because each is something the administrator acts on
+    /// and continues from and each carries the version they compose the next attempt over.
+    /// </remarks>
+    internal static async Task<Results<Ok<ConfigurationWriteResponse>, ProblemHttpResult>> WriteAsync(
+        [FromServices] PersistedSettingsAdministration settings,
+        [FromBody] ConfigurationWriteRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (request.Version < 0)
+        {
+            return NotAcceptable("A configuration write states the version it was composed over, which is never negative.");
+        }
+
+        if (request.Changes is not { Count: > 0 } changes)
+        {
+            return NotAcceptable("A configuration write states at least one change.");
+        }
+
+        if (changes.Count > IConfigurationWriter.MaximumEdits)
+        {
+            return NotAcceptable(
+                $"A configuration write carries at most {IConfigurationWriter.MaximumEdits} changes, and this one carries {changes.Count}.");
+        }
+
+        IReadOnlyList<ConfigurationEdit> edits;
+
+        try
+        {
+            edits = [.. changes.Select(Stated)];
+        }
+        catch (ArgumentException refusal)
+        {
+            return NotAcceptable(refusal.Message);
+        }
+
+        return TypedResults.Ok(ConfigurationWriteResponse.For(
+            await settings.ApplyAsync(edits, request.Version, request.EvenIfShadowed, cancellationToken)));
+    }
+
+    /// <summary>Hands over the persisted document itself, as the sparse JSON an editing session opens.</summary>
+    /// <param name="settings">The deployment's configuration administration.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns><c>200</c> with the document and the version it was read at.</returns>
+    /// <remarks>
+    /// The document is read from the database rather than from the layer this process composed, because it is what the
+    /// caller's save is judged against: composing an edit over what this process happens to hold would author it
+    /// against a version another writer may already have replaced.
+    /// </remarks>
+    internal static async Task<Ok<ConfigurationDocumentResponse>> ReadDocumentAsync(
+        [FromServices] PersistedSettingsAdministration settings,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        var document = await settings.ReadDocumentAsync(cancellationToken);
+
+        return TypedResults.Ok(new ConfigurationDocumentResponse(document.Version, document.Json));
+    }
+
+    /// <summary>Takes back the persisted document an editing session saved.</summary>
+    /// <param name="settings">The deployment's configuration administration.</param>
+    /// <param name="request">The document and the version the buffer was opened over.</param>
+    /// <param name="cancellationToken">Cancels the read and the commit.</param>
+    /// <returns><c>200</c> with what the write did, or <c>400</c> when the request carries no document.</returns>
+    internal static async Task<Results<Ok<ConfigurationWriteResponse>, ProblemHttpResult>> SaveDocumentAsync(
+        [FromServices] PersistedSettingsAdministration settings,
+        [FromBody] ConfigurationDocumentRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (request.Version < 0)
+        {
+            return NotAcceptable("A configuration write states the version it was composed over, which is never negative.");
+        }
+
+        if (request.Document is not { Length: > 0 } document)
+        {
+            return NotAcceptable(
+                "A saved configuration document carries the document. An editing session that means to change nothing sends nothing at all.");
+        }
+
+        return TypedResults.Ok(ConfigurationWriteResponse.For(
+            await settings.ApplyDocumentAsync(document, request.Version, request.EvenIfShadowed, cancellationToken)));
+    }
+
+    /// <summary>Reports what adopting a path would copy from the deployment's files into the persisted layer.</summary>
+    /// <param name="settings">The deployment's configuration administration.</param>
+    /// <param name="prefix">The colon-delimited path the adoption would cover.</param>
+    /// <returns><c>200</c> with what would be adopted, or <c>400</c> when no prefix was named or it matched too many settings.</returns>
+    /// <remarks>
+    /// The preview is the same shape as an ordinary reading, and deliberately: what an adoption writes is a set of
+    /// settings with a source each, and the source is the part an operator weighs — it names the file that stops
+    /// deciding the value once the adoption commits.
+    /// </remarks>
+    internal static Results<Ok<ConfigurationReadingResponse>, ProblemHttpResult> ReadAdoptable(
+        [FromServices] PersistedSettingsAdministration settings,
+        [FromQuery] string? prefix)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+
+        if (prefix is not { Length: > 0 })
+        {
+            return NotAcceptable("An adoption names the path it covers. There is no adoption of the whole configuration.");
+        }
+
+        var reading = settings.ReadAdoptable(prefix);
+
+        return reading.IsTooBroad
+            ? TooBroad(reading, prefix)
+            : TypedResults.Ok(ConfigurationReadingResponse.For(settings.ComposedVersion, reading));
+    }
+
+    /// <summary>Copies what the deployment's files supply beneath a path into the persisted layer.</summary>
+    /// <param name="settings">The deployment's configuration administration.</param>
+    /// <param name="request">The path and the version the preview was read over.</param>
+    /// <param name="cancellationToken">Cancels the read and the commit.</param>
+    /// <returns><c>200</c> with what the adoption did, or <c>400</c> when it names no path.</returns>
+    internal static async Task<Results<Ok<ConfigurationWriteResponse>, ProblemHttpResult>> AdoptAsync(
+        [FromServices] PersistedSettingsAdministration settings,
+        [FromBody] ConfigurationAdoptionRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (request.Version < 0)
+        {
+            return NotAcceptable("A configuration write states the version it was composed over, which is never negative.");
+        }
+
+        if (request.Prefix is not { Length: > 0 } prefix || string.IsNullOrWhiteSpace(prefix))
+        {
+            return NotAcceptable("An adoption names the path it covers. There is no adoption of the whole configuration.");
+        }
+
+        return TypedResults.Ok(ConfigurationWriteResponse.For(
+            await settings.AdoptAsync(prefix, request.Version, request.EvenIfShadowed, cancellationToken)));
+    }
+
+    /// <summary>Turns one stated change into the change the writer accepts, refusing a path or value it will not.</summary>
+    /// <exception cref="ArgumentException">Thrown when the path names no setting, or either half carries a character no configuration document can hold.</exception>
+    private static ConfigurationEdit Stated(ConfigurationChangeRequest change) => change.Value is { } value
+        ? ConfigurationEdit.SetTo(change.Path ?? string.Empty, value)
+        : ConfigurationEdit.Removing(change.Path ?? string.Empty);
+
+    private static ProblemHttpResult TooBroad(SettingsReading reading, string? prefix) => TypedResults.Problem(
+        $"{Named(prefix)} matches {reading.MatchedCount} settings, past the {EffectiveSettingsReader.MaximumSettings} one reading answers with. Read a narrower path.",
+        statusCode: StatusCodes.Status400BadRequest);
+
+    private static string Named(string? prefix) =>
+        prefix is { Length: > 0 } named ? $"The path '{named}'" : "The whole configuration";
+
+    private static ProblemHttpResult NotAcceptable(string detail) =>
+        TypedResults.Problem(detail, statusCode: StatusCodes.Status400BadRequest);
+}

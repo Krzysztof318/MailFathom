@@ -4,6 +4,7 @@
 
 using System.Text.Json.Serialization;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Administration.Configuration;
 using MailFathom.Cli.Administration.Contacts;
 using MailFathom.Cli.Administration.Content;
 using MailFathom.Cli.Administration.Embeddings;
@@ -80,6 +81,12 @@ namespace MailFathom.Cli;
 [JsonSerializable(typeof(ContactErasure))]
 [JsonSerializable(typeof(CollectedContactErasure))]
 [JsonSerializable(typeof(ContactExport))]
+[JsonSerializable(typeof(ConfigurationReading))]
+[JsonSerializable(typeof(ConfigurationDocument))]
+[JsonSerializable(typeof(ConfigurationWriteRequest))]
+[JsonSerializable(typeof(ConfigurationDocumentRequest))]
+[JsonSerializable(typeof(ConfigurationAdoptionRequest))]
+[JsonSerializable(typeof(ConfigurationWriteAnswer))]
 [JsonSerializable(typeof(StoredCredentials))]
 [JsonSerializable(typeof(ProtectedResourceMetadata))]
 [JsonSerializable(typeof(AuthorizationServerMetadata))]

@@ -1,6 +1,6 @@
 # Administering a deployment
 
-<!-- describes: backend/src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, backend/src/Host/Api/Admin*.cs, backend/src/Host/Api/Contact*.cs, backend/src/Host/Api/Content*.cs, backend/src/Host/Api/Embedding*.cs, backend/src/Host/Api/Job*.cs, backend/src/Host/Api/Mail*.cs, backend/src/Host/Api/Outbox*.cs, backend/src/Host/Api/Spam*.cs, backend/src/Host/Hosting/Startup/SurfaceIsolation.cs, backend/src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, backend/src/Domain/Access/MailFathomPermission.cs, backend/src/Host/Security/Endpoints/RouteAuthorization.cs, backend/src/Host/Security/Endpoints/RoutePermission.cs, backend/src/Host/Security/Endpoints/TransportListenerBinder.cs, backend/src/Host/Security/Transport/TransportRateLimiting.cs, backend/src/Cli/**, scripts/install-mfctl.sh -->
+<!-- describes: backend/src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, backend/src/Host/Api/Admin*.cs, backend/src/Host/Api/Configuration*.cs, backend/src/Host/Api/Contact*.cs, backend/src/Host/Api/Content*.cs, backend/src/Host/Api/Embedding*.cs, backend/src/Host/Api/Job*.cs, backend/src/Host/Api/Mail*.cs, backend/src/Host/Api/Outbox*.cs, backend/src/Host/Api/Spam*.cs, backend/src/Host/Hosting/Startup/SurfaceIsolation.cs, backend/src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, backend/src/Domain/Access/MailFathomPermission.cs, backend/src/Host/Security/Endpoints/RouteAuthorization.cs, backend/src/Host/Security/Endpoints/RoutePermission.cs, backend/src/Host/Security/Endpoints/TransportListenerBinder.cs, backend/src/Host/Security/Transport/TransportRateLimiting.cs, backend/src/Cli/**, scripts/install-mfctl.sh -->
 
 How the `mfctl` command reaches a running deployment, and what that deployment has to have enabled before it will
 answer.
@@ -195,6 +195,12 @@ what it was never granted is what the record exists to make visible.
 | `DELETE /api/admin/contacts/{id}` | `mailfathom.admin.erase` | Erases one person and everything the book derived from them. **This is the one route that disposes of a contact, and it cannot be undone.** |
 | `DELETE /api/admin/contacts/collected` | `mailfathom.admin.erase` | Erases every contact this deployment collected from arriving mail, leaving every one its owner asserted. **This cannot be undone either.** |
 | `GET /api/admin/contacts/{id}/export` | `mailfathom.admin.audit.read` | Produces everything the book holds about one person, as of the instant it was taken. |
+| `GET /api/admin/configuration` | `mailfathom.admin.read` | Reports the settings at or beneath a path as this deployment reads them, each with the layer that decided it, and the persisted version they were composed over. Secret-bearing values read back as the redaction marker. This is what [`mfctl config get` and `mfctl config show`](#reading-and-changing-the-deployments-own-configuration) ask. |
+| `POST /api/admin/configuration` | `mailfathom.admin.configuration.write` | Applies keyed changes to the persisted configuration document, together or not at all, over the version the body states. |
+| `GET /api/admin/configuration/document` | `mailfathom.admin.read` | Hands over the persisted document itself, secrets redacted, with the version it was read at. This is what an editing session opens. |
+| `POST /api/admin/configuration/document` | `mailfathom.admin.configuration.write` | Takes that document back edited and commits it as one change against the version it was opened over. |
+| `GET /api/admin/configuration/adoption` | `mailfathom.admin.read` | Reports what adopting a path would copy out of the deployment's files, naming the file behind each setting, and writes nothing. |
+| `POST /api/admin/configuration/adoption` | `mailfathom.admin.configuration.write` | Copies those values into the persisted document. **This is the one route that moves a decision out of a deployment's files and into its database.** |
 
 The write route's body carries a long-lived credential for a named mailbox owner, which is what makes the clear-text
 warning below matter more here than it does for a session probe. It refuses, with `400` and a sentence naming what was
@@ -1012,6 +1018,52 @@ one is asked with.
 Every refusal names the rule rather than the value: a malformed address is reported as an address that is not usable and
 never echoed, and no name, address, or note reaches a log line, a problem document, a trace, or a failing command's
 output. What a failure names is the contact's identifier, which is the one part of the record that is not personal data.
+
+### Reading and changing the deployment's own configuration
+
+`mfctl config` is how a persisted setting is read and changed without editing a database row and restarting over it.
+[Configuration sources](configuration-sources.md#reading-and-changing-settings-from-mfctl) is the whole of what a write
+does and what it refuses; what belongs here is what the commands are for and how the two grants divide them.
+
+```
+$ mfctl config show MailboxSearch
+MailboxSearch:
+  SnippetsPerEmail = 3 [file (10-deployment.json)]
+  WordsPerSnippet = 12 [persisted-layer]
+2 settings, over persisted configuration version 7.
+
+$ mfctl config set MailboxSearch:SnippetsPerEmail 5
+Committed persisted configuration version 8.
+  MailboxSearch:SnippetsPerEmail
+    before: 3 (from file (10-deployment.json))
+    now:    5 (from persisted-layer)
+```
+
+**Every reading names the layer that decided the value**, because a deployment composes its settings from files, the
+persisted layer, and the three sources an operator reaches for when something is wrong — so "what does this setting
+say" and "where would I change it" are one question, and answering only the first is what leads to a persisted write
+that commits and changes nothing. A write to a setting an outranking source supplies is refused for exactly that
+reason, naming the source; `--even-if-shadowed` is how staging a value beneath an override about to be removed is
+stated.
+
+**Reading is `mailfathom.admin.read` and every write is `mailfathom.admin.configuration.write`.** That second name
+exists because a persisted setting decides what the deployment *is* rather than what it does next: the same write that
+corrects a search bound can widen a credential's grant or repoint a model provider. A monitoring credential is
+therefore told where every value is decided while being unable to decide one, and the operating grant does not carry
+the ability to redefine the deployment it operates.
+
+**`mfctl config edit` is the command for a change that is several settings at once**, committed as one transaction over
+the version the buffer was opened at, and it needs `$VISUAL` or `$EDITOR` — a graphical editor needs the flag that makes
+it wait, such as `VISUAL="code --wait"`, because the command reads the file back when the editor exits. An emptied
+buffer abandons the session and a buffer saved unchanged writes nothing.
+
+**`mfctl config adopt` is previewed and then confirmed**, because after it the files stop deciding the settings it
+copied. `--yes` states the agreement where nobody is at the terminal, and `mfctl config unset` is what gives a setting
+back to its file.
+
+Secret-bearing values never leave this endpoint. `get`, `show`, and the editing buffer all report the redaction marker,
+and a marker saved back leaves the setting exactly as it was — so an editing session over a document carrying a
+credential reference is safe, and no reading of this surface discloses where material is kept.
 
 ## Rate limiting
 

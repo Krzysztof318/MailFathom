@@ -34,6 +34,7 @@ two disjoint halves, and the prefix after `mailfathom.` says which half a name b
 | `mailfathom.admin.credentials.write` | administrative | Storing a mailbox refresh token |
 | `mailfathom.admin.spend` | administrative | Activating the declared embedding model, which is the one operation that starts a provider bill |
 | `mailfathom.admin.erase` | administrative | Disposing of what this deployment holds: the mail stored for a folder an account no longer mirrors, one person and everything the contact book derived from them, and the database copies a finished move left beside the objects it verified |
+| `mailfathom.admin.configuration.write` | administrative | Changing the deployment's own [persisted configuration](configuration-sources.md#changing-a-persisted-setting): persisting a setting, stopping the document carrying one, saving an edited document, and adopting what the files decide beneath a path. Reading the settings is `mailfathom.admin.read`, so a credential may be told where a value is decided without being able to decide it |
 
 **Three surfaces draw on those two halves.** The MCP endpoint and the client endpoint each draw on the mail half — the
 client reads the mail an agent reads, and a second vocabulary for one authority would be two things to keep in step —
@@ -146,7 +147,7 @@ Every administrative route publishes the one permission it requires as endpoint 
 [what the endpoint serves](admin-endpoint.md#what-the-endpoint-serves) states it route by route beside what each route
 does. Two consequences of that mapping belong here rather than to any one route.
 
-**Eight `mfctl` commands make two requests and therefore need two permissions**, because what such a command reads is
+**Twelve `mfctl` commands make two requests and therefore need two permissions**, because what such a command reads is
 what it puts in front of you or amends from:
 
 | Command | Needs |
@@ -157,9 +158,14 @@ what it puts in front of you or amends from:
 | `mfctl content move` | `mailfathom.admin.read` beside `mailfathom.admin.operate` |
 | `mfctl content release` | `mailfathom.admin.read` beside `mailfathom.admin.erase` |
 | `mfctl embedding activate` | `mailfathom.admin.read` beside `mailfathom.admin.spend` |
+| `mfctl config set`, `mfctl config unset`, `mfctl config edit`, `mfctl config adopt` | `mailfathom.admin.read` beside `mailfathom.admin.configuration.write` |
 
 A credential granted only the permission the operation itself is published under meets the refusal at the first request
 and nothing is done — the safe half of it, and still not what the operator intended.
+
+The four configuration writes read for a reason of their own: what they read carries the version the change is composed
+over, and a version fetched apart from the values it describes is the lost update the deployment's version guard exists
+to refuse. `mfctl config get` and `mfctl config show` make one request and need `mailfathom.admin.read` alone.
 
 **`GET /api/admin/session` sits outside the model and needs no permission.** It reports the credential the caller
 already presented, the version this deployment already publishes, and the permissions that credential holds, all of

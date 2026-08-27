@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.CommandLine;
+using MailFathom.Cli.Commands.Configuration;
 using MailFathom.Cli.Commands.Contacts;
 using MailFathom.Cli.Commands.Content;
 using MailFathom.Cli.Commands.Folders;
@@ -154,6 +155,22 @@ internal static class CliRootCommand
             ExportContactCommand.Create(context),
         };
 
+        // The deployment's own settings, and the one group whose writes change what this deployment is rather than what
+        // it does next. Reading and writing sit together because they are one act: three sources outrank the persisted
+        // layer, so "where is this decided" is the question an operator answers before every write, and a group that
+        // read from one place and wrote from another would be two commands to keep in step. "adopt" is apart from the
+        // other five — it moves a decision out of the deployment's files and into its database, which nothing else in
+        // MailFathom ever does, and which no upgrade or import will do behind an operator's back.
+        Command configCommand = new("config", "Read and change this deployment's own configuration.")
+        {
+            GetSettingCommand.Create(context),
+            ShowSettingsCommand.Create(context),
+            SetSettingCommand.Create(context),
+            UnsetSettingCommand.Create(context),
+            EditConfigurationCommand.Create(context),
+            AdoptSettingsCommand.Create(context),
+        };
+
         // The only option the root owns. It governs what the runner does once a command has finished rather than
         // anything a command does, so it is declared once and made recursive rather than added to each of them.
         return new RootCommand($"MailFathom administration tool ({version.Version}).")
@@ -173,6 +190,7 @@ internal static class CliRootCommand
             folderCommand,
             contentCommand,
             contactCommand,
+            configCommand,
         };
     }
 }

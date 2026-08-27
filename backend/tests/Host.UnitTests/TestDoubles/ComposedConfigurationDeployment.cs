@@ -1,0 +1,135 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.Application.Configuration;
+using MailFathom.Host.Configuration.Administration;
+using MailFathom.Host.Configuration.RootSettings;
+using MailFathom.Infrastructure.Persistence.Settings;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Time.Testing;
+using Xunit;
+
+namespace MailFathom.Host.UnitTests.TestDoubles;
+
+/// <summary>A deployment composed the way the host composes one, over sources a test states.</summary>
+/// <remarks>
+/// <para>
+/// The sources are layered in the host's own order, and the operator's override arrives as the user-secrets file
+/// because that is what the layer's insertion point recognizes as the lowest of the operator's sources. The persisted
+/// layer therefore sits below it and above the deployment's own file, exactly as it does in a running process — which
+/// is the whole of what a reading reports and what a write is refused by.
+/// </para>
+/// <para>
+/// The writer behind the administration is the real one rather than a substitute. What the administration adds —
+/// refusing a write nothing will read, dropping a change that changes nothing, and reporting the effective value on
+/// both sides of a commit — is only worth anything if the commit beneath it is judged by the deny-list, the route
+/// catalog, the secret rule, the candidate binding, and the version guard a deployment actually applies.
+/// </para>
+/// </remarks>
+internal sealed class ComposedConfigurationDeployment : IDisposable
+{
+    /// <summary>The instant the candidate validators read, fixed because nothing here is about the passage of time.</summary>
+    private static readonly DateTimeOffset AnyInstant = new(2026, 8, 27, 12, 0, 0, TimeSpan.Zero);
+
+    private const string DeploymentFileName = "10-deployment.json";
+    private const string OperatorOverrideFileName = "secrets.json";
+
+    private readonly ConfigurationManager configuration;
+
+    private ComposedConfigurationDeployment(
+        ConfigurationManager configuration,
+        RootSettingsConfigurationSource layer,
+        InMemoryRootSettingsRow row)
+    {
+        this.configuration = configuration;
+        this.Row = row;
+        this.Reader = new EffectiveSettingsReader(configuration, layer.Provider);
+
+        var writer = new RootSettingsWriter(
+            row,
+            row,
+            new CandidateConfigurationComposer(configuration, layer),
+            new CandidateSettingsValidator(new FakeTimeProvider(AnyInstant), []),
+            new RootSettingsReloader(layer.Provider, row, new RecordingLogger<RootSettingsReloader>()),
+            DeclaredSecretScheme.Registered,
+            new RecordingLogger<RootSettingsWriter>());
+
+        this.Administration = new PersistedSettingsAdministration(this.Reader, row, writer);
+    }
+
+    /// <summary>Gets the reading side, which reports where each value the deployment composed came from.</summary>
+    public EffectiveSettingsReader Reader { get; }
+
+    /// <summary>Gets the service the configuration routes are served by.</summary>
+    public PersistedSettingsAdministration Administration { get; }
+
+    /// <summary>Gets the persisted row, which is what says whether a commit reached the database.</summary>
+    public InMemoryRootSettingsRow Row { get; }
+
+    /// <summary>Gets the name the deployment's provisioned file is composed under, which a reading reports as an origin.</summary>
+    public static string ProvisionedFileName => DeploymentFileName;
+
+    /// <summary>Composes the deployment's file, the persisted layer, and an optional operator override.</summary>
+    /// <param name="provisioned">The deployment's own configuration file, as JSON.</param>
+    /// <param name="persisted">The persisted configuration document, as JSON.</param>
+    /// <param name="operatorOverride">An override composed above the persisted layer, as JSON, or nothing.</param>
+    /// <param name="version">The version the persisted document stands at.</param>
+    /// <returns>The composed deployment.</returns>
+    public static ComposedConfigurationDeployment Composed(
+        string provisioned,
+        string persisted,
+        string? operatorOverride = null,
+        long version = 1)
+    {
+        var configuration = new ConfigurationManager();
+        var files = new InMemoryConfigurationFileProvider().WithFile(DeploymentFileName, provisioned);
+
+        configuration.AddJsonFile(files, DeploymentFileName, optional: false, reloadOnChange: false);
+
+        if (operatorOverride is not null)
+        {
+            files.WithFile(OperatorOverrideFileName, operatorOverride);
+            configuration.AddJsonFile(files, OperatorOverrideFileName, optional: false, reloadOnChange: false);
+        }
+
+        configuration.AddRootSettings(new RootSettingsDocument(persisted, version));
+
+        return new ComposedConfigurationDeployment(
+            configuration,
+            configuration.Sources.OfType<RootSettingsConfigurationSource>().Last(),
+            new InMemoryRootSettingsRow(persisted, version));
+    }
+
+    /// <summary>Applies keyed changes over the version the row currently stands at.</summary>
+    /// <param name="edits">The changes to apply.</param>
+    /// <returns>What the write did.</returns>
+    public Task<SettingsWriteOutcome> ApplyAsync(params ConfigurationEdit[] edits) =>
+        this.ApplyAsync(evenIfShadowed: false, edits);
+
+    /// <summary>Applies keyed changes, stating whether a shadowed setting is meant.</summary>
+    /// <param name="evenIfShadowed">Whether a write to a setting an outranking source supplies is meant deliberately.</param>
+    /// <param name="edits">The changes to apply.</param>
+    /// <returns>What the write did.</returns>
+    public Task<SettingsWriteOutcome> ApplyAsync(bool evenIfShadowed, params ConfigurationEdit[] edits) =>
+        this.Administration.ApplyAsync(edits, this.Row.Version, evenIfShadowed, TestContext.Current.CancellationToken);
+
+    /// <summary>Opens the persisted document as an editing session opens it.</summary>
+    /// <returns>The document and the version it was read at.</returns>
+    public Task<PersistedSettingsDocument> ReadDocumentAsync() =>
+        this.Administration.ReadDocumentAsync(TestContext.Current.CancellationToken);
+
+    /// <summary>Saves an edited document back over the version it was opened at.</summary>
+    /// <param name="document">The document as the editing session left it.</param>
+    /// <param name="version">The version the buffer was opened over.</param>
+    /// <returns>What the write did.</returns>
+    public Task<SettingsWriteOutcome> ApplyDocumentAsync(string document, long version) =>
+        this.Administration.ApplyDocumentAsync(
+            document,
+            version,
+            evenIfShadowed: false,
+            TestContext.Current.CancellationToken);
+
+    /// <inheritdoc />
+    public void Dispose() => this.configuration.Dispose();
+}

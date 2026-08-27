@@ -1,0 +1,110 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.Host.Configuration.Administration;
+using Xunit;
+
+namespace MailFathom.Host.UnitTests.Configuration.Administration;
+
+/// <summary>
+/// Covers what a configuration reading may disclose. The rule is the one the writer refuses material by, so the two
+/// cannot disagree about what a secret is — a value a write would refuse to persist must not be a value a read hands
+/// back.
+/// </summary>
+public sealed class SettingRedactionTests
+{
+    /// <summary>The last segment is the property name a setting binds to, and it is what announces a secret.</summary>
+    [Theory]
+    [InlineData("MailSynchronization:Accounts:0:Secrets:Password:SecretReference")]
+    [InlineData("Persistence:Password")]
+    [InlineData("Ai:Providers:0:ApiKey")]
+    public void Redacts_ASettingNamingASecret_ReportsTrue(string path) => Assert.True(SettingRedaction.Redacts(path));
+
+    /// <summary>
+    /// A name that locates something rather than holding it is not a secret, and neither is the handle beside one. The
+    /// second is what makes a redacted document still readable: an operator sees which secret a setting names without
+    /// seeing where its material is kept.
+    /// </summary>
+    [Theory]
+    [InlineData("Ai:Providers:0:TokenEndpoint")]
+    [InlineData("MailSynchronization:Accounts:0:Secrets:Password:Name")]
+    [InlineData("MailSynchronization:Accounts:0:Secrets:Password:Lifetime")]
+    [InlineData("MailboxSearch:SnippetsPerEmail")]
+    public void Redacts_ASettingHoldingNoSecret_ReportsFalse(string path) =>
+        Assert.False(SettingRedaction.Redacts(path));
+
+    /// <summary>A secret-bearing value is replaced by the marker, and every other value is reported as it stands.</summary>
+    [Fact]
+    public void Apply_ASecretBearingSetting_ReportsTheMarker()
+    {
+        // Act
+        var redacted = SettingRedaction.Apply("Persistence:Password", "file:/run/secrets/postgres");
+        var reported = SettingRedaction.Apply("MailboxSearch:SnippetsPerEmail", "3");
+
+        // Assert
+        Assert.Equal(SettingRedaction.Marker, redacted);
+        Assert.Equal("3", reported);
+    }
+
+    /// <summary>
+    /// The marker carries no colon, so it parses as a reference to no scheme. That is what makes it safe to leave in a
+    /// buffer an operator saves: written into a setting that never bore one, the writer refuses it as material rather
+    /// than persisting a value that looks deliberate.
+    /// </summary>
+    [Fact]
+    public void Marker_NamesNoSecretScheme() =>
+        Assert.DoesNotContain(":", SettingRedaction.Marker, StringComparison.Ordinal);
+
+    /// <summary>A document reports every secret-bearing value as the marker, wherever it sits.</summary>
+    [Fact]
+    public void ApplyToDocument_ASecretInsideAnArrayElement_ReportsTheMarker()
+    {
+        // Arrange
+        const string persisted = """
+            {
+              "MailSynchronization": {
+                "Accounts": [
+                  {
+                    "AccountId": "primary",
+                    "Secrets": { "Password": { "Name": "primary", "SecretReference": "file:/run/secrets/imap" } }
+                  }
+                ]
+              }
+            }
+            """;
+
+        // Act
+        var redacted = SettingRedaction.ApplyToDocument(persisted);
+
+        // Assert
+        Assert.DoesNotContain("/run/secrets/imap", redacted, StringComparison.Ordinal);
+        Assert.Contains(SettingRedaction.Marker, redacted, StringComparison.Ordinal);
+    }
+
+    /// <summary>Everything that is not a secret is handed over unchanged, including the handle a secret is named by.</summary>
+    [Fact]
+    public void ApplyToDocument_ASettingHoldingNoSecret_CarriesItThrough()
+    {
+        // Arrange
+        const string persisted = """
+            {
+              "MailboxSearch": { "SnippetsPerEmail": "3" },
+              "Persistence": { "Password": { "Name": "postgres", "SecretReference": "file:/run/secrets/postgres" } }
+            }
+            """;
+
+        // Act
+        var redacted = SettingRedaction.ApplyToDocument(persisted);
+
+        // Assert
+        Assert.Contains("\"SnippetsPerEmail\"", redacted, StringComparison.Ordinal);
+        Assert.Contains("postgres\"", redacted, StringComparison.Ordinal);
+        Assert.DoesNotContain("/run/secrets/postgres", redacted, StringComparison.Ordinal);
+    }
+
+    /// <summary>A row that is not a JSON object describes no settings, and is refused rather than reported as an empty one.</summary>
+    [Fact]
+    public void ApplyToDocument_ADocumentThatIsNotAnObject_IsRefused() =>
+        Assert.Throws<FormatException>(() => SettingRedaction.ApplyToDocument("[1, 2, 3]"));
+}

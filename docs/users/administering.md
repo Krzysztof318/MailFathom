@@ -176,12 +176,12 @@ Documentation for that version: https://krzysztof318.github.io/MailFathom/v0.2.0
 ```
 
 A credential is granted a set of named permissions on the deployment, and each command needs the one its operation is
-published under — two, for the seven commands that read something before they change it. Signing in
+published under — two, for the twelve commands that read something before they change it. Signing in
 needs none, so a key that reads `It holds no administrative permission` still signs in and is refused everywhere else —
 which is how a credential is retired without its entry being removed. When a command is refused for want of one, it
 names the permission to add and where it is written, so the answer is to widen that credential's grant rather than to
 replace the key.
-[What a credential may do](../operations/permissions.md) lists the names, what each covers, and which seven commands need
+[What a credential may do](../operations/permissions.md) lists the names, what each covers, and which twelve commands need
 a second one; [what the endpoint serves](../operations/admin-endpoint.md#what-the-endpoint-serves) names the permission
 every route is published under.
 
@@ -615,9 +615,45 @@ people that account corresponds with as its mail is synchronized. Those records 
 about the whole thing, `mfctl contact delete-collected` erases everything it collected and keeps everything you entered
 — and switching collection off in configuration is the separate act that stops the book filling again.
 
+## Changing a setting without a restart
+
+Most of what MailFathom reads comes from the files your deployment provisioned, and those stay yours: nothing in the
+process edits one. What a deployment persists for itself is a document in the database, layered above those files, and
+`mfctl config` is where you read and change it:
+
+```console
+$ mfctl config show MailboxSearch
+MailboxSearch:
+  SnippetsPerEmail = 3 [file (10-deployment.json)]
+  WordsPerSnippet = 12 [persisted-layer]
+2 settings, over persisted configuration version 7.
+
+$ mfctl config set MailboxSearch:SnippetsPerEmail 5
+```
+
+**Every value comes with where it was decided**, and that is half the answer. A deployment reads its settings from
+files, from that persisted document, and from an environment variable or a command-line argument somebody put beside
+the process — so before changing anything, the reading tells you which of those you would actually have to edit. A
+value an environment variable is supplying is refused rather than persisted, naming the variable, because persisting it
+would spend a version and change nothing you read.
+
+`mfctl config unset` gives one setting back to the file beneath it. `mfctl config edit` opens the whole persisted
+document in your `$EDITOR` and commits what you saved as one change, which is what you want when a change spans half a
+section — set it up as `VISUAL="code --wait"` if your editor is a graphical one, since the command reads the file back
+when the editor exits. And `mfctl config adopt` copies what your files decide beneath a path into the database, which
+is the one thing here that stops a file deciding a value; it shows you exactly what it would take and asks first.
+
+A setting that holds a credential reads back as `(redacted)` everywhere, including in the editor — the document holds a
+reference to where the material is kept rather than the material, and neither reaches your screen.
+
+[Configuration sources](../operations/configuration-sources.md#reading-and-changing-settings-from-mfctl) is the whole
+of what a write proves before it commits and every refusal it can answer with.
+
 ## Where to go next
 
 - [Administering a deployment](../operations/admin-endpoint.md) — the operator's reference for everything above
+- [Configuration sources](../operations/configuration-sources.md) — where every setting can come from, and what
+  `mfctl config` changes
 - [Contacts](../features/contacts.md) — what the contact book holds, and every rule a writer of it obeys
 - [Mail rules](../features/mail-rules.md) — every fact, operator, and action a rule can use
 - [Mailbox OAuth](../operations/mailbox-oauth.md) — registering the application, and every mode of the sign-in above

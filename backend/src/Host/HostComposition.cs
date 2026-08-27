@@ -47,6 +47,7 @@ using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Host.Api;
 using MailFathom.Host.Api.Documentation;
 using MailFathom.Host.Configuration;
+using MailFathom.Host.Configuration.Administration;
 using MailFathom.Host.Configuration.Answering;
 using MailFathom.Host.Configuration.Chat;
 using MailFathom.Host.Configuration.DataEncryption;
@@ -170,6 +171,12 @@ internal static class HostComposition
         builder.Services.AddSingleton(new CandidateConfigurationComposer(builder.Configuration, layer));
         builder.Services.AddSingleton<CandidateSettingsValidator>();
         builder.Services.AddSingleton<IConfigurationWriter, RootSettingsWriter>();
+        // The composed configuration and the layer's own provider, for the same reason the composer takes them: which
+        // source supplies a value is a property of the pipeline this host built rather than of whatever was registered
+        // as IConfiguration, and the layer is told apart from a candidate's provider by identity.
+        builder.Services.AddSingleton(
+            new EffectiveSettingsReader(builder.Configuration, layer.Provider));
+        builder.Services.AddSingleton<PersistedSettingsAdministration>();
     }
 
     /// <summary>Registers the telemetry, resilience, clock, and secret resolution every other stage assumes.</summary>

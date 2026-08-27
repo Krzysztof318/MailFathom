@@ -110,6 +110,13 @@ namespace MailFathom.Host.Api;
 /// should bound who may add to it, read it out, or erase somebody from it.
 /// </para>
 /// <para>
+/// The last of all are the deployment's own settings, which <see cref="ConfigurationEndpoints" /> describes: reading
+/// what it is configured to do and where each value is decided, changing a setting, editing the persisted document as
+/// one transaction, and taking a decision the files were making into the database. They are here because configuration
+/// is what an operator has, and nothing a model reasons over — and their writes take a permission of their own, because
+/// a persisted setting decides what this deployment is rather than what it does next.
+/// </para>
+/// <para>
 /// Every one of them is mapped into one group so a route cannot be added outside the requirement the endpoint attaches
 /// to it, and so the one filter that reads each route's published permission covers every route the group holds.
 /// </para>
@@ -164,6 +171,7 @@ internal static class AdminApiEndpoints
         api.MapOutbox();
         api.MapMailFolderErasure();
         api.MapContacts();
+        api.MapConfiguration();
 
         return api;
     }

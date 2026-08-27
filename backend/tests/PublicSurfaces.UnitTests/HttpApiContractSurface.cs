@@ -7,7 +7,9 @@ using MailFathom.Host;
 using MailFathom.Host.Api;
 using MailFathom.Host.Api.Documentation;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Configuration.RootSettings;
 using MailFathom.Host.Hosting;
+using MailFathom.Infrastructure.Persistence.Settings;
 using MailFathom.Mcp;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.OpenApi;
@@ -137,6 +139,13 @@ internal static class HttpApiContractSurface
         // set for a developer's run would otherwise decide which surfaces the recorded document describes.
         builder.Configuration.Sources.Clear();
         builder.Configuration.AddInMemoryCollection(DeploymentServingEverySurface);
+
+        // The persisted configuration layer, empty but present. Every deployment composes one — the host reads it
+        // before it composes anything else — and the routes that administer it are mapped only where it exists, so a
+        // rendering over sources cleared to an in-memory list would record a document missing a whole route family for
+        // a reason no operator ever chose. The document is empty because what the layer carries decides nothing about
+        // the contract; that it was composed at all is the whole of what this line is for.
+        builder.Configuration.AddRootSettings(new RootSettingsDocument("{}", Version: 0));
 
         var surfaces = HostComposition.Compose(builder);
 

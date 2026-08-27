@@ -154,6 +154,17 @@ public readonly record struct MailFathomPermission
     /// <summary>Gets the permission covering erasing the mail stored for a folder an account no longer mirrors.</summary>
     public static MailFathomPermission AdminErase { get; } = new("mailfathom.admin.erase", ProtectedSurface.Administration);
 
+    /// <summary>Gets the permission covering changing the deployment's own persisted configuration.</summary>
+    /// <remarks>
+    /// A name of its own rather than a route under the operating one, because a persisted setting decides what the
+    /// deployment is rather than what it does next. The write that corrects a search bound is the write that widens a
+    /// credential's grant or repoints a model provider, so a caller holding this holds everything this surface
+    /// publishes — which is exactly what an operator has to be able to withhold from the credential they granted the
+    /// ordinary operating work to.
+    /// </remarks>
+    public static MailFathomPermission AdminConfigurationWrite { get; } =
+        new("mailfathom.admin.configuration.write", ProtectedSurface.Administration);
+
     #endregion
 
     /// <summary>Gets every published permission.</summary>
@@ -173,6 +184,7 @@ public readonly record struct MailFathomPermission
         AdminCredentialsWrite,
         AdminSpend,
         AdminErase,
+        AdminConfigurationWrite,
     ];
 
     /// <summary>Gets whether this value names a published permission rather than the unusable struct default.</summary>
