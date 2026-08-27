@@ -111,20 +111,27 @@ jobs:
   # failure was legible, and would start them minutes before the integration suite had said anything at all. Declared
   # here, the dependency is what a further artifact inherits by being added rather than by being reviewed.
   #
-  # The same definition a pull request is verified by, against the tagged commit rather than against a branch, with
-  # every switch at its default: `CI` skips work a pull request's changed files cannot affect, and a release skips
-  # nothing.
+  # The same definition a pull request is verified by, against the tagged commit rather than against a branch. A
+  # release skips nothing on the grounds `CI` skips things — it never asks what a change touched — and turns off the
+  # one switch that answers a question already settled, which the `with:` block below states.
   verify:
-    name: Build, test, format, and migrations
+    name: Build, test, and migrations
     needs:
       - assert
     permissions:
       contents: read
     uses: ./.github/workflows/build-test-format-and-migrations.yml
     with:
+      # Everything but the formatting pass, which is the one switch a publication turns off. Formatting is a property
+      # of the files a change wrote, so the pull request that wrote them has already answered it, and it is the one
+      # verdict here that two changes merging without seeing each other cannot break — the same argument `CI` makes
+      # for exempting a push to `main`, applied to the two events downstream of that push. What it saves is a
+      # whole-solution pass in front of an artifact somebody is waiting for; what it risks is nothing, because no
+      # commit reaches a tag or a nightly without having been a pull request first.
       ref: ${{ needs.assert.outputs.revision }}
+      run-format: false
 
-  # The client stack's half of the same gate, against the same commit and with every switch at its default. It is a
+  # The client stack's half of the same gate, against the same commit and with the same one switch turned off. It is a
   # second job rather than a switch on the one above because the two stacks share no solution, no build contract, and
   # no package pins — and it blocks the image for a reason the two artifacts it produces make plain: the browser head
   # published into that image is built from this commit, so a client that does not compile is a release whose image
@@ -137,7 +144,9 @@ jobs:
       contents: read
     uses: ./.github/workflows/build-test-frontend.yml
     with:
+      # The same exemption the server's gate takes above, from the same rule rather than from a second reading of it.
       ref: ${{ needs.assert.outputs.revision }}
+      run-format: false
 
   # The half of the repository neither stack's build can see, against the same commit and with every switch at its
   # default: the contract suite, and the chart linted and rendered against the manifests committed beside it.

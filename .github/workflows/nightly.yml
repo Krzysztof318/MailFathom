@@ -147,8 +147,9 @@ jobs:
   # Everything a nightly builds waits behind this, for the reason `Release` states at greater length: a gate belonging
   # to the image would gate the image, leaving the schema script and the command binaries to be built beside it from a
   # commit whose unit tests had not run. It is the same definition a pull request is verified by, against the revision
-  # being previewed rather than against a branch, with every switch at its default — `CI` skips work a pull request's
-  # changed files cannot affect, and a publication skips nothing.
+  # being previewed rather than against a branch. A publication skips nothing on the grounds `CI` skips things — it
+  # never asks what a change touched — and turns off the one switch that answers a question already settled, which the
+  # `with:` block below states.
   #
   # The migration check is the half worth naming on this channel: a nightly is installable long before any tag, so an
   # image whose committed model snapshot describes a schema no migration produces would be discovered by whoever
@@ -158,7 +159,7 @@ jobs:
   # container time on something published every night whose whole value is being current, and `Release` is where the
   # answer is worth waiting for.
   verify:
-    name: Build, test, format, and migrations
+    name: Build, test, and migrations
     needs:
       - decide
     if: needs.decide.outputs.publish == 'true'
@@ -166,12 +167,19 @@ jobs:
       contents: read
     uses: ./.github/workflows/build-test-format-and-migrations.yml
     with:
+      # Everything but the formatting pass, which is the one switch a publication turns off. Formatting is a property
+      # of the files a change wrote, so the pull request that wrote them has already answered it, and it is the one
+      # verdict here that two changes merging without seeing each other cannot break — the same argument `CI` makes
+      # for exempting a push to `main`, applied to the two events downstream of that push. What it saves is a
+      # whole-solution pass in front of an artifact somebody is waiting for; what it risks is nothing, because no
+      # commit reaches a tag or a nightly without having been a pull request first.
       ref: ${{ needs.decide.outputs.revision }}
+      run-format: false
 
-  # The client stack's half of the same gate, against the same revision. It is a second job rather than a switch on the
-  # one above because the two stacks share no solution, no build contract, and no package pins — and it gates the push
-  # below for the reason it gates a release's: the image carries the browser head, built from this revision by the
-  # image build itself.
+  # The client stack's half of the same gate, against the same revision and with the same one switch turned off. It is
+  # a second job rather than a switch on the one above because the two stacks share no solution, no build contract,
+  # and no package pins — and it gates the push below for the reason it gates a release's: the image carries the
+  # browser head, built from this revision by the image build itself.
   verify-client:
     name: Build and test the client
     needs:
@@ -181,7 +189,9 @@ jobs:
       contents: read
     uses: ./.github/workflows/build-test-frontend.yml
     with:
+      # The same exemption the server's gate takes above, from the same rule rather than from a second reading of it.
       ref: ${{ needs.decide.outputs.revision }}
+      run-format: false
 
   # The half of the repository neither stack's build can see, against the same revision: the contract suite, and the
   # chart linted and rendered against the manifests committed beside it. A nightly is installable long before any tag,
