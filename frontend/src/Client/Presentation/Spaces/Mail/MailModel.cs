@@ -185,6 +185,6 @@ public partial record MailModel
     {
         var arrangement = await this.messages.Arrangement ?? MessageListArrangement.Default;
 
-        await this.messages.ArrangeAsync(change(arrangement), cancellationToken);
+        await this.messages.ArrangeAsync(change(arrangement), cancellationToken).ConfigureAwait(false);
     }
 }

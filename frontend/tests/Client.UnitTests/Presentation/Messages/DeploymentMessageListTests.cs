@@ -19,6 +19,9 @@ public sealed class DeploymentMessageListTests
 {
     private static readonly DateTimeOffset Now = new(2026, 8, 25, 12, 0, 0, TimeSpan.Zero);
 
+    /// <summary>How long a test waits on a request it is holding open before it gives up rather than hanging the run.</summary>
+    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(30);
+
     /// <summary>The list opens on the leading page of the place in force, which is one request for a screenful.</summary>
     [Fact]
     public async Task Rows_ADeploymentAnswering_DrawsThePageItServed()
@@ -196,6 +199,59 @@ public sealed class DeploymentMessageListTests
         var rows = await over.List.Rows;
         Assert.Equal([MailMessages.Key(1), MailMessages.Key(2)], rows!.Select(row => row.Key));
         Assert.True(await over.List.PagingFailed);
+    }
+
+    /// <summary>
+    /// A page that failed for a folder somebody has already left says nothing about the one they are in: the abandoned
+    /// read is the loser of an ordinary race, and reporting it beside the new folder would put a warning over mail that
+    /// arrived.
+    /// </summary>
+    [Fact]
+    public async Task ShowMoreAsync_APageThatFailedForAPlaceSomebodyLeft_IsNotReportedBesideTheNewOne()
+    {
+        // Arrange
+        var cancellation = TestContext.Current.CancellationToken;
+
+        using var reached = new ManualResetEventSlim(false);
+        using var released = new ManualResetEventSlim(false);
+
+        using var over = new ListOver(request =>
+        {
+            if (Cursor(request) is not null)
+            {
+                reached.Set();
+                released.Wait(Patience, cancellation);
+
+                return StubTransport.JsonResponse("{}", HttpStatusCode.InternalServerError);
+            }
+
+            return request.RequestUri!.Query.Contains("folder=INBOX", StringComparison.Ordinal)
+                ? Answer(Page(5, 2, next: null, previous: null))
+                : Answer(Page(1, 2, next: "after-2", previous: null));
+        });
+
+        await over.List.Rows;
+
+        // The read is started on a thread of its own because the scripted deployment holds the request open on the one
+        // that made it, which is how a test states that a page is still in flight.
+        var paging = Task.Run(
+            async () => await over.List.ShowMoreAsync(TestContext.Current.CancellationToken),
+            TestContext.Current.CancellationToken);
+
+        Assert.True(reached.Wait(Patience, cancellation));
+
+        // Act
+        await over.Workspace.Scope.UpdateAsync(
+            _ => new WorkspaceScope { Account = "work", Folder = "INBOX" },
+            TestContext.Current.CancellationToken);
+
+        await over.Until(async () => await over.List.Rows is [{ } first, _] && first.Key == MailMessages.Key(5));
+
+        released.Set();
+        await paging;
+
+        // Assert
+        Assert.False(await over.List.PagingFailed);
     }
 
     /// <summary>Coming back to a folder is coming back: the leading page it was left on is what is asked for again.</summary>

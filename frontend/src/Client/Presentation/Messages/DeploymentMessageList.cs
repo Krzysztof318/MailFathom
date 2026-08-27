@@ -260,9 +260,17 @@ internal sealed class DeploymentMessageList : IMessageList
 
     /// <summary>Takes one more page onto the window at the end being scrolled towards.</summary>
     /// <remarks>
+    /// <para>
     /// A page that did not arrive is reported beside the list rather than as the list's own failure, because what is
     /// already drawn is still true: putting the whole list into an error state would take a folder's worth of mail off
     /// the screen over one request.
+    /// </para>
+    /// <para>
+    /// Everything the read says afterwards is said about the window it was started for, so each of them is written only
+    /// while that is still the window loaded. A request in flight when somebody opens another folder is answered by a
+    /// list that has already reopened and cleared its own indicator, and letting the abandoned read finish onto it
+    /// would clear a failure it never saw or raise one over mail that arrived.
+    /// </para>
     /// </remarks>
     private async ValueTask PageAsync(
         MailTimelinePageDirection direction,
@@ -282,28 +290,48 @@ internal sealed class DeploymentMessageList : IMessageList
             return;
         }
 
+        MessagePage page;
+
         try
         {
-            var page = await this.ReadAsync(window.Place, window.Arrangement, cursor, direction, cancellationToken)
+            page = await this.ReadAsync(window.Place, window.Arrangement, cursor, direction, cancellationToken)
                 .ConfigureAwait(false);
-
-            await this.loaded.UpdateAsync(
-                loaded => loaded?.Extended(page, direction, window.Place, window.Arrangement),
-                cancellationToken).ConfigureAwait(false);
-
-            await this.pagingFailed.UpdateAsync(static _ => false, cancellationToken).ConfigureAwait(false);
         }
         catch (DeploymentFailure)
         {
-            await this.pagingFailed.UpdateAsync(static _ => true, cancellationToken).ConfigureAwait(false);
+            if (await this.StillLoadedAsync(window, cancellationToken).ConfigureAwait(false) is not null)
+            {
+                await this.pagingFailed.UpdateAsync(static _ => true, cancellationToken).ConfigureAwait(false);
+            }
 
             return;
         }
 
-        if (await this.loaded.Value(cancellationToken).ConfigureAwait(false) is { } extended)
+        await this.loaded.UpdateAsync(
+            loaded => loaded?.Extended(page, direction, window.Place, window.Arrangement),
+            cancellationToken).ConfigureAwait(false);
+
+        if (await this.StillLoadedAsync(window, cancellationToken).ConfigureAwait(false) is not { } extended)
         {
-            this.Remember(extended);
+            return;
         }
+
+        await this.pagingFailed.UpdateAsync(static _ => false, cancellationToken).ConfigureAwait(false);
+
+        this.Remember(extended);
+    }
+
+    /// <summary>Reads the loaded window back, where it is still of the list a read was started for.</summary>
+    /// <param name="window">The window that read was started from.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The window loaded now, or <see langword="null" /> where the list has moved on to another one.</returns>
+    private async ValueTask<MessageWindow?> StillLoadedAsync(
+        MessageWindow window,
+        CancellationToken cancellationToken)
+    {
+        var current = await this.loaded.Value(cancellationToken).ConfigureAwait(false);
+
+        return current?.IsOf(window.Place, window.Arrangement) is true ? current : null;
     }
 
     /// <summary>Writes what is selected in the list into the scope every other space reads.</summary>

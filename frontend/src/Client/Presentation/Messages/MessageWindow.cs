@@ -115,6 +115,18 @@ internal sealed record MessageWindow
     /// <remarks>What is written down when somebody leaves the folder, and what puts them back where they were when they return.</remarks>
     internal MessagePage? LeadingPage => this.Pages.Count is 0 ? null : this.Pages[0];
 
+    /// <summary>Answers whether this window is of a given list.</summary>
+    /// <param name="place">Where a read was asked for.</param>
+    /// <param name="arrangement">What that read ran under.</param>
+    /// <returns><see langword="true" /> where this window is of that same list.</returns>
+    /// <remarks>
+    /// What a caller asks before acting on a read it started: a window loaded for a different place or under a
+    /// different arrangement is a list somebody has already left, and everything the abandoned read would have said
+    /// about it is stale.
+    /// </remarks>
+    internal bool IsOf(MessagePlace place, MessageListArrangement arrangement) =>
+        this.Place == place && this.Arrangement == arrangement;
+
     /// <summary>Takes one more page onto the window, dropping the far one where the bound is reached.</summary>
     /// <param name="page">The page that was read.</param>
     /// <param name="direction">Which end of the window it was read from.</param>
@@ -137,7 +149,7 @@ internal sealed record MessageWindow
         ArgumentNullException.ThrowIfNull(place);
         ArgumentNullException.ThrowIfNull(arrangement);
 
-        if (this.Place != place || this.Arrangement != arrangement)
+        if (!this.IsOf(place, arrangement))
         {
             return this;
         }
