@@ -12,7 +12,7 @@
       "properties": {
         "accounts": {
           "default": null,
-          "description": "MailFathom accounts the answer may be drawn from, each named by its configured account identifier or by the display name it is published under. Omit to draw on every account this deployment serves; call list_accounts to see what they are. At most 64 may be named, and a name this deployment does not serve is refused rather than answered from the rest.",
+          "description": "MailFathom accounts the answer may be drawn from, each named by its configured account identifier or by the display name it is published under; both are unique within the account's owner rather than across the deployment. Omit to draw on every account you may read; call list_accounts to see what they are. At most 64 may be named, and a name that resolves to none of them is refused rather than answered from the rest — the same refusal whether nothing carries that name or it names a mailbox that is not yours.",
           "items": {
             "type": [
               "string",
@@ -1562,26 +1562,26 @@
       "readOnlyHint": true,
       "title": "List accounts"
     },
-    "description": "Lists the mail accounts this MailFathom deployment serves. Call it to learn which mailboxes exist and what to call them before narrowing a listing, a search, or a question to one: every account carries a configured identifier and a readable display name, and either may be used to name it. Also reports how current the local copy of each folder is and whether synchronization is running at all, which is what tells an empty answer about a mailbox apart from a mailbox nothing has synchronized. Reads the local copy only: it never contacts a mail server, and it returns no mail, no mail server address, no user name, and no credential.",
+    "description": "Lists the mail accounts you may read. Call it to learn which mailboxes exist and what to call them before narrowing a listing, a search, or a question to one: every account carries a configured identifier and a readable display name, and either may be used to name it. Both names are the ones the account's owner gave it, and both are unique within that owner rather than across the deployment, so the same spelling can name a different mailbox under another owner: store either name as this owner's name for the mailbox, and never compare it with one that came from another owner or another deployment. Also reports how current the local copy of each folder is and whether synchronization is running at all, which is what tells an empty answer about a mailbox apart from a mailbox nothing has synchronized. Reads the local copy only: it never contacts a mail server, and it returns no mail, no mail server address, no user name, and no credential.",
     "inputSchema": {
       "properties": {},
       "type": "object"
     },
     "name": "list_accounts",
     "outputSchema": {
-      "description": "The mail accounts this deployment serves, with the names a request may use for each and how current their local copies are.",
+      "description": "The mail accounts you may read, with the names a request may use for each and how current their local copies are.",
       "properties": {
         "accounts": {
-          "description": "The accounts this deployment serves, ordered by account identifier. Empty when it serves none, which means no stored mail is readable at all rather than that the mailboxes are empty.",
+          "description": "The accounts you may read, ordered by account identifier. Empty when you may read none, which means no stored mail is readable at all rather than that the mailboxes are empty.",
           "items": {
-            "description": "One mail account this deployment serves, with the names a request may use for it and how current the local copy of each of its folders is.",
+            "description": "One mail account you may read, with the names a request may use for it and how current the local copy of each of its folders is.",
             "properties": {
               "accountId": {
-                "description": "The configured MailFathom account identifier. It is what every other result reports as accountId, and it is stable across a change of the display name.",
+                "description": "The configured MailFathom account identifier. It is what every other result reports as accountId, and it is stable across a change of the display name. It is unique within the account's owner rather than across the deployment, so store it as this owner's name for the mailbox and never compare it with an identifier that reached you from another owner or another deployment.",
                 "type": "string"
               },
               "displayName": {
-                "description": "The display name the operator gave the account, which is the readable name for the mailbox. Either this or accountId may be used to name the account when narrowing a listing, a search, or a question; the display name is matched without regard to case.",
+                "description": "The display name the operator gave the account, which is the readable name for the mailbox. Either this or accountId may be used to name the account when narrowing a listing, a search, or a question; the display name is matched without regard to case. It is unique within the account's owner in the same way accountId is, and the two names share one naming space there, so either spelling names one mailbox.",
                 "type": "string"
               },
               "folders": {
@@ -1590,11 +1590,11 @@
                   "description": "How current the local copy of one folder is. Every MailFathom read answers from this local copy and never contacts a mail server, so a result can be stale or incomplete and this states which.",
                   "properties": {
                     "accountDisplayName": {
-                      "description": "The display name the account is published under, which is the operator's own name for the mailbox.",
+                      "description": "The display name the account is published under, which is the operator's own name for the mailbox. It is unique within that account's owner in the same way the identifier is.",
                       "type": "string"
                     },
                     "accountId": {
-                      "description": "The configured MailFathom account identifier the folder belongs to.",
+                      "description": "The configured MailFathom account identifier the folder belongs to, unique within that account's owner rather than across the deployment.",
                       "type": "string"
                     },
                     "folderAlias": {
@@ -1802,7 +1802,7 @@
       "properties": {
         "accounts": {
           "default": null,
-          "description": "MailFathom accounts to read, each named by its configured account identifier or by the display name it is published under. Omit to read every account this deployment serves; call list_accounts to see what they are. At most 64 may be named, and a name this deployment does not serve is refused rather than answered with an empty page.",
+          "description": "MailFathom accounts to read, each named by its configured account identifier or by the display name it is published under; both are unique within the account's owner rather than across the deployment. Omit to read every account you may read; call list_accounts to see what they are. At most 64 may be named, and a name that resolves to none of them is refused rather than answered with an empty page — the same refusal whether nothing carries that name or it names a mailbox that is not yours.",
           "items": {
             "type": [
               "string",
@@ -2198,11 +2198,11 @@
             "description": "How current the local copy of one folder is. Every MailFathom read answers from this local copy and never contacts a mail server, so a result can be stale or incomplete and this states which.",
             "properties": {
               "accountDisplayName": {
-                "description": "The display name the account is published under, which is the operator's own name for the mailbox.",
+                "description": "The display name the account is published under, which is the operator's own name for the mailbox. It is unique within that account's owner in the same way the identifier is.",
                 "type": "string"
               },
               "accountId": {
-                "description": "The configured MailFathom account identifier the folder belongs to.",
+                "description": "The configured MailFathom account identifier the folder belongs to, unique within that account's owner rather than across the deployment.",
                 "type": "string"
               },
               "folderAlias": {
@@ -2640,7 +2640,7 @@
       "properties": {
         "accounts": {
           "default": null,
-          "description": "MailFathom accounts to search, each named by its configured account identifier or by the display name it is published under. Omit to search every account this deployment serves; call list_accounts to see what they are. At most 64 may be named, and a name this deployment does not serve is refused rather than answered with an empty window.",
+          "description": "MailFathom accounts to search, each named by its configured account identifier or by the display name it is published under; both are unique within the account's owner rather than across the deployment. Omit to search every account you may read; call list_accounts to see what they are. At most 64 may be named, and a name that resolves to none of them is refused rather than answered with an empty window — the same refusal whether nothing carries that name or it names a mailbox that is not yours.",
           "items": {
             "type": [
               "string",
@@ -2773,11 +2773,11 @@
             "description": "How current the local copy of one folder is. Every MailFathom read answers from this local copy and never contacts a mail server, so a result can be stale or incomplete and this states which.",
             "properties": {
               "accountDisplayName": {
-                "description": "The display name the account is published under, which is the operator's own name for the mailbox.",
+                "description": "The display name the account is published under, which is the operator's own name for the mailbox. It is unique within that account's owner in the same way the identifier is.",
                 "type": "string"
               },
               "accountId": {
-                "description": "The configured MailFathom account identifier the folder belongs to.",
+                "description": "The configured MailFathom account identifier the folder belongs to, unique within that account's owner rather than across the deployment.",
                 "type": "string"
               },
               "folderAlias": {
@@ -3192,7 +3192,7 @@
     "inputSchema": {
       "properties": {
         "account": {
-          "description": "The account to send as, named by the accountId or the display name list_accounts returned. Its configuration decides the From address, which you never supply. An account this deployment does not serve, or serves without a sending configuration, refuses the call.",
+          "description": "The account to send as, named by the accountId or the display name list_accounts returned; both are unique within the account's owner rather than across the deployment. Its configuration decides the From address, which you never supply. A name that resolves to none of the accounts you may send as refuses the call, as does one that resolves to an account carrying no sending configuration.",
           "type": "string"
         },
         "bcc": {

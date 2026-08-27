@@ -29,6 +29,9 @@ public sealed class MailboxScopeResolverTests
         MailAccountDisplayName.Create("Private mail"),
         MailSynchronizationMode.Push);
 
+    /// <summary>The identifier two owners each declare, which is what makes both spellings ambiguous outside an owner.</summary>
+    private static readonly MailAccountId SharedAccountId = MailAccountId.Create("shared");
+
     [Fact]
     public void ReadableScope_AnAccountNamedByItsIdentifier_ResolvesToThatAccount()
     {
@@ -230,6 +233,64 @@ public sealed class MailboxScopeResolverTests
         Assert.Equal(
             refusedForNoSuchAccount.Message.Replace("no-such-account", Work.Id.Value, StringComparison.Ordinal),
             refusedForAnotherOwnersAccount.Message);
+    }
+
+    /// <summary>
+    /// Both spellings are unique within their owner and nowhere wider, so two owners may each call an account the same
+    /// thing. Each of them resolves their own, and the scope says whose by naming the owner beside the identifier the
+    /// two share.
+    /// </summary>
+    [Theory]
+    [InlineData("shared")]
+    [InlineData("The shared mailbox")]
+    public void ReadableScope_TwoOwnersHoldingIdenticallyNamedAccounts_EachResolvesTheirOwn(string named)
+    {
+        // Arrange
+        var ofOneOwner = ResolverOwning(SyntheticMailOwner.Deployment, SharedlyNamedAccountOf(SyntheticMailOwner.Deployment));
+        var ofAnotherOwner = ResolverOwning(SyntheticMailOwner.Another, SharedlyNamedAccountOf(SyntheticMailOwner.Another));
+
+        // Act
+        var forOneOwner = ofOneOwner.ReadableScope([MailAccountSelector.Create(named)], [], JunkMailInclusion.Excluded);
+        var forAnotherOwner = ofAnotherOwner.ReadableScope([MailAccountSelector.Create(named)], [], JunkMailInclusion.Excluded);
+
+        // Assert
+        Assert.Equal([SharedAccountId], forOneOwner.AccountIds);
+        Assert.Equal([SharedAccountId], forAnotherOwner.AccountIds);
+        Assert.Equal(SyntheticMailOwner.Deployment, forOneOwner.Owner);
+        Assert.Equal(SyntheticMailOwner.Another, forAnotherOwner.Owner);
+    }
+
+    /// <summary>
+    /// An account only the other owner carries is not a name this owner can reach, and the refusal is the one text that
+    /// names nothing meets — so a caller cannot use a name to learn what somebody else was given.
+    /// </summary>
+    [Fact]
+    public void ReadableScope_AnAccountOnlyAnotherOwnerCarries_IsRefusedAsTextNamingNothingIs()
+    {
+        // Arrange
+        var studio = SyntheticServedAccount.Of("studio", SyntheticMailOwner.Another);
+        var resolver = ResolverOwning(SyntheticMailOwner.Deployment, SharedlyNamedAccountOf(SyntheticMailOwner.Deployment));
+        var onlyTheOtherOwnerCarries = MailAccountSelector.Create(studio.Id.Value);
+
+        // Act
+        var refusedForTheirName = Assert.Throws<MailAccountNotAccessibleException>(
+            () => resolver.ReadableScope([onlyTheOtherOwnerCarries], [], JunkMailInclusion.Excluded));
+        var refusedForNoName = Assert.Throws<MailAccountNotAccessibleException>(
+            () => resolver.ReadableScope([MailAccountSelector.Create("no-such-account")], [], JunkMailInclusion.Excluded));
+
+        // Assert
+        Assert.Equal(
+            refusedForNoName.Message.Replace("no-such-account", onlyTheOtherOwnerCarries.Value, StringComparison.Ordinal),
+            refusedForTheirName.Message);
+        Assert.Equal(refusedForNoName.ErrorCode, refusedForTheirName.ErrorCode);
+
+        // The control: the owner who does carry that name reaches their own account by it, so the refusal above is the
+        // owner axis rather than a name nothing in this deployment is called.
+        Assert.Equal(
+            [studio.Id],
+            ResolverOwning(SyntheticMailOwner.Another, studio)
+                .ReadableScope([onlyTheOtherOwnerCarries], [], JunkMailInclusion.Excluded)
+                .AccountIds);
     }
 
     /// <summary>The identity question a tool asks about one folder answers on the same owner scope as the listing does.</summary>
@@ -695,6 +756,35 @@ public sealed class MailboxScopeResolverTests
             folderParticipation,
             StubJunkMailFolderCatalog.None,
             StubMailFolderMappings.Nothing.Resolver);
+
+    /// <summary>Builds the account both owners declare under one identifier and one display name.</summary>
+    private static ServedMailAccount SharedlyNamedAccountOf(MailOwnerId owner) => new(
+        owner,
+        SharedAccountId,
+        MailAccountDisplayName.Create("The shared mailbox"),
+        MailSynchronizationMode.Polling);
+
+    /// <summary>Composes the resolver over the accounts one owner owns, stated rather than derived from configuration.</summary>
+    /// <remarks>
+    /// The catalog is substituted here where <see cref="ResolverFor(MailOwnerId, ServedMailAccount[])" /> composes the
+    /// real one, because these claims are about two owners each owning something and configuration holds one owner —
+    /// <see cref="OwnedMailAccountCatalog" /> answers every configured account to that owner and none to anybody else,
+    /// so the arrangement they need cannot be reached through it while accounts are declared in a file. What is under
+    /// test is the naming decision the resolver takes over whatever set that port answered with, which is exactly what
+    /// stating the set leaves in place.
+    /// </remarks>
+    private static MailboxScopeResolver ResolverOwning(MailOwnerId owner, params ServedMailAccount[] ownedAccounts)
+    {
+        var catalog = Substitute.For<ICallerMailAccountCatalog>();
+        catalog.Owner.Returns(owner);
+        catalog.OwnedAccounts.Returns([.. ownedAccounts.OrderBy(account => account.Id.Value, StringComparer.Ordinal)]);
+
+        return new MailboxScopeResolver(
+            catalog,
+            StubMailFolderParticipation.Nothing,
+            StubJunkMailFolderCatalog.None,
+            StubMailFolderMappings.Nothing.Resolver);
+    }
 
     private static MailboxScopeResolver Resolver(
         IMailFolderParticipationReader folderParticipation,

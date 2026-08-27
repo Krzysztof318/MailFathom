@@ -406,7 +406,7 @@ entrypoint over the same use case is work of the same kind:
 
 | Span | The read it reports |
 | --- | --- |
-| `read_account_directory` | Which accounts this deployment serves, and how current the local copy of each is |
+| `read_account_directory` | Which accounts the caller's owner owns, and how current the local copy of each is |
 | `list_mailbox_timeline` | One bounded page of the stored email timeline |
 | `search_mailbox` | One window of a ranking over the stored emails |
 | `read_email_content` | The stored content of the emails one call named |

@@ -31,7 +31,7 @@ divergence neither copy would look wrong for on its own.
 
 | Field | Meaning | Absent means |
 |---|---|---|
-| `Accounts` | The accounts to list from, each named by its identifier or by its display name | every account this deployment serves |
+| `Accounts` | The accounts to list from, each named by its identifier or by its display name | every account the caller's owner owns |
 | `Folders` | The folders to list from, each named by its alias or by the role it plays | every folder those accounts map and let tools read |
 | `SenderAddress` | The address the sender must carry, in any case | any sender |
 | `RecipientAddress` | The address a `To` or `Cc` recipient must carry | any recipient |
@@ -119,18 +119,25 @@ a fragment, so naming one account can never select another whose name contains i
 
 The two are resolved into one identity before a query runs, which is what keeps the rest of this page true: the scope a
 cursor is fingerprinted from holds identifiers, so naming the same account both ways is one account, and a cursor issued
-for one spelling stays valid for the other. Configuration is what makes this unambiguous — a display name another
-account's identifier or display name already carries fails startup — so resolution never has to choose between two
-matches. [`list_accounts`](mcp-tools.md#list_accounts) is where a caller learns both names.
+for one spelling stays valid for the other. Configuration is what makes this unambiguous — a display name another of the
+same owner's accounts already carries as an identifier or as a display name fails startup — so resolution never has to
+choose between two matches. [`list_accounts`](mcp-tools.md#list_accounts) is where a caller learns both names.
+
+Both spellings belong to the account's owner and are unique within it rather than across the deployment, which is as far
+as that unambiguity has to reach: resolution runs against the accounts the caller's owner owns, so two owners each
+calling an account `work` is no ambiguity at all and neither of them can name the other's. A client storing either name
+is storing this owner's name for the mailbox, and one that compared it with a name read for somebody else — another
+owner, or a second deployment — would be comparing two values that were never in one naming space.
 
 ### Which accounts an unscoped request reads
 
-Naming no account means every account this deployment serves, and the request is narrowed to that set before anything is
-read rather than left without an account predicate. The two are not the same: removing an account from configuration
+Naming no account means every account the caller's owner owns, and the request is narrowed to that set before anything
+is read rather than left without an account predicate. The two are not the same: removing an account from configuration
 leaves its stored rows in place, so an absent predicate would keep publishing mail from an account MailFathom no longer
-serves. Switching `MailSynchronization:Enabled` off is a different matter and hides nothing — it stops runs from fetching
-mail, and the copy already stored stays readable. Switching a single folder's `Synchronize` off is a third thing again:
-that folder's stored mail is kept and withheld from every reader rather than erased, which
+serves — and the rows of every other owner are in the same table. Switching `MailSynchronization:Enabled` off is a
+different matter and hides nothing — it stops runs from fetching mail, and the copy already stored stays readable.
+Switching a single folder's `Synchronize` off is a third thing again: that folder's stored mail is kept and withheld
+from every reader rather than erased, which
 [what a mapping decides beyond where the folder is](imap-synchronization.md#what-a-mapping-decides-beyond-where-the-folder-is)
 states.
 

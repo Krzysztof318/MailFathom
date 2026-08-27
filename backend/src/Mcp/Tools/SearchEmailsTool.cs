@@ -66,7 +66,7 @@ internal sealed class SearchEmailsTool(
 
     /// <summary>Searches the local mailbox copy for text and returns one bounded ranked window.</summary>
     /// <param name="queryText">The text to search for.</param>
-    /// <param name="accounts">The accounts to search, named by identifier or display name, or none to search every account this deployment serves.</param>
+    /// <param name="accounts">The accounts to search, named by identifier or display name, or none to search every account the caller's owner owns.</param>
     /// <param name="folders">The folders to search, each named by alias or by role, or none to search every folder of those accounts.</param>
     /// <param name="senderAddress">The address the sender must carry.</param>
     /// <param name="recipientAddress">The address a <c>To</c> or <c>Cc</c> recipient must carry.</param>
@@ -110,7 +110,7 @@ internal sealed class SearchEmailsTool(
     public async Task<SearchEmailsToolResult> SearchEmailsAsync(
         [Description("The text to search for, up to 512 characters. Quoted phrases, OR, and a leading - to exclude a word are understood; every other punctuation mark is ordinary text. Write the words the mail itself is likely to contain, in the language it was written in rather than the language of your request: matching compares words rather than translating them, so a mailbox holding several languages is reached by a search per language. Required: a search with no text is a listing, which list_emails answers in a stable order and with a cursor.")]
         string queryText,
-        [Description("MailFathom accounts to search, each named by its configured account identifier or by the display name it is published under. Omit to search every account this deployment serves; call list_accounts to see what they are. At most 64 may be named, and a name this deployment does not serve is refused rather than answered with an empty window.")]
+        [Description("MailFathom accounts to search, each named by its configured account identifier or by the display name it is published under; both are unique within the account's owner rather than across the deployment. Omit to search every account you may read; call list_accounts to see what they are. At most 64 may be named, and a name that resolves to none of them is refused rather than answered with an empty window — the same refusal whether nothing carries that name or it names a mailbox that is not yours.")]
         string[]? accounts = null,
         [Description("MailFathom folders to search, each named by its alias, such as INBOX, or by the role it plays, written as role:Junk. Roles are Inbox, Archive, Drafts, Sent, Junk, Trash, All, Flagged, Important, and Outbox; naming one searches whichever folder each account in scope maps with that role, whatever it is called there. Omit to search every folder of the accounts in scope. At most 64 may be named. An alias is MailFathom's own name for a folder and is matched without regard to case.")]
         string[]? folders = null,

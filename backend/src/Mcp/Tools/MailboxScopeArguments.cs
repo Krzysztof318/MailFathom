@@ -36,8 +36,9 @@ internal static class MailboxScopeArguments
     /// <exception cref="MailboxQueryFilterInvalidException">Thrown when more than the accepted number are named, or one of them is text no account of this system could be named by.</exception>
     /// <remarks>
     /// Which account the text names is deliberately not settled here. An account may be named by its configured
-    /// identifier or by the display name it is published under, and the two are matched against the served accounts
-    /// inside the use case, so text naming nothing meets the same refusal as an account the deployment stopped serving.
+    /// identifier or by the display name it is published under, and the two are matched inside the use case against the
+    /// accounts the caller's owner owns — which is the only set in which either spelling names one mailbox — so text
+    /// naming nothing meets the same refusal as an account the deployment stopped serving and as one somebody else owns.
     /// </remarks>
     public static IReadOnlyList<MailAccountSelector> Accounts(string[]? accounts) =>
         Parse(accounts, MailAccountSelector.Create, MailboxScope.MaximumAccountIds, "accounts");
