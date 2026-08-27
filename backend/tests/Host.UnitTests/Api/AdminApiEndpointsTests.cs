@@ -124,6 +124,9 @@ public sealed class AdminApiEndpointsTests
         // The content move appears twice at its own path and once at each of the two the operator stops and resumes it
         // on, because pausing and resuming are opposite decisions and a body naming which one was meant would make a
         // mistyped value the difference between them.
+        // An owner's credentials appear twice at one path, which is the listing and the provisioning, and the password
+        // and the enabled state each appear at a path of their own, because rotating a password and disabling a
+        // credential are separate acts an operator audits separately.
         Assert.Equal(
             [
                 $"{AdminEndpointOptions.RoutePrefix}{MailAnsweringAuditEndpoint.Route}",
@@ -162,6 +165,12 @@ public sealed class AdminApiEndpointsTests
                 $"{AdminEndpointOptions.RoutePrefix}{OutboxEndpoints.RequeueRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{OutboxEndpoints.SummaryRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{OutboxEndpoints.SendRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{OwnerCredentialEndpoints.OwnersRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{OwnerCredentialEndpoints.OwnerCredentialsRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{OwnerCredentialEndpoints.OwnerCredentialsRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{OwnerCredentialEndpoints.OwnerCredentialRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{OwnerCredentialEndpoints.OwnerCredentialEnablementRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{OwnerCredentialEndpoints.OwnerCredentialPasswordRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailRuleEndpoints.RulesRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailRuleEndpoints.HistoryRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailRuleEndpoints.RunsRoute}",
@@ -255,6 +264,12 @@ public sealed class AdminApiEndpointsTests
                 $"POST {prefix}{ContentMoveEndpoints.MoveRoute} -> {MailFathomPermission.AdminOperate.Name}",
                 $"POST {prefix}{ContentMoveEndpoints.PauseRoute} -> {MailFathomPermission.AdminOperate.Name}",
                 $"POST {prefix}{ContentMoveEndpoints.ResumeRoute} -> {MailFathomPermission.AdminOperate.Name}",
+                $"GET {prefix}{OwnerCredentialEndpoints.OwnersRoute} -> {MailFathomPermission.AdminRead.Name}",
+                $"GET {prefix}{OwnerCredentialEndpoints.OwnerCredentialsRoute} -> {MailFathomPermission.AdminRead.Name}",
+                $"POST {prefix}{OwnerCredentialEndpoints.OwnerCredentialsRoute} -> {MailFathomPermission.AdminCredentialsWrite.Name}",
+                $"PUT {prefix}{OwnerCredentialEndpoints.OwnerCredentialPasswordRoute} -> {MailFathomPermission.AdminCredentialsWrite.Name}",
+                $"PUT {prefix}{OwnerCredentialEndpoints.OwnerCredentialEnablementRoute} -> {MailFathomPermission.AdminCredentialsWrite.Name}",
+                $"DELETE {prefix}{OwnerCredentialEndpoints.OwnerCredentialRoute} -> {MailFathomPermission.AdminCredentialsWrite.Name}",
                 $"GET {prefix}{ContentReleaseEndpoints.ReleaseRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"POST {prefix}{ContentReleaseEndpoints.ReleaseRoute} -> {MailFathomPermission.AdminErase.Name}",
             }.Order(StringComparer.Ordinal),

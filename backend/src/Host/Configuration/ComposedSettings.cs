@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Rules.Conditions;
+using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Answering;
 using MailFathom.Host.Configuration.Chat;
 using MailFathom.Host.Configuration.Embeddings;
@@ -182,6 +183,10 @@ internal static class ComposedSettings
 
         // Surfaces may share a socket — which is what lets a single-node deployment publish one port rather than three
         // — but they may not disagree about it, and this is where that is settled before anything binds.
+        //
+        // Whether a surface accepting passwords is confidential is settled here as well, and only here: it is the one
+        // rule reading an endpoint's own transport against the proxy section, so neither section could hold it. Both
+        // read after the short-circuit above, because each of them reads a section as though it were valid.
         return
         [
             .. Refusal<McpEndpointOptions>(
@@ -193,6 +198,22 @@ internal static class ComposedSettings
                     .. client.DeclareListeners(),
                     .. health.DeclareListeners(),
                 ]).Errors),
+            .. Refusal<McpEndpointOptions>(
+                McpEndpointOptions.SectionName,
+                PasswordTransportConfidentiality.FindConfigurationErrors(
+                    McpEndpointOptions.SectionName,
+                    mcp.Enabled,
+                    mcp.AllowsBasic,
+                    mcp.TerminatesTls,
+                    reverseProxy)),
+            .. Refusal<ClientEndpointOptions>(
+                ClientEndpointOptions.SectionName,
+                PasswordTransportConfidentiality.FindConfigurationErrors(
+                    ClientEndpointOptions.SectionName,
+                    client.Enabled,
+                    client.AllowsBasic,
+                    client.TerminatesTls,
+                    reverseProxy)),
         ];
     }
 

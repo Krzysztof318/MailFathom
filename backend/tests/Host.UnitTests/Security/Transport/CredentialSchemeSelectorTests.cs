@@ -32,6 +32,8 @@ public sealed class CredentialSchemeSelectorTests
 
     private const string MetadataScheme = "McpAuth";
 
+    private const string BasicScheme = "MailFathom:Mcp:Basic";
+
     [Fact]
     public void SchemeFor_ATokenNamingAConfiguredIssuer_ReachesThatIssuersValidator()
     {
@@ -153,6 +155,7 @@ public sealed class CredentialSchemeSelectorTests
             new Dictionary<string, string>(StringComparer.Ordinal),
             ApiKeyScheme,
             clientAssertionSchemeName: null,
+            basicSchemeName: null,
             MetadataScheme);
 
         // Act, Assert
@@ -170,6 +173,7 @@ public sealed class CredentialSchemeSelectorTests
             new Dictionary<string, string> { [WorkforceIssuer] = WorkforceScheme },
             apiKeySchemeName: null,
             clientAssertionSchemeName: null,
+            basicSchemeName: null,
             MetadataScheme);
 
         // Act, Assert
@@ -185,10 +189,51 @@ public sealed class CredentialSchemeSelectorTests
             new Dictionary<string, string>(StringComparer.Ordinal),
             ApiKeyScheme,
             clientAssertionSchemeName: null,
+            basicSchemeName: null,
             ApiKeyScheme);
 
         // Act, Assert
         Assert.Equal(ApiKeyScheme, selector.SchemeFor(TokenIssuedBy(WorkforceIssuer)));
+    }
+
+    /// <summary>A password names its own scheme in the header, which is the one credential kind that says what it is before anything is decoded.</summary>
+    [Theory]
+    [InlineData("Basic b3duZXI6Y29ycmVjdGhvcnNl")]
+    [InlineData("basic b3duZXI6Y29ycmVjdGhvcnNl")]
+    [InlineData("  Basic b3duZXI6Y29ycmVjdGhvcnNl")]
+    [InlineData("Basic")]
+    [InlineData("Basic not-base64")]
+    public void SchemeFor_ACredentialNamingTheBasicScheme_ReachesThePasswordVerification(string headerValue)
+    {
+        // Arrange
+        var selector = AlsoAcceptingAPassword();
+
+        // Act, Assert
+        Assert.Equal(BasicScheme, selector.SchemeFor(headerValue));
+    }
+
+    /// <summary>The scheme name is matched rather than searched for, so a token whose value happens to start with those letters is still a token.</summary>
+    [Theory]
+    [InlineData("Bearer BasicLookingToken")]
+    [InlineData("BasicAuth b3duZXI6cA==")]
+    public void SchemeFor_ACredentialMerelySpelledLikeOne_DoesNotReachThePasswordVerification(string headerValue)
+    {
+        // Arrange
+        var selector = AlsoAcceptingAPassword();
+
+        // Act, Assert
+        Assert.NotEqual(BasicScheme, selector.SchemeFor(headerValue));
+    }
+
+    /// <summary>With passwords turned off nothing routes to a scheme that was never registered, which would forward to nothing.</summary>
+    [Fact]
+    public void SchemeFor_APasswordWherePasswordsAreNotAccepted_ReachesTheApiKeyComparison()
+    {
+        // Arrange
+        var selector = AcceptingBoth();
+
+        // Act, Assert
+        Assert.Equal(ApiKeyScheme, selector.SchemeFor("Basic b3duZXI6Y29ycmVjdGhvcnNl"));
     }
 
     /// <summary>Selection is deterministic, so the same request never reaches two different handlers across two attempts.</summary>
@@ -211,6 +256,17 @@ public sealed class CredentialSchemeSelectorTests
         },
         ApiKeyScheme,
         ClientAssertionScheme,
+        basicSchemeName: null,
+        MetadataScheme);
+
+    private static CredentialSchemeSelector AlsoAcceptingAPassword() => new(
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            [WorkforceIssuer] = WorkforceScheme,
+        },
+        ApiKeyScheme,
+        ClientAssertionScheme,
+        BasicScheme,
         MetadataScheme);
 
     private static string TokenIssuedBy(string issuer)

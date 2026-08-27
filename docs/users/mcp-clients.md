@@ -46,7 +46,7 @@ verification that nothing here performs.
 
 ## What is the same for every client
 
-Five things hold whichever client is being configured, and each is stated in full on the page that owns it rather than
+Six things hold whichever client is being configured, and each is stated in full on the page that owns it rather than
 repeated per client below:
 
 - **The address ends in `/mcp`**, which is a constant rather than a setting. What precedes it is where the deployment is
@@ -55,6 +55,13 @@ repeated per client below:
 - **An API key travels as `Authorization: Bearer <the key material>`**, and nothing else about it is client-specific.
   [The MCP endpoint § API keys](../operations/mcp-endpoint.md#api-keys) records what a key is, how it rotates, and what
   every refusal looks like.
+- **A username and password travels as `Authorization: Basic <the pair, base64-encoded>`**, on a deployment that accepts
+  one, and any client able to send a static header can present it. It is the one credential here that names a person
+  rather than a deployment, so a request admitted with it reads that owner's mail rather than whichever owner the
+  deployment was configured with. [The MCP endpoint § Passwords](../operations/mcp-endpoint.md#passwords) records how a
+  deployment turns the method on, why the address has to be HTTPS before it will start, and what the refusal looks like;
+  the credential itself is provisioned by whoever administers the deployment, over
+  [the administrative endpoint](../operations/admin-endpoint.md#owner-credentials).
 - **A browser-based client is also subject to the origin policy.** A client that runs as a web page sends an `Origin`
   header, and a deployment that narrowed `McpEndpoint:Cors:AllowedOrigins` has to list that client's origin;
   [CORS and the `Origin` header](../operations/mcp-endpoint.md#cors-and-the-origin-header) holds the rule. A client that

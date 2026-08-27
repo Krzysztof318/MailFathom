@@ -1,6 +1,6 @@
 # Who a use case is running for
 
-<!-- describes: backend/src/Application/Access/**, backend/src/Host/Security/Transport/TransportAuthorizedPrincipalSource.cs, backend/src/Host/Security/Transport/TransportCallerIdentity.cs, backend/src/Host/Api/EmailAttachmentDownloadEndpoint.cs -->
+<!-- describes: backend/src/Application/Access/**, backend/src/Host/Security/Transport/TransportAuthorizedPrincipalSource.cs, backend/src/Host/Security/Transport/TransportCallerIdentity.cs, backend/src/Host/Security/Transport/TransportCallerOwner.cs, backend/src/Host/Api/EmailAttachmentDownloadEndpoint.cs -->
 
 A use case can be reached by more than one thing. Today an MCP tool, an administrative route, a background worker, and
 the attachment download link all end at application-layer code, and each of them arrives by a different path with
@@ -93,9 +93,10 @@ so the next capability-authorized route does not have to argue for its own.
 The host composes one `IAuthorizedPrincipalSource` per scope, which for a served request is that request:
 
 - **A request an authentication scheme validated** becomes a caller, named by what this deployment authorized — an API
-  key's name, a client public key's name, or the issuer and subject the access policy checked against the configured
-  authorization servers. The permissions travel as claims the scheme wrote when the credential was judged, so nothing
-  per request re-reads a configuration section.
+  key's name, a client public key's name, the issuer and subject the access policy checked against the configured
+  authorization servers, or the identifier of the owner credential a username and password resolved to. The permissions
+  travel as claims the scheme wrote when the credential was judged, so nothing per request re-reads a configuration
+  section.
 - **A scope with no request behind it** is the process's own identity. Work reached outside a request in this process is
   work no caller asked for.
 - **A route that verified a capability** states that principal onto its own scope before it reaches the use case. The
@@ -120,12 +121,19 @@ mailbox. The split holds on either posture — a caller the surface authenticate
 configuring no credential are both admitted the same way — because it follows from the path the request arrived on
 rather than from what it presented.
 
-Which owner that is comes from a startup gate rather than from the request. A mail account declared in configuration
-names no owner, so the deployment holds exactly one owner record for every configured account to belong to, and the host
-reads it once while starting and refuses to come up on any other number.
+**Which owner that is comes from the credential where the credential names one, and from a startup gate otherwise.** A
+username and password authenticate exactly one owner, so a request admitted that way carries that owner as a claim and
+the adapter acts for it — which is what lets one deployment serve more than one person's mail over one address. Every
+other credential names no owner, and for those the answer is the gate: a mail account declared in configuration names
+nobody, so the deployment holds exactly one owner record for every configured account to belong to, and the host reads
+it once while starting and refuses to come up on any other number.
 [The health endpoints](../operations/health-endpoints.md#the-three-probes) record what each refusal means to an
-operator. When accounts, owners, and credentials move into the database together, the owner a request acts for comes
-from what admitted it and nothing above this line changes.
+operator.
+
+The claim is read on the two mail-serving surfaces alone. A request admitted on the administrative surface acts for no
+owner whether or not it carried one, which is why the method that produces the claim
+[is refused there at startup](../operations/mcp-endpoint.md#passwords): a credential naming a person would otherwise be
+admitted to a surface with nowhere to put them, and what it authorized would be the deployment's own authority.
 
 **The client surface reaches the same adapter and is no third case.** It is the third surface a request can arrive on,
 and its grant is resolved exactly as the two above are — from the entry that admitted the caller, or from the whole of

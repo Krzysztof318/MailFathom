@@ -4,18 +4,24 @@
 
 using MailFathom.Common.ClientAssertions;
 using MailFathom.Infrastructure.Security.OAuth;
+using MailFathom.Infrastructure.Security.Passwords;
 
 namespace MailFathom.Host.Security.Transport;
 
 /// <summary>Decides which handler judges the credential a request presented.</summary>
 /// <remarks>
 /// <para>
-/// Every credential arrives as an HTTP bearer credential, so the endpoint has to tell them apart before any of them can
-/// be checked. The shape does it, in the order the credentials are self-describing. A client assertion declares its own
-/// media type in its header, which nothing else this endpoint accepts does, so it is recognized first and exactly. An
-/// access token is a compact-serialized JSON Web Token naming its issuer, so a request carrying one from a configured
-/// authorization server reaches that server's validator. An API key is an opaque string that is neither, and everything
-/// left reaches the key comparison.
+/// A username and password are the one credential that names its own scheme in the header, so they are recognized first
+/// and by that name alone: RFC 7617 writes <c>Basic</c> where every other credential here writes <c>Bearer</c>, and no
+/// bearer credential can be mistaken for one.
+/// </para>
+/// <para>
+/// Every other credential arrives as an HTTP bearer credential, so the endpoint has to tell those apart before any of
+/// them can be checked. The shape does it, in the order the credentials are self-describing. A client assertion declares
+/// its own media type in its header, which nothing else this endpoint accepts does, so it is recognized next and
+/// exactly. An access token is a compact-serialized JSON Web Token naming its issuer, so a request carrying one from a
+/// configured authorization server reaches that server's validator. An API key is an opaque string that is neither, and
+/// everything left reaches the key comparison.
 /// </para>
 /// <para>
 /// The declared type and the issuer are both read unverified, and choosing a handler is the only thing either decides.
@@ -41,18 +47,21 @@ internal sealed class CredentialSchemeSelector
     private readonly Dictionary<string, string> oauthSchemesByIssuer;
     private readonly string? apiKeySchemeName;
     private readonly string? clientAssertionSchemeName;
+    private readonly string? basicSchemeName;
     private readonly string unmatchedSchemeName;
 
     /// <summary>Initializes a new selector.</summary>
     /// <param name="oauthSchemesByIssuer">The scheme validating each configured authorization server's tokens, keyed by that server's issuer.</param>
     /// <param name="apiKeySchemeName">The scheme comparing API keys, or <see langword="null" /> when API keys are not accepted.</param>
     /// <param name="clientAssertionSchemeName">The scheme verifying client assertions, or <see langword="null" /> when assertions are not accepted.</param>
+    /// <param name="basicSchemeName">The scheme judging an owner's username and password, or <see langword="null" /> when passwords are not accepted.</param>
     /// <param name="unmatchedSchemeName">The scheme a request reaches when no credential it presented selects one.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="oauthSchemesByIssuer" /> or <paramref name="unmatchedSchemeName" /> is <see langword="null" />.</exception>
     internal CredentialSchemeSelector(
         IReadOnlyDictionary<string, string> oauthSchemesByIssuer,
         string? apiKeySchemeName,
         string? clientAssertionSchemeName,
+        string? basicSchemeName,
         string unmatchedSchemeName)
     {
         ArgumentNullException.ThrowIfNull(oauthSchemesByIssuer);
@@ -61,6 +70,7 @@ internal sealed class CredentialSchemeSelector
         this.oauthSchemesByIssuer = new Dictionary<string, string>(oauthSchemesByIssuer, StringComparer.Ordinal);
         this.apiKeySchemeName = apiKeySchemeName;
         this.clientAssertionSchemeName = clientAssertionSchemeName;
+        this.basicSchemeName = basicSchemeName;
         this.unmatchedSchemeName = unmatchedSchemeName;
     }
 
@@ -69,6 +79,14 @@ internal sealed class CredentialSchemeSelector
     /// <returns>The name of a registered authentication scheme.</returns>
     internal string SchemeFor(string? authorizationHeaderValue)
     {
+        // Named rather than shaped, and read off the raw header rather than off a parsed credential: what selects this
+        // scheme is the word the request wrote, so a value that says Basic and decodes to nothing usable is refused by
+        // the handler that understands the method instead of falling through to the key comparison.
+        if (this.basicSchemeName is { } passwordSchemeName && NamesTheBasicScheme(authorizationHeaderValue))
+        {
+            return passwordSchemeName;
+        }
+
         if (!BearerCredentialHeader.TryRead(authorizationHeaderValue, out var credential))
         {
             return this.apiKeySchemeName ?? this.unmatchedSchemeName;
@@ -88,5 +106,26 @@ internal sealed class CredentialSchemeSelector
         }
 
         return this.apiKeySchemeName ?? this.unmatchedSchemeName;
+    }
+
+    /// <summary>Reports whether the header's own first word is the password scheme, rather than merely beginning with its letters.</summary>
+    /// <remarks>The scheme is a token, so what ends it is whitespace or the end of the value; matching the prefix alone would hand a header naming some future <c>BasicSomething</c> scheme to the handler that judges passwords.</remarks>
+    private static bool NamesTheBasicScheme(string? authorizationHeaderValue)
+    {
+        if (authorizationHeaderValue is null)
+        {
+            return false;
+        }
+
+        var value = authorizationHeaderValue.AsSpan().TrimStart();
+
+        if (!value.StartsWith(BasicCredentialHeader.HttpAuthenticationScheme, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var rest = value[BasicCredentialHeader.HttpAuthenticationScheme.Length..];
+
+        return rest.IsEmpty || rest[0] is ' ' or '\t';
     }
 }

@@ -272,6 +272,49 @@ public sealed class TransportAuthorizedPrincipalSourceTests
             Options.Create(clientEndpoint));
     }
 
+    /// <summary>A password authenticates one owner, so the credential's own owner is what the caller acts for rather than the one the deployment was configured with.</summary>
+    [Theory]
+    [InlineData(McpEndpointRoute.Path)]
+    [InlineData(ClientEndpointOptions.RoutePrefix + "/session")]
+    public void Current_ARequestAuthenticatedByAnOwnersCredential_ActsForThatOwnerRatherThanTheDeploymentsOwner(string path)
+    {
+        // Arrange
+        var source = SourceOver(
+            RequestBy(AuthenticatedOwnerHolding(SyntheticMailOwner.Another, MailFathomPermission.MailRead), path),
+            mcpConfiguresACredential: true,
+            adminConfiguresACredential: true,
+            clientConfiguresACredential: true);
+
+        // Act
+        var principal = source.Current;
+
+        // Assert
+        Assert.NotNull(principal);
+        Assert.Equal(AuthorizedPrincipalKind.Caller, principal.Kind);
+        Assert.Equal(SyntheticMailOwner.Another, principal.Owner);
+    }
+
+    /// <summary>The administrative surface has nowhere to put an owner, so a claim carrying one is dropped rather than admitted with it.</summary>
+    [Fact]
+    public void Current_AnOwnersCredentialOnASurfaceServingNoOnesMail_ActsForNoOwner()
+    {
+        // Arrange
+        var source = SourceOver(
+            RequestBy(
+                AuthenticatedOwnerHolding(SyntheticMailOwner.Another, MailFathomPermission.AdminRead),
+                AdminEndpointOptions.RoutePrefix + "/session"),
+            mcpConfiguresACredential: true,
+            adminConfiguresACredential: true,
+            clientConfiguresACredential: true);
+
+        // Act
+        var principal = source.Current;
+
+        // Assert
+        Assert.NotNull(principal);
+        Assert.Null(principal.Owner);
+    }
+
     private static DefaultHttpContext RequestBy(ClaimsPrincipal caller) => new() { User = caller };
 
     private static DefaultHttpContext RequestBy(ClaimsPrincipal caller, string path) =>
@@ -284,6 +327,18 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         new(new ClaimsIdentity(
             [
                 new Claim(ApiKeyAuthentication.ApiKeyNameClaimType, ConfiguredKeyName),
+                .. TransportGrant.ClaimsFor(granted),
+            ],
+            "test",
+            ApiKeyAuthentication.ApiKeyNameClaimType,
+            ApiKeyAuthentication.RoleClaimType));
+
+    /// <summary>Composes the principal the password scheme produces, which names the owner the credential belongs to beside its grant.</summary>
+    private static ClaimsPrincipal AuthenticatedOwnerHolding(MailOwnerId owner, params MailFathomPermission[] granted) =>
+        new(new ClaimsIdentity(
+            [
+                new Claim(ApiKeyAuthentication.ApiKeyNameClaimType, ConfiguredKeyName),
+                TransportCallerOwner.ClaimFor(owner),
                 .. TransportGrant.ClaimsFor(granted),
             ],
             "test",

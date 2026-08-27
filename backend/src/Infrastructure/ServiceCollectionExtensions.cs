@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Access.Credentials;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Contacts;
@@ -121,6 +122,7 @@ using MailFathom.Infrastructure.Secrets.References;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using MailFathom.Infrastructure.Secrets.Sources;
 using MailFathom.Infrastructure.Security.OAuth;
+using MailFathom.Infrastructure.Security.Passwords;
 using MailFathom.Infrastructure.SensitiveContent.PersonalData;
 using MailFathom.Infrastructure.SensitiveContent.Secrets;
 using MailFathom.Infrastructure.Spam;
@@ -443,6 +445,30 @@ public static class ServiceCollectionExtensions
         // is why nothing scoped to a request depends on it and why it is registered beside the schema inspector the same
         // startup step already resolves.
         services.AddScoped<IMailOwnerDirectory, PersistedMailOwnerDirectory>();
+        // The passwords an owner signs in with. Scoped because it reads and writes through the request's own context,
+        // and separate from the directory above because that answers which owners exist and this answers what one of
+        // them may present.
+        services.AddScoped<IOwnerPasswordCredentialStore, PersistedOwnerPasswordCredentials>();
+        // What a password becomes when it is stored and what a presented one is judged against. A singleton because it
+        // holds no state at all: every parameter a verification needs travels inside the record it is verifying.
+        services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
+        // The bound on how often one source and one username may have a password checked. A singleton because the
+        // buckets are what it is: a per-request instance would count each attempt in a bucket of its own and bound
+        // nothing.
+        services.AddSingleton<PasswordAttemptLimiter>();
+        // The record every unresolved username is compared against. A singleton because deriving it is what makes an
+        // unknown username cost what a known one costs, and doing that per request would spend the same derivation on
+        // every attempt before anything had been checked.
+        services.AddSingleton<DecoyPasswordHash>();
+        // Judging a presented username and password. Scoped rather than singleton, unlike the API key authenticator,
+        // because it reads the credential store through the request's own context; everything it holds that is
+        // expensive to build is one of the singletons above.
+        services.AddScoped<OwnerPasswordAuthenticator>();
+        // Where a change to who can reach an owner's mail is written down.
+        services.AddScoped<IOwnerCredentialAuditor, LoggedOwnerCredentialAuditor>();
+        // What an administrator does to those credentials, registered beside them because the whole of what it
+        // composes is the four services above.
+        services.AddScoped<OwnerPasswordCredentialAdministration>();
         // One owner's own record, read by key and bounded in the statement rather than in the process. A singleton
         // over the pool for the reason the persisted configuration layer's reader is one — the command holds no state
         // between calls — and separate from the directory above because that answers for the deployment and this for

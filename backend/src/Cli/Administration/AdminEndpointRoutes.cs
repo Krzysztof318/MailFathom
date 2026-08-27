@@ -208,6 +208,43 @@ internal static class AdminEndpointRoutes
     /// <summary>Where an adoption of the deployment's file-decided settings is previewed, and where it is performed.</summary>
     internal const string ConfigurationAdoptionPath = $"{ConfigurationPath}/adoption";
 
+    /// <summary>Where the owners a deployment holds records for are listed.</summary>
+    /// <remarks>
+    /// The identifiers alone, and they are what every credential path below is composed from: an administrator selects
+    /// an owner before administering a credential, and a generated identifier is the only handle either side has for
+    /// one. A deployment serving one person answers with one entry, which is what lets the command act without asking
+    /// which owner was meant.
+    /// </remarks>
+    internal const string OwnersPath = $"{Prefix}/owners";
+
+    /// <summary>Where one owner's username-and-password credentials are listed and provisioned.</summary>
+    /// <param name="ownerId">The owner the path names.</param>
+    /// <returns>The path, with the identity written the way a deployment's route constraint reads one.</returns>
+    internal static string OwnerCredentialsPath(Guid ownerId) => $"{OwnersPath}/{ownerId:D}/credentials";
+
+    /// <summary>Where one credential is removed.</summary>
+    /// <param name="ownerId">The owner the credential belongs to.</param>
+    /// <param name="credentialId">The credential the path names.</param>
+    /// <returns>The path.</returns>
+    /// <remarks>The owner is in the path as well as the credential, because that is what the deployment's own contract asks for: an identifier copied out of the wrong listing is refused rather than acted on.</remarks>
+    internal static string OwnerCredentialPath(Guid ownerId, Guid credentialId) =>
+        $"{OwnerCredentialsPath(ownerId)}/{credentialId:D}";
+
+    /// <summary>Where one credential's password is replaced.</summary>
+    /// <param name="ownerId">The owner the credential belongs to.</param>
+    /// <param name="credentialId">The credential the path names.</param>
+    /// <returns>The path.</returns>
+    /// <remarks>A path of its own rather than a field on the credential, because rotating a password and suspending a credential are opposite decisions and a body carrying which was meant would make a mistyped value the difference between them.</remarks>
+    internal static string OwnerCredentialPasswordPath(Guid ownerId, Guid credentialId) =>
+        $"{OwnerCredentialPath(ownerId, credentialId)}/password";
+
+    /// <summary>Where one credential is turned on or off.</summary>
+    /// <param name="ownerId">The owner the credential belongs to.</param>
+    /// <param name="credentialId">The credential the path names.</param>
+    /// <returns>The path.</returns>
+    internal static string OwnerCredentialEnablementPath(Guid ownerId, Guid credentialId) =>
+        $"{OwnerCredentialPath(ownerId, credentialId)}/enablement";
+
     /// <summary>Where a deployment publishes the document naming its authorization servers, resource, and required scopes.</summary>
     /// <remarks>
     /// Composed rather than discovered from a challenge, because a client that knows which routes it is about to call

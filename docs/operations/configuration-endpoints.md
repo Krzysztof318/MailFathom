@@ -182,6 +182,8 @@ same entries; the administrative one adds a single rule, stated with it below.
 | --- | --- | --- | --- | --- |
 | `…:<n>:ApiKey` | secret block | — | One [named secret](secret-provisioning.md#the-secret-block) with its own `Lifetime`; a second key is a second entry | restart; material per request |
 | `…:<n>:PublicKey` | secret block | — | One [named secret](secret-provisioning.md#the-secret-block) with its own `Lifetime`, resolving to one client's PEM public key. Startup refuses material that is not one, an RSA key below 2048 bits, and — explicitly — material carrying a private key | restart; material per request |
+| `…:<n>:Basic` | block | — | Accepts [an owner's username and password](mcp-endpoint.md#passwords). Carries no credential: the records are provisioned over [the administrative endpoint](admin-endpoint.md#owner-credentials). At most one entry may carry it, and startup refuses it on `AdminEndpoint` and on a surface that neither terminates TLS nor is declared to sit behind a proxy that does | restart |
+| `…:<n>:Basic:AttemptsPerMinute` | int | `10` | Password attempts one source and one username each get per minute, replenished continuously; `1` to `600` | restart |
 | `…:<n>:Permissions` | string list | absent = everything this surface publishes | The [permissions](permissions.md#the-published-set) every credential this entry admits may hold; an empty list grants nothing. A value writing `*` as a whole segment grants [every published name the pattern reaches on this surface](permissions.md#writing-a-grant), the wildcard standing for one or more segments at whatever position it is written, resolved against the published set on every start. A name nothing publishes, a name belonging to the other surface, a repeated name, a pattern matching nothing or matching only the other surface, a pattern overlapping what the grant already carries, and a bare `*` or `mailfathom.*` each fail startup naming the entry's index | restart |
 | `…:<n>:PermissionsFromTokenScopes` | bool | `false` | Narrows the list above by each token's own scopes instead of granting all of it. Refused on an entry that also carries `ApiKey` or `PublicKey`, neither of which can carry a scope | restart |
 | `…:<n>:OAuth:Resource` | string | — | Required; the canonical `https` URL clients reach this endpoint at — behind a proxy, the proxy's public URL. Every OAuth entry names the same one, because the endpoint publishes one metadata document at an address derived from it | restart |
@@ -196,9 +198,10 @@ MailFathom is a protected resource only; an external authorization server signs 
 [`OAuth`](mcp-endpoint.md#oauth) records what a token must prove and
 [scopes you advertise but do not require](mcp-endpoint.md#scopes-you-advertise-but-do-not-require) why the published list
 is longer than the checked one,
-[API keys](mcp-endpoint.md#api-keys) what a key is compared against, and
+[API keys](mcp-endpoint.md#api-keys) what a key is compared against,
 [Key pairs](mcp-endpoint.md#key-pairs) what a client signs and what the deployment verifies — including the audience,
-expiry, and replay identifier an assertion carries, none of which is a setting.
+expiry, and replay identifier an assertion carries, none of which is a setting — and
+[Passwords](mcp-endpoint.md#passwords) what a deployment must arrange before it may accept one at all.
 
 
 ### Browser origins — `McpEndpoint:Cors`
@@ -330,7 +333,7 @@ request or per handshake. [Administering a deployment](admin-endpoint.md) is the
 | `AdminEndpoint:BindAddress` | string | `0.0.0.0` | An IP address; binds the clear-text socket, which `HttpsOnly` does not open | restart |
 | `AdminEndpoint:Port` | int | `8080` | 1–65535. The MCP and client endpoints' default as well, so enabling several without stating a port publishes one shared socket — see [sharing a socket](#sharing-a-socket) | restart |
 | `AdminEndpoint:Transport` | enum | `Http` | `Http`, `HttpAndHttps`, `HttpsOnly` — the same setting the MCP endpoint carries, read the same way | restart |
-| `AdminEndpoint:Authentication` | list of credentials | empty | Same shape and rules as [`McpEndpoint:Authentication:<n>`](#the-accepted-credentials--mcpendpointauthenticationn), with three additions: every `OAuth` block's `Resource` must end in `/api/admin`, because that is where these routes answer and what `mfctl` appends to find the metadata document; a client assertion presented here names the audience `urn:mailfathom:admin` rather than `urn:mailfathom:mcp`; and `Permissions` draws from the administrative half of [the published set](permissions.md#the-published-set), so a name or a pattern reaching only the mail half fails startup here | restart; material per request |
+| `AdminEndpoint:Authentication` | list of credentials | empty | Same shape and rules as [`McpEndpoint:Authentication:<n>`](#the-accepted-credentials--mcpendpointauthenticationn), except that a `Basic` block is refused at startup — this surface answers for the deployment rather than for a person — and with three additions: every `OAuth` block's `Resource` must end in `/api/admin`, because that is where these routes answer and what `mfctl` appends to find the metadata document; a client assertion presented here names the audience `urn:mailfathom:admin` rather than `urn:mailfathom:mcp`; and `Permissions` draws from the administrative half of [the published set](permissions.md#the-published-set), so a name or a pattern reaching only the mail half fails startup here | restart; material per request |
 | `AdminEndpoint:Https:Endpoints:<n>` | list of profiles | empty | Same shape and rules as `McpEndpoint:Https:Endpoints:<n>`, read under the two `Transport` modes that terminate TLS | restart; material per handshake |
 | `AdminEndpoint:Https:Redirect` | block | on | Same shape and rules as `McpEndpoint:Https:Redirect`; its socket is this surface's own `BindAddress` and `Port`, so terminating TLS on both surfaces opens two clear-text ports that do not collide | restart |
 | `AdminEndpoint:RateLimiting` | block | bounded | Same shape, defaults, and rules as `McpEndpoint:RateLimiting` above; applied whether or not it is written | restart |

@@ -106,9 +106,19 @@ internal static class McpTransportSecurityExtensions
     /// </para>
     /// <para>
     /// It is also what a credential this endpoint cannot place authenticates against, so whichever scheme is named here
-    /// must authenticate nobody rather than judge something. All three do: the API key and assertion handlers read no
-    /// credential out of such a request, and the MCP scheme performs no authentication at all once
+    /// must authenticate nobody rather than judge something. All four do: the API key and assertion handlers read no
+    /// credential out of such a request, the password handler reads nothing that is not a Basic credential and spends no
+    /// attempt establishing that, and the MCP scheme performs no authentication at all once
     /// <see cref="AddProtectedResourceMetadataScheme" /> has cleared the forwarding the SDK sets by default.
+    /// </para>
+    /// <para>
+    /// Passwords are answered ahead of a key and an assertion, because a password is the one credential a client asks a
+    /// person for only when a <c>WWW-Authenticate: Basic</c> challenge names it, and that challenge carries the bare
+    /// bearer one beside it. They are answered behind OAuth rather than ahead of it, because the OAuth challenge is the
+    /// one that carries discovery: an MCP client that cannot read the metadata document out of a refusal cannot reach
+    /// the authorization server at all, while a client configured with a username and password already holds both. An
+    /// endpoint combining the two therefore challenges for discovery, and a password client sends its credential
+    /// without waiting to be asked.
     /// </para>
     /// </remarks>
     private static string ChallengeSchemeFor(McpEndpointOptions endpointSettings)
@@ -116,6 +126,11 @@ internal static class McpTransportSecurityExtensions
         if (endpointSettings.AllowsOAuth)
         {
             return McpAuthenticationDefaults.AuthenticationScheme;
+        }
+
+        if (endpointSettings.AllowsBasic)
+        {
+            return TransportSurface.Mcp.BasicSchemeName;
         }
 
         return endpointSettings.AllowsApiKey

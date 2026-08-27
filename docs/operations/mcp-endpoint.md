@@ -129,10 +129,10 @@ carries and how it is verified.
 
 ## Authentication
 
-**`Authentication` is a list of credentials.** The three methods identify different kinds of caller — a key belongs to a
+**`Authentication` is a list of credentials.** The four methods identify different kinds of caller — a key belongs to a
 client the operator provisioned, a public key belongs to a client that holds the private half and signs for itself, a
-token belongs to a person an external authorization server signed in — so a deployment serving several carries an entry
-for each:
+token belongs to a person an external authorization server signed in, and a password belongs to one owner of mail this
+deployment holds — so a deployment serving several carries an entry for each:
 
 ```json
 {
@@ -141,7 +141,8 @@ for each:
     "Authentication": [
       { "ApiKey": { "Name": "nightly-digest", "SecretReference": "systemd-credential:mailfathom-mcp-digest-key" } },
       { "PublicKey": { "Name": "reporting-job", "SecretReference": "file:/etc/mailfathom/reporting-job.pub" } },
-      { "OAuth": { "Resource": "https://mail.example.test/mcp", "AuthorizationServers": [ { "Name": "workforce", "Issuer": "https://sso.example.test/realms/mailfathom", "AuthorizedSubjects": [ "9f2c7c1e-8a4d-4c62-9f0b-3d2a1b5e7c04" ] } ] } }
+      { "OAuth": { "Resource": "https://mail.example.test/mcp", "AuthorizationServers": [ { "Name": "workforce", "Issuer": "https://sso.example.test/realms/mailfathom", "AuthorizedSubjects": [ "9f2c7c1e-8a4d-4c62-9f0b-3d2a1b5e7c04" ] } ] } },
+      { "Basic": {} }
     ]
   }
 }
@@ -157,9 +158,10 @@ combination of blocks that is refused. Otherwise one shape of entry fails startu
 no block. So does a value written where the list belongs, because a value contributes no entries and would otherwise
 leave the endpoint served with no credential at all.
 
-A request is served when it satisfies **any one** of the entries. The credentials are told apart by shape: a client
-assertion is a JSON Web Token declaring MailFathom's own media type in its header, an access token is a JSON Web Token
-naming its issuer, an API key is anything else, and each reaches only the check that understands it. That is also why
+A request is served when it satisfies **any one** of the entries. A password is told from the rest by name — it is the
+one credential whose header says `Basic` where every other says `Bearer` — and the bearer credentials are told apart by
+shape: a client assertion is a JSON Web Token declaring MailFathom's own media type in its header, an access token is a
+JSON Web Token naming its issuer, an API key is anything else, and each reaches only the check that understands it. That is also why
 **an API key must not itself be a token of a configured authorization server**: such a key would be judged as an access
 token by that server and never compared as a key, so no client could authenticate with it. Startup refuses the
 combination by position — `McpEndpoint:Authentication:0:ApiKey` — rather than letting a deployment start with a key
@@ -562,6 +564,78 @@ relaxing audience validation**; there is no setting for it, deliberately.
 callback URL a client generates rather than accepts, a verification recipe to run before a client is touched, and what
 each failed sign-in looks like.
 
+### Passwords
+
+A password belongs to a person rather than to a client, and it is the one credential this deployment holds a record of
+rather than reads out of your configuration. So the block turns the method on and carries nothing to steal:
+
+```json
+{
+  "McpEndpoint": {
+    "Enabled": true,
+    "Authentication": [
+      { "Basic": { "AttemptsPerMinute": 10 } }
+    ]
+  }
+}
+```
+
+The credentials themselves are provisioned over the administrative endpoint, with
+[`mfctl credential`](admin-endpoint.md#owner-credentials). Nothing provisions one on its own and there is no default, so
+an endpoint carrying this block and no provisioned credential authenticates nobody.
+
+A client presents one exactly as [RFC 7617](https://www.rfc-editor.org/rfc/rfc7617.html) describes:
+
+```http
+POST /mcp HTTP/1.1
+Host: mail.example.test
+Authorization: Basic b3duZXI6Y29ycmVjdGhvcnNlYmF0dGVyeXN0YXBsZQ==
+```
+
+The two halves are a username and a password joined by a colon and encoded as base64 — which is an encoding rather than
+a protection, and is the whole reason for the transport rule below. A username is folded to lower case, so `Owner` and
+`owner` are one credential, and it names exactly one owner across the deployment.
+
+**A surface accepting a password must be confidential, and startup refuses it otherwise.** Every other method here is
+warned about over clear text and permitted, because a deployment may knowingly be on a loopback socket. A password is
+not: it is typed by a person, it is the credential that person is most likely to have typed somewhere else, and reading
+it once off the network is reading it for as long as it stands. Two arrangements satisfy the rule, and they are the two
+a deployment actually runs — the endpoint terminates TLS itself, through [`Transport`](#https-and-your-own-domain), or
+you have named what stands in front in
+[`ReverseProxy:TrustedProxies`](#behind-a-tls-terminating-reverse-proxy). A range covering every address is not naming
+one: it trusts whatever can open a connection, which is what a section naming nothing already does.
+
+An endpoint carries **at most one** `Basic` block and startup refuses a second. Rotation is a second credential row
+rather than a second block, because a presented credential names a username rather than an entry — two blocks would
+leave the grant an owner holds decided by configuration order.
+
+**A refusal says nothing about which half was wrong.** No credential at all, a header that does not decode, an unknown
+username, a wrong password, a credential somebody disabled, and a caller that has spent its attempts each receive the
+same answer, and the deployment spends the same work reaching it:
+
+```http
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Bearer realm="MailFathom"
+WWW-Authenticate: Basic realm="MailFathom", charset="UTF-8"
+```
+
+Both challenges are offered, which is what lets an OAuth client's discovery keep working on an endpoint that also
+accepts a password. The `charset` parameter is the only one RFC 7617 permits and is what makes a password outside
+US-ASCII survive the round trip.
+
+`AttemptsPerMinute` bounds guessing and defaults to 10, which is a person correcting a mistyped password. It is applied
+**per source and per username** rather than per endpoint, because those are the two shapes an attack takes: one host
+trying many passwords, and many hosts trying one account's. Both buckets replenish continuously, so a client that has
+spent its capacity gets some back within seconds rather than being locked out — the point is to make guessing expensive
+rather than to give anybody a way to lock an owner out. It is separate from
+[`RateLimiting`](#rate-limiting), which bounds requests to the surface rather than guesses at a credential. The ceiling
+is 600; a number above it is refused, because a thousand verifications a minute against one username is an offline
+guessing rate rather than a bound.
+
+**The method is refused on the administrative endpoint**, at startup, naming the section. That surface answers for the
+deployment rather than for a person, so a credential naming an owner has nothing there to act for —
+[the administrative endpoint](admin-endpoint.md) states what it accepts instead.
+
 ### Requiring no credential
 
 An enabled endpoint whose `Authentication` list is empty requires no credential. Writing the empty list says so
@@ -573,9 +647,9 @@ explicitly and is exactly equivalent to leaving the setting out:
 }
 ```
 
-There is nothing to configure alongside it, which is the point of the shape: keys, public keys, and authorization servers
-live inside the entry that turns their method on, so a deployment cannot end up carrying settings nothing checks —
-believing it is protected, which is worse than knowing it is not.
+There is nothing to configure alongside it, which is the point of the shape: keys, public keys, authorization servers,
+and the bound on guessing a password all live inside the entry that turns their method on, so a deployment cannot end up
+carrying settings nothing checks — believing it is protected, which is worse than knowing it is not.
 
 Whenever an enabled endpoint requires no credential, startup logs one warning:
 
@@ -583,10 +657,10 @@ Whenever an enabled endpoint requires no credential, startup logs one warning:
 warn: MailFathom.Host.Hosting.Warnings.McpTransportAuthenticationWarning
       The MCP endpoint is enabled on /mcp with no authentication method configured, so anything that can reach this
       address can read the synchronized mailboxes. Add an entry to McpEndpoint:Authentication carrying an ApiKey block,
-      a PublicKey block, an OAuth block, or any combination of them, unless the address is reachable only from this
-      machine or from a network you control. Neither an origin policy nor a client certificate substitutes for this: the
-      first restricts which page a browser will let call, the second names the application calling, and neither
-      identifies the person whose mail is served.
+      a PublicKey block, an OAuth block, a Basic block, or any combination of them, unless the address is reachable only
+      from this machine or from a network you control. Neither an origin policy nor a client certificate substitutes for
+      this: the first restricts which page a browser will let call, the second names the application calling, and
+      neither identifies the person whose mail is served.
 ```
 
 Leaving `Cors.AllowedOrigins` at its default of `["*"]` with no credential required — which is what makes the endpoint

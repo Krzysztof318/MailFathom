@@ -9,6 +9,7 @@ using MailFathom.Cli.Commands.Content;
 using MailFathom.Cli.Commands.Folders;
 using MailFathom.Cli.Commands.Jobs;
 using MailFathom.Cli.Commands.Outbox;
+using MailFathom.Cli.Commands.Owners;
 using MailFathom.Cli.Commands.Rules;
 using MailFathom.Cli.Commands.Spam;
 using MailFathom.Versioning;
@@ -171,6 +172,19 @@ internal static class CliRootCommand
             AdoptSettingsCommand.Create(context),
         };
 
+        // The one group whose credentials belong to a person rather than to this deployment, which is why every command
+        // in it reads its password from a prompt or a pipe and none of them takes one as an argument. "disable" and
+        // "delete" are the two halves of revoking, kept apart because one is reversible and the other frees the name.
+        Command credentialCommand = new("credential", "Administer the usernames and passwords an owner signs in with.")
+        {
+            CreateOwnerCredentialCommand.Create(context),
+            ListOwnerCredentialsCommand.Create(context),
+            RotateOwnerCredentialCommand.Create(context),
+            EnableOwnerCredentialCommand.Create(context),
+            DisableOwnerCredentialCommand.Create(context),
+            DeleteOwnerCredentialCommand.Create(context),
+        };
+
         // The only option the root owns. It governs what the runner does once a command has finished rather than
         // anything a command does, so it is declared once and made recursive rather than added to each of them.
         return new RootCommand($"MailFathom administration tool ({version.Version}).")
@@ -191,6 +205,7 @@ internal static class CliRootCommand
             contentCommand,
             contactCommand,
             configCommand,
+            credentialCommand,
         };
     }
 }

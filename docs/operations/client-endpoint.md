@@ -630,10 +630,11 @@ authenticates nothing there. The separation is mechanical rather than convention
 authentication schemes and its own authorization policy, and a policy consults only its own schemes.
 
 `Authentication` takes the same entries the other two sections take — one entry per credential, each carrying an
-`ApiKey` block, a `PublicKey` block, an `OAuth` block, or any combination of them — and every one of them is this
-endpoint's own. Each method is documented once, under [the MCP endpoint](mcp-endpoint.md#authentication). What differs
-here is the audience a signed assertion names, `urn:mailfathom:client`, which is what keeps a credential minted to read
-a mailbox as an agent from signing in as somebody's mail client even where one client is registered on both.
+`ApiKey` block, a `PublicKey` block, an `OAuth` block, a `Basic` block, or any combination of them — and every one of
+them is this endpoint's own. Each method is documented once, under
+[the MCP endpoint](mcp-endpoint.md#authentication). What differs here is the audience a signed assertion names,
+`urn:mailfathom:client`, which is what keeps a credential minted to read a mailbox as an agent from signing in as
+somebody's mail client even where one client is registered on both.
 
 A grant written on an entry draws from the mailbox half of the published set, so a name or a pattern reaching only the
 administrative half fails startup naming the entry's index. [Writing a grant](permissions.md#writing-a-grant) is the
@@ -641,10 +642,32 @@ whole of that rule; nothing about it is particular to this surface.
 
 ## Signing a person in
 
-The credential this surface is built around is an access token a public client obtained under the authorization code
-flow with PKCE. MailFathom is a protected resource only — it signs nobody in, holds no user, and issues no token — so
-what a deployment configures here is which authorization server's tokens are believed and which subjects they may be
-issued to.
+Two of the four methods sign a person in rather than a client, and which of them a deployment offers is what it
+configures.
+
+**A username and password** is the one MailFathom holds the record for, and it is what the client's own sign-in screen
+asks for. A deployment that runs no authorization server reaches for it; the block turns the method on and carries
+nothing else, and the credentials are provisioned over
+[the administrative endpoint](admin-endpoint.md#owner-credentials):
+
+```json
+{
+  "ClientEndpoint": { "Enabled": true, "Authentication": [ { "Basic": {} } ] }
+}
+```
+
+The method is documented once, under [the MCP endpoint](mcp-endpoint.md#passwords) — including the bound on guessing,
+the indistinguishable refusal, and the rule that matters most here: **a surface accepting a password must terminate TLS
+itself or be declared to sit behind a proxy that does, and startup refuses it otherwise.** That is the one place this
+surface's transport stops being a warning and becomes a refusal.
+
+A caller admitted this way acts for **the owner the credential belongs to**, rather than for whichever owner the
+deployment was configured with. That is the difference between this method and every other one here, and it is what
+lets one deployment serve more than one person's mail over one address.
+
+**An access token** is the other, and it is what a deployment that already runs an authorization server uses.
+MailFathom is a protected resource only — it signs nobody in, holds no user, and issues no token — so what a deployment
+configures here is which authorization server's tokens are believed and which subjects they may be issued to.
 
 **Every `OAuth` entry must name a `Resource` ending in `/api/client`.** Startup refuses anything else, naming the
 setting. The reason is discovery rather than OAuth: the client is configured with an address and finds the
@@ -711,7 +734,7 @@ TLS-terminating reverse proxy and wrong anywhere else, so startup says so:
 - an enabled endpoint with no `Authentication` entry warns that anything reaching the address is served the mailbox, and
   names the section that fixes it;
 - an enabled endpoint terminating no TLS warns that any credential a client presents is readable on the path, and names
-  its clear-text port;
+  its clear-text port — except where one of those credentials is a password, which is refused rather than warned about;
 - an endpoint serving [the page](#serving-the-client-from-the-deployment) over clear text an operator explicitly
   permitted reports that separately, at every startup, naming the permission rather than assuming it is still true.
 

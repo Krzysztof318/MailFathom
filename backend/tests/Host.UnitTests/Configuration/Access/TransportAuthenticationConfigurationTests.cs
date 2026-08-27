@@ -2,12 +2,14 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
+using MailFathom.Infrastructure.Secrets.Discovery;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Configuration.Access;
 
-/// <summary>Covers which entry's scopes a configured issuer is held to.</summary>
+/// <summary>Covers what the section reads across every entry at once: which issuer is held to which scopes, and which entry accepts a password.</summary>
 /// <remarks>
 /// This is where the entries' independence becomes a runtime lookup: the access policy and the insufficient-scope
 /// challenge both read the map this composes, keyed by the issuer a validated token carries. A regression attributing
@@ -16,6 +18,8 @@ namespace MailFathom.Host.UnitTests.Configuration.Access;
 /// </remarks>
 public sealed class TransportAuthenticationConfigurationTests
 {
+    private const string SectionName = "McpEndpoint";
+
     private const string Resource = "https://mail.example.test/mcp";
 
     private const string WorkforceIssuer = "https://sso.example.test/realms/mailfathom";
@@ -88,6 +92,64 @@ public sealed class TransportAuthenticationConfigurationTests
         // Assert
         Assert.Equal([WorkforceIssuer], requiredScopes.Keys);
     }
+
+    [Fact]
+    public void BasicMethodIn_NoEntryCarryingAPasswordBlock_ReportsNone()
+    {
+        // Arrange
+        TransportAuthenticationOptions[] methods = [new() { ApiKey = AnApiKey() }];
+
+        // Act, Assert
+        Assert.Null(TransportAuthenticationConfiguration.BasicMethodIn(methods));
+    }
+
+    /// <summary>The scheme is registered from the entry that carries the block, so it is the entry the read has to hand back rather than the block alone.</summary>
+    [Fact]
+    public void BasicMethodIn_AnEntryCarryingAPasswordBlock_ReportsThatEntry()
+    {
+        // Arrange
+        var basic = new TransportAuthenticationOptions { Basic = new BasicAuthenticationOptions() };
+        TransportAuthenticationOptions[] methods = [new() { ApiKey = AnApiKey() }, basic];
+
+        // Act, Assert
+        Assert.Same(basic, TransportAuthenticationConfiguration.BasicMethodIn(methods));
+    }
+
+    [Fact]
+    public void FindConfigurationErrors_OneEntryCarryingAPasswordBlock_ReportsNothing()
+    {
+        // Arrange
+        TransportAuthenticationOptions[] methods =
+        [
+            new() { ApiKey = AnApiKey() },
+            new() { Basic = new BasicAuthenticationOptions() },
+        ];
+
+        // Act, Assert
+        Assert.Empty(TransportAuthenticationConfiguration.FindConfigurationErrors(SectionName, methods, ProtectedSurface.Mail));
+    }
+
+    /// <summary>A password names a credential the deployment provisioned rather than an entry, so a second block would leave the grant decided by configuration order.</summary>
+    [Fact]
+    public void FindConfigurationErrors_ASecondEntryCarryingAPasswordBlock_IsRefusedNamingTheLaterEntry()
+    {
+        // Arrange
+        TransportAuthenticationOptions[] methods =
+        [
+            new() { Basic = new BasicAuthenticationOptions() },
+            new() { Basic = new BasicAuthenticationOptions() },
+        ];
+
+        // Act
+        var errors = TransportAuthenticationConfiguration.FindConfigurationErrors(SectionName, methods, ProtectedSurface.Mail);
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains($"{SectionName}:Authentication:1:{nameof(TransportAuthenticationOptions.Basic)}", reported, StringComparison.Ordinal);
+    }
+
+    private static ConfiguredSecret AnApiKey(string name = "workstation") =>
+        new() { Name = name, SecretReference = "plaintext:a-key" };
 
     private static OAuthValidationOptions EntryRequiring(
         IReadOnlyList<string> requiredScopes,

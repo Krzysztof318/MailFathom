@@ -15,6 +15,7 @@ using MailFathom.Cli.Administration.Folders;
 using MailFathom.Cli.Administration.Jobs;
 using MailFathom.Cli.Administration.Mailboxes;
 using MailFathom.Cli.Administration.Outbox;
+using MailFathom.Cli.Administration.Owners;
 using MailFathom.Cli.Administration.Rules;
 using MailFathom.Cli.Administration.Spam;
 using MailFathom.Cli.Transport;
@@ -1154,13 +1155,150 @@ internal sealed class AdminApiClient
             JsonContent.Create(request, CliJsonContext.Default.ConfigurationAdoptionRequest));
     }
 
+    /// <summary>Reads the owners a deployment holds records for.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The owner identifiers.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a roster.</exception>
+    internal Task<MailOwnerList> ReadOwnersAsync(string token, CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Get,
+            AdminEndpointRoutes.OwnersPath,
+            token,
+            CliJsonContext.Default.MailOwnerList,
+            cancellationToken);
+
+    /// <summary>Reads the credentials one owner signs in with.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="ownerId">The owner being asked about.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The listing, which is empty for an owner holding none.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a listing.</exception>
+    internal Task<OwnerCredentialList> ReadOwnerCredentialsAsync(
+        string token,
+        Guid ownerId,
+        CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Get,
+            AdminEndpointRoutes.OwnerCredentialsPath(ownerId),
+            token,
+            CliJsonContext.Default.OwnerCredentialList,
+            cancellationToken);
+
+    /// <summary>Provisions a credential one owner can sign in with.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="ownerId">The owner the credential authenticates.</param>
+    /// <param name="username">The name the owner will sign in with.</param>
+    /// <param name="password">The password the owner will type.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The identifier the new credential carries.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the credential or the request, could not be reached, or answered with anything but the new identifier.</exception>
+    /// <remarks>
+    /// The password is carried in the body rather than in the path or the query, which is where it would otherwise
+    /// reach a proxy log, a browser history, or the deployment's own request logging. It is sent once and never echoed:
+    /// the answer is an identifier, so a success reports nothing that was typed.
+    /// </remarks>
+    internal Task<OwnerCredentialProvisioned> ProvisionOwnerCredentialAsync(
+        string token,
+        Guid ownerId,
+        string username,
+        string password,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(username);
+        ArgumentNullException.ThrowIfNull(password);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.OwnerCredentialsPath(ownerId),
+            token,
+            CliJsonContext.Default.OwnerCredentialProvisioned,
+            cancellationToken,
+            JsonContent.Create(
+                new OwnerCredentialProvisioningRequest(username, password),
+                CliJsonContext.Default.OwnerCredentialProvisioningRequest));
+    }
+
+    /// <summary>Replaces one credential's password, which stops the previous one working at that instant.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="ownerId">The owner the credential belongs to.</param>
+    /// <param name="credentialId">The credential being rotated.</param>
+    /// <param name="password">The new password the owner will type.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>A task that completes once the new password stands.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the credential or the request, could not be reached, or answered with anything but an acceptance.</exception>
+    internal Task RotateOwnerCredentialPasswordAsync(
+        string token,
+        Guid ownerId,
+        Guid credentialId,
+        string password,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(password);
+
+        return this.RequestAsync(
+            HttpMethod.Put,
+            AdminEndpointRoutes.OwnerCredentialPasswordPath(ownerId, credentialId),
+            token,
+            cancellationToken,
+            JsonContent.Create(
+                new OwnerCredentialPasswordRequest(password),
+                CliJsonContext.Default.OwnerCredentialPasswordRequest));
+    }
+
+    /// <summary>Turns one credential on or off while it keeps its username and its password.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="ownerId">The owner the credential belongs to.</param>
+    /// <param name="credentialId">The credential being written.</param>
+    /// <param name="enabled">Whether it should authenticate requests.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>A task that completes once the state stands.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the credential or the request, could not be reached, or answered with anything but an acceptance.</exception>
+    internal Task SetOwnerCredentialEnabledAsync(
+        string token,
+        Guid ownerId,
+        Guid credentialId,
+        bool enabled,
+        CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Put,
+            AdminEndpointRoutes.OwnerCredentialEnablementPath(ownerId, credentialId),
+            token,
+            cancellationToken,
+            JsonContent.Create(
+                new OwnerCredentialEnablementRequest(enabled),
+                CliJsonContext.Default.OwnerCredentialEnablementRequest));
+
+    /// <summary>Removes one credential and frees the username it held.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="ownerId">The owner the credential belongs to.</param>
+    /// <param name="credentialId">The credential being removed.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>A task that completes once the credential is gone.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the credential or the request, could not be reached, or answered with anything but an acceptance.</exception>
+    internal Task DeleteOwnerCredentialAsync(
+        string token,
+        Guid ownerId,
+        Guid credentialId,
+        CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Delete,
+            AdminEndpointRoutes.OwnerCredentialPath(ownerId, credentialId),
+            token,
+            cancellationToken);
+
     /// <summary>Sends one credentialed request and reads the answer, or turns the refusal into a sentence.</summary>
     /// <remarks>
     /// <para>
-    /// Written once for every route that answers with a document, because the four refusals are the same four
-    /// everywhere: a credential this deployment does not accept, a port serving no administrative endpoint, a request
-    /// this deployment states a reason for refusing, and anything else. Repeating them per operation is how they drift
-    /// into saying different things about the same situation.
+    /// Written once for every route that answers with a document. The four refusals it answers to are
+    /// <see cref="SendCredentialedAsync" />'s, shared with the routes whose acceptance carries no body, because
+    /// repeating them per operation is how they drift into saying different things about the same situation.
     /// </para>
     /// <para>
     /// A stated refusal is repeated rather than replaced. The deployment knows why it refused — no provider declared, a
@@ -1191,43 +1329,14 @@ internal sealed class AdminApiClient
         string? overBoundRemedy = null)
         where TAnswer : class
     {
-        ArgumentNullException.ThrowIfNull(token);
-
-        await this.EnsureSettledAsync(token, cancellationToken);
-
-        using var request = new HttpRequestMessage(method, path) { Content = content };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
-        using var response = await this.SendAsync(request, cancellationToken, overBoundRemedy);
-
-        if (response.StatusCode is HttpStatusCode.Unauthorized)
-        {
-            throw new CliFailure(CredentialRefused);
-        }
-
-        if (response.StatusCode is HttpStatusCode.Forbidden)
-        {
-            throw new CliFailure(await DescribeForbiddenAsync(response, cancellationToken));
-        }
-
-        if (response.StatusCode is HttpStatusCode.NotFound)
-        {
-            throw new CliFailure(
-                absenceMessage
-                ?? $"The address answered, but serves no administrative endpoint at {path}. Check the port: the administrative endpoint binds a listener of its own, and it is disabled unless the deployment enabled it.");
-        }
-
-        if (response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Conflict)
-        {
-            throw new CliFailure(
-                await ReadRefusalAsync(response, cancellationToken)
-                ?? "The deployment refused the request without saying why.");
-        }
-
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new CliFailure($"The deployment answered {(int)response.StatusCode} and said nothing this command could act on.");
-        }
+        using var response = await this.SendCredentialedAsync(
+            method,
+            path,
+            token,
+            content,
+            absenceMessage,
+            overBoundRemedy,
+            cancellationToken);
 
         try
         {
@@ -1239,6 +1348,97 @@ internal sealed class AdminApiClient
             throw new CliFailure(
                 "The address answered, but not with anything MailFathom would send. Check that it is the administrative endpoint rather than another service on the same host.",
                 failure);
+        }
+    }
+
+    /// <summary>Sends one credentialed request whose acceptance is the whole answer.</summary>
+    /// <remarks>
+    /// The same four refusals as the reading above, reached through the same code so the two cannot come to say
+    /// different things about one situation. What differs is only what a success is: these routes answer with no body
+    /// at all, because there is nothing to report that the command did not send and a response echoing any part of it
+    /// would be a way to read a password back out of the deployment.
+    /// </remarks>
+    private async Task RequestAsync(
+        HttpMethod method,
+        string path,
+        string token,
+        CancellationToken cancellationToken,
+        HttpContent? content = null)
+    {
+        using var response = await this.SendCredentialedAsync(
+            method,
+            path,
+            token,
+            content,
+            absenceMessage: null,
+            overBoundRemedy: null,
+            cancellationToken);
+    }
+
+    /// <summary>Presents the credential, sends the request, and turns everything but a success into a sentence.</summary>
+    /// <returns>The successful response, which the caller disposes.</returns>
+    /// <remarks>
+    /// Written once for every route this command calls, because the four refusals are the same four everywhere: a
+    /// credential this deployment does not accept, a port serving no administrative endpoint, a request this deployment
+    /// states a reason for refusing, and anything else. A response is disposed here only on the paths that throw, so a
+    /// caller reading a body receives one that is still open.
+    /// </remarks>
+    private async Task<HttpResponseMessage> SendCredentialedAsync(
+        HttpMethod method,
+        string path,
+        string token,
+        HttpContent? content,
+        string? absenceMessage,
+        string? overBoundRemedy,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(token);
+
+        await this.EnsureSettledAsync(token, cancellationToken);
+
+        using var request = new HttpRequestMessage(method, path) { Content = content };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var response = await this.SendAsync(request, cancellationToken, overBoundRemedy);
+
+        try
+        {
+            if (response.StatusCode is HttpStatusCode.Unauthorized)
+            {
+                throw new CliFailure(CredentialRefused);
+            }
+
+            if (response.StatusCode is HttpStatusCode.Forbidden)
+            {
+                throw new CliFailure(await DescribeForbiddenAsync(response, cancellationToken));
+            }
+
+            if (response.StatusCode is HttpStatusCode.NotFound)
+            {
+                throw new CliFailure(
+                    absenceMessage
+                    ?? $"The address answered, but serves no administrative endpoint at {path}. Check the port: the administrative endpoint binds a listener of its own, and it is disabled unless the deployment enabled it.");
+            }
+
+            if (response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Conflict)
+            {
+                throw new CliFailure(
+                    await ReadRefusalAsync(response, cancellationToken)
+                    ?? "The deployment refused the request without saying why.");
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new CliFailure($"The deployment answered {(int)response.StatusCode} and said nothing this command could act on.");
+            }
+
+            return response;
+        }
+        catch
+        {
+            response.Dispose();
+
+            throw;
         }
     }
 

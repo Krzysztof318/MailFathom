@@ -80,9 +80,9 @@ internal sealed partial class ClientTransportSecurityWarning : IHostedService
         Level = LogLevel.Warning,
         Message = "The client endpoint is enabled on {ClientRoutePrefix} with no authentication method configured, so "
             + "anything that can reach this address is served the mailbox this deployment holds. Add an entry to "
-            + "ClientEndpoint:Authentication carrying an ApiKey block, a PublicKey block, an OAuth block, or any "
-            + "combination of them, unless the address is reachable only from this machine or from a network you "
-            + "control.")]
+            + "ClientEndpoint:Authentication carrying an ApiKey block, a PublicKey block, an OAuth block, a Basic block, "
+            + "or any combination of them, unless the address is reachable only from this machine or from a network "
+            + "you control.")]
     private partial void LogEndpointServedWithoutAuthentication(string clientRoutePrefix);
 
     [LoggerMessage(

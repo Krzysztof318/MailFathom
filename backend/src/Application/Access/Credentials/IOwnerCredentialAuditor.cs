@@ -1,0 +1,68 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using MailFathom.Domain.Access;
+
+namespace MailFathom.Application.Access.Credentials;
+
+/// <summary>Records that an administrator changed which passwords authenticate an owner.</summary>
+/// <remarks>
+/// <para>
+/// Provisioning, rotating, disabling, and deleting a credential each change who can reach one person's mail, and none
+/// of them leaves a trace in the mail graph. The record is the explanation an operator reads afterwards, and it names
+/// the act, the credential, the owner, and who asked — which is everything a later question about "when did this
+/// password stop working" can be answered from.
+/// </para>
+/// <para>
+/// It deliberately cannot carry the username. A username is a value a person types into a client and is the half of a
+/// credential that travels beside the password, so the identifier is what is written down instead: a listing resolves
+/// the two for whoever is entitled to read one, and a record that named both would put a live credential's name into
+/// whichever sink this port ends up writing to.
+/// </para>
+/// <para>
+/// The port is deliberately narrow for the reason <see cref="Folders.IMailFolderMappingChangeAuditor" /> is: the sink
+/// behind it is undecided — structured logging today, an audit table or an external evidence store once compliance
+/// evidence is collected — and one operation is all a caller may reach for.
+/// </para>
+/// </remarks>
+public interface IOwnerCredentialAuditor
+{
+    /// <summary>Records one change to an owner's credentials.</summary>
+    /// <param name="change">The act, the credential, the owner, and the administrator who asked.</param>
+    /// <param name="cancellationToken">Cancels writing the record.</param>
+    /// <returns>A task that completes once the record is durable for the configured sink.</returns>
+    Task RecordCredentialChangeAsync(OwnerCredentialChange change, CancellationToken cancellationToken);
+}
+
+/// <summary>One administrative change to the credentials an owner holds.</summary>
+/// <param name="Act">What was done.</param>
+/// <param name="CredentialId">The credential it was done to.</param>
+/// <param name="Owner">The owner the credential authenticates.</param>
+/// <param name="ActingAdministrator">What the administrative surface admitted the caller as, which is a configured credential's own name rather than a person.</param>
+/// <param name="OccurredAt">When the change committed.</param>
+public sealed record OwnerCredentialChange(
+    OwnerCredentialAct Act,
+    Guid CredentialId,
+    MailOwnerId Owner,
+    string ActingAdministrator,
+    DateTimeOffset OccurredAt);
+
+/// <summary>Which administrative act a credential record describes.</summary>
+public enum OwnerCredentialAct
+{
+    /// <summary>A credential was created with a password nothing can read back.</summary>
+    Provisioned = 0,
+
+    /// <summary>An existing credential's password was replaced, and the previous one stopped working at that instant.</summary>
+    PasswordRotated = 1,
+
+    /// <summary>An existing credential stopped authenticating requests while keeping its username and its password.</summary>
+    Disabled = 2,
+
+    /// <summary>A disabled credential started authenticating requests again under the password it already held.</summary>
+    Enabled = 3,
+
+    /// <summary>A credential was removed, which freed its username for another.</summary>
+    Deleted = 4,
+}

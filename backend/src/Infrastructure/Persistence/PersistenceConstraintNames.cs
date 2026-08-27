@@ -437,4 +437,16 @@ internal static class PersistenceConstraintNames
     /// the refusal an insert of a second row under one label produces is worth naming the index it came from.
     /// </remarks>
     internal const string OwnerAccountDisplayNameUniqueIndexName = "ix_settings_accounts_display_name";
+
+    /// <summary>The index that keeps one credential username to one owner across the deployment.</summary>
+    /// <remarks>
+    /// Stated rather than left to convention because the store reads it: an insert that violates it is a username
+    /// another credential already holds, which is an answer an operator acts on rather than a provider failure. It is
+    /// deployment-wide rather than per owner, because a request presents a username and nothing else.
+    /// </remarks>
+    internal const string OwnerPasswordCredentialUsernameUniqueIndexName = "ix_owner_password_credentials_username";
+
+    /// <summary>The index every administrative listing of one owner's credentials is answered from.</summary>
+    /// <remarks>Stated because it covers the owner and the provisioning instant together, which is the listing's own order, and a name composed from the two properties would say nothing about that being why.</remarks>
+    internal const string OwnerPasswordCredentialOwnerIndexName = "ix_owner_password_credentials_owner_created_at";
 }

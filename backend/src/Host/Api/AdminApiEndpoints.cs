@@ -110,6 +110,13 @@ namespace MailFathom.Host.Api;
 /// should bound who may add to it, read it out, or erase somebody from it.
 /// </para>
 /// <para>
+/// Then come the passwords an owner signs in with, which <see cref="OwnerCredentialEndpoints" /> describes: listing
+/// the owners this deployment holds, and provisioning, listing, rotating, disabling, and removing one owner's
+/// credentials. They are here because a credential this deployment keeps a record of has to be administered over a
+/// route rather than edited into a configuration file, and because deciding who can read a person's mail belongs under
+/// the credential that already bounds placing a mailbox owner's long-lived one.
+/// </para>
+/// <para>
 /// The last of all are the deployment's own settings, which <see cref="ConfigurationEndpoints" /> describes: reading
 /// what it is configured to do and where each value is decided, changing a setting, editing the persisted document as
 /// one transaction, and taking a decision the files were making into the database. They are here because configuration
@@ -171,6 +178,7 @@ internal static class AdminApiEndpoints
         api.MapOutbox();
         api.MapMailFolderErasure();
         api.MapContacts();
+        api.MapOwnerCredentials();
         api.MapConfiguration();
 
         return api;

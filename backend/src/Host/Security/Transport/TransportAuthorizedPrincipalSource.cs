@@ -65,9 +65,12 @@ namespace MailFathom.Host.Security.Transport;
 /// that decides it rather than what the request carried.
 /// </para>
 /// <para>
-/// The owner comes from a startup gate rather than from a credential, because a credential is configured today and
-/// names no owner. When credentials become records of an owner's own, this reads the admitted credential's owner and
-/// nothing above it changes.
+/// One credential answers that question for itself. A username and password are a record of one owner's own, so a
+/// principal carrying <see cref="TransportCallerOwner" />'s claim acts for the owner the credential named rather than
+/// for whoever the deployment serves. Every other credential is something the deployment configured or an
+/// authorization server issued and names nobody, so the surface decides as above and the owner comes from the startup
+/// gate. The two are read apart rather than merged, because widening a credential that does name an owner to the
+/// deployment's owner would be the one mistake this distinction exists to prevent.
 /// </para>
 /// </remarks>
 internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalSource
@@ -130,24 +133,33 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
         var path = context.Request.Path;
 
         return TransportCallerIdentity.NameOf(context.User) is { } identity
-            ? this.AdmittedCallerOn(path, identity, TransportGrant.PermissionsCarriedBy(context.User))
+            ? this.AdmittedCallerOn(
+                path,
+                identity,
+                TransportGrant.PermissionsCarriedBy(context.User),
+                TransportCallerOwner.CarriedBy(context.User))
             : this.UnnarrowedCallerOn(path);
     }
 
-    /// <summary>Describes a caller a scheme validated, acting for the owner the surface it reached serves.</summary>
+    /// <summary>Describes a caller a scheme validated, acting for the owner its credential named or the one the surface it reached serves.</summary>
     /// <remarks>
     /// The two mail-serving surfaces answer one person about their own mail, so a caller admitted there is admitted for
-    /// the owner this deployment serves. The administrative surface answers for the deployment, so a caller admitted
-    /// there acts for no owner and is refused by every use case scoped to one — which is what makes the deployment
-    /// administrator a principal rather than a grant. A path neither surface serves is neither, and a caller cannot
-    /// reach one: the routes this host maps all belong to a surface.
+    /// an owner: the one their credential named where it named one, and otherwise the one this deployment serves. The
+    /// administrative surface answers for the deployment, so a caller admitted there acts for no owner and is refused
+    /// by every use case scoped to one — which is what makes the deployment administrator a principal rather than a
+    /// grant, and why a credential naming an owner does not turn one into an owner's caller there. A path neither
+    /// surface serves is neither, and a caller cannot reach one: the routes this host maps all belong to a surface.
     /// </remarks>
     private AuthorizedPrincipal AdmittedCallerOn(
         PathString path,
         string identity,
-        IEnumerable<MailFathomPermission> grantedPermissions) =>
+        IEnumerable<MailFathomPermission> grantedPermissions,
+        MailOwnerId? credentialOwner) =>
         ServesOneOwnersMail(path)
-            ? AuthorizedPrincipal.CallerActingFor(this.deploymentOwner.Owner, identity, grantedPermissions)
+            ? AuthorizedPrincipal.CallerActingFor(
+                credentialOwner ?? this.deploymentOwner.Owner,
+                identity,
+                grantedPermissions)
             : AuthorizedPrincipal.Caller(identity, grantedPermissions);
 
     /// <summary>Reports whether a surface answers one person about their own mail rather than answering for the deployment.</summary>
@@ -212,5 +224,6 @@ internal sealed class TransportAuthorizedPrincipalSource : IAuthorizedPrincipalS
     private AuthorizedPrincipal WholeSurfaceCaller(TransportSurface surface, PathString path) => this.AdmittedCallerOn(
         path,
         TransportCallerIdentity.AnonymousCaller,
-        MailFathomPermission.PublishedFor(surface.GrantedSurface));
+        MailFathomPermission.PublishedFor(surface.GrantedSurface),
+        credentialOwner: null);
 }
