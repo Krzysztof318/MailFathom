@@ -26,6 +26,14 @@ namespace MailFathom.IntegrationTests.Persistence;
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
 public sealed class OrchestratedOwnerSettingsDocumentTests(MailFathomOrchestrationFixture orchestration)
 {
+    /// <summary>The label the migration chain backfills onto the owner an upgraded deployment already served.</summary>
+    /// <remarks>
+    /// <c>docs/operations/database-schema.md</c> publishes this word to operators, and the only thing that writes it
+    /// is this change's own backfill, so a migration writing some other label is a documented fact that quietly
+    /// stopped being true.
+    /// </remarks>
+    private const string ProvisionedOwnerLabel = "owner";
+
     /// <summary>The provisioned owner is read as an envelope with the empty document their row was created with.</summary>
     [Fact]
     public async Task ReadAsync_TheOwnerTheDeploymentHolds_IsOneRowCarryingItsLabelVersionAndMarker()
@@ -52,7 +60,7 @@ public sealed class OrchestratedOwnerSettingsDocumentTests(MailFathomOrchestrati
 
         // Assert
         Assert.NotNull(record);
-        Assert.False(string.IsNullOrWhiteSpace(record.DisplayName));
+        Assert.Equal(ProvisionedOwnerLabel, record.DisplayName);
         Assert.Equal("{}", record.Json);
         Assert.True(record.Version > 0);
         Assert.False(record.WrittenAtRuntime);
@@ -125,6 +133,51 @@ public sealed class OrchestratedOwnerSettingsDocumentTests(MailFathomOrchestrati
         {
             await OrchestratedForeignOwner.EraseAsync(services, holder);
             await OrchestratedForeignOwner.EraseAsync(services, contender);
+        }
+    }
+
+    /// <summary>The marker is read as the row holds it, so a written record is told from one nobody has written.</summary>
+    /// <remarks>
+    /// The column exists to separate an unfilled row from one an owner emptied — the same empty document, different
+    /// facts — and a class that only ever observed it clear would stay green with the marker dropped from the
+    /// projection or read out of the wrong ordinal. So it is set on a foreign owner and read back through the port,
+    /// beside the assertion that the provisioned owner's is clear.
+    /// </remarks>
+    [Fact]
+    public async Task ReadAsync_AnOwnerWhoseDocumentWasWrittenAtRuntime_CarriesTheMarkerSet()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var written = Guid.NewGuid();
+
+        try
+        {
+            await OrchestratedForeignOwner.ProvisionAsync(services, written, cancellationToken);
+
+            await services.CommitAsync(
+                async (_, session, token) =>
+                {
+                    var context = await EfCorePersistenceSessionAccessor.JoinAsync(session, token);
+                    var record = await context.OwnerAccounts.SingleAsync(owner => owner.Id == written, token);
+
+                    record.DocumentWrittenAtRuntime = true;
+                },
+                cancellationToken);
+
+            // Act
+            var record = await services.InScopeAsync(
+                (scope, token) => scope.GetRequiredService<IOwnerSettingsDocumentReader>()
+                    .ReadAsync(MailOwnerId.Create(written), token),
+                cancellationToken);
+
+            // Assert
+            Assert.NotNull(record);
+            Assert.True(record.WrittenAtRuntime);
+        }
+        finally
+        {
+            await OrchestratedForeignOwner.EraseAsync(services, written);
         }
     }
 

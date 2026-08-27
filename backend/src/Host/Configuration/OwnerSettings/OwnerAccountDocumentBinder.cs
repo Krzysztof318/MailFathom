@@ -133,9 +133,10 @@ internal sealed class OwnerAccountDocumentBinder(PersistedSecretMaterial secretM
     /// </para>
     /// <para>
     /// The path is taken from the last marker rather than the first, because a value quoted before it may contain
-    /// anything, including the marker itself. What comes out is then checked to be a configuration path — segments
-    /// separated by colons and nothing else — so that a message shaped differently by a later runtime falls back to
-    /// the general sentence instead of putting an unexamined fragment in front of a reader.
+    /// anything, including the marker itself. Neither fragment goes back unexamined: the path has to be a
+    /// configuration path — segments separated by colons and nothing else — and the property names have to be the
+    /// quoted list the framework writes, carrying no control character. What fails either test falls back to the
+    /// general sentence, which is also what a message shaped differently by a later runtime gets.
     /// </para>
     /// </remarks>
     private static string BindingRefusalFor(InvalidOperationException refusal)
@@ -147,9 +148,10 @@ internal sealed class OwnerAccountDocumentBinder(PersistedSecretMaterial secretM
         var message = refusal.Message;
 
         if (message.Contains(unknownProperties, StringComparison.Ordinal)
-            && message.LastIndexOf(": ", StringComparison.Ordinal) is var named and > 0)
+            && message.LastIndexOf(": ", StringComparison.Ordinal) is var named and > 0
+            && QuotedNamesIn(message[(named + 2)..]) is { } names)
         {
-            return $"The owner record names {message[(named + 2)..]}, which is not a setting an owner's record carries. Remove it, or correct the spelling of the setting it was meant to be.";
+            return $"The owner record names {names}, which is not a setting an owner's record carries. Remove it, or correct the spelling of the setting it was meant to be.";
         }
 
         var conversion = refusal.InnerException?.Message ?? string.Empty;
@@ -168,6 +170,25 @@ internal sealed class OwnerAccountDocumentBinder(PersistedSecretMaterial secretM
 
         return "The owner record does not bind to an owner's settings. Check it against the settings an owner's record carries.";
     }
+
+    /// <summary>Gets the named properties back when they are safe to repeat, and nothing when they are not.</summary>
+    /// <remarks>
+    /// What sits in this fragment is the JSON property names of a <c>settings_accounts</c> row, which is text whoever
+    /// wrote the row chose. A name carrying a newline would put a line of its own choosing into the refusal an
+    /// administrator reads and into any log of it, and a name carrying the marker this fragment was cut at would leave
+    /// the cut inside the name, so what came back would be a fragment the record does not hold. The framework quotes
+    /// each name, which is what makes the second detectable: a fragment cut inside a name no longer opens with the
+    /// quotation mark. Anything that fails either test goes back as nothing and the general sentence answers instead,
+    /// and the bound is on the whole fragment rather than on each name because a page of names is as unreadable as one
+    /// long one.
+    /// </remarks>
+    private static string? QuotedNamesIn(string candidate) =>
+        candidate.Length is > 1 and <= 512
+        && candidate.StartsWith('\'')
+        && candidate.EndsWith('\'')
+        && !candidate.Any(char.IsControl)
+            ? candidate
+            : null;
 
     /// <summary>Gets whether a fragment is a configuration path and therefore safe to repeat back.</summary>
     private static bool IsSettingPath(string candidate) =>

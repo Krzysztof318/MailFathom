@@ -148,6 +148,27 @@ public sealed class OwnerAccountDocumentBinderTests
     }
 
     /// <summary>
+    /// A property name is text whoever wrote the row chose, so one carrying a newline is not repeated back: the
+    /// refusal an administrator reads, and any log of it, would otherwise carry a line of that record's choosing.
+    /// </summary>
+    [Fact]
+    public void Bind_PropertyNameCarryingAControlCharacter_IsRefusedWithoutRepeatingTheName()
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind("""{ "MailAccounts": [], "quiet\nDatabase error: reached": 1 }""");
+
+        // Assert
+        Assert.False(binding.IsBound);
+        var refusal = Assert.Single(binding.Refusals);
+        Assert.DoesNotContain("Database error", refusal, StringComparison.Ordinal);
+        Assert.DoesNotContain('\n', refusal);
+        Assert.Contains("does not bind to an owner's settings", refusal, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A value of the wrong type names the setting to correct and never the value, which is where the framework puts
     /// it: the failure it raises quotes what it could not convert, and the setting whose value that is may be a
     /// mailbox password rather than a port.
