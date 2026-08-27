@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Host.Configuration.Mail;
 
@@ -33,9 +34,17 @@ internal sealed class DeclaredOwnerOptions
     public const string SectionName = "Accounts";
 
     /// <summary>Gets or sets the identifier this owner is declared under, written as a UUID.</summary>
+    /// <remarks>
+    /// The attribute states what a start already refuses — a declaration carrying no identifier does not start — for
+    /// the reader that cannot run one: the published configuration surface derives whether a key is required from it,
+    /// and this collection is read by hand rather than through the validated options pipeline.
+    /// </remarks>
+    [Required]
     public string Id { get; set; } = string.Empty;
 
     /// <summary>Gets or sets the label this owner is told apart by, which is unique across the deployment.</summary>
+    /// <remarks>Required for the reason <see cref="Id" /> is, and refused by the same rules.</remarks>
+    [Required]
     public string DisplayName { get; set; } = string.Empty;
 
     /// <summary>Gets or sets the mail accounts this owner owns, which may be none.</summary>

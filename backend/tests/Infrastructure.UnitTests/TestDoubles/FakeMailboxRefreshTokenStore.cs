@@ -21,7 +21,12 @@ internal sealed class FakeMailboxRefreshTokenStore(string? storedToken = null) :
     public Exception? SaveFailure { get; set; }
 
     /// <summary>Gets the accounts a token was stored for, in the order the stores happened.</summary>
-    public List<string> StoredAccountIds { get; } = [];
+    /// <remarks>
+    /// The whole identity rather than the identifier alone, because the owner half is what decides whose row a
+    /// credential lands on: a store that recorded the identifier would let one owner's refresh token be written onto
+    /// another owner's account with nothing to assert against.
+    /// </remarks>
+    public List<MailAccountIdentity> StoredAccounts { get; } = [];
 
     /// <summary>Gets the token last stored, read as text so it survives the caller erasing its own copy.</summary>
     public string? LastStoredToken { get; private set; }
@@ -45,7 +50,7 @@ internal sealed class FakeMailboxRefreshTokenStore(string? storedToken = null) :
             return Task.FromException(failure);
         }
 
-        this.StoredAccountIds.Add(account.Id.Value);
+        this.StoredAccounts.Add(account);
         this.LastStoredToken = refreshToken.RevealAsString();
         this.currentToken = this.LastStoredToken;
 

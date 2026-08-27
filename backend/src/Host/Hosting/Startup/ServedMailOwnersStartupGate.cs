@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
+using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.OwnerSettings;
 using MailFathom.Infrastructure.Persistence.Owners;
@@ -52,7 +53,6 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
     private readonly HostStartupGates startupGates;
     private readonly McpEndpointOptions mcpEndpointSettings;
     private readonly ClientEndpointOptions clientEndpointSettings;
-    private readonly TimeProvider timeProvider;
     private readonly ILogger<ServedMailOwnersStartupGate> logger;
 
     /// <summary>Initializes a new served-owner startup gate.</summary>
@@ -62,7 +62,6 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
     /// <param name="startupGates">The tracker this gate reports its completion to, which is what the startup probe reads.</param>
     /// <param name="mcpEndpointSettings">The MCP endpoint settings startup was composed from.</param>
     /// <param name="clientEndpointSettings">The client endpoint settings startup was composed from.</param>
-    /// <param name="timeProvider">Supplies the date a declared synchronization bound is read against.</param>
     /// <param name="logger">The startup logger.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public ServedMailOwnersStartupGate(
@@ -72,7 +71,6 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
         HostStartupGates startupGates,
         IOptions<McpEndpointOptions> mcpEndpointSettings,
         IOptions<ClientEndpointOptions> clientEndpointSettings,
-        TimeProvider timeProvider,
         ILogger<ServedMailOwnersStartupGate> logger)
     {
         ArgumentNullException.ThrowIfNull(scopeFactory);
@@ -81,7 +79,6 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
         ArgumentNullException.ThrowIfNull(startupGates);
         ArgumentNullException.ThrowIfNull(mcpEndpointSettings);
         ArgumentNullException.ThrowIfNull(clientEndpointSettings);
-        ArgumentNullException.ThrowIfNull(timeProvider);
 
         this.scopeFactory = scopeFactory;
         this.configuration = configuration;
@@ -89,7 +86,6 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
         this.startupGates = startupGates;
         this.mcpEndpointSettings = mcpEndpointSettings.Value;
         this.clientEndpointSettings = clientEndpointSettings.Value;
-        this.timeProvider = timeProvider;
         this.logger = logger;
     }
 
@@ -116,6 +112,8 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
             : await this.ServeDeclaredOwnersAsync(scope, declared, held, cancellationToken);
 
         this.RefuseSeveralOwnersOnAnOwnerFacingSurface(served);
+
+        await this.RefuseUnusableMailAccountSecretsAsync(scope, served, cancellationToken);
 
         this.servedOwners.Resolved(served);
 
@@ -149,9 +147,32 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
         {
             var generated = MailOwnerId.Create(Guid.NewGuid());
 
-            await scope.ServiceProvider
+            var recorded = await scope.ServiceProvider
                 .GetRequiredService<IMailOwnerProvisioning>()
                 .ProvisionAsync(generated, SoleOwnerDisplayName, cancellationToken);
+
+            if (!recorded)
+            {
+                // Another replica of this deployment recorded the sole owner first, under an identifier it minted
+                // rather than this one. Serving the identifier this process generated would hang every message on a
+                // row that is not there, so the owner the deployment actually holds is read back and served instead.
+                var winners = await scope.ServiceProvider
+                    .GetRequiredService<IMailOwnerDirectory>()
+                    .ReadOwnersAsync(2, cancellationToken);
+
+                if (winners is not [var winner])
+                {
+                    throw DeploymentMailOwnerUnresolvedException.SeveralOwners();
+                }
+
+                return winner.DocumentWrittenAtRuntime
+                    ? await this.ServeFromTheOwnDocumentAsync(scope, winner, cancellationToken)
+                    : new ServedMailOwner(
+                        winner.Owner,
+                        winner.DisplayName,
+                        MailOwnerAccountSource.DeploymentSection,
+                        MailAccounts: []);
+            }
 
             this.LogSoleOwnerRecorded();
 
@@ -181,20 +202,26 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
         var provisioning = scope.ServiceProvider.GetRequiredService<IMailOwnerProvisioning>();
         var served = new List<ServedMailOwner>(declared.Count);
 
+        // The roster this start has actually reached rather than the snapshot it opened with. Every write below is
+        // applied to it, because the label check reads it: a file that renames one owner and gives their old label to
+        // another would otherwise be refused for a label nobody carries any more, and the refusal would clear itself on
+        // the next start — which is the proof that the file was legal all along.
+        var roster = held.ToList();
+
         foreach (var declaration in declared)
         {
             // Every declaration has already been proven to carry one, by the composed rules a start refuses before its
             // container exists, so the identifier is read rather than judged again here.
             var owner = MailOwnerId.Create(DeclaredOwners.TryReadIdentifier(declaration.Id)!.Value);
             var label = declaration.DisplayName.Trim();
-            var record = held.FirstOrDefault(candidate => candidate.Owner == owner);
+            var record = roster.FirstOrDefault(candidate => candidate.Owner == owner);
 
             // A label another owner is already recorded under is what the unique index refuses, whichever of the two
             // writes below would meet it. Refusing here is what turns a constraint violation into a sentence, and which
             // sentence it is depends on whether this owner has a row at all: without one the declaration is the same
             // person written down twice under a new identifier, and their mail would stay on the row nothing serves;
             // with one it is a label moving onto an owner while its holder still carries it.
-            if (held.Any(candidate =>
+            if (roster.Any(candidate =>
                 candidate.Owner != owner && StringComparer.Ordinal.Equals(candidate.DisplayName, label)))
             {
                 throw record is null
@@ -204,7 +231,14 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
 
             if (record is null)
             {
-                await provisioning.ProvisionAsync(owner, label, cancellationToken);
+                // False is the label having been taken between the roster being read and this insert reaching the
+                // table, which no reading of a snapshot could have refused earlier.
+                if (!await provisioning.ProvisionAsync(owner, label, cancellationToken))
+                {
+                    throw DeploymentMailOwnerUnresolvedException.OwnerLabelHeldByAnother(label);
+                }
+
+                roster.Add(new MailOwnerRecord(owner, label, DocumentWrittenAtRuntime: false));
                 served.Add(new ServedMailOwner(owner, label, MailOwnerAccountSource.OwnerDeclaration, declaration.MailAccounts));
 
                 continue;
@@ -213,6 +247,8 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
             if (!StringComparer.Ordinal.Equals(record.DisplayName, label))
             {
                 await provisioning.RelabelAsync(owner, label, cancellationToken);
+
+                roster[roster.IndexOf(record)] = record with { DisplayName = label };
             }
 
             served.Add(record.DocumentWrittenAtRuntime
@@ -251,19 +287,48 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
             throw DeploymentMailOwnerUnresolvedException.OwnerRecordUnusable(record.DisplayName, binding.Refusals);
         }
 
-        var windowErrors = OwnerMailAccountRules.FindSynchronizationWindowErrors(
-            bound.MailAccounts,
-            DateOnly.FromDateTime(this.timeProvider.GetUtcNow().UtcDateTime));
+        return new ServedMailOwner(
+            record.Owner,
+            record.DisplayName,
+            MailOwnerAccountSource.OwnerDocument,
+            bound.MailAccounts);
+    }
 
-        return windowErrors.Count > 0
-            ? throw DeploymentMailOwnerUnresolvedException.OwnerRecordUnusable(
-                record.DisplayName,
-                [.. windowErrors.Select(error => error.ErrorMessage ?? "A declared synchronization bound is unusable.")])
-            : new ServedMailOwner(
-                record.Owner,
-                record.DisplayName,
-                MailOwnerAccountSource.OwnerDocument,
-                bound.MailAccounts);
+    /// <summary>Refuses an owner whose own mail accounts carry a secret or a trust anchor this deployment cannot use.</summary>
+    /// <remarks>
+    /// The deployment's own section is proven by the secret gate ahead of this one, which walks the bound mail
+    /// snapshot; an owner's mailboxes are not in that snapshot and are not bound when it runs, so without this they
+    /// would start a host clean and fail one connection at a time, while the identical declaration in
+    /// <c>MailSynchronization:Accounts</c> fails the start. It runs here rather than there because it is the roster
+    /// that says which accounts belong to whom, and the roster is what this gate establishes.
+    /// </remarks>
+    private async Task RefuseUnusableMailAccountSecretsAsync(
+        AsyncServiceScope scope,
+        IReadOnlyList<ServedMailOwner> served,
+        CancellationToken cancellationToken)
+    {
+        var validator = scope.ServiceProvider.GetRequiredService<SecretConfigurationValidator>();
+
+        foreach (var (index, owner) in served.Index())
+        {
+            if (owner.Source == MailOwnerAccountSource.DeploymentSection)
+            {
+                continue;
+            }
+
+            // The path an operator would edit, which is not the same place for the two sources: a declared owner is a
+            // numbered entry of the file's own collection, and an adopted one has no configuration path at all.
+            var path = owner.Source == MailOwnerAccountSource.OwnerDeclaration
+                ? $"{DeclaredOwnerOptions.SectionName}:{index}"
+                : "document";
+
+            var errors = await validator.FindOwnerMailAccountErrorsAsync(path, owner.MailAccounts, cancellationToken);
+
+            if (errors.Count > 0)
+            {
+                throw DeploymentMailOwnerUnresolvedException.OwnerMailAccountsUnusable(owner.DisplayName, errors);
+            }
+        }
     }
 
     /// <summary>Refuses a deployment whose owner-facing surfaces could not say which owner a caller acts for.</summary>

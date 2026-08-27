@@ -26,9 +26,15 @@ public interface IMailOwnerProvisioning
     /// <param name="owner">The identity the owner is declared under, which every mail account of theirs will name.</param>
     /// <param name="displayName">The label the owner is told apart by.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns>A task that completes once the row is there.</returns>
+    /// <returns><see langword="true" /> when the deployment holds this owner once the write has run, <see langword="false" /> when the label belongs to somebody else.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody, or <paramref name="displayName" /> is <see langword="null" />, empty, or white space.</exception>
-    Task ProvisionAsync(MailOwnerId owner, string displayName, CancellationToken cancellationToken);
+    /// <remarks>
+    /// The answer is what the deployment holds afterwards rather than whether this call was the one that wrote it, so
+    /// a replica that lost the race to an identical declaration is told the same thing as the one that won. False is
+    /// the one outcome a caller has to act on: the label is unique across the deployment, so it says another owner has
+    /// taken it and this owner has no row — which is a start that would otherwise serve mail against a missing one.
+    /// </remarks>
+    Task<bool> ProvisionAsync(MailOwnerId owner, string displayName, CancellationToken cancellationToken);
 
     /// <summary>Puts the label a declaration now carries onto the row of an owner this deployment already holds.</summary>
     /// <param name="owner">The owner whose row is relabelled.</param>

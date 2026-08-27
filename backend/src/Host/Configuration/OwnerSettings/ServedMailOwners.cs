@@ -35,29 +35,45 @@ internal sealed class ServedMailOwners : IDeploymentMailOwnerSource
 {
     private readonly Lock mutex = new();
 
+    /// <summary>The roster the startup gate established, or nothing while it has not run.</summary>
+    /// <remarks>
+    /// Absence is what is being stored rather than an empty roster, which is why the field is nullable: a deployment
+    /// before its gate has run serves nobody <em>yet</em>, and an empty list would read as a deployment that serves
+    /// nobody at all. Every read and write of it is taken under <see cref="mutex" />.
+    /// </remarks>
+    private IReadOnlyList<ServedMailOwner>? resolvedOwners;
+
     /// <summary>Gets every owner this deployment serves, in the order the roster was established in.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the startup gate that establishes the roster has not yet run.</exception>
-    /// <remarks>
-    /// What the backing field holds before the gate has run is absence rather than an empty roster, which is why the
-    /// getter refuses instead of answering: a deployment before its gate has run serves nobody <em>yet</em>, and an
-    /// empty list would read as a deployment that serves nobody at all. Every read and write of it is taken under
-    /// <see cref="mutex" />.
-    /// </remarks>
     public IReadOnlyList<ServedMailOwner> Owners
     {
         get
         {
             lock (this.mutex)
             {
-                return field
+                return this.resolvedOwners
                     ?? throw new InvalidOperationException(
                         "The owners this deployment serves are read before the startup gate that establishes them has "
                         + "run. Either the process is still starting, which the startup probe reports until every gate "
                         + "has completed, or the caller is composed outside the host's own startup ordering.");
             }
         }
+    }
 
-        private set;
+    /// <summary>Gets the mail accounts every served owner declares, across the whole roster.</summary>
+    /// <returns>The accounts, empty while the startup gate that establishes the roster has not run.</returns>
+    /// <remarks>
+    /// The one read that answers rather than refusing before the gate, because its callers judge a candidate or a
+    /// reload rather than serve mail: a rule set is judged against the accounts that exist, and none exist yet. What
+    /// keeps that from being a hole is that the same judgement runs again over the composed configuration, where the
+    /// owners are read from the file directly and the roster is not consulted at all.
+    /// </remarks>
+    public IReadOnlyList<MailSynchronizationAccountOptions> MailAccountsOfEveryOwner()
+    {
+        lock (this.mutex)
+        {
+            return [.. (this.resolvedOwners ?? []).SelectMany(owner => owner.MailAccounts)];
+        }
     }
 
     /// <inheritdoc />
@@ -107,7 +123,7 @@ internal sealed class ServedMailOwners : IDeploymentMailOwnerSource
 
         lock (this.mutex)
         {
-            this.Owners = owners;
+            this.resolvedOwners = owners;
         }
     }
 }

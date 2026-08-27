@@ -10,8 +10,8 @@
 # The framework-shaped sections are absent because they are not MailFathom's: Logging, ConnectionStrings, and
 # the Kestrel endpoints, which this host refuses rather than binds.
 #
-Accounts:<index>:DisplayName = string (optional)
-Accounts:<index>:Id = string (optional)
+Accounts:<index>:DisplayName = string (required)
+Accounts:<index>:Id = string (required)
 Accounts:<index>:MailAccounts:<index>:AccountId = string (required)
 Accounts:<index>:MailAccounts:<index>:AnsweringAuditTrail:Enabled = bool (optional)
 Accounts:<index>:MailAccounts:<index>:AnsweringAuditTrail:Retention = TimeSpan (optional)

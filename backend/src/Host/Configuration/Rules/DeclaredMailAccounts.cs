@@ -5,6 +5,7 @@
 using MailFathom.Application.Rules.Actions;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.OwnerSettings;
 
 namespace MailFathom.Host.Configuration.Rules;
 
@@ -40,6 +41,12 @@ internal static class DeclaredMailAccounts
     /// <param name="configuration">The configuration the host is composing itself from.</param>
     /// <returns>The accounts, in the order they are declared.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// Both places a mailbox is declared are read: the deployment's own section, and each owner's <c>MailAccounts</c>
+    /// under the top-level owner collection. A deployment declaring owners is refused a non-empty
+    /// <c>MailSynchronization:Accounts</c>, so exactly one of the two is ever populated — and a rule judged against
+    /// only the first would refuse every scope such a file names while naming the section that file may not fill.
+    /// </remarks>
     public static IReadOnlyCollection<DeclaredMailAccount> ReadFrom(IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(configuration);
@@ -49,6 +56,12 @@ internal static class DeclaredMailAccounts
             .. configuration
                 .GetSection($"{MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.Accounts)}")
                 .GetChildren()
+                .Concat(configuration
+                    .GetSection(DeclaredOwnerOptions.SectionName)
+                    .GetChildren()
+                    .SelectMany(owner => owner
+                        .GetSection(nameof(DeclaredOwnerOptions.MailAccounts))
+                        .GetChildren()))
                 .Select(ReadAccount)
                 .OfType<DeclaredMailAccount>(),
         ];
@@ -58,6 +71,12 @@ internal static class DeclaredMailAccounts
     /// <param name="settings">The synchronization configuration a reload published, or the one currently in force.</param>
     /// <returns>The accounts, in the order they are declared.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="settings" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The owners' own declarations come off the roster the snapshot carries rather than out of a section, because
+    /// that is where an owner's mailboxes are once the startup gate has resolved them — an owner read from their own
+    /// document has no section at all. A reload runs behind that gate, so the roster is established by the time this
+    /// is asked.
+    /// </remarks>
     public static IReadOnlyCollection<DeclaredMailAccount> ReadFrom(MailSynchronizationOptions settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -65,6 +84,7 @@ internal static class DeclaredMailAccounts
         return
         [
             .. settings.Accounts
+                .Concat(settings.ServedOwners?.MailAccountsOfEveryOwner() ?? [])
                 .Where(account => !string.IsNullOrWhiteSpace(account.AccountId))
                 .Select(account => new DeclaredMailAccount(
                     account.AccountId.Trim(),

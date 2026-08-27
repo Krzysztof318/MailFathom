@@ -30,6 +30,10 @@ public sealed class MailOAuthAccessTokenSourceTests
 {
     private const string Account = "primary";
 
+    /// <summary>The account in full, which is what a stored credential is recorded under.</summary>
+    private static readonly MailAccountIdentity AccountIdentity =
+        MailAccountIdentity.Create(SyntheticMailOwner.Another, MailAccountId.Create(Account));
+
     /// <summary>A public client sends no field at all; an empty one is a value the server evaluates and refuses.</summary>
     [Fact]
     public async Task GetAccessTokenAsync_PublicClient_SendsNoClientSecretFieldRatherThanAnEmptyOne()
@@ -141,7 +145,7 @@ public sealed class MailOAuthAccessTokenSourceTests
         await context.Source.GetAccessTokenAsync(Account, CancellationToken.None);
 
         // Assert
-        Assert.Equal([Account], context.RefreshTokenStore.StoredAccountIds);
+        Assert.Equal([AccountIdentity], context.RefreshTokenStore.StoredAccounts);
         Assert.Equal("a-rotated-refresh-token", context.RefreshTokenStore.LastStoredToken);
     }
 
@@ -158,7 +162,7 @@ public sealed class MailOAuthAccessTokenSourceTests
         await context.Source.GetAccessTokenAsync(Account, CancellationToken.None);
 
         // Assert
-        Assert.Empty(context.RefreshTokenStore.StoredAccountIds);
+        Assert.Empty(context.RefreshTokenStore.StoredAccounts);
     }
 
     /// <summary>
@@ -225,12 +229,14 @@ public sealed class MailOAuthAccessTokenSourceTests
             .Returns(_ => new HttpClient(handler, disposeHandler: false));
 
         // The owner comes off the account this deployment serves rather than off a sole owner, because a deployment may
-        // serve several and only the catalog knows whose each configured mailbox is.
+        // serve several and only the catalog knows whose each configured mailbox is. It is deliberately not the first
+        // owner a deployment holds: an implementation that reached for a sole owner would answer with that one, and
+        // seeding it here is what makes the stored credential's owner an assertion rather than a coincidence.
         var accountCatalog = Substitute.For<IDeploymentMailAccountCatalog>();
         accountCatalog.ServedAccounts.Returns(
         [
             new ServedMailAccount(
-                SyntheticMailOwner.Deployment,
+                SyntheticMailOwner.Another,
                 MailAccountId.Create(Account),
                 MailAccountDisplayName.Create("The primary mailbox"),
                 MailSynchronizationMode.Polling),

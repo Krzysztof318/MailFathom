@@ -49,17 +49,17 @@ internal static class ComposedSettings
         // `AddMailRules`, which runs before `AddPersistenceAndProviders`, which runs before the surfaces are mapped. An
         // operator whose candidate carries a mistake in two of them is shown the same one first by a write and by a
         // start, which is what the summary promises and the only thing that makes the promise worth anything.
-        List<SettingsRefusal> refusals =
-        [
-            .. FindOwnerDeclarationRefusals(configuration, timeProvider),
-            .. FindMailRuleRefusals(configuration, new NCalcMailRuleConditionCompiler()),
-        ];
+        List<SettingsRefusal> refusals = [.. FindOwnerDeclarationRefusals(configuration, timeProvider)];
 
         // A group that will not bind at all raises rather than returning, and a start meeting an earlier refusal never
         // reaches it — so what is already held is what a start would have reported, and discarding it for the binder's
-        // sentence would answer a two-section candidate with the second of its mistakes.
+        // sentence would answer a two-section candidate with the second of its mistakes. Every group but the first is
+        // inside the guard for that reason: the owners are established before any of them, so a candidate carrying an
+        // owner mistake and a section that will not bind is answered with the owner sentence, which is the one a start
+        // would have stopped at.
         try
         {
+            refusals.AddRange(FindMailRuleRefusals(configuration, new NCalcMailRuleConditionCompiler()));
             refusals.AddRange(FindProviderRefusals(configuration));
             refusals.AddRange(FindSurfaceRefusals(configuration));
         }

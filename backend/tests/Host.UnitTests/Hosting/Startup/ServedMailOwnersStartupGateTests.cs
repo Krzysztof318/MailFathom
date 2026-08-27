@@ -8,8 +8,12 @@ using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.OwnerSettings;
+using MailFathom.Host.Configuration.Persistence;
 using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.Infrastructure;
+using MailFathom.Infrastructure.Certificates;
+using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Owners;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Configuration;
@@ -55,7 +59,7 @@ public sealed class ServedMailOwnersStartupGateTests
     public async Task StartAsync_NoOwnerDeclaredAndNoRowHeld_RecordsOneUnderAGeneratedVersionFourIdentifier()
     {
         // Arrange
-        var provisioning = Substitute.For<IMailOwnerProvisioning>();
+        var provisioning = ProvisioningThatRecords();
         var roster = new ServedMailOwners();
 
         // Act
@@ -88,7 +92,7 @@ public sealed class ServedMailOwnersStartupGateTests
     public async Task StartAsync_AnOwnerDeclaredWithNoRow_GivesThemTheRowTheMailGraphHangsOn()
     {
         // Arrange
-        var provisioning = Substitute.For<IMailOwnerProvisioning>();
+        var provisioning = ProvisioningThatRecords();
         var roster = new ServedMailOwners();
 
         // Act
@@ -166,6 +170,121 @@ public sealed class ServedMailOwnersStartupGateTests
             .RelabelAsync(Arg.Any<MailOwnerId>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// A file that renames one owner and hands their old label to another is legal, and the roster this start has
+    /// written is what the second owner is judged against — a snapshot read once would refuse them for a label the
+    /// first no longer carries, and the refusal would clear itself on the next start.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_ALabelPassedFromOneDeclaredOwnerToAnother_ServesBothInOneStart()
+    {
+        // Arrange
+        var roster = new ServedMailOwners();
+        var renamed = MailOwnerId.Create(DeclaredIdentifier);
+
+        var declared = Configuration(new Dictionary<string, string?>
+        {
+            ["Accounts:0:Id"] = DeclaredIdentifier.ToString(),
+            ["Accounts:0:DisplayName"] = "sam",
+            ["Accounts:1:Id"] = SyntheticMailOwner.Another.Value.ToString(),
+            ["Accounts:1:DisplayName"] = "alex",
+        });
+
+        // Act
+        await CreateGate(
+                [Held(renamed, "alex")],
+                declared,
+                servedOwners: roster)
+            .StartAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(["sam", "alex"], roster.Owners.Select(owner => owner.DisplayName));
+    }
+
+    /// <summary>
+    /// The label is unique across the deployment, so an insert that wrote nothing is another owner having taken it
+    /// between the roster being read and the write reaching the table. Serving the declaration anyway would hang every
+    /// message of theirs on a row that is not there.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_ADeclaredOwnerWhoseRowTheLabelKeptOut_FailsStartupNamingTheLabel()
+    {
+        // Arrange
+        var provisioning = Substitute.For<IMailOwnerProvisioning>();
+
+        provisioning
+            .ProvisionAsync(Arg.Any<MailOwnerId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<DeploymentMailOwnerUnresolvedException>(() =>
+            CreateGate([], Declaring(DeclaredIdentifier, "alex"), provisioning)
+                .StartAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Contains("'alex'", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("Free the label first", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An owner's mailboxes are declared outside the section the secret gate walks, so this is the only place their
+    /// references are proven. Without it a start comes up clean and fails one connection at a time.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_ADeclaredOwnerWhoseMailboxSecretCannotResolve_FailsStartupNamingTheOwnerAndThePath()
+    {
+        // Arrange
+        var declared = Configuration(new Dictionary<string, string?>
+        {
+            ["Accounts:0:Id"] = DeclaredIdentifier.ToString(),
+            ["Accounts:0:DisplayName"] = "alex",
+            ["Accounts:0:MailAccounts:0:AccountId"] = "work",
+            ["Accounts:0:MailAccounts:0:DisplayName"] = "Work",
+            ["Accounts:0:MailAccounts:0:Host"] = "imap.example.test",
+            ["Accounts:0:MailAccounts:0:UserName"] = "alex@example.test",
+            ["Accounts:0:MailAccounts:0:Secrets:Password:Name"] = "imap-work-password",
+            ["Accounts:0:MailAccounts:0:Secrets:Password:SecretReference"] = "nothing-serves-this:imap-work-password",
+        });
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<DeploymentMailOwnerUnresolvedException>(() =>
+            CreateGate([], declared).StartAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Contains("'alex'", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "Accounts:0:MailAccounts:0:Secrets:Password",
+            refusal.Message,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>A declaration whose secrets all resolve is served, which is what keeps the check above from refusing every owner.</summary>
+    [Fact]
+    public async Task StartAsync_ADeclaredOwnerWhoseMailboxSecretResolves_ServesThem()
+    {
+        // Arrange
+        var roster = new ServedMailOwners();
+
+        var declared = Configuration(new Dictionary<string, string?>
+        {
+            ["Accounts:0:Id"] = DeclaredIdentifier.ToString(),
+            ["Accounts:0:DisplayName"] = "alex",
+            ["Accounts:0:MailAccounts:0:AccountId"] = "work",
+            ["Accounts:0:MailAccounts:0:DisplayName"] = "Work",
+            ["Accounts:0:MailAccounts:0:Host"] = "imap.example.test",
+            ["Accounts:0:MailAccounts:0:UserName"] = "alex@example.test",
+            ["Accounts:0:MailAccounts:0:Secrets:Password:Name"] = "imap-work-password",
+            ["Accounts:0:MailAccounts:0:Secrets:Password:SecretReference"] = "plaintext:the-mailbox-password",
+        });
+
+        // Act
+        await CreateGate([], declared, servedOwners: roster).StartAsync(CancellationToken.None);
+
+        // Assert
+        var served = Assert.Single(roster.Owners);
+        Assert.Equal(["work"], served.MailAccounts.Select(account => account.AccountId));
+    }
+
     /// <summary>An owner the deployment holds and no file declares keeps their mail and stops being served, which is a report rather than a refusal.</summary>
     [Fact]
     public async Task StartAsync_AHeldOwnerNoFileDeclares_LeavesThemOutOfTheRosterWithoutFailing()
@@ -216,6 +335,37 @@ public sealed class ServedMailOwnersStartupGateTests
         Assert.Contains(reasonNamed, refusal.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// The client surface is owner-facing on exactly the terms the MCP one is, so a deployment serving several owners
+    /// is refused for having it open even where no MCP endpoint is served at all.
+    /// </summary>
+    [Theory]
+    [InlineData(true, "it admits callers without authenticating them")]
+    [InlineData(false, "a configured credential authenticates a caller without naming the owner")]
+    public async Task StartAsync_SeveralOwnersServedWithTheClientEndpointAlone_FailsStartupSayingWhy(
+        bool authenticationDisabled,
+        string reasonNamed)
+    {
+        // Arrange
+        var client = new ClientEndpointOptions { Enabled = true };
+
+        if (!authenticationDisabled)
+        {
+            client.Authentication.Add(new());
+        }
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<DeploymentMailOwnerUnresolvedException>(() =>
+            CreateGate(
+                    [],
+                    TwoDeclaredOwners(),
+                    clientEndpointSettings: client)
+                .StartAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Contains(reasonNamed, refusal.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>A deployment that serves no owner-facing surface synchronizes several owners' mail perfectly well.</summary>
     [Fact]
     public async Task StartAsync_SeveralOwnersServedWithNoOwnerFacingSurface_ServesEveryOneOfThem()
@@ -245,7 +395,7 @@ public sealed class ServedMailOwnersStartupGateTests
             """
             {"MailAccounts":[{"AccountId":"adopted","DisplayName":"Adopted at work","Host":"imap.example.test",
             "UserName":"alex@example.test",
-            "Secrets":{"Password":{"SecretReference":"systemd-credential:imap-adopted-password"}}}]}
+            "Secrets":{"Password":{"Name":"imap-adopted-password","SecretReference":"systemd-credential:imap-adopted-password"}}}]}
             """);
 
         // Act
@@ -363,6 +513,9 @@ public sealed class ServedMailOwnersStartupGateTests
         return documents;
     }
 
+    private static IConfiguration Configuration(Dictionary<string, string?> keys) =>
+        new ConfigurationBuilder().AddInMemoryCollection(keys).Build();
+
     private static IConfiguration Declaring(Guid identifier, string displayName) =>
         new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
@@ -399,8 +552,17 @@ public sealed class ServedMailOwnersStartupGateTests
         ServedMailOwners? servedOwners = null,
         HostStartupGates? startupGates = null,
         McpEndpointOptions? mcpEndpointSettings = null,
-        IOwnerSettingsDocumentReader? documents = null) =>
-        CreateGate(DirectoryOf(held), declared, provisioning, servedOwners, startupGates, mcpEndpointSettings, documents);
+        IOwnerSettingsDocumentReader? documents = null,
+        ClientEndpointOptions? clientEndpointSettings = null) =>
+        CreateGate(
+            DirectoryOf(held),
+            declared,
+            provisioning,
+            servedOwners,
+            startupGates,
+            mcpEndpointSettings,
+            documents,
+            clientEndpointSettings);
 
     private static ServedMailOwnersStartupGate CreateGate(
         IMailOwnerDirectory directory,
@@ -409,16 +571,18 @@ public sealed class ServedMailOwnersStartupGateTests
         ServedMailOwners? servedOwners = null,
         HostStartupGates? startupGates = null,
         McpEndpointOptions? mcpEndpointSettings = null,
-        IOwnerSettingsDocumentReader? documents = null)
+        IOwnerSettingsDocumentReader? documents = null,
+        ClientEndpointOptions? clientEndpointSettings = null)
     {
         var services = new ServiceCollection();
 
         services.AddScoped(_ => directory);
-        services.AddScoped(_ => provisioning ?? Substitute.For<IMailOwnerProvisioning>());
+        services.AddScoped(_ => provisioning ?? ProvisioningThatRecords());
         services.AddScoped(_ => documents ?? Substitute.For<IOwnerSettingsDocumentReader>());
         services.AddSingleton(new OwnerAccountDocumentBinder(
             new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
             new FakeTimeProvider()));
+        services.AddSingleton(SecretValidator());
 
         return new ServedMailOwnersStartupGate(
             services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>(),
@@ -426,8 +590,35 @@ public sealed class ServedMailOwnersStartupGateTests
             servedOwners ?? new ServedMailOwners(),
             startupGates ?? new HostStartupGates(HostStartupGate.ServedMailOwners),
             Options.Create(mcpEndpointSettings ?? new McpEndpointOptions()),
-            Options.Create(new ClientEndpointOptions()),
-            new FakeTimeProvider(),
+            Options.Create(clientEndpointSettings ?? new ClientEndpointOptions()),
             NullLogger<ServedMailOwnersStartupGate>.Instance);
+    }
+
+    /// <summary>A provisioning that reports the row as recorded, which is what every case but the contested label is.</summary>
+    private static IMailOwnerProvisioning ProvisioningThatRecords()
+    {
+        var provisioning = Substitute.For<IMailOwnerProvisioning>();
+
+        provisioning
+            .ProvisionAsync(Arg.Any<MailOwnerId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(true));
+
+        return provisioning;
+    }
+
+    /// <summary>Resolves a reference under any scheme a deployment registers, which is what an owner's secrets are proven through here.</summary>
+    private static SecretConfigurationValidator SecretValidator()
+    {
+        var resolver = new RegisteredSchemeSecretReferenceResolver();
+
+        return new SecretConfigurationValidator(
+            resolver,
+            new TrustAnchorLoader(resolver),
+            new DatabaseConnectionSettingsMapper(new ConfigurationBuilder().Build()),
+            new StubDatabaseConnectionSettingsValidator(),
+            PostgresTextSearchConfiguration.Default,
+            new DatabaseCommandTimeout(TimeSpan.FromSeconds(HostApplicationBuilderExtensions.DefaultDatabaseCommandTimeoutSeconds)),
+            new FakeTimeProvider(),
+            new RecordingLogger<SecretConfigurationValidator>());
     }
 }

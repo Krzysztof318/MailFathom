@@ -94,7 +94,7 @@ A `settings_root` document carrying `Accounts`, or anything beneath it, is there
 
 **A row's document is bound at startup, for an owner who has taken their record over and for no other.** Each row holds the declarations and the owner-level settings that are one person's own, and [the owners a deployment serves](#the-owners-a-deployment-serves) below is which of the two sources each owner is read from and how an owner moves between them. Until an owner is adopted their document is not read at all — their mail accounts come from configuration — so a `settings_accounts` row written by hand for an owner still read from their file changes nothing and is neither judged nor refused.
 
-Binding is strict, so a property nothing binds is a refusal rather than a value dropped, and the record is then judged by every rule a mail account is declared under. The account identifier and the published name are unique *within the owner*, so two people may each declare `work` and neither is refused for it. The document may carry no secret material: a mailbox password is a `<scheme>:<target>` reference naming where the material is kept, exactly as `settings_root` requires, and a value carrying the material itself is refused. None of it is a configuration layer — the record shadows no deployment setting, and a value that would need to is a deployment setting written into the wrong document.
+Binding is strict, so a property nothing binds is a refusal rather than a value dropped, and the record is then judged by every rule a mail account is declared under. The account identifier and the published name are unique *within the owner*, which is the rule the document binder applies — but a second, deployment-wide bound narrows it while an owner is read from configuration, and [the owners a deployment serves](#the-owners-a-deployment-serves) states it: no two declared owners may name a mail account alike. Every owner of this release is in that state, so `work` under two owners is refused today and is accepted only once both are served from documents of their own. The document may carry no secret material: a mailbox password is a `<scheme>:<target>` reference naming where the material is kept, exactly as `settings_root` requires, and a value carrying the material itself is refused. None of it is a configuration layer — the record shadows no deployment setting, and a value that would need to is a deployment setting written into the wrong document.
 
 What the read does enforce is size. The row is measured by PostgreSQL in the statement that reads it, and a document past what this build binds is refused under error code `12012` rather than transferred, so a row something else wrote too large stops that request instead of the process.
 
@@ -211,7 +211,7 @@ The owner labelled sam is held by this deployment and declared nowhere, so they 
 Until something does, a configuration write naming an owner is **refused** rather than applied, because a write against an empty document would silently drop every mailbox the file was supplying:
 
 ```
-MailFathom persists Accounts:0:MailAccounts:0:Host in the owner accounts store, and every owner of this release is
+MailFathom persists Accounts:0:MailAccounts:0:Host in the owner-accounts store, and every owner of this release is
 served from the declaration a configuration source supplies rather than from that store. Change the declaration where
 it is written — the owner's own section of the top-level Accounts collection — and restart.
 ```

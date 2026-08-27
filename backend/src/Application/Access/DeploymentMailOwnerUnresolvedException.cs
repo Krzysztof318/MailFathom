@@ -31,13 +31,6 @@ public sealed class DeploymentMailOwnerUnresolvedException : MailFathomException
     /// <inheritdoc />
     public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.DeploymentMailOwnerUnresolved;
 
-    /// <summary>Reports a deployment holding no owner record at all.</summary>
-    /// <returns>The failure to raise.</returns>
-    public static DeploymentMailOwnerUnresolvedException NoOwner() => new(
-        "This deployment holds no owner record, so the mail accounts it is configured with belong to nobody and no "
-        + "caller could be admitted to act for one. Apply the schema of this release, which provisions the owner an "
-        + "upgraded deployment's accounts are carried onto.");
-
     /// <summary>Reports a deployment holding several owners while its mail accounts are declared in the section that names none.</summary>
     /// <returns>The failure to raise.</returns>
     public static DeploymentMailOwnerUnresolvedException SeveralOwners() => new(
@@ -113,6 +106,30 @@ public sealed class DeploymentMailOwnerUnresolvedException : MailFathomException
             : "a configured credential authenticates a caller without naming the owner they act for, so there is "
             + "nothing for it to resolve an owner from. ")
         + "Serve one owner while those surfaces are enabled, or disable them on a deployment that serves several.");
+
+    /// <summary>Reports an owner whose own mail accounts carry a secret or a trust anchor this deployment cannot use.</summary>
+    /// <param name="displayName">The label the owner is declared under.</param>
+    /// <param name="refusals">The sentences naming each setting that must change, each already carrying its configuration path.</param>
+    /// <returns>The failure to raise.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="displayName" /> is <see langword="null" />, empty, or white space.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="refusals" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// Separate from the deployment section's own secret refusal because an owner's mailboxes are declared somewhere
+    /// that section cannot reach, and an operator reading a path alone would not know whose mailbox it names. The
+    /// refusals carry no material and no length, exactly as the ones raised over the deployment's own section do.
+    /// </remarks>
+    public static DeploymentMailOwnerUnresolvedException OwnerMailAccountsUnusable(
+        string displayName,
+        IReadOnlyList<string> refusals)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
+        ArgumentNullException.ThrowIfNull(refusals);
+
+        return new(
+            $"The mail accounts of the owner labelled '{displayName}' carry a setting this deployment cannot use, so "
+            + "they would have failed one connection at a time rather than the start: "
+            + string.Join(" ", refusals));
+    }
 
     /// <summary>Reports an owner whose own record could not be read as the settings it is meant to hold.</summary>
     /// <param name="displayName">The label the owner's row carries.</param>

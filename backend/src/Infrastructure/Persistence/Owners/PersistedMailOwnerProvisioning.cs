@@ -14,8 +14,9 @@ namespace MailFathom.Infrastructure.Persistence.Owners;
 /// <para>
 /// Both statements are single and conditional, which is what makes them safe against the race they actually meet: two
 /// replicas of one deployment start at the same moment and reconcile the same roster. An insert guarded by
-/// <c>ON CONFLICT</c> on the primary key leaves the loser having written nothing rather than raising, and an update
-/// that names the label it is replacing writes no row when the label is already the one declared.
+/// <c>ON CONFLICT</c> — over every unique constraint the row has rather than over the key alone — leaves the loser
+/// having written nothing rather than raising, and an update that names the label it is replacing writes no row when
+/// the label is already the one declared.
 /// </para>
 /// <para>
 /// The document is provisioned as the empty object and is never written here. An owner read from configuration is
@@ -31,20 +32,28 @@ internal sealed class PersistedMailOwnerProvisioning(MailFathomDbContext dbConte
     private const string EmptyDocument = "{}";
 
     /// <inheritdoc />
-    public async Task ProvisionAsync(MailOwnerId owner, string displayName, CancellationToken cancellationToken)
+    public async Task<bool> ProvisionAsync(MailOwnerId owner, string displayName, CancellationToken cancellationToken)
     {
         var ownerId = RequireNamed(owner);
         ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
 
         var provisionedAt = timeProvider.GetUtcNow();
 
+        // The conflict clause names no target, so it covers the label's unique index as well as the primary key. Two
+        // replicas of a deployment holding no owner at all each mint an identifier and provision it under the one
+        // label such a deployment uses, and a clause guarding the key alone would leave the loser raising the server's
+        // own unique-violation sentence out of its start. The read below is what turns the silence into an answer.
         await dbContext.Database.ExecuteSqlAsync(
             $"""
              INSERT INTO settings_accounts ("Id", "DisplayName", "Document", "Version", "CreatedAt", "UpdatedAt", "DocumentWrittenAtRuntime")
              VALUES ({ownerId}, {displayName}, CAST({EmptyDocument} AS jsonb), 1, {provisionedAt}, {provisionedAt}, FALSE)
-             ON CONFLICT ("Id") DO NOTHING
+             ON CONFLICT DO NOTHING
              """,
             cancellationToken);
+
+        return await dbContext.OwnerAccounts
+            .AsNoTracking()
+            .AnyAsync(record => record.Id == ownerId, cancellationToken);
     }
 
     /// <inheritdoc />

@@ -210,7 +210,11 @@ whose marker below is set and for no other, so the document of an owner still re
 all and a row edited by hand for one changes nothing. What the binding does is bind strictly — a property nothing binds
 is a refusal rather than a value quietly dropped — and then judge the record by every rule a mail account is declared
 under, refusing the start naming the owner when it finds one; the identifier and the published name are unique *within
-the owner*, so two people may each declare `work` and neither is refused for it. The record may carry no secret material at
+the owner*, which is the naming space this binder applies. A deployment-wide bound narrows it while an owner is read
+from configuration rather than from their own document — no two declared owners may name a mail account alike, because
+the settings read in front of persistence still resolves an account by its identifier alone — and every owner of this
+release is in that state, so two people each declaring `work` is refused today and is what that bound's removal
+delivers. The record may carry no secret material at
 all — a mailbox password is a reference naming where the material is kept, and a value carrying the material itself is
 refused. Nothing in it shadows a deployment setting, because there is no owner configuration layer: an owner-level
 setting is a property of this record, or it is a deployment setting somebody put in the wrong document. The label, the
