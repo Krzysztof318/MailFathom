@@ -220,6 +220,31 @@ public sealed class OwnerAccountDocumentBinderTests
     }
 
     /// <summary>
+    /// The refusal names the setting only when the whole path is one, because the rule that finds material reads the
+    /// last segment and an earlier one is an owner's own text — a place to forge a sentence an administrator would
+    /// read as MailFathom's.
+    /// </summary>
+    [Fact]
+    public void Bind_MaterialUnderAPathCarryingAControlCharacter_IsRefusedWithoutRepeatingThePath()
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind("""{ "quiet\nDatabase error: reached": { "Password": "hunter2" } }""");
+
+        // Assert
+        Assert.False(binding.IsBound);
+        var refusal = Assert.Single(
+            binding.Refusals,
+            candidate => candidate.Contains("does not persist secret material", StringComparison.Ordinal));
+        Assert.DoesNotContain("Database error", refusal, StringComparison.Ordinal);
+        Assert.DoesNotContain('\n', refusal);
+        Assert.DoesNotContain("hunter2", refusal, StringComparison.Ordinal);
+        Assert.Contains("a setting of the owner record", refusal, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// A value that merely parses as a reference is material too: a scheme is minted for any name before the first
     /// colon, so what decides is whether this deployment serves the scheme rather than whether the syntax admits it.
     /// </summary>
