@@ -1325,8 +1325,10 @@ grow:
   about the subscription rather than about any one change;
 - a later pass starts readers only for the groups holding a path that moved since the
   previous review, so the second and later rounds cost a fraction of the first;
-- a P3 never withholds approval, so no round is ever spent on a finding whose own
-  severity says it can wait.
+- a P3 never withholds approval, and from the fourth automatic pass neither does a
+  P2, so no round is ever spent on a finding whose own severity says it can wait —
+  and the pass that raises that bar leaves the `security` label's wide sweep behind
+  with it.
 
 The last four are the only ones that bound how *hard* a run works rather than how
 often one starts, and they are the set worth re-measuring rather than tuning by
@@ -1360,6 +1362,15 @@ evidence a security review happened. It widens what the reviewer reads and nothi
 about what it reports: a defect in code the change does not touch is still not a
 finding. The absence of the label changes nothing, and an unlabelled change is not
 read more loosely for it.
+
+That sweep belongs to the first three passes. Where the posture is `settling` — a
+fourth automatic pass or later, resolved as [What a later pass is
+for](#what-a-later-pass-is-for) describes — the security rubric applies to what the
+change touches, like every other rubric, and the wide reading is left behind: it
+earns its cost while the change is being shaped and stops earning it once a fifth
+reading of a path no fix moved is reading what four passes already read and let
+through. The label's other consequence is untouched, and the paragraph below is why
+that matters more: the costlier model performs the pass at every count.
 
 The second is the model. `claude-opus-5` performs that pass, which is the same shape
 of exception as a maintainer writing `opus` in a request, taken by the project rather
@@ -1495,8 +1506,9 @@ sixth opened `SECURITY.md` and raised another. Not one of those pages had been
 touched by a single fix. The reviewer was not converging on the change; it was
 widening across it.
 
-Three rules answer that. Two bound what a pass may conclude; the third bounds what
-it re-reads, and it arrived later, when the fan-out made the cost of a pass legible.
+Four rules answer that. Two bound what a pass may conclude; the third bounds what it
+re-reads, and arrived later, when the fan-out made the cost of a pass legible; the
+fourth raises the bar a pass this late applies at all.
 
 **What moved is what a later pass may conclude something about.** The collection
 step compares the head of the reviewer's previous review with the one in front of
@@ -1555,6 +1567,44 @@ where the verdict was never theirs to decide.
 The prompt states the severities and the consequence together, because the
 reviewer writing a P3 as a P2 to make it hold the change would be arranging a
 verdict rather than reporting one.
+
+**A fourth pass raises its own bar.** The three rules above bound what a later pass
+concludes about and re-reads; this one bounds what is worth an author's round at
+all. The gate resolves a *posture* beside the pass count it already keeps —
+`settling` for an automatic pass with three or more automatic reviews already
+published, `full` otherwise — and hands the same value to the readers' prompts, the
+reviewer's prompt, and the verdict, so what a review was written to and what it is
+published under cannot come apart. Under `settling` the reviewer reports P1 and P2
+only, the wide sweep the `security` label asks for is behind it, and a P1 alone
+withholds approval; a P2 arrives as a thread under an approval exactly as a P3 does
+under `full`. Nothing else moves: the same rubrics apply, the coverage ledger and
+`obligations.json` are unchanged, the `security` label still selects the costlier
+model on every pass, and the severity written is still the one the defect has.
+
+The threshold is measured rather than chosen. Across the 60 most recently merged
+pull requests — 59 of them reviewed, 187 published reviews — 21 reached a fourth
+pass, 10 reached the ceiling, and 9 never received an approval at all. Of the 33
+reviews published at pass 4 or later, 31 withheld approval and 27 of those carried
+no P1 at all: a rule-owed P2 spent the round, at the point where the author is
+answering review rather than writing code. The findings sit the same way — 38 of the
+43 P1 findings on those pull requests were raised in the first three passes against
+5 after them, while P2 and P3 kept arriving at 57 and 51. So the fourth pass is where
+this reviewer stops finding what breaks and starts finding what a later change pays
+for.
+
+A review somebody asked for is `full` at any count, for the same reason it is
+unbounded in scope: a maintainer spending usage on a pass no push asked for wants the
+reading a first pass performs, and the count the posture reads deliberately excludes
+requested reviews. The run records the posture beside the pass count in its metrics
+artifact rather than leaving it to be recomputed, because a requested pass and a
+settling one can carry the same count and mean opposite things.
+
+This is not the P3 threshold returning. That one settled a review carrying nothing
+but P3 findings from the fourth pass, and the measurement above it is what removed
+it; a P3 withholds approval at no pass, in either posture. What moves here is P2,
+which is what the numbers say actually holds a late change — and unlike its
+predecessor it is one value resolved in one place, rather than a threshold each
+reader of it evaluates again.
 
 Both failure modes that split addresses are real and opposite. Judging a
 candidate while still looking suppresses findings that were not yet understood,

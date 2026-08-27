@@ -165,9 +165,15 @@ jobs:
       # what records it on the review it publishes, and the gate of a later run is what reads it back.
       explicit: ${{ steps.gate.outputs.explicit }}
       # How many automatic reviews this pull request already carries, which is how many passes it has
-      # had before this one. The submission step reads it to decide whether a pass this late may
-      # still withhold approval over findings that are paid for later.
+      # had before this one. The run records it beside the rest of what a pass cost, and the posture
+      # below is derived from it.
       automatic_reviews: ${{ steps.gate.outputs.automatic_reviews }}
+      # Which bar this pass applies — `full` or `settling` — resolved from the count above and from
+      # whether anybody asked for this review. Three steps read it and none of them recomputes it:
+      # the reader's prompt, the judge's prompt, and the verdict. A threshold evaluated three times
+      # is three places for the passes to be counted differently, which is how a review would report
+      # under one bar and be published under another.
+      posture: ${{ steps.gate.outputs.posture }}
       # The gate picks the default and the step that reads the labels may raise it, so the answer is
       # the second value where one exists. A skipped step has no output at all, which GitHub renders
       # as the empty string and this expression treats as *nothing was decided here* — the same shape
@@ -365,10 +371,9 @@ jobs:
 
           # Counted whenever a review is going to happen rather than only when the ceiling could
           # refuse it, because two decisions read this number now. The ceiling is one; the other is
-          # the settling threshold in the submission step, which needs to know how many passes this
-          # pull request has already had in order to stop a late pass withholding approval over
-          # findings that are paid for later. A requested review is still never refused by the
-          # ceiling below, and it still never joins the count.
+          # the posture below, which needs to know how many passes this pull request has already had
+          # in order to decide which bar this one applies. A requested review is still never refused
+          # by the ceiling below, and it still never joins the count.
           automatic_reviews='0'
 
           if [[ "$review" == 'true' ]]; then
@@ -410,15 +415,47 @@ jobs:
             fi
           fi
 
+          # Which bar this pass applies, decided once here and read by three steps that must not
+          # disagree about it: the reader's prompt, the judge's prompt, and the verdict. `full` is
+          # every rubric at the severity the defect actually has. `settling` is the same reading with
+          # a higher bar on what is worth another round — the reviewer reports P1 and P2 only, the
+          # security label's wide sweep is behind it, and a P1 alone withholds approval.
+          #
+          # Three is the threshold because the sharp pass is measurably the early one. Across the 60
+          # most recently merged pull requests — 59 reviewed, 187 published reviews — 21 reached a
+          # fourth pass, 10 reached the ceiling, and 9 never received an approval at all. Of the 33
+          # reviews published at pass 4 or later, 31 withheld approval and **27 of those carried no
+          # P1 at all**: a rule-owed P2 spent the round. The findings sit the same way — 38 of the 43
+          # P1s on those pull requests were raised in the first three passes against 5 after them,
+          # while P2 and P3 keep arriving at 57 and 51. So a fourth pass is where the reviewer stops
+          # finding what breaks and starts finding what a later change pays for, and the bar moves
+          # with it.
+          #
+          # This is not #930's threshold returning. That one settled a review carrying nothing but
+          # P3, which the measurement there found was worth one review in 106, and it stays removed:
+          # a P3 withholds approval at no pass, in either posture. What moves here is P2, which is
+          # what the numbers above say actually holds a late change.
+          #
+          # A requested review is always `full`, for the same reason it is always unbounded in scope:
+          # a maintainer spending usage on a pass nobody's push asked for wants the reading the first
+          # pass performed, and the count this reads deliberately never includes one.
+          settle_after_passes=3
+          posture='full'
+
+          if [[ "$explicit" != 'true' ]] && (( automatic_reviews >= settle_after_passes )); then
+            posture='settling'
+          fi
+
           {
             echo "review=${review}"
             echo "pull_request_number=${PULL_REQUEST_NUMBER}"
             echo "model=${model}"
             echo "explicit=${explicit}"
             echo "automatic_reviews=${automatic_reviews}"
+            echo "posture=${posture}"
           } >> "$GITHUB_OUTPUT"
 
-          echo "Review: ${review} (${reason})."
+          echo "Review: ${review} (${reason}); posture: ${posture} after ${automatic_reviews} automatic passes."
 
       # `security` says this change needs a security review before it merges. It is written on the
       # issue — `docs/operations/issue-tracking.md` § "Labels" — and `Apply pull request rules`
@@ -1292,6 +1329,13 @@ jobs:
           SNAPSHOT_TAKEN: ${{ needs.collect.outputs.snapshot_taken }}
           GROUP_INDEX: ${{ matrix.group }}
           GROUP_COUNT: ${{ needs.collect.outputs.group_count }}
+          # The bar this pass applies, which the reader needs for one thing only: the security
+          # label's wide sweep is what a settling pass leaves behind, and that sweep is a reader's
+          # work rather than the judge's. Severity is not a reader's concern in either posture. It
+          # substitutes as `full` where it arrives empty, for the reason the submission step gives:
+          # a prompt is worse off carrying a word its own instructions do not define than carrying
+          # the sharper of the two.
+          REVIEW_POSTURE: ${{ needs.decide.outputs.posture }}
           REVIEW_DIRECTORY: ${{ runner.temp }}/review
           TEMPLATE_FILE: ${{ github.workspace }}/.github/fathom-review/reader-prompt.md
           RUBRICS_FILE: ${{ github.workspace }}/.github/fathom-review/review-rubrics.md
@@ -1338,6 +1382,7 @@ jobs:
               -e "s|{{SNAPSHOT_TAKEN}}|${SNAPSHOT_TAKEN}|g" \
               -e "s|{{GROUP_INDEX}}|${GROUP_INDEX}|g" \
               -e "s|{{GROUP_COUNT}}|${GROUP_COUNT}|g" \
+              -e "s|{{REVIEW_POSTURE}}|${REVIEW_POSTURE:-full}|g" \
               -e "s|{{REVIEW_DIRECTORY}}|${REVIEW_DIRECTORY}|g" \
               > "$PROMPT_FILE"
 
@@ -1590,6 +1635,11 @@ jobs:
           PULL_REQUEST_NUMBER: ${{ needs.decide.outputs.pull_request_number }}
           HEAD_SHA: ${{ needs.collect.outputs.head_sha }}
           SNAPSHOT_TAKEN: ${{ needs.collect.outputs.snapshot_taken }}
+          # The bar this pass applies, and the same value the readers were given. The judge is where
+          # it decides what is worth reporting at all, and the submission step below reads it again
+          # for the verdict — one value from the gate, so the bar the review was written to and the
+          # bar it is published under cannot come apart.
+          REVIEW_POSTURE: ${{ needs.decide.outputs.posture }}
           REVIEW_DIRECTORY: ${{ runner.temp }}/review
           TEMPLATE_FILE: ${{ github.workspace }}/.github/fathom-review/reviewer-prompt.md
           # The rubrics the readers were given, verbatim. They are one file because the judge
@@ -1617,6 +1667,7 @@ jobs:
               -e "s|{{PULL_REQUEST_NUMBER}}|${PULL_REQUEST_NUMBER}|g" \
               -e "s|{{HEAD_SHA}}|${HEAD_SHA}|g" \
               -e "s|{{SNAPSHOT_TAKEN}}|${SNAPSHOT_TAKEN}|g" \
+              -e "s|{{REVIEW_POSTURE}}|${REVIEW_POSTURE:-full}|g" \
               -e "s|{{REVIEW_DIRECTORY}}|${REVIEW_DIRECTORY}|g" \
               > "$PROMPT_FILE"
 
@@ -2005,6 +2056,11 @@ jobs:
           # submitted a review and when, never what asked for it, and the gate of a later run needs
           # exactly that to count the automatic passes without counting the requested ones.
           TRIGGER_MARKER: ${{ needs.decide.outputs.explicit == 'true' && env.REQUESTED_REVIEW_MARKER || env.AUTOMATIC_REVIEW_MARKER }}
+          # The bar the reviewer was written to, read here for the verdict. The gate resolved it and
+          # the prompt above carried the same value, so what the review was asked for and what it is
+          # published under are one decision. An unset or unrecognized value reads as `full` below,
+          # which is the posture that withholds more rather than less.
+          REVIEW_POSTURE: ${{ needs.decide.outputs.posture }}
         run: |
           set -euo pipefail
 
@@ -2144,16 +2200,39 @@ jobs:
           #
           # What this does not change is that the finding is reported. A P3 is a thread the author
           # answers and resolves like any other, and the ceiling on findings still applies to it.
+          #
+          # What the posture changes is where the line above P3 sits. Under `settling` — a fourth or
+          # later automatic pass, resolved by the gate for the reasons recorded there — a P2 stops
+          # withholding approval too, and a P1 alone holds the change. The measurement is in the gate:
+          # of the 33 reviews published at pass 4 or later across the 60 most recently merged pull
+          # requests, 31 withheld approval and 27 of those carried no P1 at all. Each of those 27 is
+          # a round spent on a defect a rule owes rather than on one that breaks something, at the
+          # point where the author is answering review rather than writing code — and the findings
+          # still arrive, on their lines, as threads the `main` ruleset keeps answerable.
+          #
+          # An unrecognized posture reads as `full`. This is a bar rather than a gate, so the value
+          # arriving empty is a workflow defect rather than an attack, but the safe reading of one is
+          # still the posture that withholds approval for more rather than for less.
           verdict_event='COMMENT'
           verdict_heading='# NEEDS CHANGES'
           verdict_output='changes_requested'
           settled_note=''
 
-          if [[ "$(jq '[(.findings // [])[] | select(.severity != "P3")] | length' "$findings_file")" == '0' ]]; then
+          if [[ "${REVIEW_POSTURE:-full}" == 'settling' ]]; then
+            holding_severities='["P1"]'
+            settled_reason='This is a settling pass, so nothing below P1 holds the change'
+          else
+            holding_severities='["P1", "P2"]'
+            settled_reason='Nothing above P3 is left'
+          fi
+
+          if [[ "$(jq --argjson holding "$holding_severities" \
+                     '[(.findings // [])[] | select(.severity as $severity | $holding | index($severity))] | length' \
+                     "$findings_file")" == '0' ]]; then
             verdict_event='APPROVE'
             verdict_heading='# APPROVED'
             verdict_output='approved'
-            settled_note='Nothing above P3 is left, so the change is approved carrying the findings below rather than held for them.'
+            settled_note="${settled_reason}, so the change is approved carrying the findings below rather than held for them."
           fi
 
           # Anchors are checked against the same patches the reviewer was given, so a line that has
@@ -2284,6 +2363,11 @@ jobs:
           COVERAGE_READ: ${{ steps.coverage.outputs.coverage_read }}
           COVERAGE_REPORTS: ${{ steps.coverage.outputs.coverage_reports }}
           AUTOMATIC_REVIEWS: ${{ needs.decide.outputs.automatic_reviews }}
+          # Recorded rather than derived from the count beside it, because the two answer different
+          # questions: the count is how many passes came before, and this is the bar this one applied.
+          # A requested pass is `full` at any count, so a reading that recomputed the posture from the
+          # count would attribute a requested pass's findings to a settling one.
+          REVIEW_POSTURE: ${{ needs.decide.outputs.posture }}
           REVIEW_OUTCOME: ${{ steps.review.outcome }}
           VERDICT: ${{ steps.submit.outputs.verdict }}
         run: |
@@ -2318,6 +2402,7 @@ jobs:
             --arg head_sha "$HEAD_SHA" \
             --arg outcome "$REVIEW_OUTCOME" \
             --arg verdict "${VERDICT:-none}" \
+            --arg posture "${REVIEW_POSTURE:-full}" \
             --argjson pull_request "$PULL_REQUEST_NUMBER" \
             --argjson automatic_reviews "${AUTOMATIC_REVIEWS:-0}" \
             --argjson changed_files "${CHANGED_FILES:-0}" \
@@ -2331,7 +2416,8 @@ jobs:
                                    | if . == null then {} else . end' \
                                 "$EXECUTION_FILE" 2>/dev/null || echo '{}')" \
             '{pull_request: $pull_request, head_sha: $head_sha, model: $model,
-              automatic_reviews: $automatic_reviews, changed_files: $changed_files,
+              automatic_reviews: $automatic_reviews, posture: $posture,
+              changed_files: $changed_files,
               groups: $groups, reader_reports: $reports, files_covered: $covered,
               readers: $readers[0], judge: $judge, outcome: $outcome, verdict: $verdict,
               findings_by_severity: $severities}' \
