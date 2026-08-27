@@ -126,6 +126,7 @@ public sealed class ClientApiEndpointsTests
             [
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailAccountsEndpoint.MailAccountsRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailTimelineEndpoint.MailTimelineRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientMailSearchEndpoint.MailSearchRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailFoldersEndpoint.MailFoldersRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientApiEndpoints.SessionRoute}",
             ],
@@ -171,6 +172,7 @@ public sealed class ClientApiEndpointsTests
             [
                 $"GET {prefix}{ClientMailAccountsEndpoint.MailAccountsRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailTimelineEndpoint.MailTimelineRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientMailSearchEndpoint.MailSearchRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailFoldersEndpoint.MailFoldersRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientApiEndpoints.SessionRoute} -> none",
             ],

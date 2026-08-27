@@ -1,6 +1,6 @@
 # Email search
 
-<!-- describes: backend/src/Application/Emails/SearchEmails/**, backend/src/Application/Emails/Search/**, backend/src/Infrastructure/Persistence/** -->
+<!-- describes: backend/src/Application/Emails/SearchEmails/**, backend/src/Application/Emails/BrowseSearch/**, backend/src/Application/Emails/Search/**, backend/src/Infrastructure/Persistence/** -->
 
 MailFathom searches its local copy. `SearchEmails` is the second read use case: it takes a free-text query plus
 the same structured filters a listing takes, and returns a bounded window of matched emails ordered by relevance, each
@@ -15,6 +15,14 @@ records what the combination does and what it does not promise. Everything else 
 This page documents the use case. `MailboxSearchReader` is where every rule below is enforced, so a second entrypoint
 cannot reach the query without them; the `search_emails` MCP tool maps protocol arguments onto it and publishes what it
 returns, and [MCP tools](mcp-tools.md#search_emails) documents that surface.
+
+**A screen searches the same mail through a second use case.** `MailSearchBrowser` composes the same scope, the same
+filters, both rankings, the same fusion and the same extracts, and differs in the two things a screen needs and a tool
+does not: the results continue past the first window, and each one says which ranking found it.
+[Paging a ranking](#paging-a-ranking) is where the first of those is described and
+[What a result carries](#what-a-result-carries) the second; the route is
+[the client endpoint's](../operations/client-endpoint.md#the-mail-search-route). Everything else on this page holds for
+both.
 
 ## What is searchable, and what is not
 
@@ -102,6 +110,9 @@ The maximum is lower than a listing's page size of 100. A ranked result costs mo
 a highlighted extract per row on top of matching and ranking it — and the bound is also what limits how much mail
 content one query can draw out of a mailbox.
 
+One bound covers both readings, because what it bounds is the same thing in both: a client search cuts a page with it
+rather than closing a window, and refuses a page size outside the range the same way.
+
 ## What a result carries
 
 `EmailSearchMatch` pairs the `EmailSummary` a listing would show with two values that exist only for the query that
@@ -118,11 +129,22 @@ produced them, and `SearchEmailsResult` adds the retrieval mode the whole window
 - **Whether junk mail took part** says which of the two searches the caller got, so an absent result is never
   ambiguous between missing and withheld.
 
+A client search publishes the same result with two differences, both following from who reads it. It adds **which
+ranking found the message** — `LexicalRanking`, `SemanticRanking`, or `BothRankings` — and the bounded **preview** the
+mail list route publishes, so a result row is drawn from one request and a semantically ranked message, which carries no
+extract because there is no part of it that shows the query's words, still has something to show and a word for why it
+is in the list. It publishes **no relevance rank at all**: a number on a row invites a comparison between two searches
+that no ranking supports, and the order of the results is what the ranking has to say. Freshness is absent for the same
+kind of reason — a screen reads it once from
+[the folders route](../operations/client-endpoint.md#the-folders-route) rather than on every page.
+
 The subject, the snippets, and the sender's display name are what a result carries that a message's author wrote, so
 where a sensitive-content scanner is switched on all three are redacted before the window is served, each value scanned
 on its own rather than as one composed result. The display name is scanned rather than treated as part of the address it
 accompanies, because an address is a routing identity a server issued while the name in front of it is free text the
-sending side wrote. A scanner that cannot answer refuses the search. Both switches are off by default,
+sending side wrote. A client search scans the preview beside those three and reports under a point of its own, because
+what crosses there is chosen by the query rather than by where a message sits in a folder. A scanner that cannot answer
+refuses the search. Both switches are off by default,
 and nothing on this path is scanned then. [Sensitive-content scanning § the guarded egress
 points](sensitive-content-scanning.md#the-guarded-egress-points) holds the contract; that redaction leaves the ranking
 alone, because it happens after the query has run over the stored index. What the index itself holds is the earlier
@@ -300,7 +322,7 @@ applying the bounds the host started with. This is deliberate — the value is a
 than a per-request preference — but it means an operator who tightens a bound and does not restart is not protected by
 the number they just wrote. Restart the host to adopt it.
 
-## Ordering, and why there is no cursor
+## Ordering, and what a cursor into a ranking means
 
 Ranking alone is not a total order: several messages carrying an uncommon word once each score identically, and an
 unbroken tie leaves the server free to return either order. The ordering contract therefore appends the timeline key —
@@ -312,11 +334,33 @@ The same key settles a fused tie, and there ties are not rare: two messages at s
 fifth semantically against fifth and first — score identically by construction. Both rankings the fusion consumes are
 ordered by that key too, so one search applies one tiebreaker rather than three that happen to agree.
 
-A search returns a **window**, not a page, and nothing continues it. Relevance order is recomputed per query and moves as
-mail is indexed, so a boundary into it would name a position that had stopped meaning what it meant when it was handed
-out — unlike a timeline, where a keyset boundary stays valid because the order it names is a property of the data rather
-than of the query. The result bound is the control that replaces a cursor, and a caller who needs different mail narrows
-the structured filters or writes a different query.
+**A tool search returns a window, not a page, and nothing continues it.** A model asks once and takes the ranked answer,
+so the result bound is the whole control and a caller who needs different mail narrows the structured filters or writes a
+different query.
+
+### Paging a ranking
+
+A screen is the other case, and it pages. What makes that sound is the bound rather than a promise the ranking cannot
+keep: `MailSearchBrowser` ranks **one list of at most 200 results** and every page of a search ranks the same list to
+the same depth, so the sequence a client walks is one sequence rather than a series of differently-deep re-rankings.
+Both rankings reach that depth, which keeps agreement between them observable as far down as paging can go, and the
+cost of a page is the same wherever in the list it is asked for — 200 candidates per side is what the tool search
+already pays for its deepest window.
+
+Inside that list the boundary is a keyset one: `RankedSearchCursor` names the score and the timeline position the last
+result held, and the next page reads what the order places strictly after it. Nothing on the server remembers a cursor,
+and a cursor presented against a different query or different filters is refused rather than followed, because a
+fingerprint of both travels in it.
+
+What such a boundary cannot promise is what a timeline's promises. Relevance is recomputed per query, so a message
+indexed between two pages can move across a boundary a client is holding and be seen twice or not at all; a timeline
+boundary stays exact because the order it names is a property of the data rather than of the query. The order here is
+still total, so a continuation always advances, and the depth is where every walk ends — a person who has read two
+hundred results without finding what they wanted narrows the filters, which is the thing that would have found it
+sooner.
+
+Paging runs forward only. There is no backward cursor, because a client keeps the pages it has already drawn and a
+backward one would promise a re-read of a list that no longer exists in the form it was read in.
 
 ## Empty results, and what they do not reveal
 
@@ -325,12 +369,16 @@ an account or a folder holds mail the caller was not already entitled to see. An
 is still refused with `53001 MailAccountNotAccessible` before anything is read, for the reason a listing refuses one: an
 empty result would confirm the identifier.
 
-Every result carries one `MailboxFolderFreshness` entry per folder in scope, exactly as a listing does. Without it a
+Every tool result carries one `MailboxFolderFreshness` entry per folder in scope, exactly as a listing does. Without it a
 caller cannot tell a folder that holds nothing matching from one whose synchronization has been failing for a week.
 
 ## Where the pieces live
 
-- `MailFathom.Application.Emails.SearchEmails` — the use case, its request, and its result.
+- `MailFathom.Application.Emails.SearchEmails` — the tool use case, its request, and its result.
+- `MailFathom.Application.Emails.BrowseSearch` — the client use case: `MailSearchBrowser`, `BrowseSearchRequest`, and
+  `BrowsedSearchPage`; `RankedSearchList`, which is the bounded list one search pages through and the fingerprint a
+  cursor belongs to; `RankedSearchCursor`, the boundary between two pages; and `BrowsedSearchResult` with
+  `SearchMatchOrigin`, which is the result and the word for why it is in the list.
 - `MailFathom.Application.Emails.Search` — `EmailSearchQueryText`, `EmailSearchResultLimit`, and
   `EmailSearchSnippetBounds`; `EmailSearchMatch`, `RankedEmailCandidate`, and `EmailSearchRetrievalMode`;
   `ReciprocalRankFusion`, which combines two rankings and reaches nothing at all; `SemanticEmailSearch`, which decides
@@ -354,6 +402,7 @@ caller cannot tell a folder that holds nothing matching from one whose synchroni
   caller-supplied text into account identifiers and folder references that it shares with the listing tool.
 - `MailFathom.Mcp.Tools.Results` — `SearchEmailsToolResult`, `SearchedEmailMatch`, `EmailRetrievalMode`, and
   `SemanticSearchAvailability`, the published contract.
+- `MailFathom.Host.Api.ClientMailSearchEndpoint` — the client route, its refusals, and the response it publishes.
 
 ## How the guarantees are verified
 

@@ -6,18 +6,20 @@ using System.Globalization;
 
 namespace MailFathom.Application.Emails.Search;
 
-/// <summary>How many ranked emails one lexical search returns.</summary>
+/// <summary>How many ranked emails one search hands back at once.</summary>
 /// <remarks>
 /// <para>
-/// A search returns a window rather than a page, and this bound is what closes it. Relevance order is not stable the
-/// way a timeline order is — indexing one new message can move every rank — so a cursor into a ranked result set would
-/// name a boundary that no longer means what it meant when it was issued. This type states the bound instead of
-/// implying a cursor that would not be sound, and a caller who needs more than a window narrows the structured filters.
+/// One bound over two readings, because what it bounds is the same thing in both: how much ranked mail content one
+/// request draws out of a mailbox. A tool search closes a window with it and continues nowhere — a caller that needs
+/// different mail narrows the structured filters or writes a different query. A client search cuts a page with it and
+/// continues, within a ranked list whose depth is fixed;
+/// <see cref="BrowseSearch.RankedSearchCursor" /> is where a boundary into a relevance order is defined and what it
+/// costs is stated, since that order is recomputed per query while a timeline order is not.
 /// </para>
 /// <para>
 /// The maximum is lower than a timeline page's, because a ranked result costs more than a listed one: PostgreSQL builds
-/// a highlighted extract per row on top of matching and ranking it. It is also the bound on how much mail content one
-/// request can draw out of a mailbox, which is the reason it is a control rather than a tuning knob.
+/// a highlighted extract per row on top of matching and ranking it. That is what makes it a control rather than a
+/// tuning knob.
 /// </para>
 /// <para>
 /// Being a struct, <see langword="default" /> is reachable and carries a value of zero, which names no window.

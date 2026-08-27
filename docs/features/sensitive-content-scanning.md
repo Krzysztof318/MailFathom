@@ -47,7 +47,7 @@ below.
 ## The guarded egress points
 
 Every place text leaves this deployment goes through one guard, and the guard is told which place it is. There are
-six, and the register is closed: a seventh is a code change rather than a configuration one, which is what makes the
+seven, and the register is closed: an eighth is a code change rather than a configuration one, which is what makes the
 list below answerable by reading it.
 
 | Egress point | What crosses it |
@@ -58,11 +58,17 @@ list below answerable by reading it.
 | `mcp_email_content` | The message `get_email_content` returns: both body representations, the subject, and every participant's display name |
 | `outgoing_mail` | The message a caller asks to send or to hold as a draft: its subject and both body representations, read back out of the MIME it would be transmitted as |
 | `client_mail_listing` | The mail text the client API answers a message list with: the subject and sender display name of every row, and the preview of the message's own text beside them |
+| `client_mail_search` | The mail text the client API answers a search with: the subject, sender display name and preview of every result, and every highlighted extract cut around what matched |
 
 `client_mail_listing` is apart from `mcp_snippet` rather than folded into it because the two publish different amounts
 of a message. A list row carries the opening of the body and a tool listing carries none, so what a scanner finds here
 is found in text no other listing point ever sees — and one tag for both would leave an operator unable to say which
 surface a finding crossed.
+
+`client_mail_search` is apart from `client_mail_listing` for a different reason: an extract is cut around what somebody
+was looking for, so what crosses there is chosen by the query rather than by where a message sits in a folder, and a
+redaction rate averaging the two would describe neither. It is also the point whose cost is paid per result and per
+extract rather than per row.
 
 **A value is guarded, never a composed document.** A snippet, a subject, and a question are each scanned on their own
 and the result is composed afterwards. Scanning the composed thing instead would let one detection cover the end of one

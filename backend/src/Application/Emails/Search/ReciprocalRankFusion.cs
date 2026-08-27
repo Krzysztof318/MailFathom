@@ -73,7 +73,7 @@ public static class ReciprocalRankFusion
         [
             .. fusedScores
                 .Select(scored => new RankedEmailCandidate(positions[scored.Key], scored.Value))
-                .Order(FusedOrder.BestFirst)
+                .Order(RankedEmailCandidate.BestFirst)
                 .Take(limit),
         ];
     }
@@ -105,25 +105,6 @@ public static class ReciprocalRankFusion
             var contribution = 1f / (RankConstant + index + 1);
             fusedScores[candidate.StoredEmailId] =
                 fusedScores.GetValueOrDefault(candidate.StoredEmailId) + contribution;
-        }
-    }
-
-    /// <summary>Orders fused candidates the way a search publishes them: best score first, ties settled by the timeline.</summary>
-    private static class FusedOrder
-    {
-        /// <summary>Gets the comparer the fused window is ordered by.</summary>
-        public static IComparer<RankedEmailCandidate> BestFirst { get; } = new BestFirstComparer();
-
-        private sealed class BestFirstComparer : IComparer<RankedEmailCandidate>
-        {
-            public int Compare(RankedEmailCandidate? x, RankedEmailCandidate? y)
-            {
-                var byScore = y!.Score.CompareTo(x!.Score);
-
-                return byScore is not 0
-                    ? byScore
-                    : EmailTimelinePosition.NewestFirst.Compare(x.Position, y.Position);
-            }
         }
     }
 }

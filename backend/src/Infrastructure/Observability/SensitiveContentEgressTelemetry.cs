@@ -183,6 +183,7 @@ public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTel
         SensitiveContentEgressPoint.McpEmailContent => "mcp_email_content",
         SensitiveContentEgressPoint.OutgoingMail => "outgoing_mail",
         SensitiveContentEgressPoint.ClientMailListing => "client_mail_listing",
+        SensitiveContentEgressPoint.ClientMailSearch => "client_mail_search",
         _ => "unknown",
     };
 

@@ -72,4 +72,14 @@ public enum SensitiveContentEgressPoint
     /// unable to tell which surface a finding crossed, which is the one thing every tag on this register is for.
     /// </remarks>
     ClientMailListing = 5,
+
+    /// <summary>Text the client API answers a search with: the subjects, the sender display names, the preview, and every highlighted extract of a result.</summary>
+    /// <remarks>
+    /// Apart from the client listing above rather than folded into it, because a search publishes text a list never
+    /// does. An extract is cut around what somebody was looking for, so what crosses here is chosen by the query rather
+    /// than by where a message sits in a folder — and a redaction rate that averaged the two would tell an operator
+    /// nothing about either. It is also the point whose cost is paid per result and per extract rather than per row,
+    /// which is the other thing a tag on this register is read for.
+    /// </remarks>
+    ClientMailSearch = 6,
 }

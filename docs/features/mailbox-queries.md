@@ -25,7 +25,7 @@ this page documents, so nothing about what a filter means is restated there.
 `EmailTimelineFilter`, so no adapter can reach a query with a filter that skipped validation.
 
 The filters themselves live on `MailboxEmailSelection`, which search applies too; `EmailTimelineFilter` adds the reading
-direction and the cursor fingerprint, which belong to a timeline alone. One type and one SQL predicate is what keeps an
+direction, which belongs to a timeline alone, and the fingerprint a timeline cursor is issued under. One type and one SQL predicate is what keeps an
 attachment filter or a recipient filter from coming to mean one thing in a listing and another in a search — a
 divergence neither copy would look wrong for on its own.
 
