@@ -25,7 +25,8 @@ namespace MailFathom.Application.Emails.Threads;
 /// decision belongs to the use case rather than to the query that produced these rows.
 /// </para>
 /// <para>
-/// It still carries personal data — a subject and an address — and inherits the classification of the mail it describes.
+/// It still carries personal data — a subject, an address, and the name that address wrote under — and inherits the
+/// classification of the mail it describes.
 /// </para>
 /// </remarks>
 public sealed record ThreadedEmailSummary
