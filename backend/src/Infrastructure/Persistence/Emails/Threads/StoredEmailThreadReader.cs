@@ -58,6 +58,7 @@ internal sealed class StoredEmailThreadReader(MailFathomDbContext dbContext) : I
                 email.Subject,
                 email.SentAt,
                 email.SenderAddress,
+                email.SenderDisplayName,
             })
             .ToArrayAsync(cancellationToken);
 
@@ -74,6 +75,7 @@ internal sealed class StoredEmailThreadReader(MailFathomDbContext dbContext) : I
                 Subject = row.Subject,
                 SentAt = row.SentAt,
                 SenderAddress = row.SenderAddress,
+                SenderDisplayName = row.SenderDisplayName,
             }),
         ];
     }

@@ -129,6 +129,7 @@ public sealed class ClientApiEndpointsTests
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailSearchEndpoint.MailSearchRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailFoldersEndpoint.MailFoldersRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientApiEndpoints.SessionRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientMailThreadEndpoint.MailThreadRoute}",
             ],
             routes);
     }
@@ -175,6 +176,7 @@ public sealed class ClientApiEndpointsTests
                 $"GET {prefix}{ClientMailSearchEndpoint.MailSearchRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailFoldersEndpoint.MailFoldersRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientApiEndpoints.SessionRoute} -> none",
+                $"GET {prefix}{ClientMailThreadEndpoint.MailThreadRoute} -> {MailFathomPermission.MailRead.Name}",
             ],
             PublishedAllocation(endpoints).Order(StringComparer.Ordinal));
     }

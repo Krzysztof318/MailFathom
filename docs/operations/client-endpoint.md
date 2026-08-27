@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs -->
+<!-- describes: backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -68,6 +68,7 @@ for you.
 | `GET /api/client/folders` | `mailfathom.mail.read` |
 | `GET /api/client/emails` | `mailfathom.mail.read` |
 | `GET /api/client/emails/search` | `mailfathom.mail.read` |
+| `GET /api/client/threads/{threadId}` | `mailfathom.mail.read` |
 
 There is no version segment in either path: the major version is `0` and
 [ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
@@ -488,6 +489,139 @@ no search waits on IMAP and none can set the remote `\Seen` flag.
 
 **An owner with no mail account reads an empty `results` list**, and a credential whose grant does not carry
 `mailfathom.mail.read` is answered `403`.
+### The conversation route
+
+```http
+GET /api/client/threads/0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a91?pageSize=50
+```
+
+It answers with one conversation as a single document — the messages in it, who wrote in it, and how big it is:
+
+```jsonc
+{
+  "threadId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a91",
+  "messages": [
+    {
+      "position": 0,
+      "answeredId": null,
+      "email": {
+        "id": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90",
+        "account": "work",
+        "folder": "INBOX",
+        "threadId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a91",
+        "subject": "Release 0.8.0 is out",
+        "receivedAt": "2026-08-15T09:58:00+00:00",
+        "sentAt": "2026-08-15T09:57:12+00:00",
+        "senderAddress": "releases@example.test",
+        "senderDisplayName": "Example Releases",
+        "toAddresses": [ "somebody@example.test" ],
+        "unread": true,
+        "flagged": false,
+        "answered": false,
+        "hasAttachments": true,
+        "attachmentCount": 2,
+        "sizeOctets": 48213,
+        "preview": "The release went out this morning and the notes are attached."
+      }
+    },
+    {
+      "position": 1,
+      "answeredId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90",
+      "email": {
+        "id": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a92",
+        "account": "work",
+        "folder": "SENT",
+        "threadId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a91",
+        "subject": "Re: Release 0.8.0 is out",
+        "receivedAt": "2026-08-15T10:04:00+00:00",
+        "sentAt": "2026-08-15T10:03:41+00:00",
+        "senderAddress": "somebody@example.test",
+        "senderDisplayName": "Somebody",
+        "toAddresses": [ "releases@example.test" ],
+        "unread": false,
+        "flagged": false,
+        "answered": false,
+        "hasAttachments": false,
+        "attachmentCount": 0,
+        "sizeOctets": 3120,
+        "preview": "Thanks — I will read the notes this afternoon."
+      }
+    }
+  ],
+  "participants": [
+    { "address": "releases@example.test", "displayName": "Example Releases", "messageCount": 1 },
+    { "address": "somebody@example.test", "displayName": "Somebody", "messageCount": 1 }
+  ],
+  "messageCount": 2,
+  "moreMessagesNotAssembled": false,
+  "moreParticipantsNotNamed": false,
+  "nextCursor": null,
+  "pageSize": 50
+}
+```
+
+**A conversation is not scoped to a folder, and the route takes no account or folder to scope it by.** The question is
+in the inbox, the answer is in `SENT`, and a forwarded copy is in a project folder — so it is read across every folder
+of every account the signed-in owner owns, and the junk folder takes part too, because a reply that landed in junk is
+still part of the exchange somebody is reading. A folder an operator withheld from tools is the one exception, and it is
+absent for the reason it is absent everywhere: the message is in no conversation this surface publishes, in no count of
+one, and in no participant list.
+
+**What a conversation covers today is one account's mail.** MailFathom assembles a thread from the mail of the account
+that holds it, so the same exchange in two of your mailboxes is two conversations with two identifiers, each complete
+within its own account. Nothing in this route narrows by account — it never asks which mailbox you were looking at — so
+what bounds a thread here is how threading is assembled rather than how it is served.
+
+**`email` is [the mail list route's](#the-mail-list-route) own row, field for field.** A client parses one message shape
+across this surface, and its `preview` is what that message added with the quoted history and the signature block
+trimmed off — which is what keeps the eighth reply from redrawing the seven above it. There is no body here either: the
+whole of a message is a request of its own, named by the `id` that row already carries.
+
+**`position` and `answeredId` are where the message sits.** `position` is its zero-based place in the conversation's
+own order and continues across pages, so a client that has paged twice still knows what it is holding. `answeredId`
+names the message it answers *among the ones you are shown* — a message whose parent sits in a withheld folder is
+published as a root naming nothing, so the withheld message is not disclosed by the gap it would otherwise leave.
+
+**The order is the conversation's own, not a re-sort.** The reply relation decides it wherever it is known, because it
+is the only statement about sequence a sender did not make about themselves; the sent time settles messages answering
+the same parent, and the local identity settles the rest so the order is total. For an ordinary exchange, where each
+message answers the one before it, that is chronological order — and a reply somebody's clock dated a year early still
+sits under what it answers rather than at the top of the screen. It is the same order the MCP surface publishes for the
+same conversation, so two clients of one deployment never see one exchange in two orders.
+
+**`participants` is who wrote, drawn from the whole conversation rather than the page.** That is the point of it: a
+client draws the header from the first page without walking the messages. Each entry carries the address, the display
+name their most recent message wrote, and how many of the conversation's messages are theirs; a message with no usable
+sender names no participant. At most 50 authors are named, and `moreParticipantsNotNamed` says when a list expansion
+went past that. Addressees are not participants here — who a message went to is on the message.
+
+**`messageCount` is the whole conversation, and the page is bounded separately.** A conversation is assembled to at most
+500 messages the caller may see; `moreMessagesNotAssembled` is `true` when it runs past that, which is a mailing list's
+archive rather than correspondence somebody is following. Within it, `pageSize` messages are returned at a time and
+`nextCursor` continues from the last one; `null` means the conversation ends there. Paging runs forward from the
+beginning of the conversation, because that is how a thread is read.
+
+**The cursor names a message, not a position.** The order is derived on every read, so a reply arriving in the middle
+moves positions and moves no message — and the next page is whatever follows the message the last page ended on. Three
+things are refused with `400`, each saying which it is: a cursor this deployment never issued, a cursor issued for a
+different conversation, and a cursor whose message this conversation no longer shows, which is a message deleted or
+moved into a folder you may no longer read. The repair for the last one is to read the conversation from its beginning,
+which is why it is not answered with the first page — a thread that silently jumped back to the top would read as a
+defect in the client.
+
+| Parameter | Accepts | Default |
+| --- | --- | --- |
+| `threadId` | The conversation's identifier, as a message row published it | required, in the path |
+| `pageSize` | 1 to 100 | 25 |
+| `cursor` | A cursor a previous page returned | the beginning of the conversation |
+
+**A conversation this owner does not hold is answered `404`**, and so is one no deployment ever held: nothing in the
+answer, its timing, or its failure separates somebody else's exchange from one that never existed. Text that is not a
+UUID matches no route and is the same `404`. A credential whose grant does not carry `mailfathom.mail.read` is answered
+`403`, as everywhere else on this surface.
+
+**The conversation is served from the local copy.** Nothing here contacts a mail server, so no screen waits on IMAP, and
+opening a thread cannot set the remote `\Seen` flag.
 
 ## Credentials do not cross surfaces
 

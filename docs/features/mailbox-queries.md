@@ -1,6 +1,6 @@
 # Mailbox queries
 
-<!-- describes: backend/src/Application/Accounts/**, backend/src/Application/Emails/BrowseTimeline/**, backend/src/Application/Emails/ListEmails/**, backend/src/Application/Emails/Mailboxes/**, backend/src/Application/Emails/Summaries/**, backend/src/Application/Folders/**, backend/src/Application/Synchronization/Checkpoints/**, backend/src/Infrastructure/Persistence/Emails/**, backend/src/Infrastructure/Persistence/Synchronization/** -->
+<!-- describes: backend/src/Application/Accounts/**, backend/src/Application/Emails/BrowseThread/**, backend/src/Application/Emails/BrowseTimeline/**, backend/src/Application/Emails/ListEmails/**, backend/src/Application/Emails/Mailboxes/**, backend/src/Application/Emails/Summaries/**, backend/src/Application/Emails/Threads/**, backend/src/Application/Folders/**, backend/src/Application/Synchronization/Checkpoints/**, backend/src/Infrastructure/Persistence/Emails/**, backend/src/Infrastructure/Persistence/Synchronization/** -->
 
 MailFathom answers a mailbox listing from its local copy. `ListEmails` is the first read use case: it takes structured
 filters, returns a bounded page of email summaries, issues the cursor that continues the walk, and reports how current
@@ -15,6 +15,10 @@ scope, the filters, the order, the bound and the cursor holds for it unchanged. 
 below: [a preview on every row](#the-preview-a-list-row-shows), and [a page that can be asked for in either
 direction](#reading-a-page-backwards). [`GET /api/client/emails`](../operations/client-endpoint.md#the-mail-list-route)
 is what publishes it.
+
+`MailThreadBrowser` is the third read on this page and the one a folder does not scope: it answers one conversation as a
+document, across every folder that conversation reached. [Reading a conversation](#reading-a-conversation) is what it
+adds and what it borrows from the reads above.
 
 [Email search](email-search.md) is the second read use case and applies the same structured filters
 this page documents, so nothing about what a filter means is restated there.
@@ -422,6 +426,52 @@ A page that came back empty carries no cursor at either end, because a cursor na
 none. A client that reached the leading end has nothing more to ask for, and one whose backward page came back empty
 keeps the cursor it already held.
 
+## Reading a conversation
+
+A list is a filtered walk over a folder. A conversation is not: it is every message threading put together, whatever
+folder each of them landed in, and a read narrowed to the folder somebody happened to be looking at would return the
+question without the answer. `MailThreadBrowser` is that read —
+[`GET /api/client/threads/{threadId}`](../operations/client-endpoint.md#the-conversation-route) is what publishes it —
+and it takes no account and no folder at all. What narrows it is ownership alone, which is the same
+`MailboxScopeResolver` every read on this page narrows through, and the junk folder takes part rather than being
+withheld: a reply that landed in junk is part of the exchange somebody is reading rather than mail they asked to be
+shown. A folder [withheld from tools](#folders-withheld-from-tools) stays withheld here as everywhere.
+
+**Membership, order and count come from the thread reader the MCP content read already uses**, so a conversation is one
+thing however it is asked for. `IEmailThreadReader` assembles at most 500 messages the caller may see and reads one row
+past that, so a conversation that runs further says so rather than ending silently at the bound; `EmailThreadOrder`
+then produces the one order that conversation has — the reply relation first, the sent time settling messages answering
+the same parent, the local identity settling the rest. Nothing here re-sorts it into a screen's own order, which is what
+keeps two surfaces of one deployment from showing one exchange two ways.
+
+**What each message carries is the list row of the page above**, read for the page's messages alone through the
+identity lookup beside the timeline reader, with the same [preview](#the-preview-a-list-row-shows) beside it. That
+preview is what the message added — the trimmed reading, without the quoted history the eight replies above it would
+otherwise repeat — and the whole message is reached by the identity the row already carries rather than by anything
+this read returns. A message deleted between the membership read and the row read is left out of the page rather than
+published as an identity with nothing behind it.
+
+**The participants are the conversation's authors**, gathered from the whole of it rather than from the page, so a
+client draws a thread header without walking the messages. Each is an address, the display name their most recent
+message wrote, and how many of the assembled messages are theirs; at most 50 are named and the answer says when that
+cut. A message whose sender no reader could establish is counted under no participant.
+
+**A page is bounded by `MailboxQueryPageSize` and continued by a message rather than a position.** The order is derived
+on every read, so an offset into it names a different message as soon as a reply arrives in the middle, while the
+message the last page ended on is still that message wherever it moved. `EmailThreadCursor` carries that identity and a
+fingerprint of the conversation it was issued for, over the shared keyset payload; its position field is written absent,
+because a place in a conversation is not an instant. A cursor whose message the conversation no longer shows is refused
+with `52004 EmailThreadCursorMessageMissing` rather than answered from the beginning, which on screen would read as the
+thread having jumped back to the top.
+
+**What a conversation spans today is one account's mail**, because [a thread is assembled from the mail of the account
+that holds it](../architecture/stored-email-schema.md#the-conversation-a-message-belongs-to). This read adds no
+narrowing of its own on top of ownership, so what bounds a conversation is the assembly rather than the serving.
+
+The subjects, the sender display names, the previews and the participants' display names are guarded at
+`ClientMailListing`, the same egress point the list above publishes through and for the same reasons; a header naming
+somebody the rows beneath it had redacted would leave the two disagreeing about who wrote what.
+
 ## Freshness reporting
 
 Every result carries one `MailboxFolderFreshness` entry per folder in the request's scope, each reporting when
@@ -495,6 +545,11 @@ from configuration for exactly that reason. The tree is what
   continues from its cursor. It is a use case of its own rather than a wider listing because both of those are things a
   tool has no use for, and it shares the scope, the filters, the order, the bound and the cursor codec with the listing
   rather than restating any of them.
+- `MailFathom.Application.Emails.BrowseThread` — `MailThreadBrowser`, one conversation read as the document a thread
+  screen is drawn from, with its request, its page, the message that pairs a summary with what that message added, the
+  participant a header names, and `EmailThreadCursor`, whose boundary is a message rather than a position. It owns none
+  of the threading: membership, the bound and the order come from `MailFathom.Application.Emails.Threads`, which the MCP
+  content read publishes a conversation through as well.
 - `MailFathom.Application.Emails.Mailboxes` — `MailboxEmailSelection` and the timeline filter that wraps it, the cursor,
   the page size, and the query failures shared with the other read models. `MailboxScopeResolver` is here too: it
   resolves the accounts a read runs against and refuses one this deployment does not serve, and it is a collaborator

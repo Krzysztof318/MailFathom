@@ -5,6 +5,7 @@
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Emails.BrowseTimeline;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Emails.Summaries;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -326,22 +327,33 @@ internal sealed record ClientMailTimelineEntryResponse(
     /// <summary>Describes one row for the wire.</summary>
     /// <param name="row">The row the use case read.</param>
     /// <returns>The response body.</returns>
-    internal static ClientMailTimelineEntryResponse For(BrowsedEmail row) => new(
-        row.Email.StoredEmailId.Value,
-        row.Email.AccountId.Value,
-        row.Email.FolderAlias.Value,
-        row.Email.ThreadId?.Value,
-        row.Email.Subject,
-        row.Email.ReceivedAt,
-        row.Email.SentAt,
-        row.Email.SenderAddress,
-        row.Email.SenderDisplayName,
-        row.Email.ToAddresses,
-        !row.Email.RemoteFlags.IsSeen,
-        row.Email.RemoteFlags.IsFlagged,
-        row.Email.RemoteFlags.IsAnswered,
-        row.Email.Attachments.HasAttachments,
-        row.Email.Attachments.AttachmentCount,
-        row.Email.SizeOctets,
-        row.Preview);
+    internal static ClientMailTimelineEntryResponse For(BrowsedEmail row) => For(row.Email, row.Preview);
+
+    /// <summary>Describes one message for the wire, wherever on this surface a message is drawn.</summary>
+    /// <param name="email">The message the use case read.</param>
+    /// <param name="preview">The opening of the message's own text, or <see langword="null" /> where nothing has extracted it.</param>
+    /// <returns>The response body.</returns>
+    /// <remarks>
+    /// The pair rather than a reading's own row type, because a message is one shape on this surface: a list row and a
+    /// message inside a conversation are drawn from the same fields, and a second mapping is how the two would come to
+    /// publish one message two ways.
+    /// </remarks>
+    internal static ClientMailTimelineEntryResponse For(EmailSummary email, string? preview) => new(
+        email.StoredEmailId.Value,
+        email.AccountId.Value,
+        email.FolderAlias.Value,
+        email.ThreadId?.Value,
+        email.Subject,
+        email.ReceivedAt,
+        email.SentAt,
+        email.SenderAddress,
+        email.SenderDisplayName,
+        email.ToAddresses,
+        !email.RemoteFlags.IsSeen,
+        email.RemoteFlags.IsFlagged,
+        email.RemoteFlags.IsAnswered,
+        email.Attachments.HasAttachments,
+        email.Attachments.AttachmentCount,
+        email.SizeOctets,
+        preview);
 }

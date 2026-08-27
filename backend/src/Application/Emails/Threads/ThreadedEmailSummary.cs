@@ -15,7 +15,9 @@ namespace MailFathom.Application.Emails.Threads;
 /// a caller reading one message is shown the rest of the conversation so it can recognize what else is there, not so it
 /// can read the conversation through the back of a content call. The subject and the sender are what a person picks a
 /// message out of a list by, and the timestamp is what tells them when — nothing else about the other messages is
-/// published here.
+/// published here. The sender is both halves of what the header wrote, the address and the display name beside it,
+/// because naming who is in a conversation is a list of people rather than a list of addresses; no surface has to
+/// publish the second half, and the MCP conversation does not.
 /// </para>
 /// <para>
 /// The account and the folder are carried because they are what the read decides visibility on. A message in a folder an
@@ -23,7 +25,8 @@ namespace MailFathom.Application.Emails.Threads;
 /// decision belongs to the use case rather than to the query that produced these rows.
 /// </para>
 /// <para>
-/// It still carries personal data — a subject and an address — and inherits the classification of the mail it describes.
+/// It still carries personal data — a subject, an address, and the name that address wrote under — and inherits the
+/// classification of the mail it describes.
 /// </para>
 /// </remarks>
 public sealed record ThreadedEmailSummary
@@ -57,4 +60,13 @@ public sealed record ThreadedEmailSummary
 
     /// <summary>Gets the sender's address as the message wrote it, or <see langword="null" /> when it carried none usable.</summary>
     public string? SenderAddress { get; init; }
+
+    /// <summary>Gets the display name the sender wrote, or <see langword="null" /> when the header carried none.</summary>
+    /// <remarks>
+    /// Carried because naming who is in a conversation is what a thread's participant list does, and a list of bare
+    /// addresses is not that. It is the one value here a reader is shown without being shown the message it came from,
+    /// so a surface publishing it scans it exactly as it scans the subject beside it — and a surface that publishes no
+    /// display name at all, as the MCP conversation does, publishes none of this either.
+    /// </remarks>
+    public string? SenderDisplayName { get; init; }
 }

@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Emails;
 
-/// <summary>Reads one stored email's summary out of PostgreSQL by its primary key.</summary>
+/// <summary>Reads stored email summaries out of PostgreSQL by their primary key.</summary>
 /// <remarks>
 /// <para>
 /// The lookup is a projection rather than a <c>FindAsync</c>, which is the privacy control the listing query applies for
@@ -36,5 +36,31 @@ internal sealed class StoredEmailSummaryReader(MailFathomDbContext dbContext) : 
             .SingleOrDefaultAsync(cancellationToken);
 
         return row?.ToSummary();
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<StoredEmailId, EmailSummary>> ReadSummariesAsync(
+        IReadOnlyList<StoredEmailId> storedEmailIds,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(storedEmailIds);
+
+        if (storedEmailIds.Count is 0)
+        {
+            return new Dictionary<StoredEmailId, EmailSummary>();
+        }
+
+        var identities = storedEmailIds.Select(static storedEmailId => storedEmailId.Value).ToArray();
+
+        var rows = await dbContext.StoredEmails
+            .AsNoTracking()
+            .Where(email => identities.Contains(email.Id))
+            .Where(StoredEmailTombstone.IsNotTombstoned)
+            .Select(StoredEmailSummaryRow.Projection)
+            .ToArrayAsync(cancellationToken);
+
+        return rows
+            .Select(static row => row.ToSummary())
+            .ToDictionary(static summary => summary.StoredEmailId);
     }
 }

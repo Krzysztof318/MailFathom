@@ -620,6 +620,16 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode ContactCursorMalformed { get; } = new(52003);
 
+    /// <summary>Gets subcategory 2, pagination: a conversation's continuation cursor names a message that conversation no longer shows.</summary>
+    /// <remarks>
+    /// It is separate from <see cref="MailboxQueryCursorFilterMismatch" /> because the cursor belongs to the
+    /// conversation it was presented against and is still refused: a thread is ordered on every read, so a boundary is a
+    /// message rather than a position, and a message deleted or moved out of what the caller may see leaves the walk
+    /// nothing to continue after. What a caller does about it is read the conversation from its beginning, which is a
+    /// different repair from correcting a mismatched request.
+    /// </remarks>
+    public static MailFathomErrorCode EmailThreadCursorMessageMissing { get; } = new(52004);
+
     /// <summary>Gets subcategory 3, access: a request named a mail account this deployment does not serve.</summary>
     public static MailFathomErrorCode MailAccountNotAccessible { get; } = new(53001);
 
@@ -995,6 +1005,7 @@ public readonly record struct MailFathomErrorCode
         MailboxQueryCursorMalformed,
         MailboxQueryCursorFilterMismatch,
         ContactCursorMalformed,
+        EmailThreadCursorMessageMissing,
         MailAccountNotAccessible,
         StoredEmailNotFound,
         MailFolderRoleUnmapped,

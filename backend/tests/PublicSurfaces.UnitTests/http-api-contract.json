@@ -337,6 +337,120 @@
         ],
         "type": "object"
       },
+      "ClientMailThreadEmailResponse": {
+        "properties": {
+          "answeredId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "email": {
+            "$ref": "#/components/schemas/ClientMailTimelineEntryResponse"
+          },
+          "position": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "position",
+          "answeredId",
+          "email"
+        ],
+        "type": "object"
+      },
+      "ClientMailThreadParticipantResponse": {
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "messageCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "address",
+          "displayName",
+          "messageCount"
+        ],
+        "type": "object"
+      },
+      "ClientMailThreadResponse": {
+        "properties": {
+          "messageCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ClientMailThreadEmailResponse"
+            },
+            "type": "array"
+          },
+          "moreMessagesNotAssembled": {
+            "type": "boolean"
+          },
+          "moreParticipantsNotNamed": {
+            "type": "boolean"
+          },
+          "nextCursor": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pageSize": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "participants": {
+            "items": {
+              "$ref": "#/components/schemas/ClientMailThreadParticipantResponse"
+            },
+            "type": "array"
+          },
+          "threadId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "threadId",
+          "messages",
+          "participants",
+          "messageCount",
+          "moreMessagesNotAssembled",
+          "moreParticipantsNotNamed",
+          "nextCursor",
+          "pageSize"
+        ],
+        "type": "object"
+      },
       "ClientMailTimelineEntryResponse": {
         "properties": {
           "account": {
@@ -4953,6 +5067,63 @@
               }
             },
             "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/threads/{threadId}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "threadId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientMailThreadResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           }
         },
         "security": [
