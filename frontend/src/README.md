@@ -69,12 +69,31 @@ The soft keyboard is the one mask the toolkit supports on a `SafeArea` or a `Scr
 control around the field this frame takes typing in.
 
 **What travels with somebody between spaces is `IWorkspace`**, registered once for the run. It holds the question being
-composed and the scope that question would be asked against — an account, a folder within it, and what is selected
-there — and the frame shows both above the spaces: the field a question is typed in, and the indicator beside it saying
-what it would be asked against. Neither answers anything here. Asking is Discover's work and narrowing is done by the
-space somebody narrows in; what this settles is that both survive the move, because both are held for the run rather
-than by the model of whichever screen is on top. A scope names accounts, folders, and message identifiers, so it
-carries the same classification as anything else about mail: it lives in memory and is written nowhere.
+composed and the scope that question would be asked against — an account, a folder within it or a special-use role
+taken across all of them, and what is selected there — and the frame shows both above the spaces: the field a question
+is typed in, and the indicator beside it saying what it would be asked against. Neither answers anything here. Asking
+is Discover's work; what this settles is that both survive the move, because both are held for the run rather than by
+the model of whichever screen is on top. A scope names accounts, folders, and message identifiers, so it carries the
+same classification as anything else about mail.
+
+**Narrowing is the mailbox tree's work**, which `Client/Presentation/Mailboxes/` holds and the frame shows in a pane
+beside the spaces. One tree carries every account and the folder hierarchy beneath each, with the unread and stored
+counts the service reports, and choosing a row is the one act that writes `IWorkspace.Scope` — so the list, the search,
+and the field's scope indicator all read what was chosen there rather than each holding a selector of its own. Three
+kinds of row narrow to something no folder does: every mailbox at once, a special-use role taken across accounts, and
+an account without a folder. A folder is placed by the role the service gave it rather than by what it is called, which
+is what puts a Polish `Odebrane` and an English `Inbox` under one heading, and a level of a server's hierarchy that
+holds no folder of its own is drawn and narrows nothing. An account that cannot be reached and a copy merely behind are
+said apart in words, neither as a spinner: a spinner claims something is arriving.
+
+**Where somebody was working outlives the run**, which is the one thing about a scope this client writes down.
+`IMailboxTreeMemory` keeps the chosen scope and the keys of the opened rows in `ApplicationData.LocalSettings`, so
+starting the client again opens the tree where it was left rather than collapsed on everything, and `SharedWorkspace`
+reads the same value so the scope and the tree cannot disagree about it. What is selected *inside* a scope is never
+written: a selection names mail somebody was reading a moment ago rather than where they work, and the mail it names
+may be gone by the next run. What is written is a folder alias, a hierarchy path, and an account identifier, which are
+mail metadata and therefore personal data — held on the device, in the store the platform gives this application alone,
+never logged and never sent anywhere.
 
 **Settings is reached from the frame rather than named among the spaces**, because it is not one. It is the screen that
 says which build is running and which deployment this client is pointed at, carries the two choices below and the way to

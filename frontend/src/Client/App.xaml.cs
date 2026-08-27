@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Client.Backend;
 using MailFathom.Client.Deployment;
+using MailFathom.Client.Presentation.Mailboxes;
 using MailFathom.Client.Presentation.Settings;
 using MailFathom.Client.Presentation.Spaces;
 using MailFathom.Client.Presentation.Spaces.Mail;
@@ -88,6 +89,13 @@ public partial class App : Application
                     // composing and what it would be asked against. One for the run rather than one per model: a
                     // model is discarded as its view is navigated away from, and so would be anything it held.
                     services.AddSingleton<IWorkspace, SharedWorkspace>();
+
+                    // The tree those spaces are scoped by, on the same terms and for the same reason: a tree held per
+                    // model would forget what was open the moment somebody moved between spaces, and would ask the
+                    // deployment for the same folders again while doing it. Where it was left outlives the run, which
+                    // is what makes starting the client again opening it rather than finding one's way back.
+                    services.AddSingleton<IMailboxTreeMemory, LocalSettingsMailboxTreeMemory>();
+                    services.AddSingleton<IMailboxTree, DeploymentMailboxTree>();
 
                     // What the deployment allows this caller, for the same reason and on the same terms. It is the
                     // one place that answers whether something may be offered, so every screen reads one answer

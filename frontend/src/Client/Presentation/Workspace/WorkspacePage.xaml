@@ -9,6 +9,8 @@ Project repository: https://github.com/Krzysztof318/MailFathom
       xmlns:mvux="using:Uno.Extensions.Reactive.UI"
       xmlns:uen="using:Uno.Extensions.Navigation.UI"
       xmlns:utu="using:Uno.Toolkit.UI"
+      xmlns:mailboxes="using:MailFathom.Client.Presentation.Mailboxes"
+      xmlns:spaces="using:MailFathom.Client.Presentation.Spaces"
       NavigationCacheMode="Required"
       Background="{ThemeResource BackgroundBrush}">
 
@@ -17,8 +19,12 @@ Project repository: https://github.com/Krzysztof318/MailFathom
        bottom navigation nested inside adds nothing on top of what is taken here. The soft keyboard is the one mask
        that cannot be attached to an ordinary element — the toolkit supports `SoftInput` on a SafeArea or a
        ScrollViewer alone, and warns at run time rather than failing — so it is stated below, around the text this
-       frame owns. -->
-  <Grid uen:Region.Attached="True"
+       frame owns.
+
+       Named, because the rows of the mailbox tree reach the frame's model through it: a template's own data context is
+       the row it draws, so the commands a row presses are bound by naming the element whose context is the model. -->
+  <Grid x:Name="WorkspaceRoot"
+        uen:Region.Attached="True"
         utu:SafeArea.Insets="VisibleBounds">
     <VisualStateManager.VisualStateGroups>
       <VisualStateGroup>
@@ -37,6 +43,12 @@ Project repository: https://github.com/Krzysztof318/MailFathom
             <Setter Target="Rail.IsPaneVisible" Value="False" />
             <Setter Target="Rail.PaneDisplayMode" Value="LeftMinimal" />
             <Setter Target="Rail.IsPaneOpen" Value="False" />
+
+            <!-- The tree comes over the content and starts closed, because a phone has no room to hold it beside
+                 anything. It is one press away rather than a screen away, which is what keeps changing folder from
+                 being a navigation. -->
+            <Setter Target="MailboxPane.DisplayMode" Value="Overlay" />
+            <Setter Target="MailboxPane.IsPaneOpen" Value="False" />
           </VisualState.Setters>
         </VisualState>
 
@@ -49,6 +61,11 @@ Project repository: https://github.com/Krzysztof318/MailFathom
             <Setter Target="Rail.IsPaneToggleButtonVisible" Value="True" />
             <Setter Target="Rail.IsPaneVisible" Value="True" />
             <Setter Target="Rail.PaneDisplayMode" Value="LeftCompact" />
+
+            <!-- Beside the content rather than over it, and open, because where somebody is reading is the first thing
+                 a window with room for it should say. -->
+            <Setter Target="MailboxPane.DisplayMode" Value="Inline" />
+            <Setter Target="MailboxPane.IsPaneOpen" Value="True" />
           </VisualState.Setters>
         </VisualState>
 
@@ -63,6 +80,8 @@ Project repository: https://github.com/Krzysztof318/MailFathom
             <Setter Target="Rail.IsPaneToggleButtonVisible" Value="True" />
             <Setter Target="Rail.IsPaneVisible" Value="True" />
             <Setter Target="Rail.PaneDisplayMode" Value="LeftCompact" />
+            <Setter Target="MailboxPane.DisplayMode" Value="Inline" />
+            <Setter Target="MailboxPane.IsPaneOpen" Value="True" />
           </VisualState.Setters>
         </VisualState>
       </VisualStateGroup>
@@ -121,17 +140,29 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                 ColumnSpacing="12"
                 Background="{ThemeResource SurfaceBrush}">
             <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" />
               <ColumnDefinition />
               <ColumnDefinition Width="Auto" />
               <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
+
+            <!-- What opens and closes the tree. It is bound to the pane rather than to the model because what is open
+                 is a fact about this window rather than about the workspace: the scope the tree chose is what travels,
+                 and it travels whether or not anybody is looking at the tree. It is offered at every width, since a
+                 wide window is also where somebody wants the room back. -->
+            <ToggleButton x:Uid="Workspace.Toggle.Mailboxes"
+                          IsChecked="{Binding IsPaneOpen, ElementName=MailboxPane, Mode=TwoWay}"
+                          VerticalAlignment="Center">
+              <SymbolIcon Symbol="List" />
+            </ToggleButton>
 
             <!-- The one place this frame takes typing, and therefore the one place the soft keyboard can cover
                  something: SafeArea as a control rather than as an attached mask, which is what the `SoftInput` mask
                  is supported on. A space that takes typing of its own says the same thing around its own field. -->
             <!-- The field follows the space that would run what is typed into it: asking is Discover's act, so a
                  credential that may not ask is not offered a field to ask in. -->
-            <utu:SafeArea Insets="SoftInput"
+            <utu:SafeArea Grid.Column="1"
+                          Insets="SoftInput"
                           Visibility="{Binding OffersDiscover, Converter={StaticResource AffirmedVisibility}}">
               <TextBox x:Uid="Workspace.TextBox.Intent"
                        Text="{Binding Intent, Mode=TwoWay}"
@@ -144,7 +175,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                  handed a string has no feed to render. A FeedView is what a feed of a record is shown through — as
                  the settings screen shows its build — and this indicator becomes one the day a scope is resolved
                  against the deployment and can therefore be loading or failed. -->
-            <Border Grid.Column="1"
+            <Border Grid.Column="2"
                     Padding="12,6"
                     CornerRadius="16"
                     VerticalAlignment="Center"
@@ -162,7 +193,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                  the three. It is a route like every other, which is what puts it on the stack the system back
                  gesture and the browser's history move through. -->
             <Button x:Uid="Workspace.Button.Settings"
-                    Grid.Column="2"
+                    Grid.Column="3"
                     uen:Navigation.Request="Settings"
                     VerticalAlignment="Center"
                     Style="{StaticResource TextBlockButtonStyle}">
@@ -271,10 +302,233 @@ Project repository: https://github.com/Krzysztof318/MailFathom
             </mvux:FeedView>
           </StackPanel>
 
-          <!-- Left empty deliberately: navigation resolves a registered route and puts the view for it here. -->
-          <Grid Grid.Row="2"
-                uen:Region.Attached="True"
-                uen:Region.Navigator="Visibility" />
+          <!-- The mailboxes and their folders as one tree, which is the client's scope selector: what a row narrows
+               to is what the list, the search, and the field above are all about. It belongs to the frame rather than
+               to the Mail space for exactly that reason, and it is a pane rather than a column so the same tree
+               stands beside the content where there is room for it and over the content where there is not. -->
+          <SplitView x:Name="MailboxPane"
+                     Grid.Row="2"
+                     DisplayMode="Overlay"
+                     PanePlacement="Left"
+                     OpenPaneLength="300"
+                     IsPaneOpen="False"
+                     PaneBackground="{ThemeResource SurfaceBrush}">
+            <SplitView.Pane>
+              <Grid>
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="Auto" />
+                  <RowDefinition />
+                </Grid.RowDefinitions>
+
+                <StackPanel Padding="16,12,16,8"
+                            Spacing="8">
+                  <TextBlock x:Uid="Workspace.TextBlock.Mailboxes"
+                             Style="{StaticResource CaptionTextBlockStyle}"
+                             Foreground="{ThemeResource OnSurfaceVariantBrush}" />
+
+                  <!-- A deployment that has stopped refreshing changes what every sentence below means, so it is said
+                       once above them rather than repeated on each row. -->
+                  <InfoBar x:Uid="Workspace.InfoBar.MailboxesPaused"
+                           IsOpen="{Binding MailboxesPaused}"
+                           IsClosable="False"
+                           Severity="Warning" />
+                </StackPanel>
+
+                <mvux:FeedView Grid.Row="1"
+                               Source="{Binding Mailboxes}">
+                  <mvux:FeedView.ValueTemplate>
+                    <DataTemplate>
+                      <!-- One flat, virtualized list rather than a tree of containers: the nesting is on the row, so
+                           an owner with several mailboxes and a provider that nests deeply costs the same as one with
+                           a handful of folders. Which row is current is the workspace's scope rather than this
+                           control's selection, so a space that narrowed the scope some other way marks the same row
+                           without this control being told. -->
+                      <ListView ItemsSource="{Binding Data}"
+                                SelectionMode="None"
+                                IsItemClickEnabled="False"
+                                Padding="8,0,8,12">
+                        <ListView.ItemTemplate>
+                          <DataTemplate x:DataType="mailboxes:MailboxRow">
+                            <Grid>
+                              <!-- What is in scope is marked behind the row rather than on its words, so the row
+                                   reads as current without the sentence on it depending on being read in colour. -->
+                              <Border CornerRadius="6"
+                                      Background="{ThemeResource SecondaryContainerBrush}"
+                                      Visibility="{x:Bind IsSelected, Converter={StaticResource AffirmedVisibility}}" />
+
+                              <Grid Padding="2,4"
+                                    ColumnSpacing="4">
+                                <Grid.ColumnDefinitions>
+                                  <ColumnDefinition Width="Auto" />
+                                  <ColumnDefinition Width="Auto" />
+                                  <ColumnDefinition />
+                                  <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Nesting is a width rather than a margin, which keeps every row's disclosure
+                                     control on the same grid as the one above it. -->
+                                <Border Width="{x:Bind IndentWidth}" />
+
+                                <!-- Two controls rather than one with a glyph that turns: each is shown on an
+                                     outright yes, so a row with nothing nested under it carries neither and a row
+                                     whose state has not been decided carries neither either. -->
+                                <Button x:Uid="Workspace.Button.OpenMailboxRow"
+                                        Grid.Column="1"
+                                        Command="{Binding DataContext.ToggleMailbox, ElementName=WorkspaceRoot}"
+                                        CommandParameter="{x:Bind Key}"
+                                        Visibility="{x:Bind CanOpen, Converter={StaticResource AffirmedVisibility}}"
+                                        Style="{StaticResource TextBlockButtonStyle}">
+                                  <FontIcon Glyph="&#xE76C;"
+                                            FontSize="12" />
+                                </Button>
+
+                                <Button x:Uid="Workspace.Button.CloseMailboxRow"
+                                        Grid.Column="1"
+                                        Command="{Binding DataContext.ToggleMailbox, ElementName=WorkspaceRoot}"
+                                        CommandParameter="{x:Bind Key}"
+                                        Visibility="{x:Bind CanClose, Converter={StaticResource AffirmedVisibility}}"
+                                        Style="{StaticResource TextBlockButtonStyle}">
+                                  <FontIcon Glyph="&#xE70D;"
+                                            FontSize="12" />
+                                </Button>
+
+                                <!-- The row itself is what narrows the workspace. A level of a mail server's
+                                     hierarchy that is not a folder narrows nothing, and is drawn without being a
+                                     choice rather than being a choice that refuses. -->
+                                <Button Grid.Column="2"
+                                        Command="{Binding DataContext.SelectMailbox, ElementName=WorkspaceRoot}"
+                                        CommandParameter="{Binding}"
+                                        IsEnabled="{x:Bind IsSelectable}"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Left"
+                                        Style="{StaticResource TextBlockButtonStyle}">
+                                  <StackPanel Spacing="2">
+                                    <StackPanel Orientation="Horizontal"
+                                                Spacing="6">
+                                      <TextBlock Text="{x:Bind Name}"
+                                                 Style="{StaticResource BodyTextBlockStyle}"
+                                                 Foreground="{ThemeResource OnSurfaceBrush}"
+                                                 TextTrimming="CharacterEllipsis" />
+
+                                      <!-- How much mail is held here, beside the name rather than under it, because
+                                           it is what the row is about rather than something about its copy. -->
+                                      <TextBlock Text="{x:Bind StoredText}"
+                                                 VerticalAlignment="Center"
+                                                 Style="{StaticResource CaptionTextBlockStyle}"
+                                                 Foreground="{ThemeResource OnSurfaceVariantBrush}" />
+                                    </StackPanel>
+
+                                    <!-- How current the copy is, on the rows that stand for one. Three separable
+                                         facts, drawn as three things and never as a spinner: a mail server that did
+                                         not answer, an attempt that went wrong, and mail still outstanding. -->
+                                    <StackPanel Orientation="Horizontal"
+                                                Spacing="6"
+                                                Visibility="{x:Bind ShowsCopyState, Converter={StaticResource AffirmedVisibility}}">
+                                      <Border Width="8"
+                                              Height="8"
+                                              CornerRadius="4"
+                                              VerticalAlignment="Center"
+                                              Background="{ThemeResource ErrorBrush}"
+                                              Visibility="{x:Bind IsFailing, Converter={StaticResource AffirmedVisibility}}" />
+
+                                      <Border Width="8"
+                                              Height="8"
+                                              CornerRadius="4"
+                                              VerticalAlignment="Center"
+                                              Background="{ThemeResource TertiaryBrush}"
+                                              Visibility="{x:Bind IsUnreachable, Converter={StaticResource AffirmedVisibility}}" />
+
+                                      <TextBlock Text="{x:Bind Standing}"
+                                                 Style="{StaticResource CaptionTextBlockStyle}"
+                                                 Foreground="{ThemeResource OnSurfaceVariantBrush}"
+                                                 TextWrapping="Wrap" />
+
+                                      <TextBlock Text="{x:Bind Freshness}"
+                                                 Style="{StaticResource CaptionTextBlockStyle}"
+                                                 Foreground="{ThemeResource OnSurfaceVariantBrush}"
+                                                 TextWrapping="Wrap" />
+
+                                      <!-- Its own words rather than a fourth standing, because a copy can be behind
+                                           under any of them: an attempt that succeeded within its batch budget
+                                           leaves mail for the next one. -->
+                                      <TextBlock x:Uid="Workspace.TextBlock.MailboxBehind"
+                                                 Style="{StaticResource CaptionTextBlockStyle}"
+                                                 Foreground="{ThemeResource OnSurfaceVariantBrush}"
+                                                 TextWrapping="Wrap"
+                                                 Visibility="{x:Bind IsBehind, Converter={StaticResource AffirmedVisibility}}" />
+                                    </StackPanel>
+                                  </StackPanel>
+                                </Button>
+
+                                <!-- Unread mail is a count somebody acts on, so it is a mark rather than another
+                                     sentence, and it is absent rather than reading zero where there is none. -->
+                                <Border Grid.Column="3"
+                                        Padding="6,1"
+                                        CornerRadius="9"
+                                        VerticalAlignment="Center"
+                                        Background="{ThemeResource PrimaryBrush}"
+                                        Visibility="{x:Bind HasUnread, Converter={StaticResource AffirmedVisibility}}">
+                                  <TextBlock Text="{x:Bind UnreadText}"
+                                             Style="{StaticResource CaptionTextBlockStyle}"
+                                             Foreground="{ThemeResource OnPrimaryBrush}" />
+                                </Border>
+                              </Grid>
+                            </Grid>
+                          </DataTemplate>
+                        </ListView.ItemTemplate>
+                      </ListView>
+                    </DataTemplate>
+                  </mvux:FeedView.ValueTemplate>
+
+                  <mvux:FeedView.ProgressTemplate>
+                    <DataTemplate>
+                      <ProgressBar IsIndeterminate="True"
+                                   VerticalAlignment="Top"
+                                   HorizontalAlignment="Stretch" />
+                    </DataTemplate>
+                  </mvux:FeedView.ProgressTemplate>
+
+                  <!-- Owning no mailbox is a state rather than an empty tree: it says what it is and what to do about
+                       it, which is a thing an operator does on the administrative surface rather than here. -->
+                  <mvux:FeedView.NoneTemplate>
+                    <DataTemplate>
+                      <InfoBar x:Uid="Workspace.InfoBar.NoMailbox"
+                               IsOpen="True"
+                               IsClosable="False"
+                               Severity="Informational" />
+                    </DataTemplate>
+                  </mvux:FeedView.NoneTemplate>
+
+                  <!-- What it means and what to try, in this application's own words: the failure carries an English
+                       message written for a log, and one of the four cases can carry text from a machine this process
+                       does not own. Asking again is reached through the template's parent, because it is the
+                       session's act rather than this view's. -->
+                  <mvux:FeedView.ErrorTemplate>
+                    <DataTemplate>
+                      <InfoBar x:Uid="Workspace.InfoBar.MailboxesUnavailable"
+                               IsOpen="True"
+                               IsClosable="False"
+                               Severity="Error">
+                        <InfoBar.ActionButton>
+                          <Button x:Uid="Workspace.Button.RetryMailboxes"
+                                  Command="{Binding Parent.RetryMailboxes}" />
+                        </InfoBar.ActionButton>
+                      </InfoBar>
+                    </DataTemplate>
+                  </mvux:FeedView.ErrorTemplate>
+                </mvux:FeedView>
+
+                <!-- What the tree is instead where the session does not offer correspondence at all: the same words
+                     every withheld space uses, over the pane rather than over the window. -->
+                <spaces:WithheldOverlay Grid.RowSpan="2"
+                                        Withheld="{Binding WithholdsMail}" />
+              </Grid>
+            </SplitView.Pane>
+
+            <!-- Left empty deliberately: navigation resolves a registered route and puts the view for it here. -->
+            <Grid uen:Region.Attached="True"
+                  uen:Region.Navigator="Visibility" />
+          </SplitView>
 
           <utu:TabBar x:Name="Spaces"
                       Grid.Row="3"

@@ -9,6 +9,7 @@ namespace MailFathom.Client.Backend.Accounts;
 /// <param name="DisplayName">The name the account is published under, which is what a person recognizes.</param>
 /// <param name="SynchronizationState">The standing as the deployment names it, kept as the word that arrived so an unknown one is readable rather than lost.</param>
 /// <param name="LastSynchronizedAt">When the account last durably took anything in, or <see langword="null" /> where it never has.</param>
+/// <param name="Behind">Whether any of the account's folders ended its last attempt with mail it had not yet taken in.</param>
 /// <remarks>
 /// <para>
 /// The client's own record for the wire shape rather than a type shared with the service, for the reason
@@ -18,16 +19,19 @@ namespace MailFathom.Client.Backend.Accounts;
 /// front of somebody without an address being.
 /// </para>
 /// <para>
-/// The standing and the instant answer different halves of one question and are two fields for that reason. The
-/// instant says how old what is being read is; the standing says whether it is still being refreshed. An account that
-/// has been failing since yesterday and one nobody has written to since yesterday carry the same instant.
+/// The standing, the instant, and being behind answer different parts of one question and are three fields for that
+/// reason. The instant says how old what is being read is; the standing says whether it is still being refreshed; and
+/// being behind is neither, because a copy can be behind under any standing — an attempt that succeeded within its
+/// batch budget leaves mail for the next one. An account that has been failing since yesterday and one nobody has
+/// written to since yesterday carry the same instant.
 /// </para>
 /// </remarks>
 public sealed record DeploymentMailAccount(
     string Id,
     string DisplayName,
     string SynchronizationState,
-    DateTimeOffset? LastSynchronizedAt)
+    DateTimeOffset? LastSynchronizedAt,
+    bool Behind)
 {
     /// <summary>Gets where this account's copy stands, as this client reads the word the deployment sent.</summary>
     /// <remarks>
@@ -36,11 +40,5 @@ public sealed record DeploymentMailAccount(
     /// publishes, and each of which would turn a document this client does not understand into a claim about somebody's
     /// mail.
     /// </remarks>
-    public MailAccountStanding Standing => this.SynchronizationState switch
-    {
-        "NeverSynchronized" => MailAccountStanding.NeverSynchronized,
-        "Synchronized" => MailAccountStanding.Synchronized,
-        "Failing" => MailAccountStanding.Failing,
-        _ => MailAccountStanding.Unrecognized,
-    };
+    public MailSynchronizationStanding Standing => MailSynchronizationStandings.Read(this.SynchronizationState);
 }

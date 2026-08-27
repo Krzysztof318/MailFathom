@@ -389,72 +389,144 @@
     <value>Z Twojego wdrożenia nic nie odpowiedziało, więc klient przestał próbować. Sprawdź, czy to urządzenie jest w sieci i czy Twoje wdrożenie działa, a potem spróbuj ponownie.</value>
     <comment>Names the two things the person can check. It says nothing about credentials, which would send somebody to their operator about a network.</comment>
   </data>
-  <data name="MailPage.TextBlock.Accounts.Text" xml:space="preserve">
+  <data name="Workspace.Toggle.Mailboxes.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Pokaż lub ukryj skrzynki</value>
+    <comment>Names the control that opens and closes the mailbox pane, which carries an icon rather than words.</comment>
+  </data>
+  <data name="Workspace.TextBlock.Mailboxes.Text" xml:space="preserve">
     <value>Twoje skrzynki</value>
-    <comment>Heads the list of the signed-in owner's own accounts. Never a deployment-wide list, which the client does not show.</comment>
+    <comment>Heads the tree of the signed-in owner's own mailboxes. Never a deployment-wide list, which the client does not show.</comment>
   </data>
-  <data name="MailPage.InfoBar.SynchronizationPaused.Title" xml:space="preserve">
+  <data name="Workspace.InfoBar.MailboxesPaused.Title" xml:space="preserve">
     <value>To wdrożenie nie odświeża poczty</value>
-    <comment>Heads the notice shown where synchronization is switched off for the whole deployment, which changes what every gap below it means.</comment>
+    <comment>Heads the notice shown where synchronization is switched off for the whole deployment, which changes what every sentence below it means.</comment>
   </data>
-  <data name="MailPage.InfoBar.SynchronizationPaused.Message" xml:space="preserve">
-    <value>Nic poniżej nie jest utrzymywane w aktualnym stanie, choćby wyglądało na świeże. Poproś o ponowne włączenie synchronizacji osobę, która prowadzi Twój MailFathom.</value>
+  <data name="Workspace.InfoBar.MailboxesPaused.Message" xml:space="preserve">
+    <value>Nic poniżej nie jest utrzymywane w aktualnym stanie, choćby wyglądało na świeże. Poproś osobę prowadzącą Twój MailFathom o ponowne włączenie synchronizacji.</value>
     <comment>Says what the switch does to the readings beside it, and names the person who can change it.</comment>
   </data>
-  <data name="MailPage.InfoBar.NoAccount.Title" xml:space="preserve">
-    <value>Nie ma jeszcze żadnej skrzynki</value>
+  <data name="Workspace.InfoBar.NoMailbox.Title" xml:space="preserve">
+    <value>Nie ma jeszcze skrzynki</value>
     <comment>Heads the state an owner with no mail account is shown. It is a state rather than a failure, so it is not worded as one.</comment>
   </data>
-  <data name="MailPage.InfoBar.NoAccount.Message" xml:space="preserve">
-    <value>W Twoim MailFathom nie ma jeszcze konta pocztowego, więc nie ma tu czego czytać. Konto dodaje osoba, która go prowadzi.</value>
-    <comment>Says what to do about it rather than leaving an empty list. Adding an account is an administrative act, which is deliberately not offered here.</comment>
+  <data name="Workspace.InfoBar.NoMailbox.Message" xml:space="preserve">
+    <value>Na Twoim MailFathomie nie ma jeszcze konta pocztowego, więc nie ma tu czego czytać. Dodaje je osoba, która go prowadzi.</value>
+    <comment>Says what to do about it rather than leaving an empty tree. Adding an account is an administrative act, which is deliberately not offered here.</comment>
   </data>
-  <data name="MailPage.InfoBar.AccountsUnavailable.Title" xml:space="preserve">
+  <data name="Workspace.InfoBar.MailboxesUnavailable.Title" xml:space="preserve">
     <value>Nie udało się odczytać Twoich skrzynek</value>
-    <comment>Heads the failed read of the account list, which is a different thing from a mailbox being out of date.</comment>
+    <comment>Heads the failed read of the tree, which is a different thing from a mailbox being out of date.</comment>
   </data>
-  <data name="MailPage.InfoBar.AccountsUnavailable.Message" xml:space="preserve">
-    <value>Dopóki Twoje wdrożenie nie odpowie, ta lista nie jest pokazywana. Komunikat nad obszarem pracy mówi, co klient sądzi o połączeniu.</value>
+  <data name="Workspace.InfoBar.MailboxesUnavailable.Message" xml:space="preserve">
+    <value>Dopóki Twoje wdrożenie nie odpowie, drzewo nie jest pokazywane. Komunikat nad obszarem pracy mówi, co klient sądzi o połączeniu.</value>
     <comment>Sends the reader to the frame, which is where reaching the deployment at all is told apart from a mailbox being behind.</comment>
   </data>
-  <data name="MailPage.Button.RetryAccounts.Content" xml:space="preserve">
+  <data name="Workspace.Button.RetryMailboxes.Content" xml:space="preserve">
     <value>Spróbuj ponownie</value>
     <comment>Asks the deployment once more, which asks for the session and the mailboxes together.</comment>
   </data>
-  <data name="MailPage.Account.Standing.Unrecognized" xml:space="preserve">
+  <data name="Workspace.Button.OpenMailboxRow.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Pokaż zawartość</value>
+    <comment>Names the disclosure control on a row with something nested under it that is not being shown.</comment>
+  </data>
+  <data name="Workspace.Button.CloseMailboxRow.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Ukryj zawartość</value>
+    <comment>Names the disclosure control on a row whose contents are being shown.</comment>
+  </data>
+  <data name="Workspace.TextBlock.MailboxBehind.Text" xml:space="preserve">
+    <value>poczta jeszcze do pobrania</value>
+    <comment>Said beside a standing rather than instead of one, because a copy can be behind under any of them. Lower case, since it follows the standing on the same line.</comment>
+  </data>
+  <data name="WorkspaceScope.Role" xml:space="preserve">
+    <value>{0} · wszystkie skrzynki</value>
+    <comment>One special-use folder taken across every mailbox. {0} is the role's own name in the reader's language; punctuation rather than words, so the name stays readable in any of them.</comment>
+  </data>
+  <data name="Mailboxes.Everything" xml:space="preserve">
+    <value>Cała Twoja poczta</value>
+    <comment>Names the row that scopes the workspace to every mailbox at once. Resolved in code rather than by a x:Uid, because the tree composes its rows from what the deployment answered.</comment>
+  </data>
+  <data name="Mailboxes.Unified" xml:space="preserve">
+    <value>{0} · wszystkie skrzynki</value>
+    <comment>Names a role taken across every mailbox that plays it. {0} is the role's own name in the reader's language.</comment>
+  </data>
+  <data name="Mailboxes.Role.Inbox" xml:space="preserve">
+    <value>Odebrane</value>
+    <comment>The role a mail server advertises for incoming mail. Named here rather than taken from the folder's own name, which differs per provider and per language.</comment>
+  </data>
+  <data name="Mailboxes.Role.Drafts" xml:space="preserve">
+    <value>Robocze</value>
+    <comment>The role a mail server advertises for unsent drafts.</comment>
+  </data>
+  <data name="Mailboxes.Role.Sent" xml:space="preserve">
+    <value>Wysłane</value>
+    <comment>The role a mail server advertises for sent messages.</comment>
+  </data>
+  <data name="Mailboxes.Role.Outbox" xml:space="preserve">
+    <value>Do wysłania</value>
+    <comment>The one role that is MailFathom's own rather than the mail server's: the folder an operator chose to see undelivered outgoing mail in.</comment>
+  </data>
+  <data name="Mailboxes.Role.Archive" xml:space="preserve">
+    <value>Archiwum</value>
+    <comment>The role a mail server advertises for archived messages.</comment>
+  </data>
+  <data name="Mailboxes.Role.Junk" xml:space="preserve">
+    <value>Spam</value>
+    <comment>The role a mail server advertises for messages classified as spam.</comment>
+  </data>
+  <data name="Mailboxes.Role.Trash" xml:space="preserve">
+    <value>Kosz</value>
+    <comment>The role a mail server advertises for deleted messages.</comment>
+  </data>
+  <data name="Mailboxes.Role.All" xml:space="preserve">
+    <value>Cała poczta</value>
+    <comment>The virtual folder a mail server advertises as presenting every message in the account.</comment>
+  </data>
+  <data name="Mailboxes.Role.Flagged" xml:space="preserve">
+    <value>Oznaczone</value>
+    <comment>The virtual folder a mail server advertises as presenting flagged messages.</comment>
+  </data>
+  <data name="Mailboxes.Role.Important" xml:space="preserve">
+    <value>Ważne</value>
+    <comment>The virtual folder a mail server advertises as presenting messages it considers important.</comment>
+  </data>
+  <data name="Mailboxes.Standing.Unrecognized" xml:space="preserve">
     <value>Nieznany stan</value>
     <comment>Shown where the deployment named a state this version of the client does not know. Nothing is claimed about the copy, which is the safe reading.</comment>
   </data>
-  <data name="MailPage.Account.Standing.NeverSynchronized" xml:space="preserve">
-    <value>Jeszcze niezsynchronizowana</value>
-    <comment>Shown where nothing has ever been taken in for the account.</comment>
+  <data name="Mailboxes.Standing.NeverSynchronized" xml:space="preserve">
+    <value>Jeszcze niezsynchronizowane</value>
+    <comment>Shown where nothing has ever been taken in.</comment>
   </data>
-  <data name="MailPage.Account.Standing.Synchronized" xml:space="preserve">
-    <value>Odświeżana</value>
-    <comment>Shown where the deployment's last attempt at the account did not fail. It says the copy is being kept current, and deliberately not that it is current — how old is too old is the reader's judgement.</comment>
+  <data name="Mailboxes.Standing.Synchronized" xml:space="preserve">
+    <value>Odświeżane</value>
+    <comment>Shown where the deployment's last attempt did not fail. It says the copy is being kept current, and deliberately not that it is current — how old is too old is the reader's judgement.</comment>
   </data>
-  <data name="MailPage.Account.Standing.Failing" xml:space="preserve">
-    <value>Nieosiągalna</value>
-    <comment>Shown where the deployment's last attempt at the account did not complete. It is about the account's own mail server rather than about this client's connection.</comment>
+  <data name="Mailboxes.Standing.Failing" xml:space="preserve">
+    <value>Ostatnie odświeżanie się nie powiodło</value>
+    <comment>Shown where the deployment's last attempt did not complete for a reason other than the mail server being out of reach. It is a mapping, a credential, or a defect rather than something to wait out.</comment>
   </data>
-  <data name="MailPage.Account.Freshness.Never" xml:space="preserve">
+  <data name="Mailboxes.Standing.Unreachable" xml:space="preserve">
+    <value>Serwer poczty nie odpowiada</value>
+    <comment>Shown where the mail server did not serve the deployment within its budget, so nothing is refreshing the copy and nothing is wrong with it. Kept apart from the entry above because one is waited out and the other is repaired.</comment>
+  </data>
+  <data name="Mailboxes.Freshness.Never" xml:space="preserve">
     <value>Nie pobrano jeszcze żadnej poczty</value>
-    <comment>The gap for an account nothing has ever synchronized, where there is no instant to state.</comment>
+    <comment>The gap where nothing has ever been synchronized and there is no instant to state.</comment>
   </data>
-  <data name="MailPage.Account.Freshness.WithinTheHour" xml:space="preserve">
-    <value>Zaktualizowana w ciągu ostatniej godziny</value>
+  <data name="Mailboxes.Freshness.WithinTheHour" xml:space="preserve">
+    <value>Zaktualizowano w ciągu ostatniej godziny</value>
     <comment>The narrowest gap band. A timestamp slightly ahead of this device's clock reads as this band rather than as a negative gap.</comment>
   </data>
-  <data name="MailPage.Account.Freshness.Today" xml:space="preserve">
-    <value>Zaktualizowana w ciągu ostatniej doby</value>
-    <comment>The gap band for an account refreshed less than a day ago.</comment>
+  <data name="Mailboxes.Freshness.Today" xml:space="preserve">
+    <value>Zaktualizowano w ciągu ostatniej doby</value>
+    <comment>The gap band for a copy refreshed less than a day ago.</comment>
   </data>
-  <data name="MailPage.Account.Freshness.WithinTheWeek" xml:space="preserve">
-    <value>Zaktualizowana w ciągu ostatniego tygodnia</value>
-    <comment>The gap band for an account refreshed less than a week ago.</comment>
+  <data name="Mailboxes.Freshness.WithinTheWeek" xml:space="preserve">
+    <value>Zaktualizowano w ciągu ostatniego tygodnia</value>
+    <comment>The gap band for a copy refreshed less than a week ago.</comment>
   </data>
-  <data name="MailPage.Account.Freshness.LongerAgo" xml:space="preserve">
+  <data name="Mailboxes.Freshness.LongerAgo" xml:space="preserve">
     <value>Od ponad tygodnia nic nie pobrano</value>
-    <comment>The widest gap band. It states the gap without calling the mailbox stale, which is the reader's judgement rather than the client's.</comment>
+    <comment>The widest gap band. It states the gap without calling the copy stale, which is the reader's judgement rather than the client's.</comment>
   </data>
 </root>

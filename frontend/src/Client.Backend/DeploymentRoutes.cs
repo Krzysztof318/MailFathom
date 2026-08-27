@@ -30,6 +30,14 @@ internal static class DeploymentRoutes
     /// <summary>Where a deployment reports the signed-in owner's mail accounts and how current each one's copy is.</summary>
     internal const string MailAccountsPath = $"{Prefix}/accounts";
 
+    /// <summary>Where a deployment reports the owner's mailboxes and every folder in them, which is the one tree a screen is drawn from.</summary>
+    /// <remarks>
+    /// Its own route rather than a wider version of the one above, because counting a folder's mail is work
+    /// proportional to the mail: a client asking whether a mailbox is reachable reads the accounts, and a client
+    /// drawing a tree reads this.
+    /// </remarks>
+    internal const string MailFoldersPath = $"{Prefix}/folders";
+
     /// <summary>Where a deployment publishes what a client must obtain before it holds any credential.</summary>
     internal const string ProtectedResourceMetadataPath = $"/.well-known/oauth-protected-resource{Prefix}";
 }

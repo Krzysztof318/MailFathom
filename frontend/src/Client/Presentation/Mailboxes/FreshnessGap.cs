@@ -2,9 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-namespace MailFathom.Client.Presentation.Spaces.Mail;
+namespace MailFathom.Client.Presentation.Mailboxes;
 
-/// <summary>How long ago an account last took mail in, in the bands somebody decides on rather than as a duration.</summary>
+/// <summary>How long ago a mailbox or a folder last took mail in, in the bands somebody decides on rather than as a duration.</summary>
 /// <remarks>
 /// <para>
 /// Bands rather than a count, and that is a decision about language rather than about precision. "Updated 3 minutes
@@ -14,7 +14,7 @@ namespace MailFathom.Client.Presentation.Spaces.Mail;
 /// </para>
 /// <para>
 /// The gap is stated rather than left to be worked out from a timestamp, which is what the architecture asks of every
-/// screen that shows a copy of a mailbox. It is deliberately not a judgement: nothing here calls an account stale,
+/// screen that shows a copy of a mailbox. It is deliberately not a judgement: nothing here calls a copy stale,
 /// because how old is too old is the reader's to decide and not this client's.
 /// </para>
 /// </remarks>

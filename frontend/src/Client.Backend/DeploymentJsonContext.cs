@@ -5,6 +5,7 @@
 using System.Text.Json.Serialization;
 using MailFathom.Client.Backend.Accounts;
 using MailFathom.Client.Backend.Authorization;
+using MailFathom.Client.Backend.Folders;
 
 namespace MailFathom.Client.Backend;
 
@@ -25,6 +26,7 @@ namespace MailFathom.Client.Backend;
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(DeploymentSession))]
 [JsonSerializable(typeof(DeploymentMailAccounts))]
+[JsonSerializable(typeof(DeploymentMailFolders))]
 [JsonSerializable(typeof(ProtectedResourceMetadata))]
 [JsonSerializable(typeof(AuthorizationServerMetadata))]
 [JsonSerializable(typeof(OAuthTokenResponse))]

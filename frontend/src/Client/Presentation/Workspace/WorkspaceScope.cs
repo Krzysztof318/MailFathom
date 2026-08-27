@@ -7,7 +7,8 @@ using System.Collections.Immutable;
 namespace MailFathom.Client.Presentation.Workspace;
 
 /// <summary>
-/// What the next question would be asked against: an account, a folder within it, and whatever is selected there.
+/// What the next question would be asked against: an account, a folder within it or a role across all of them, and
+/// whatever is selected there.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -16,9 +17,9 @@ namespace MailFathom.Client.Presentation.Workspace;
 /// asking about, and a scope each space kept for itself would say they had.
 /// </para>
 /// <para>
-/// Nothing here identifies a person or carries mail content. An account and a folder are names the deployment already
-/// told this client, and a selection is a list of the identifiers it handed over with them — the classification the
-/// root instructions put on mail metadata follows all three, so none of them is logged or written anywhere but memory.
+/// Nothing here identifies a person or carries mail content. An account, a folder, and a role are names the deployment
+/// already told this client, and a selection is a list of the identifiers it handed over with them — the classification
+/// the root instructions put on mail metadata follows all four, so none of them is put in a log or in telemetry.
 /// </para>
 /// </remarks>
 public sealed record WorkspaceScope
@@ -32,21 +33,46 @@ public sealed record WorkspaceScope
     /// <summary>The folder in scope within <see cref="Account" />, or <see langword="null" /> when the whole account is.</summary>
     public string? Folder { get; init; }
 
+    /// <summary>The special-use role in scope across every account that has one, or <see langword="null" /> when no role is.</summary>
+    /// <remarks>
+    /// The one narrowing that is not a place in one mailbox. Somebody with a work account and two personal ones wants
+    /// <em>sent</em> to mean sent from any of them as often as they want one account's own sent folder, and a scope
+    /// that could only name an account and a folder within it would turn that into three acts. It is the role's own
+    /// published name rather than a folder alias, because which folder plays the role differs per account and per
+    /// provider — that is the whole reason the deployment reports a role at all.
+    /// </remarks>
+    public string? Role { get; init; }
+
     /// <summary>What is selected within the scope above, in the order it was selected.</summary>
     public IImmutableList<string> Selection { get; init; } = ImmutableArray<string>.Empty;
 
     /// <summary>Whether this scope narrows to anything at all.</summary>
     /// <remarks>
-    /// Each of the three is asked about rather than only the account, because nothing here refuses a folder named
-    /// without one: the property above says a folder is read within its account, and a reader that assumed the type
+    /// Each of the four is asked about rather than only the account, because nothing here refuses a folder named
+    /// without one: the properties above say what a well-formed scope looks like, and a reader that assumed the type
     /// enforced it would answer <see langword="false" /> for a scope that plainly narrows.
     /// </remarks>
     public bool NarrowsAnything =>
-        this.Account is not null || this.Folder is not null || this.Selection.Count > 0;
+        this.Account is not null || this.Folder is not null || this.Role is not null || this.Selection.Count > 0;
+
+    /// <summary>Whether this scope and another name the same place, whatever either has selected inside it.</summary>
+    /// <param name="other">The scope to compare against.</param>
+    /// <returns><see langword="true" /> when both name the same account, folder, and role.</returns>
+    /// <remarks>
+    /// What the tree marks a row selected by. Equality below is the whole value and is what the state compares to
+    /// decide whether anything happened; this is the weaker question a row asks — whether the place it stands for is
+    /// the place in force — so opening a message inside a folder does not stop the folder reading as the one somebody
+    /// is in.
+    /// </remarks>
+    public bool NamesSamePlaceAs(WorkspaceScope? other) =>
+        other is not null
+        && string.Equals(this.Account, other.Account, StringComparison.Ordinal)
+        && string.Equals(this.Folder, other.Folder, StringComparison.Ordinal)
+        && string.Equals(this.Role, other.Role, StringComparison.Ordinal);
 
     /// <summary>Holds two scopes equal when they name the same thing, rather than when they are the same object.</summary>
     /// <param name="other">The scope to compare against.</param>
-    /// <returns><see langword="true" /> when both name the same account, folder, and selection.</returns>
+    /// <returns><see langword="true" /> when both name the same account, folder, role, and selection.</returns>
     /// <remarks>
     /// A record compares its members with the default comparer, and for <see cref="IImmutableList{T}" /> that is
     /// reference equality — so two scopes built from the same selection would be unequal and every write of an
@@ -54,11 +80,10 @@ public sealed record WorkspaceScope
     /// whether anything happened, which is why the comparison is stated rather than inherited.
     /// </remarks>
     public bool Equals(WorkspaceScope? other) =>
-        other is not null
-        && string.Equals(this.Account, other.Account, StringComparison.Ordinal)
-        && string.Equals(this.Folder, other.Folder, StringComparison.Ordinal)
-        && this.Selection.SequenceEqual(other.Selection, StringComparer.Ordinal);
+        this.NamesSamePlaceAs(other)
+        && this.Selection.SequenceEqual(other!.Selection, StringComparer.Ordinal);
 
     /// <inheritdoc />
-    public override int GetHashCode() => HashCode.Combine(this.Account, this.Folder, this.Selection.Count);
+    public override int GetHashCode() =>
+        HashCode.Combine(this.Account, this.Folder, this.Role, this.Selection.Count);
 }
