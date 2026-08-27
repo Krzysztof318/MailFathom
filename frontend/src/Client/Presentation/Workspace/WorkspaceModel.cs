@@ -194,7 +194,7 @@ public partial record WorkspaceModel
     /// <remarks>
     /// A scope is described by composing words rather than by a <c>x:Uid</c> on a control, so these keys are asked
     /// for from code — which makes a typo in one of them the single way a reader would meet the key itself instead of
-    /// a sentence. The unit suite holds every authored table to naming all three.
+    /// a sentence. The unit suite holds every authored table to naming all four.
     /// </remarks>
     internal static IReadOnlyList<string> ScopeResourceKeys { get; } =
         [EverythingKey, AccountFolderKey, RoleKey, SelectedKey];

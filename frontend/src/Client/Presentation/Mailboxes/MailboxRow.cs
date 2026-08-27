@@ -41,6 +41,13 @@ namespace MailFathom.Client.Presentation.Mailboxes;
 /// Nothing of the mailbox is on it beyond the folder's own name, which is this owner's and is put in front of that
 /// owner alone: no message, no subject, no correspondent, and no mail server, port, user name, or credential.
 /// </para>
+/// <para>
+/// It is <c>partial</c> because <paramref name="Key" /> makes it eligible for MVUX's key-equality generation, which is
+/// what carries a row's identity across a redraw so the list reuses the container rather than rebuilding every row
+/// each time the tree is drawn again. The generator refuses to run on a sealed record that is not partial and says so
+/// as <c>KE0001</c>, so the modifier is load-bearing rather than left over — the sibling records here carry no key and
+/// therefore carry no modifier either.
+/// </para>
 /// </remarks>
 public sealed partial record MailboxRow(
     string Key,

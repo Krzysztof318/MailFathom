@@ -73,8 +73,8 @@ composed and the scope that question would be asked against — an account, a fo
 taken across all of them, and what is selected there — and the frame shows both above the spaces: the field a question
 is typed in, and the indicator beside it saying what it would be asked against. Neither answers anything here. Asking
 is Discover's work; what this settles is that both survive the move, because both are held for the run rather than by
-the model of whichever screen is on top. A scope names accounts, folders, and message identifiers, so it carries the
-same classification as anything else about mail.
+the model of whichever screen is on top. A scope names accounts, folders, special-use roles, and message identifiers, so
+all four carry the same classification as anything else about mail.
 
 **Narrowing is the mailbox tree's work**, which `Client/Presentation/Mailboxes/` holds and the frame shows in a pane
 beside the spaces. One tree carries every account and the folder hierarchy beneath each, with the unread and stored

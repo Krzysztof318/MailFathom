@@ -17,10 +17,14 @@ namespace MailFathom.Client.Presentation.Mailboxes;
 /// </para>
 /// <para>
 /// The values are written as plain text rather than as anything serialized, because a settings store holds simple
-/// values and the browser head publishes trimmed. The expanded keys are one entry joined by line feeds, which is a
-/// character no key composed here can contain — a key joins its own parts with a unit separator — so reading them back
-/// is a split rather than a parse. An entry that is no longer readable is treated as nothing having been remembered,
-/// which is the same answer a first run gives and is never a failure to start.
+/// values and the browser head publishes trimmed. The expanded keys are one entry joined by line feeds, so reading
+/// them back is a split rather than a parse. A key carrying the separator itself is dropped on the way in rather than
+/// written, because a mail server's own folder names reach a key verbatim and nothing about IMAP forbids one of them
+/// a line feed — writing it would make the split disagree with the join and silently merge or divide the keys around
+/// it. Dropping costs that one row the expansion it was remembered with and costs the rows beside it nothing, which
+/// is the same bargain a key composed with a unit separator in a folder name already makes. An entry that is no
+/// longer readable is treated as nothing having been remembered, which is the same answer a first run gives and is
+/// never a failure to start.
 /// </para>
 /// <para>
 /// Nothing here is written for another deployment's benefit. A remembered mailbox that this deployment does not serve
@@ -54,11 +58,7 @@ internal sealed class LocalSettingsMailboxTreeMemory : IMailboxTreeMemory
             Role = OfferedRole(),
         };
 
-        var expanded = Kept(ExpandedSettingName) is { } written
-            ? written.Split(ExpandedSeparator, StringSplitOptions.RemoveEmptyEntries).ToImmutableHashSet(StringComparer.Ordinal)
-            : ImmutableHashSet<string>.Empty;
-
-        return new RememberedMailboxes(scope, expanded);
+        return new RememberedMailboxes(scope, Divided(Kept(ExpandedSettingName)));
     }
 
     /// <inheritdoc />
@@ -69,8 +69,35 @@ internal sealed class LocalSettingsMailboxTreeMemory : IMailboxTreeMemory
         Keep(AccountSettingName, remembered.Scope.Account);
         Keep(FolderSettingName, remembered.Scope.Folder);
         Keep(RoleSettingName, remembered.Scope.Role);
-        Keep(ExpandedSettingName, string.Join(ExpandedSeparator, remembered.Expanded));
+        Keep(ExpandedSettingName, Joined(remembered.Expanded));
     }
+
+    /// <summary>Writes the expanded keys as one value, leaving out any that would not survive being read back.</summary>
+    /// <param name="expanded">The keys of the rows whose contents are being shown.</param>
+    /// <returns>The keys as one entry, or an empty string where none of them can be kept.</returns>
+    /// <remarks>
+    /// A key is composed from a mail server's own folder names, which are that server's to choose rather than this
+    /// application's to constrain, so whether one can hold the separator is a question about somebody else's software
+    /// and is answered by checking rather than by assuming. The check is on the way in because that is where the
+    /// ambiguity would be created: a value written with a key carrying a line feed cannot be read back as the keys
+    /// that went into it.
+    /// </remarks>
+    internal static string Joined(IImmutableSet<string> expanded)
+    {
+        ArgumentNullException.ThrowIfNull(expanded);
+
+        return string.Join(ExpandedSeparator, expanded.Where(key => !key.Contains(ExpandedSeparator)));
+    }
+
+    /// <summary>Reads the expanded keys back out of the one value they were written as.</summary>
+    /// <param name="written">What the store held, or <see langword="null" /> where it held nothing.</param>
+    /// <returns>The keys, and none where nothing was written.</returns>
+    internal static IImmutableSet<string> Divided(string? written) =>
+        written is null
+            ? ImmutableHashSet<string>.Empty
+            : written
+                .Split(ExpandedSeparator, StringSplitOptions.RemoveEmptyEntries)
+                .ToImmutableHashSet(StringComparer.Ordinal);
 
     /// <summary>Reads the kept role, forgetting one this build does not offer rather than restoring a scope nothing can draw.</summary>
     private static string? OfferedRole() =>
