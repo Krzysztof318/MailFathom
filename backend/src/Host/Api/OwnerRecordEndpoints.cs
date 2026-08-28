@@ -2,12 +2,14 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Text;
 using System.Text.Json;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.OwnerSettings.Administration;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Infrastructure.Persistence.Owners;
 using MailFathom.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Secrets.Database;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -466,6 +468,11 @@ internal static class OwnerRecordEndpoints
         if (request?.Material is not { Length: > 0 })
         {
             return Refusal("The request carried no secret material.");
+        }
+
+        if (Encoding.UTF8.GetByteCount(request.Material) > IStoredSecretStore.MaximumMaterialByteCount)
+        {
+            return Refusal("The secret material exceeds the bounded size MailFathom accepts.");
         }
 
         StoredSecretProvisioning provisioning;

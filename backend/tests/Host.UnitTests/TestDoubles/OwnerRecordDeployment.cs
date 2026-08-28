@@ -21,10 +21,10 @@ using NSubstitute;
 
 namespace MailFathom.Host.UnitTests.TestDoubles;
 
-/// <summary>A deployment holding owner records, composed as the two services the owner routes are published over.</summary>
+/// <summary>A deployment holding owner records, composed as the three services the owner routes are published over.</summary>
 /// <remarks>
 /// <para>
-/// Both administrations are built rather than substituted, because they are concrete types the handlers take and
+/// All three administrations are built rather than substituted, because they are concrete types the handlers take and
 /// because what a route test is asking about is the boundary in front of real rules rather than in front of a scripted
 /// answer. What is substituted is the row underneath — the reader, the writer, the directory, the provisioning, and the
 /// erasure — so a test states what the deployment holds without a database.

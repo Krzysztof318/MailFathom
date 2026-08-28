@@ -21,7 +21,6 @@ namespace MailFathom.Infrastructure.Persistence.Secrets;
 [RequiresIntegrationCoverage]
 internal sealed class StoredSecretStore(
     MailFathomDbContext readContext,
-    FieldEncryptor fieldEncryptor,
     DataEncryptionKeyRing keyRing,
     TimeProvider timeProvider) : IStoredSecretStore
 {
@@ -57,6 +56,7 @@ internal sealed class StoredSecretStore(
             throw new ArgumentException("Stored secret material exceeds the configured material bound.", nameof(material));
         }
 
+        using var key = await keyRing.ResolveActiveKeyAsync(cancellationToken);
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
         var stored = await TrackedEntityLookup.SinglePendingOrPersistedAsync(
             writeContext.StoredSecrets,
@@ -81,10 +81,7 @@ internal sealed class StoredSecretStore(
         SealedValue sealedValue;
         try
         {
-            sealedValue = await fieldEncryptor.SealAsync(
-                StoredSecretBinding.Create(owner, effectiveReference, name),
-                plaintext,
-                cancellationToken);
+            sealedValue = key.Seal(StoredSecretBinding.Create(owner, effectiveReference, name), plaintext);
         }
         finally
         {

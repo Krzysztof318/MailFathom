@@ -31,6 +31,8 @@ internal static class StoredSecretBinding
             throw new ArgumentException("A stored secret binding requires the secret's declared name.", nameof(name));
         }
 
+        // The GUIDs use their fixed 36-character D form and SecretName admits no slash, so this separator cannot
+        // occur in any part and distinct owner/reference/name triples cannot compose the same subject.
         return DataEncryptionBinding.Create(
             DataEncryptionPurpose.StoredSecret,
             $"{owner.Value:D}/{reference.Id:D}/{name.Value}");

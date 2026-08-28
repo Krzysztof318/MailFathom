@@ -8,6 +8,7 @@ using MailFathom.Domain.Failures;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.OwnerSettings;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.Infrastructure.Secrets.Database;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
@@ -458,6 +459,48 @@ public sealed class OwnerRecordEndpointsTests
         var result = await OwnerRecordEndpoints.StoreSecretAsync(
             SyntheticMailOwner.Deployment.Value,
             new StoredSecretWriteRequest("primary-password", string.Empty),
+            deployment.Secrets,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        AssertRefusal(result.Result, StatusCodes.Status400BadRequest);
+        await deployment.StoredSecrets.DidNotReceiveWithAnyArgs().StoreAsync(
+            default!,
+            default,
+            default,
+            default,
+            default!,
+            TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task StoreSecretAsync_AnOwnerThisDeploymentDoesNotHold_AnswersThatThereIsNoSuchOwner()
+    {
+        // Arrange
+        var deployment = new OwnerRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
+
+        // Act
+        var result = await OwnerRecordEndpoints.StoreSecretAsync(
+            SyntheticMailOwner.Another.Value,
+            new StoredSecretWriteRequest("primary-password", "not-a-real-mailbox-password"),
+            deployment.Secrets,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.IsType<NotFound<ProblemDetails>>(result.Result);
+    }
+
+    [Fact]
+    public async Task StoreSecretAsync_MaterialPastTheBound_RefusesWithoutReachingTheStore()
+    {
+        // Arrange
+        var deployment = new OwnerRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
+        var material = new string('x', IStoredSecretStore.MaximumMaterialByteCount + 1);
+
+        // Act
+        var result = await OwnerRecordEndpoints.StoreSecretAsync(
+            SyntheticMailOwner.Deployment.Value,
+            new StoredSecretWriteRequest("primary-password", material),
             deployment.Secrets,
             TestContext.Current.CancellationToken);
 

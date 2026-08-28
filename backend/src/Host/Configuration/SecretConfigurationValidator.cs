@@ -102,8 +102,8 @@ internal sealed partial class SecretConfigurationValidator
             await this.FindSecretReferenceErrorsAsync(
                 PersistenceConfigurationPath,
                 candidate,
-                cancellationToken,
-                "the secret cannot be read from the database it is needed to reach. Provision bootstrap material outside the database"));
+                "the secret cannot be read from the database it is needed to reach. Provision bootstrap material outside the database",
+                cancellationToken));
 
         errors.AddRange(this.FindTextSearchConfigurationErrors(candidate));
 
@@ -145,8 +145,8 @@ internal sealed partial class SecretConfigurationValidator
             await this.FindSecretReferenceErrorsAsync(
                 DataEncryptionConfigurationPath,
                 candidate,
-                cancellationToken,
-                "the secret cannot be read from the database whose values it opens. Provision data-encryption key material outside the database"));
+                "the secret cannot be read from the database whose values it opens. Provision data-encryption key material outside the database",
+                cancellationToken));
 
         errors.AddRange(await this.FindKeyMaterialErrorsAsync(candidate, cancellationToken));
 
@@ -254,7 +254,7 @@ internal sealed partial class SecretConfigurationValidator
         ArgumentNullException.ThrowIfNull(candidate);
 
         var errors = new List<string>(
-            await this.FindSecretReferenceErrorsAsync(MailSynchronizationConfigurationPath, candidate, cancellationToken));
+            await this.FindSecretReferenceErrorsAsync(MailSynchronizationConfigurationPath, candidate, null, cancellationToken));
 
         errors.AddRange(await this.FindTrustAnchorErrorsAsync(
             $"{MailSynchronizationConfigurationPath}:{nameof(MailSynchronizationOptions.Accounts)}",
@@ -294,7 +294,7 @@ internal sealed partial class SecretConfigurationValidator
         var owner = new OwnerAccountOptions { MailAccounts = [.. mailAccounts] };
 
         var errors = new List<string>(
-            await this.FindSecretReferenceErrorsAsync(ownerConfigurationPath, owner, cancellationToken));
+            await this.FindSecretReferenceErrorsAsync(ownerConfigurationPath, owner, null, cancellationToken));
 
         errors.AddRange(await this.FindTrustAnchorErrorsAsync(
             $"{ownerConfigurationPath}:{nameof(OwnerAccountOptions.MailAccounts)}",
@@ -326,7 +326,7 @@ internal sealed partial class SecretConfigurationValidator
         }
 
         var errors = new List<string>(
-            await this.FindSecretReferenceErrorsAsync(McpEndpointOptions.SectionName, candidate, cancellationToken));
+            await this.FindSecretReferenceErrorsAsync(McpEndpointOptions.SectionName, candidate, null, cancellationToken));
 
         // No key and no public key is asked about, because this endpoint's section holds neither: what a client
         // presents resolves a credential record, and a record's material is proven where it is written rather than at
@@ -358,7 +358,7 @@ internal sealed partial class SecretConfigurationValidator
         }
 
         var errors = new List<string>(
-            await this.FindSecretReferenceErrorsAsync(AdminEndpointOptions.SectionName, candidate, cancellationToken));
+            await this.FindSecretReferenceErrorsAsync(AdminEndpointOptions.SectionName, candidate, null, cancellationToken));
 
         errors.AddRange(await this.FindClientPublicKeyErrorsAsync(
             AdminEndpointOptions.SectionName,
@@ -394,7 +394,7 @@ internal sealed partial class SecretConfigurationValidator
         }
 
         var errors = new List<string>(
-            await this.FindSecretReferenceErrorsAsync(ClientEndpointOptions.SectionName, candidate, cancellationToken));
+            await this.FindSecretReferenceErrorsAsync(ClientEndpointOptions.SectionName, candidate, null, cancellationToken));
 
         // No key and no public key is asked about, for the reason the MCP endpoint's read gives: this section holds
         // neither.
@@ -428,6 +428,7 @@ internal sealed partial class SecretConfigurationValidator
         return await this.FindSecretReferenceErrorsAsync(
             ContentStorageOptions.SectionName,
             candidate,
+            null,
             cancellationToken);
     }
 
@@ -654,8 +655,8 @@ internal sealed partial class SecretConfigurationValidator
     /// <summary>Resolves every secret reference in a bound options graph and reports the ones an operator must fix.</summary>
     /// <param name="rootConfigurationPath">The configuration path of the bound root, which prefixes every reported path.</param>
     /// <param name="boundOptions">The bound options root.</param>
-    /// <param name="cancellationToken">Cancels the resolution.</param>
     /// <param name="databaseBootstrapRefusal">The reason this root cannot use a database-backed reference, or <see langword="null" /> when it may.</param>
+    /// <param name="cancellationToken">Cancels the resolution.</param>
     /// <returns>One message per faulty declaration, per unresolvable reference, and per plain string setting that names a secret.</returns>
     /// <remarks>
     /// The material is erased immediately: this proves the reference is reachable, and each actual use resolves again.
@@ -666,8 +667,8 @@ internal sealed partial class SecretConfigurationValidator
     internal async Task<IReadOnlyList<string>> FindSecretReferenceErrorsAsync(
         string rootConfigurationPath,
         object boundOptions,
-        CancellationToken cancellationToken,
-        string? databaseBootstrapRefusal = null)
+        string? databaseBootstrapRefusal,
+        CancellationToken cancellationToken)
     {
         var discovered = ConfiguredSecretDiscovery.FindSecretBearingSettings(boundOptions, rootConfigurationPath);
         var errors = new List<string>(discovered.RawSecretPropertyPaths.Select(DescribeRawSecretProperty));

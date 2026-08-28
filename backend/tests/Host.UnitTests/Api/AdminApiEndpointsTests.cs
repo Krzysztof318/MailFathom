@@ -397,6 +397,27 @@ public sealed class AdminApiEndpointsTests
             write.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata>()!.MaxRequestBodySize);
     }
 
+    [Fact]
+    public void MapAdminApi_TheStoredSecretRoute_CarriesItsLargerRequestBodyBound()
+    {
+        // Arrange
+        var endpoints = BuildRouteBuilder();
+
+        // Act
+        endpoints.MapAdminApi();
+
+        // Assert
+        var write = endpoints.Materialize()
+            .OfType<RouteEndpoint>()
+            .Single(endpoint =>
+                $"/{endpoint.RoutePattern.RawText?.TrimStart('/')}" ==
+                    $"{AdminEndpointOptions.RoutePrefix}{OwnerRecordEndpoints.OwnerSecretsRoute}");
+
+        Assert.Equal(
+            OwnerRecordEndpoints.MaxStoredSecretWriteRequestBytes,
+            write.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata>()!.MaxRequestBodySize);
+    }
+
     /// <summary>
     /// The other half of the arrangement, and the one no metadata records: a route publishing its permission decides
     /// nothing unless the group carries the filter that reads it. Deleting that one line leaves every assertion above

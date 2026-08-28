@@ -5,6 +5,7 @@
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
 using MailFathom.Infrastructure.Secrets.Resolution;
+using MailFathom.Infrastructure.Secrets.Sources;
 
 namespace MailFathom.Infrastructure.Secrets.Database;
 
@@ -17,6 +18,9 @@ namespace MailFathom.Infrastructure.Secrets.Database;
 /// </remarks>
 public interface IStoredSecretStore
 {
+    /// <summary>The largest material one database-backed secret write accepts.</summary>
+    const int MaximumMaterialByteCount = SecretMaterialLimits.MaximumMaterialByteCount;
+
     /// <summary>The largest key-retirement inventory one read returns.</summary>
     const int MaximumKeyReferenceCount = 1000;
 

@@ -176,10 +176,11 @@ rotation identity, so the response returns the reference the document already ca
 current `ActiveKeyId`, so replacing the material and re-sealing an unchanged secret are the same operation; the next
 resolution opens only the replacement. The plaintext is not written into the document, a log, a metric, or the response.
 
-Keep an old data-encryption key configured until the bounded key-reference inventory returns no stored secret for it.
-Rewriting each reference still reported by that query re-seals its row under `ActiveKeyId`; only then may the old key
-be removed. `Persistence` and `DataEncryption` themselves may never use `database:` because each is required before
-the table can be reached or opened.
+No administrative route or command exposes the stored-secret key inventory yet, so this release provides no check an
+operator can use to decide that an old key is safe to retire. Keep the old key configured. Rewriting a known secret
+re-seals its row under `ActiveKeyId`, but that alone does not prove that no other row still names the old key.
+`Persistence` and `DataEncryption` themselves may never use `database:` because each is required before the table can
+be reached or opened.
 
 ## Rotating the object-storage access key
 

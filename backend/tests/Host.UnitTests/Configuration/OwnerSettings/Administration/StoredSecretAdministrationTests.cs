@@ -73,14 +73,70 @@ public sealed class StoredSecretAdministrationTests
         await owners.DidNotReceiveWithAnyArgs().ReadAsync(default, TestContext.Current.CancellationToken);
     }
 
+    [Fact]
+    public async Task StoreAsync_ACallerHoldingOnlyTheAdministrativeRead_IsRefused()
+    {
+        // Arrange
+        var owners = Substitute.For<IOwnerSettingsDocumentReader>();
+        var store = Substitute.For<IStoredSecretStore>();
+        var service = CreateService(owners, store, [MailFathomPermission.AdminRead]);
+        Assert.True(SecretName.TryCreate("primary-password", out var name));
+        using var material = ResolvedSecret.FromText("not-a-real-mailbox-password");
+
+        // Act & Assert
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(
+            () => service.StoreAsync(
+                SyntheticMailOwner.Deployment,
+                name,
+                material,
+                TestContext.Current.CancellationToken));
+        await store.DidNotReceiveWithAnyArgs().StoreAsync(
+            default!,
+            default,
+            default,
+            default,
+            default!,
+            TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task StoreAsync_AnUnknownOwner_IsRefusedBeforeTheStoreIsReached()
+    {
+        // Arrange
+        var owners = Substitute.For<IOwnerSettingsDocumentReader>();
+        var store = Substitute.For<IStoredSecretStore>();
+        store.CanStore.Returns(true);
+        var service = CreateService(owners, store);
+        Assert.True(SecretName.TryCreate("primary-password", out var name));
+        using var material = ResolvedSecret.FromText("not-a-real-mailbox-password");
+
+        // Act
+        var result = await service.StoreAsync(
+            SyntheticMailOwner.Deployment,
+            name,
+            material,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(StoredSecretProvisioningOutcome.UnknownOwner, result.Outcome);
+        await store.DidNotReceiveWithAnyArgs().StoreAsync(
+            default!,
+            default,
+            default,
+            default,
+            default!,
+            TestContext.Current.CancellationToken);
+    }
+
     private static StoredSecretAdministration CreateService(
         IOwnerSettingsDocumentReader owners,
-        IStoredSecretStore store)
+        IStoredSecretStore store,
+        IReadOnlyList<MailFathomPermission>? granted = null)
     {
         var principals = Substitute.For<IAuthorizedPrincipalSource>();
         principals.Current.Returns(AuthorizedPrincipal.Caller(
             "operations",
-            [MailFathomPermission.AdminConfigurationWrite]));
+            granted ?? [MailFathomPermission.AdminConfigurationWrite]));
         var session = Substitute.For<IPersistenceSession>();
         session.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.Committed);
         var sessions = Substitute.For<IPersistenceSessionFactory>();
