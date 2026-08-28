@@ -117,26 +117,23 @@ public sealed class DeploymentMailOwnerUnresolvedException : MailFathomException
     }
 
     /// <summary>Reports several owners on a deployment whose surfaces cannot say which of them an act is for.</summary>
-    /// <param name="authenticationDisabled">Whether a mail-serving surface is enabled with an empty <c>Authentication</c> list.</param>
+    /// <param name="authenticationDisabled">Whether one of those surfaces admits callers without authenticating them at all.</param>
     /// <returns>The failure to raise.</returns>
     /// <remarks>
-    /// Both halves are the same fact one step apart: a caller carrying no owner needs exactly one owner to act for, and
-    /// two shapes admit such a caller. An empty <c>Authentication</c> list admits whoever reaches the port, and the
-    /// administrative surface admits an administrator whose acts are the deployment's rather than a person's. Which of
-    /// the two it is decides what an operator does next — requiring a credential fixes the first and nothing but a sole
-    /// owner fixes the second — so the message says which.
+    /// Both halves are the same fact one step apart: an owner-facing surface acts for exactly one owner, and nothing
+    /// this release admits a caller with names which. Authentication-free operation says so outright, and a configured
+    /// credential says it too — it authenticates a caller and carries no owner. Which of the two it is decides what an
+    /// operator does next, so the message says which.
     /// </remarks>
     public static DeploymentMailOwnerUnresolvedException SeveralOwnersOnAnOwnerFacingSurface(bool authenticationDisabled) => new(
-        "This deployment serves more than one owner while a surface that admits a caller carrying no owner is "
-        + "enabled, and such a caller needs exactly one owner to act for. "
+        "This deployment serves more than one owner while a surface that resolves a sole owner — McpEndpoint, "
+        + "ClientEndpoint, or AdminEndpoint — is enabled. Such a surface acts for one person's mail, and "
         + (authenticationDisabled
-            ? "McpEndpoint or ClientEndpoint is enabled with an empty Authentication list, so it admits callers "
-            + "without a credential and has nothing to resolve an owner from. Require a credential there — every "
-            + "method names the owner it admits — or serve one owner. "
-            : "AdminEndpoint is enabled, and an administrator acts for the deployment rather than for a person, so "
-            + "the acts of theirs that need an owner resolve the sole one. Serve one owner while it is enabled, or "
-            + "disable it on a deployment that serves several. ")
-        + "A mail-serving surface that requires a credential is unaffected, because the credential names the owner.");
+            ? "it admits callers without authenticating them, so there is nothing for it to resolve an owner from. "
+            : "a configured credential authenticates a caller without naming the owner they act for, so there is "
+            + "nothing for it to resolve an owner from. ")
+        + "Serve one owner while any of those surfaces is enabled, or disable them on a deployment that serves "
+        + "several.");
 
     /// <summary>Reports an owner whose own mail accounts carry a secret or a trust anchor this deployment cannot use.</summary>
     /// <param name="displayName">The label the owner is declared under.</param>

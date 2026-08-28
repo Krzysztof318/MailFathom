@@ -230,6 +230,49 @@ public sealed class OrchestratedOwnerCredentialTests(MailFathomOrchestrationFixt
     }
 
     /// <summary>
+    /// A password rotation states the username the credential already carries, and the update sets the lookup
+    /// unconditionally — so the stated value is in the predicate as well. A mistyped one has to match no row and leave
+    /// the sign-in alone, because writing it would stop the owner's username authenticating and start the typo, report
+    /// the rotation as performed, and record only that material was replaced.
+    /// </summary>
+    [Fact]
+    public async Task ReplaceMaterialAsync_AUsernameTheCredentialDoesNotCarry_WritesNothingAndRenamesNoSignIn()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var lookup = OwnerCredentialLookup.ForUsername(OwnerCredentialUsername.Create("orchestrated-rotation-typo"));
+        var mistyped = OwnerCredentialLookup.ForUsername(OwnerCredentialUsername.Create("orchestrated-rotation-typo2"));
+        var credentialId = await ProvisionAsync(services, OwnerCredentialMethod.Password, lookup, cancellationToken);
+
+        // Act
+        var rotation = await services.InScopeAsync(
+            (scope, token) => Store(scope).ReplaceMaterialAsync(
+                SyntheticMailAccount.Owner,
+                credentialId,
+                OwnerCredentialMethod.Password,
+                mistyped,
+                "$mf1$rotated$",
+                token),
+            cancellationToken);
+
+        // Assert
+        Assert.Equal(OwnerCredentialWriteOutcome.UnknownCredential, rotation);
+
+        var stillResolvedByTheUsernameTheOwnerTypes = await services.InScopeAsync(
+            (scope, token) => Store(scope).FindAsync(OwnerCredentialMethod.Password, lookup, token),
+            cancellationToken);
+
+        var resolvedByTheTypo = await services.InScopeAsync(
+            (scope, token) => Store(scope).FindAsync(OwnerCredentialMethod.Password, mistyped, token),
+            cancellationToken);
+
+        Assert.NotNull(stillResolvedByTheUsernameTheOwnerTypes);
+        Assert.Equal(StoredHash, stillResolvedByTheUsernameTheOwnerTypes.Material);
+        Assert.Null(resolvedByTheTypo);
+    }
+
+    /// <summary>
     /// A rehash spends two deliberately slow derivations, and an administrator rotating a leaked credential can commit
     /// inside that window — which is the case rotation exists for. The rehash therefore names the record it verified
     /// against, so what the rotation wrote is not overwritten by a request that read the record it replaced.

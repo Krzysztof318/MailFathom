@@ -202,6 +202,13 @@ internal sealed class PersistedOwnerCredentials(MailFathomDbContext dbContext, T
     /// answers that no such credential exists rather than writing a password's record into a row a key is resolved by.
     /// The lookup moves with the material for the two methods whose lookup is derived from it, which is why the unique
     /// index can be violated here and is answered as the taken lookup it is.
+    /// <para>
+    /// Where the lookup is <em>not</em> derived from the secret it is in the predicate too, because there the caller
+    /// states a value the row is meant to already carry. A username the credential does not hold then matches no row
+    /// and answers <see cref="OwnerCredentialWriteOutcome.UnknownCredential" />, rather than renaming somebody's
+    /// sign-in to whatever was typed — which the update below would otherwise do, since it sets the lookup
+    /// unconditionally.
+    /// </para>
     /// </remarks>
     public async Task<OwnerCredentialWriteOutcome> ReplaceMaterialAsync(
         MailOwnerId owner,
@@ -216,6 +223,7 @@ internal sealed class PersistedOwnerCredentials(MailFathomDbContext dbContext, T
         var storedMethod = RequireMethod(method);
         var storedLookup = RequireLookup(lookup);
         var storedMaterial = RequireMaterialAgreesWithMethod(method, material);
+        var statedLookup = method.LookupIsDerivedFromTheSecret ? null : storedLookup;
         var changedAt = timeProvider.GetUtcNow();
 
         try
@@ -223,7 +231,8 @@ internal sealed class PersistedOwnerCredentials(MailFathomDbContext dbContext, T
             var written = await dbContext.OwnerCredentials
                 .Where(credential => credential.Id == storedCredentialId
                     && credential.OwnerId == storedOwnerId
-                    && credential.Method == storedMethod)
+                    && credential.Method == storedMethod
+                    && (statedLookup == null || credential.Lookup == statedLookup))
                 .ExecuteUpdateAsync(
                     setters => setters
                         .SetProperty(credential => credential.Lookup, storedLookup)

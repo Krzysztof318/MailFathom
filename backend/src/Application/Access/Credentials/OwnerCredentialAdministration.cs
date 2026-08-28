@@ -559,9 +559,10 @@ public sealed class OwnerCredentialAdministration
     /// identifier" read alike. The record is written after the change commits, so nothing is claimed that the store
     /// refused.
     /// <para>
-    /// The two acts that name no method are the two that are the same act whichever credential they reached: turning
-    /// one off and removing one are written against the identifier, which is the handle the administrator used. The
-    /// method is recorded where the act was about it.
+    /// The acts that name no method are the ones that are the same act whichever credential they reached: turning one
+    /// on, turning one off, and removing one are written against the identifier, which is the handle the administrator
+    /// used, and the record carries no method rather than an unspecified one. The method is recorded where the act was
+    /// about it.
     /// </para>
     /// </remarks>
     private Task RecordAsync(
@@ -577,7 +578,7 @@ public sealed class OwnerCredentialAdministration
                     act,
                     credentialId,
                     owner,
-                    method ?? default,
+                    method,
 
                     // Every act above required a permission, which only an admitted caller holds, so the identity is
                     // there. The fallback is the honest name for the one principal that could reach a use case without

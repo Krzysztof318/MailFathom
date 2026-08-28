@@ -39,14 +39,20 @@ public interface IOwnerCredentialAuditor
 /// <param name="Act">What was done.</param>
 /// <param name="CredentialId">The credential it was done to.</param>
 /// <param name="Owner">The owner the credential authenticates.</param>
-/// <param name="Method">How the credential is presented, which is what makes two records about one owner readable apart.</param>
+/// <param name="Method">How the credential is presented, which is what makes two records about one owner readable apart, and <see langword="null" /> for the acts written against the identifier alone.</param>
 /// <param name="ActingAdministrator">What the administrative surface admitted the caller as, which is a configured credential's own name rather than a person.</param>
 /// <param name="OccurredAt">When the change committed.</param>
+/// <remarks>
+/// <paramref name="Method" /> is optional because three of the five acts are the same act whichever credential they
+/// reached: enabling one, disabling one, and deleting one are asked for by identifier and name no method. Carrying the
+/// unspecified <see cref="OwnerCredentialMethod" /> there instead would hand every sink a value whose published name
+/// throws and which no serializer will write, and it would do so after the store write had already committed.
+/// </remarks>
 public sealed record OwnerCredentialChange(
     OwnerCredentialAct Act,
     Guid CredentialId,
     MailOwnerId Owner,
-    OwnerCredentialMethod Method,
+    OwnerCredentialMethod? Method,
     string ActingAdministrator,
     DateTimeOffset OccurredAt);
 

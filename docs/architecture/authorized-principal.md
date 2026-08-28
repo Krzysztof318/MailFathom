@@ -136,13 +136,15 @@ exactly as an unknown credential is.
 
 The gate answers for the callers that carry nobody, and it settles the whole roster while the host starts — every owner
 the file declares, each with the mail accounts they own, and the deployment's own `MailSynchronization:Accounts`
-belonging to the sole owner such a deployment holds. A caller carrying nobody needs exactly one owner to act for, so
-the gate refuses to come up on any other number **while `AdminEndpoint` is enabled, or while `McpEndpoint` or
-`ClientEndpoint` is enabled and requires no credential**. Those are the two ways a request reaches a use case without an
-owner on it: an unauthenticated mail-serving surface admits a caller that presented nothing, and an administrator acts
-for the deployment rather than for a person, so the acts of theirs that need an owner — the contact book above all —
-resolve the sole one, which a roster of several leaves with no answer. A surface that requires a credential is not among
-them and never was after this release, because the credential is what names the owner.
+belonging to the sole owner such a deployment holds. It refuses to come up on any number but one **while
+`McpEndpoint`, `ClientEndpoint`, or `AdminEndpoint` is enabled**, and it refuses on the enablement alone rather than on
+whether the surface requires a credential. Two things are behind that. An unauthenticated mail-serving surface admits a
+caller that presented nothing, and an administrator acts for the deployment rather than for a person, so the acts of
+theirs that need an owner — the contact book above all — resolve the sole one. And a caller the credential *does* name
+still reaches reads that resolve the owner from the deployment rather than from the caller, `OwnedMailAccountCatalog`
+and the attachment download route above all, so a roster of several would answer those with an unclassified failure.
+The credential naming the owner is what makes lifting the bound possible; lifting it waits for those readers to take
+the owner from the caller.
 [The health endpoints](../operations/health-endpoints.md#the-three-probes) record what each refusal means to an
 operator.
 

@@ -22,9 +22,11 @@ namespace MailFathom.Host.Security.Transport;
 /// </para>
 /// <para>
 /// The names below are what keeps two surfaces from reaching each other. Each registers its own routing scheme, and each
-/// endpoint requires an authorization policy naming only that scheme, so a credential the other surface accepts is never
-/// consulted for this one. That isolation is by scheme name rather than by an explicit check, which is what makes it
-/// hold for every route on the surface instead of for the routes somebody remembered.
+/// endpoint requires an authorization policy naming only that scheme, so a method the other surface accepts and this one
+/// does not is never consulted here. That isolation is by scheme name rather than by an explicit check, which is what
+/// makes it hold for every route on the surface instead of for the routes somebody remembered. It isolates the schemes
+/// rather than the credentials: where both mail-serving surfaces accept one method, both resolve the same owner rows
+/// through it, for the reason <see cref="Client" /> gives.
 /// </para>
 /// <para>
 /// The authentication names are internal handles: nothing published, persisted, or configured reads them. A challenge
@@ -87,9 +89,20 @@ internal readonly record struct TransportSurface
     /// <remarks>
     /// It draws on the same half of the permission vocabulary <see cref="Mcp" /> does, because the client reads the
     /// mailbox an agent reads and a second vocabulary for the same operations would be two names for one authority.
-    /// What is separate is everything else: its own listener, its own credentials, its own bounds, and an assertion
-    /// audience of its own — so a key provisioned for an agent authenticates nothing in the mail client, and the
-    /// client's own credential authenticates nothing on either other surface.
+    /// What is separate is its listener, its bounds, and its assertion audience — the last of which is what still keeps
+    /// a client assertion signed for one of the two mail surfaces from being replayed against the other.
+    /// <para>
+    /// Its credentials are no longer separate, and that is a deliberate consequence of resolving every owner-facing
+    /// credential to an owner row: a row names an owner and a method and carries no surface, so an api-key, a password,
+    /// or an OAuth subject that admits an owner admits them wherever the deployment accepts that method. An operator
+    /// who wants a client credential that opens no agent surface configures the two endpoints to accept different
+    /// methods. Carrying the surface on the row is what would restore the narrower guarantee, and it is not in this
+    /// release.
+    /// </para>
+    /// <para>
+    /// The administrative surface is unaffected either way, because its credentials stay configured under
+    /// <see cref="Admin" />'s own section and are never resolved from a row.
+    /// </para>
     /// </remarks>
     internal static TransportSurface Client { get; } = new(
         "Client",

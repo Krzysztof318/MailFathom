@@ -369,32 +369,35 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
     /// <summary>Refuses a deployment whose served surfaces could not say which owner an act is for.</summary>
     /// <remarks>
     /// <para>
-    /// An owner-facing surface answers one person about their own mail, and what names that person is the credential:
-    /// every method the two mail-serving surfaces accept resolves one owner record, so a surface requiring a credential
-    /// composes a caller for whichever owner admitted them and serves a roster of any size.
+    /// An owner-facing surface answers one person about their own mail, and nothing this release admits a caller with
+    /// names the owner they act for: authentication-free operation admits them with no credential at all, and a
+    /// configured credential authenticates without carrying an owner. Both leave a deployment serving several owners
+    /// with no way to compose a caller, so the surface is refused rather than served against whichever owner a read
+    /// happened to find.
     /// </para>
     /// <para>
-    /// Two shapes still admit a caller carrying nobody, and each needs a sole owner to act for. A mail-serving surface
-    /// enabled with an empty <c>Authentication</c> list admits whoever reaches the port, with no credential to resolve
-    /// an owner from. And the administrative surface admits an administrator whose acts are the deployment's rather
-    /// than one person's, so they carry no owner and every act of theirs that needs one resolves it through
+    /// The administrative surface is in that set for a reason of its own. An administrator's acts are the deployment's
+    /// rather than one person's, so they carry no owner and every act of theirs that needs one resolves it through
     /// <see cref="IDeploymentMailOwnerSource.Owner" /> — the contact book above all. That read has no answer on a
-    /// roster of several, so serving either shape would answer such a route with an unclassified failure rather than
-    /// against the owner the caller meant.
+    /// roster of several, so serving the surface would answer each such route with an unclassified failure rather than
+    /// with somebody's contacts.
     /// </para>
     /// </remarks>
     private void RefuseSeveralOwnersOnAnOwnerFacingSurface(IReadOnlyList<ServedMailOwner> served)
     {
-        var unauthenticatedMailServingSurface =
-            (this.mcpEndpointSettings.Enabled && !this.mcpEndpointSettings.RequiresAuthentication)
-            || (this.clientEndpointSettings.Enabled && !this.clientEndpointSettings.RequiresAuthentication);
-
-        var surfacesResolvingASoleOwner = unauthenticatedMailServingSurface || this.adminEndpointSettings.Enabled;
+        var surfacesResolvingASoleOwner =
+            this.mcpEndpointSettings.Enabled
+            || this.clientEndpointSettings.Enabled
+            || this.adminEndpointSettings.Enabled;
 
         if (served.Count > 1 && surfacesResolvingASoleOwner)
         {
-            throw DeploymentMailOwnerUnresolvedException.SeveralOwnersOnAnOwnerFacingSurface(
-                unauthenticatedMailServingSurface);
+            var authenticationDisabled =
+                (this.mcpEndpointSettings.Enabled && !this.mcpEndpointSettings.RequiresAuthentication)
+                || (this.clientEndpointSettings.Enabled && !this.clientEndpointSettings.RequiresAuthentication)
+                || (this.adminEndpointSettings.Enabled && !this.adminEndpointSettings.RequiresAuthentication);
+
+            throw DeploymentMailOwnerUnresolvedException.SeveralOwnersOnAnOwnerFacingSurface(authenticationDisabled);
         }
     }
 

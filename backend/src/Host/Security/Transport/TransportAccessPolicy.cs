@@ -41,10 +41,11 @@ namespace MailFathom.Host.Security.Transport;
 /// an admitted caller.
 /// </para>
 /// <para>
-/// What an admitted caller may then <em>do</em> is a separate question and is not asked here. The permissions its
-/// credential's configuration entry granted travel on the principal this judges, written by whichever scheme
-/// authenticated it, so that admission stays one shared judgement while each surface comes to enforce the grant in the
-/// terms its own callers are answered in. <see cref="TransportGrant" /> is how one is read back, through the caller the
+/// What an admitted caller may then <em>do</em> is a separate question and is not asked here. The permissions travel on
+/// the principal this judges, written by whichever scheme authenticated it, and where they were granted follows the
+/// same split as the owner: on a mail-serving surface the credential record carries the grant beside the owner it
+/// names, and on the administrative surface the configured entry states it. Either way admission stays one shared
+/// judgement while each surface comes to enforce the grant in the terms its own callers are answered in. <see cref="TransportGrant" /> is how one is read back, through the caller the
 /// application layer is handed. The MCP surface serves each caller the tools its grant permits and answers a call for
 /// any other as a tool that does not exist; the administrative surface refuses a route the grant does not admit and
 /// names the one permission that would have sufficed, because the caller there is an operator at their own terminal.
@@ -145,9 +146,10 @@ internal static class TransportAccessPolicy
     /// <summary>Reports whether a credential this deployment holds rather than a token an authorization server issued produced this principal, judged by what the principal carries rather than by which scheme named it.</summary>
     /// <remarks>
     /// Each claim type is read rather than one of them standing for the others, because each names a different kind of
-    /// credential and a principal carrying none of them has to fall through to the token rules. The first two name a
-    /// credential this deployment's configuration states; the third names one of its own database rows, which is the
-    /// only difference a password makes here — the identity is still established before this runs, and what is left to
+    /// credential and a principal carrying none of them has to fall through to the token rules. What each one names
+    /// follows the surface: on the administrative surface an API key and a client public key are stated in
+    /// configuration, and on a mail-serving surface all three name one of this deployment's own credential rows. The
+    /// distinction does not matter here — the identity is established before this runs either way, and what is left to
     /// decide is that it was not an unrecognized subject.
     /// </remarks>
     private static bool AuthenticatedWithACredentialThisDeploymentHolds(ClaimsPrincipal principal) =>

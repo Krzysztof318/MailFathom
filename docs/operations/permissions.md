@@ -396,11 +396,10 @@ surface or the client surface is admitted to act for one owner, and every mailbo
 that owner owns before any grant is consulted; a caller admitted on the administrative surface acts for no owner at all,
 so an owner-scoped use case refuses it however broad its grant. That is why no permission names an account and adding
 one would be the wrong repair: a grant says what may be done, and whose mail it may be done to is decided by what
-admitted the caller. A deployment may declare several owners and serve each of them the mail accounts they own, and a
-mail-serving surface that requires a credential resolves the owner from the credential itself — so several owners are
-served over one address. What still needs a sole owner is a caller carrying nobody: an owner-facing surface enabled
-with no credential required, and the administrative surface, whose acts are the deployment's and whose owner-scoped
-ones resolve the sole owner. A deployment serving several refuses to come up in either of those shapes.
+admitted the caller. A deployment may declare several owners and serve each of them the mail accounts they own, and
+every credential a mail-serving surface accepts now names the owner it admits — but a deployment serving several still
+refuses to come up while any of the three surfaces is enabled, because the reads that resolve an owner from the
+deployment rather than from the caller have not moved yet.
 [Who a use case is running for](../architecture/authorized-principal.md) records the whole of it.
 
 **Whether a capability exists.** A grant composes with availability rather than replacing it: a tool may be

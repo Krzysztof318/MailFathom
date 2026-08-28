@@ -17,11 +17,19 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
         // alone; what widens it is a method column and a grant, so the rows that exist keep working and keep the
         // identifiers an operator wrote down.
         //
-        // Both backfills state what the existing rows already were rather than choosing something for them: every row
-        // this migration can meet was written by the password credential store, which was the only writer, and the
-        // grant those rows were admitted with was the whole mail surface the endpoint's section resolved to. Neither
-        // default survives the statement that adds it, because the model declares none and a column carrying one the
-        // model does not know about is a divergence nothing would report.
+        // The method backfill states what the existing rows already were: every row this migration can meet was written
+        // by the password credential store, which was the only writer.
+        //
+        // The grant backfill cannot do the same, and grants nothing rather than guessing. What a password credential
+        // was admitted with lived on the endpoint's Authentication entry, which narrowed to the operator's own
+        // Permissions list wherever they wrote one — a list this statement cannot see. Backfilling the whole mail
+        // surface would therefore widen exactly the deployments that had governed their credentials, handing a
+        // read-only sign-in the ability to send mail on an upgrade nobody asked for. So an upgraded credential
+        // authenticates and may do nothing until it is provisioned again with the grant its owner is meant to have,
+        // which is the operator's action this release's changelog names.
+        //
+        // Neither default survives the statement that adds it, because the model declares none and a column carrying
+        // one the model does not know about is a divergence nothing would report.
 
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -94,7 +102,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                 table: "owner_credentials",
                 type: "text[]",
                 nullable: false,
-                defaultValueSql: "ARRAY['mailfathom.mail.read', 'mailfathom.mail.ask', 'mailfathom.mail.contacts.read', 'mailfathom.mail.contacts.write', 'mailfathom.mail.flags.write', 'mailfathom.mail.drafts.write', 'mailfathom.mail.send']::text[]");
+                defaultValueSql: "ARRAY[]::text[]");
 
             migrationBuilder.Sql(
                 """
