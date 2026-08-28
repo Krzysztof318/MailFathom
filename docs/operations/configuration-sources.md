@@ -1,6 +1,6 @@
 # Configuration sources
 
-<!-- describes: backend/src/Application/Configuration/**, backend/src/Host/Configuration/**, backend/src/Infrastructure/Persistence/Settings/**, backend/src/Infrastructure/Persistence/Owners/**, backend/src/Cli/Commands/Configuration/** -->
+<!-- describes: backend/src/Application/Configuration/**, backend/src/Host/Configuration/**, backend/src/Infrastructure/Persistence/Settings/**, backend/src/Infrastructure/Persistence/Owners/**, backend/src/Cli/Commands/Configuration/**, backend/src/Host/Hosting/Startup/ServedMailOwnersStartupGate.cs, backend/src/Application/Access/DeploymentMailOwnerUnresolvedException.cs -->
 
 MailFathom reads its settings through the ordinary .NET configuration pipeline, plus two additions. A deployment may name a directory or a file of JSON configuration that it provisioned outside the application's own content root, which is what makes a Kubernetes ConfigMap mounted as a volume ordinary configuration rather than a shape the host cannot see. And the deployment's own persisted settings — one document in PostgreSQL, composed at startup like every other source — are layered in above those files, so a setting the deployment has persisted binds and validates exactly as one that came from a file. When an edit to that document takes effect is [its own section](#the-persisted-layer) below.
 
@@ -92,9 +92,9 @@ One entry exists in this release: the top-level `Accounts` collection of owner a
 
 A `settings_root` document carrying `Accounts`, or anything beneath it, is therefore **refused** under error code `12005`, naming the path. It is the same choice the refusal above makes and for the same reason: a row an operator wrote by hand is a mistake, and a mistake composed with the duplicate silently dropped is one they go on believing they fixed.
 
-**This release carries the owner-accounts store's schema, the typed record its document binds to, and the read that loads one row, and no path that binds a document.** Each row holds the declarations and the owner-level settings that are one person's own. The binder those go through is composed into the host and nothing calls it: the read hands a caller the document as the row holds it, so a `settings_accounts` row edited by hand is neither judged nor refused on the way out. What follows is what that binder does once something drives it — importing what configuration declares and provisioning an owner over an endpoint are the changes that will — so the contract is readable before the first caller exists.
+**A row's document is bound at startup, for an owner who has taken their record over and for no other.** Each row holds the declarations and the owner-level settings that are one person's own, and [the owners a deployment serves](#the-owners-a-deployment-serves) below is which of the two sources each owner is read from and how an owner moves between them. Until an owner is adopted their document is not read at all — their mail accounts come from configuration — so a `settings_accounts` row written by hand for an owner still read from their file changes nothing and is neither judged nor refused.
 
-Binding is strict, so a property nothing binds is a refusal rather than a value dropped, and the record is then judged by every rule a mail account is declared under. The account identifier and the published name are unique *within the owner*, so two people may each declare `work` and neither is refused for it. The document may carry no secret material: a mailbox password is a `<scheme>:<target>` reference naming where the material is kept, exactly as `settings_root` requires, and a value carrying the material itself is refused. None of it is a configuration layer — the record shadows no deployment setting, and a value that would need to is a deployment setting written into the wrong document.
+Binding is strict, so a property nothing binds is a refusal rather than a value dropped, and the record is then judged by every rule a mail account is declared under. The account identifier and the published name are unique *within the owner*, which is the rule the document binder applies — but a second, deployment-wide bound narrows it while an owner is read from configuration, and [the owners a deployment serves](#the-owners-a-deployment-serves) states it: no two declared owners may name a mail account alike. Every owner of this release is in that state, so `work` under two owners is refused today and is accepted only once both are served from documents of their own. The document may carry no secret material: a mailbox password is a `<scheme>:<target>` reference naming where the material is kept, exactly as `settings_root` requires, and a value carrying the material itself is refused. None of it is a configuration layer — the record shadows no deployment setting, and a value that would need to is a deployment setting written into the wrong document.
 
 What the read does enforce is size. The row is measured by PostgreSQL in the statement that reads it, and a document past what this build binds is refused under error code `12012` rather than transferred, so a row something else wrote too large stops that request instead of the process.
 
@@ -113,6 +113,112 @@ Host MailFathom.Host composed its settings over persisted configuration version 
 That number is the only record of which document the process actually read — the files are in the repository and the environment is in the manifest, and what the row held at that moment is otherwise unrecoverable from the running process.
 
 **A committed write republishes the layer, and a republish that fails changes nothing.** Republishing a later document to everything bound to it is what [a committed write](#changing-a-persisted-setting) ends with. What the path guarantees: a candidate that cannot be read leaves the deployment exactly as it was, one that reads but is not a configuration document — or carries a setting this layer may not or does not hold — is rejected *by version* with the record naming both the version that did not take and the version still serving, and a fall back to the files beneath this layer never happens — those never carried the persisted values, so reverting to them would quietly change settings the deployment had already adopted.
+
+## The owners a deployment serves
+
+Every mail account, every stored message, and every job belongs to an **owner**, and `settings_accounts` holds one row per owner because the mail graph's foreign key is relational rather than a predicate over a document. What that row holds is a different question from whether it exists: the envelope — the identifier, the label, the version, the timestamps — is always the row's, and the *content* — the owner's mail accounts and the settings that are theirs — comes from configuration until that owner is explicitly handed over to their document.
+
+**A deployment may therefore keep its whole configuration outside the database, owners included.** The rows exist so the graph resolves; the file is still the truth about what is served.
+
+### Declaring an owner
+
+Owners are the top-level `Accounts` collection. It is **not** `MailSynchronization:Accounts`, which is the deployment's own mailbox section and is [described elsewhere](configuration-mail.md); the two carry the same word and are different collections.
+
+```json
+{
+  "Accounts": [
+    {
+      "Id": "3f2b8c14-6d5a-4e9f-8b70-1c2d3e4f5a60",
+      "DisplayName": "alex",
+      "MailAccounts": [
+        {
+          "AccountId": "alex-work",
+          "DisplayName": "Alex at work",
+          "Host": "imap.example.test",
+          "UserName": "alex@example.test",
+          "Secrets": { "Password": { "SecretReference": "file:/run/secrets/alex-work-password" } }
+        }
+      ]
+    }
+  ]
+}
+```
+
+| Key | Required | What it is |
+| --- | --- | --- |
+| `Accounts:<n>:Id` | Yes | The identifier every mail account, every stored message, and every job of this owner hangs on, written as a UUID |
+| `Accounts:<n>:DisplayName` | Yes | The label an administrator tells owners apart by, at most 128 characters and unique across the deployment |
+| `Accounts:<n>:MailAccounts` | No | The mail accounts this owner owns, each declared exactly as one in `MailSynchronization:Accounts` is |
+
+An owner declaring no mailbox is an ordinary state rather than an unfinished one: an owner exists before their first mailbox does, and one whose last mailbox is withdrawn is still an owner. Binding is strict, so a property nothing binds — a `DisplayNames` where `DisplayName` belongs — fails the start naming it rather than leaving the host running on a default.
+
+At most **256** owners may be declared. A file past that was generated rather than written, which is worth stopping for on its own.
+
+### The identifier is yours to generate
+
+**MailFathom does not invent it.** Nothing in a file could derive an identifier that is the same across restarts and across replicas, and one invented per start would attach a deployment's stored mail to a person who existed for one process. So the operator states it, and it is a **version 4 UUID** — deliberately unlike the version 7 identifiers the rest of persistence mints, because an owner identifier reaches administrative APIs, audit records, and logs, and a time-ordered one would publish when each owner was created and in what order.
+
+Produce one with whatever is already on the machine:
+
+```sh
+uuidgen                                   # util-linux, macOS
+python3 -c 'import uuid; print(uuid.uuid4())'
+cat /proc/sys/kernel/random/uuid          # Linux, no tools at all
+```
+
+A value that is not a well-formed UUID stops the start, and so does the all-zero UUID, which is what a template emits for a field nobody filled in and which names nobody. Two owners declared under one identifier stop it too: an identifier names one person, and everything either of them owned would be recorded against the same row.
+
+**Never change it afterwards.** A declaration whose identifier has moved for an owner the database already holds under that label stops the start naming them, rather than orphaning every message that hangs on the old value. Restore the identifier the deployment holds, and rename the owner instead if the label is what you meant to change — a changed label is applied to the row and is not a refusal.
+
+A label is applied only where nobody else holds it. A label declared for one owner while another owner the deployment holds still carries it stops the start too, because a label names one owner and the column that stores it is unique. That makes two owners exchanging labels two starts rather than one: free the label in the first — relabel or remove whoever holds it — and declare it for its new owner in the second.
+
+### A deployment that declares no owner
+
+Today's shape keeps working and **no file has to change**. A deployment that declares no owner at all serves exactly one: the row the release's migration provisioned, or — where the deployment holds none — one identifier generated once and recorded, reported at `Information`:
+
+```
+This deployment declared no owner and held none, so one has been recorded for the mail accounts it is configured with.
+```
+
+Every account in `MailSynchronization:Accounts` belongs to that sole owner. Once owners *are* declared there is no sole owner for that section's accounts to belong to, so declaring both is **refused**: move each of those accounts under the owner who owns it, as an entry of that owner's `MailAccounts`.
+
+Two further bounds hold while owners are declared. Only one owner may be served whenever the MCP endpoint, the client endpoint, or the administrative endpoint is enabled, because a credential does not yet name the owner it acts for and every admitted caller is composed for the sole owner — and because an administrator acts for the deployment rather than for a person, so the acts of theirs that need an owner resolve the sole one. A deployment serving several with any of those surfaces on is refused, and the message says whether the surface admits callers without authenticating them or authenticates them without naming an owner. And no two owners may name a mail account alike — this release resolves an account's settings by its identifier alone, so a name two owners shared would reach whichever declaration the lookup met first. Give each mailbox a name no other owner uses.
+
+### What a start reports
+
+Every start records the roster, at `Information`:
+
+```
+This deployment serves 3 owners: 2 read from configuration and 1 from their own document.
+```
+
+and then one line per owner whose source is not their file:
+
+```
+The owner labelled morgan is read from their own document; no configuration source reaches their mail accounts. Change them with mfctl.
+```
+
+An owner the database holds and no file declares is **neither deleted nor stripped of their mail**. They stop being served — their mail is kept, and neither read nor refreshed — and the start says so at `Warning`:
+
+```
+The owner labelled sam is held by this deployment and declared nowhere, so they are not served. Their mail is kept and neither read nor refreshed; removing them is an explicit act through mfctl.
+```
+
+### The handover, and what it costs
+
+**The handover is per owner and never happens by itself.** A start reads each row's runtime-written marker and serves that owner from whichever source it names — their declaration while the marker is unset, their document once it is set. Nothing here sets it: no upgrade, no import, and no first start adopts anybody, and this release ships no command that sets it either, so **every owner of this release is read from configuration** and the document half of the rule is what the marker will select once something writes an owner's document.
+
+Until something does, a configuration write naming an owner is **refused** rather than applied, because a write against an empty document would silently drop every mailbox the file was supplying:
+
+```
+MailFathom persists Accounts:0:MailAccounts:0:Host in the owner-accounts store, and every owner of this release is
+served from the declaration a configuration source supplies rather than from that store. Change the declaration where
+it is written — the owner's own section of the top-level Accounts collection — and restart.
+```
+
+**Once an owner is adopted the change is permanent for them, and no configuration source reaches their mail accounts at all** — not the provisioned file, and not an environment variable or a command-line argument either. Those accounts have stopped being configuration keys rather than merely losing precedence, so the precedence table at the top of this page has nothing to say about them. `mfctl` over the administrative port is what changes them afterwards, and what repairs a deployment whose file no longer reaches an owner it used to.
+
+This is the one place the page's standing claim needs reading carefully. **No file MailFathom reads is ever written back** — that still holds, and adoption writes nothing into anybody's file. What it does is stop MailFathom reading one owner's section out of it, which the file itself cannot show; the startup line naming that owner is what says so, and it is worth reading after any adoption.
 
 ## Changing a persisted setting
 

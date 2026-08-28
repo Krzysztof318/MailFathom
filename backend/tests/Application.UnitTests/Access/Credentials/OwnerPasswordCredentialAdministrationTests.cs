@@ -384,7 +384,8 @@ public sealed class OwnerPasswordCredentialAdministrationTests
 
             this.Owners = Substitute.For<IMailOwnerDirectory>();
             this.Owners.ReadOwnersAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
-                .Returns([Owner]);
+                .Returns(Task.FromResult<IReadOnlyList<MailOwnerRecord>>(
+                    [new MailOwnerRecord(Owner, "owner", DocumentWrittenAtRuntime: false)]));
 
             this.Administration = new OwnerPasswordCredentialAdministration(
                 new AccessAuthorization(principals),

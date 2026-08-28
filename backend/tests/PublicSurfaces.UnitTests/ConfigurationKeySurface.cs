@@ -7,6 +7,7 @@ using System.Globalization;
 using System.Reflection;
 using MailFathom.Application.Resilience;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Configuration.OwnerSettings;
 using MailFathom.Host.Configuration.Provisioning;
 using MailFathom.Infrastructure;
 using MailFathom.Infrastructure.Secrets.Resolution;
@@ -34,6 +35,15 @@ internal static class ConfigurationKeySurface
     /// <summary>How deep a walk follows nested settings before it reports the path instead of continuing.</summary>
     /// <remarks>A backstop rather than a bound anything reaches: the cycle guard already stops a graph that refers to itself, and no configured section nests this far.</remarks>
     private const int MaximumDepth = 12;
+
+    /// <summary>The discovered sections the host binds a list of rather than one of.</summary>
+    /// <remarks>
+    /// A section's own constant names where it is read from and says nothing about the shape beneath it, so nothing a
+    /// walk can see distinguishes a section bound once from one bound per element. Naming the collections here is what
+    /// records their keys as an operator writes them — <c>Accounts:0:Id</c> rather than <c>Accounts:Id</c> — and a
+    /// second one added without a line here would be recorded under a path nobody can write.
+    /// </remarks>
+    private static readonly string[] SectionsBoundAsCollections = [DeclaredOwnerOptions.SectionName];
 
     /// <summary>Renders the published configuration key set.</summary>
     /// <returns>The header and one line per key, ordered so the rendering depends on nothing but the keys themselves.</returns>
@@ -87,7 +97,7 @@ internal static class ConfigurationKeySurface
                 .Where(candidate => candidate != typeof(ProvisionedConfigurationPaths))
                 .Select(candidate => (Settings: candidate, Declaration: SectionNameDeclaration(candidate)))
                 .Where(candidate => candidate.Declaration is not null)
-                .Select(candidate => ((string)candidate.Declaration!.GetRawConstantValue()!, candidate.Settings)),
+                .Select(candidate => (PathOf((string)candidate.Declaration!.GetRawConstantValue()!), candidate.Settings)),
 
             // One bound instance per dependency class, named after the enumeration member, which is what makes the
             // member names part of the configuration surface rather than an implementation detail behind it.
@@ -95,6 +105,12 @@ internal static class ConfigurationKeySurface
                 .Select(dependency => ($"Resilience:{dependency}", resilienceSettings)),
         ];
     }
+
+    /// <summary>Reads the path a section's keys hang under, which carries a position where the host binds a list of it.</summary>
+    private static string PathOf(string sectionName) =>
+        SectionsBoundAsCollections.Contains(sectionName, StringComparer.Ordinal)
+            ? $"{sectionName}:<index>"
+            : sectionName;
 
     /// <summary>The keys the host reads straight from configuration, which no options class carries.</summary>
     private static IEnumerable<ConfigurationKey> KeysReadWithoutTheBinder() =>

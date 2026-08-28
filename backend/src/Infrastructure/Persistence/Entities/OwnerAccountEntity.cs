@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Access;
 using MailFathom.CodeCoverage;
 
 namespace MailFathom.Infrastructure.Persistence.Entities;
@@ -26,7 +27,8 @@ namespace MailFathom.Infrastructure.Persistence.Entities;
 internal sealed class OwnerAccountEntity
 {
     /// <summary>The longest label an owner is told apart by, which is what a mail account's identifier is bounded at.</summary>
-    public const int MaximumDisplayNameLength = 128;
+    /// <remarks>Taken from the application's own statement of the bound, so the column and the rule that judges a declaration carrying a label cannot disagree about it.</remarks>
+    public const int MaximumDisplayNameLength = MailOwnerRecord.MaximumDisplayNameLength;
 
     /// <summary>The stable owner identity every mail account of theirs points at.</summary>
     /// <remarks>

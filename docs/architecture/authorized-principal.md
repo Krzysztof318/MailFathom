@@ -124,9 +124,17 @@ rather than from what it presented.
 **Which owner that is comes from the credential where the credential names one, and from a startup gate otherwise.** A
 username and password authenticate exactly one owner, so a request admitted that way carries that owner as a claim and
 the adapter acts for it — which is what lets one deployment serve more than one person's mail over one address. Every
-other credential names no owner, and for those the answer is the gate: a mail account declared in configuration names
-nobody, so the deployment holds exactly one owner record for every configured account to belong to, and the host reads
-it once while starting and refuses to come up on any other number.
+other credential names no owner, and for those the answer is the gate.
+
+The gate settles the whole roster while the host starts — every owner the file declares, each with the mail accounts
+they own, and the deployment's own `MailSynchronization:Accounts` belonging to the sole owner such a deployment holds.
+A caller whose credential names no owner needs exactly one owner to act for, so the gate refuses to come up on any
+other number **while `McpEndpoint`, `ClientEndpoint`, or `AdminEndpoint` is enabled** — and it refuses on the enablement
+alone rather than on which methods the surface accepts, because a surface accepting a password accepts the other
+methods beside it and a caller admitted by one of those still arrives carrying nobody. The administrative surface is
+among the three for a reason of its own: an administrator acts for the deployment rather than for a person, so the acts
+of theirs that need an owner resolve the sole one, and a roster of several leaves that with no answer. So a deployment
+serving several owners serves none of the three today, and the roster is what its synchronization runs on.
 [The health endpoints](../operations/health-endpoints.md#the-three-probes) record what each refusal means to an
 operator.
 

@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Net.Http.Json;
-using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Resilience;
 using MailFathom.Common.OAuth;
@@ -42,7 +41,7 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
     private readonly IHttpClientFactory transportFactory;
     private readonly IMailOAuthSettingsProvider settingsProvider;
     private readonly IMailboxRefreshTokenStore refreshTokenStore;
-    private readonly IDeploymentMailOwnerSource deploymentOwner;
+    private readonly IDeploymentMailAccountCatalog accountCatalog;
     private readonly MailAccessTokenCache tokenCache;
     private readonly OutboundOperationExecutor operationExecutor;
     private readonly TimeProvider timeProvider;
@@ -52,7 +51,7 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
     /// <param name="transportFactory">Opens the transport a token request is sent over, one per exchange.</param>
     /// <param name="settingsProvider">Resolves one account's endpoint and secrets per request.</param>
     /// <param name="refreshTokenStore">Holds the refresh token MailFathom stores, and receives the one a rotation issues.</param>
-    /// <param name="deploymentOwner">Names the owner a configured account belongs to, which the stored credential is recorded under.</param>
+    /// <param name="accountCatalog">Names the owner each served account belongs to, which the stored credential is recorded under.</param>
     /// <param name="tokenCache">Holds the issued tokens across scopes and serializes the requests that replace them.</param>
     /// <param name="operationExecutor">Applies the authorization-server resilience budget.</param>
     /// <param name="timeProvider">Supplies the instant an expiry is measured from.</param>
@@ -62,7 +61,7 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
         IHttpClientFactory transportFactory,
         IMailOAuthSettingsProvider settingsProvider,
         IMailboxRefreshTokenStore refreshTokenStore,
-        IDeploymentMailOwnerSource deploymentOwner,
+        IDeploymentMailAccountCatalog accountCatalog,
         MailAccessTokenCache tokenCache,
         OutboundOperationExecutor operationExecutor,
         TimeProvider timeProvider,
@@ -71,7 +70,7 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
         ArgumentNullException.ThrowIfNull(transportFactory);
         ArgumentNullException.ThrowIfNull(settingsProvider);
         ArgumentNullException.ThrowIfNull(refreshTokenStore);
-        ArgumentNullException.ThrowIfNull(deploymentOwner);
+        ArgumentNullException.ThrowIfNull(accountCatalog);
         ArgumentNullException.ThrowIfNull(tokenCache);
         ArgumentNullException.ThrowIfNull(operationExecutor);
         ArgumentNullException.ThrowIfNull(timeProvider);
@@ -80,7 +79,7 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
         this.transportFactory = transportFactory;
         this.settingsProvider = settingsProvider;
         this.refreshTokenStore = refreshTokenStore;
-        this.deploymentOwner = deploymentOwner;
+        this.accountCatalog = accountCatalog;
         this.tokenCache = tokenCache;
         this.operationExecutor = operationExecutor;
         this.timeProvider = timeProvider;
@@ -143,11 +142,22 @@ internal sealed class MailOAuthAccessTokenSource : IMailAccessTokenSource
     /// </remarks>
     /// <summary>Names the account in full, so a stored credential records whose account it belongs to.</summary>
     /// <remarks>
-    /// The owner comes from the deployment's own owner rather than from a read of the account table, because a
-    /// configured account names no owner of its own and every account this deployment declares belongs to that one.
+    /// The owner comes from the account this deployment serves under that identifier rather than from a read of the
+    /// account table or from a sole owner the deployment may not have: a configured mailbox names no owner of its own,
+    /// and which owner declared it is exactly what the catalog resolved when it published the account.
     /// </remarks>
-    private MailAccountIdentity AccountIdentityOf(MailOAuthAccountSettings settings) =>
-        MailAccountIdentity.Create(this.deploymentOwner.Owner, MailAccountId.Create(settings.AccountId));
+    /// <exception cref="InvalidOperationException">Thrown when no served account carries the identifier, which is an account withdrawn between the run being scheduled and its token being requested.</exception>
+    private MailAccountIdentity AccountIdentityOf(MailOAuthAccountSettings settings)
+    {
+        var accountId = MailAccountId.Create(settings.AccountId);
+
+        var served = this.accountCatalog.ServedAccounts
+            .FirstOrDefault(account => account.Id == accountId)
+            ?? throw new InvalidOperationException(
+                $"Account '{accountId.Value}' is no longer served, so the owner its stored credential would be recorded under cannot be named.");
+
+        return served.Identity;
+    }
 
     private static Dictionary<string, string> BuildTokenRequestForm(
         MailOAuthAccountSettings settings,

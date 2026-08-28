@@ -38,7 +38,11 @@ public sealed class OwnerCredentialEndpointsTests
         // Arrange
         var harness = new EndpointHarness(MailFathomPermission.AdminRead);
         harness.Owners.ReadOwnersAsync(OwnerCredentialEndpoints.MaximumListedOwners, Arg.Any<CancellationToken>())
-            .Returns([SyntheticMailOwner.Deployment, SyntheticMailOwner.Another]);
+            .Returns(Task.FromResult<IReadOnlyList<MailOwnerRecord>>(
+            [
+                new MailOwnerRecord(SyntheticMailOwner.Deployment, "owner", DocumentWrittenAtRuntime: false),
+                new MailOwnerRecord(SyntheticMailOwner.Another, "second", DocumentWrittenAtRuntime: false),
+            ]));
 
         // Act
         var result = await OwnerCredentialEndpoints.ListOwnersAsync(

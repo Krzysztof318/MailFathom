@@ -12,20 +12,21 @@ namespace MailFathom.Infrastructure.Persistence.Owners;
 /// <summary>Reads the owner records this deployment holds out of PostgreSQL.</summary>
 /// <remarks>
 /// <para>
-/// The owner rows are the whole of what this reads, and it projects the identity alone: the document beside it is the
-/// owner's own configurable record, and nothing that asks how many owners there are has any business materializing one.
+/// The owner rows are the whole of what this reads, and it projects the envelope alone: the document beside it is the
+/// owner's own configurable record, and nothing that asks who this deployment holds has any business materializing one
+/// — least of all everybody's at once.
 /// </para>
 /// <para>
 /// The order is by the instant an owner was recorded, so "the first owner" is a stable answer rather than whichever
-/// row the database returned first. What a caller does about the count is theirs to decide: this reports what is
-/// there, and the startup gate is what refuses a deployment holding none or several.
+/// row the database returned first. What a caller does about the roster is theirs to decide: this reports what is
+/// there, and the startup gate is what reconciles it against what configuration declares.
 /// </para>
 /// </remarks>
 [RequiresIntegrationCoverage]
 internal sealed class PersistedMailOwnerDirectory(MailFathomDbContext dbContext) : IMailOwnerDirectory
 {
     /// <inheritdoc />
-    public async Task<IReadOnlyList<MailOwnerId>> ReadOwnersAsync(int limit, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<MailOwnerRecord>> ReadOwnersAsync(int limit, CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(limit);
 
@@ -33,10 +34,21 @@ internal sealed class PersistedMailOwnerDirectory(MailFathomDbContext dbContext)
             .AsNoTracking()
             .OrderBy(owner => owner.CreatedAt)
             .ThenBy(owner => owner.Id)
-            .Select(owner => owner.Id)
+            .Select(owner => new
+            {
+                owner.Id,
+                owner.DisplayName,
+                owner.DocumentWrittenAtRuntime,
+            })
             .Take(limit)
             .ToArrayAsync(cancellationToken);
 
-        return [.. owners.Select(MailOwnerId.Create)];
+        return
+        [
+            .. owners.Select(owner => new MailOwnerRecord(
+                MailOwnerId.Create(owner.Id),
+                owner.DisplayName,
+                owner.DocumentWrittenAtRuntime)),
+        ];
     }
 }

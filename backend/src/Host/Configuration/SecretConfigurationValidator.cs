@@ -8,6 +8,7 @@ using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.DataEncryption;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.OwnerSettings;
 using MailFathom.Host.Configuration.Persistence;
 using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.DataEncryption;
@@ -236,7 +237,50 @@ internal sealed partial class SecretConfigurationValidator
         var errors = new List<string>(
             await this.FindSecretReferenceErrorsAsync(MailSynchronizationConfigurationPath, candidate, cancellationToken));
 
-        errors.AddRange(await this.FindTrustAnchorErrorsAsync(candidate, cancellationToken));
+        errors.AddRange(await this.FindTrustAnchorErrorsAsync(
+            $"{MailSynchronizationConfigurationPath}:{nameof(MailSynchronizationOptions.Accounts)}",
+            candidate.Accounts,
+            cancellationToken));
+
+        return errors;
+    }
+
+    /// <summary>Finds everything an operator must fix before one owner's own mail accounts can be connected with.</summary>
+    /// <param name="ownerConfigurationPath">The path the owner's declarations hang under, which prefixes every reported path.</param>
+    /// <param name="mailAccounts">The mail accounts that owner declares, wherever they were declared.</param>
+    /// <param name="cancellationToken">Cancels the resolution.</param>
+    /// <returns>One message per unusable setting, empty when the owner's mail accounts are all usable.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="ownerConfigurationPath" /> is <see langword="null" />, empty, or white space.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="mailAccounts" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// An owner's mailboxes are declared outside <c>MailSynchronization:Accounts</c> and therefore outside the graph
+    /// the mail check above walks, so without this they would start a host clean and fail per connection instead —
+    /// while the identical declaration in the deployment's own section fails the start. The whole owner is put through
+    /// one walk rather than one per account, because a repeated secret name is a refusal within the section that
+    /// declares it and judging each account alone would stop seeing the repeat.
+    /// </remarks>
+    internal async Task<IReadOnlyList<string>> FindOwnerMailAccountErrorsAsync(
+        string ownerConfigurationPath,
+        IReadOnlyList<MailSynchronizationAccountOptions> mailAccounts,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(ownerConfigurationPath);
+        ArgumentNullException.ThrowIfNull(mailAccounts);
+
+        if (mailAccounts.Count == 0)
+        {
+            return [];
+        }
+
+        var owner = new OwnerAccountOptions { MailAccounts = [.. mailAccounts] };
+
+        var errors = new List<string>(
+            await this.FindSecretReferenceErrorsAsync(ownerConfigurationPath, owner, cancellationToken));
+
+        errors.AddRange(await this.FindTrustAnchorErrorsAsync(
+            $"{ownerConfigurationPath}:{nameof(OwnerAccountOptions.MailAccounts)}",
+            mailAccounts,
+            cancellationToken));
 
         return errors;
     }
@@ -697,17 +741,18 @@ internal sealed partial class SecretConfigurationValidator
     /// needs to confirm that the authority MailFathom trusts is the one they provisioned.
     /// </remarks>
     private async Task<IReadOnlyList<string>> FindTrustAnchorErrorsAsync(
-        MailSynchronizationOptions candidate,
+        string accountsConfigurationPath,
+        IReadOnlyList<MailSynchronizationAccountOptions> accounts,
         CancellationToken cancellationToken)
     {
         var errors = new List<string>();
 
         // The position is part of the reported configuration path, so it comes from Index rather than from a counter
         // the loop body could forget to advance. The loop itself stays, because each step awaits a retrieval.
-        foreach (var (accountIndex, account) in candidate.Accounts.Index())
+        foreach (var (accountIndex, account) in accounts.Index())
         {
             var configurationPath =
-                $"{MailSynchronizationConfigurationPath}:{nameof(MailSynchronizationOptions.Accounts)}:{accountIndex}:{nameof(MailSynchronizationAccountOptions.TransportSecurity)}:{nameof(MailAccountTransportSecurityOptions.TrustedCertificateAuthority)}";
+                $"{accountsConfigurationPath}:{accountIndex}:{nameof(MailSynchronizationAccountOptions.TransportSecurity)}:{nameof(MailAccountTransportSecurityOptions.TrustedCertificateAuthority)}";
 
             using var loadResult = await account.TransportSecurity.LoadTrustedCertificateAuthorityAsync(
                 this.trustAnchorLoader,

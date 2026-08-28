@@ -445,6 +445,10 @@ public static class ServiceCollectionExtensions
         // is why nothing scoped to a request depends on it and why it is registered beside the schema inspector the same
         // startup step already resolves.
         services.AddScoped<IMailOwnerDirectory, PersistedMailOwnerDirectory>();
+        // The envelope a declared owner is given, beside the read that establishes who is already there. Scoped for the
+        // same reason and used from the same startup step: a declaration reaches this exactly once per start, and never
+        // while a request is being served.
+        services.AddScoped<IMailOwnerProvisioning, PersistedMailOwnerProvisioning>();
         // The passwords an owner signs in with. Scoped because it reads and writes through the request's own context,
         // and separate from the directory above because that answers which owners exist and this answers what one of
         // them may present.
@@ -892,7 +896,7 @@ public static class ServiceCollectionExtensions
             provider.GetRequiredService<IHttpClientFactory>(),
             provider.GetRequiredService<IMailOAuthSettingsProvider>(),
             provider.GetRequiredService<IMailboxRefreshTokenStore>(),
-            provider.GetRequiredService<IDeploymentMailOwnerSource>(),
+            provider.GetRequiredService<IDeploymentMailAccountCatalog>(),
             provider.GetRequiredService<MailAccessTokenCache>(),
             provider.GetRequiredService<OutboundOperationExecutor>(),
             provider.GetRequiredService<TimeProvider>(),

@@ -20,6 +20,7 @@ using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Domain.Transport;
 using MailFathom.Host.Configuration.Mail.Readers;
+using MailFathom.Host.Configuration.OwnerSettings;
 using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.OAuth;
@@ -60,6 +61,22 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     /// per-account maps three of the readers memoize built once per snapshot rather than once per work unit.
     /// </remarks>
     internal MailSynchronizationSettingsReaders Readers => this.readers.Value;
+
+    /// <summary>Gets or sets the owners this deployment serves, which is where a declaration outside this section lives.</summary>
+    /// <remarks>
+    /// <para>
+    /// Not bound from anything: the roster is established against the database while the host starts, so it is put onto
+    /// each materialized snapshot afterwards rather than read out of a section. Absent on a snapshot nobody serves from
+    /// — the container a configuration write judges its candidate in — where the only declarations that exist are the
+    /// candidate's own.
+    /// </para>
+    /// <para>
+    /// It is the roster holder rather than a copy of what it held, because the holder is filled once by a startup gate
+    /// that runs after the snapshot is first materialized. Reading it through the holder is what lets a lookup see the
+    /// answer the gate established rather than the emptiness that preceded it.
+    /// </para>
+    /// </remarks>
+    internal ServedMailOwners? ServedOwners { get; set; }
 
     /// <summary>Gets or sets whether periodic synchronization is enabled.</summary>
     public bool Enabled { get; set; }
@@ -612,14 +629,14 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
             yield break;
         }
 
-        if (this.Enabled && this.Accounts.Count == 0)
-        {
-            yield return new ValidationResult("At least one account is required when synchronization is enabled.", [nameof(this.Accounts)]);
-        }
-
-        // Every account a file declares belongs to the one owner such a deployment serves, which is why the whole
+        // Whether anything is declared at all is deliberately not asked here. This section is one of two places a
+        // mailbox is declared — the other being each owner's own section of the top-level Accounts collection — and a
+        // deployment that moved its mailboxes under their owners has emptied this one on purpose. The rule is stated
+        // once, over the effective set, in DeclaredOwners.
+        //
+        // Every account this section declares belongs to the one owner such a deployment serves, which is why the whole
         // section is one naming space here. A second owner declaring an account of the same name is not a collision
-        // and never reaches this, because their accounts are in their own record rather than in this list.
+        // and never reaches this, because their accounts are in their own section rather than in this list.
         foreach (var result in MailAccountNamingSpace.FindCollisions(this.Accounts, nameof(this.Accounts)))
         {
             yield return result;
@@ -638,16 +655,26 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     /// <param name="accountId">The local account identifier.</param>
     /// <returns>The configured account, or <see langword="null" /> when this snapshot no longer names it.</returns>
     /// <remarks>
+    /// <para>
     /// A reload can remove an account while its supervisor is between runs, which is an ordinary configuration change
     /// rather than a failure: the supervisor ends itself instead of connecting to a server the operator withdrew.
     /// Every other reader wants the account it was handed to exist, and keeps failing when it does not.
+    /// </para>
+    /// <para>
+    /// This section is searched first and the roster second, and the two never both answer: an owner whose accounts are
+    /// in this section holds none of their own, and an owner who holds their own is not served from this section. What
+    /// makes the identifier enough to search either of them is the deployment-wide bound on mail-account names that
+    /// <c>DeclaredOwners</c> states — until the per-account ports are keyed by the owner as well, a name two owners
+    /// shared would resolve to whichever declaration the search met.
+    /// </para>
     /// </remarks>
     internal MailSynchronizationAccountOptions? FindConfiguredAccount(MailAccountId accountId) =>
         (this.Accounts ?? []).SingleOrDefault(
             candidate => !string.IsNullOrWhiteSpace(candidate.AccountId)
                 && StringComparer.Ordinal.Equals(
                     MailAccountId.Create(candidate.AccountId).Value,
-                    accountId.Value));
+                    accountId.Value))
+        ?? this.ServedOwners?.FindAccount(accountId)?.Account;
 
     /// <summary>Finds the account a reader was handed, failing when this snapshot does not name it.</summary>
     /// <param name="accountId">The local account identifier.</param>

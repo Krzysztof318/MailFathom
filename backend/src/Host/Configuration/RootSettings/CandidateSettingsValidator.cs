@@ -55,16 +55,16 @@ internal sealed class CandidateSettingsValidator(
         // refuses, would otherwise commit and stop the next start.
         return
         [
-            .. FindComposedErrorsIn(candidate),
+            .. this.FindComposedErrorsIn(candidate),
             .. this.FindBoundErrorsIn(candidate),
         ];
     }
 
-    private static IReadOnlyList<string> FindComposedErrorsIn(IConfiguration candidate)
+    private IReadOnlyList<string> FindComposedErrorsIn(IConfiguration candidate)
     {
         try
         {
-            return [.. ComposedSettings.FindRefusals(candidate).SelectMany(refusal => refusal.Errors)];
+            return [.. ComposedSettings.FindRefusals(candidate, timeProvider).SelectMany(refusal => refusal.Errors)];
         }
         catch (InvalidOperationException refusal)
         {

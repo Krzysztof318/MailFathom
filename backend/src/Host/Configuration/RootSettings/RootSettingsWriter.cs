@@ -181,8 +181,18 @@ internal sealed partial class RootSettingsWriter(
             return target.RefusalMessage;
         }
 
-        return target.Route == ConfigurationStorageRoute.RootDocument
-            ? null
+        if (target.Route == ConfigurationStorageRoute.RootDocument)
+        {
+            return null;
+        }
+
+        // An owner's record is the one store with an answer better than "configure it elsewhere". An owner still read
+        // from configuration holds an empty document, so a write accepted into it would leave that owner served from a
+        // record holding less than the file was supplying — which is a mailbox that stops being synchronized because
+        // somebody edited a setting beside it. Every owner of this release is in that state, so the sentence names the
+        // declaration an operator can actually change rather than an adoption no command performs yet.
+        return target.Route == ConfigurationStorageRoute.OwnerAccounts
+            ? $"MailFathom persists {path} in the {target.Route.Name} store, and every owner of this release is served from the declaration a configuration source supplies rather than from that store. Change the declaration where it is written — the owner's own section of the top-level Accounts collection — and restart."
             : $"MailFathom persists {path} in the {target.Route.Name} store, which this build does not write. Configure it where that store is provisioned from.";
     }
 
