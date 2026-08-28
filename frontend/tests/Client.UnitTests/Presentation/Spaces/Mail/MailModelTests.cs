@@ -54,6 +54,53 @@ public sealed class MailModelTests
         Assert.Same(list.PagingFailed, model.PagingFailed);
     }
 
+    /// <summary>
+    /// The conversation is the run's own read through this space as well, so a citation that opened one and a row that
+    /// opened one are the same screen rather than two.
+    /// </summary>
+    [Fact]
+    public async Task Thread_TheRunsOwnConversation_IsReadThroughRatherThanCopied()
+    {
+        // Arrange
+        using var session = SessionOffering("mailfathom.mail.read");
+        var thread = new StubMailThread();
+        await using var model = new MailModel(session, new StubMessageList(), thread);
+
+        // Act, Assert
+        Assert.Same(thread.Reading, model.Thread);
+        Assert.Same(thread.Messages, model.ThreadMessages);
+        Assert.Same(thread.HasMoreMessages, model.HasMoreThreadMessages);
+        Assert.Same(thread.PagingFailed, model.ThreadPagingFailed);
+    }
+
+    /// <summary>
+    /// Every gesture the conversation column offers reaches the conversation the run holds, and reaches the member that
+    /// gesture means: expanding a message and reading the whole of it are two different requests of the deployment, and
+    /// one wired to the other would compile.
+    /// </summary>
+    [Fact]
+    public async Task ToggleThreadMessage_EveryGestureTheColumnOffers_ReachesTheConversationTheRunHolds()
+    {
+        // Arrange
+        using var session = SessionOffering("mailfathom.mail.read");
+        var thread = new StubMailThread();
+        await using var model = new MailModel(session, new StubMessageList(), thread);
+
+        // Act
+        await model.ToggleThreadMessage(MailMessages.Key(1), TestContext.Current.CancellationToken);
+        await model.ShowWholeThreadMessage(MailMessages.Key(2), TestContext.Current.CancellationToken);
+        await model.ShowThreadRemoteContent(MailMessages.Key(3), TestContext.Current.CancellationToken);
+        await model.ShowMoreThreadMessages(TestContext.Current.CancellationToken);
+        await model.RetryThread(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([MailMessages.Key(1)], thread.Toggled);
+        Assert.Equal([MailMessages.Key(2)], thread.Whole);
+        Assert.Equal([MailMessages.Key(3)], thread.Remote);
+        Assert.Equal(1, thread.Pages);
+        Assert.Equal(1, thread.Asks);
+    }
+
     /// <summary>Both ends of the loaded window are reported, because each is a control of its own on the screen.</summary>
     [Fact]
     public async Task HasMoreAfter_AWindowWithMailEitherSideOfIt_ReportsEachEndSeparately()

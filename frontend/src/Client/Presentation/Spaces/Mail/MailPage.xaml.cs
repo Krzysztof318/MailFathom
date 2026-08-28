@@ -73,7 +73,17 @@ public sealed partial class MailPage : Page
 
         var opened = rows.OfType<ThreadMessageRow>().FirstOrDefault(static row => row.IsOpenedAt);
 
-        if (opened is null || string.Equals(opened.Key, this.scrolledTo, StringComparison.Ordinal))
+        if (opened is null)
+        {
+            // A conversation nobody has open was scrolled to nothing, and this page outlives the conversations opened
+            // in it: without this, arriving at the same message a second time would find the guard already naming it
+            // and would leave the viewport wherever the last reading left it.
+            this.scrolledTo = string.Empty;
+
+            return;
+        }
+
+        if (string.Equals(opened.Key, this.scrolledTo, StringComparison.Ordinal))
         {
             return;
         }
