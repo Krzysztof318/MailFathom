@@ -17,6 +17,7 @@ What is inside the two projects:
 | Path | What it holds |
 |---|---|
 | `Client/App.xaml`, `App.xaml.cs` | The composition root: the host every head starts through, logging, and the route registry |
+| `Client/ClientComposition.cs` | Every service the application registers, beside the launch path rather than inside it, so the graph can be composed and resolved without a window |
 | `Client/Presentation/` | The shell, the frame the three spaces are shown inside, the spaces themselves, and the MVUX models behind them |
 | `Client/Styles/` | The Material palette every brush resolves from — the one place a colour value is written |
 | `Client/Platforms/` | What belongs to one head only: the two entry points, the browser head's web manifest, linker configuration, and font stylesheet, and its half of the sign-in redirect |

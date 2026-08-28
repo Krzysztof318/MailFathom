@@ -30,6 +30,15 @@
           TargetPath="Build/Client.csproj"
           CopyToOutputDirectory="PreserveNewest" />
 
+    <!-- The configuration the application ships, on the same terms and for the same reason: it travels into the bundle
+         embedded, so a value edited out of it composes a head that fails while starting and no build reports it. What
+         the suite does with it is compose the real service graph against it, which is the one reading that says the
+         file every head is launched from still holds what the composition reads. -->
+    <None Include="..\..\src\Client\appsettings.json"
+          Link="Configuration/appsettings.json"
+          TargetPath="Configuration/appsettings.json"
+          CopyToOutputDirectory="PreserveNewest" />
+
     <!-- The string tables, on the same terms and for the same reason: they are compiled into a resource map a running
          head resolves and this host has none, so the suite reads the authored files instead. What it asserts of them
          is which languages are authored at all and whether every table says the same things, neither of which a build
