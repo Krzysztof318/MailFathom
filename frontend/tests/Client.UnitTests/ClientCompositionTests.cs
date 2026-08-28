@@ -9,6 +9,7 @@ using MailFathom.Client.Backend.Authorization;
 using MailFathom.Client.Deployment;
 using MailFathom.Client.Presentation.Mailboxes;
 using MailFathom.Client.Presentation.Messages;
+using MailFathom.Client.Presentation.Threads;
 using MailFathom.Client.Presentation.Workspace;
 using MailFathom.Client.Session;
 using MailFathom.Client.UnitTests.TestDoubles;
@@ -71,6 +72,7 @@ public sealed class ClientCompositionTests
         typeof(IMailboxTree),
         typeof(IMessageListMemory),
         typeof(IMessageList),
+        typeof(IMailThread),
         typeof(IClientSession),
         typeof(DeploymentChoice),
         typeof(DeploymentAddress),

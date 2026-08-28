@@ -23,10 +23,10 @@ public sealed class MailModelTests
     {
         // Arrange
         using var withheld = SessionOffering("mailfathom.mail.ask");
-        await using var withheldModel = new MailModel(withheld, new StubMessageList());
+        await using var withheldModel = new MailModel(withheld, new StubMessageList(), new StubMailThread());
 
         using var offered = SessionOffering("mailfathom.mail.read");
-        await using var offeredModel = new MailModel(offered, new StubMessageList());
+        await using var offeredModel = new MailModel(offered, new StubMessageList(), new StubMailThread());
 
         // Act, Assert
         Assert.True(await withheldModel.WithholdsMail);
@@ -43,7 +43,7 @@ public sealed class MailModelTests
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
         var list = new StubMessageList(Row(1), Row(2));
-        await using var model = new MailModel(session, list);
+        await using var model = new MailModel(session, list, new StubMailThread());
 
         // Act
         var rows = await model.Messages;
@@ -61,7 +61,7 @@ public sealed class MailModelTests
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
         var list = new StubMessageList(Row(1)) { More = true, Earlier = false };
-        await using var model = new MailModel(session, list);
+        await using var model = new MailModel(session, list, new StubMailThread());
 
         // Act, Assert
         Assert.True(await model.HasMoreAfter);
@@ -75,7 +75,7 @@ public sealed class MailModelTests
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
         var list = new StubMessageList();
-        await using var model = new MailModel(session, list);
+        await using var model = new MailModel(session, list, new StubMailThread());
 
         await list.ArrangeAsync(
             new MessageListArrangement
@@ -107,7 +107,7 @@ public sealed class MailModelTests
     {
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
-        await using var model = new MailModel(session, new StubMessageList());
+        await using var model = new MailModel(session, new StubMessageList(), new StubMailThread());
 
         // Act, Assert
         Assert.True(await model.KeepsEverything);
@@ -121,7 +121,7 @@ public sealed class MailModelTests
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
         var list = new StubMessageList();
-        await using var model = new MailModel(session, list);
+        await using var model = new MailModel(session, list, new StubMailThread());
 
         // Act
         await model.ShowMore(TestContext.Current.CancellationToken);
@@ -141,7 +141,7 @@ public sealed class MailModelTests
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
         var list = new StubMessageList();
-        await using var model = new MailModel(session, list);
+        await using var model = new MailModel(session, list, new StubMailThread());
 
         // Act
         await model.ReverseOrder(TestContext.Current.CancellationToken);
@@ -163,7 +163,7 @@ public sealed class MailModelTests
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
         var list = new StubMessageList();
-        await using var model = new MailModel(session, list);
+        await using var model = new MailModel(session, list, new StubMailThread());
 
         // Act
         await model.ToggleUnreadOnly(TestContext.Current.CancellationToken);
@@ -190,7 +190,7 @@ public sealed class MailModelTests
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
         var list = new StubMessageList();
-        await using var model = new MailModel(session, list);
+        await using var model = new MailModel(session, list, new StubMailThread());
 
         // Act
         await model.ToggleUnreadOnly(TestContext.Current.CancellationToken);
@@ -208,12 +208,16 @@ public sealed class MailModelTests
         using var session = SessionOffering("mailfathom.mail.read");
 
         // Act, Assert
-        Assert.Throws<ArgumentNullException>(() => new MailModel(null!, new StubMessageList()));
-        Assert.Throws<ArgumentNullException>(() => new MailModel(session, null!));
+        Assert.Throws<ArgumentNullException>(
+            () => new MailModel(null!, new StubMessageList(), new StubMailThread()));
+
+        Assert.Throws<ArgumentNullException>(() => new MailModel(session, null!, new StubMailThread()));
+        Assert.Throws<ArgumentNullException>(() => new MailModel(session, new StubMessageList(), null!));
     }
 
     private static MessageRow Row(int number) => new(
         MailMessages.Key(number),
+        MailThreads.Identity,
         "Someone",
         "Quarterly review",
         Preview: string.Empty,

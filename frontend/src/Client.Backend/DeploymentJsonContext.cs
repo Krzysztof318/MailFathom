@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using MailFathom.Client.Backend.Accounts;
 using MailFathom.Client.Backend.Folders;
 using MailFathom.Client.Backend.Mail;
+using MailFathom.Client.Backend.Threads;
 using MailFathom.Client.Backend.Timeline;
 
 namespace MailFathom.Client.Backend;
@@ -29,6 +30,7 @@ namespace MailFathom.Client.Backend;
 [JsonSerializable(typeof(DeploymentMailAccounts))]
 [JsonSerializable(typeof(DeploymentMailFolders))]
 [JsonSerializable(typeof(DeploymentMailTimelinePage))]
+[JsonSerializable(typeof(DeploymentMailThreadPage))]
 [JsonSerializable(typeof(DeploymentMailBody))]
 // One entry per block the reduction publishes, because the reader that dispatches on a block's identity resolves each
 // of them by its own generated type info rather than by reflection over the hierarchy.

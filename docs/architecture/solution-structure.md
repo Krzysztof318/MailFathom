@@ -202,10 +202,13 @@ project here and neither build reads the other's files.
 - `src/Client/Presentation/` holds every screen. The shell, the screen that asks which deployment this client reaches,
   and `ClientRoutes` — where each route is named once — sit directly under it, while `Workspace/`, `Spaces/`, and
   `Settings/` hold the frame the product's three spaces are shown inside, those spaces, and the settings screen.
-  Two directories sit beside them and are not screens. `Mailboxes/` is the tree of accounts and folders the frame shows
-  in its pane, which is what narrows the scope every space then reads; `Messages/` is the message list of whatever place
-  that scope names — a bounded window over the deployment's keyset-paged timeline, registered once for the run, whose
-  selection is written back into that same scope for every other space to read. Every screen carries an MVUX model
+  Three directories sit beside them and are not screens. `Mailboxes/` is the tree of accounts and folders the frame
+  shows in its pane, which is what narrows the scope every space then reads; `Messages/` is the message list of whatever
+  place that scope names — a bounded window over the deployment's keyset-paged timeline, registered once for the run,
+  whose selection is written back into that same scope for every other space to read; `Threads/` is the conversation
+  that selection is in, registered once for the run as well, because a conversation is reached by naming one message
+  inside it — which a search result and a citation do as readily as a row of the list does — rather than only from the
+  list. Every screen carries an MVUX model
   except the Discover and Cases pages, which have none yet because each is filled in by the parent that owns it. Every
   screen is a route rather than content something swaps by hand, which is what makes the system back
   gesture and the browser's history move through the client's own screens;

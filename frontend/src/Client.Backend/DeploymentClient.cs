@@ -5,6 +5,7 @@
 using MailFathom.Client.Backend.Accounts;
 using MailFathom.Client.Backend.Folders;
 using MailFathom.Client.Backend.Mail;
+using MailFathom.Client.Backend.Threads;
 using MailFathom.Client.Backend.Timeline;
 
 namespace MailFathom.Client.Backend;
@@ -19,11 +20,12 @@ namespace MailFathom.Client.Backend;
 /// keeps a route from being written without one by accident.
 /// </para>
 /// <para>
-/// Three of the four routes it carries are the ones a client reads before it draws anything: what the deployment made
-/// of the caller, which mailboxes that caller has beside a statement of how current each copy is, and the folders those
-/// mailboxes hold. The fourth is the one a mail screen then spends its time in — one page of the message list, asked
-/// for by cursor. None of them reaches a mail server, so no screen here can wait on IMAP or set the remote
-/// <c>\Seen</c> flag.
+/// Three of the routes it carries are the ones a client reads before it draws anything: what the deployment made of the
+/// caller, which mailboxes that caller has beside a statement of how current each copy is, and the folders those
+/// mailboxes hold. The rest are the mail itself — one page of the message list asked for by cursor, which is where a
+/// mail screen spends its time; one conversation across every folder and account it spans; and one message's body in
+/// the two renderings a reading pane draws it from. None of them reaches a mail server, so no screen here can wait on
+/// IMAP or set the remote <c>\Seen</c> flag.
 /// </para>
 /// </remarks>
 public sealed class DeploymentClient
@@ -117,6 +119,32 @@ public sealed class DeploymentClient
             DeploymentJsonContext.Default.DeploymentMailTimelinePage,
             cancellationToken);
     }
+
+    /// <summary>Asks the deployment for one page of one of the owner's conversations.</summary>
+    /// <param name="threadId">The conversation to read, as a message row published it.</param>
+    /// <param name="pageSize">How many messages the page may hold, or <see langword="null" /> for the deployment's own default.</param>
+    /// <param name="cursor">The cursor a previous page returned, or <see langword="null" /> for the beginning of the conversation.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The page, the whole conversation's participants and counts beside it, and the cursor continuing it where one exists.</returns>
+    /// <exception cref="DeploymentFailure">Thrown when the deployment refused, was unreachable, did not answer in time, or answered with something else.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when nothing has pointed this client at a deployment yet.</exception>
+    /// <remarks>
+    /// A cursor the deployment will not honour — one it never issued, one issued for another conversation, and one
+    /// naming a message the conversation no longer shows — arrives as
+    /// <see cref="DeploymentFailureReason.RequestRefused" />, because it is a value this client sent and can therefore
+    /// stop sending. A conversation this owner does not hold and one no deployment ever held are answered identically
+    /// by the deployment, so nothing here separates the two either.
+    /// </remarks>
+    public Task<DeploymentMailThreadPage> ReadMailThreadAsync(
+        Guid threadId,
+        int? pageSize = null,
+        string? cursor = null,
+        CancellationToken cancellationToken = default) =>
+        DeploymentExchange.ReadAsync(
+            this.Transport(),
+            new HttpRequestMessage(HttpMethod.Get, DeploymentRoutes.MailThreadPath(threadId, pageSize, cursor)),
+            DeploymentJsonContext.Default.DeploymentMailThreadPage,
+            cancellationToken);
 
     /// <summary>Asks the deployment for one message's body, in both the renderings a reading pane draws it from.</summary>
     /// <param name="storedEmailId">The message to read, as a list row or a conversation published it.</param>

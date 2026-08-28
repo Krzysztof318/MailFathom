@@ -37,6 +37,14 @@ public sealed partial class MailBodyView : UserControl
         typeof(MailBodyView),
         new PropertyMetadata(null));
 
+    /// <summary>Identifies the <see cref="ShowRemoteContentCommandParameter"/> property.</summary>
+    public static readonly DependencyProperty ShowRemoteContentCommandParameterProperty =
+        DependencyProperty.Register(
+            nameof(ShowRemoteContentCommandParameter),
+            typeof(object),
+            typeof(MailBodyView),
+            new PropertyMetadata(null));
+
     /// <summary>Identifies the <see cref="Nothing"/> property.</summary>
     public static readonly DependencyProperty NothingProperty = DependencyProperty.Register(
         nameof(Nothing),
@@ -68,6 +76,18 @@ public sealed partial class MailBodyView : UserControl
     {
         get => (ICommand?)this.GetValue(ShowRemoteContentCommandProperty);
         set => this.SetValue(ShowRemoteContentCommandProperty, value);
+    }
+
+    /// <summary>Gets or sets what the command re-reading the message is told to act on, where it acts on one thing among several.</summary>
+    /// <remarks>
+    /// A pane composed over one open message needs none of this and leaves it unset. One composed inside a conversation
+    /// does: the same command re-reads whichever message the reader asked it of, and a command that runs per item is
+    /// told which item by its parameter rather than by the pane it happens to be drawn in.
+    /// </remarks>
+    public object? ShowRemoteContentCommandParameter
+    {
+        get => this.GetValue(ShowRemoteContentCommandParameterProperty);
+        set => this.SetValue(ShowRemoteContentCommandParameterProperty, value);
     }
 
     /// <summary>Gets or sets whether the pane has nothing open in it.</summary>

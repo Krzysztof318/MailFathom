@@ -30,7 +30,8 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                  Message="{x:Bind Reading.WithheldRemoteContent, Mode=OneWay}">
           <InfoBar.ActionButton>
             <Button x:Uid="MailBody.Button.ShowRemoteContent"
-                    Command="{x:Bind ShowRemoteContentCommand, Mode=OneWay}" />
+                    Command="{x:Bind ShowRemoteContentCommand, Mode=OneWay}"
+                    CommandParameter="{x:Bind ShowRemoteContentCommandParameter, Mode=OneWay}" />
           </InfoBar.ActionButton>
         </InfoBar>
 
