@@ -143,10 +143,15 @@ them if that access were ever removed.
 10. Claim the issue, in the owner's checkout, once the brief below will read `safe`:
 
     ```bash
-    gh issue edit <number> --repo Krzysztof318/MailFathom --add-label agent:claimed
+    claim_label=agent:claude
+    if [[ -n "${CODEX_THREAD_ID:-}" ]]; then
+      claim_label=agent:codex
+    fi
+    gh issue edit <number> --repo Krzysztof318/MailFathom --add-label "$claim_label"
     ```
 
     This is the step that says work has begun, so it belongs here rather than at step 8: an issue
+    is marked with the runtime that took it (`agent:claude` or `agent:codex`). An issue
     identified while the workspace turns out to be `blocked` was read and not taken. Nothing reads
     the label, so re-applying one already present is a harmless no-op and nothing has to look first,
     and it is never removed — `docs/operations/issue-tracking.md` § *Labels* holds what it claims and
@@ -165,7 +170,7 @@ Protected paths: <none reached, or which and what that means for this role>
 Issue: <number and title, or created with reason>
 Blocked by: <the open blockers refusing the work, or none — and any relation written>
 Placement: <type label, stack label or neither, Area, Queue, Size, milestone or none — or what the board probe left to triage>
-Claim: <agent:claimed applied, already present, or not applicable in the fork role>
+Claim: <agent:claude or agent:codex applied, already present, or not applicable in the fork role>
 Required context: <files read>
 Assumptions or blockers: <none or explicit list>
 Verification: <fast loop and final gate>
