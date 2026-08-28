@@ -234,7 +234,12 @@ public sealed class MailKitImapSessionResilienceTests
         // Assert
         Assert.Equal(PrimaryAccount, failure.AccountId);
         Assert.Equal(InboxFolder.Alias, failure.FolderAlias);
-        Assert.Equal(3, client.ConnectCount);
+        Assert.Contains(
+            resilience.Logs.Records,
+            record => record.Message.Contains("will retry as attempt 2", StringComparison.Ordinal));
+        Assert.Contains(
+            resilience.Logs.Records,
+            record => record.Message.Contains("will retry as attempt 3", StringComparison.Ordinal));
     }
 
     /// <summary>A host shutting down and a mail server that stopped answering must not reach the worker as one failure.</summary>

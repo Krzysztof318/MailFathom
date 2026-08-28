@@ -1,6 +1,6 @@
 # Telemetry and the Aspire dashboard
 
-<!-- describes: backend/src/Application/Observability/**, backend/src/Common/Observability/**, backend/src/Host/Observability/**, backend/src/Host/ServiceDefaultsExtensions.cs, backend/src/Host/Hosting/Workers/**, backend/src/Infrastructure/Observability/**, backend/src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, backend/src/Infrastructure/HostApplicationBuilderExtensions.cs, backend/src/Mcp/Observability/**, backend/src/Cli/Diagnostics/**, backend/src/AppHost/**, backend/src/AI/ProviderAdapters/OpenAiCompatibleClientFactory.cs -->
+<!-- describes: backend/src/Application/Observability/**, backend/src/Common/Observability/**, backend/src/Host/Observability/**, backend/src/Host/ServiceDefaultsExtensions.cs, backend/src/Host/Hosting/Workers/**, backend/src/Infrastructure/Observability/**, backend/src/Infrastructure/Mail/MailServerConnectionBudget.cs, backend/src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, backend/src/Infrastructure/HostApplicationBuilderExtensions.cs, backend/src/Mcp/Observability/**, backend/src/Cli/Diagnostics/**, backend/src/AppHost/**, backend/src/AI/ProviderAdapters/OpenAiCompatibleClientFactory.cs -->
 
 The host instruments itself with OpenTelemetry throughout — logs, metrics, and traces — and exports none of it unless
 the environment names a destination. Today exactly one environment does that out of the box: a local run under the
@@ -824,6 +824,12 @@ The queue depth is the wait for a slot, which is why the cycle's span opens only
 duration that included the wait would report the accounts in front of it as this account's own work.
 `runs.queued` standing at the account count while `runs.active` sits at the configured bound is a pipeline saturated by
 that bound rather than an idle one, which is a distinction nothing else here makes.
+
+Three further gauges report the process-wide connection budget per IMAP server host. Each carries only
+`mailfathom.mail.server.host`, compared without regard to DNS casing: `mailfathom.mail.server.connections.limit` is the
+configured ceiling, `…connections.active` is the connections and attempts holding it, and `…connections.queued` is the
+attempts waiting for it. They aggregate every owner and account without sharing a protocol session between any two of
+them.
 
 Nothing published by any of this is derived from a message. The dimensions are the two configured aliases and closed
 sets of MailFathom's own words, and the values are counts and durations — no UID, no message identifier, no address, no

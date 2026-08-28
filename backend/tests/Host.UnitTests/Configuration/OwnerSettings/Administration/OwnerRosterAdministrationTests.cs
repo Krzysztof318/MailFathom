@@ -147,6 +147,7 @@ public sealed class OwnerRosterAdministrationTests
             "{}",
             1,
             Arg.Any<CancellationToken>());
+        Assert.Contains(harness.ServedOwners.Owners, owner => owner.Owner == outcome.Owner);
     }
 
     /// <summary>A label is what an administrator selects an owner by, so two owners carrying one would leave nothing to select on.</summary>
@@ -614,8 +615,6 @@ public sealed class OwnerRosterAdministrationTests
     /// <summary>The roster over substituted rows, with the endpoint posture a deployment's several-owner refusal is read from.</summary>
     private sealed class RosterHarness
     {
-        private readonly ServedMailOwners servedOwners = new();
-
         internal RosterHarness(
             MailFathomPermission granted,
             ClientEndpointOptions? clientEndpoint = null,
@@ -644,7 +643,7 @@ public sealed class OwnerRosterAdministrationTests
                 .Returns((long?)2);
 
             // A roster naming somebody no test acts on, so "served" is a fact a test states rather than a default.
-            this.servedOwners.Resolved(
+            this.ServedOwners.Resolved(
             [
                 new(
                     MailOwnerId.Create(new Guid("99999999-9999-9999-9999-999999999999")),
@@ -670,11 +669,11 @@ public sealed class OwnerRosterAdministrationTests
                 this.Provisioning,
                 this.Erasure,
                 this.Documents,
-                this.servedOwners,
+                this.ServedOwners,
                 new SeveralOwnerAdmission(
                     Options.Create(new McpEndpointOptions()),
                     Options.Create(clientEndpoint ?? new ClientEndpointOptions())),
-                new ConfiguredOwnerMailAccounts(settings, this.servedOwners),
+                new ConfiguredOwnerMailAccounts(settings, this.ServedOwners),
                 NullLogger<OwnerRosterAdministration>.Instance);
         }
 
@@ -688,14 +687,16 @@ public sealed class OwnerRosterAdministrationTests
 
         internal IOwnerSettingsDocumentWriter Documents { get; }
 
+        internal ServedMailOwners ServedOwners { get; } = new();
+
         internal void Holding(params MailOwnerRecord[] held) =>
             this.Directory.ReadOwnersAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(held);
 
         internal void Serving(MailOwnerId owner) =>
-            this.servedOwners.Resolved([new(owner, "served", MailOwnerAccountSource.OwnerDocument, [])]);
+            this.ServedOwners.Resolved([new(owner, "served", MailOwnerAccountSource.OwnerDocument, [])]);
 
         internal void ServingFromTheDeploymentSection(MailOwnerId owner) =>
-            this.servedOwners.Resolved([new(owner, "served", MailOwnerAccountSource.DeploymentSection, [])]);
+            this.ServedOwners.Resolved([new(owner, "served", MailOwnerAccountSource.DeploymentSection, [])]);
 
         internal void Erasing(MailOwnerId owner) =>
             this.Erasure.EraseAsync(owner, Arg.Any<CancellationToken>()).Returns(true);

@@ -119,6 +119,25 @@ public sealed class ServedMailOwnersTests
         Assert.Null(found);
     }
 
+    /// <summary>A slow publisher cannot put an older committed document back after a newer one reached the roster.</summary>
+    [Fact]
+    public void OwnerDocumentPublished_AnOlderCommittedVersionArrivesLast_KeepsTheNewerDocument()
+    {
+        // Arrange
+        var servedOwners = new ServedMailOwners();
+        var older = new MailSynchronizationAccountOptions { AccountId = "older" };
+        var newer = new MailSynchronizationAccountOptions { AccountId = "newer" };
+
+        servedOwners.Resolved([Serving(SyntheticMailOwner.Deployment, "owner")]);
+
+        // Act
+        servedOwners.OwnerDocumentPublished(SyntheticMailOwner.Deployment, "owner", [newer], 3);
+        servedOwners.OwnerDocumentPublished(SyntheticMailOwner.Deployment, "owner", [older], 2);
+
+        // Assert
+        Assert.Same(newer, Assert.Single(servedOwners.Owners).MailAccounts.Single());
+    }
+
     private static ServedMailOwner Serving(
         MailOwnerId owner,
         string displayName,

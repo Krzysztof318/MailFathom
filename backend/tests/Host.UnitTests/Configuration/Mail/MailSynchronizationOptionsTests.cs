@@ -5,12 +5,14 @@
 using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using MailFathom.Application.Retrieval.AskMail.Audit;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Synchronization;
 using MailFathom.Domain.Transport;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.OwnerSettings;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.Mail;
@@ -209,6 +211,8 @@ public sealed class MailSynchronizationOptionsTests
     [InlineData("MaxConcurrentAccounts", 101)]
     [InlineData("MaxConcurrentFoldersPerAccount", 0)]
     [InlineData("MaxConcurrentFoldersPerAccount", 21)]
+    [InlineData("MaxConcurrentConnectionsPerHost", 1)]
+    [InlineData("MaxConcurrentConnectionsPerHost", 1001)]
     [InlineData("MaxMutationAttempts", 0)]
     [InlineData("MaxMutationAttempts", 101)]
     public void Bind_ConcurrencyBoundOutsideItsRange_FailsDataAnnotationValidation(string settingName, int configuredValue)
@@ -1362,6 +1366,35 @@ public sealed class MailSynchronizationOptionsTests
         Assert.Equal(22, limits.MaxNestingDepth);
         Assert.Equal(23, limits.MaxExtractedTextCharacters);
         Assert.Equal(verifyDkimLocally, limits.VerifyDkimLocally);
+    }
+
+    /// <summary>An adoption supersedes the file without rewriting it, so the published document must win immediately.</summary>
+    [Fact]
+    public void FindConfiguredAccount_AdoptedOwnerDocument_PrecedesTheDeploymentSectionItSuperseded()
+    {
+        // Arrange
+        var configured = CreateAccount("primary");
+        configured.Host = "file.example.test";
+        var adopted = CreateAccount("primary");
+        adopted.Host = "document.example.test";
+        var options = new MailSynchronizationOptions
+        {
+            Accounts = [configured],
+            ServedOwners =
+            [
+                new ServedMailOwner(
+                    MailOwnerId.Create(new Guid("57ee8cd9-f68a-4231-9e09-b64a17806518")),
+                    "owner",
+                    MailOwnerAccountSource.OwnerDocument,
+                    [adopted]),
+            ],
+        };
+
+        // Act
+        var found = options.FindConfiguredAccount(MailAccountId.Create("primary"));
+
+        // Assert
+        Assert.Same(adopted, found);
     }
 
     private static TrustAnchorLoader CreateTrustAnchorLoader() =>

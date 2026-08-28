@@ -157,6 +157,7 @@ public sealed class OrchestratedPushNotificationTests(MailFathomOrchestrationFix
             scope.GetRequiredService<IMailAccessTokenSource>(),
             scope.GetRequiredService<OutboundOperationExecutor>(),
             scope.GetRequiredService<ITransientFailureClassifier>(),
+            scope.GetRequiredService<MailServerConnectionBudget>(),
             MailKitImapChangeSubscription.RequestFolderNotificationsAsync,
             TimeProvider.System);
 

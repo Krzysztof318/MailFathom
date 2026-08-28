@@ -158,6 +158,7 @@ internal static class MailKitImapWriteSessionTestContext
             CreateScopeFactory(scopeDisposals),
             resilience.Executor,
             resilience.TransientFailureClassifier,
+            MailKitImapSessionTestContext.ConnectionBudget,
             options,
             timeProvider,
             new RecordingCategoryLogger<MailboxWriteConnectionPool>(recordedLogs));

@@ -29,6 +29,7 @@ internal sealed class MailKitImapMailboxSessionFactory(
     IMailAccessTokenSource accessTokenSource,
     OutboundOperationExecutor operationExecutor,
     ITransientFailureClassifier transientFailureClassifier,
+    MailServerConnectionBudget connectionBudget,
     TimeProvider timeProvider) : IMailboxSessionFactory
 {
     /// <inheritdoc />
@@ -47,6 +48,8 @@ internal sealed class MailKitImapMailboxSessionFactory(
             accessTokenSource,
             operationExecutor,
             transientFailureClassifier,
+            connectionBudget,
+            MailServerConnectionPurpose.Work,
             accountId,
             folder,
             transportSecurityPolicy);

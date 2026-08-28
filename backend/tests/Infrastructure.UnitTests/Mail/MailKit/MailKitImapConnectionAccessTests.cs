@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.MailKit;
 using MailFathom.Infrastructure.UnitTests.TestDoubles;
 using MailKit;
@@ -34,6 +35,8 @@ public sealed class MailKitImapConnectionAccessTests
             new UnusedMailAccessTokenSource(),
             resilience.Executor,
             resilience.TransientFailureClassifier,
+            ConnectionBudget,
+            MailServerConnectionPurpose.Work,
             PrimaryAccount,
             InboxFolder,
             TlsOnConnectWithPlainPolicy);
@@ -67,6 +70,8 @@ public sealed class MailKitImapConnectionAccessTests
             new UnusedMailAccessTokenSource(),
             resilience.Executor,
             resilience.TransientFailureClassifier,
+            ConnectionBudget,
+            MailServerConnectionPurpose.Work,
             PrimaryAccount,
             InboxFolder,
             TlsOnConnectWithPlainPolicy);
@@ -99,6 +104,7 @@ public sealed class MailKitImapConnectionAccessTests
             new UnusedMailAccessTokenSource(),
             resilience.Executor,
             resilience.TransientFailureClassifier,
+            ConnectionBudget,
             PrimaryAccount,
             InboxFolder,
             TlsOnConnectWithPlainPolicy);
@@ -126,6 +132,7 @@ public sealed class MailKitImapConnectionAccessTests
             new UnusedMailAccessTokenSource(),
             resilience.Executor,
             resilience.TransientFailureClassifier,
+            ConnectionBudget,
             PrimaryAccount,
             TlsOnConnectWithPlainPolicy);
 
@@ -153,6 +160,7 @@ public sealed class MailKitImapConnectionAccessTests
             new UnusedMailAccessTokenSource(),
             resilience.Executor,
             resilience.TransientFailureClassifier,
+            ConnectionBudget,
             PrimaryAccount,
             TlsOnConnectWithPlainPolicy);
 

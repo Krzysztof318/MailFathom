@@ -643,7 +643,7 @@ $ mfctl owner add --display-name Morgan
 Recorded Morgan as 9b41....
 Their mail accounts are read from their own record; no configuration source reaches them. Declare one with
 'mfctl owner account add', and provision a way for them to sign in with 'mfctl credential create'. The running
-deployment settled its roster at start, so it begins serving this owner at its next restart.
+deployment serves this owner now; no restart is needed.
 ```
 
 Every command but `list` and `add` takes `--owner` and does not need it while the deployment holds one person: it acts
@@ -679,9 +679,10 @@ every owner reads a record of their own would go on synchronizing each mailbox u
 stopped being read. The next start refuses rather than doing that, and names the section to clear.
 
 **Withdrawing a mailbox is not deleting mail, and removing an owner is.** `mfctl owner account remove` stops MailFathom
-synchronizing one mailbox and leaves everything already stored for it exactly where it is. `mfctl owner remove` erases
-the person and every message, folder, attachment, and derived index the deployment holds for them; it shows what it is
-about to do and asks, and nothing puts it back.
+synchronizing one mailbox without a restart and leaves everything already stored for it exactly where it is. A run
+already in flight drains against the document version it began with. `mfctl owner remove` erases the person and every
+message, folder, attachment, and derived index the deployment holds for them; it shows what it is about to do and asks,
+and nothing puts it back.
 
 It refuses one person: an owner your configuration declares. A start writes every declared owner it no longer holds back
 into the roster, so the erasure would run, the mail would go, and the same person would be recreated at the next restart

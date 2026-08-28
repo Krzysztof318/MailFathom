@@ -522,9 +522,9 @@ public sealed class OwnerCommandTests : IDisposable
             line => line.Contains("Nothing was erased", StringComparison.Ordinal));
     }
 
-    /// <summary>A process serving an owner it has erased goes on composing callers against a row that is gone.</summary>
+    /// <summary>A process serving an erased owner follows the erasure without asking for a restart.</summary>
     [Fact]
-    public async Task Remove_AnErasedOwnerTheProcessWasServing_SaysARestartIsOwed()
+    public async Task Remove_AnErasedOwnerTheProcessWasServing_SaysNoRestartIsNeeded()
     {
         // Arrange
         using var deployment = FakeOwnerRecordDeployment.Holding(Owner);
@@ -533,7 +533,7 @@ public sealed class OwnerCommandTests : IDisposable
         await this.RunAsync(deployment, "owner", "remove", "--owner", $"{Owner:D}", "--yes", "--endpoint", Endpoint);
 
         // Assert
-        Assert.Contains(
+        Assert.DoesNotContain(
             this.harness.Console.Lines.Concat(this.harness.Console.Errors),
             line => line.Contains("Restart it", StringComparison.Ordinal));
     }

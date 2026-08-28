@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Threading.Channels;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Primitives;
 
 namespace MailFathom.Host.Configuration;
 
@@ -58,6 +59,7 @@ internal sealed partial class ValidatedSettingsSnapshot<TSettings> :
     private long publishedSequence;
     private long observedChangeCount;
     private int refusedSettingCount;
+    private ConfigurationReloadToken reloadToken = new();
     private IDisposable? changeSubscription;
     private Task? validationLoop;
     private bool disposed;
@@ -88,6 +90,9 @@ internal sealed partial class ValidatedSettingsSnapshot<TSettings> :
 
     /// <inheritdoc />
     public TSettings Current => Volatile.Read(ref this.publishedSettings);
+
+    /// <inheritdoc />
+    public IChangeToken GetReloadToken() => Volatile.Read(ref this.reloadToken);
 
     /// <summary>Gets whether the configuration as it now stands was refused, leaving an older snapshot in force.</summary>
     /// <remarks>
@@ -241,6 +246,9 @@ internal sealed partial class ValidatedSettingsSnapshot<TSettings> :
             Volatile.Write(ref this.publishedSettings, candidate.Settings);
 
             Volatile.Write(ref this.refusedSettingCount, 0);
+
+            var changed = Interlocked.Exchange(ref this.reloadToken, new ConfigurationReloadToken());
+            changed.OnReload();
 
             this.LogReloadPublished(this.settingsName);
         }

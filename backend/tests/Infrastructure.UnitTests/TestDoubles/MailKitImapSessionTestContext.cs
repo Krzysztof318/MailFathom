@@ -29,6 +29,9 @@ internal static class MailKitImapSessionTestContext
 
     internal static MailAccountId SecondaryAccount { get; } = MailAccountId.Create("secondary");
 
+    /// <summary>A generous process-lifetime budget, so adapter tests wait only where the budget test asks them to.</summary>
+    internal static MailServerConnectionBudget ConnectionBudget { get; } = new(1000);
+
     internal static MailFolderResolution InboxFolder { get; } = MailFolderResolution.FirstBindingOf(
         MailFolderAlias.Create("inbox"),
         RemoteFolderPath.Create("INBOX", '/'));
@@ -85,7 +88,8 @@ internal static class MailKitImapSessionTestContext
             CreateSettingsProvider(),
             new UnusedMailAccessTokenSource(),
             resilience.Executor,
-            resilience.TransientFailureClassifier);
+            resilience.TransientFailureClassifier,
+            ConnectionBudget);
     }
 
     /// <summary>Opens a session over one scripted connection that authenticates with the default permitted mechanism.</summary>
@@ -143,6 +147,7 @@ internal static class MailKitImapSessionTestContext
             new UnusedMailAccessTokenSource(),
             resilience.Executor,
             resilience.TransientFailureClassifier,
+            ConnectionBudget,
             requestFolderNotifications ?? ((_, _, _) => Task.CompletedTask),
             clock);
 
@@ -165,6 +170,7 @@ internal static class MailKitImapSessionTestContext
             accessTokenSource,
             resilience.Executor,
             resilience.TransientFailureClassifier,
+            ConnectionBudget,
             new FakeTimeProvider(ObservedAt));
 
     /// <summary>A policy that permits only the registered token-bearing mechanism, so no password path is reachable.</summary>

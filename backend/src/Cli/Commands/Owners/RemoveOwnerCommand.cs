@@ -114,8 +114,8 @@ internal static class RemoveOwnerCommand
         if (erasure.WasServed)
         {
             context.Console.WriteNotice(
-                "The running deployment was serving this owner, and it settled its roster at start. Restart it: until "
-                + "then it goes on composing callers against a record that is gone.");
+                "The running deployment has stopped serving this owner. A synchronization run already in flight is "
+                + "allowed to finish what it started; no new run is scheduled.");
         }
 
         return CliExitCode.Success;
