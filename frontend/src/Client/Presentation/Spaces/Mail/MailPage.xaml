@@ -459,6 +459,12 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                           <StackPanel Orientation="Horizontal"
                                       HorizontalAlignment="Right"
                                       Spacing="4">
+                            <FontIcon Glyph="&#xE172;"
+                                      FontSize="12"
+                                      AutomationProperties.AccessibilityView="Raw"
+                                      Foreground="{ThemeResource OnSurfaceVariantBrush}"
+                                      Visibility="{x:Bind IsAnswered, Converter={StaticResource AffirmedVisibility}}" />
+
                             <FontIcon Glyph="&#xE7C1;"
                                       FontSize="12"
                                       AutomationProperties.AccessibilityView="Raw"

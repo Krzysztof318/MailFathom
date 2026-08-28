@@ -122,7 +122,7 @@ internal static class ThreadShape
 
         if (window.OpenedAt is { } arrivedAt)
         {
-            var named = Written(arrivedAt);
+            var named = KeyOf(arrivedAt);
 
             if (window.Messages.Any(message => string.Equals(KeyOf(message), named, StringComparison.Ordinal)))
             {
@@ -138,10 +138,11 @@ internal static class ThreadShape
     {
         ArgumentNullException.ThrowIfNull(message);
 
-        return message.Email is { } email ? Written(email.Id) : string.Empty;
+        return message.Email is { } email ? KeyOf(email.Id) : string.Empty;
     }
 
-    private static string Written(Guid identity) => identity.ToString("D", CultureInfo.InvariantCulture);
+    /// <summary>Names one message as every other part of the client names it, from the identity alone.</summary>
+    private static string KeyOf(Guid identity) => identity.ToString("D", CultureInfo.InvariantCulture);
 
     /// <summary>Takes what the conversation is about from the message that began it.</summary>
     /// <remarks>
@@ -184,7 +185,7 @@ internal static class ThreadShape
         IStringLocalizer words)
     {
         var email = message.Email!;
-        var key = Written(email.Id);
+        var key = KeyOf(email.Id);
         var author = Named(email.SenderDisplayName, email.SenderAddress) ?? words[MessageWords.NoSenderKey].Value;
         var subject = string.IsNullOrWhiteSpace(email.Subject)
             ? words[MessageWords.NoSubjectKey].Value
