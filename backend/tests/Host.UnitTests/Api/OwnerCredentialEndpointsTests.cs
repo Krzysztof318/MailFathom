@@ -175,6 +175,7 @@ public sealed class OwnerCredentialEndpointsTests
             SyntheticMailOwner.Deployment.Value,
             PasswordRequest("Owner", Password),
             harness.Administration,
+            harness.PublicKeys,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -197,6 +198,7 @@ public sealed class OwnerCredentialEndpointsTests
             SyntheticMailOwner.Deployment.Value,
             PasswordRequest("  Owner@Example.Test  ", Password),
             harness.Administration,
+            harness.PublicKeys,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -229,6 +231,7 @@ public sealed class OwnerCredentialEndpointsTests
                 Subject: null,
                 Permissions: null),
             harness.Administration,
+            harness.PublicKeys,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -257,6 +260,7 @@ public sealed class OwnerCredentialEndpointsTests
                 Subject: null,
                 Permissions: null),
             harness.Administration,
+            harness.PublicKeys,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -284,6 +288,7 @@ public sealed class OwnerCredentialEndpointsTests
                 "subject-1",
                 Permissions: null),
             harness.Administration,
+            harness.PublicKeys,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -316,6 +321,7 @@ public sealed class OwnerCredentialEndpointsTests
                 Subject: null,
                 Permissions: null),
             harness.Administration,
+            harness.PublicKeys,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -355,6 +361,7 @@ public sealed class OwnerCredentialEndpointsTests
                 Subject: null,
                 Permissions: null),
             harness.Administration,
+            harness.PublicKeys,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -377,6 +384,7 @@ public sealed class OwnerCredentialEndpointsTests
             SyntheticMailOwner.Deployment.Value,
             PasswordRequest("owner", Password, ["mailfathom.mail.read", "mailfathom.mail.teleport"]),
             harness.Administration,
+            harness.PublicKeys,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -397,6 +405,7 @@ public sealed class OwnerCredentialEndpointsTests
             SyntheticMailOwner.Deployment.Value,
             PasswordRequest("owner", Password, [MailFathomPermission.AdminErase.Name]),
             harness.Administration,
+            harness.PublicKeys,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -416,6 +425,7 @@ public sealed class OwnerCredentialEndpointsTests
             SyntheticMailOwner.Deployment.Value,
             PasswordRequest("owner", Password, [MailFathomPermission.MailRead.Name]),
             harness.Administration,
+            harness.PublicKeys,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -443,6 +453,7 @@ public sealed class OwnerCredentialEndpointsTests
             SyntheticMailOwner.Deployment.Value,
             PasswordRequest("owner", Password),
             harness.Administration,
+            harness.PublicKeys,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -464,6 +475,7 @@ public sealed class OwnerCredentialEndpointsTests
             SyntheticMailOwner.Deployment.Value,
             PasswordRequest("owner", Password),
             harness.Administration,
+            harness.PublicKeys,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -488,6 +500,7 @@ public sealed class OwnerCredentialEndpointsTests
             SyntheticMailOwner.Another.Value,
             PasswordRequest("owner", Password),
             harness.Administration,
+            harness.PublicKeys,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -510,6 +523,7 @@ public sealed class OwnerCredentialEndpointsTests
             SyntheticMailOwner.Deployment.Value,
             PasswordRequest("owner", password),
             harness.Administration,
+            harness.PublicKeys,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -539,6 +553,7 @@ public sealed class OwnerCredentialEndpointsTests
             SyntheticMailOwner.Deployment.Value,
             PasswordRequest(username, Password),
             harness.Administration,
+            harness.PublicKeys,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -559,6 +574,7 @@ public sealed class OwnerCredentialEndpointsTests
             CredentialId,
             new OwnerCredentialMaterialRequest(OwnerCredentialMethod.Password.Name, "owner", Password, PublicKey: null),
             harness.Administration,
+            harness.PublicKeys,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -590,6 +606,7 @@ public sealed class OwnerCredentialEndpointsTests
                 Password: null,
                 PublicKey: null),
             harness.Administration,
+            harness.PublicKeys,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -597,6 +614,117 @@ public sealed class OwnerCredentialEndpointsTests
 
         Assert.Equal(StatedApiKeyMinter.Key, rotated.Key);
         Assert.Null(rotated.Lookup);
+    }
+
+    /// <summary>A client sending a new key is resolved by that key's fingerprint from then on, so the answer is the fingerprint its assertions must name.</summary>
+    [Fact]
+    public async Task ReplaceMaterialAsync_AClientPublicKey_AnswersWithTheFingerprintTheClientMustNameFromNowOn()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminCredentialsWrite);
+
+        // Act
+        var result = await OwnerCredentialEndpoints.ReplaceMaterialAsync(
+            SyntheticMailOwner.Deployment.Value,
+            CredentialId,
+            new OwnerCredentialMaterialRequest(
+                OwnerCredentialMethod.PublicKey.Name,
+                Username: null,
+                Password: null,
+                StatedPublicKeyReader.ReadableKey),
+            harness.Administration,
+            harness.PublicKeys,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var rotated = Assert.IsType<Ok<OwnerCredentialRotatedResponse>>(result.Result).Value!;
+
+        Assert.Equal(StatedPublicKeyReader.Fingerprint, rotated.Lookup);
+        Assert.Null(rotated.Key);
+
+        await harness.Credentials.Received(1).ReplaceMaterialAsync(
+            SyntheticMailOwner.Deployment,
+            CredentialId,
+            OwnerCredentialMethod.PublicKey,
+            Arg.Is<OwnerCredentialLookup>(lookup => lookup.Value == StatedPublicKeyReader.Fingerprint),
+            StatedPublicKeyReader.ReadableKey,
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The boundary reads the key rather than letting the use case raise on it. Nothing in this process maps that
+    /// exception to a response, so an operator pasting a private key or a truncated block would be answered with a
+    /// <c>500</c> instead of the sentence naming what a key may be — and a rotation nobody could correct from the
+    /// answer.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("   ")]
+    [InlineData("-----BEGIN RSA PRIVATE KEY-----pasted-----END RSA PRIVATE KEY-----")]
+    public async Task ReplaceMaterialAsync_APublicKeyThisDeploymentCannotRead_IsRefusedWithoutReachingTheStore(
+        string? written)
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminCredentialsWrite);
+
+        // Act
+        var result = await OwnerCredentialEndpoints.ReplaceMaterialAsync(
+            SyntheticMailOwner.Deployment.Value,
+            CredentialId,
+            new OwnerCredentialMaterialRequest(
+                OwnerCredentialMethod.PublicKey.Name,
+                Username: null,
+                Password: null,
+                written),
+            harness.Administration,
+            harness.PublicKeys,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.IsType<ProblemHttpResult>(result.Result);
+
+        await harness.Credentials.DidNotReceive().ReplaceMaterialAsync(
+            Arg.Any<MailOwnerId>(),
+            Arg.Any<Guid>(),
+            Arg.Any<OwnerCredentialMethod>(),
+            Arg.Any<OwnerCredentialLookup>(),
+            Arg.Any<string>(),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Provisioning reads the key by the same rule, so the same mistake is answered rather than raised there too.</summary>
+    [Fact]
+    public async Task ProvisionAsync_APublicKeyThisDeploymentCannotRead_IsRefusedWithoutReachingTheStore()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminCredentialsWrite);
+
+        // Act
+        var result = await OwnerCredentialEndpoints.ProvisionAsync(
+            SyntheticMailOwner.Deployment.Value,
+            new OwnerCredentialProvisioningRequest(
+                OwnerCredentialMethod.PublicKey.Name,
+                Username: null,
+                Password: null,
+                "-----BEGIN PUBLIC KEY-----truncated",
+                Issuer: null,
+                Subject: null,
+                Permissions: null),
+            harness.Administration,
+            harness.PublicKeys,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.IsType<ProblemHttpResult>(result.Result);
+
+        await harness.Credentials.DidNotReceive().CreateAsync(
+            Arg.Any<Guid>(),
+            Arg.Any<MailOwnerId>(),
+            Arg.Any<OwnerCredentialMethod>(),
+            Arg.Any<OwnerCredentialLookup>(),
+            Arg.Any<string?>(),
+            Arg.Any<IReadOnlyList<MailFathomPermission>>(),
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>A mapped subject is not this deployment's to reissue, so it says so rather than writing half of one.</summary>
@@ -616,6 +744,7 @@ public sealed class OwnerCredentialEndpointsTests
                 Password: null,
                 PublicKey: null),
             harness.Administration,
+            harness.PublicKeys,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -646,6 +775,7 @@ public sealed class OwnerCredentialEndpointsTests
             CredentialId,
             new OwnerCredentialMaterialRequest(OwnerCredentialMethod.Password.Name, "owner", Password, PublicKey: null),
             harness.Administration,
+            harness.PublicKeys,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -666,6 +796,7 @@ public sealed class OwnerCredentialEndpointsTests
             Guid.Empty,
             new OwnerCredentialMaterialRequest(OwnerCredentialMethod.Password.Name, "owner", Password, PublicKey: null),
             harness.Administration,
+            harness.PublicKeys,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -887,6 +1018,8 @@ public sealed class OwnerCredentialEndpointsTests
         }
 
         internal OwnerCredentialAdministration Administration { get; }
+
+        internal IClientPublicKeyReader PublicKeys { get; } = new StatedPublicKeyReader();
 
         internal IMailOwnerDirectory Owners { get; }
 

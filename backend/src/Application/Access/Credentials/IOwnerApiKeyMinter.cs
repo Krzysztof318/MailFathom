@@ -48,9 +48,16 @@ public interface IOwnerApiKeyMinter
 /// <summary>A key this deployment has just drawn, in the two forms that exist at that instant.</summary>
 /// <param name="Key">The plaintext, which is reported to whoever asked for it and then exists nowhere.</param>
 /// <param name="Lookup">The value the credential row is resolved by, which is what the deployment keeps.</param>
-/// <remarks><see cref="ToString" /> is redacted, so no diagnostic, log template, or exception message can print a minted key by rendering the record it arrived in.</remarks>
+/// <remarks>
+/// <see cref="ToString" /> renders neither half, so no diagnostic, log template, or exception message can print a
+/// minted key or its digest by rendering the record it arrived in. The digest is withheld for the reason
+/// <see cref="OwnerCredentialMethod.LookupIsDerivedFromTheSecret" /> gives — it verifies a presented key, so it is
+/// material rather than a fact about the record, and the administrative listing answers it as absent. A record that
+/// published it here would be giving away in a log what a reader holding <c>mailfathom.admin.credentials.read</c> is
+/// refused.
+/// </remarks>
 public sealed record MintedOwnerApiKey(string Key, OwnerCredentialLookup Lookup)
 {
     /// <inheritdoc />
-    public override string ToString() => $"{nameof(MintedOwnerApiKey)} {{ {this.Lookup} }}";
+    public override string ToString() => nameof(MintedOwnerApiKey);
 }

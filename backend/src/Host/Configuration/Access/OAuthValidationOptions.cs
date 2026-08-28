@@ -191,7 +191,6 @@ internal sealed class OAuthValidationOptions
     /// </remarks>
     private IEnumerable<string> FindAdvertisedScopeErrors(OAuthSubjectAdmission admission)
     {
-        var grantIsWritten = GrantRemedy(admission);
         var scopesAreRead = ScopeGrantRemedy(admission);
         var requiredScopes = new HashSet<string>(this.RequiredScopes, StringComparer.Ordinal);
         var claimedScopes = new HashSet<string>(StringComparer.Ordinal);

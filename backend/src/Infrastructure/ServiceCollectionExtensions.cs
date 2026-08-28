@@ -482,8 +482,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<OwnerOAuthSubjectResolver>();
         // Where a change to who can reach an owner's mail is written down.
         services.AddScoped<IOwnerCredentialAuditor, LoggedOwnerCredentialAuditor>();
-        // What an administrator does to those credentials, registered beside them because the whole of what it
-        // composes is the four services above.
+        // What an administrator does to those credentials, registered beside the ports it composes so a port added to
+        // it and a port registered here stay in one place.
         services.AddScoped<OwnerCredentialAdministration>();
         // One owner's own record, read by key and bounded in the statement rather than in the process. A singleton
         // over the pool for the reason the persisted configuration layer's reader is one — the command holds no state

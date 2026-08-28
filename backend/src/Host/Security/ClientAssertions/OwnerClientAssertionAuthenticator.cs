@@ -35,12 +35,13 @@ namespace MailFathom.Host.Security.ClientAssertions;
 /// record names is the credential's identifier, which is MailFathom's own name for the row.
 /// </para>
 /// <para>
-/// Three of the refusals are recorded, and they are the three that happened to a credential this deployment holds: one
-/// an administrator disabled, one whose assertion claims something the surface does not accept, and one whose
-/// identifier had already been served. Each names an operator's own act or a client of theirs misbehaving, which is
-/// what a log line is for. The rest are not recorded, for the reason the configured verification beside this one does
-/// not record them either: a refusal before a credential is resolved is what an open endpoint answers to anything on
-/// the network path, so writing a line per such request would hand whoever sends them the deployment's log.
+/// Four of the refusals are recorded, and every one of them is read after the signature has verified: a credential an
+/// administrator disabled, an assertion claiming a longer life than the surface accepts, one carrying no usable replay
+/// identifier, and one whose identifier had already been served. Each names an operator's own act or a client of theirs
+/// misbehaving, which is what a log line is for. Nothing before the signature is recorded, for the reason the
+/// configured verification beside this one records nothing there either: a fingerprint travels in the clear in every
+/// assertion its client ever sent, so a line written where one merely resolves a row would let whoever captured one
+/// fill the deployment's log by sending unsigned tokens.
 /// </para>
 /// </remarks>
 internal sealed partial class OwnerClientAssertionAuthenticator
@@ -113,15 +114,11 @@ internal sealed partial class OwnerClientAssertionAuthenticator
             fingerprint,
             cancellationToken);
 
-        if (credential is not { Enabled: true, Material: { } material })
+        // A disabled credential is carried into verification rather than refused here, so that the refusal is recorded
+        // against a caller who has proven it holds the private key. Nothing else about it is admitted: the enablement
+        // is judged below, and it produces the same refusal this line would have.
+        if (credential is not { Material: { } material })
         {
-            // A row that exists and cannot be used is the one refusal here an operator took deliberately, so it is
-            // named rather than left indistinguishable from a fingerprint nobody registered.
-            if (credential is not null)
-            {
-                this.LogDisabledCredentialPresented(credential.Id);
-            }
-
             return OwnerClientAssertionAuthenticationResult.Rejected(ClientAssertionRejection.SignatureUnrecognized);
         }
 
@@ -136,7 +133,7 @@ internal sealed partial class OwnerClientAssertionAuthenticator
     }
 
     /// <summary>Verifies the assertion against the resolved key and then judges what it claims.</summary>
-    /// <remarks>The order is what keeps every later rule reading a signed value: nothing about the audience, the expiry, or the identifier is acted on until the signature has proven whose assertion this is.</remarks>
+    /// <remarks>The order is what keeps every later rule reading a signed value: nothing about the credential's enablement, the audience, the expiry, or the identifier is acted on until the signature has proven whose assertion this is.</remarks>
     private async Task<OwnerClientAssertionAuthenticationResult> VerifyAsync(
         string audience,
         string presentedAssertion,
@@ -152,6 +149,16 @@ internal sealed partial class OwnerClientAssertionAuthenticator
         {
             return OwnerClientAssertionAuthenticationResult.Rejected(
                 ClientAssertionRejection.SignatureUnrecognized);
+        }
+
+        // Read after the signature and not before it: a fingerprint travels in the clear in every assertion the client
+        // ever sent, so refusing a disabled credential where it is resolved would let whoever captured one write a line
+        // per request. Verification is what makes the caller the client this credential belongs to.
+        if (!credential.Enabled)
+        {
+            this.LogDisabledCredentialPresented(credential.Id);
+
+            return OwnerClientAssertionAuthenticationResult.Rejected(ClientAssertionRejection.SignatureUnrecognized);
         }
 
         var expiresAt = new DateTimeOffset(assertion.ValidTo, TimeSpan.Zero);
@@ -182,8 +189,8 @@ internal sealed partial class OwnerClientAssertionAuthenticator
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "A request presented an assertion signed by the key of credential {CredentialId}, which this "
-            + "deployment holds and does not accept. The request was refused with the same response as any other "
+        Message = "A request presented a verified assertion signed by the key of credential {CredentialId}, which "
+            + "this deployment holds and does not accept. The request was refused with the same response as any other "
             + "refusal; enable the credential, or provision the client a new one.")]
     private partial void LogDisabledCredentialPresented(Guid credentialId);
 

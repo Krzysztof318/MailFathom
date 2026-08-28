@@ -178,6 +178,12 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
     /// admitted caller holds is recorded on the credential the administrative surface provisioned, per owner and per
     /// credential, so a report that printed a ceiling would be printing a number this section does not hold. What is
     /// worth stating is which methods are open and where to go and read what each credential may do.
+    /// <para>
+    /// The no-entry line is this surface's own rather than the configured one's, because the two remedies differ: an
+    /// entry added here carries no <c>Permissions</c> at all — the key is retired and a section carrying it is refused
+    /// at startup — so an operator following the configured wording would add the entry, write the grant it promised,
+    /// and meet a process that will not start.
+    /// </para>
     /// </remarks>
     private void ReportOwnerFacing(
         string endpointName,
@@ -193,7 +199,7 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
         {
             var wholeSurface = Describe(MailFathomPermission.PublishedFor(surface));
 
-            this.LogSurfaceGrantedWithoutAnyEntry(
+            this.LogOwnerFacingSurfaceGrantedWithoutAnyEntry(
                 endpointName,
                 endpointPath,
                 wholeSurface,
@@ -297,6 +303,19 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
         string endpointName,
         string entrySettingPath,
         string acceptedMethod,
+        string grantEnforcement);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The {EndpointName} endpoint on {EndpointPath} configures no credential entry, so every caller it "
+            + "serves holds {GrantedPermissions} — everything this surface publishes. Add an entry under "
+            + "{AuthenticationSettingPath} naming a method this endpoint accepts, and provision each owner's own grant "
+            + "with 'mfctl credential create'; an entry here carries no permissions of its own. {GrantEnforcement}")]
+    private partial void LogOwnerFacingSurfaceGrantedWithoutAnyEntry(
+        string endpointName,
+        string endpointPath,
+        string grantedPermissions,
+        string authenticationSettingPath,
         string grantEnforcement);
 
     [LoggerMessage(

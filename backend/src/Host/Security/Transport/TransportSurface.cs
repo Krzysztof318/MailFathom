@@ -177,8 +177,9 @@ internal readonly record struct TransportSurface
     /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>
     internal string RoutingSchemeName => $"MailFathom:{this.Name}:Transport";
 
-    /// <summary>Gets the scheme comparing a presented credential against this surface's configured API keys.</summary>
+    /// <summary>Gets the scheme judging a presented key, against this surface's configured keys on the administrative surface and against the credentials this deployment stores on the two mail-serving ones.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>
+    /// <remarks>One name registering two handlers, because what a surface publishes to a client is a scheme rather than where the deployment keeps what it compares against. Which handler the name carries is decided where the scheme is registered.</remarks>
     internal string ApiKeySchemeName => $"MailFathom:{this.Name}:ApiKey";
 
     /// <summary>Gets the scheme judging an owner's username and password against the credentials this deployment stores.</summary>
@@ -186,8 +187,9 @@ internal readonly record struct TransportSurface
     /// <remarks>Composed from the surface's name like the others, even though the credentials it consults are one set for the deployment rather than one per surface: what the name keeps apart is the attempt bucket and the policy, so a caller spending its guesses on one surface has not spent them on the other.</remarks>
     internal string BasicSchemeName => $"MailFathom:{this.Name}:Basic";
 
-    /// <summary>Gets the scheme verifying a signed assertion against this surface's configured client public keys.</summary>
+    /// <summary>Gets the scheme verifying a signed assertion, against this surface's configured client public keys on the administrative surface and against the credentials this deployment stores on the two mail-serving ones.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>
+    /// <remarks>One name registering two handlers, for the reason <see cref="ApiKeySchemeName" /> gives. What the name keeps apart either way is the audience, which is what stops an assertion minted for one surface verifying on another.</remarks>
     internal string ClientAssertionSchemeName => $"MailFathom:{this.Name}:ClientAssertion";
 
     /// <summary>Gets the audience an assertion presented here must name.</summary>

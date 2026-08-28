@@ -153,6 +153,7 @@ internal static class OwnerCredentialEndpoints
     /// <param name="ownerId">The owner the credential authenticates.</param>
     /// <param name="request">The method and whatever that method requires, as the client sent them.</param>
     /// <param name="credentials">Performs the write, for a caller the use case's own grant admits.</param>
+    /// <param name="publicKeys">Decides whether a written public key is one this deployment accepts, so the refusal is a request the operator can correct.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> with the new credential, <c>409</c> when what it would be resolved by is taken or the owner already holds as many credentials as one owner may, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>
@@ -165,9 +166,11 @@ internal static class OwnerCredentialEndpoints
         Guid ownerId,
         [FromBody] OwnerCredentialProvisioningRequest? request,
         [FromServices] OwnerCredentialAdministration credentials,
+        [FromServices] IClientPublicKeyReader publicKeys,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(credentials);
+        ArgumentNullException.ThrowIfNull(publicKeys);
 
         if (!TryReadOwner(ownerId, out var owner))
         {
@@ -199,16 +202,19 @@ internal static class OwnerCredentialEndpoints
 
         if (method == OwnerCredentialMethod.PublicKey)
         {
-            return string.IsNullOrWhiteSpace(request!.PublicKey)
-                ? Refused("The request accepts 'public-key' and carried none. Write the client's public key.")
-                : AnswerProvisioning(
-                    method,
-                    ownerId,
-                    await credentials.ProvisionPublicKeyAsync(
-                        owner,
-                        request.PublicKey,
-                        permissions,
-                        cancellationToken));
+            if (FindPublicKeyRefusal(request!.PublicKey, publicKeys) is { } keyRefusal)
+            {
+                return Refused(keyRefusal);
+            }
+
+            return AnswerProvisioning(
+                method,
+                ownerId,
+                await credentials.ProvisionPublicKeyAsync(
+                    owner,
+                    request.PublicKey!,
+                    permissions,
+                    cancellationToken));
         }
 
         return await ProvisionOAuthSubjectAsync(owner, ownerId, request!, permissions, credentials, cancellationToken);
@@ -276,6 +282,7 @@ internal static class OwnerCredentialEndpoints
     /// <param name="credentialId">The credential being rotated.</param>
     /// <param name="request">The method and its new material, as the client sent them.</param>
     /// <param name="credentials">Performs the write, for a caller the use case's own grant admits.</param>
+    /// <param name="publicKeys">Decides whether a written public key is one this deployment accepts, so the refusal is a request the operator can correct.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> once the new material stands, <c>409</c> when what the credential would be resolved by is taken, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>A mapped subject is refused here rather than silently doing nothing: there is nothing about it this deployment issued, so pointing an owner at a different subject is a credential to provision rather than material to replace.</remarks>
@@ -284,9 +291,11 @@ internal static class OwnerCredentialEndpoints
         Guid credentialId,
         [FromBody] OwnerCredentialMaterialRequest? request,
         [FromServices] OwnerCredentialAdministration credentials,
+        [FromServices] IClientPublicKeyReader publicKeys,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(credentials);
+        ArgumentNullException.ThrowIfNull(publicKeys);
 
         if (!TryReadOwner(ownerId, out var owner))
         {
@@ -330,17 +339,47 @@ internal static class OwnerCredentialEndpoints
                 cancellationToken);
         }
 
-        return string.IsNullOrWhiteSpace(request!.PublicKey)
-            ? Refused("The request names 'public-key' and carried none. Write the client's new public key.")
-            : AnswerRotation(
-                method,
-                ownerId,
+        if (FindPublicKeyRefusal(request!.PublicKey, publicKeys, replacing: true) is { } keyRefusal)
+        {
+            return Refused(keyRefusal);
+        }
+
+        return AnswerRotation(
+            method,
+            ownerId,
+            credentialId,
+            await credentials.ReplacePublicKeyAsync(
+                owner,
                 credentialId,
-                await credentials.ReplacePublicKeyAsync(
-                    owner,
-                    credentialId,
-                    request.PublicKey,
-                    cancellationToken));
+                request.PublicKey!,
+                cancellationToken));
+    }
+
+    /// <summary>Reports why a written public key cannot be read, or <see langword="null" /> when it can.</summary>
+    /// <param name="written">The key as the request carried it.</param>
+    /// <param name="publicKeys">The reader that decides what a written key may be.</param>
+    /// <param name="replacing">Whether the key is replacing one, which is the only difference between the two sentences.</param>
+    /// <returns>The refusal, or <see langword="null" /> when the key is one this deployment accepts.</returns>
+    /// <remarks>
+    /// The boundary reads the key rather than letting the use case raise on it. Nothing in this process maps that
+    /// exception to a response, so an operator pasting a private key or a truncated PEM would be answered with a
+    /// <c>500</c> instead of the sentence the reader publishes for exactly that mistake.
+    /// </remarks>
+    private static string? FindPublicKeyRefusal(
+        string? written,
+        IClientPublicKeyReader publicKeys,
+        bool replacing = false)
+    {
+        if (string.IsNullOrWhiteSpace(written))
+        {
+            return replacing
+                ? "The request names 'public-key' and carried none. Write the client's new public key."
+                : "The request accepts 'public-key' and carried none. Write the client's public key.";
+        }
+
+        return publicKeys.TryRead(written, out _)
+            ? null
+            : publicKeys.DescribeAcceptedForm();
     }
 
     /// <summary>Replaces one credential's password, refusing each half by the rule it broke.</summary>

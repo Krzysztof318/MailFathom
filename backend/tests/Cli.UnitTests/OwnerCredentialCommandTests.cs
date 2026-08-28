@@ -668,6 +668,64 @@ public sealed class OwnerCredentialCommandTests : IDisposable
             ReadStrings(provisioning.ContentAsUtf8String(), "permissions"));
     }
 
+    /// <summary>
+    /// An empty grant and an absent one are opposite instructions the deployment reads from the same field — an empty
+    /// array grants nothing and no array at all grants the whole mail surface — so the flag that says which is meant is
+    /// asserted on the body rather than on the invocation parsing.
+    /// </summary>
+    [Fact]
+    public async Task Create_AGrantNamingNothing_SendsAnEmptyPermissionListRatherThanNone()
+    {
+        // Arrange
+        using var deployment = FakeOwnerCredentialDeployment.Provisioning([Owner], "mfk_not…", "mfk_a-key");
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "credential",
+            "create",
+            "--method",
+            "api-key",
+            "--no-permissions",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var provisioning = Assert.Single(deployment.RequestsTo(
+            HttpMethod.Post,
+            AdminEndpointRoutes.OwnerCredentialsPath(Owner)));
+
+        Assert.Empty(ReadStrings(provisioning.ContentAsUtf8String(), "permissions"));
+        Assert.Contains("\"permissions\"", provisioning.ContentAsUtf8String(), StringComparison.Ordinal);
+    }
+
+    /// <summary>The two ways of stating a grant contradict each other, so writing both is answered rather than silently resolved to one of them.</summary>
+    [Fact]
+    public async Task Create_AGrantBothNamedAndDeniedAtOnce_IsRefusedWithoutProvisioningAnything()
+    {
+        // Arrange
+        using var deployment = FakeOwnerCredentialDeployment.Provisioning([Owner], "mfk_not…", "mfk_a-key");
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "credential",
+            "create",
+            "--method",
+            "api-key",
+            "--permission",
+            "mailfathom.mail.read",
+            "--no-permissions",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.NotEqual(CliExitCode.Success, exitCode);
+        Assert.Empty(deployment.RequestsTo(HttpMethod.Post, AdminEndpointRoutes.OwnerCredentialsPath(Owner)));
+    }
+
     /// <summary>A listing describes four methods rather than one, so what each credential is resolved by is reported beside the method it belongs to.</summary>
     [Fact]
     public async Task List_CredentialsOfSeveralMethods_ReportsEachMethodAndWhatResolvesIt()

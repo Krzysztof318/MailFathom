@@ -13,16 +13,19 @@ namespace MailFathom.Infrastructure.Security.OAuth;
 /// <remarks>
 /// <para>
 /// A deployment can trust several authorization servers and can accept a credential a client minted for itself, and the
-/// token is the only thing that says which of them it is. Choosing a validator therefore has to read the token's own
-/// <c>iss</c> claim and its own declared type first — both unsigned input, chosen by whoever sent the request, and the
-/// name of this type says so at every call site.
+/// token is the only thing that says which of them it is. Choosing what verifies it therefore has to read the token's
+/// own <c>iss</c> claim, its own declared type, and its own <c>kid</c> header first — all three unsigned input, chosen
+/// by whoever sent the request, and the name of this type says so at every call site.
 /// </para>
 /// <para>
-/// What the value is allowed to decide is the point. It selects which configured profile validates the token, and that
-/// profile then checks the signature against its own key set and compares <c>iss</c> against its own configured issuer.
-/// A token claiming an issuer nobody configured selects no profile and is refused; a token claiming one profile's issuer
-/// while carrying another's signature fails that profile's signature check. So the worst an attacker achieves by writing
-/// whatever they like here is to pick which validator rejects them.
+/// What each value is allowed to decide is the point, and it is the same shape in all three: the value selects what
+/// will check the signature, and never anything the signature was supposed to establish. <c>iss</c> and <c>typ</c>
+/// select which configured profile validates the token, and that profile checks the signature against its own key set
+/// and compares <c>iss</c> against its own configured issuer. <c>kid</c> selects a stored owner-credential row, whose
+/// registered public key is then what the signature is verified against — so an assertion naming a key registered for
+/// another owner is refused by that key's own signature check rather than admitted as that owner, and one naming a
+/// fingerprint nobody registered is refused exactly as one naming nothing. In every case the worst an attacker achieves
+/// by writing whatever they like here is to pick which verifier rejects them.
 /// </para>
 /// <para>
 /// Nothing else is read. The remaining claims are the validated token's business, and reading one here would make an
