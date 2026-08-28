@@ -7,6 +7,7 @@ using MailFathom.Client.Backend.Authorization;
 using MailFathom.Client.Deployment;
 using MailFathom.Client.Presentation.Mailboxes;
 using MailFathom.Client.Presentation.Messages;
+using MailFathom.Client.Presentation.Threads;
 using MailFathom.Client.Presentation.Workspace;
 using MailFathom.Client.Session;
 using Microsoft.Extensions.DependencyInjection;
@@ -70,6 +71,11 @@ internal static class ClientComposition
         // outlives only the run for every other place it visited.
         services.AddSingleton<IMessageListMemory, LocalSettingsMessageListMemory>();
         services.AddSingleton<IMessageList, DeploymentMessageList>();
+
+        // The conversation a message in that list is read in, on the same terms and for the same reason — with one of
+        // its own: a conversation is reached by naming one message inside it, which a search result and a citation both
+        // do, so a conversation held per model would be one screen for the mail space and another for everywhere else.
+        services.AddSingleton<IMailThread, DeploymentMailThread>();
 
         // What the deployment allows this caller, for the same reason and on the same terms. It is the one place that
         // answers whether something may be offered, so every screen reads one answer instead of deriving its own from

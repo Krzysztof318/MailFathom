@@ -27,6 +27,7 @@ internal static class MailMessages
     /// <param name="answered">Whether it last reported it with <c>\Answered</c>.</param>
     /// <param name="attachmentCount">How many attachments it carries.</param>
     /// <param name="preview">The opening of its own text, or <see langword="null" /> where nothing has extracted it.</param>
+    /// <param name="threadId">The conversation it belongs to, or <see langword="null" /> where nothing has placed it in one.</param>
     /// <returns>The message.</returns>
     internal static DeploymentMailMessage Message(
         int number,
@@ -39,12 +40,13 @@ internal static class MailMessages
         bool flagged = false,
         bool answered = false,
         int attachmentCount = 0,
-        string? preview = null) =>
+        string? preview = null,
+        Guid? threadId = null) =>
         new(
             Identity(number),
             "work",
             "INBOX",
-            ThreadId: null,
+            threadId,
             subject,
             receivedAt,
             receivedAt,

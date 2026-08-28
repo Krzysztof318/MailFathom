@@ -5,6 +5,7 @@
 using System.Collections.Immutable;
 using MailFathom.Client.Backend.Timeline;
 using MailFathom.Client.Presentation.Messages;
+using MailFathom.Client.Presentation.Threads;
 using MailFathom.Client.Session;
 
 namespace MailFathom.Client.Presentation.Spaces.Mail;
@@ -23,6 +24,11 @@ namespace MailFathom.Client.Presentation.Spaces.Mail;
 /// coming back is finding the list where it was rather than reading its first page again.
 /// </para>
 /// <para>
+/// The conversation the list opens is the run's own on the same terms, and it is read through here rather than held:
+/// selecting a message is how one is reached in this space, and a search result or a citation reaches the same
+/// conversation by naming a message in it, so a conversation this model owned would be one of two.
+/// </para>
+/// <para>
 /// Beside that is the space's own reading of the session: whether correspondence may be put in front of this caller at
 /// all, read here rather than derived from a request the deployment refused.
 /// </para>
@@ -30,17 +36,21 @@ namespace MailFathom.Client.Presentation.Spaces.Mail;
 public partial record MailModel
 {
     private readonly IMessageList messages;
+    private readonly IMailThread thread;
 
-    /// <summary>Initializes the space over what decides whether it may be offered, and the list it is read through.</summary>
+    /// <summary>Initializes the space over what decides whether it may be offered, and the list and conversation it is read through.</summary>
     /// <param name="session">What the deployment allows this caller.</param>
     /// <param name="messages">The run's own message list, drawn from wherever the mailbox tree says somebody is.</param>
+    /// <param name="thread">The run's own conversation, which is whatever the list has one message selected in.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    public MailModel(IClientSession session, IMessageList messages)
+    public MailModel(IClientSession session, IMessageList messages, IMailThread thread)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(messages);
+        ArgumentNullException.ThrowIfNull(thread);
 
         this.messages = messages;
+        this.thread = thread;
 
         this.WithholdsMail = session.Standing.Select(standing => standing.Withholds(ClientCapability.Mail));
 
@@ -107,6 +117,53 @@ public partial record MailModel
     /// and neither may be announced while the answer is still on its way.
     /// </remarks>
     public IFeed<bool> KeepsEverything { get; }
+
+    /// <summary>The conversation the selected message is in, as its header is drawn.</summary>
+    /// <remarks>The run's own conversation read through this model, so a citation that opened one and a row that opened one are the same screen rather than two.</remarks>
+    public IFeed<ThreadReading> Thread => this.thread.Reading;
+
+    /// <summary>The messages of that conversation, in the conversation's own order.</summary>
+    public IListFeed<ThreadMessageRow> ThreadMessages => this.thread.Messages;
+
+    /// <summary>Whether there is more of the conversation after what has been read.</summary>
+    public IFeed<bool> HasMoreThreadMessages => this.thread.HasMoreMessages;
+
+    /// <summary>Whether the last attempt to read more of the conversation did not arrive.</summary>
+    public IFeed<bool> ThreadPagingFailed => this.thread.PagingFailed;
+
+    /// <summary>Shows what one message of the conversation added, or collapses it back to a line.</summary>
+    /// <param name="key">The message, as its row names itself.</param>
+    /// <param name="cancellationToken">Abandons the change.</param>
+    /// <returns>A task completing once the message has been opened or closed.</returns>
+    /// <remarks>It carries the message it acts on, so the command generated from it runs per message and reports its progress on the message rather than over the conversation.</remarks>
+    public ValueTask ToggleThreadMessage(string key, CancellationToken cancellationToken) =>
+        this.thread.ToggleAsync(key, cancellationToken);
+
+    /// <summary>Reads the whole of one message, which is what its quoted history is reached by.</summary>
+    /// <param name="key">The message, as its row names itself.</param>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    /// <returns>A task completing once the whole message has arrived or the attempt has been reported.</returns>
+    public ValueTask ShowWholeThreadMessage(string key, CancellationToken cancellationToken) =>
+        this.thread.ShowWholeMessageAsync(key, cancellationToken);
+
+    /// <summary>Reads one whole message again, this time fetching what it asks for from somebody else's server.</summary>
+    /// <param name="key">The message, as its row names itself.</param>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    /// <returns>A task completing once the second read has been asked for.</returns>
+    public ValueTask ShowThreadRemoteContent(string key, CancellationToken cancellationToken) =>
+        this.thread.ShowRemoteContentAsync(key, cancellationToken);
+
+    /// <summary>Takes the next page of the conversation onto the end of what has been read.</summary>
+    /// <param name="cancellationToken">Abandons the page.</param>
+    /// <returns>A task completing once the page has arrived or the attempt has been reported.</returns>
+    public ValueTask ShowMoreThreadMessages(CancellationToken cancellationToken) =>
+        this.thread.ShowMoreAsync(cancellationToken);
+
+    /// <summary>Asks the deployment for the conversation again, which is what a person presses when it did not arrive.</summary>
+    /// <param name="cancellationToken">Abandons the ask.</param>
+    /// <returns>A task completing once the ask has been made.</returns>
+    public ValueTask RetryThread(CancellationToken cancellationToken) =>
+        this.thread.AskAgainAsync(cancellationToken);
 
     /// <summary>Takes the next page onto the end of the list.</summary>
     /// <param name="cancellationToken">Abandons the page.</param>

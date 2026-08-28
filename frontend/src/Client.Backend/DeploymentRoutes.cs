@@ -48,6 +48,38 @@ internal static class DeploymentRoutes
     /// </remarks>
     internal const string MailTimelinePath = $"{Prefix}/emails";
 
+    /// <summary>Where a deployment serves one page of one conversation, across every folder and account it spans.</summary>
+    /// <param name="threadId">The conversation, as a message row published it.</param>
+    /// <param name="pageSize">How many messages the page may hold, or <see langword="null" /> for the deployment's own default.</param>
+    /// <param name="cursor">The cursor a previous page returned, or <see langword="null" /> for the beginning of the conversation.</param>
+    /// <returns>The path, relative to the address the composing host supplied.</returns>
+    /// <remarks>
+    /// The conversation is the one thing named in the path, because it is the resource; how much of it is served and
+    /// where the serving continues from are the query. Nothing narrows it to a folder or an account — a reply that
+    /// landed in another mailbox's junk folder is still part of the exchange somebody is reading, and the route is what
+    /// says so by taking neither.
+    /// </remarks>
+    internal static string MailThreadPath(Guid threadId, int? pageSize, string? cursor)
+    {
+        var stated = new List<string>(2);
+
+        if (pageSize is { } wanted)
+        {
+            stated.Add($"pageSize={wanted.ToString(CultureInfo.InvariantCulture)}");
+        }
+
+        // Escaped rather than written raw: a cursor is a value this client received rather than composed, whatever it
+        // happens to look like today.
+        if (!string.IsNullOrEmpty(cursor))
+        {
+            stated.Add($"cursor={Uri.EscapeDataString(cursor)}");
+        }
+
+        var query = stated.Count is 0 ? string.Empty : $"?{string.Join('&', stated)}";
+
+        return string.Create(CultureInfo.InvariantCulture, $"{Prefix}/threads/{threadId:D}{query}");
+    }
+
     /// <summary>Where a deployment serves one message's body, as the two renderings a reading pane draws it from.</summary>
     /// <param name="storedEmailId">The message, as a list row or a conversation published it.</param>
     /// <param name="remoteImages">Whether the reader has asked for this message's remote pictures.</param>

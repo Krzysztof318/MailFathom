@@ -129,6 +129,25 @@ the list into a selecting mode that is visible and can be left. Loading, a read 
 and a folder whose mail this list is keeping out are four rendered states rather than one blank list — the last two are
 told apart in words, and how current the copy is stays the tree's to say.
 
+**The conversation that selection is in is the other half of the space.** `Client/Presentation/Threads/` holds it, and
+`IMailThread` is registered once for the run beside the list — not because a screen keeps it, but because a conversation
+is reached by naming one message inside it, which a search result and a citation do as readily as a row of the list
+does, so a conversation each screen owned would be two. Selecting one message opens the exchange it belongs to, and
+selecting several closes it, because a question asked about four messages is not an exchange to read. It is not scoped
+to the folder the list is drawn from and cannot be: the question is in the inbox, the answer is in the sent folder, and
+a forwarded copy is somewhere else again — so what is drawn is every folder of every account, in the conversation's own
+order. Where somebody arrived at a particular message, that message is the one opened and scrolled to; where they
+arrived at the conversation itself, the newest is.
+
+**What each message added arrived with the conversation, and the whole of one is a request somebody made.** A message
+collapses to a line and opens to what it contributed, which the deployment publishes with the quoted history and the
+signature trimmed off — so an exchange of thirty replies is one request to draw and the eighth reply does not redraw the
+seven above it. The whole message, quoted history and all, is read only for the message somebody asked it of and drawn
+by the same pane a single message is read in, which is what keeps the question asked before a link is followed one piece
+of code rather than two. Collapsing that message drops the whole of it along with the answer about its remote pictures,
+so no allowance outlives the reason it was given. A page of the conversation that did not arrive, and a whole message
+that did not, are each said beside what is already drawn rather than instead of it.
+
 **Settings is reached from the frame rather than named among the spaces**, because it is not one. It is the screen that
 says which build is running and which deployment this client is pointed at, carries the two choices below and the way to
 point it at another deployment, and carries the way back out as a navigation request rather than as a handler — the same

@@ -429,13 +429,105 @@
     <value>To, co już widać, jest nadal aktualne. Poproś o tę stronę jeszcze raz.</value>
     <comment>Says that nothing was lost, because a warning over a list that is still correct otherwise reads as the list being wrong.</comment>
   </data>
-  <data name="MailPage.Reading.Heading" xml:space="preserve">
-    <value>Czytanie</value>
+  <data name="MailPage.Thread.Heading" xml:space="preserve">
+    <value>Rozmowa</value>
     <comment>Names the companion column of the Mail space, which a wide window shows beside the list.</comment>
   </data>
-  <data name="MailPage.Reading.Detail" xml:space="preserve">
-    <value>Ta kolumna jest wciąż budowana.</value>
-    <comment>The companion column's counterpart to the sentence above.</comment>
+  <data name="MailPage.Thread.Detail" xml:space="preserve">
+    <value>Wybierz wiadomość, aby przeczytać rozmowę, której jest częścią.</value>
+    <comment>Says what to do rather than that something is missing: nothing being open is the ordinary state of this column.</comment>
+  </data>
+  <data name="MailPage.List.ThreadMessages.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Wiadomości w tej rozmowie</value>
+    <comment>Names the list itself, so a screen reader announces what the messages belong to before it reads one.</comment>
+  </data>
+  <data name="MailPage.Toggle.ThreadMessage.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Pokaż, co wnosi ta wiadomość</value>
+    <comment>Names the control that opens one message of the conversation. The control announces whether it is on, so the name says only what it does.</comment>
+  </data>
+  <data name="MailPage.TextBlock.MoreParticipants.Text" xml:space="preserve">
+    <value>W tej rozmowie pisały też inne osoby.</value>
+    <comment>Says that the header names some of the authors rather than all of them, so a long conversation is not read as having had fewer people in it.</comment>
+  </data>
+  <data name="MailPage.TextBlock.NoContribution.Text" xml:space="preserve">
+    <value>MailFathom nie przeczytał jeszcze tej wiadomości, więc nie ma czego pokazać z tego, co wnosi.</value>
+    <comment>Names the ordinary state of a mailbox still being taken in, so a message with nothing under it is not read as one somebody sent empty.</comment>
+  </data>
+  <data name="MailPage.Button.ShowWholeMessage.Content" xml:space="preserve">
+    <value>Pokaż całą wiadomość</value>
+    <comment>Asks for the message itself, quoted history and all, which is the one gesture in this column that costs a request.</comment>
+  </data>
+  <data name="MailPage.InfoBar.WholeMessageUnavailable.Title" xml:space="preserve">
+    <value>Ta wiadomość nie dotarła</value>
+    <comment>Heads a failed read of one whole message, which leaves the conversation and what the message added on the screen.</comment>
+  </data>
+  <data name="MailPage.InfoBar.WholeMessageUnavailable.Message" xml:space="preserve">
+    <value>To, co wnosi ta wiadomość, jest nadal widoczne powyżej. Poproś o całość jeszcze raz.</value>
+    <comment>Says that nothing was lost, because a warning over a message that is still readable otherwise reads as the message being wrong.</comment>
+  </data>
+  <data name="MailPage.Button.RetryWholeMessage.Content" xml:space="preserve">
+    <value>Spróbuj ponownie</value>
+    <comment>Asks the deployment for the whole message again, which is what a person presses when it did not arrive.</comment>
+  </data>
+  <data name="MailPage.InfoBar.ThreadRunsPast.Title" xml:space="preserve">
+    <value>Ta rozmowa jest dłuższa, niż tu widać</value>
+    <comment>Heads a conversation too large to assemble in one read, which is a mailing list's archive rather than correspondence somebody is following.</comment>
+  </data>
+  <data name="MailPage.InfoBar.ThreadRunsPast.Message" xml:space="preserve">
+    <value>MailFathom składa rozmowę do pewnej granicy, a ta ją przekracza. Widoczny jest jej początek, a nie całość.</value>
+    <comment>Says which part is shown, because a screen that showed part of a conversation silently would be claiming to show all of it.</comment>
+  </data>
+  <data name="MailPage.InfoBar.NoThreadMessages.Title" xml:space="preserve">
+    <value>Nie ma czego pokazać</value>
+    <comment>Heads an open conversation with no message this client can draw, which is a state rather than a failure.</comment>
+  </data>
+  <data name="MailPage.InfoBar.NoThreadMessages.Message" xml:space="preserve">
+    <value>Ta rozmowa nie zawiera żadnej wiadomości, którą MailFathom już pobrał. Panel skrzynek mówi, jak aktualna jest ta kopia.</value>
+    <comment>Points at where how current a copy is, is actually said, which is per folder in the tree rather than repeated here.</comment>
+  </data>
+  <data name="MailPage.InfoBar.ThreadUnavailable.Title" xml:space="preserve">
+    <value>Nie udało się odczytać tej rozmowy</value>
+    <comment>Heads the state a failed read of the conversation is shown.</comment>
+  </data>
+  <data name="MailPage.InfoBar.ThreadUnavailable.Message" xml:space="preserve">
+    <value>MailFathom nie odpowiedział tą rozmową. Spróbuj ponownie, a jeśli błąd się powtarza, zajrzyj do panelu skrzynek.</value>
+    <comment>Says what to try in this application's own words rather than repeating a message written for a log.</comment>
+  </data>
+  <data name="MailPage.Button.RetryThread.Content" xml:space="preserve">
+    <value>Spróbuj ponownie</value>
+    <comment>Asks the deployment for the conversation again, which is what a person presses when it did not arrive.</comment>
+  </data>
+  <data name="MailPage.InfoBar.ThreadPageUnavailable.Title" xml:space="preserve">
+    <value>Ta strona nie dotarła</value>
+    <comment>Heads a page of the conversation that failed, which leaves the messages already drawn on the screen.</comment>
+  </data>
+  <data name="MailPage.InfoBar.ThreadPageUnavailable.Message" xml:space="preserve">
+    <value>To, co już widać, jest nadal aktualne. Poproś o tę stronę jeszcze raz.</value>
+    <comment>Says that nothing was lost, because a warning over a conversation that is still correct otherwise reads as the conversation being wrong.</comment>
+  </data>
+  <data name="MailPage.Button.ShowMoreThreadMessages.Content" xml:space="preserve">
+    <value>Pokaż dalszą część rozmowy</value>
+    <comment>Asks for the next page of the conversation, which runs forward from where the last one ended.</comment>
+  </data>
+  <data name="Thread.MessageCount" xml:space="preserve">
+    <value>Wiadomości: {0}</value>
+    <comment>Says how large the whole conversation is, as the deployment answered it rather than as what has been read. Written as a label and a number so one message and many read correctly under one entry.</comment>
+  </data>
+  <data name="Thread.Announcement" xml:space="preserve">
+    <value>Rozmowa: {0}. {1}</value>
+    <comment>Composes the header as the one sentence a screen reader is given instead of a subject, a count, and a row of authors. Takes the subject and the count already in words.</comment>
+  </data>
+  <data name="Thread.Recipients" xml:space="preserve">
+    <value>Do {0}</value>
+    <comment>Names who an opened message went to. Takes the recipients already written as a line, so the entry says only what the line is for.</comment>
+  </data>
+  <data name="Thread.Participant.Messages" xml:space="preserve">
+    <value>({0})</value>
+    <comment>How many of the conversation's messages one author wrote, drawn beside their name. A number in its own right rather than a sentence, because the name it sits beside is the sentence.</comment>
+  </data>
+  <data name="Thread.Participant.Announcement" xml:space="preserve">
+    <value>{0}, liczba napisanych wiadomości: {1}</value>
+    <comment>Composes one author as the sentence a screen reader is given instead of a name and a number. Written as a label and a number so one message and many read correctly under one entry.</comment>
   </data>
   <data name="CasesPage.Cases.Heading" xml:space="preserve">
     <value>Sprawy</value>

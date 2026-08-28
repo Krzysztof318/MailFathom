@@ -8,6 +8,7 @@ namespace MailFathom.Client.Presentation.Messages;
 
 /// <summary>One line of the message list, with everything the view draws it from and nothing else.</summary>
 /// <param name="Key">The message's own identity, which is what this row is matched by across a redraw and what the scope names it by.</param>
+/// <param name="ThreadId">The conversation the message belongs to, or <see langword="null" /> where nothing has placed it in one.</param>
 /// <param name="Correspondent">Who the message is with — its sender, or its recipients where the place is mail this owner sent.</param>
 /// <param name="Subject">What the message is about, or the words standing in for a message that carried no subject.</param>
 /// <param name="Preview">The opening of the message's own text, and empty where nothing has extracted it yet.</param>
@@ -30,6 +31,12 @@ namespace MailFathom.Client.Presentation.Messages;
 /// that had to be redrawn on every click.
 /// </para>
 /// <para>
+/// The conversation is the one member here nothing draws. It is carried because selecting a row is how a conversation
+/// is opened, and the identity that opens one is published on the message rather than derivable from anything else the
+/// row holds — a screen that had to ask the deployment which conversation a selected message is in would be a request
+/// per click.
+/// </para>
+/// <para>
 /// It is <c>partial</c> because <paramref name="Key" /> makes it eligible for MVUX's key-equality generation, which is
 /// what carries a row's identity across a redraw: a page taken onto the window updates the rows it changed and leaves
 /// the containers of the rest alone, and what was selected stays selected. The generator refuses to run on a sealed
@@ -42,6 +49,7 @@ namespace MailFathom.Client.Presentation.Messages;
 /// </remarks>
 public sealed partial record MessageRow(
     string Key,
+    Guid? ThreadId,
     string Correspondent,
     string Subject,
     string Preview,

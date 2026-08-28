@@ -54,6 +54,7 @@ internal static class MessageListShape
 
         return new MessageRow(
             message.Id.ToString("D", CultureInfo.InvariantCulture),
+            message.ThreadId,
             correspondent,
             subject,
             message.Preview ?? string.Empty,

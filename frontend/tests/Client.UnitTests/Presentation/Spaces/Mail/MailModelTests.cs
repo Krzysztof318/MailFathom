@@ -23,10 +23,10 @@ public sealed class MailModelTests
     {
         // Arrange
         using var withheld = SessionOffering("mailfathom.mail.ask");
-        await using var withheldModel = new MailModel(withheld, new StubMessageList());
+        await using var withheldModel = new MailModel(withheld, new StubMessageList(), new StubMailThread());
 
         using var offered = SessionOffering("mailfathom.mail.read");
-        await using var offeredModel = new MailModel(offered, new StubMessageList());
+        await using var offeredModel = new MailModel(offered, new StubMessageList(), new StubMailThread());
 
         // Act, Assert
         Assert.True(await withheldModel.WithholdsMail);
@@ -43,7 +43,7 @@ public sealed class MailModelTests
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
         var list = new StubMessageList(Row(1), Row(2));
-        await using var model = new MailModel(session, list);
+        await using var model = new MailModel(session, list, new StubMailThread());
 
         // Act
         var rows = await model.Messages;
@@ -54,6 +54,53 @@ public sealed class MailModelTests
         Assert.Same(list.PagingFailed, model.PagingFailed);
     }
 
+    /// <summary>
+    /// The conversation is the run's own read through this space as well, so a citation that opened one and a row that
+    /// opened one are the same screen rather than two.
+    /// </summary>
+    [Fact]
+    public async Task Thread_TheRunsOwnConversation_IsReadThroughRatherThanCopied()
+    {
+        // Arrange
+        using var session = SessionOffering("mailfathom.mail.read");
+        var thread = new StubMailThread();
+        await using var model = new MailModel(session, new StubMessageList(), thread);
+
+        // Act, Assert
+        Assert.Same(thread.Reading, model.Thread);
+        Assert.Same(thread.Messages, model.ThreadMessages);
+        Assert.Same(thread.HasMoreMessages, model.HasMoreThreadMessages);
+        Assert.Same(thread.PagingFailed, model.ThreadPagingFailed);
+    }
+
+    /// <summary>
+    /// Every gesture the conversation column offers reaches the conversation the run holds, and reaches the member that
+    /// gesture means: expanding a message and reading the whole of it are two different requests of the deployment, and
+    /// one wired to the other would compile.
+    /// </summary>
+    [Fact]
+    public async Task ToggleThreadMessage_EveryGestureTheColumnOffers_ReachesTheConversationTheRunHolds()
+    {
+        // Arrange
+        using var session = SessionOffering("mailfathom.mail.read");
+        var thread = new StubMailThread();
+        await using var model = new MailModel(session, new StubMessageList(), thread);
+
+        // Act
+        await model.ToggleThreadMessage(MailMessages.Key(1), TestContext.Current.CancellationToken);
+        await model.ShowWholeThreadMessage(MailMessages.Key(2), TestContext.Current.CancellationToken);
+        await model.ShowThreadRemoteContent(MailMessages.Key(3), TestContext.Current.CancellationToken);
+        await model.ShowMoreThreadMessages(TestContext.Current.CancellationToken);
+        await model.RetryThread(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([MailMessages.Key(1)], thread.Toggled);
+        Assert.Equal([MailMessages.Key(2)], thread.Whole);
+        Assert.Equal([MailMessages.Key(3)], thread.Remote);
+        Assert.Equal(1, thread.Pages);
+        Assert.Equal(1, thread.Asks);
+    }
+
     /// <summary>Both ends of the loaded window are reported, because each is a control of its own on the screen.</summary>
     [Fact]
     public async Task HasMoreAfter_AWindowWithMailEitherSideOfIt_ReportsEachEndSeparately()
@@ -61,7 +108,7 @@ public sealed class MailModelTests
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
         var list = new StubMessageList(Row(1)) { More = true, Earlier = false };
-        await using var model = new MailModel(session, list);
+        await using var model = new MailModel(session, list, new StubMailThread());
 
         // Act, Assert
         Assert.True(await model.HasMoreAfter);
@@ -75,7 +122,7 @@ public sealed class MailModelTests
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
         var list = new StubMessageList();
-        await using var model = new MailModel(session, list);
+        await using var model = new MailModel(session, list, new StubMailThread());
 
         await list.ArrangeAsync(
             new MessageListArrangement
@@ -107,7 +154,7 @@ public sealed class MailModelTests
     {
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
-        await using var model = new MailModel(session, new StubMessageList());
+        await using var model = new MailModel(session, new StubMessageList(), new StubMailThread());
 
         // Act, Assert
         Assert.True(await model.KeepsEverything);
@@ -121,7 +168,7 @@ public sealed class MailModelTests
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
         var list = new StubMessageList();
-        await using var model = new MailModel(session, list);
+        await using var model = new MailModel(session, list, new StubMailThread());
 
         // Act
         await model.ShowMore(TestContext.Current.CancellationToken);
@@ -141,7 +188,7 @@ public sealed class MailModelTests
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
         var list = new StubMessageList();
-        await using var model = new MailModel(session, list);
+        await using var model = new MailModel(session, list, new StubMailThread());
 
         // Act
         await model.ReverseOrder(TestContext.Current.CancellationToken);
@@ -163,7 +210,7 @@ public sealed class MailModelTests
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
         var list = new StubMessageList();
-        await using var model = new MailModel(session, list);
+        await using var model = new MailModel(session, list, new StubMailThread());
 
         // Act
         await model.ToggleUnreadOnly(TestContext.Current.CancellationToken);
@@ -190,7 +237,7 @@ public sealed class MailModelTests
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
         var list = new StubMessageList();
-        await using var model = new MailModel(session, list);
+        await using var model = new MailModel(session, list, new StubMailThread());
 
         // Act
         await model.ToggleUnreadOnly(TestContext.Current.CancellationToken);
@@ -208,12 +255,16 @@ public sealed class MailModelTests
         using var session = SessionOffering("mailfathom.mail.read");
 
         // Act, Assert
-        Assert.Throws<ArgumentNullException>(() => new MailModel(null!, new StubMessageList()));
-        Assert.Throws<ArgumentNullException>(() => new MailModel(session, null!));
+        Assert.Throws<ArgumentNullException>(
+            () => new MailModel(null!, new StubMessageList(), new StubMailThread()));
+
+        Assert.Throws<ArgumentNullException>(() => new MailModel(session, null!, new StubMailThread()));
+        Assert.Throws<ArgumentNullException>(() => new MailModel(session, new StubMessageList(), null!));
     }
 
     private static MessageRow Row(int number) => new(
         MailMessages.Key(number),
+        MailThreads.Identity,
         "Someone",
         "Quarterly review",
         Preview: string.Empty,
