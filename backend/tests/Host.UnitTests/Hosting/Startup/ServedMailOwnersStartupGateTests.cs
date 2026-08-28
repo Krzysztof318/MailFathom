@@ -404,65 +404,42 @@ public sealed class ServedMailOwnersStartupGateTests
     }
 
     /// <summary>
-    /// An owner-facing surface answers one person about their own mail, and nothing this release admits a caller with
-    /// names the owner they act for — neither the absence of a credential nor a configured one.
+    /// An owner-facing surface answers one person about their own mail, and a surface requiring no credential admits a
+    /// caller who names nobody — which leaves the owner to be supplied by the deployment, and it has one to supply only
+    /// while it serves one person.
     /// </summary>
-    [Theory]
-    [InlineData(true, "requires no authentication")]
-    [InlineData(false, "whose credentials name no owner")]
-    public async Task StartAsync_SeveralOwnersServedWithAnOwnerFacingSurfaceEnabled_FailsStartupSayingWhy(
-        bool authenticationDisabled,
-        string reasonNamed)
+    [Fact]
+    public async Task StartAsync_SeveralOwnersServedWithAnOwnerFacingSurfaceAuthenticatingNobody_FailsStartupSayingWhy()
     {
-        // Arrange
-        var mcp = new McpEndpointOptions { Enabled = true };
-
-        if (!authenticationDisabled)
-        {
-            mcp.Authentication.Add(new());
-        }
-
         // Act
         var refusal = await Assert.ThrowsAsync<DeploymentMailOwnerUnresolvedException>(() =>
             CreateGate(
                     [],
                     TwoDeclaredOwners(),
-                    mcpEndpointSettings: mcp)
+                    mcpEndpointSettings: new McpEndpointOptions { Enabled = true })
                 .StartAsync(CancellationToken.None));
 
         // Assert
-        Assert.Contains(reasonNamed, refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("requires no authentication", refusal.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
     /// The client surface is owner-facing on exactly the terms the MCP one is, so a deployment serving several owners
-    /// is refused for having it open even where no MCP endpoint is served at all.
+    /// is refused for having it open unauthenticated even where no MCP endpoint is served at all.
     /// </summary>
-    [Theory]
-    [InlineData(true, "requires no authentication")]
-    [InlineData(false, "whose credentials name no owner")]
-    public async Task StartAsync_SeveralOwnersServedWithTheClientEndpointAlone_FailsStartupSayingWhy(
-        bool authenticationDisabled,
-        string reasonNamed)
+    [Fact]
+    public async Task StartAsync_SeveralOwnersServedWithTheClientEndpointAuthenticatingNobody_FailsStartupSayingWhy()
     {
-        // Arrange
-        var client = new ClientEndpointOptions { Enabled = true };
-
-        if (!authenticationDisabled)
-        {
-            client.Authentication.Add(new());
-        }
-
         // Act
         var refusal = await Assert.ThrowsAsync<DeploymentMailOwnerUnresolvedException>(() =>
             CreateGate(
                     [],
                     TwoDeclaredOwners(),
-                    clientEndpointSettings: client)
+                    clientEndpointSettings: new ClientEndpointOptions { Enabled = true })
                 .StartAsync(CancellationToken.None));
 
         // Assert
-        Assert.Contains(reasonNamed, refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("requires no authentication", refusal.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -486,18 +463,24 @@ public sealed class ServedMailOwnersStartupGateTests
     }
 
     /// <summary>
-    /// A username and password are one owner's own record, so a surface admitting nobody else can say which owner every
-    /// caller acts for. It is the one credential this release has that does, and therefore the one posture under which a
-    /// deployment may serve several people.
+    /// Every credential an owner-facing surface admits is a record naming its owner, whichever method presents it, so a
+    /// surface requiring one can say which owner every caller acts for — which is the posture under which a deployment
+    /// may serve several people, and it holds for each of the four methods rather than for one of them.
     /// </summary>
-    [Fact]
-    public async Task StartAsync_SeveralOwnersServedWhereEveryOwnerFacingCredentialNamesAnOwner_ServesEveryDeclaredOwner()
+    /// <param name="method">The method the enabled surface accepts.</param>
+    [Theory]
+    [InlineData("password")]
+    [InlineData("api-key")]
+    [InlineData("public-key")]
+    [InlineData("oauth-subject")]
+    public async Task StartAsync_SeveralOwnersServedWhereTheOwnerFacingSurfaceRequiresACredential_ServesEveryDeclaredOwner(
+        string method)
     {
         // Arrange
         var mcp = new McpEndpointOptions { Enabled = true };
         var servedOwners = new ServedMailOwners();
 
-        mcp.Authentication.Add(new() { Basic = new() });
+        mcp.Authentication.Add(new() { Method = method });
 
         // Act
         await CreateGate([], TwoDeclaredOwners(), servedOwners: servedOwners, mcpEndpointSettings: mcp)

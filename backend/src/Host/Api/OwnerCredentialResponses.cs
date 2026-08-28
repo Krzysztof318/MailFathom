@@ -185,5 +185,3 @@ internal sealed record OwnerCredentialRotatedResponse(string? Lookup, string? Ke
     /// <inheritdoc />
     public override string ToString() => nameof(OwnerCredentialRotatedResponse);
 }
-
-

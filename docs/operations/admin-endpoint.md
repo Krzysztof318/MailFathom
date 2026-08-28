@@ -1178,16 +1178,17 @@ request answered worse than one refused. Remove them from the file — or from `
 deployment that declares no owners supplies its sole owner's mailboxes — and ask again.
 
 **A second owner is refused while an owner-facing endpoint authenticates nobody.** A deployment serving one person may
-leave the MCP endpoint open, or authenticate it with a key that names no owner, because there is only one answer to
-whose mail a caller is asking about. Recording a second person makes that question unanswerable, so the refusal names
-the endpoints to narrow — give each of them a credential that names an owner, or switch them off — rather than letting
-the deployment reach a state in which one caller's request would be answered out of another person's mailbox. The
-administrative endpoint is deliberately not part of that check: it is the surface an operator is holding while they
-correct the others, and its credentials never name an owner in the first place.
+leave the MCP endpoint open, because there is only one answer to whose mail a caller is asking about. Recording a second
+person makes that question unanswerable, so the refusal names the endpoints to correct — require a credential on each of
+them, or switch them off — rather than letting the deployment reach a state in which one caller's request would be
+answered out of another person's mailbox. Requiring one is the whole of the correction: every credential these two
+surfaces admit is a record naming the owner it belongs to, whichever method presents it. The administrative endpoint is
+deliberately not part of that check: it is the surface an operator is holding while they correct the others, and its
+credentials never name an owner in the first place.
 
-That leaves the reads with nobody to act for on such a deployment. The contact book is read for one person, and a
-credential that names no owner leaves the deployment to supply one — which it can do only where it holds a single
-owner. Those routes answer `409` on a deployment serving several, with a sentence naming the credential that would have
+That leaves the reads with nobody to act for on such a deployment. The contact book is read for one person, and an
+administrator's credential names no owner, which leaves the deployment to supply one — which it can do only where it
+holds a single owner. Those routes answer `409` on a deployment serving several, with a sentence naming the credential that would have
 been answered, rather than reporting the deployment as broken. Every route that names the owner in its own path is
 unaffected, which is every route in the table above, and so is every mailbox read: which accounts a caller owns is
 resolved from the owner each served account carries rather than from a sole one.

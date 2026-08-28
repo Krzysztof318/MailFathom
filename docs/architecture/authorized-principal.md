@@ -136,13 +136,12 @@ exactly as an unknown credential is.
 
 The gate settles the whole roster while the host starts — every owner the file declares, each with the mail accounts
 they own, every owner whose record is already their own and whom no file declares, and the deployment's own
-`MailSynchronization:Accounts` belonging to the sole owner such a deployment holds. A caller whose credential names no
-owner needs exactly one owner to act for, so the gate refuses to come up on any other number **while `McpEndpoint` or
-`ClientEndpoint` admits such a caller** — which is a surface requiring no authentication, or one any of whose methods is
-a key, a public key, or an access token rather than a person's password. It is the methods rather than the enablement:
-a surface accepting a password accepts whatever is configured beside it, and a caller admitted by one of those still
-arrives carrying nobody, so what frees the roster is every method on both surfaces naming an owner — or the surfaces
-being off.
+`MailSynchronization:Accounts` belonging to the sole owner such a deployment holds. A caller that names no owner needs exactly one owner
+to act for, so the gate refuses to come up on any other number **while `McpEndpoint` or `ClientEndpoint` admits such a
+caller** — which is a surface requiring no authentication and nothing else. Every credential these two surfaces admit is
+a record naming the owner it belongs to, whichever of the four methods presents it, so what an entry states is a method
+rather than a person and reading the entry would answer nothing; what frees the roster is requiring a credential on both
+surfaces — or the surfaces being off.
 
 **The administrative surface is deliberately outside that reading.** An administrator acts for the deployment rather
 than for a person, and every route there that is about one owner names the owner it is about, so a roster of several
