@@ -45,6 +45,10 @@ public readonly record struct DataEncryptionPurpose
     /// <remarks>The subject of a value sealed under this purpose is the account identifier, which is MailFathom's own configured name for the account and carries no personal data.</remarks>
     public static DataEncryptionPurpose MailboxRefreshToken { get; } = new("mailbox-refresh-token");
 
+    /// <summary>Gets the purpose of secret material stored behind a database secret reference.</summary>
+    /// <remarks>The subject binds the owner, stored-secret identifier, and secret name, so moving any one of them makes the value fail to open.</remarks>
+    public static DataEncryptionPurpose StoredSecret { get; } = new("stored-secret");
+
     /// <summary>Gets the purpose of the key that signs the short-lived capability an attachment is fetched with.</summary>
     /// <remarks>
     /// Nothing is sealed under this purpose. It is the label a signing key is derived under, so the material that signs
@@ -56,7 +60,8 @@ public readonly record struct DataEncryptionPurpose
 
     /// <summary>Gets every supported purpose.</summary>
     /// <remarks>Declared last so the members it lists are already initialized when this initializer runs.</remarks>
-    public static IReadOnlyList<DataEncryptionPurpose> All { get; } = [MailboxRefreshToken, AttachmentDownloadLink];
+    public static IReadOnlyList<DataEncryptionPurpose> All { get; } =
+        [MailboxRefreshToken, StoredSecret, AttachmentDownloadLink];
 
     /// <summary>Gets whether this value names a supported purpose rather than the unusable struct default.</summary>
     public bool IsSpecified => this.identity is not null;

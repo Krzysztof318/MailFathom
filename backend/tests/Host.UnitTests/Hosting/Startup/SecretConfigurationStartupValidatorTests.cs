@@ -788,6 +788,62 @@ public sealed class SecretConfigurationStartupValidatorTests
     }
 
     [Fact]
+    public async Task StartingAsync_APersistenceCredentialStoredInTheDatabase_IsRefusedAsABootstrapCycle()
+    {
+        // Arrange
+        var harness = CreateHarness(
+            new MailSynchronizationOptions(),
+            new PersistenceOptions
+            {
+                Password = new ConfiguredSecret
+                {
+                    Name = "postgres",
+                    SecretReference = "database:019925df-96f4-7c6d-8f91-b9f6cf27f5b2",
+                },
+            });
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        var failure = Assert.Single(exception.Failures);
+        Assert.StartsWith("Persistence:Password", failure, StringComparison.Ordinal);
+        Assert.Contains("cannot be read from the database it is needed to reach", failure, StringComparison.Ordinal);
+        Assert.DoesNotContain("019925df", failure, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StartingAsync_ADataEncryptionKeyStoredInTheDatabase_IsRefusedAsABootstrapCycle()
+    {
+        // Arrange
+        var options = new DataEncryptionOptions { ActiveKeyId = "2026-08" };
+        options.Keys.Add(new DataEncryptionKeyOptions
+        {
+            KeyId = "2026-08",
+            Material = new ConfiguredSecret
+            {
+                Name = "mailfathom-data-key",
+                SecretReference = "database:019925df-96f4-7c6d-8f91-b9f6cf27f5b2",
+            },
+        });
+        var harness = CreateHarness(
+            new MailSynchronizationOptions(),
+            new PersistenceOptions(),
+            dataEncryptionOptions: options);
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        var failure = Assert.Single(exception.Failures);
+        Assert.StartsWith("DataEncryption:Keys:0:Material", failure, StringComparison.Ordinal);
+        Assert.Contains("cannot be read from the database whose values it opens", failure, StringComparison.Ordinal);
+        Assert.DoesNotContain("019925df", failure, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task StartingAsync_ARingWhoseMaterialIsAKey_PassesTheGate()
     {
         // Arrange — the counterpart the two refusals need: without it they would pass against a validator that

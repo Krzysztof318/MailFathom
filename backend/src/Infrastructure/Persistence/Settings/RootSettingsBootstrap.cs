@@ -4,6 +4,7 @@
 
 using MailFathom.CodeCoverage;
 using MailFathom.Infrastructure.Persistence.Connections;
+using MailFathom.Infrastructure.Secrets.Database;
 using MailFathom.Infrastructure.Secrets.References;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using Microsoft.Extensions.DependencyInjection;
@@ -67,6 +68,7 @@ public static class RootSettingsBootstrap
         await using var secretResolution = new ServiceCollection()
             .AddSingleton(TimeProvider.System)
             .AddSecretResolution(interpretation)
+            .AddSingleton<ISecretSchemeResolver, DatabaseSecretBootstrapResolver>()
             .BuildServiceProvider();
 
         var resolver = secretResolution.GetRequiredService<ISecretReferenceResolver>();

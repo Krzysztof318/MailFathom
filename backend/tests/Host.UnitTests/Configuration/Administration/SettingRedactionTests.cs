@@ -97,6 +97,21 @@ public sealed class SettingRedactionTests
         Assert.Contains(SettingRedaction.Marker, redacted, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ApplyToDocument_ADatabaseSecretReference_ReportsTheMarkerRatherThanTheStoredIdentifier()
+    {
+        // Arrange
+        const string persisted =
+            """{ "MailAccounts": [{ "Secrets": { "Password": { "SecretReference": "database:019925df-96f4-7c6d-8f91-b9f6cf27f5b2" } } }] }""";
+
+        // Act
+        var redacted = SettingRedaction.ApplyToDocument(persisted);
+
+        // Assert
+        Assert.DoesNotContain("019925df", redacted, StringComparison.Ordinal);
+        Assert.Contains(SettingRedaction.Marker, redacted, StringComparison.Ordinal);
+    }
+
     /// <summary>
     /// Everything that is not a secret is handed over unchanged, including the handle a secret is named by. The secret
     /// here is a chat provider's key rather than the database's, because a database setting is bootstrap-only and the

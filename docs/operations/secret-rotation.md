@@ -21,6 +21,7 @@ Material is applied at operation boundaries, never mid-operation:
 | Mail account trust anchor | The next connection attempt, which loads the anchor alongside the password. |
 | MCP client certificate trust anchor | The next MCP request. Every anchor of the profile being judged is loaded again on each one. |
 | Database credential | The next **physical** connection the pool opens. Connections already open finish with the credential they authenticated with, and a pooled logical connection reusing an open physical one keeps it too. |
+| Database-backed secret | The next operation that resolves its `database:` reference. Rewriting the secret also re-seals it under the active data-encryption key. |
 | MCP API key | The next MCP request. Every configured key is read again on each one, so a rotated file takes effect immediately. |
 
 A long-lived authenticated session has no next connect to pick up a rotation, so its operation boundary is the *connection*: a session whose secrets have rotated is recycled at the next safe point rather than left running for the process lifetime. The IMAP `IDLE` session an account in push mode holds is that case. It is closed and reopened between synchronization runs — never mid-wait — as soon as a newly published configuration snapshot supersedes the one it connected under, and the reconnection resolves every secret again. A reload is not distinguishable from a rotation inside it, so every republished snapshot recycles the session; [push synchronization](../features/imap-synchronization.md#a-long-lived-connection-is-a-rotation-boundary) records why that is the safe direction to err in.
@@ -166,6 +167,18 @@ Both provisioning shapes rotate: `Persistence:Password`, and `Persistence:Connec
 *A password written into `ConnectionStrings:mailfathom` with no secret block* — an orchestrator-injected connection string. Nothing re-reads it, and under `ReferenceOnly` startup already logs a warning naming it. The same restriction applies to the non-credential parts of `Persistence:ConnectionString`: a rotated connection string that also changes host, database, or user name describes a different database rather than a rotated credential, and only its password is adopted in place.
 
 A rotated `Persistence:ConnectionString` is also parsed before it is published. Material that resolves but is not a valid connection string, or that no longer carries a password when it is what supplies the credential, is rejected as `ConnectionStringNotParsable` or `ConnectionStringCarriesNoPassword` — otherwise it would replace working settings and then fail every connection opened afterwards.
+
+## Rotating a database-backed secret
+
+A document keeps the same `database:<uuid>` reference while the store replaces the sealed material behind it. The
+write uses the ring's current `ActiveKeyId`, so replacing the material and re-sealing an unchanged secret are the same
+operation; the next resolution opens only the replacement. The plaintext is not written into the document, a log, a
+metric, or the response.
+
+Keep an old data-encryption key configured until the bounded key-reference inventory returns no stored secret for it.
+Rewriting each reference still reported by that query re-seals its row under `ActiveKeyId`; only then may the old key
+be removed. `Persistence` and `DataEncryption` themselves may never use `database:` because each is required before
+the table can be reached or opened.
 
 ## Rotating the object-storage access key
 

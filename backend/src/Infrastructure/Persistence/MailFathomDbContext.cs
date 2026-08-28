@@ -16,6 +16,7 @@ using MailFathom.Infrastructure.Persistence.Jobs.Configurations;
 using MailFathom.Infrastructure.Persistence.Mutations.Configurations;
 using MailFathom.Infrastructure.Persistence.Owners.Configurations;
 using MailFathom.Infrastructure.Persistence.Rules.Configurations;
+using MailFathom.Infrastructure.Persistence.Secrets.Configurations;
 using MailFathom.Infrastructure.Persistence.Settings.Configurations;
 using MailFathom.Infrastructure.Persistence.Spam.Configurations;
 using MailFathom.Infrastructure.Persistence.Synchronization.Configurations;
@@ -61,6 +62,8 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<OwnerCredentialEntity> OwnerCredentials =>
         this.Set<OwnerCredentialEntity>();
+
+    internal DbSet<StoredSecretEntity> StoredSecrets => this.Set<StoredSecretEntity>();
 
     internal DbSet<OwnerStoredContentEntity> OwnerStoredContent => this.Set<OwnerStoredContentEntity>();
 
@@ -170,6 +173,7 @@ internal sealed class MailFathomDbContext : DbContext
 
         modelBuilder.ApplyConfiguration(new RootSettingsConfiguration());
         modelBuilder.ApplyConfiguration(new OwnerAccountConfiguration());
+        modelBuilder.ApplyConfiguration(new StoredSecretConfiguration());
         modelBuilder.ApplyConfiguration(new OwnerCredentialConfiguration());
         modelBuilder.ApplyConfiguration(new OwnerStoredContentConfiguration());
         modelBuilder.ApplyConfiguration(new MailboxAccountConfiguration());

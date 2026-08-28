@@ -40,7 +40,7 @@ is the three-field shape [secret provisioning](secret-provisioning.md#the-secret
 ```
 
 `Name` is the identity diagnostics use, `SecretReference` is `<scheme>:<target>` with the schemes
-`systemd-credential:`, `file:`, `env:`, and `plaintext:`, and `Lifetime` is `NoLimit` (the default) or the ISO 8601
+`systemd-credential:`, `file:`, `env:`, `database:`, and `plaintext:`, and `Lifetime` is `NoLimit` (the default) or the ISO 8601
 instant the material stops being accepted. Trust-anchor and certificate blocks nest a fourth field, `Password`, itself
 a secret block, for protected PKCS#12 bundles.
 

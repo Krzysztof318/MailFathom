@@ -110,6 +110,14 @@ internal static class PersistenceConstraintNames
 
     internal const string MailboxRefreshTokenKeyIndexName = "ix_mailbox_refresh_tokens_data_encryption_key";
 
+    internal const string StoredSecretMaterialLengthCheckConstraintName = "ck_stored_secrets_material_length";
+
+    internal const string StoredSecretOwnerForeignKeyName = "fk_stored_secrets_settings_accounts";
+
+    internal const string StoredSecretOwnerNameUniqueIndexName = "ix_stored_secrets_owner_name";
+
+    internal const string StoredSecretKeyIndexName = "ix_stored_secrets_data_encryption_key";
+
     /// <summary>The key that keeps one classification per occurrence, and which a second concurrent run is recognized by.</summary>
     /// <remarks>
     /// Named because losing this race is the mechanism rather than a fault: an arrival classifies an occurrence while a
