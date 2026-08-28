@@ -41,7 +41,7 @@ public sealed class ClientMarkTests
     /// same one, and a single item of each because it answers a second by taking the first and warning.
     /// </remarks>
     [Fact]
-    public void Include_TheIconAndTheSplash_AreEachStagedFromTheRepositorysOwnArtwork()
+    public void Include_TheIconAndTheSplash_AreEachStagedFromTheArtworkUnderAssets()
     {
         // Arrange
         var staged = Project
