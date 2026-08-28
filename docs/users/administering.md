@@ -642,8 +642,8 @@ $ mfctl owner list
 $ mfctl owner add --display-name Morgan
 Recorded Morgan as 9b41....
 Their mail accounts are read from their own record; no configuration source reaches them. Declare one with
-'mfctl owner account add', and provision a way for them to sign in with 'mfctl credential create'. The running
-deployment serves this owner now; no restart is needed.
+'mfctl owner account add', and provision a way for them to sign in with 'mfctl credential create'. The replica this
+request reached serves this owner now; other replicas pick up the change after their next owner write or restart.
 ```
 
 Every command but `list` and `add` takes `--owner` and does not need it while the deployment holds one person: it acts

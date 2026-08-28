@@ -114,8 +114,9 @@ internal static class RemoveOwnerCommand
         if (erasure.WasServed)
         {
             context.Console.WriteNotice(
-                "The running deployment has stopped serving this owner. A synchronization run already in flight is "
-                + "allowed to finish what it started; no new run is scheduled.");
+                "The replica this request reached has stopped serving this owner. A synchronization run already in "
+                + "flight is allowed to finish what it started; no new run is scheduled. Other replicas pick up the "
+                + "change after their next owner write or restart.");
         }
 
         return CliExitCode.Success;

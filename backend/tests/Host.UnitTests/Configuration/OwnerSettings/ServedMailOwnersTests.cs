@@ -140,20 +140,20 @@ public sealed class ServedMailOwnersTests
 
     /// <summary>Two owner-document writes cannot validate and publish against the same runtime roster.</summary>
     [Fact]
-    public async Task WaitForDocumentPublicationAsync_AnotherWriterHoldsThePublicationGate_WaitsForItsRelease()
+    public async Task WaitForRosterPublicationAsync_AnotherWriterHoldsThePublicationGate_WaitsForItsRelease()
     {
         // Arrange
         var servedOwners = new ServedMailOwners();
-        await servedOwners.WaitForDocumentPublicationAsync(TestContext.Current.CancellationToken);
+        await servedOwners.WaitForRosterPublicationAsync(TestContext.Current.CancellationToken);
 
         // Act
-        var secondWriter = servedOwners.WaitForDocumentPublicationAsync(TestContext.Current.CancellationToken);
+        var secondWriter = servedOwners.WaitForRosterPublicationAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(secondWriter.IsCompleted);
-        servedOwners.ReleaseDocumentPublication();
+        servedOwners.ReleaseRosterPublication();
         await secondWriter;
-        servedOwners.ReleaseDocumentPublication();
+        servedOwners.ReleaseRosterPublication();
     }
 
     private static ServedMailOwner Serving(

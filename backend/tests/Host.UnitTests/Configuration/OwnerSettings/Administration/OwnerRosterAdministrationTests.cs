@@ -357,6 +357,36 @@ public sealed class OwnerRosterAdministrationTests
         Assert.True(outcome.WasServed);
     }
 
+    /// <summary>An erasure waits until a document write has published, so it cannot remove the owner between commit and publication.</summary>
+    [Fact]
+    public async Task EraseAsync_AnotherRosterWriteIsPublishing_WaitsBeforeDeletingTheOwner()
+    {
+        // Arrange
+        var harness = new RosterHarness(MailFathomPermission.AdminErase);
+        harness.Serving(SyntheticMailOwner.Deployment);
+        harness.Erasing(SyntheticMailOwner.Deployment);
+        await harness.ServedOwners.WaitForRosterPublicationAsync(TestContext.Current.CancellationToken);
+
+        Task<OwnerErasureOutcome> erasing;
+        try
+        {
+            // Act
+            erasing = harness.Roster.EraseAsync(
+                SyntheticMailOwner.Deployment,
+                TestContext.Current.CancellationToken);
+
+            // Assert
+            Assert.False(erasing.IsCompleted);
+            await harness.Erasure.DidNotReceiveWithAnyArgs().EraseAsync(default, CancellationToken.None);
+        }
+        finally
+        {
+            harness.ServedOwners.ReleaseRosterPublication();
+        }
+
+        Assert.True((await erasing).OwnerErased);
+    }
+
     [Fact]
     public async Task EraseAsync_AnOwnerThisDeploymentDoesNotHold_ReportsThatNothingWasRemoved()
     {

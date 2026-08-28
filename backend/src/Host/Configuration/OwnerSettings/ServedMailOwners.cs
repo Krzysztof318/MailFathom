@@ -37,7 +37,7 @@ internal sealed class ServedMailOwners : IDeploymentMailOwnerSource
 {
     private readonly Lock mutex = new();
     private readonly Dictionary<MailOwnerId, long> publishedDocumentVersions = [];
-    private readonly SemaphoreSlim documentPublication = new(1, 1);
+    private readonly SemaphoreSlim rosterPublication = new(1, 1);
     private ConfigurationReloadToken reloadToken = new();
 
     /// <summary>The roster the startup gate established, or nothing while it has not run.</summary>
@@ -78,11 +78,11 @@ internal sealed class ServedMailOwners : IDeploymentMailOwnerSource
     internal IChangeToken GetReloadToken() => Volatile.Read(ref this.reloadToken);
 
     /// <summary>Waits until this process can validate and publish one owner-document write without another overtaking it.</summary>
-    internal Task WaitForDocumentPublicationAsync(CancellationToken cancellationToken) =>
-        this.documentPublication.WaitAsync(cancellationToken);
+    internal Task WaitForRosterPublicationAsync(CancellationToken cancellationToken) =>
+        this.rosterPublication.WaitAsync(cancellationToken);
 
     /// <summary>Lets the next owner-document write validate against the roster this one published.</summary>
-    internal void ReleaseDocumentPublication() => this.documentPublication.Release();
+    internal void ReleaseRosterPublication() => this.rosterPublication.Release();
 
     /// <summary>Gets whether any served owner's mail accounts are their own rather than the deployment's section.</summary>
     /// <returns><see langword="true" /> when at least one owner is served from their own declaration or their own document.</returns>

@@ -606,7 +606,7 @@ internal sealed class OwnerRecordAdministration(
                 unusable);
         }
 
-        await servedOwners.WaitForDocumentPublicationAsync(cancellationToken);
+        await servedOwners.WaitForRosterPublicationAsync(cancellationToken);
 
         try
         {
@@ -638,7 +638,7 @@ internal sealed class OwnerRecordAdministration(
         }
         finally
         {
-            servedOwners.ReleaseDocumentPublication();
+            servedOwners.ReleaseRosterPublication();
         }
     }
 
