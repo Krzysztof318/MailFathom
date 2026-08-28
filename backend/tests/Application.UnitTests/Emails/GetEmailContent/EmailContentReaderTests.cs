@@ -514,6 +514,49 @@ public sealed class EmailContentReaderTests
         Assert.Equal(EmailBodyTruncation.ReadCharacterBudget, starved.Truncation);
     }
 
+    /// <summary>The pictures one call may return are spent across its emails rather than handed to each of them in full.</summary>
+    /// <remarks>
+    /// A read naming ten emails would otherwise return ten documents' worth of inlined octets, which is the response
+    /// size this budget exists to bound. A reading pane refuses an answer past its own limit whole, so what that costs
+    /// the reader is every message in the read, words included, rather than one photograph.
+    /// </remarks>
+    [Fact]
+    public async Task ReadContentAsync_DocumentsInliningPictures_SpendTheOctetBudgetAcrossTheEmailsOfOneRead()
+    {
+        // Arrange
+        var summaries = SummariesOf(3);
+        var renderer = new BoundedBodyEmailContentRenderer("Body", inlineImageOctets: 300);
+        var reader = ReaderOver(summaries, renderer);
+
+        // Act
+        await reader.ReadContentAsync(
+            RequestFor(IdentitiesOf(summaries)) with { IncludeMailDocument = true },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var whole = MailDocumentBounds.Default.MaximumInlineImageOctetsPerDocument;
+        Assert.Equal([whole, whole - 300, whole - 600], renderer.ObservedRemainingImageOctets);
+    }
+
+    /// <summary>A read that asked for no document spends none of the octet budget, whatever a message carries.</summary>
+    [Fact]
+    public async Task ReadContentAsync_NoDocumentRequested_LeavesTheOctetBudgetWholeForEveryEmail()
+    {
+        // Arrange
+        var summaries = SummariesOf(2);
+        var renderer = new BoundedBodyEmailContentRenderer("Body", inlineImageOctets: 300);
+        var reader = ReaderOver(summaries, renderer);
+
+        // Act
+        await reader.ReadContentAsync(
+            RequestFor(IdentitiesOf(summaries)),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var whole = MailDocumentBounds.Default.MaximumInlineImageOctetsPerDocument;
+        Assert.Equal([whole, whole], renderer.ObservedRemainingImageOctets);
+    }
+
     /// <summary>Markup is content too, so what it returned is taken off the budget the next email is measured against.</summary>
     [Fact]
     public async Task ReadContentAsync_SanitizedHtmlRequested_SpendsTheBudgetOnBothRepresentations()

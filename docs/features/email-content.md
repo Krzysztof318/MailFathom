@@ -514,6 +514,16 @@ renderer honouring a setting, and it holds identically for a remote `img`, a `ur
 `background` attribute on a table row or one of its cells. `RemovedRemoteReferenceCount` is what survives instead — a
 number a pane can put in front of the reader in place of what was removed.
 
+An element that asked not to be drawn is read for what it would have loaded before it is dropped, and so is everything
+beneath it. A tracking pixel is a hidden picture, so counting only what survives the reduction would tell the reader
+the message asked to load nothing in exactly the case where it was asking to load something. That reading is bounded
+in its own right — a subtree past the bound marks the document truncated rather than being walked further — and it is
+the only place a part of the message nobody is shown is read at all.
+
+The style attribute a hiding decision is read out of is bounded by length, and the bound is answered by reading the
+declarations that fit rather than none of them. A block written past it used to be read as an element that asked for
+nothing, which made length the way to defeat every hiding check at once.
+
 `RetainRemoteImageReferences` widens exactly one thing: `http` and `https` on a picture's source, counted in
 `RetainedRemoteImageCount`. It is a per-message act by a reader who was told what it reveals, and nothing on either
 side of the boundary writes it down, so opening the message again asks again. A link's target is unaffected because
@@ -526,7 +536,10 @@ how many were drawn and how many a bound left out. The third of those is the bou
 the message: without it a message carrying the permitted count at the permitted size composes a response no reading pane
 will buffer, and the reader loses the whole message rather than one photograph. It is spent across the call rather than
 per message, exactly as the character budget is, so a read naming ten emails returns one document's worth of pictures
-between them rather than ten.
+between them rather than ten. It is charged per occurrence rather than per decoded part, because a part resolves once
+and every reference naming it carries the whole encoding again: a body repeating one `cid:` reference would otherwise
+compose an answer many times the size of the message it came from. A picture past what is left is reported through
+`UndrawnInlineImageCount` and marks the document truncated.
 
 Only the pictures the body actually names are decoded. A part carrying a content identifier may be an attachment the
 message never draws — clients routinely give one to both — and resolving in the order the message happens to carry its

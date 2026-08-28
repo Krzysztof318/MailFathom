@@ -54,7 +54,14 @@ internal static class MailBodyProjection
             return MailDocument.Refused(MailDocumentRefusal.NoHtmlPart);
         }
 
-        var bounds = MailDocumentBounds.Default;
+        // What the call has left narrows the document's own octet bound rather than sitting beside it, so the one
+        // number governs both halves: how much is decoded out of the message, and how much of it the answer carries.
+        var bounds = MailDocumentBounds.Default with
+        {
+            MaximumInlineImageOctetsPerDocument =
+                Math.Min(MailDocumentBounds.Default.MaximumInlineImageOctetsPerDocument, maximumImageOctets),
+        };
+
         var joined = string.Join('\n', htmlParts);
         var source = MailTextBounds.TruncateAtTextElementBoundary(joined, maximumCharacters);
 
@@ -76,7 +83,7 @@ internal static class MailBodyProjection
             MailPictureReferences.NamedBy(body),
             bounds.MaximumInlineImages,
             bounds.MaximumInlineImageOctets,
-            Math.Min(bounds.MaximumInlineImageOctetsPerDocument, maximumImageOctets),
+            bounds.MaximumInlineImageOctetsPerDocument,
             cancellationToken);
 
         var reducer = new MailBodyReducer(bounds, inlineImages, retainRemoteImages);

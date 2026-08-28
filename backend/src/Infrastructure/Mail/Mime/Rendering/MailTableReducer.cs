@@ -97,6 +97,8 @@ internal static class MailTableReducer
 
         if (MailStyleReader.Read(child).Hidden)
         {
+            reducer.NoteHiddenReferences(child);
+
             return [];
         }
 
@@ -116,7 +118,10 @@ internal static class MailTableReducer
         {
             // A row that asked not to be drawn is dropped exactly as a hidden cell and a hidden element on the
             // ordinary walk are. Reading only the cells' styles, which is what this did, left the row the one place a
-            // message could hide something from every renderer but this one.
+            // message could hide something from every renderer but this one — and what it holds is still read for
+            // what it would have loaded, because a row is where a tracking pixel fits as comfortably as anywhere.
+            reducer.NoteHiddenReferences(row);
+
             return new MailTableRow(IsHeader: false, []);
         }
 
@@ -138,13 +143,15 @@ internal static class MailTableReducer
                 break;
             }
 
-            reducer.NoteRemoteReferences(cell);
-
             var style = MailStyleReader.Read(cell);
             if (style.Hidden)
             {
+                reducer.NoteHiddenReferences(cell);
+
                 continue;
             }
+
+            reducer.NoteRemoteReferences(cell);
 
             cells.Add(new MailTableCell(
                 SpanOf(cell, "colspan", bounds.MaximumTableCells),

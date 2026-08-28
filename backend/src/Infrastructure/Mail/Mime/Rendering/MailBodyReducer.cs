@@ -39,12 +39,22 @@ internal sealed class MailBodyReducer
     /// <summary>How deeply the anchor's own text is gathered, so a nested body cannot cost the walk its stack.</summary>
     private const int MaximumComparedDepth = 32;
 
+    /// <summary>How many elements of a subtree nobody is shown are still read for what they would have loaded.</summary>
+    /// <remarks>
+    /// The walk stops at a hidden element, so that subtree is read here instead of descended into, and a message could
+    /// otherwise make the reading arbitrarily large. Past the bound the count understates rather than misreports, and
+    /// the document says it was truncated.
+    /// </remarks>
+    private const int MaximumHiddenElementsCounted = 512;
+
     private readonly MailInlineImages inlineImages;
     private readonly bool retainRemoteImages;
 
     private int emittedBlocks;
     private int removedRemoteReferences;
     private int retainedRemoteImages;
+    private int undrawnPictures;
+    private long emittedImageOctets;
     private bool truncated;
 
     /// <summary>Initializes a reduction.</summary>
@@ -83,7 +93,7 @@ internal sealed class MailBodyReducer
             this.removedRemoteReferences,
             this.retainedRemoteImages,
             this.inlineImages.ResolvedCount,
-            this.inlineImages.UndrawnCount,
+            this.inlineImages.UndrawnCount + this.undrawnPictures,
             this.truncated);
     }
 
@@ -145,6 +155,8 @@ internal sealed class MailBodyReducer
         var style = MailStyleReader.Read(element);
         if (style.Hidden)
         {
+            this.NoteHiddenReferences(element);
+
             return;
         }
 
@@ -270,7 +282,7 @@ internal sealed class MailBodyReducer
 
     private void EmitImage(IElement element, MailReductionContext context, List<MailDocumentBlock> blocks)
     {
-        if (this.ResolveImageSource(element.GetAttribute("src")) is not { } source)
+        if (this.ResolveImageSource(element.GetAttribute("src")) is not { } source || !this.Affords(source))
         {
             return;
         }
@@ -282,6 +294,31 @@ internal sealed class MailBodyReducer
             DimensionOf(element.GetAttribute("height")));
 
         this.Emit(blocks, new MailImageBlock(image, context.Link, context.Alignment));
+    }
+
+    /// <summary>Charges what a picture would add to the answer, and refuses the one that would carry it past the bound.</summary>
+    /// <remarks>
+    /// The bound is on what the document carries rather than on what was decoded, because those are not the same
+    /// number: one part is resolved once and every reference naming it emits the whole encoding again, so a body
+    /// repeating a single <c>cid:</c> reference composes an answer many times the size of the message it came from —
+    /// past what a reading pane will accept, which loses the reader the words as well as the pictures. A remote address
+    /// the reader consented to costs nothing here, because the document carries the address rather than the octets.
+    /// </remarks>
+    private bool Affords(string source)
+    {
+        var octets = MailDocumentImages.OctetsBehind(source);
+
+        if (this.emittedImageOctets + octets > this.Bounds.MaximumInlineImageOctetsPerDocument)
+        {
+            this.undrawnPictures++;
+            this.truncated = true;
+
+            return false;
+        }
+
+        this.emittedImageOctets += octets;
+
+        return true;
     }
 
     /// <summary>Resolves what a picture's source points at, or reports that nothing is drawn for it.</summary>
@@ -352,13 +389,30 @@ internal sealed class MailBodyReducer
         }
     }
 
+    /// <summary>Emits a heading, which the contract holds as words and which may still hold something that is not.</summary>
+    /// <remarks>
+    /// The words are read back out of the blocks the walk produced rather than taken from what was left pending,
+    /// because a heading holding a <c>div</c> has already had its words flushed into a block. A picture is the other
+    /// thing a heading holds — a masthead logo is written exactly that way — and it becomes a block no reading of runs
+    /// can express, so it is kept beside the heading instead of being dropped with the list it was gathered into.
+    /// </remarks>
     private void EmitHeading(
         IElement element,
         string name,
         MailReductionContext context,
         List<MailDocumentBlock> blocks)
     {
-        var content = this.ReduceInline(element, context);
+        var gathered = new List<MailDocumentBlock>();
+        var pending = new List<MailInlineRun>();
+
+        foreach (var child in element.ChildNodes)
+        {
+            this.ReduceNode(child, context, gathered, pending);
+        }
+
+        this.Flush(gathered, pending, context);
+
+        var content = this.Merged([.. gathered.SelectMany(RunsOf)]);
 
         if (content.Count > 0)
         {
@@ -369,6 +423,8 @@ internal sealed class MailBodyReducer
                     content,
                     context.Alignment));
         }
+
+        this.EmitRange(blocks, gathered.Where(gatheredBlock => !IsWords(gatheredBlock)));
     }
 
     /// <summary>Reduces a list, whose items the ordinary element walk never reaches.</summary>
@@ -393,6 +449,8 @@ internal sealed class MailBodyReducer
             var style = MailStyleReader.Read(item);
             if (style.Hidden)
             {
+                this.NoteHiddenReferences(item);
+
                 continue;
             }
 
@@ -432,27 +490,6 @@ internal sealed class MailBodyReducer
         }
     }
 
-    /// <summary>Reduces an element that the contract holds as words rather than as blocks.</summary>
-    /// <remarks>
-    /// A heading is the case, and a heading holding a <c>div</c> is the reason this does not simply keep the runs it
-    /// gathered: the walk would have flushed those words into a block, and returning only what was still pending would
-    /// drop them. So whatever became a block is read back for its own runs, and the heading keeps every word.
-    /// </remarks>
-    internal IReadOnlyList<MailInlineRun> ReduceInline(IElement element, MailReductionContext context)
-    {
-        var blocks = new List<MailDocumentBlock>();
-        var pending = new List<MailInlineRun>();
-
-        foreach (var child in element.ChildNodes)
-        {
-            this.ReduceNode(child, context, blocks, pending);
-        }
-
-        this.Flush(blocks, pending, context);
-
-        return this.Merged([.. blocks.SelectMany(RunsOf)]);
-    }
-
     private static IEnumerable<MailInlineRun> RunsOf(MailDocumentBlock block) => block switch
     {
         MailParagraphBlock paragraph => paragraph.Content,
@@ -461,6 +498,10 @@ internal sealed class MailBodyReducer
             [new MailInlineRun(preformatted.Text, MailTextEmphasis.Monospace, null, null)],
         _ => [],
     };
+
+    /// <summary>Says whether a block is one <see cref="RunsOf" /> can express as words, which decides what is kept.</summary>
+    private static bool IsWords(MailDocumentBlock block) =>
+        block is MailParagraphBlock or MailHeadingBlock or MailPreformattedBlock;
 
     /// <summary>Reduces everything one element holds, which a table cell and a list item both need.</summary>
     internal List<MailDocumentBlock> ReduceBlocks(IElement element, MailReductionContext context) =>
@@ -471,6 +512,68 @@ internal sealed class MailBodyReducer
 
     /// <summary>Notes that the walk stopped at a bound rather than at the end of the body.</summary>
     internal void NoteTruncated() => this.truncated = true;
+
+    /// <summary>Counts what a subtree nobody is shown would still have asked somebody's server for.</summary>
+    /// <remarks>
+    /// <para>
+    /// A tracking pixel is a hidden picture, so dropping a hidden element without reading it told the reader the
+    /// message asked to load nothing in exactly the case where the message was asking to load something. Nothing here
+    /// is drawn and nothing is ever fetched; the count is the whole of what survives, as it is for every other removed
+    /// reference.
+    /// </para>
+    /// <para>
+    /// This is the one place a subtree is read rather than descended into, and it is reached only at the outermost
+    /// hidden element — the walk never enters one — so a nested hidden element is read as part of its ancestor's
+    /// reading rather than a second time.
+    /// </para>
+    /// </remarks>
+    internal void NoteHiddenReferences(IElement element)
+    {
+        var unread = new Stack<IElement>();
+        var counted = 0;
+
+        unread.Push(element);
+
+        while (unread.Count > 0)
+        {
+            var hidden = unread.Pop();
+
+            if (++counted > MaximumHiddenElementsCounted)
+            {
+                this.truncated = true;
+
+                break;
+            }
+
+            this.NoteRemoteReferences(hidden);
+            this.NoteHiddenPicture(hidden);
+
+            foreach (var child in hidden.Children)
+            {
+                unread.Push(child);
+            }
+        }
+    }
+
+    /// <summary>Counts the picture a hidden element names, which the emission that would have counted it never reaches.</summary>
+    /// <remarks>
+    /// A source the message carries in itself is not counted, because nothing is asked of anybody for it; nor is one
+    /// the reader consented to, because a hidden picture is not drawn and so is not fetched either. What is left is a
+    /// reference to somebody else's server that the document will not carry, which is what the count is about.
+    /// </remarks>
+    private void NoteHiddenPicture(IElement element)
+    {
+        if (!element.LocalName.Equals("img", StringComparison.OrdinalIgnoreCase)
+            || element.GetAttribute("src") is not { Length: > 0 } source
+            || !Uri.TryCreate(source.Trim(), UriKind.Absolute, out var absolute)
+            || (absolute.Scheme != Uri.UriSchemeHttp && absolute.Scheme != Uri.UriSchemeHttps)
+            || this.inlineImages.Resolve(absolute.AbsoluteUri) is not null)
+        {
+            return;
+        }
+
+        this.removedRemoteReferences++;
+    }
 
     /// <summary>Counts the references to somebody else's server that the document will not carry.</summary>
     /// <remarks>

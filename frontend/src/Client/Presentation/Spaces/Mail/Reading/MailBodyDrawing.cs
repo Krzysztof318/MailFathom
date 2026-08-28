@@ -110,6 +110,12 @@ internal sealed class MailBodyDrawing
     /// nothing is showing — and, for a source they consented to load remotely, still fetched from the sender's server,
     /// disclosing a read of a message they have already left.
     /// </para>
+    /// <para>
+    /// The yield in front of the question is what makes the question answerable. Resolving a remote source hands back a
+    /// bitmap that decodes on its own and completes synchronously, so a document whose pictures are all remote would
+    /// otherwise run the whole loop within one turn — with the reading unable to have changed at any point in it, which
+    /// is exactly the case the guard is here for.
+    /// </para>
     /// </remarks>
     internal async Task FillPicturesAsync(Func<bool> isCurrent)
     {
@@ -117,6 +123,8 @@ internal sealed class MailBodyDrawing
 
         foreach (var pending in this.pictures)
         {
+            await Task.Yield();
+
             if (!isCurrent())
             {
                 return;

@@ -28,7 +28,7 @@ namespace MailFathom.Infrastructure.Mail.Mime.Rendering;
 /// </remarks>
 internal static class MailStyleReader
 {
-    /// <summary>The longest style attribute this reads, past which the element is treated as having asked for nothing.</summary>
+    /// <summary>The longest run of a style attribute this reads, past which the rest is left unread.</summary>
     /// <remarks>
     /// Well past the longest declaration block ordinary mail writes on one element, which runs to a few hundred
     /// characters in a templated newsletter. A body arriving with more on a single element is spending the reader's
@@ -59,14 +59,14 @@ internal static class MailStyleReader
 
     private static MailNodeStyle ReadDeclarations(IElement element)
     {
-        if (element.GetAttribute("style") is not { Length: > 0 and <= MaximumStyleLength } declarations)
+        if (element.GetAttribute("style") is not { Length: > 0 } written)
         {
             return MailNodeStyle.None;
         }
 
         var style = MailNodeStyle.None;
 
-        foreach (var declaration in declarations.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        foreach (var declaration in Bounded(written).Split(';', StringSplitOptions.RemoveEmptyEntries))
         {
             var separator = declaration.IndexOf(':', StringComparison.Ordinal);
             if (separator <= 0)
@@ -81,6 +81,27 @@ internal static class MailStyleReader
         }
 
         return style;
+    }
+
+    /// <summary>Cuts an over-long attribute back to the last declaration that fits, rather than discarding them all.</summary>
+    /// <remarks>
+    /// The bound exists so a block written to cost a parse costs the bound instead, and it used to be answered by
+    /// reading nothing — which made length the way to defeat every <see cref="MailNodeStyle.Hidden" /> check at once:
+    /// a message could write <c>display:none</c> and then pad past the bound, and the element would be drawn in full
+    /// while every other client hid it. Every other refusal in this file fails towards showing less, and so does this
+    /// one now. The cut is taken back to the last complete declaration, because half a declaration means nothing.
+    /// </remarks>
+    private static string Bounded(string declarations)
+    {
+        if (declarations.Length <= MaximumStyleLength)
+        {
+            return declarations;
+        }
+
+        var read = declarations.AsSpan(0, MaximumStyleLength);
+        var complete = read.LastIndexOf(';');
+
+        return complete >= 0 ? read[..complete].ToString() : string.Empty;
     }
 
     /// <summary>Reads the value a declaration states, without the qualifier a sender may have written after it.</summary>

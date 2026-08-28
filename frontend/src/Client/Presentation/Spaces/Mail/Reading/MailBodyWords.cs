@@ -15,6 +15,8 @@ namespace MailFathom.Client.Presentation.Spaces.Mail.Reading;
 /// <param name="LinkTarget">What the address the link actually goes to is labelled with.</param>
 /// <param name="LinkPunycode">What the second spelling of a host written in another script is labelled with.</param>
 /// <param name="LinkDeception">What is said where the words on the link name a different host from the one it goes to.</param>
+/// <param name="LinkHomograph">What is said where the host is written in two spellings and nothing said the text lies.</param>
+/// <param name="LinkUnjudged">What is said where the deployment reported a verdict this build cannot read.</param>
 /// <param name="LinkOpen">What the answer that follows the link is called.</param>
 /// <param name="LinkCancel">What the answer that does not is called.</param>
 /// <remarks>
@@ -30,6 +32,8 @@ public sealed record MailBodyWords(
     string LinkTarget,
     string LinkPunycode,
     string LinkDeception,
+    string LinkHomograph,
+    string LinkUnjudged,
     string LinkOpen,
     string LinkCancel)
 {
@@ -47,6 +51,8 @@ public sealed record MailBodyWords(
         "MailBody.Link.Target",
         "MailBody.Link.Punycode",
         "MailBody.Link.Deception",
+        "MailBody.Link.Homograph",
+        "MailBody.Link.Unjudged",
         "MailBody.Link.Open",
         "MailBody.Link.Cancel",
     ];
@@ -68,7 +74,32 @@ public sealed record MailBodyWords(
             words[ResourceKeys[5]],
             words[ResourceKeys[6]],
             words[ResourceKeys[7]],
-            words[ResourceKeys[8]]);
+            words[ResourceKeys[8]],
+            words[ResourceKeys[9]],
+            words[ResourceKeys[10]]);
+    }
+
+    /// <summary>Says what the deployment actually found about a link, out of the three grounds a warning opens on.</summary>
+    /// <param name="link">The link as the deployment judged it.</param>
+    /// <returns>The sentence naming what was found.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="link" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The verdict is read off the contract rather than re-derived, and it picks the sentence rather than merely
+    /// opening the bar: a reader told the words name a different site, who then checks the two spellings against the
+    /// target and finds they agree, learns to distrust the bar — which is the one thing a warning cannot afford. A
+    /// host written in two spellings is its own finding and says so, and a verdict this build cannot read says that
+    /// instead of naming a mismatch nobody established.
+    /// </remarks>
+    public string WarningAbout(MailBodyLink link)
+    {
+        ArgumentNullException.ThrowIfNull(link);
+
+        return link.Deception switch
+        {
+            MailBodyLinkDeception.DisplayedHostDiffers => this.LinkDeception,
+            MailBodyLinkDeception.Unrecognized => this.LinkUnjudged,
+            _ => this.LinkHomograph,
+        };
     }
 
     /// <summary>Names the entry the reason a message is read as words rather than as a document is authored under.</summary>

@@ -661,6 +661,14 @@
     <value>The words on this link name a different site from the one it opens.</value>
     <comment>The warning shown where the deployment established that the link's own text names one host and the link goes to another.</comment>
   </data>
+  <data name="MailBody.Link.Homograph" xml:space="preserve">
+    <value>This address is written in a script that can imitate another. Compare both spellings above before opening it.</value>
+    <comment>The warning shown where the host has two spellings and the deployment found no mismatch between the link's text and its target.</comment>
+  </data>
+  <data name="MailBody.Link.Unjudged" xml:space="preserve">
+    <value>This version cannot read what the deployment said about this link, so nothing about it has been checked here.</value>
+    <comment>The warning shown where the deployment reported a deception verdict this build does not recognize.</comment>
+  </data>
   <data name="MailBody.Link.Open" xml:space="preserve">
     <value>Open in browser</value>
     <comment>The answer that follows the link, which hands it to the platform and leaves the application.</comment>

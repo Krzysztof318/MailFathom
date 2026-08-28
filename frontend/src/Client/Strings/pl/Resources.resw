@@ -661,6 +661,14 @@
     <value>Tekst tego odnośnika wskazuje inną witrynę niż ta, którą otworzy.</value>
     <comment>The warning shown where the deployment established that the link's own text names one host and the link goes to another.</comment>
   </data>
+  <data name="MailBody.Link.Homograph" xml:space="preserve">
+    <value>Ten adres zapisano pismem, które może naśladować inne. Porównaj oba zapisy powyżej, zanim go otworzysz.</value>
+    <comment>The warning shown where the host has two spellings and the deployment found no mismatch between the link's text and its target.</comment>
+  </data>
+  <data name="MailBody.Link.Unjudged" xml:space="preserve">
+    <value>Ta wersja nie odczytuje oceny, którą wdrożenie wydało o tym odnośniku, więc nic tutaj nie zostało sprawdzone.</value>
+    <comment>The warning shown where the deployment reported a deception verdict this build does not recognize.</comment>
+  </data>
   <data name="MailBody.Link.Open" xml:space="preserve">
     <value>Otwórz w przeglądarce</value>
     <comment>The answer that follows the link, which hands it to the platform and leaves the application.</comment>

@@ -617,13 +617,6 @@ public sealed class EmailContentReader
         ];
     }
 
-    /// <summary>Counts what one email spent of the call's budget, which is every representation it returned.</summary>
-    /// <remarks>
-    /// The document is counted as the words it holds rather than as the JSON it serializes to. What the budget governs
-    /// is how much mail one call draws out of a mailbox, and a picture the message carried is bounded by
-    /// <see cref="MailDocumentBounds" /> in octets rather than in characters, so counting its encoding here would
-    /// spend a text budget on something no text bound was written for.
-    /// </remarks>
     /// <summary>Counts the octets of its own pictures one email inlined, which the call's octet budget is spent in.</summary>
     /// <remarks>
     /// Counted apart from the characters because the bound governing it is stated in octets: a <c>data:</c> URI is a
@@ -635,6 +628,13 @@ public sealed class EmailContentReader
             ? (int)Math.Min(MailDocumentImages.OctetsIn(document), int.MaxValue)
             : 0;
 
+    /// <summary>Counts what one email spent of the call's budget, which is every representation it returned.</summary>
+    /// <remarks>
+    /// The document is counted as the words it holds rather than as the JSON it serializes to. What the budget governs
+    /// is how much mail one call draws out of a mailbox, and a picture the message carried is bounded by
+    /// <see cref="MailDocumentBounds" /> in octets rather than in characters, so counting its encoding here would
+    /// spend a text budget on something no text bound was written for.
+    /// </remarks>
     private static int CharactersReturnedBy(EmailContentReadOutcome outcome) =>
         outcome.Content is { } content
             ? content.Body.PlainText.Text.Length

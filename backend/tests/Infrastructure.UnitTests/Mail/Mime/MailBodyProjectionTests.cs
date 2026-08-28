@@ -625,6 +625,147 @@ public sealed class MailBodyProjectionTests
         Assert.True(share is null || double.IsFinite(share.Value));
     }
 
+    /// <summary>A picture emitted more often than the bound allows stops at it, and the document says so.</summary>
+    /// <remarks>
+    /// The octets are spent on what the answer carries rather than on what was decoded: one part resolves once and
+    /// every reference naming it emits the whole encoding again, so a body repeating a single <c>cid:</c> reference
+    /// composes an answer many times the size of the message. Past what a reading pane accepts, that loses the reader
+    /// the words as well as the pictures.
+    /// </remarks>
+    [Fact]
+    public async Task ProduceAsync_OnePictureDrawnMoreOftenThanTheBoundAllows_StopsAtItAndSaysSo()
+    {
+        // Arrange
+        var content = MimeFixtures.StoredMessage(
+            "From: sender@example.test",
+            "Content-Type: multipart/related; boundary=\"rel\"",
+            string.Empty,
+            "--rel",
+            "Content-Type: text/html; charset=utf-8",
+            string.Empty,
+            string.Concat(Enumerable.Repeat("<p><img src=\"cid:one@example.test\"></p>", 20)),
+            "--rel",
+            "Content-Type: image/png",
+            "Content-Id: <one@example.test>",
+            "Content-Transfer-Encoding: base64",
+            string.Empty,
+            Convert.ToBase64String(new byte[600]),
+            "--rel--");
+
+        // Act
+        var document = await DocumentOf(content, maxImageOctets: 3000);
+
+        // Assert
+        Assert.Equal(5, ImagesIn(document.Blocks).Count());
+        Assert.Equal(15, document.UndrawnInlineImageCount);
+        Assert.True(document.Truncated);
+    }
+
+    /// <summary>A reference somebody's server would answer is counted even where the element asked not to be drawn.</summary>
+    /// <remarks>
+    /// A tracking pixel is a hidden picture, so a reduction that dropped a hidden element without reading it told the
+    /// reader the message asked to load nothing in exactly the case it was asking to load something.
+    /// </remarks>
+    [Theory]
+    [InlineData("<img src=\"https://tracker.test/p.gif\" style=\"display:none\">")]
+    [InlineData("<div style=\"display:none;background-image:url(https://tracker.test/p.gif)\">x</div>")]
+    [InlineData("<div style=\"display:none\"><img src=\"https://tracker.test/p.gif\"></div>")]
+    [InlineData("<ul><li style=\"display:none\"><img src=\"https://tracker.test/p.gif\"></li></ul>")]
+    [InlineData("<table><tr style=\"display:none\"><td><img src=\"https://tracker.test/p.gif\"></td></tr></table>")]
+    [InlineData("<table><tr><td style=\"display:none\"><img src=\"https://tracker.test/p.gif\"></td></tr></table>")]
+    [InlineData("<table><tbody style=\"display:none\"><tr><td><img src=\"https://tracker.test/p.gif\"></td></tr></tbody></table>")]
+    public async Task ProduceAsync_HiddenReferenceToSomebodysServer_IsStillCounted(string markup)
+    {
+        // Act
+        var document = await DocumentOf($"<p>Readable</p>{markup}");
+
+        // Assert
+        Assert.Equal(1, document.RemovedRemoteReferenceCount);
+        Assert.DoesNotContain("tracker.test", Sources(document), StringComparison.Ordinal);
+    }
+
+    /// <summary>A picture the message itself carries is not counted as a removed reference because it was hidden.</summary>
+    [Fact]
+    public async Task ProduceAsync_HiddenPictureTheMessageCarries_IsNotCountedAsRemoved()
+    {
+        // Arrange
+        var content = MimeFixtures.StoredMessage(
+            "From: sender@example.test",
+            "Content-Type: multipart/related; boundary=\"rel\"",
+            string.Empty,
+            "--rel",
+            "Content-Type: text/html; charset=utf-8",
+            string.Empty,
+            "<p>Readable</p><img src=\"cid:one@example.test\" style=\"display:none\">",
+            "--rel",
+            "Content-Type: image/png",
+            "Content-Id: <one@example.test>",
+            "Content-Transfer-Encoding: base64",
+            string.Empty,
+            Convert.ToBase64String(new byte[16]),
+            "--rel--");
+
+        // Act
+        var document = await DocumentOf(content);
+
+        // Assert
+        Assert.Equal(0, document.RemovedRemoteReferenceCount);
+    }
+
+    /// <summary>A style attribute past the bound still hides what it asked to hide, rather than being read as nothing.</summary>
+    /// <remarks>
+    /// Discarding the whole attribute made its length the way to defeat every hiding check at once: a message could
+    /// write <c>display:none</c> and pad past the bound, and this pane alone would draw the element in full.
+    /// </remarks>
+    [Fact]
+    public async Task ProduceAsync_HidingDeclarationBuriedUnderAnOverLongAttribute_IsStillHidden()
+    {
+        // Arrange
+        var padding = string.Concat(Enumerable.Repeat("color:#112233;", 500));
+
+        // Act
+        var document = await DocumentOf($"<p>Readable</p><div style=\"display:none;{padding}\">Hidden</div>");
+
+        // Assert
+        Assert.DoesNotContain("Hidden", TextOf(document), StringComparison.Ordinal);
+        Assert.Contains("Readable", TextOf(document), StringComparison.Ordinal);
+    }
+
+    /// <summary>A picture a heading holds survives beside it rather than being dropped with the words it is not.</summary>
+    /// <remarks>
+    /// A masthead is written as a logo inside an <c>h1</c>, and a heading is read as words — so the block the picture
+    /// became had nowhere to go, and both it and the alt text left the document with nothing saying they had.
+    /// </remarks>
+    [Fact]
+    public async Task ProduceAsync_HeadingHoldingAPicture_KeepsItBesideTheHeading()
+    {
+        // Arrange
+        var content = MimeFixtures.StoredMessage(
+            "From: sender@example.test",
+            "Content-Type: multipart/related; boundary=\"rel\"",
+            string.Empty,
+            "--rel",
+            "Content-Type: text/html; charset=utf-8",
+            string.Empty,
+            "<h1>Acme <img src=\"cid:one@example.test\" alt=\"Acme\"></h1>",
+            "--rel",
+            "Content-Type: image/png",
+            "Content-Id: <one@example.test>",
+            "Content-Transfer-Encoding: base64",
+            string.Empty,
+            Convert.ToBase64String(new byte[16]),
+            "--rel--");
+
+        // Act
+        var document = await DocumentOf(content);
+
+        // Assert
+        Assert.Contains(document.Blocks, block => block is MailHeadingBlock);
+        var picture = Assert.Single(ImagesIn(document.Blocks));
+        Assert.Equal("Acme", picture.AlternativeText);
+        Assert.StartsWith("data:image/png;base64,", picture.Source, StringComparison.Ordinal);
+    }
+
     /// <summary>Every link the document carries, in reading order.</summary>
     private static IEnumerable<MailDocumentLink> LinksIn(MailDocument document) => document.Blocks
         .OfType<MailParagraphBlock>()
@@ -636,13 +777,15 @@ public sealed class MailBodyProjectionTests
     private static async Task<MailDocument> DocumentOf(
         string markup,
         bool retainRemoteImages = false,
-        int maxBodyCharacters = 100_000) =>
-        await DocumentOf(HtmlOnlyMessage(markup), retainRemoteImages, maxBodyCharacters);
+        int maxBodyCharacters = 100_000,
+        int maxImageOctets = int.MaxValue) =>
+        await DocumentOf(HtmlOnlyMessage(markup), retainRemoteImages, maxBodyCharacters, maxImageOctets);
 
     private static async Task<MailDocument> DocumentOf(
         StoredEmailContent content,
         bool retainRemoteImages = false,
-        int maxBodyCharacters = 100_000)
+        int maxBodyCharacters = 100_000,
+        int maxImageOctets = int.MaxValue)
     {
         var renderer = new MimeKitEmailContentRenderer(new EmailMimeExtractionOptions { MaxPartCount = 1000 });
 
@@ -652,6 +795,7 @@ public sealed class MailBodyProjectionTests
             {
                 IncludeMailDocument = true,
                 RetainRemoteImageReferences = retainRemoteImages,
+                RemainingInlineImageOctetsForRead = maxImageOctets,
             },
             TestContext.Current.CancellationToken);
 

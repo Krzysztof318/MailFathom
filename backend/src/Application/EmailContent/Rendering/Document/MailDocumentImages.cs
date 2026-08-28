@@ -46,8 +46,17 @@ public static class MailDocumentImages
     };
 
     /// <summary>Reads how many octets a composed <c>data:</c> URI carries, and nothing for a source that is not one.</summary>
-    private static long OctetsBehind(string source)
+    /// <param name="source">What a picture block names as the place its octets come from.</param>
+    /// <returns>The octets the source carries in itself, which is none for an address the answer only points at.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="source" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// Public because the reduction composing a document has to charge a picture against the same bound this reads it
+    /// back against, and one arithmetic answering both is what keeps the two numbers the same number.
+    /// </remarks>
+    public static long OctetsBehind(string source)
     {
+        ArgumentNullException.ThrowIfNull(source);
+
         if (!source.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
         {
             return 0;

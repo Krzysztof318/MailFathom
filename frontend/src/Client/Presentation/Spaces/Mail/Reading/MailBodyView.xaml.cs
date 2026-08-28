@@ -152,10 +152,7 @@ public sealed partial class MailBodyView : UserControl
             this.LinkPunycodeValue.Text = link.AsciiHost ?? string.Empty;
             this.LinkPunycodeValue.Visibility = spelled;
 
-            // Read off the contract rather than re-derived here: a homograph host whose link text is prose names no
-            // host to disagree with, so the mismatch verdict is absent while the two spellings above are exactly what
-            // the reader needs warning about — and a dialog deciding for itself is how the two come to disagree.
-            this.LinkDeception.Message = words.LinkDeception;
+            this.LinkDeception.Message = words.WarningAbout(link);
             this.LinkDeception.IsOpen = link.IsWorthWarningAbout;
 
             if (await this.LinkQuestion.ShowAsync() is not ContentDialogResult.Primary)
