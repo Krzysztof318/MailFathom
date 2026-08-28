@@ -26,11 +26,19 @@ namespace MailFathom.Host.Security.Transport;
 /// definitions of what an authorized caller is.
 /// </para>
 /// <para>
-/// Neither an authorized subject nor a required scope is ever asked of a credential the operator configured — an API
-/// key, or a client public key an assertion was verified against. Such a credential exists because somebody wrote it
-/// into this deployment's configuration, so the authorization it carries is that decision; a token is issued by a server
-/// that decides for itself who receives one, which is what makes both worth checking. Asking either of a configured
-/// credential would mean asking it for something nothing can ever put in it.
+/// Neither an authorized subject nor a required scope is ever asked of a credential this deployment holds — an API key,
+/// a client public key an assertion was verified against, or an owner's password. Such a credential exists because
+/// somebody provisioned it here, so the authorization it carries is that decision; a token is issued by a server that
+/// decides for itself who receives one, which is what makes both worth checking. Asking either of a held credential
+/// would mean asking it for something nothing can ever put in it.
+/// </para>
+/// <para>
+/// There are two judgements rather than one, and the difference is what a subject decides. On the administrative
+/// surface a configured list of subjects is who may sign in, so <see cref="IsAuthorized" /> compares against it. On a
+/// mail-serving surface a subject resolves one owner's credential record, so <see cref="IsOwnerAuthorized" /> asks that
+/// the credential named an owner at all. Everything else — the scopes, the held-credential shortcut, the requirement
+/// that the principal be authenticated — is shared, which is what keeps the two from drifting into two definitions of
+/// an admitted caller.
 /// </para>
 /// <para>
 /// What an admitted caller may then <em>do</em> is a separate question and is not asked here. The permissions its
@@ -81,6 +89,40 @@ internal static class TransportAccessPolicy
 
         return NamesAnAuthorizedSubject(principal, authorizedIdentities)
             && CarriesEveryScopeItsIssuerRequires(principal, requiredScopesByIssuer);
+    }
+
+    /// <summary>Judges an authenticated principal on a surface whose every credential resolves the owner it acts for.</summary>
+    /// <param name="principal">The principal a validated credential produced.</param>
+    /// <param name="requiredScopesByIssuer">The scopes an access token must carry, keyed by the issuer whose entry asks for them.</param>
+    /// <returns><see langword="true" /> when the caller may reach the surface; otherwise <see langword="false" />.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when either argument is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// There is no set of authorized identities to compare against here, because who this deployment serves is a set of
+    /// records rather than a list an operator wrote: a key, a public key, a password, and a validated subject each
+    /// resolve one, and a credential that resolves none was already refused where it was judged. What is left worth
+    /// asking is that the credential did resolve an owner — which is why the owner claim is required rather than
+    /// assumed, so a principal something else assembled cannot reach a mailbox by carrying a grant alone.
+    /// </para>
+    /// <para>
+    /// The scopes are still asked of a token, and only of a token, for the reason the shared judgement gives: a scope is
+    /// something an authorization server decides per issuance, and no credential this deployment holds can carry one.
+    /// </para>
+    /// </remarks>
+    internal static bool IsOwnerAuthorized(
+        ClaimsPrincipal principal,
+        IReadOnlyDictionary<string, IReadOnlyCollection<string>> requiredScopesByIssuer)
+    {
+        ArgumentNullException.ThrowIfNull(principal);
+        ArgumentNullException.ThrowIfNull(requiredScopesByIssuer);
+
+        if (principal.Identity is not { IsAuthenticated: true } || TransportCallerOwner.CarriedBy(principal) is null)
+        {
+            return false;
+        }
+
+        return AuthenticatedWithACredentialThisDeploymentHolds(principal)
+            || CarriesEveryScopeItsIssuerRequires(principal, requiredScopesByIssuer);
     }
 
     /// <summary>Reports whether a token carries every scope the entry that trusts its issuer asks for.</summary>

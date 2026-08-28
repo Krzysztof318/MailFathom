@@ -66,7 +66,7 @@ public sealed class OAuthValidationOptionsTests
         oauth.RequiredScopes.Add("mailfathom.read");
 
         // Act
-        var error = Assert.Single(oauth.FindConfigurationErrors());
+        var error = Assert.Single(oauth.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
 
         // Assert
         Assert.StartsWith("RequiredScopes:1", error, StringComparison.Ordinal);
@@ -82,7 +82,7 @@ public sealed class OAuthValidationOptionsTests
         oauth.AdvertisedScopes.Add("two scopes");
 
         // Act
-        var error = Assert.Single(oauth.FindConfigurationErrors());
+        var error = Assert.Single(oauth.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
 
         // Assert
         Assert.StartsWith("AdvertisedScopes:1", error, StringComparison.Ordinal);
@@ -97,7 +97,7 @@ public sealed class OAuthValidationOptionsTests
         oauth.AdvertisedScopes.Add("offline_access");
 
         // Act
-        var error = Assert.Single(oauth.FindConfigurationErrors());
+        var error = Assert.Single(oauth.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
 
         // Assert
         Assert.StartsWith("AdvertisedScopes:1", error, StringComparison.Ordinal);
@@ -116,7 +116,7 @@ public sealed class OAuthValidationOptionsTests
         oauth.AdvertisedScopes.Add("mailfathom.read");
 
         // Act
-        var error = Assert.Single(oauth.FindConfigurationErrors());
+        var error = Assert.Single(oauth.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
 
         // Assert
         Assert.StartsWith("AdvertisedScopes:0", error, StringComparison.Ordinal);
@@ -132,7 +132,7 @@ public sealed class OAuthValidationOptionsTests
         oauth.AdvertisedScopes.Add("offline_access");
 
         // Act, Assert
-        Assert.Empty(oauth.FindConfigurationErrors());
+        Assert.Empty(oauth.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
     }
 
     /// <summary>A section carrying nothing but an advertised scope was still written, so it is reported rather than treated as an OAuth block nobody meant to configure.</summary>
@@ -169,7 +169,7 @@ public sealed class OAuthValidationOptionsTests
         });
 
         // Act
-        var error = Assert.Single(oauth.FindConfigurationErrors());
+        var error = Assert.Single(oauth.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
 
         // Assert
         Assert.StartsWith("AuthorizationServers:1:Name", error, StringComparison.Ordinal);

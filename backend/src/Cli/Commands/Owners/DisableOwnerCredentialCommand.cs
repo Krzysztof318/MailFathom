@@ -6,7 +6,7 @@ using System.CommandLine;
 
 namespace MailFathom.Cli.Commands.Owners;
 
-/// <summary>Stops one credential authenticating requests, keeping its username and its password.</summary>
+/// <summary>Stops one credential authenticating requests, keeping what it is presented as.</summary>
 /// <remarks>The command to reach for when a way into somebody's mail has to be closed now and the decision may have to be undone. Removing the record instead is <c>credential delete</c>, and nothing puts that back.</remarks>
 internal static class DisableOwnerCredentialCommand
 {

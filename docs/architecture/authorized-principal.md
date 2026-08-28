@@ -99,11 +99,11 @@ use cases.
 
 The host composes one `IAuthorizedPrincipalSource` per scope, which for a served request is that request:
 
-- **A request an authentication scheme validated** becomes a caller, named by what this deployment authorized — an API
-  key's name, a client public key's name, the issuer and subject the access policy checked against the configured
-  authorization servers, or the identifier of the owner credential a username and password resolved to. The permissions
-  travel as claims the scheme wrote when the credential was judged, so nothing per request re-reads a configuration
-  section.
+- **A request an authentication scheme validated** becomes a caller, named by what this deployment authorized — the
+  identifier of the owner credential the presented value resolved to on a mail-serving surface, and on the
+  administrative surface the configured name of an API key or a client public key, or the issuer and subject the access
+  policy checked against the configured authorization servers. The permissions travel as claims the scheme wrote when
+  the credential was judged, so nothing per request re-reads a configuration section or the credential's row.
 - **A scope with no request behind it** is the process's own identity. Work reached outside a request in this process is
   work no caller asked for.
 - **A route that verified a capability** states that principal onto its own scope before it reaches the use case. The
@@ -128,20 +128,21 @@ mailbox. The split holds on either posture — a caller the surface authenticate
 configuring no credential are both admitted the same way — because it follows from the path the request arrived on
 rather than from what it presented.
 
-**Which owner that is comes from the credential where the credential names one, and from a startup gate otherwise.** A
-username and password authenticate exactly one owner, so a request admitted that way carries that owner as a claim and
-the adapter acts for it — which is what lets one deployment serve more than one person's mail over one address. Every
-other credential names no owner, and for those the answer is the gate.
+**Which owner that is comes from the credential wherever a credential was presented, and from a startup gate
+otherwise.** Every credential a mail-serving surface accepts resolves one owner record, whichever of the four methods it
+is, so a request admitted on one carries that owner as a claim and the adapter acts for it — which is what lets one
+deployment serve more than one person's mail over one address, and what makes a credential resolving no owner refusable
+exactly as an unknown credential is.
 
-The gate settles the whole roster while the host starts — every owner the file declares, each with the mail accounts
-they own, and the deployment's own `MailSynchronization:Accounts` belonging to the sole owner such a deployment holds.
-A caller whose credential names no owner needs exactly one owner to act for, so the gate refuses to come up on any
-other number **while `McpEndpoint`, `ClientEndpoint`, or `AdminEndpoint` is enabled** — and it refuses on the enablement
-alone rather than on which methods the surface accepts, because a surface accepting a password accepts the other
-methods beside it and a caller admitted by one of those still arrives carrying nobody. The administrative surface is
-among the three for a reason of its own: an administrator acts for the deployment rather than for a person, so the acts
-of theirs that need an owner resolve the sole one, and a roster of several leaves that with no answer. So a deployment
-serving several owners serves none of the three today, and the roster is what its synchronization runs on.
+The gate answers for the callers that carry nobody, and it settles the whole roster while the host starts — every owner
+the file declares, each with the mail accounts they own, and the deployment's own `MailSynchronization:Accounts`
+belonging to the sole owner such a deployment holds. A caller carrying nobody needs exactly one owner to act for, so
+the gate refuses to come up on any other number **while `AdminEndpoint` is enabled, or while `McpEndpoint` or
+`ClientEndpoint` is enabled and requires no credential**. Those are the two ways a request reaches a use case without an
+owner on it: an unauthenticated mail-serving surface admits a caller that presented nothing, and an administrator acts
+for the deployment rather than for a person, so the acts of theirs that need an owner — the contact book above all —
+resolve the sole one, which a roster of several leaves with no answer. A surface that requires a credential is not among
+them and never was after this release, because the credential is what names the owner.
 [The health endpoints](../operations/health-endpoints.md#the-three-probes) record what each refusal means to an
 operator.
 

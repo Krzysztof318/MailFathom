@@ -3,10 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text;
-using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
-using MailFathom.Infrastructure.Secrets;
 using MailFathom.Infrastructure.Security.ClientCertificates;
 using MailFathom.Mcp.Tools.Categories;
 using Microsoft.Extensions.Configuration;
@@ -38,11 +36,9 @@ public sealed class McpEndpointOptionsBindingTests
         var configuration = ConfigurationFrom(new Dictionary<string, string?>
         {
             ["McpEndpoint:Enabled"] = "true",
-            ["McpEndpoint:Authentication:0:ApiKey:Name"] = "workstation",
-            ["McpEndpoint:Authentication:0:ApiKey:SecretReference"] = "systemd-credential:mailfathom-mcp-workstation-key",
-            ["McpEndpoint:Authentication:1:ApiKey:Name"] = "chatgpt-connector",
-            ["McpEndpoint:Authentication:1:ApiKey:SecretReference"] = "file:/run/secrets/mailfathom-mcp-chatgpt-key",
-            ["McpEndpoint:Authentication:1:ApiKey:Lifetime"] = "2027-01-31T00:00:00Z",
+            ["McpEndpoint:Authentication:0:Method"] = "api-key",
+            ["McpEndpoint:Authentication:1:Method"] = "password",
+            ["McpEndpoint:Authentication:1:Basic:AttemptsPerMinute"] = "3",
             ["McpEndpoint:Cors:AllowedOrigins:0"] = "https://client.example.test",
             ["McpEndpoint:Cors:AllowedOrigins:1"] = "https://console.example.test:8443",
             ["McpEndpoint:RateLimiting:MaxConcurrentRequests"] = "12",
@@ -57,12 +53,11 @@ public sealed class McpEndpointOptionsBindingTests
 
         // Assert
         Assert.True(options.Enabled);
-        var apiKeys = options.ApiKeys();
         Assert.Empty(options.OAuthMethods());
-        Assert.Equal(["workstation", "chatgpt-connector"], apiKeys.Select(key => key.Name));
         Assert.Equal(
-            [SecretLifetime.NoLimitValue, "2027-01-31T00:00:00Z"],
-            apiKeys.Select(key => key.Lifetime));
+            ["api-key", "password"],
+            options.Authentication.Select(entry => entry.AcceptedMethod.Name));
+        Assert.Equal(3, options.BasicMethod()!.Basic!.AttemptsPerMinute);
         Assert.Equal(
             ["https://client.example.test", "https://console.example.test:8443"],
             options.Cors.AllowedOrigins);
@@ -148,7 +143,7 @@ public sealed class McpEndpointOptionsBindingTests
         // Assert
         Assert.False(options.Enabled);
         Assert.Empty(options.Authentication);
-        Assert.Empty(options.ApiKeys());
+        Assert.False(options.AllowsApiKey);
         Assert.True(options.Cors.ServesEveryBrowserOrigin);
     }
 
@@ -160,13 +155,12 @@ public sealed class McpEndpointOptionsBindingTests
         var configuration = ConfigurationFrom(new Dictionary<string, string?>
         {
             ["McpEndpoint:Enabled"] = "true",
-            ["McpEndpoint:Authentication:0:ApiKey:Name"] = "nightly-digest",
-            ["McpEndpoint:Authentication:0:ApiKey:SecretReference"] = "systemd-credential:mailfathom-mcp-digest-key",
+            ["McpEndpoint:Authentication:0:Method"] = "api-key",
+            ["McpEndpoint:Authentication:1:Method"] = "oauth-subject",
             ["McpEndpoint:Authentication:1:OAuth:Resource"] = "https://mail.example.test/mcp",
             ["McpEndpoint:Authentication:1:OAuth:RequiredScopes:0"] = "mailfathom.read",
             ["McpEndpoint:Authentication:1:OAuth:AuthorizationServers:0:Name"] = "workforce",
             ["McpEndpoint:Authentication:1:OAuth:AuthorizationServers:0:Issuer"] = "https://sso.example.test/realms/mailfathom",
-            ["McpEndpoint:Authentication:1:OAuth:AuthorizationServers:0:AuthorizedSubjects:0"] = "9f2c",
         });
 
         // Act
@@ -176,11 +170,9 @@ public sealed class McpEndpointOptionsBindingTests
         Assert.True(options.AllowsApiKey);
         Assert.True(options.AllowsOAuth);
         var oauth = Assert.Single(options.OAuthMethods());
-        Assert.Equal(["nightly-digest"], options.ApiKeys().Select(key => key.Name));
         Assert.Equal("https://mail.example.test/mcp", oauth.Resource);
         Assert.Equal(["mailfathom.read"], oauth.RequiredScopes);
         Assert.Equal(["workforce"], oauth.AuthorizationServers.Select(server => server.Name));
-        Assert.Equal(["9f2c"], oauth.AuthorizationServers.Single().AuthorizedSubjects);
         Assert.Empty(options.FindConfigurationErrors());
     }
 
@@ -196,7 +188,7 @@ public sealed class McpEndpointOptionsBindingTests
         var configuration = ConfigurationFrom(new Dictionary<string, string?>
         {
             ["McpEndpoint:Enabled"] = "true",
-            ["McpEndpoint:Authentication"] = "ApiKey, OAuth",
+            ["McpEndpoint:Authentication"] = "api-key, oauth-subject",
         });
 
         // Act, Assert
@@ -239,115 +231,70 @@ public sealed class McpEndpointOptionsBindingTests
     }
 
     /// <summary>
-    /// The grant is read the way the origin list is, and the pair is pinned from real JSON for the same reason: an
-    /// absent list and an emptied one bind identically, and only the section can say which the operator wrote.
+    /// Each setting a credential took over from configuration is refused by name, because the operator upgrading has to
+    /// be told which credential to provision rather than that a property is unknown. The walk reaches a key at any
+    /// depth, which is what covers the two that were written inside a block.
+    /// </summary>
+    [Theory]
+    [InlineData("McpEndpoint:Authentication:0:ApiKey:Name", "workstation")]
+    [InlineData("McpEndpoint:Authentication:0:PublicKey:Name", "workstation")]
+    [InlineData("McpEndpoint:Authentication:0:Permissions:0", "mailfathom.mail.read")]
+    [InlineData("McpEndpoint:Authentication:0:OAuth:AuthorizationServers:0:AuthorizedSubjects:0", "9f2c")]
+    public void ReadFrom_ASettingACredentialTookOver_IsRefusedNamingWhatToProvisionInstead(string key, string value)
+    {
+        // Arrange
+        var configuration = ConfigurationFrom(new Dictionary<string, string?>
+        {
+            ["McpEndpoint:Enabled"] = "true",
+            ["McpEndpoint:Authentication:0:Method"] = "api-key",
+            [key] = value,
+        });
+
+        // Act
+        var errors = McpEndpointOptions.ReadFrom(configuration).FindConfigurationErrors();
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.StartsWith(key[..key.LastIndexOf(':')], reported, StringComparison.Ordinal);
+        Assert.Contains("mfctl", reported, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The refusal is composed before the strict bind, so it is the retired setting an operator reads about rather than
+    /// the binder's own message about a property this type no longer declares.
     /// </summary>
     [Fact]
-    public void ReadFrom_AnEntryWithNoPermissionsKey_ReachesTheWholeSurface()
+    public void ReadFrom_ARetiredSetting_IsRefusedRatherThanRaisingWhileTheSectionIsBound()
     {
         // Arrange
-        var configuration = ConfigurationFromJson("""
-            {
-              "McpEndpoint": {
-                "Enabled": true,
-                "Authentication": [
-                  { "ApiKey": { "Name": "workstation", "SecretReference": "plaintext:a-key" } }
-                ]
-              }
-            }
-            """);
+        var configuration = ConfigurationFrom(new Dictionary<string, string?>
+        {
+            ["McpEndpoint:Enabled"] = "true",
+            ["McpEndpoint:Authentication:0:ApiKey:Name"] = "workstation",
+        });
 
         // Act
         var options = McpEndpointOptions.ReadFrom(configuration);
 
         // Assert
-        var entry = Assert.Single(options.Authentication);
-        Assert.True(entry.GrantsTheWholeSurface);
-        Assert.Equal(
-            MailFathomPermission.PublishedFor(McpEndpointOptions.GrantedSurface),
-            entry.GrantedPermissions(McpEndpointOptions.GrantedSurface));
-    }
-
-    /// <summary>An emptied grant retires a credential without deleting its entry, so it must not read as the entry that never narrowed.</summary>
-    [Fact]
-    public void ReadFrom_AnEntryWithAnEmptyPermissionsList_ReachesNothing()
-    {
-        // Arrange
-        var configuration = ConfigurationFromJson("""
-            {
-              "McpEndpoint": {
-                "Enabled": true,
-                "Authentication": [
-                  {
-                    "ApiKey": { "Name": "workstation", "SecretReference": "plaintext:a-key" },
-                    "Permissions": []
-                  }
-                ]
-              }
-            }
-            """);
-
-        // Act
-        var options = McpEndpointOptions.ReadFrom(configuration);
-
-        // Assert
-        var entry = Assert.Single(options.Authentication);
-        Assert.False(entry.GrantsTheWholeSurface);
-        Assert.Empty(entry.GrantedPermissions(McpEndpointOptions.GrantedSurface));
-        Assert.Empty(options.FindConfigurationErrors());
-    }
-
-    /// <summary>The grant belongs to the entry, so the read has to answer the question once per entry rather than once per section.</summary>
-    [Fact]
-    public void ReadFrom_TwoEntriesGrantedDifferently_ReadsTheGrantWrittenOnEachEntry()
-    {
-        // Arrange
-        var configuration = ConfigurationFromJson("""
-            {
-              "McpEndpoint": {
-                "Enabled": true,
-                "Authentication": [
-                  {
-                    "ApiKey": { "Name": "reporting-job", "SecretReference": "plaintext:a-key" },
-                    "Permissions": ["mailfathom.mail.read"]
-                  },
-                  { "ApiKey": { "Name": "workstation", "SecretReference": "plaintext:another-key" } }
-                ]
-              }
-            }
-            """);
-
-        // Act
-        var options = McpEndpointOptions.ReadFrom(configuration);
-
-        // Assert
-        Assert.Equal(["mailfathom.mail.read"], options.Authentication[0].Permissions);
-        Assert.Equal(
-            [MailFathomPermission.MailRead],
-            options.Authentication[0].GrantedPermissions(McpEndpointOptions.GrantedSurface));
-        Assert.Equal(
-            MailFathomPermission.PublishedFor(McpEndpointOptions.GrantedSurface),
-            options.Authentication[1].GrantedPermissions(McpEndpointOptions.GrantedSurface));
+        Assert.NotEmpty(options.FindConfigurationErrors());
     }
 
     /// <summary>
     /// A configuration source numbering its entries with a gap — the environment-variable form a container deployment
-    /// writes — binds them into consecutive list positions, so a grant read by position would land on the wrong entry
-    /// and hand the narrowed one its surface's whole half.
+    /// writes — binds them into consecutive list positions, so an entry read by position would be a different entry
+    /// from the one an operator wrote.
     /// </summary>
     [Fact]
-    public void ReadFrom_EntriesNumberedWithAGap_ReadsEachGrantFromTheEntryThatWroteIt()
+    public void ReadFrom_EntriesNumberedWithAGap_ReadsEachMethodFromTheEntryThatWroteIt()
     {
         // Arrange
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
             {
                 ["McpEndpoint:Enabled"] = "true",
-                ["McpEndpoint:Authentication:0:ApiKey:Name"] = "workstation",
-                ["McpEndpoint:Authentication:0:ApiKey:SecretReference"] = "plaintext:a-key",
-                ["McpEndpoint:Authentication:2:ApiKey:Name"] = "reporting-job",
-                ["McpEndpoint:Authentication:2:ApiKey:SecretReference"] = "plaintext:another-key",
-                ["McpEndpoint:Authentication:2:Permissions:0"] = "mailfathom.mail.read",
+                ["McpEndpoint:Authentication:0:Method"] = "api-key",
+                ["McpEndpoint:Authentication:2:Method"] = "password",
             })
             .Build();
 
@@ -356,11 +303,9 @@ public sealed class McpEndpointOptionsBindingTests
 
         // Assert
         Assert.Equal(
-            MailFathomPermission.PublishedFor(McpEndpointOptions.GrantedSurface),
-            options.Authentication[0].GrantedPermissions(McpEndpointOptions.GrantedSurface));
-        Assert.Equal(
-            [MailFathomPermission.MailRead],
-            options.Authentication[1].GrantedPermissions(McpEndpointOptions.GrantedSurface));
+            ["api-key", "password"],
+            options.Authentication.Select(entry => entry.AcceptedMethod.Name));
+        Assert.Empty(options.FindConfigurationErrors());
     }
 
     /// <summary>A refusal names the position an operator has to go and edit, and where the numbering has a gap that is the key they wrote rather than the one the binder appended at.</summary>
@@ -372,11 +317,8 @@ public sealed class McpEndpointOptionsBindingTests
             .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
             {
                 ["McpEndpoint:Enabled"] = "true",
-                ["McpEndpoint:Authentication:0:ApiKey:Name"] = "workstation",
-                ["McpEndpoint:Authentication:0:ApiKey:SecretReference"] = "plaintext:a-key",
-                ["McpEndpoint:Authentication:2:ApiKey:Name"] = "reporting-job",
-                ["McpEndpoint:Authentication:2:ApiKey:SecretReference"] = "plaintext:another-key",
-                ["McpEndpoint:Authentication:2:Permissions:0"] = "mailfathom.mail.write",
+                ["McpEndpoint:Authentication:0:Method"] = "api-key",
+                ["McpEndpoint:Authentication:2:Method"] = "apikey",
             })
             .Build();
 
@@ -385,26 +327,26 @@ public sealed class McpEndpointOptionsBindingTests
 
         // Assert
         var reported = Assert.Single(errors);
-        Assert.Contains("McpEndpoint:Authentication:2:Permissions", reported, StringComparison.Ordinal);
+        Assert.Contains("McpEndpoint:Authentication:2:Method", reported, StringComparison.Ordinal);
     }
 
-    /// <summary>Every refusal against an entry names the key it was written under, not only the ones a grant adds — a path composed per rule would drift back to the bound position one rule at a time.</summary>
+    /// <summary>Every refusal against an entry names the key it was written under, whichever rule produced it — a path composed per rule would drift back to the bound position one rule at a time.</summary>
     [Fact]
-    public void FindConfigurationErrors_EntriesNumberedWithAGap_NameTheKeyInARefusalNoGrantProduced()
+    public void FindConfigurationErrors_EntriesNumberedWithAGap_NameTheKeyInARefusalTheMethodDidNotProduce()
     {
         // Arrange
         var configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>(StringComparer.Ordinal)
             {
                 ["McpEndpoint:Enabled"] = "true",
+                ["McpEndpoint:Authentication:0:Method"] = "oauth-subject",
                 ["McpEndpoint:Authentication:0:OAuth:Resource"] = "https://mail.example.test/mcp",
                 ["McpEndpoint:Authentication:0:OAuth:AuthorizationServers:0:Name"] = "workforce",
                 ["McpEndpoint:Authentication:0:OAuth:AuthorizationServers:0:Issuer"] = "https://sso.example.test/realms/mailfathom",
-                ["McpEndpoint:Authentication:0:OAuth:AuthorizationServers:0:AuthorizedSubjects:0"] = "11111111-2222-3333-4444-555555555555",
+                ["McpEndpoint:Authentication:2:Method"] = "oauth-subject",
                 ["McpEndpoint:Authentication:2:OAuth:Resource"] = "https://mail.example.test/elsewhere",
                 ["McpEndpoint:Authentication:2:OAuth:AuthorizationServers:0:Name"] = "partners",
                 ["McpEndpoint:Authentication:2:OAuth:AuthorizationServers:0:Issuer"] = "https://partners.example.test/realms/mailfathom",
-                ["McpEndpoint:Authentication:2:OAuth:AuthorizationServers:0:AuthorizedSubjects:0"] = "22222222-3333-4444-5555-666666666666",
             })
             .Build();
 
@@ -418,11 +360,11 @@ public sealed class McpEndpointOptionsBindingTests
 
     /// <summary>
     /// An element carrying nothing binds to an entry rather than being dropped, so the children and the bound entries
-    /// stay the same length and every grant is still read off the entry that wrote it. The empty element is refused
-    /// for stating no method, which is the answer it already had before a grant could be written on one.
+    /// stay the same length and every refusal still names the key that produced it. The empty element is refused for
+    /// naming no method, which is what an entry stating nothing has always been answered with.
     /// </summary>
     [Fact]
-    public void ReadFrom_AnEmptyElementInTheList_BindsAnEntryThatIsRefusedRatherThanShiftingTheGrants()
+    public void ReadFrom_AnEmptyElementInTheList_BindsAnEntryThatIsRefusedRatherThanShiftingTheRest()
     {
         // Arrange
         var configuration = ConfigurationFromJson("""
@@ -431,10 +373,7 @@ public sealed class McpEndpointOptionsBindingTests
                 "Enabled": true,
                 "Authentication": [
                   null,
-                  {
-                    "ApiKey": { "Name": "retired", "SecretReference": "plaintext:a-key" },
-                    "Permissions": []
-                  }
+                  { "Method": "api-key" }
                 ]
               }
             }
@@ -445,7 +384,7 @@ public sealed class McpEndpointOptionsBindingTests
 
         // Assert
         Assert.Equal(2, options.Authentication.Count);
-        Assert.Empty(options.Authentication[1].GrantedPermissions(McpEndpointOptions.GrantedSurface));
+        Assert.Equal("api-key", options.Authentication[1].AcceptedMethod.Name);
 
         var reported = Assert.Single(options.FindConfigurationErrors());
         Assert.Contains("McpEndpoint:Authentication:0", reported, StringComparison.Ordinal);
@@ -462,17 +401,13 @@ public sealed class McpEndpointOptionsBindingTests
                 "Enabled": true,
                 "Authentication": [
                   {
+                    "Method": "oauth-subject",
                     "OAuth": {
                       "Resource": "https://mail.example.test/mcp",
                       "AuthorizationServers": [
-                        {
-                          "Name": "workforce",
-                          "Issuer": "https://sso.example.test/realms/mailfathom",
-                          "AuthorizedSubjects": [ "11111111-2222-3333-4444-555555555555" ]
-                        }
+                        { "Name": "workforce", "Issuer": "https://sso.example.test/realms/mailfathom" }
                       ]
                     },
-                    "Permissions": ["mailfathom.mail.read"],
                     "PermissionsFromTokenScopes": true
                   }
                 ]
@@ -489,41 +424,13 @@ public sealed class McpEndpointOptionsBindingTests
         Assert.Empty(options.FindConfigurationErrors());
     }
 
-    /// <summary>The whole point of a closed vocabulary is that a name nothing publishes fails startup instead of reading as a narrowed grant.</summary>
-    [Fact]
-    public void ReadFrom_AnEntryNamingAnUnpublishedPermission_IsRefusedNamingTheEntry()
-    {
-        // Arrange
-        var configuration = ConfigurationFromJson("""
-            {
-              "McpEndpoint": {
-                "Enabled": true,
-                "Authentication": [
-                  {
-                    "ApiKey": { "Name": "workstation", "SecretReference": "plaintext:a-key" },
-                    "Permissions": ["mailfathom.mail.write"]
-                  }
-                ]
-              }
-            }
-            """);
-
-        // Act
-        var errors = McpEndpointOptions.ReadFrom(configuration).FindConfigurationErrors();
-
-        // Assert
-        var reported = Assert.Single(errors);
-        Assert.Contains("McpEndpoint:Authentication:0:Permissions", reported, StringComparison.Ordinal);
-    }
-
     /// <summary>A misspelling that bound quietly would leave a security decision reading as one nobody made.</summary>
     [Theory]
     [InlineData("McpEndpoint:Enabeld", "true")]
-    [InlineData("McpEndpoint:Authentication:0:Permission:0", "mailfathom.mail.read")]
+    [InlineData("McpEndpoint:Authentication:0:Metod", "api-key")]
     [InlineData("McpEndpoint:Authentication:0:PermissionsFromTokenScope", "true")]
-    [InlineData("McpEndpoint:Authentication:0:ApiKeys:Name", "workstation")]
-    [InlineData("McpEndpoint:Authentication:0:ApiKey:Named", "workstation")]
-    [InlineData("McpEndpoint:ApiKeys:0:Name", "workstation")]
+    [InlineData("McpEndpoint:Authentication:0:Basic:AttemptsPerMinuet", "3")]
+    [InlineData("McpEndpoint:Authentication:0:Basci:AttemptsPerMinute", "3")]
     [InlineData("McpEndpoint:OAuth:Resource", "https://mail.example.test/mcp")]
     [InlineData("McpEndpoint:Cors:AllowedOrigin", "https://client.example.test")]
     [InlineData("McpEndpoint:RateLimiting:Enabeld", "false")]
@@ -565,7 +472,7 @@ public sealed class McpEndpointOptionsBindingTests
     /// posture. The block name is the method, so a misspelling is an unknown key and strict binding is what refuses it.
     /// </summary>
     [Theory]
-    [InlineData("McpEndpoint:Authentication:0:ApiKye:Name")]
+    [InlineData("McpEndpoint:Authentication:0:Bascis:AttemptsPerMinute")]
     [InlineData("McpEndpoint:Authentication:0:OAtuh:Resource")]
     public void ReadFrom_AnEntryNamingNoKnownMethod_Fails(string key)
     {

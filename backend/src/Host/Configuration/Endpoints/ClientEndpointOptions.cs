@@ -6,7 +6,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Net.Quic;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
-using MailFathom.Infrastructure.Secrets.Discovery;
 
 namespace MailFathom.Host.Configuration.Endpoints;
 
@@ -54,6 +53,8 @@ internal sealed class ClientEndpointOptions
     /// <summary>The configuration section the endpoint settings are bound from.</summary>
     public const string SectionName = "ClientEndpoint";
 
+    private IReadOnlyList<string> retiredSettings = [];
+
     /// <summary>The half of the published permission vocabulary a grant on this endpoint draws from.</summary>
     /// <remarks>Stated once here rather than derived wherever a grant is read, so a permission belonging to the other surface is refused by the same rule everywhere the section is judged. It is the mailbox's half, which the MCP endpoint's grants also come from: the client reads the same mail, so it draws on the same vocabulary and only the transport is separate.</remarks>
     public const ProtectedSurface GrantedSurface = ProtectedSurface.Mail;
@@ -98,7 +99,7 @@ internal sealed class ClientEndpointOptions
     /// resource a token is issued for is what separates signing in to the mail client from reading the same mailbox as
     /// an agent.
     /// </remarks>
-    public IList<TransportAuthenticationOptions> Authentication { get; } = [];
+    public IList<OwnerFacingAuthenticationOptions> Authentication { get; } = [];
 
     /// <summary>Gets or sets whether this deployment also serves the client's browser head from this endpoint's listeners.</summary>
     /// <remarks>The one setting here that is about a page rather than about an API. It belongs to this section because the page is served on this surface's listeners and nowhere else: same origin is what lets the head carry no address at all, and it is what a deployment gives up by publishing the two apart.</remarks>
@@ -131,17 +132,17 @@ internal sealed class ClientEndpointOptions
     public TransportRequestTimeoutOptions RequestTimeout { get; set; } = new();
 
     /// <summary>Gets whether a client may authenticate with one of the configured API keys.</summary>
-    public bool AllowsApiKey => this.ApiKeys().Count > 0;
+    public bool AllowsApiKey => this.Accepts(OwnerCredentialMethod.ApiKey);
 
     /// <summary>Gets whether a client may authenticate with an access token from one of the configured authorization servers.</summary>
-    public bool AllowsOAuth => this.OAuthMethods().Count > 0;
+    public bool AllowsOAuth => this.Accepts(OwnerCredentialMethod.OAuthSubject);
 
     /// <summary>Gets whether a client may authenticate with an assertion signed by one of the configured public keys.</summary>
-    public bool AllowsClientAssertion => this.PublicKeys().Count > 0;
+    public bool AllowsClientAssertion => this.Accepts(OwnerCredentialMethod.PublicKey);
 
     /// <summary>Gets whether a client may authenticate with an owner's own username and password.</summary>
     /// <remarks>What it reports is that the endpoint accepts the method; which owners can actually use it is the credentials the administrative surface has provisioned, which is a question about the database rather than about this section.</remarks>
-    public bool AllowsBasic => this.BasicMethod() is not null;
+    public bool AllowsBasic => this.Accepts(OwnerCredentialMethod.Password);
 
     /// <summary>Gets whether a request must present a credential naming who is calling.</summary>
     public bool RequiresAuthentication => this.Authentication.Count > 0;
@@ -174,6 +175,17 @@ internal sealed class ClientEndpointOptions
         ArgumentNullException.ThrowIfNull(configuration);
 
         var section = configuration.GetSection(SectionName);
+
+        // Read before the strict bind rather than after it. A retired key is a key this type no longer declares, so
+        // binding first would raise the framework's own message about an unknown property — which says nothing about the
+        // credential that replaced the setting, and that is the whole of what an operator upgrading has to be told.
+        var retiredSettings = OwnerFacingAuthenticationConfiguration.FindRetiredSettingErrors(SectionName, section);
+
+        if (retiredSettings.Count > 0)
+        {
+            return RefusingRetiredSettings(retiredSettings);
+        }
+
         var settings = section.Get<ClientEndpointOptions>(binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
             ?? new ClientEndpointOptions();
 
@@ -195,38 +207,35 @@ internal sealed class ClientEndpointOptions
 
         // Each entry's grant is read the same way and for the same reason, and every endpoint asks it through one
         // method so the absent-versus-emptied reading exists once.
-        TransportAuthenticationConfiguration.ReadWhatTheBinderCannotSay(section, [.. settings.Authentication]);
+        OwnerFacingAuthenticationConfiguration.ReadWhatTheBinderCannotSay(section, [.. settings.Authentication]);
 
         return settings;
     }
 
-    /// <summary>Reports every key a client may authenticate with, in configuration order.</summary>
-    /// <returns>The configured keys, empty when the endpoint accepts none.</returns>
-    /// <remarks>
-    /// A method rather than a property, as <see cref="OAuthMethods" /> is, because it reads the same objects the list
-    /// already holds. The secret machinery discovers what to resolve by walking this graph's readable properties, and a
-    /// property here would offer it a second path to every configured key — leaving which of the two a refusal names
-    /// decided by the order reflection happens to report them in.
-    /// </remarks>
-    public IReadOnlyList<ConfiguredSecret> ApiKeys() =>
-        TransportAuthenticationConfiguration.ApiKeysIn(this.Authentication);
+    /// <summary>Composes the settings a section carrying a retired key reads as, which is a refusal and nothing else.</summary>
+    /// <remarks>The section was never bound, so nothing else it states was read; reporting anything beside the retired keys would be reporting defaults the operator did not write.</remarks>
+    private static ClientEndpointOptions RefusingRetiredSettings(IReadOnlyList<string> retiredSettings)
+    {
+        var refused = new ClientEndpointOptions();
+        refused.retiredSettings = retiredSettings;
 
-    /// <summary>Reports every client public key a signed assertion may be verified against, in configuration order.</summary>
-    /// <returns>The configured public keys, empty when the endpoint accepts no assertion.</returns>
-    /// <remarks>A method rather than a property, for the reason <see cref="ApiKeys" /> is one.</remarks>
-    public IReadOnlyList<ConfiguredSecret> PublicKeys() =>
-        TransportAuthenticationConfiguration.PublicKeysIn(this.Authentication);
+        return refused;
+    }
 
-    /// <summary>Reports what an access token must prove, once per entry that states OAuth.</summary>
+    /// <summary>Reports what an access token must prove, once per entry that accepts one.</summary>
     /// <returns>The configured OAuth blocks, empty when the endpoint accepts no token.</returns>
+    /// <remarks>A method rather than a property, because it reads the same objects the list already holds and a second path to them would leave which one a refusal names decided by the order reflection reports them in.</remarks>
     public IReadOnlyList<OAuthValidationOptions> OAuthMethods() =>
-        TransportAuthenticationConfiguration.OAuthMethodsIn(this.Authentication);
+        OwnerFacingAuthenticationConfiguration.OAuthMethodsIn(this.Authentication);
 
     /// <summary>Reports the entry that accepts an owner's username and password, where the endpoint accepts one.</summary>
     /// <returns>The entry, or <see langword="null" /> when the endpoint accepts no password.</returns>
-    /// <remarks>A method rather than a property, for the reason <see cref="ApiKeys" /> is one.</remarks>
-    public TransportAuthenticationOptions? BasicMethod() =>
-        TransportAuthenticationConfiguration.BasicMethodIn(this.Authentication);
+    /// <remarks>A method rather than a property, for the reason <see cref="OAuthMethods" /> is one.</remarks>
+    public OwnerFacingAuthenticationOptions? BasicMethod() =>
+        OwnerFacingAuthenticationConfiguration.BasicMethodIn(this.Authentication);
+
+    private bool Accepts(OwnerCredentialMethod method) =>
+        OwnerFacingAuthenticationConfiguration.Accepts(this.Authentication, method);
 
     /// <summary>Describes every socket this endpoint asks for.</summary>
     /// <returns>One declaration per socket, empty when the endpoint is not served.</returns>
@@ -246,6 +255,14 @@ internal sealed class ClientEndpointOptions
     /// <returns>One message per faulty setting, each naming its configuration path, empty when the settings are usable.</returns>
     public IReadOnlyList<string> FindConfigurationErrors()
     {
+        // Before the enabled question rather than after it, because a retired key is what stopped the section being
+        // read at all: nothing below has values to judge, and a deployment that turned the endpoint off while leaving
+        // one written has still not provisioned the credential that replaced it.
+        if (this.retiredSettings.Count > 0)
+        {
+            return this.retiredSettings;
+        }
+
         if (!this.Enabled)
         {
             // The one setting in this section that is read while the endpoint is off, because it is the one that says
@@ -256,10 +273,9 @@ internal sealed class ClientEndpointOptions
                 : [];
         }
 
-        var authenticationErrors = TransportAuthenticationConfiguration.FindConfigurationErrors(
+        var authenticationErrors = OwnerFacingAuthenticationConfiguration.FindConfigurationErrors(
             SectionName,
-            [.. this.Authentication],
-            GrantedSurface);
+            [.. this.Authentication]);
 
         var errors = new List<string>(authenticationErrors);
 
@@ -331,7 +347,7 @@ internal sealed class ClientEndpointOptions
                 continue;
             }
 
-            yield return $"{TransportAuthenticationConfiguration.SettingPathOf(SectionName, method, index)}:{nameof(TransportAuthenticationOptions.OAuth)}:{nameof(OAuthValidationOptions.Resource)} — the path must be '{RoutePrefix}', because that is where the endpoint's routes answer and it is what a client appends to the address it was given. Write the absolute https URL clients reach this endpoint at, ending in that prefix.";
+            yield return $"{OwnerFacingAuthenticationConfiguration.SettingPathOf(SectionName, method, index)}:{nameof(OwnerFacingAuthenticationOptions.OAuth)}:{nameof(OAuthValidationOptions.Resource)} — the path must be '{RoutePrefix}', because that is where the endpoint's routes answer and it is what a client appends to the address it was given. Write the absolute https URL clients reach this endpoint at, ending in that prefix.";
         }
     }
 

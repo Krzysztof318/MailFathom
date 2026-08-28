@@ -67,13 +67,13 @@ whatever connects to it afterwards:
 | Once per deployment | Once per client | Once per person |
 | --- | --- | --- |
 | Choose the resource identifier | Register an application in the provider | Find the subject identifier |
-| Make the token's audience match it | Allow that client's callback URL | Add it to `AuthorizedSubjects` |
+| Make the token's audience match it | Allow that client's callback URL | Map it onto an owner with `mfctl` |
 | Define the scope, if you require one | Set the token-endpoint authentication method | |
 | Write the `OAuth` entry in MailFathom | Paste the credentials into the client, where it takes them | |
 | Verify the endpoint answers | Point the client at the server URL | |
 
-Adding a second person to an existing client is the right-hand column alone: one `sub` in `AuthorizedSubjects` and a
-restart. Adding a second client is the middle column. Nothing in the left column is touched again unless the deployment
+Adding a second person to an existing client is the right-hand column alone: one `mfctl credential create` naming their
+subject, which takes effect at once and needs no restart. Adding a second client is the middle column. Nothing in the left column is touched again unless the deployment
 moves to a new public address.
 
 ## The sequence
@@ -227,10 +227,12 @@ registration, and this step disappears — which is most of why those shapes are
 
 ### 6. Find the subject identifier
 
-`AuthorizedSubjects` is required and at least one entry is needed, because MailFathom serves one owner's mail to
-everyone it admits: without the list, every colleague who can obtain a token for this resource reads that mailbox. What
-goes in it is the `sub` the authorization server issues, and **an email address is not it** — a subject is what a server
-promises never to reuse, and an address is reassigned to whoever holds the mailbox next.
+A valid token says only that its bearer is somebody the authorization server knows. What decides whether it is served
+here — and whose mail it then reaches — is a credential record mapping the validated subject onto one owner, and a token
+whose subject resolves no record is refused exactly as an unknown credential is. So this step is required, and until it
+is done the entry written in step 7 admits nobody. What goes in the record is the `sub` the authorization server issues,
+and **an email address is not it** — a subject is what a server promises never to reuse, and an address is reassigned to
+whoever holds the mailbox next.
 
 **In Keycloak** it is the **ID** shown on the user's own page under **Users**, a UUID.
 
@@ -244,6 +246,21 @@ $ curl -sS -H "Authorization: Bearer $ACCESS_TOKEN" \
 9f2c7c1e-8a4d-4c62-9f0b-3d2a1b5e7c04
 ```
 
+Then map the subject onto the owner whose mail that person reads:
+
+```console
+$ mfctl credential create --method oauth-subject --owner 6f1c… \
+    --issuer https://sso.example.test/realms/mailfathom \
+    --subject 9f2c7c1e-8a4d-4c62-9f0b-3d2a1b5e7c04
+Provisioned oauth-subject credential 41d7… for owner 6f1c….
+```
+
+The issuer is the one written in the entry below, byte for byte, because the pair is what resolves the record.
+`--permission` records what tokens admitted under it may do; naming none grants everything the MCP surface publishes.
+[Owner credentials](admin-endpoint.md#owner-credentials) specifies the command, and the mapping takes effect at once —
+it is a record rather than a setting, so nothing restarts and closing one is `mfctl credential disable` or
+`mfctl credential delete` rather than an edit here.
+
 Do this once per person who will use the deployment.
 
 ### 7. Write the MailFathom entry
@@ -256,6 +273,7 @@ Now the part that is MailFathom's, and it is one block:
     "Enabled": true,
     "Authentication": [
       {
+        "Method": "oauth-subject",
         "OAuth": {
           "Resource": "https://mail.example.com/mcp",
           "RequiredScopes": [ "mailfathom.read" ],
@@ -263,8 +281,7 @@ Now the part that is MailFathom's, and it is one block:
           "AuthorizationServers": [
             {
               "Name": "workforce",
-              "Issuer": "https://sso.example.test/realms/mailfathom",
-              "AuthorizedSubjects": [ "9f2c7c1e-8a4d-4c62-9f0b-3d2a1b5e7c04" ]
+              "Issuer": "https://sso.example.test/realms/mailfathom"
             }
           ]
         }
@@ -274,8 +291,10 @@ Now the part that is MailFathom's, and it is one block:
 }
 ```
 
-`Resource` came from step 1, `RequiredScopes` and `AdvertisedScopes` from step 2, and `AuthorizedSubjects` from step 6;
-`Name` is a label of your own that diagnostics report. Drop `AdvertisedScopes` if you decided against offline access —
+`Method` says which of the four methods this endpoint accepts here, and `oauth-subject` is the one an access token is
+judged by. `Resource` came from step 1 and `RequiredScopes` and `AdvertisedScopes` from step 2; `Name` is a label of your
+own that diagnostics report. Whose tokens are served is not written here at all — that is the record step 6 wrote, which
+is why nothing in this block names a person. Drop `AdvertisedScopes` if you decided against offline access —
 it publishes a scope for clients to ask for and is checked on nothing, so leaving it out narrows no boundary and only
 shortens how long a client goes between sign-ins. `Issuer` is the one new value and the one to be careful with: **copy it verbatim from
 the provider, trailing slash included**, because it is compared to a token's `iss` by exact string equality and is the
@@ -287,25 +306,25 @@ opens the discovery document, and its `issuer` field is the value to copy.
 Nothing else about the server is configured here: MailFathom finds the discovery document itself, at addresses it derives
 from the issuer, and takes the key set address out of it.
 
-The entry writes down no grant, so every token it admits reaches everything the MCP surface publishes. To state a bound,
-add `Permissions` beside `OAuth` — and add `"PermissionsFromTokenScopes": true` as well where the scopes you created in
-step 2 should narrow the list per subject. On this surface that is a bound rather than a statement, for the reason
-[step 2](#2-register-mailfathom-as-a-resource-in-the-provider) gives: a token admitted without a mail
-permission is listed fewer tools and is answered about the rest as though they did not exist. The example below
-therefore withholds all six contact tools from every token this entry admits — write the contact permissions in beside
-`mailfathom.mail.read` where they should reach the book.
+What each admitted token may do is the grant recorded on the credential step 6 wrote — `--permission` there, once per
+name, or none to hold everything the MCP surface publishes. To let the scopes you created in step 2 narrow that grant
+per session as well, add `"PermissionsFromTokenScopes": true` on this entry:
 
 ```json
 {
+  "Method": "oauth-subject",
   "OAuth": { "…": "as above" },
-  "Permissions": [ "mailfathom.mail.read" ],
   "PermissionsFromTokenScopes": true
 }
 ```
 
-Both settings sit on the entry rather than inside the `OAuth` block, because the grant belongs to the credential entry
-and applies to every block in it; [what a credential may do](mcp-endpoint.md#what-a-credential-may-do) has the whole
-reading, including what an empty list means and why the setting is refused beside a key.
+A token then holds the published names its scopes carry *and* its credential records, so the authorization server
+decides per session within the bound the provisioning fixed. On this surface that is a bound rather than a statement,
+for the reason [step 2](#2-register-mailfathom-as-a-resource-in-the-provider) gives: a token admitted without a mail
+permission is listed fewer tools and is answered about the rest as though they did not exist. The setting sits on the
+entry rather than inside the `OAuth` block, and it is written on no other method, since none of the other three carries
+a token to read a scope from; [what a credential may do](mcp-endpoint.md#what-a-credential-may-do) has the whole
+reading.
 
 The section is read once while the host is composed, so this takes effect on restart.
 
@@ -316,8 +335,9 @@ every entry must agree on `Resource`, why `Name` and `Issuer` are unique across 
 TLS-terminating proxy must name that proxy in
 [`ReverseProxy:TrustedProxies`](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) — an access token is refused
 outright when the request did not arrive over TLS, and with no proxy named that refusal stops working rather than
-becoming stricter. And an `OAuth` entry may sit beside an `ApiKey` or `PublicKey` entry: a request is served when it
-satisfies any one of them, which is how a scheduled job keeps its own credential while people sign in.
+becoming stricter. And an entry accepting `oauth-subject` may sit beside one accepting `api-key` or `public-key`: a
+request is served when it satisfies any one of the accepted methods, which is how a scheduled job keeps its own
+credential while people sign in.
 
 ### 8. Verify before you touch the client
 
@@ -341,9 +361,11 @@ Check `resource` against what you will type into the client, and `authorization_
 deployment configuring several authorization servers publishes them all here, and a client may use only the first —
 order them accordingly. `scopes_supported` is what a client will ask for, which is why `offline_access` appears in it
 without being required: an absence here is a client that never asks for a refresh token. An entry setting
-`PermissionsFromTokenScopes` publishes its whole ceiling here as well, so the permission names in this field are exactly
-the client scopes to create in your authorization server — the document above is from a deployment that sets none. An
-entry granting from configuration publishes none of its permissions, because no client can ask for one.
+`PermissionsFromTokenScopes` publishes this surface's whole published vocabulary here as well, so the permission names
+in this field are exactly the client scopes to create in your authorization server — the document above is from a
+deployment that sets none. Advertising them widens nothing, because a token holds only the names its own credential's
+grant also carries. An entry that does not set it publishes no permission name at all, because no client can ask for
+one.
 
 **An unauthenticated request is refused, and says where to authorize:**
 
@@ -428,7 +450,7 @@ second:
 | `401` on every call, sign-in itself succeeded | The audience. The token was issued for something other than `Resource` — [step 3](#3-make-the-tokens-audience-agree) |
 | `401`, and the log names an unknown issuer | `Issuer` does not match the token's `iss` exactly. Check the trailing slash — [step 7](#7-write-the-mailfathom-entry) |
 | `401` after a successful sign-in, on a deployment behind a proxy | The token was refused because the request did not arrive over TLS. The scheme is read after forwarded headers are applied, so either the proxy sends no `X-Forwarded-Proto` or its address falls outside [`ReverseProxy:TrustedProxies`](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy). Do not answer it by emptying that list — that trusts every peer and turns the refusal off rather than fixing the hop |
-| `403` naming no scope | The subject is not in `AuthorizedSubjects` for that issuer. Signing in again cannot fix it, which is why it is not a `401` — [step 6](#6-find-the-subject-identifier) |
+| `401`, and the log says the token validated | The subject resolves no owner. Nothing maps that issuer and `sub` onto a credential record, or the record is disabled — [step 6](#6-find-the-subject-identifier) |
 | `403` naming a scope in `WWW-Authenticate` | The token is missing a required scope. The client scope is not assigned, or not `Default`, or **Include in token scope** is off — [step 4](#4-register-an-application-for-the-client) |
 | `404` on the metadata address, everything else working | The request did not arrive under the scheme and host `Resource` names. Behind a proxy, the forwarded scheme and host are missing or the peer is outside `TrustedProxies` — [discovery a client uses](mcp-endpoint.md#discovery-a-client-uses) |
 | The client reports it cannot reach the server, and the provider logs no traffic at all | Discovery never completed, so the client never learned where to authorize. Run the first two commands of [step 8](#8-verify-before-you-touch-the-client) |

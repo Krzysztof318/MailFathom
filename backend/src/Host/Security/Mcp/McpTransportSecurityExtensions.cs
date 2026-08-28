@@ -83,7 +83,7 @@ internal static class McpTransportSecurityExtensions
 
         var oauthMethods = endpointSettings.OAuthMethods();
 
-        var authentication = services.AddTransportAuthentication(
+        var authentication = services.AddOwnerFacingTransportAuthentication(
             TransportSurface.Mcp,
             [.. endpointSettings.Authentication],
             challengeSchemeName);
@@ -146,9 +146,9 @@ internal static class McpTransportSecurityExtensions
     /// </remarks>
     private static void AddProtectedResourceMetadataScheme(
         AuthenticationBuilder authentication,
-        IReadOnlyList<TransportAuthenticationOptions> methods)
+        IReadOnlyList<OwnerFacingAuthenticationOptions> methods)
     {
-        var published = PublishedOAuthMetadata.For(methods, McpEndpointOptions.GrantedSurface);
+        var published = PublishedOAuthMetadata.ForOwnerFacing(methods, McpEndpointOptions.GrantedSurface);
 
         authentication.AddMcp(mcpOptions =>
         {

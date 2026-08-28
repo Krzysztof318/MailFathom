@@ -7,11 +7,12 @@ using MailFathom.Cli.Administration;
 
 namespace MailFathom.Cli.Commands.Owners;
 
-/// <summary>Reads the usernames and passwords one owner can sign in with.</summary>
+/// <summary>Reads the credentials one owner's clients present.</summary>
 /// <remarks>
 /// What an administrator answers "who can reach this mailbox" from, and the listing every other command here takes its
-/// identifiers out of. It reports which credentials exist, whether each still works, and how old its password is — each
-/// a fact about the record rather than about the secret, so the listing is safe to print, capture, and keep.
+/// identifiers out of. It reports which credentials exist, how each is presented, what each may do, whether each still
+/// works, and how old its material is — each a fact about the record rather than about the secret, so the listing is
+/// safe to print, capture, and keep. The one value it withholds is a key's digest, which verifies a presented key.
 /// </remarks>
 internal static class ListOwnerCredentialsCommand
 {
@@ -26,7 +27,7 @@ internal static class ListOwnerCredentialsCommand
         var endpointOption = CliOptions.Endpoint();
         var ownerOption = OwnerCredentialOptions.Owner();
 
-        Command command = new("list", "Read the credentials one owner signs in with.")
+        Command command = new("list", "Read the credentials one owner's clients present.")
         {
             ownerOption,
             endpointOption,
@@ -63,8 +64,8 @@ internal static class ListOwnerCredentialsCommand
         if (listing.Credentials is not { Count: > 0 } credentials)
         {
             context.Console.WriteLine(
-                $"Owner {owner:D} holds no username-and-password credentials. Nothing provisions one on its own, so "
-                + "there are none until 'credential create' writes one.");
+                $"Owner {owner:D} holds no credentials. Nothing provisions one on its own, so there are none until "
+                + "'credential create' writes one.");
 
             return CliExitCode.Success;
         }

@@ -1169,7 +1169,7 @@ internal sealed class AdminApiClient
             CliJsonContext.Default.MailOwnerList,
             cancellationToken);
 
-    /// <summary>Reads the credentials one owner signs in with.</summary>
+    /// <summary>Reads the credentials one owner's clients present.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="ownerId">The owner being asked about.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
@@ -1187,29 +1187,26 @@ internal sealed class AdminApiClient
             CliJsonContext.Default.OwnerCredentialList,
             cancellationToken);
 
-    /// <summary>Provisions a credential one owner can sign in with.</summary>
+    /// <summary>Provisions a credential one owner's clients can present.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="ownerId">The owner the credential authenticates.</param>
-    /// <param name="username">The name the owner will sign in with.</param>
-    /// <param name="password">The password the owner will type.</param>
+    /// <param name="request">The method and whatever that method requires.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
-    /// <returns>The identifier the new credential carries.</returns>
+    /// <returns>The new credential's identifier, what it is resolved by, and the key where the deployment minted one.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    /// <exception cref="CliFailure">Thrown when the deployment refused the credential or the request, could not be reached, or answered with anything but the new identifier.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the credential or the request, could not be reached, or answered with anything but the new credential.</exception>
     /// <remarks>
-    /// The password is carried in the body rather than in the path or the query, which is where it would otherwise
-    /// reach a proxy log, a browser history, or the deployment's own request logging. It is sent once and never echoed:
-    /// the answer is an identifier, so a success reports nothing that was typed.
+    /// Whatever is secret travels in the body rather than in the path or the query, which is where it would otherwise
+    /// reach a proxy log, a browser history, or the deployment's own request logging. A password is sent once and never
+    /// echoed; a key is drawn by the deployment and carried back once, because that is the only moment it exists.
     /// </remarks>
     internal Task<OwnerCredentialProvisioned> ProvisionOwnerCredentialAsync(
         string token,
         Guid ownerId,
-        string username,
-        string password,
+        OwnerCredentialProvisioningRequest request,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(username);
-        ArgumentNullException.ThrowIfNull(password);
+        ArgumentNullException.ThrowIfNull(request);
 
         return this.RequestAsync(
             HttpMethod.Post,
@@ -1217,40 +1214,37 @@ internal sealed class AdminApiClient
             token,
             CliJsonContext.Default.OwnerCredentialProvisioned,
             cancellationToken,
-            JsonContent.Create(
-                new OwnerCredentialProvisioningRequest(username, password),
-                CliJsonContext.Default.OwnerCredentialProvisioningRequest));
+            JsonContent.Create(request, CliJsonContext.Default.OwnerCredentialProvisioningRequest));
     }
 
-    /// <summary>Replaces one credential's password, which stops the previous one working at that instant.</summary>
+    /// <summary>Replaces what one credential is presented as, which stops the previous material working at that instant.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="ownerId">The owner the credential belongs to.</param>
     /// <param name="credentialId">The credential being rotated.</param>
-    /// <param name="password">The new password the owner will type.</param>
+    /// <param name="request">The method and its new material.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
-    /// <returns>A task that completes once the new password stands.</returns>
+    /// <returns>What the credential is resolved by from now on, and the key where the deployment minted one.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    /// <exception cref="CliFailure">Thrown when the deployment refused the credential or the request, could not be reached, or answered with anything but an acceptance.</exception>
-    internal Task RotateOwnerCredentialPasswordAsync(
+    /// <exception cref="CliFailure">Thrown when the deployment refused the credential or the request, could not be reached, or answered with anything but the rotated credential.</exception>
+    internal Task<OwnerCredentialRotated> ReplaceOwnerCredentialMaterialAsync(
         string token,
         Guid ownerId,
         Guid credentialId,
-        string password,
+        OwnerCredentialMaterialRequest request,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(password);
+        ArgumentNullException.ThrowIfNull(request);
 
         return this.RequestAsync(
             HttpMethod.Put,
-            AdminEndpointRoutes.OwnerCredentialPasswordPath(ownerId, credentialId),
+            AdminEndpointRoutes.OwnerCredentialMaterialPath(ownerId, credentialId),
             token,
+            CliJsonContext.Default.OwnerCredentialRotated,
             cancellationToken,
-            JsonContent.Create(
-                new OwnerCredentialPasswordRequest(password),
-                CliJsonContext.Default.OwnerCredentialPasswordRequest));
+            JsonContent.Create(request, CliJsonContext.Default.OwnerCredentialMaterialRequest));
     }
 
-    /// <summary>Turns one credential on or off while it keeps its username and its password.</summary>
+    /// <summary>Turns one credential on or off while it keeps what it is presented as.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="ownerId">The owner the credential belongs to.</param>
     /// <param name="credentialId">The credential being written.</param>
@@ -1274,7 +1268,7 @@ internal sealed class AdminApiClient
                 new OwnerCredentialEnablementRequest(enabled),
                 CliJsonContext.Default.OwnerCredentialEnablementRequest));
 
-    /// <summary>Removes one credential and frees the username it held.</summary>
+    /// <summary>Removes one credential and frees what it was resolved by.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="ownerId">The owner the credential belongs to.</param>
     /// <param name="credentialId">The credential being removed.</param>

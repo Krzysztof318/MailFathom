@@ -309,15 +309,10 @@ internal sealed partial class SecretConfigurationValidator
         var errors = new List<string>(
             await this.FindSecretReferenceErrorsAsync(McpEndpointOptions.SectionName, candidate, cancellationToken));
 
+        // No key and no public key is asked about, because this endpoint's section holds neither: what a client
+        // presents resolves a credential record, and a record's material is proven where it is written rather than at
+        // every start. The certificate anchors are still configuration, so they are still read here.
         errors.AddRange(await this.FindClientCertificateTrustAnchorErrorsAsync(candidate, cancellationToken));
-        errors.AddRange(await this.FindUnreachableApiKeyErrorsAsync(
-            McpEndpointOptions.SectionName,
-            candidate.Authentication,
-            cancellationToken));
-        errors.AddRange(await this.FindClientPublicKeyErrorsAsync(
-            McpEndpointOptions.SectionName,
-            candidate.Authentication,
-            cancellationToken));
 
         return errors;
     }
@@ -350,6 +345,10 @@ internal sealed partial class SecretConfigurationValidator
             AdminEndpointOptions.SectionName,
             candidate.Authentication,
             cancellationToken));
+        errors.AddRange(await this.FindUnreachableApiKeyErrorsAsync(
+            AdminEndpointOptions.SectionName,
+            candidate.Authentication,
+            cancellationToken));
 
         return errors;
     }
@@ -378,15 +377,8 @@ internal sealed partial class SecretConfigurationValidator
         var errors = new List<string>(
             await this.FindSecretReferenceErrorsAsync(ClientEndpointOptions.SectionName, candidate, cancellationToken));
 
-        errors.AddRange(await this.FindUnreachableApiKeyErrorsAsync(
-            ClientEndpointOptions.SectionName,
-            candidate.Authentication,
-            cancellationToken));
-        errors.AddRange(await this.FindClientPublicKeyErrorsAsync(
-            ClientEndpointOptions.SectionName,
-            candidate.Authentication,
-            cancellationToken));
-
+        // No key and no public key is asked about, for the reason the MCP endpoint's read gives: this section holds
+        // neither.
         return errors;
     }
 

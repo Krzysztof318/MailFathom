@@ -379,65 +379,75 @@ public sealed class ServedMailOwnersStartupGateTests
     }
 
     /// <summary>
-    /// An owner-facing surface answers one person about their own mail, and nothing this release admits a caller with
-    /// names the owner they act for — neither the absence of a credential nor a configured one.
+    /// An owner-facing surface enabled with an empty authentication list admits whoever reaches the port, so there is
+    /// no credential to resolve an owner from and a roster of several leaves such a caller with nobody to act for.
     /// </summary>
-    [Theory]
-    [InlineData(true, "it admits callers without authenticating them")]
-    [InlineData(false, "a configured credential authenticates a caller without naming the owner")]
-    public async Task StartAsync_SeveralOwnersServedWithAnOwnerFacingSurfaceEnabled_FailsStartupSayingWhy(
-        bool authenticationDisabled,
-        string reasonNamed)
+    [Fact]
+    public async Task StartAsync_SeveralOwnersServedWithTheMcpEndpointRequiringNoCredential_FailsStartupSayingWhy()
     {
-        // Arrange
-        var mcp = new McpEndpointOptions { Enabled = true };
-
-        if (!authenticationDisabled)
-        {
-            mcp.Authentication.Add(new());
-        }
-
         // Act
         var refusal = await Assert.ThrowsAsync<DeploymentMailOwnerUnresolvedException>(() =>
             CreateGate(
                     [],
                     TwoDeclaredOwners(),
-                    mcpEndpointSettings: mcp)
+                    mcpEndpointSettings: new() { Enabled = true })
                 .StartAsync(CancellationToken.None));
 
         // Assert
-        Assert.Contains(reasonNamed, refusal.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "enabled with an empty Authentication list",
+            refusal.Message,
+            StringComparison.Ordinal);
     }
 
     /// <summary>
     /// The client surface is owner-facing on exactly the terms the MCP one is, so a deployment serving several owners
-    /// is refused for having it open even where no MCP endpoint is served at all.
+    /// is refused for having it open unauthenticated even where no MCP endpoint is served at all.
     /// </summary>
-    [Theory]
-    [InlineData(true, "it admits callers without authenticating them")]
-    [InlineData(false, "a configured credential authenticates a caller without naming the owner")]
-    public async Task StartAsync_SeveralOwnersServedWithTheClientEndpointAlone_FailsStartupSayingWhy(
-        bool authenticationDisabled,
-        string reasonNamed)
+    [Fact]
+    public async Task StartAsync_SeveralOwnersServedWithTheClientEndpointRequiringNoCredential_FailsStartupSayingWhy()
     {
-        // Arrange
-        var client = new ClientEndpointOptions { Enabled = true };
-
-        if (!authenticationDisabled)
-        {
-            client.Authentication.Add(new());
-        }
-
         // Act
         var refusal = await Assert.ThrowsAsync<DeploymentMailOwnerUnresolvedException>(() =>
             CreateGate(
                     [],
                     TwoDeclaredOwners(),
-                    clientEndpointSettings: client)
+                    clientEndpointSettings: new() { Enabled = true })
                 .StartAsync(CancellationToken.None));
 
         // Assert
-        Assert.Contains(reasonNamed, refusal.Message, StringComparison.Ordinal);
+        Assert.Contains(
+            "enabled with an empty Authentication list",
+            refusal.Message,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Every method a mail-serving surface accepts resolves one owner record, so a surface requiring a credential
+    /// composes each caller for the owner that admitted them and serves a roster of any size.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_SeveralOwnersServedWithBothMailSurfacesRequiringACredential_ServesEveryOneOfThem()
+    {
+        // Arrange
+        var roster = new ServedMailOwners();
+        var mcp = new McpEndpointOptions { Enabled = true };
+        var client = new ClientEndpointOptions { Enabled = true };
+
+        mcp.Authentication.Add(new() { Method = "api-key" });
+        client.Authentication.Add(new() { Method = "password" });
+
+        // Act
+        await CreateGate(
+                [],
+                TwoDeclaredOwners(),
+                servedOwners: roster,
+                mcpEndpointSettings: mcp,
+                clientEndpointSettings: client)
+            .StartAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(2, roster.Owners.Count);
     }
 
     /// <summary>

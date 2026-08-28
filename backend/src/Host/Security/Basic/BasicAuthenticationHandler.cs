@@ -69,7 +69,7 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
     private readonly IReadOnlyList<IPNetwork> declaredProxyNetworks;
 
     /// <summary>Initializes a new Basic authentication handler.</summary>
-    /// <param name="schemeOptions">What this surface's registration granted and how often it lets a password be tried.</param>
+    /// <param name="schemeOptions">Which surface this registration protects and how often it lets a password be tried.</param>
     /// <param name="loggerFactory">The framework's own logging, which records the reason a refusal carried.</param>
     /// <param name="urlEncoder">The framework's own encoder, unused here and required by the base class.</param>
     /// <param name="authenticator">What judges the credential, below the request boundary.</param>
@@ -124,21 +124,21 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
             this.Options.AttemptsPerMinute,
             this.Context.RequestAborted);
 
-        if (result.AuthenticatedCredentialId is not { } credentialId)
+        if (result.Admitted is not { } admitted)
         {
             return AuthenticateResult.Fail("The request presented no usable credential.");
         }
 
         var identity = TransportGrant.IdentityFor(
-            credentialId.ToString("D", CultureInfo.InvariantCulture),
+            admitted.CredentialId.ToString("D", CultureInfo.InvariantCulture),
             BasicAuthentication.CredentialIdClaimType,
             BasicAuthentication.RoleClaimType,
             this.Options.Surface.BasicSchemeName,
-            this.Options.Grant);
+            admitted.Permissions);
 
         // The owner is what separates this method from every other one: the credential named a person, so the principal
         // carries them rather than leaving the surface to answer for whose mail the request acts on.
-        identity.AddClaim(TransportCallerOwner.ClaimFor(result.Owner));
+        identity.AddClaim(TransportCallerOwner.ClaimFor(admitted.Owner));
 
         return AuthenticateResult.Success(
             new AuthenticationTicket(new ClaimsPrincipal(identity), this.Scheme.Name));

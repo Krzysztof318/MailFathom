@@ -45,7 +45,7 @@ namespace MailFathom.Infrastructure.Security.Passwords;
 /// </remarks>
 public sealed partial class OwnerPasswordAuthenticator
 {
-    private readonly IOwnerPasswordCredentialStore credentials;
+    private readonly IOwnerCredentialStore credentials;
     private readonly IPasswordHasher passwordHasher;
     private readonly PasswordAttemptLimiter attemptLimiter;
     private readonly DecoyPasswordHash decoy;
@@ -60,7 +60,7 @@ public sealed partial class OwnerPasswordAuthenticator
     /// <exception cref="ArgumentNullException">Thrown when any argument but the logger is <see langword="null" />.</exception>
     /// <remarks>Nothing is derived here, so constructing this per request costs what resolving four services costs.</remarks>
     public OwnerPasswordAuthenticator(
-        IOwnerPasswordCredentialStore credentials,
+        IOwnerCredentialStore credentials,
         IPasswordHasher passwordHasher,
         PasswordAttemptLimiter attemptLimiter,
         DecoyPasswordHash decoy,
@@ -155,15 +155,20 @@ public sealed partial class OwnerPasswordAuthenticator
         PresentedBasicCredential presented,
         CancellationToken cancellationToken)
     {
-        var credential = await this.credentials.FindByUsernameAsync(username, cancellationToken);
+        var credential = await this.credentials.FindAsync(
+            OwnerCredentialMethod.Password,
+            OwnerCredentialLookup.ForUsername(username),
+            cancellationToken);
 
         // The decoy is verified rather than skipped, so a username nobody holds costs what a username somebody holds
-        // costs. Its result is discarded because it can only ever be a failure.
+        // costs. Its result is discarded because it can only ever be a failure. A password credential without stored
+        // material cannot arise — the store refuses to write one — and it is met with the decoy rather than with a
+        // fault, because a row nothing can judge is a credential nobody holds.
         var verification = this.passwordHasher.Verify(
-            credential?.PasswordHash ?? this.decoy.Value,
+            credential?.Material ?? this.decoy.Value,
             presented.Password);
 
-        if (credential is not { Enabled: true } || verification == PasswordVerification.Failed)
+        if (credential is not { Enabled: true, Material: not null } || verification == PasswordVerification.Failed)
         {
             return OwnerPasswordAuthenticationResult.Rejected(OwnerPasswordRejection.CredentialUnrecognized);
         }
@@ -173,7 +178,10 @@ public sealed partial class OwnerPasswordAuthenticator
             await this.RehashAsync(credential, presented, cancellationToken);
         }
 
-        return OwnerPasswordAuthenticationResult.Authenticated(credential.Id, credential.Owner);
+        return OwnerPasswordAuthenticationResult.Authenticated(
+            credential.Id,
+            credential.Owner,
+            credential.Permissions);
     }
 
     /// <summary>Rewrites a record whose work parameters are behind the current policy, while the plaintext is still here.</summary>
@@ -186,7 +194,7 @@ public sealed partial class OwnerPasswordAuthenticator
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A strengthening write that fails for any reason must leave the verified request served rather than turn a raised iteration count into an outage.")]
     private async Task RehashAsync(
-        ResolvedOwnerPasswordCredential credential,
+        ResolvedOwnerCredential credential,
         PresentedBasicCredential presented,
         CancellationToken cancellationToken)
     {
@@ -194,10 +202,10 @@ public sealed partial class OwnerPasswordAuthenticator
         {
             var rewritten = this.passwordHasher.Hash(presented.Password);
 
-            await this.credentials.RewritePasswordHashAsync(
+            await this.credentials.RewriteMaterialAsync(
                 credential.Owner,
                 credential.Id,
-                credential.PasswordHash,
+                credential.Material!,
                 rewritten,
                 cancellationToken);
         }

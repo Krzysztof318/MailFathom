@@ -41,8 +41,10 @@ public sealed class OwnerPasswordAuthenticatorTests
 
         // Assert
         Assert.True(result.Succeeded);
-        Assert.Equal(CredentialId, result.AuthenticatedCredentialId);
-        Assert.Equal(Owner, result.Owner);
+        Assert.NotNull(result.Admitted);
+        Assert.Equal(CredentialId, result.Admitted.CredentialId);
+        Assert.Equal(Owner, result.Admitted.Owner);
+        Assert.Equal(AuthenticatorHarness.Grant, result.Admitted.Permissions);
         Assert.Null(result.Rejection);
     }
 
@@ -60,8 +62,9 @@ public sealed class OwnerPasswordAuthenticatorTests
         // Assert
         Assert.True(result.Succeeded);
 
-        await harness.Credentials.Received(1).FindByUsernameAsync(
-            Arg.Is<OwnerCredentialUsername>(username => username.Value == "owner"),
+        await harness.Credentials.Received(1).FindAsync(
+            OwnerCredentialMethod.Password,
+            Arg.Is<OwnerCredentialLookup>(lookup => lookup.Value == "owner"),
             Arg.Any<CancellationToken>());
     }
 
@@ -168,7 +171,8 @@ public sealed class OwnerPasswordAuthenticatorTests
         Assert.Equal(expected, result.Rejection);
         Assert.Equal(0, harness.PasswordHasher.VerificationCount);
 
-        await harness.Credentials.DidNotReceiveWithAnyArgs().FindByUsernameAsync(default, TestContext.Current.CancellationToken);
+        await harness.Credentials.DidNotReceiveWithAnyArgs()
+            .FindAsync(default, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>A name no username can be folded from is refused before any capacity is spent and before any hash is computed.</summary>
@@ -402,7 +406,7 @@ public sealed class OwnerPasswordAuthenticatorTests
         // Assert
         Assert.True(result.Succeeded);
 
-        await harness.Credentials.Received(1).RewritePasswordHashAsync(
+        await harness.Credentials.Received(1).RewriteMaterialAsync(
             Owner,
             CredentialId,
             StoredHash,
@@ -427,7 +431,7 @@ public sealed class OwnerPasswordAuthenticatorTests
         await harness.AuthenticateAsync(Header("owner", Password));
 
         // Assert
-        await harness.Credentials.DidNotReceive().RewritePasswordHashAsync(
+        await harness.Credentials.DidNotReceive().RewriteMaterialAsync(
             Arg.Any<MailOwnerId>(),
             Arg.Any<Guid>(),
             Arg.Is<string>(static verified => verified != StoredHash),
@@ -443,7 +447,7 @@ public sealed class OwnerPasswordAuthenticatorTests
         using var harness = new AuthenticatorHarness();
         harness.Holds(enabled: true);
         harness.PasswordHasher.Result = PasswordVerification.SucceededAndShouldBeRehashed;
-        harness.Credentials.RewritePasswordHashAsync(
+        harness.Credentials.RewriteMaterialAsync(
                 Arg.Any<MailOwnerId>(),
                 Arg.Any<Guid>(),
                 Arg.Any<string>(),
@@ -456,7 +460,7 @@ public sealed class OwnerPasswordAuthenticatorTests
 
         // Assert
         Assert.True(result.Succeeded);
-        Assert.Equal(CredentialId, result.AuthenticatedCredentialId);
+        Assert.Equal(CredentialId, result.Admitted?.CredentialId);
     }
 
     [Fact]
@@ -471,7 +475,7 @@ public sealed class OwnerPasswordAuthenticatorTests
 
         // Assert
         await harness.Credentials.DidNotReceiveWithAnyArgs()
-            .RewritePasswordHashAsync(default, default, default!, default!, TestContext.Current.CancellationToken);
+            .RewriteMaterialAsync(default, default, default!, default!, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -557,7 +561,7 @@ public sealed class OwnerPasswordAuthenticatorTests
             }
         }
 
-        internal async Task<ResolvedOwnerPasswordCredential?> AnswerAsync(ResolvedOwnerPasswordCredential? credential)
+        internal async Task<ResolvedOwnerCredential?> AnswerAsync(ResolvedOwnerCredential? credential)
         {
             Interlocked.Increment(ref this.waiting);
 
@@ -636,9 +640,12 @@ public sealed class OwnerPasswordAuthenticatorTests
             this.Clock = new FakeTimeProvider();
             this.attemptLimiter = new PasswordAttemptLimiter(this.Clock);
 
-            this.Credentials = Substitute.For<IOwnerPasswordCredentialStore>();
-            this.Credentials.FindByUsernameAsync(Arg.Any<OwnerCredentialUsername>(), Arg.Any<CancellationToken>())
-                .Returns((ResolvedOwnerPasswordCredential?)null);
+            this.Credentials = Substitute.For<IOwnerCredentialStore>();
+            this.Credentials.FindAsync(
+                    Arg.Any<OwnerCredentialMethod>(),
+                    Arg.Any<OwnerCredentialLookup>(),
+                    Arg.Any<CancellationToken>())
+                .Returns((ResolvedOwnerCredential?)null);
 
             this.PasswordHasher = new RecordingPasswordHasher();
 
@@ -650,9 +657,13 @@ public sealed class OwnerPasswordAuthenticatorTests
                 NullLogger<OwnerPasswordAuthenticator>.Instance);
         }
 
+        /// <summary>Gets the grant the stored credential carries, which an admitted request is answered with.</summary>
+        internal static IReadOnlyList<MailFathomPermission> Grant { get; } =
+            [MailFathomPermission.MailRead, MailFathomPermission.MailSend];
+
         internal OwnerPasswordAuthenticator Authenticator { get; }
 
-        internal IOwnerPasswordCredentialStore Credentials { get; }
+        internal IOwnerCredentialStore Credentials { get; }
 
         internal RecordingPasswordHasher PasswordHasher { get; }
 
@@ -661,10 +672,11 @@ public sealed class OwnerPasswordAuthenticatorTests
         public void Dispose() => this.attemptLimiter.Dispose();
 
         internal void Holds(bool enabled) =>
-            this.Credentials.FindByUsernameAsync(
-                    Arg.Is<OwnerCredentialUsername>(username => username.Value == "owner"),
+            this.Credentials.FindAsync(
+                    OwnerCredentialMethod.Password,
+                    Arg.Is<OwnerCredentialLookup>(lookup => lookup.Value == "owner"),
                     Arg.Any<CancellationToken>())
-                .Returns(new ResolvedOwnerPasswordCredential(CredentialId, Owner, enabled, StoredHash));
+                .Returns(Credential(enabled));
 
         /// <summary>Holds every credential read open until the gate is released, so callers are genuinely in flight together.</summary>
         /// <param name="enabled">Whether the credential the store then answers with still authenticates, as <see cref="Holds" /> decides it.</param>
@@ -678,11 +690,11 @@ public sealed class OwnerPasswordAuthenticatorTests
         {
             var gate = new CredentialReadGate();
 
-            this.Credentials.FindByUsernameAsync(
-                    Arg.Is<OwnerCredentialUsername>(username => username.Value == "owner"),
+            this.Credentials.FindAsync(
+                    OwnerCredentialMethod.Password,
+                    Arg.Is<OwnerCredentialLookup>(lookup => lookup.Value == "owner"),
                     Arg.Any<CancellationToken>())
-                .Returns(_ => gate.AnswerAsync(
-                    new ResolvedOwnerPasswordCredential(CredentialId, Owner, enabled, StoredHash)));
+                .Returns(_ => gate.AnswerAsync(Credential(enabled)));
 
             return gate;
         }
@@ -694,11 +706,22 @@ public sealed class OwnerPasswordAuthenticatorTests
         {
             var gate = new CredentialReadGate();
 
-            this.Credentials.FindByUsernameAsync(Arg.Any<OwnerCredentialUsername>(), Arg.Any<CancellationToken>())
+            this.Credentials.FindAsync(
+                    Arg.Any<OwnerCredentialMethod>(),
+                    Arg.Any<OwnerCredentialLookup>(),
+                    Arg.Any<CancellationToken>())
                 .Returns(_ => gate.AnswerAsync(null));
 
             return gate;
         }
+
+        private static ResolvedOwnerCredential Credential(bool enabled) => new(
+            CredentialId,
+            Owner,
+            OwnerCredentialMethod.Password,
+            Grant,
+            enabled,
+            StoredHash);
 
         internal Task<OwnerPasswordAuthenticationResult> AuthenticateAsync(
             string? authorizationHeaderValue,

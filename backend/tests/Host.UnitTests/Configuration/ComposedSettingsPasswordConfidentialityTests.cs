@@ -33,6 +33,7 @@ public sealed class ComposedSettingsPasswordConfidentialityTests
         // Arrange
         var configuration = Settings(
             new($"{sectionName}:Enabled", "true"),
+            new($"{sectionName}:Authentication:0:Method", "password"),
             new($"{sectionName}:Authentication:0:Basic:AttemptsPerMinute", "10"));
 
         // Act
@@ -55,6 +56,7 @@ public sealed class ComposedSettingsPasswordConfidentialityTests
             new("ClientEndpoint:Https:Endpoints:0:Domain", "mail.example.test"),
             new("ClientEndpoint:Https:Endpoints:0:ServerCertificate:Bundle:Name", "client-certificate"),
             new("ClientEndpoint:Https:Endpoints:0:ServerCertificate:Bundle:SecretReference", "file:/etc/mailfathom/mail.pfx"),
+            new("ClientEndpoint:Authentication:0:Method", "password"),
             new("ClientEndpoint:Authentication:0:Basic:AttemptsPerMinute", "10"));
 
         // Act
@@ -81,6 +83,7 @@ public sealed class ComposedSettingsPasswordConfidentialityTests
             new("ClientEndpoint:Https:Endpoints:0:Domain", "mail.example.test"),
             new("ClientEndpoint:Https:Endpoints:0:ServerCertificate:Bundle:Name", "client-certificate"),
             new("ClientEndpoint:Https:Endpoints:0:ServerCertificate:Bundle:SecretReference", "file:/etc/mailfathom/mail.pfx"),
+            new("ClientEndpoint:Authentication:0:Method", "password"),
             new("ClientEndpoint:Authentication:0:Basic:AttemptsPerMinute", "10"));
 
         // Act
@@ -97,6 +100,7 @@ public sealed class ComposedSettingsPasswordConfidentialityTests
         // Arrange
         var configuration = Settings(
             new("ClientEndpoint:Enabled", "true"),
+            new("ClientEndpoint:Authentication:0:Method", "password"),
             new("ClientEndpoint:Authentication:0:Basic:AttemptsPerMinute", "10"),
             new("ReverseProxy:TrustedProxies:0", "10.0.0.5"));
 
@@ -117,6 +121,7 @@ public sealed class ComposedSettingsPasswordConfidentialityTests
         // Arrange
         var configuration = Settings(
             new("ClientEndpoint:Enabled", "true"),
+            new("ClientEndpoint:Authentication:0:Method", "password"),
             new("ClientEndpoint:Authentication:0:Basic:AttemptsPerMinute", "10"),
             new("ReverseProxy:TrustedProxies:0", "not-an-address"));
 
@@ -135,8 +140,7 @@ public sealed class ComposedSettingsPasswordConfidentialityTests
         // Arrange
         var configuration = Settings(
             new("ClientEndpoint:Enabled", "true"),
-            new("ClientEndpoint:Authentication:0:ApiKey:Name", "desktop"),
-            new("ClientEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-key"));
+            new("ClientEndpoint:Authentication:0:Method", "api-key"));
 
         // Act
         var refusals = ComposedSettings.FindSurfaceRefusals(configuration);

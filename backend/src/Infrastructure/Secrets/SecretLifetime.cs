@@ -22,8 +22,9 @@ namespace MailFathom.Infrastructure.Secrets;
 /// </para>
 /// <para>
 /// The declaration is uniform across every secret; enforcement is not, because only a consumer knows what a lapsed
-/// credential means for the operation it serves. The MCP API keys enforce it by refusing an expired key, which is what
-/// makes overlapping keys a rotation rather than an outage. Elsewhere the lifetime is recorded and reported at startup,
+/// credential means for the operation it serves. The administrative endpoint's own API keys enforce it by refusing an
+/// expired key, which is what makes overlapping keys a rotation rather than an outage. A credential an owner's client
+/// presents carries none, because it is a record rather than a configured secret. Elsewhere the lifetime is recorded and reported at startup,
 /// and the operations documentation says so rather than implying a control that does not exist.
 /// </para>
 /// </remarks>

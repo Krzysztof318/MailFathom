@@ -31,7 +31,10 @@ public sealed class ProtectedResourceMetadataEndpointTests
         var oauthSettings = Configured();
 
         // Act
-        var document = ProtectedResourceMetadataDocument.For([new TransportAuthenticationOptions { OAuth = oauthSettings }], AdminEndpointOptions.GrantedSurface);
+        var document = ProtectedResourceMetadataDocument.For(
+            PublishedOAuthMetadata.For(
+                [new TransportAuthenticationOptions { OAuth = oauthSettings }],
+                AdminEndpointOptions.GrantedSurface));
 
         // Assert
         Assert.Equal(Resource, document.Resource);
@@ -63,7 +66,10 @@ public sealed class ProtectedResourceMetadataEndpointTests
         });
 
         // Act
-        var document = ProtectedResourceMetadataDocument.For([Entry(), new TransportAuthenticationOptions { OAuth = partners }], AdminEndpointOptions.GrantedSurface);
+        var document = ProtectedResourceMetadataDocument.For(
+            PublishedOAuthMetadata.For(
+                [Entry(), new TransportAuthenticationOptions { OAuth = partners }],
+                AdminEndpointOptions.GrantedSurface));
 
         // Assert
         Assert.Equal(Resource, document.Resource);
@@ -86,7 +92,10 @@ public sealed class ProtectedResourceMetadataEndpointTests
         oauthSettings.AdvertisedScopes.Add("offline_access");
 
         // Act
-        var document = ProtectedResourceMetadataDocument.For([new TransportAuthenticationOptions { OAuth = oauthSettings }], AdminEndpointOptions.GrantedSurface);
+        var document = ProtectedResourceMetadataDocument.For(
+            PublishedOAuthMetadata.For(
+                [new TransportAuthenticationOptions { OAuth = oauthSettings }],
+                AdminEndpointOptions.GrantedSurface));
 
         // Assert
         Assert.Equal(["mailfathom.admin", "mailfathom.read", "offline_access"], document.ScopesSupported);
@@ -97,7 +106,8 @@ public sealed class ProtectedResourceMetadataEndpointTests
     public void For_AnySettings_OffersTheHeaderAsTheOnlyWayToPresentAToken()
     {
         // Act
-        var document = ProtectedResourceMetadataDocument.For([Entry()], AdminEndpointOptions.GrantedSurface);
+        var document = ProtectedResourceMetadataDocument.For(
+            PublishedOAuthMetadata.For([Entry()], AdminEndpointOptions.GrantedSurface));
 
         // Assert
         Assert.Equal(["header"], document.BearerMethodsSupported);
@@ -116,7 +126,8 @@ public sealed class ProtectedResourceMetadataEndpointTests
         entry.GrantTheWholeSurface();
 
         // Act
-        var document = ProtectedResourceMetadataDocument.For([entry], AdminEndpointOptions.GrantedSurface);
+        var document = ProtectedResourceMetadataDocument.For(
+            PublishedOAuthMetadata.For([entry], AdminEndpointOptions.GrantedSurface));
 
         // Assert
         Assert.Equal(
@@ -129,7 +140,8 @@ public sealed class ProtectedResourceMetadataEndpointTests
     public void Serialized_TheDocument_CarriesTheNamesRfc9728Defines()
     {
         // Arrange
-        var document = ProtectedResourceMetadataDocument.For([Entry()], AdminEndpointOptions.GrantedSurface);
+        var document = ProtectedResourceMetadataDocument.For(
+            PublishedOAuthMetadata.For([Entry()], AdminEndpointOptions.GrantedSurface));
 
         // Act
         using var serialized = JsonDocument.Parse(JsonSerializer.Serialize(document));

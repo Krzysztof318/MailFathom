@@ -6,7 +6,7 @@ using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.Access.Credentials;
 
-/// <summary>Records that an administrator changed which passwords authenticate an owner.</summary>
+/// <summary>Records that an administrator changed which credentials authenticate an owner.</summary>
 /// <remarks>
 /// <para>
 /// Provisioning, rotating, disabling, and deleting a credential each change who can reach one person's mail, and none
@@ -15,10 +15,10 @@ namespace MailFathom.Application.Access.Credentials;
 /// password stop working" can be answered from.
 /// </para>
 /// <para>
-/// It deliberately cannot carry the username. A username is a value a person types into a client and is the half of a
-/// credential that travels beside the password, so the identifier is what is written down instead: a listing resolves
-/// the two for whoever is entitled to read one, and a record that named both would put a live credential's name into
-/// whichever sink this port ends up writing to.
+/// It deliberately cannot carry the lookup. A lookup is what a caller presents — a username typed into a client, a
+/// key's digest, a client's public key, a subject an authorization server issued — so the identifier is what is
+/// written down instead: a listing resolves the two for whoever is entitled to read one, and a record that named both
+/// would put a live credential's name into whichever sink this port ends up writing to.
 /// </para>
 /// <para>
 /// The port is deliberately narrow for the reason <see cref="Folders.IMailFolderMappingChangeAuditor" /> is: the sink
@@ -39,30 +39,32 @@ public interface IOwnerCredentialAuditor
 /// <param name="Act">What was done.</param>
 /// <param name="CredentialId">The credential it was done to.</param>
 /// <param name="Owner">The owner the credential authenticates.</param>
+/// <param name="Method">How the credential is presented, which is what makes two records about one owner readable apart.</param>
 /// <param name="ActingAdministrator">What the administrative surface admitted the caller as, which is a configured credential's own name rather than a person.</param>
 /// <param name="OccurredAt">When the change committed.</param>
 public sealed record OwnerCredentialChange(
     OwnerCredentialAct Act,
     Guid CredentialId,
     MailOwnerId Owner,
+    OwnerCredentialMethod Method,
     string ActingAdministrator,
     DateTimeOffset OccurredAt);
 
 /// <summary>Which administrative act a credential record describes.</summary>
 public enum OwnerCredentialAct
 {
-    /// <summary>A credential was created with a password nothing can read back.</summary>
+    /// <summary>A credential was created, with material nothing can read back where the method keeps any.</summary>
     Provisioned = 0,
 
-    /// <summary>An existing credential's password was replaced, and the previous one stopped working at that instant.</summary>
-    PasswordRotated = 1,
+    /// <summary>An existing credential's material was replaced, and what it was presented as before stopped working at that instant.</summary>
+    MaterialRotated = 1,
 
-    /// <summary>An existing credential stopped authenticating requests while keeping its username and its password.</summary>
+    /// <summary>An existing credential stopped authenticating requests while keeping its lookup and its material.</summary>
     Disabled = 2,
 
-    /// <summary>A disabled credential started authenticating requests again under the password it already held.</summary>
+    /// <summary>A disabled credential started authenticating requests again under the material it already held.</summary>
     Enabled = 3,
 
-    /// <summary>A credential was removed, which freed its username for another.</summary>
+    /// <summary>A credential was removed, which freed its lookup for another.</summary>
     Deleted = 4,
 }

@@ -66,7 +66,7 @@ public sealed class ClientEndpointOptionsTests
         Assert.ThrowsAny<InvalidOperationException>(() => ClientEndpointOptions.ReadFrom(configuration));
     }
 
-    /// <summary>The credential the issue is written around: a token a page obtained under authorization code with PKCE, which is an ordinary OAuth entry to this section.</summary>
+    /// <summary>The credential the issue is written around: a token a page obtained under authorization code with PKCE, which is an ordinary mapped-subject entry to this section.</summary>
     [Fact]
     public void ReadFrom_TheAuthenticationList_BindsTheSameEntriesTheOtherEndpointsTake()
     {
@@ -74,12 +74,11 @@ public sealed class ClientEndpointOptionsTests
         var configuration = Configuration(new Dictionary<string, string?>
         {
             ["ClientEndpoint:Enabled"] = "true",
-            ["ClientEndpoint:Authentication:0:ApiKey:Name"] = "desktop-client",
-            ["ClientEndpoint:Authentication:0:ApiKey:SecretReference"] = "systemd-credential:client-key",
+            ["ClientEndpoint:Authentication:0:Method"] = OwnerCredentialMethod.ApiKey.Name,
+            ["ClientEndpoint:Authentication:1:Method"] = OwnerCredentialMethod.OAuthSubject.Name,
             ["ClientEndpoint:Authentication:1:OAuth:Resource"] = "https://mail.example.test:8080/api/client",
             ["ClientEndpoint:Authentication:1:OAuth:AuthorizationServers:0:Name"] = "workforce",
             ["ClientEndpoint:Authentication:1:OAuth:AuthorizationServers:0:Issuer"] = "https://sso.example.test/realms/mailfathom",
-            ["ClientEndpoint:Authentication:1:OAuth:AuthorizationServers:0:AuthorizedSubjects:0"] = "11111111-2222-3333-4444-555555555555",
         });
 
         // Act
@@ -92,11 +91,12 @@ public sealed class ClientEndpointOptionsTests
     }
 
     /// <summary>
-    /// The grant is drawn from the mailbox's half, so a permission belonging to the administrative one grants nothing
-    /// here and is refused rather than left in the file reading as authority somebody configured.
+    /// What a caller admitted here may do is recorded beside the owner their credential resolves, so a grant written in
+    /// this section is a setting that no longer decides anything. It is refused naming what to provision instead, which
+    /// is the only way an operator upgrading learns their configured authority has to be re-established.
     /// </summary>
     [Fact]
-    public void FindConfigurationErrors_AGrantNamingAnAdministrativePermission_IsRefusedAsBelongingToTheOtherSurface()
+    public void ReadFrom_AGrantWrittenOnAnEntry_IsRefusedNamingWhatToProvisionInstead()
     {
         // Arrange
         var configuration = ConfigurationFromJson("""
@@ -105,8 +105,8 @@ public sealed class ClientEndpointOptionsTests
                 "Enabled": true,
                 "Authentication": [
                   {
-                    "ApiKey": { "Name": "desktop-client", "SecretReference": "plaintext:a-key" },
-                    "Permissions": ["mailfathom.admin.read"]
+                    "Method": "api-key",
+                    "Permissions": ["mailfathom.mail.read"]
                   }
                 ]
               }
@@ -118,60 +118,22 @@ public sealed class ClientEndpointOptionsTests
 
         // Assert
         var reported = Assert.Single(errors);
-        Assert.Contains("ClientEndpoint:Authentication:0:Permissions", reported, StringComparison.Ordinal);
-        Assert.Contains("mailfathom.admin.read", reported, StringComparison.Ordinal);
+        Assert.StartsWith("ClientEndpoint:Authentication:0:Permissions", reported, StringComparison.Ordinal);
+        Assert.Contains("mfctl", reported, StringComparison.Ordinal);
     }
 
-    /// <summary>The reading that decides how much of the mailbox an entry carries has to answer here exactly as it does on the two existing endpoints.</summary>
+    /// <summary>An entry naming no method registers no scheme, so it is refused rather than left to read as a configured method.</summary>
     [Fact]
-    public void ReadFrom_TheGrantOnEachEntry_TellsAnAbsentKeyFromAnEmptiedList()
-    {
-        // Arrange
-        var configuration = ConfigurationFromJson("""
-            {
-              "ClientEndpoint": {
-                "Enabled": true,
-                "Authentication": [
-                  { "ApiKey": { "Name": "desktop-client", "SecretReference": "plaintext:a-key" } },
-                  {
-                    "ApiKey": { "Name": "retired", "SecretReference": "plaintext:another-key" },
-                    "Permissions": []
-                  },
-                  {
-                    "ApiKey": { "Name": "reader", "SecretReference": "plaintext:a-third-key" },
-                    "Permissions": ["mailfathom.mail.read"]
-                  }
-                ]
-              }
-            }
-            """);
-
-        // Act
-        var settings = ClientEndpointOptions.ReadFrom(configuration);
-
-        // Assert
-        Assert.Equal(
-            MailFathomPermission.PublishedFor(ClientEndpointOptions.GrantedSurface),
-            settings.Authentication[0].GrantedPermissions(ClientEndpointOptions.GrantedSurface));
-        Assert.Empty(settings.Authentication[1].GrantedPermissions(ClientEndpointOptions.GrantedSurface));
-        Assert.Equal(
-            [MailFathomPermission.MailRead],
-            settings.Authentication[2].GrantedPermissions(ClientEndpointOptions.GrantedSurface));
-        Assert.Empty(settings.FindConfigurationErrors());
-    }
-
-    /// <summary>An entry stating nothing registers no scheme, so it is refused rather than left to read as a configured method.</summary>
-    [Fact]
-    public void FindConfigurationErrors_AnEntryStatingNoCredential_IsRefusedRatherThanOpeningTheEndpoint()
+    public void FindConfigurationErrors_AnEntryNamingNoMethod_IsRefusedRatherThanOpeningTheEndpoint()
     {
         // Arrange
         var settings = EnabledEndpoint();
-        settings.Authentication.Add(new TransportAuthenticationOptions());
+        settings.Authentication.Add(new OwnerFacingAuthenticationOptions());
 
         // Act, Assert
         Assert.Contains(
             settings.FindConfigurationErrors(),
-            error => error.Contains("states no credential", StringComparison.Ordinal));
+            error => error.Contains("names no method this endpoint accepts", StringComparison.Ordinal));
     }
 
     [Theory]
@@ -338,12 +300,11 @@ public sealed class ClientEndpointOptionsTests
         var configuration = Configuration(new Dictionary<string, string?>
         {
             ["ClientEndpoint:Enabled"] = "true",
-            ["ClientEndpoint:Authentication:0:ApiKey:Name"] = "desktop-client",
-            ["ClientEndpoint:Authentication:0:ApiKey:SecretReference"] = "plaintext:a-key",
+            ["ClientEndpoint:Authentication:0:Method"] = "api-key",
+            ["ClientEndpoint:Authentication:2:Method"] = "oauth-subject",
             ["ClientEndpoint:Authentication:2:OAuth:Resource"] = "https://mail.example.test:8080/client",
             ["ClientEndpoint:Authentication:2:OAuth:AuthorizationServers:0:Name"] = "workforce",
             ["ClientEndpoint:Authentication:2:OAuth:AuthorizationServers:0:Issuer"] = "https://sso.example.test/realms/mailfathom",
-            ["ClientEndpoint:Authentication:2:OAuth:AuthorizationServers:0:AuthorizedSubjects:0"] = "11111111-2222-3333-4444-555555555555",
         });
 
         // Act
@@ -636,9 +597,11 @@ public sealed class ClientEndpointOptionsTests
             Issuer = "https://sso.example.test/realms/mailfathom",
         });
 
-        oauth.AuthorizationServers[0].AuthorizedSubjects.Add("11111111-2222-3333-4444-555555555555");
-
-        settings.Authentication.Add(new TransportAuthenticationOptions { OAuth = oauth });
+        settings.Authentication.Add(new OwnerFacingAuthenticationOptions
+        {
+            Method = OwnerCredentialMethod.OAuthSubject.Name,
+            OAuth = oauth,
+        });
 
         return settings;
     }

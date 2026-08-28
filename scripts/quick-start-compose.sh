@@ -86,6 +86,9 @@ account_id='primary'
 password_file=''
 mcp_authentication='api-key'
 admin_endpoint='off'
+# Whether the line above is the default or the operator's own answer. An authenticated MCP endpoint needs the
+# administrative endpoint to mint its key, so a default of `off` is corrected and an explicit one is refused.
+admin_endpoint_chosen='no'
 requested_version=''
 start_stack='yes'
 interactive='yes'
@@ -104,7 +107,7 @@ while [[ $# -gt 0 ]]; do
         --account-id) account_id="$2" ;;
         --password-file) password_file="$2" ;;
         --mcp-authentication) mcp_authentication="$2" ;;
-        --admin-endpoint) admin_endpoint="$2" ;;
+        --admin-endpoint) admin_endpoint="$2"; admin_endpoint_chosen='yes' ;;
         --version) requested_version="$2" ;;
       esac
       shift 2
@@ -324,6 +327,7 @@ case "$admin_endpoint" in
   *) printf 'The administrative endpoint takes off, api-key, or none, not %s.\n' "$admin_endpoint" >&2; exit 1 ;;
 esac
 
+
 if [[ "$interactive" == 'yes' ]]; then
   cat << TEXT
 
@@ -331,8 +335,10 @@ The MCP endpoint is what a chat client connects to. It is served over plain HTTP
 way — MailFathom terminates no TLS of its own — so what this decides is whether a client also has to
 present a key.
 
-  api-key  A key is generated and the client sends it as a bearer credential. Two popular chat
-           clients offer no field for one, and cannot connect to an endpoint configured this way.
+  api-key  The endpoint accepts a key the running deployment mints for the owner, and the client
+           sends it as a bearer credential. Minting it is one mfctl command against the
+           administrative endpoint, which this script then turns on for you. Two popular chat
+           clients offer no field for a key, and cannot connect to an endpoint configured this way.
   none     Anything that can reach 127.0.0.1:8080 reads your mail. Legal, announced with a startup
            warning, and reasonable only because the port is published on loopback alone.
 
@@ -341,24 +347,47 @@ TEXT
   if [[ "$mcp_authentication" == 'api-key' ]] && confirm 'Serve the MCP endpoint without authentication?'; then
     mcp_authentication='none'
   fi
+fi
 
+# The MCP key is minted over the administrative endpoint rather than written into a file here, so switching that
+# endpoint off while the MCP endpoint requires a credential produces a deployment nothing can be provisioned for.
+# An operator who asked for that combination is told; a default that arrived at it is corrected, since nobody chose it.
+if [[ "$mcp_authentication" == 'api-key' ]] && [[ "$admin_endpoint" == 'off' ]]; then
+  if [[ "$admin_endpoint_chosen" == 'yes' ]]; then
+    printf 'An MCP key is minted with mfctl over the administrative endpoint, so --admin-endpoint off cannot be\n' >&2
+    printf 'combined with --mcp-authentication api-key. Pass --admin-endpoint api-key, or --mcp-authentication none.\n' >&2
+    exit 1
+  fi
+
+  admin_endpoint='api-key'
+fi
+
+if [[ "$interactive" == 'yes' ]]; then
   cat << TEXT
 
 The administrative endpoint is what mfctl talks to: synchronization state, what was changed, what a
-question read, and the operations that store a credential or erase a folder. It is off unless you ask
-for it, and it is served on its own port ($admin_port), also on 127.0.0.1 and also over plain HTTP.
+question read, the credentials an owner's clients present, and the operations that erase a folder. It
+is served on its own port ($admin_port), also on 127.0.0.1 and also over plain HTTP.
 
 An entry that writes no grant reaches every administrative operation, so a key here is as sensitive
 as the mail it can dispose of.
 
 TEXT
 
+  # An authenticated MCP endpoint has nowhere else to get its key from: what a client presents there is a record beside
+  # the owner, minted with `mfctl credential create`, so the endpoint mfctl talks to is a prerequisite rather than an
+  # extra. The validation above has already turned it on; this is where the operator is told why.
+  if [[ "$mcp_authentication" == 'api-key' ]]; then
+    printf 'It is on, because the MCP key you chose above is minted through it.\n\n' >&2
+  fi
+
   if [[ "$admin_endpoint" == 'off' ]] && confirm 'Serve the administrative endpoint as well?'; then
     admin_endpoint='api-key'
+  fi
 
-    if confirm 'Without authentication? Anything that reaches the port can then administer the service'; then
-      admin_endpoint='none'
-    fi
+  if [[ "$admin_endpoint" == 'api-key' ]] \
+    && confirm 'Without authentication? Anything that reaches the port can then administer the service'; then
+    admin_endpoint='none'
   fi
 fi
 
@@ -420,7 +449,6 @@ for written_value in "$account_id" "$display_name" "$imap_host" "$user_name"; do
 done
 
 readonly imap_password_name="imap-$account_id-password"
-readonly mcp_key_name='mcp-workstation-key'
 readonly admin_key_name='admin-workstation-key'
 readonly schema_asset="mailfathom-schema-$version.sql"
 
@@ -448,7 +476,6 @@ write_secret() {
 }
 
 refuse_existing "secrets/mailfathom/$imap_password_name"
-[[ "$mcp_authentication" != 'api-key' ]] || refuse_existing "secrets/mailfathom/$mcp_key_name"
 [[ "$admin_endpoint" != 'api-key' ]] || refuse_existing "secrets/mailfathom/$admin_key_name"
 [[ "$admin_endpoint" == 'off' ]] || refuse_existing 'compose.override.yaml'
 
@@ -468,19 +495,14 @@ write_secret 'secrets/postgres-superuser-password' "$(openssl rand -base64 33 | 
 write_secret 'secrets/mailfathom-database-password' "$(openssl rand -base64 33 | tr -d '\n')"
 write_secret "secrets/mailfathom/$imap_password_name" "$mailbox_password"
 
+# The list names the methods this endpoint accepts and holds no credential: what a client presents resolves a record
+# beside the owner whose mail it reaches, and that record is minted over the administrative endpoint below.
 mcp_authentication_block='[]'
 if [[ "$mcp_authentication" == 'api-key' ]]; then
-  write_secret "secrets/mailfathom/$mcp_key_name" "$(openssl rand -base64 33 | tr -d '\n')"
   mcp_authentication_block=$(
-    cat << JSON
+    cat << 'JSON'
 [
-      {
-        "ApiKey": {
-          "Name": "workstation",
-          "SecretReference": "file:/etc/mailfathom/secrets/$mcp_key_name",
-          "Lifetime": "NoLimit"
-        }
-      }
+      { "Method": "api-key" }
     ]
 JSON
   )
@@ -602,8 +624,10 @@ report_connection() {
   printf '\nThe MCP endpoint answers at http://127.0.0.1:8080/mcp, over the Streamable HTTP transport.\n' >&2
 
   if [[ "$mcp_authentication" == 'api-key' ]]; then
-    printf 'Give the client an Authorization header of `Bearer <key>`, where the key is:\n\n' >&2
-    printf '  cat %s/secrets/mailfathom/%s\n' "$compose_directory" "$mcp_key_name" >&2
+    printf 'It accepts a key, and the deployment mints one for the owner once it is running:\n\n' >&2
+    printf '  mfctl credential create --method api-key\n\n' >&2
+    printf 'That prints the key once and keeps only a digest of it. Give the client an Authorization\n' >&2
+    printf 'header of `Bearer <key>` with what it printed.\n' >&2
   else
     printf 'It requires no credential, so a client needs the address alone.\n' >&2
   fi
@@ -637,8 +661,8 @@ This is a deployment to evaluate MailFathom with. Before it is one anybody depen
               The Podman Quadlet shape encrypts them as systemd credentials bound to the machine, and
               Kubernetes mounts a Secret you manage.
               $documentation_base/operations/secret-provisioning.html
-  Grants      Every credential written here reaches its whole surface, because nothing narrowed it.
-              A deployment with more than one client narrows each one.
+  Grants      Every credential this script configures reaches its whole surface, and so does one minted
+              with no --permission. A deployment with more than one client narrows each one.
               $documentation_base/operations/permissions.html
   Backups     Nothing here backs the database up, and the mail in it costs a full resynchronization
               to rebuild — the audit trail and the embeddings do not come back at all.

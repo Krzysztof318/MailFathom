@@ -48,7 +48,31 @@ internal static class ProtectedResourceMetadataEndpoint
         ArgumentNullException.ThrowIfNull(endpoints);
         ArgumentNullException.ThrowIfNull(methods);
 
-        var document = ProtectedResourceMetadataDocument.For(methods, grantedSurface);
+        return endpoints.Map(PublishedOAuthMetadata.For(methods, grantedSurface));
+    }
+
+    /// <summary>Maps a mail-serving surface's document at the address its resource identifier places it.</summary>
+    /// <param name="endpoints">The route builder.</param>
+    /// <param name="methods">The methods the endpoint accepts, in configuration order.</param>
+    /// <param name="grantedSurface">The half of the permission vocabulary the endpoint's credentials draw from, which decides what an entry narrowed by token scopes advertises.</param>
+    /// <returns>The mapped route, so a surface can attach what only its own document needs.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoints" /> or <paramref name="methods" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when no entry accepts a token, which is a surface accepting none at all.</exception>
+    internal static RouteHandlerBuilder MapOwnerFacingProtectedResourceMetadata(
+        this IEndpointRouteBuilder endpoints,
+        IReadOnlyList<OwnerFacingAuthenticationOptions> methods,
+        ProtectedSurface grantedSurface)
+    {
+        ArgumentNullException.ThrowIfNull(endpoints);
+        ArgumentNullException.ThrowIfNull(methods);
+
+        return endpoints.Map(PublishedOAuthMetadata.ForOwnerFacing(methods, grantedSurface));
+    }
+
+    /// <summary>Maps one composed document, which is where the two axes meet again.</summary>
+    private static RouteHandlerBuilder Map(this IEndpointRouteBuilder endpoints, PublishedOAuthMetadata published)
+    {
+        var document = ProtectedResourceMetadataDocument.For(published);
 
         return endpoints.MapGet(
             ProtectedResourceMetadataAddress.PathFor(document.Resource),
@@ -76,21 +100,18 @@ internal sealed record ProtectedResourceMetadataDocument(
     [property: JsonPropertyName("resource_name")] string ResourceName)
 {
     /// <summary>Describes what one endpoint's OAuth settings publish.</summary>
-    /// <param name="methods">The endpoint's configured credential entries, in configuration order.</param>
-    /// <param name="grantedSurface">The half of the permission vocabulary the endpoint's grants draw from.</param>
+    /// <param name="published">What the endpoint's entries publish between them.</param>
     /// <returns>The document.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="methods" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="published" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// What the entries publish between them is <see cref="PublishedOAuthMetadata" />'s to decide, because the MCP
     /// endpoint publishes the same document through the protocol SDK's own type and the two must not answer differently
     /// from one configuration. What is this record's own is the wire shape: the JSON names RFC 9728 fixes, and the
     /// bearer method and resource name that are constants rather than settings.
     /// </remarks>
-    internal static ProtectedResourceMetadataDocument For(
-        IReadOnlyList<TransportAuthenticationOptions> methods,
-        ProtectedSurface grantedSurface)
+    internal static ProtectedResourceMetadataDocument For(PublishedOAuthMetadata published)
     {
-        var published = PublishedOAuthMetadata.For(methods, grantedSurface);
+        ArgumentNullException.ThrowIfNull(published);
 
         return new ProtectedResourceMetadataDocument(
             published.Resource,

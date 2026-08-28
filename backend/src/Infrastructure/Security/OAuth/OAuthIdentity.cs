@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Claims;
 
 namespace MailFathom.Infrastructure.Security.OAuth;
@@ -113,6 +114,48 @@ public static class OAuthIdentity
         ArgumentNullException.ThrowIfNull(principal);
 
         return principal.FindFirst(SubjectClaimType)?.Value;
+    }
+
+    /// <summary>Reads back the two halves an identity this type composed carries.</summary>
+    /// <param name="identity">The identity <see cref="FromValidatedToken" /> produced.</param>
+    /// <param name="issuer">The authorization server that authenticated the person, when the identity names one.</param>
+    /// <param name="subject">That server's own identifier for them, when the identity names one.</param>
+    /// <returns><see langword="true" /> when both halves were read.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="identity" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The joined value is what everything comparing an identity reads, and the halves are what a lookup keyed by the
+    /// pair needs. Splitting it here rather than at that lookup is what keeps one place deciding how the two are
+    /// joined: a caller that re-derived the subject by cutting at the separator would be reading a composition this
+    /// type owns.
+    /// </remarks>
+    public static bool TryReadIssuerAndSubject(
+        ClaimsIdentity identity,
+        [NotNullWhen(true)] out string? issuer,
+        [NotNullWhen(true)] out string? subject)
+    {
+        ArgumentNullException.ThrowIfNull(identity);
+
+        issuer = null;
+        subject = null;
+
+        if (identity.FindFirst(IssuerClaimType)?.Value is not { Length: > 0 } carriedIssuer
+            || identity.FindFirst(SubjectClaimType)?.Value is not { } carriedIdentity)
+        {
+            return false;
+        }
+
+        var prefix = carriedIssuer + IdentitySeparator;
+
+        if (!carriedIdentity.StartsWith(prefix, StringComparison.Ordinal)
+            || carriedIdentity.Length == prefix.Length)
+        {
+            return false;
+        }
+
+        issuer = carriedIssuer;
+        subject = carriedIdentity[prefix.Length..];
+
+        return true;
     }
 
     /// <summary>Reports whether an authenticated principal carries every scope a request requires.</summary>

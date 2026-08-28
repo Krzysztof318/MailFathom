@@ -108,8 +108,9 @@ internal sealed class OAuthValidationOptions
         || this.AuthorizationServers.Any(authorizationServer => authorizationServer.IsConfigured);
 
     /// <summary>Finds everything an operator must fix before OAuth tokens can be validated.</summary>
+    /// <param name="admission">What a subject decides on the endpoint this block was configured for.</param>
     /// <returns>One message per faulty setting, relative to this section, empty when the settings are usable.</returns>
-    public IReadOnlyList<string> FindConfigurationErrors()
+    public IReadOnlyList<string> FindConfigurationErrors(OAuthSubjectAdmission admission)
     {
         var errors = new List<string>();
 
@@ -125,7 +126,7 @@ internal sealed class OAuthValidationOptions
 
         errors.AddRange(this.FindRequiredScopeErrors());
         errors.AddRange(this.FindAdvertisedScopeErrors());
-        errors.AddRange(this.FindAuthorizationServerErrors());
+        errors.AddRange(this.FindAuthorizationServerErrors(admission));
 
         return errors;
     }
@@ -217,7 +218,7 @@ internal sealed class OAuthValidationOptions
         }
     }
 
-    private IEnumerable<string> FindAuthorizationServerErrors()
+    private IEnumerable<string> FindAuthorizationServerErrors(OAuthSubjectAdmission admission)
     {
         var claimedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var claimedIssuers = new HashSet<string>(StringComparer.Ordinal);
@@ -226,7 +227,7 @@ internal sealed class OAuthValidationOptions
         {
             var settingPath = $"{nameof(this.AuthorizationServers)}:{index}";
 
-            var profileErrors = authorizationServer.FindConfigurationErrors();
+            var profileErrors = authorizationServer.FindConfigurationErrors(admission);
             if (profileErrors.Count > 0)
             {
                 foreach (var profileError in profileErrors)

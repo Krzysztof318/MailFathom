@@ -149,10 +149,6 @@ openssl rand -base64 33 | tr -d '\n' \
   | systemd-creds --user encrypt --name=mailfathom-database-password - \
       ~/.config/credstore.encrypted/mailfathom-database-password
 
-openssl rand -base64 33 | tr -d '\n' \
-  | systemd-creds --user encrypt --name=mcp-workstation-key - \
-      ~/.config/credstore.encrypted/mcp-workstation-key
-
 systemd-ask-password -n \
   | systemd-creds --user encrypt --name=imap-primary-password - \
       ~/.config/credstore.encrypted/imap-primary-password
@@ -161,8 +157,13 @@ systemd-ask-password -n \
 The mailbox password arrives through `systemd-ask-password -n` so that it is neither a shell-history entry nor a file
 you have to remember to delete. `-n` is what keeps a trailing newline out of the material.
 
+No credential is provisioned here for the MCP endpoint. What a client presents there resolves a record beside the owner
+whose mail it reaches, so the key is minted by the running deployment with
+[`mfctl credential create`](admin-endpoint.md#owner-credentials) rather than encrypted into this store — nothing on this
+host holds it, and the configuration names only which methods the endpoint accepts.
+
 **Each unit reaches only the credentials it lists**, which is what the two `LoadCredentialEncrypted=` lines in
-`mailfathom-postgres.container` and the three in `mailfathom.container` are: a grant rather than a manifest. The
+`mailfathom-postgres.container` and the two in `mailfathom.container` are: a grant rather than a manifest. The
 database superuser password is on the first list and not the second, so it is never on a path MailFathom can read —
 the same property the Compose deployment gets by keeping those two credentials out of the mounted secrets directory.
 

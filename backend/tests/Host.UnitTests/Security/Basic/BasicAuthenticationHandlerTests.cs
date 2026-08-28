@@ -63,7 +63,7 @@ public sealed class BasicAuthenticationHandlerTests
         Assert.Null(result.Failure);
 
         await harness.Credentials.DidNotReceiveWithAnyArgs()
-            .FindByUsernameAsync(default, TestContext.Current.CancellationToken);
+            .FindAsync(default, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>The same credential over an encrypted hop is judged, which is what says the refusal above is about the transport rather than about the header.</summary>
@@ -81,7 +81,7 @@ public sealed class BasicAuthenticationHandlerTests
         Assert.False(result.None);
 
         await harness.Credentials.ReceivedWithAnyArgs(1)
-            .FindByUsernameAsync(default, TestContext.Current.CancellationToken);
+            .FindAsync(default, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>
@@ -103,6 +103,24 @@ public sealed class BasicAuthenticationHandlerTests
         // Assert
         Assert.True(result.Succeeded);
         Assert.Equal(CredentialOwner, TransportCallerOwner.CarriedBy(result.Principal!));
+    }
+
+    /// <summary>The grant is the row's rather than the endpoint's, so what a request may do travels with the credential.</summary>
+    [Fact]
+    public async Task AuthenticateAsync_AProvisionedCredential_CarriesTheGrantOnItsOwnRowRatherThanTheEndpoints()
+    {
+        // Arrange
+        using var harness = new HandlerHarness();
+        harness.HoldsTheOwnersCredential();
+        var handler = await harness.InitializeAsync(BasicHeader("owner", Password), https: true);
+
+        // Act
+        var result = await handler.AuthenticateAsync();
+
+        // Assert
+        Assert.Equal(
+            HandlerHarness.Grant.ToHashSet(),
+            TransportGrant.PermissionsCarriedBy(result.Principal!));
     }
 
     /// <summary>The credential's identity is what the surface access policy admits the principal on, so the claim naming it is part of the success rather than a diagnostic.</summary>
@@ -172,7 +190,7 @@ public sealed class BasicAuthenticationHandlerTests
 
         // Assert
         await harness.Credentials.ReceivedWithAnyArgs(1)
-            .FindByUsernameAsync(default, TestContext.Current.CancellationToken);
+            .FindAsync(default, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>
@@ -193,7 +211,7 @@ public sealed class BasicAuthenticationHandlerTests
 
         // Assert
         await harness.Credentials.ReceivedWithAnyArgs(2)
-            .FindByUsernameAsync(default, TestContext.Current.CancellationToken);
+            .FindAsync(default, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>
@@ -214,7 +232,7 @@ public sealed class BasicAuthenticationHandlerTests
 
         // Assert
         await harness.Credentials.ReceivedWithAnyArgs(1)
-            .FindByUsernameAsync(default, TestContext.Current.CancellationToken);
+            .FindAsync(default, default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>
@@ -236,7 +254,7 @@ public sealed class BasicAuthenticationHandlerTests
 
         // Assert
         await harness.Credentials.ReceivedWithAnyArgs(2)
-            .FindByUsernameAsync(default, TestContext.Current.CancellationToken);
+            .FindAsync(default, default, TestContext.Current.CancellationToken);
     }
 
     private static string BasicHeader(string userId, string password) =>
@@ -245,13 +263,19 @@ public sealed class BasicAuthenticationHandlerTests
     /// <summary>Builds the handler over a real authenticator whose store holds nothing, because what is asserted is which requests reach it.</summary>
     private sealed class HandlerHarness : IDisposable
     {
+        /// <summary>The grant the stored credential carries, which is what the principal is admitted with.</summary>
+        internal static readonly IReadOnlyList<MailFathomPermission> Grant = [MailFathomPermission.MailRead];
+
         private readonly PasswordAttemptLimiter attemptLimiter = new(new FakeTimeProvider());
 
         internal HandlerHarness()
         {
-            this.Credentials = Substitute.For<IOwnerPasswordCredentialStore>();
-            this.Credentials.FindByUsernameAsync(Arg.Any<OwnerCredentialUsername>(), Arg.Any<CancellationToken>())
-                .Returns((ResolvedOwnerPasswordCredential?)null);
+            this.Credentials = Substitute.For<IOwnerCredentialStore>();
+            this.Credentials.FindAsync(
+                    Arg.Any<OwnerCredentialMethod>(),
+                    Arg.Any<OwnerCredentialLookup>(),
+                    Arg.Any<CancellationToken>())
+                .Returns((ResolvedOwnerCredential?)null);
 
             var passwordHasher = new UnreachablePasswordHasher();
 
@@ -263,14 +287,21 @@ public sealed class BasicAuthenticationHandlerTests
                 NullLogger<OwnerPasswordAuthenticator>.Instance);
         }
 
-        internal IOwnerPasswordCredentialStore Credentials { get; }
+        internal IOwnerCredentialStore Credentials { get; }
 
         /// <summary>Holds one enabled credential for <see cref="CredentialOwner" />, whose password the hasher recognizes.</summary>
         internal void HoldsTheOwnersCredential() =>
-            this.Credentials.FindByUsernameAsync(
-                    Arg.Is<OwnerCredentialUsername>(username => username.Value == "owner"),
+            this.Credentials.FindAsync(
+                    OwnerCredentialMethod.Password,
+                    Arg.Is<OwnerCredentialLookup>(lookup => lookup.Value == "owner"),
                     Arg.Any<CancellationToken>())
-                .Returns(new ResolvedOwnerPasswordCredential(CredentialId, CredentialOwner, Enabled: true, StoredHash));
+                .Returns(new ResolvedOwnerCredential(
+                    CredentialId,
+                    CredentialOwner,
+                    OwnerCredentialMethod.Password,
+                    Grant,
+                    Enabled: true,
+                    StoredHash));
 
         private OwnerPasswordAuthenticator Authenticator { get; }
 
@@ -307,7 +338,6 @@ public sealed class BasicAuthenticationHandlerTests
                 new StaticOptionsMonitor(new BasicAuthenticationSchemeOptions
                 {
                     Surface = TransportSurface.Client,
-                    Grant = [MailFathomPermission.MailRead],
                     AttemptsPerMinute = attemptsPerMinute,
                 }),
                 NullLoggerFactory.Instance,

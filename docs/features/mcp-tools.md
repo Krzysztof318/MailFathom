@@ -112,12 +112,12 @@ credential, the permission, or what a different caller would have been served.
 tool, and the page around it is the model those names belong to: what each one reaches, and why no permission here
 implies another. `mailfathom.mail.send` is the one worth reading twice, because it is the only name whose effect leaves
 this deployment and cannot be recalled. Which grant a credential
-holds is written on the entry that admits it, and
-[the MCP endpoint](../operations/mcp-endpoint.md#what-a-credential-may-do) is where that is configured; a deployment
-whose entries write no grant serves every permission to every caller, which is what makes this invisible until an
-operator narrows something. An entry that writes no grant but sets `PermissionsFromTokenScopes` is the one exception:
-its whole surface is a ceiling rather than a grant, and each token holds only the permission names its own scopes carry
-— so a token whose client received none is served an empty listing on an entry nobody narrowed.
+holds is recorded on the credential itself, beside the owner it resolves, and
+[the MCP endpoint](../operations/mcp-endpoint.md#what-a-credential-may-do) is where that is read; a deployment whose
+credentials were provisioned with no permission named serves every permission to every caller, which is what makes this
+invisible until an operator narrows something. An entry setting `PermissionsFromTokenScopes` is the one place a second
+thing narrows it: a token then holds only the names its own scopes carry as well as its credential's grant — so a token
+whose client received no scope is served an empty listing on a credential nobody narrowed.
 
 The protocol has no field on a tool descriptor for a required permission, and it expressly allows the returned tool set
 to vary by the authorization presented on the request — so the listing is where the decision is stated, and no extension

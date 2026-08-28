@@ -438,15 +438,16 @@ internal static class PersistenceConstraintNames
     /// </remarks>
     internal const string OwnerAccountDisplayNameUniqueIndexName = "ix_settings_accounts_display_name";
 
-    /// <summary>The index that keeps one credential username to one owner across the deployment.</summary>
+    /// <summary>The index that keeps one credential lookup to one owner across the deployment, within its own method.</summary>
     /// <remarks>
-    /// Stated rather than left to convention because the store reads it: an insert that violates it is a username
-    /// another credential already holds, which is an answer an operator acts on rather than a provider failure. It is
-    /// deployment-wide rather than per owner, because a request presents a username and nothing else.
+    /// Stated rather than left to convention because the store reads it: an insert that violates it is a lookup another
+    /// credential already holds, which is an answer an operator acts on rather than a provider failure. It is
+    /// deployment-wide rather than per owner, because a request presents a lookup and nothing else, and it is scoped to
+    /// the method because the four vocabularies are unrelated.
     /// </remarks>
-    internal const string OwnerPasswordCredentialUsernameUniqueIndexName = "ix_owner_password_credentials_username";
+    internal const string OwnerCredentialLookupUniqueIndexName = "ix_owner_credentials_method_lookup";
 
     /// <summary>The index every administrative listing of one owner's credentials is answered from.</summary>
     /// <remarks>Stated because it covers the owner and the provisioning instant together, which is the listing's own order, and a name composed from the two properties would say nothing about that being why.</remarks>
-    internal const string OwnerPasswordCredentialOwnerIndexName = "ix_owner_password_credentials_owner_created_at";
+    internal const string OwnerCredentialOwnerIndexName = "ix_owner_credentials_owner_created_at";
 }

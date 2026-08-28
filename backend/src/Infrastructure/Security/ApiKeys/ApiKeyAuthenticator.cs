@@ -13,7 +13,7 @@ using Microsoft.Extensions.Logging;
 
 namespace MailFathom.Infrastructure.Security.ApiKeys;
 
-/// <summary>Judges the credential an MCP request presented against the API keys a deployment configured.</summary>
+/// <summary>Judges the credential a request presented against the API keys a deployment configured for its own administrative surface.</summary>
 /// <remarks>
 /// <para>
 /// The keys are resolved per request rather than cached, which is what the secret machinery already promises
@@ -219,19 +219,19 @@ public sealed partial class ApiKeyAuthenticator
 
     [LoggerMessage(
         Level = LogLevel.Error,
-        Message = "A configured MCP API key carries no usable name, so it cannot authenticate a request. Startup validates "
+        Message = "A configured API key carries no usable name, so it cannot authenticate a request. Startup validates "
             + "this, which means the configuration changed underneath the running process.")]
     private partial void LogKeyDeclarationUnusable();
 
     [LoggerMessage(
         Level = LogLevel.Error,
-        Message = "The material behind MCP API key {ApiKeyName} could not be retrieved, so that key cannot authenticate a "
+        Message = "The material behind API key {ApiKeyName} could not be retrieved, so that key cannot authenticate a "
             + "request [{Failure}].")]
     private partial void LogKeyMaterialUnavailable(string apiKeyName, SecretResolutionFailure? failure);
 
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "A request presented MCP API key {ApiKeyName}, whose configured lifetime has ended. The request was "
+        Message = "A request presented API key {ApiKeyName}, whose configured lifetime has ended. The request was "
             + "refused with the same response as any other refusal; rotate the key or extend its lifetime.")]
     private partial void LogExpiredKeyPresented(string apiKeyName);
 }

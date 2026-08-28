@@ -25,20 +25,19 @@ MailFathom's configuration never carries a credential. A secret-bearing setting 
 `systemd-credential:…`, `env:…` — and the material lives wherever the deployment provisions it. A configuration file
 is therefore safe to review and back up: leaking it leaks paths, not passwords.
 
-You need two pieces of material before anything is configured:
+You need one piece of material before anything is configured:
 
 - **The mailbox password** or app password of the IMAP account to synchronize. A mailbox whose provider no longer
   accepts one — a Google Workspace or Exchange Online account — is authenticated with an OAuth refresh token instead;
   obtain it first with [mailbox OAuth](../operations/mailbox-oauth.md) and substitute that block for the password
-  below. That account needs a third piece of material as well, the **data-encryption key** the rotated refresh token is
+  below. That account needs a second piece of material as well, the **data-encryption key** the rotated refresh token is
   sealed under: `openssl rand -base64 32`, generated once and never regenerated, provisioned as a reference like
   everything else here. [The data-encryption key](../operations/secret-provisioning.md#the-data-encryption-key) is the
   whole of it.
-- **An MCP API key** for the client that will connect. Generate it rather than inventing it:
 
-```bash
-openssl rand -base64 33 | tr -d '\n' > mcp-workstation-key
-```
+There is deliberately **no MCP key to provision here**. What a client presents to that endpoint belongs to the person
+whose mail it reaches rather than to the deployment, so the running service mints it in [step 6](#6-enable-the-mcp-endpoint)
+and nothing on this machine holds it beforehand.
 
 Where the files go is the deployment's convention: `secrets/mailfathom/` for
 [Compose](../operations/deployment-compose.md#credentials), a Kubernetes `Secret` mounted at
@@ -244,31 +243,42 @@ The endpoint is off by default, and enabling it means stating how it is authenti
   "McpEndpoint": {
     "Enabled": true,
     "Authentication": [
-      {
-        "ApiKey": {
-          "Name": "workstation",
-          "SecretReference": "file:/etc/mailfathom/secrets/mcp-workstation-key"
-        }
-      }
+      { "Method": "api-key" }
     ]
   }
 }
 ```
 
+**That names a method, not a credential.** The list says which ways in this endpoint accepts — `password`, `api-key`,
+`public-key`, or `oauth-subject` — and nothing about who holds one. Each key belongs to the person whose mail it reaches
+and is minted by the running deployment, over the [administrative endpoint](administering.md), once it is up:
+
+```console
+$ mfctl credential create --method api-key
+Provisioned api-key credential 9b3e… for owner 6f1c….
+The client presents this key: mfk_…
+It is stored only as a digest, so nothing here or in the deployment can report it again. Copy it now.
+```
+
+The deployment keeps only a digest, so no file, backup, or configuration on this machine holds anything a client could
+present — and a key nobody copied is replaced with `mfctl credential rotate` rather than recovered.
+[Owner credentials](../operations/admin-endpoint.md#owner-credentials) is the whole command group, including how a key
+is disabled the moment it has to stop working.
+
 An empty `Authentication` list is legal — the reverse-proxy-and-loopback deployment is an ordinary one — but it is
 announced with a startup warning, because an unauthenticated endpoint serves your mailbox to whoever can reach its port. Read
-[the MCP endpoint](../operations/mcp-endpoint.md) before widening anything: it records the other three methods — an
-OAuth entry, a client's public key, and [an owner's own username and password](../operations/mcp-endpoint.md#passwords)
+[the MCP endpoint](../operations/mcp-endpoint.md) before widening anything: it records the other three methods — a
+mapped OAuth subject, a client's public key, and [an owner's own username and password](../operations/mcp-endpoint.md#passwords)
 — browser origins, serving your own domain over TLS, client certificates, and the rate limits that apply out of the box.
 
-**A credential reaches the whole surface until its entry narrows it.** The entry above writes no `Permissions` list, so
-the key it configures may do everything the MCP surface publishes — read the local mailbox copy, ask questions of it, and
+**A credential reaches the whole surface until its provisioning narrows it.** The command above named no `--permission`,
+so the key it minted may do everything the MCP surface publishes — read the local mailbox copy, ask questions of it, and
 read, record, amend, and erase the deployment's own contact book. That is deliberate: nothing has to be granted before a
-first deployment works. Writing a `Permissions` list on the entry
-states a narrower grant, and startup reports what every entry resolved to either way —
+first deployment works. Naming `--permission` once per name states a narrower grant, and `mfctl credential list` reads
+back what each credential holds —
 [what a credential may do](../operations/mcp-endpoint.md#what-a-credential-may-do) has the names and the rules.
 
-A narrowed entry is enforced on the tools themselves: a client connecting with that credential is listed only the tools
+A narrowed grant is enforced on the tools themselves: a client connecting with that credential is listed only the tools
 its grant permits, and a call naming any other is answered as a call naming a tool that does not exist. So a grant is
 what a credential may reach rather than a note about it.
 

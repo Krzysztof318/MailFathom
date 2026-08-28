@@ -47,11 +47,14 @@ Four things it will not decide for you, because each is a decision rather than a
 - **It overwrites nothing.** An existing `.env`, configuration file, or secret stops the run naming the file, so it
   cannot replace the credentials of a deployment already prepared here.
 
-The two answers it does ask for are the ones with a cost worth stating before they are given. The MCP endpoint takes a
-generated API key unless you ask for none, which is legal, announced with a startup warning, and the only shape the
-chat clients with no field for a static header can connect to. The administrative endpoint is off unless you ask for it,
-and enabling it publishes port 8090 through a generated `compose.override.yaml` — its own default port is 8080, which is
-the socket the MCP endpoint is already served on, and `compose.yaml` publishes nothing for it.
+The two answers it does ask for are the ones with a cost worth stating before they are given. The MCP endpoint accepts an
+API key unless you ask for none, which is legal, announced with a startup warning, and the only shape the chat clients
+with no field for a static header can connect to. The key itself is not written here: what a client presents to that
+endpoint is a record beside the owner whose mail it reaches, minted with `mfctl credential create` once the deployment is
+running, and the script prints that command when it finishes. That is also why an authenticated MCP endpoint turns the
+administrative endpoint on — it is where the key is minted rather than an extra — and enabling it publishes port 8090
+through a generated `compose.override.yaml`; its own default port is 8080, which is the socket the MCP endpoint is
+already served on, and `compose.yaml` publishes nothing for it.
 
 `--non-interactive` takes every answer as an argument instead, with `--password-file` for the credential, and
 `--no-start` writes the files and stops. `scripts/quick-start-compose.sh --help` lists all of them.
@@ -121,7 +124,6 @@ into `secrets/mailfathom/`, which is mounted read-only at `/etc/mailfathom/secre
 
 ```bash
 printf '%s' 'the-mailbox-password' > secrets/mailfathom/imap-primary-password
-openssl rand -base64 33 | tr -d '\n'  > secrets/mailfathom/mcp-workstation-key
 openssl rand -base64 32 | tr -d '\n'  > secrets/mailfathom/mailfathom-data-key   # only for an OAuth mailbox
 chmod 444 secrets/mailfathom/*
 ```

@@ -39,6 +39,8 @@ public static class UnverifiedJsonWebToken
 
     private const string TypeHeaderName = "typ";
 
+    private const string KeyIdHeaderName = "kid";
+
     /// <summary>Reads the issuer a compact-serialized JSON Web Token claims.</summary>
     /// <param name="credential">The bearer credential a request presented.</param>
     /// <param name="claimedIssuer">The unverified issuer when the credential is a JSON Web Token carrying one; otherwise <see langword="null" />.</param>
@@ -86,6 +88,25 @@ public static class UnverifiedJsonWebToken
         return credential is not null
             && TrySplitSegments(credential.AsSpan(), out var encodedHeader, out _)
             && TryReadStringMember(encodedHeader, TypeHeaderName, out declaredType);
+    }
+
+    /// <summary>Reads the key identifier a compact-serialized JSON Web Token names for the key that signed it.</summary>
+    /// <param name="credential">The bearer credential a request presented.</param>
+    /// <param name="keyId">The unverified <c>kid</c> header when the credential is a JSON Web Token carrying one; otherwise <see langword="null" />.</param>
+    /// <returns><see langword="true" /> when a key identifier was read; otherwise <see langword="false" />.</returns>
+    /// <remarks>
+    /// What it decides is which stored public key the signature is checked against, and no more. The key it names is
+    /// verified against afterwards, so a credential writing whatever it likes here picks which key refuses it — and one
+    /// naming a key this deployment holds for another owner is refused by that key's own signature check rather than
+    /// admitted as that owner.
+    /// </remarks>
+    public static bool TryReadKeyId(string? credential, [NotNullWhen(true)] out string? keyId)
+    {
+        keyId = null;
+
+        return credential is not null
+            && TrySplitSegments(credential.AsSpan(), out var encodedHeader, out _)
+            && TryReadStringMember(encodedHeader, KeyIdHeaderName, out keyId);
     }
 
     /// <summary>Isolates the encoded header and payload of a compact serialization, which are the first two of its three segments.</summary>

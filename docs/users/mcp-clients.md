@@ -53,15 +53,17 @@ repeated per client below:
   served: `http://127.0.0.1:8080` under the Compose defaults, or the public HTTPS address your proxy or
   [MailFathom's own TLS](../operations/mcp-endpoint.md#https-and-your-own-domain) serves.
 - **An API key travels as `Authorization: Bearer <the key material>`**, and nothing else about it is client-specific.
+  The key is minted for one owner by whoever administers the deployment, over
+  [the administrative endpoint](../operations/admin-endpoint.md#owner-credentials), and printed once;
   [The MCP endpoint § API keys](../operations/mcp-endpoint.md#api-keys) records what a key is, how it rotates, and what
   every refusal looks like.
 - **A username and password travels as `Authorization: Basic <the pair, base64-encoded>`**, on a deployment that accepts
-  one, and any client able to send a static header can present it. It is the one credential here that names a person
-  rather than a deployment, so a request admitted with it reads that owner's mail rather than whichever owner the
-  deployment was configured with. [The MCP endpoint § Passwords](../operations/mcp-endpoint.md#passwords) records how a
-  deployment turns the method on, why the address has to be HTTPS before it will start, and what the refusal looks like;
-  the credential itself is provisioned by whoever administers the deployment, over
-  [the administrative endpoint](../operations/admin-endpoint.md#owner-credentials).
+  one, and any client able to send a static header can present it. Every credential this endpoint accepts names the
+  person whose mail it reaches, so a request admitted with any of them reads that owner's mail rather than whichever
+  owner the deployment was configured with. [The MCP endpoint § Passwords](../operations/mcp-endpoint.md#passwords)
+  records how a deployment turns the method on, why the address has to be HTTPS before it will start, and what the
+  refusal looks like; the credential itself is provisioned over
+  [the administrative endpoint](../operations/admin-endpoint.md#owner-credentials), like every other one here.
 - **A browser-based client is also subject to the origin policy.** A client that runs as a web page sends an `Origin`
   header, and a deployment that narrowed `McpEndpoint:Cors:AllowedOrigins` has to list that client's origin;
   [CORS and the `Origin` header](../operations/mcp-endpoint.md#cors-and-the-origin-header) holds the rule. A client that
@@ -94,7 +96,8 @@ HTTP+SSE transport alone; MailFathom serves no such endpoint, and a client limit
 through a dialog that offers OAuth or nothing, so the deployment shape most readers start from — one API key, one
 client — has no way to present its credential there. Neither is a MailFathom limitation and neither has a workaround
 worth writing down: the endpoint's answer for those clients is
-[an OAuth entry](../operations/mcp-endpoint.md#oauth) beside or instead of the key, and
+[an entry accepting `oauth-subject`](../operations/mcp-endpoint.md#oauth) beside or instead of the one accepting keys,
+and
 [MCP client OAuth](../operations/mcp-client-oauth.md) is the sequence that gets one working — the identity provider's
 side, which is where nearly all of that work is.
 
@@ -115,8 +118,8 @@ works from your desk. Serve the endpoint over HTTPS on an address that resolves 
 
 **An API key cannot be presented.** OpenAI documents three authentication modes for a developer-mode app — OAuth, no
 authentication, and a mixed mode combining the two — and no field for a static header or an API key. So a MailFathom
-deployment whose `McpEndpoint:Authentication` list holds only `ApiKey` entries cannot be connected from this client, and
-the two shapes that can are [an OAuth entry](../operations/mcp-endpoint.md#oauth) and
+deployment whose `McpEndpoint:Authentication` list accepts only `api-key` cannot be connected from this client, and
+the two shapes that can are [an entry accepting `oauth-subject`](../operations/mcp-endpoint.md#oauth) and
 [an endpoint requiring no credential](../operations/mcp-endpoint.md#requiring-no-credential) — the second of which is
 the wrong answer on a public address, and says so in a startup warning.
 
@@ -149,8 +152,8 @@ connect even when it is reachable from your own machine. A loopback address cann
 
 **An API key cannot be presented.** The dialog takes the URL, and an **Advanced settings** panel taking an OAuth client
 identifier and client secret. There is no field for a static header, so — exactly as with the client above — an
-API-key deployment cannot be connected from here, and [an OAuth entry](../operations/mcp-endpoint.md#oauth) is what this
-client is served with.
+API-key deployment cannot be connected from here, and [an entry accepting `oauth-subject`](../operations/mcp-endpoint.md#oauth)
+is what this client is served with.
 
 **The desktop application's configuration file is a different thing.** `claude_desktop_config.json` configures local
 stdio servers that the application starts as processes on your machine. MailFathom is a service reached over HTTP rather
@@ -169,11 +172,13 @@ which makes it the shortest path from an API-key deployment to a working tool ca
 
 ```bash
 claude mcp add --transport http mailfathom http://127.0.0.1:8080/mcp \
-  --header "Authorization: Bearer $(cat mcp-workstation-key)"
+  --header "Authorization: Bearer $MAILFATHOM_KEY"
 ```
 
 **What each part is.** `--transport http` is the Streamable HTTP transport; `mailfathom` is a name you choose, and it is
-what labels the tools in a session; the URL is the endpoint. The server is registered for the current project by
+what labels the tools in a session; the URL is the endpoint; `$MAILFATHOM_KEY` is the key
+[`mfctl credential create`](../operations/admin-endpoint.md#owner-credentials) printed once, which nothing can report
+again. The server is registered for the current project by
 default — add `--scope user` to register it once for every project, or `--scope project` to write it into the
 repository's own `.mcp.json`.
 
@@ -309,11 +314,11 @@ dropped. They reach no mail server and touch no mail.
 absence is the deployment saying it cannot answer questions yet rather than a connection fault, and no client setting
 changes it.
 
-**A credential reaches the whole surface until its entry narrows it.** Every configuration above writes a credential and
-no `Permissions` list, so the client connects holding everything the MCP surface publishes. Narrowing that is a change to
-the entry in `McpEndpoint:Authentication` rather than anything the client sets:
-[what a credential may do](../operations/mcp-endpoint.md#what-a-credential-may-do). A client whose entry you narrow is
-listed fewer tools — the ones its grant does not permit are absent, and a call naming one is answered as an unknown
+**A credential reaches the whole surface until its provisioning narrows it.** A credential provisioned with no
+`--permission` holds everything the MCP surface publishes, so the client connects with all of it. Narrowing that is a
+change to the credential rather than anything the client sets, and it is made with `mfctl credential create`:
+[what a credential may do](../operations/mcp-endpoint.md#what-a-credential-may-do). A client whose credential you narrow
+is listed fewer tools — the ones its grant does not permit are absent, and a call naming one is answered as an unknown
 tool, with nothing said about the permission that was missing. A shorter tool list than this page describes is therefore
 the deployment's grant rather than a fault in the client configuration.
 

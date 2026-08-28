@@ -28,6 +28,13 @@ namespace MailFathom.Host.Hosting.Warnings;
 /// wrote and never who presented something.
 /// </para>
 /// <para>
+/// The two mail-serving endpoints are reported differently, because their entries hold no grant to read back: what a
+/// caller there holds is recorded on the credential an administrator provisioned. Their lines state which method each
+/// entry accepts and where the grant behind it is kept, which is the part an operator cannot infer from the section.
+/// The one line they share with the administrative endpoint is the one about configuring no entry at all — a surface
+/// admitting everybody grants the whole of itself whichever axis it would otherwise have used.
+/// </para>
+/// <para>
 /// It records rather than warns, including for the surface that configures no entry at all. That posture is already a
 /// warning — <see cref="McpTransportAuthenticationWarning" />, <see cref="AdminTransportSecurityWarning" />, and
 /// <see cref="ClientTransportSecurityWarning" /> each say
@@ -83,7 +90,7 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
     {
         if (this.mcpEndpointSettings.Enabled)
         {
-            this.Report(
+            this.ReportOwnerFacing(
                 McpEndpointName,
                 McpEndpointRoute.Path,
                 McpEndpointOptions.SectionName,
@@ -103,7 +110,7 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
 
         if (this.clientEndpointSettings.Enabled)
         {
-            this.Report(
+            this.ReportOwnerFacing(
                 ClientEndpointName,
                 ClientEndpointOptions.RoutePrefix,
                 ClientEndpointOptions.SectionName,
@@ -165,6 +172,56 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
         }
     }
 
+    /// <summary>States which methods a mail-serving endpoint accepts, and where the grant behind each of them lives.</summary>
+    /// <remarks>
+    /// The line an operator needs here is a different one, because there is no written grant to read back: what an
+    /// admitted caller holds is recorded on the credential the administrative surface provisioned, per owner and per
+    /// credential, so a report that printed a ceiling would be printing a number this section does not hold. What is
+    /// worth stating is which methods are open and where to go and read what each credential may do.
+    /// </remarks>
+    private void ReportOwnerFacing(
+        string endpointName,
+        string endpointPath,
+        string sectionName,
+        ProtectedSurface surface,
+        IReadOnlyList<OwnerFacingAuthenticationOptions> methods)
+    {
+        var settingPath = $"{sectionName}:{OwnerFacingAuthenticationConfiguration.SettingName}";
+        var enforcement = EnforcementOn(surface);
+
+        if (methods.Count == 0)
+        {
+            var wholeSurface = Describe(MailFathomPermission.PublishedFor(surface));
+
+            this.LogSurfaceGrantedWithoutAnyEntry(
+                endpointName,
+                endpointPath,
+                wholeSurface,
+                settingPath,
+                enforcement);
+
+            return;
+        }
+
+        foreach (var (index, method) in methods.Index())
+        {
+            var entryPath = OwnerFacingAuthenticationConfiguration.SettingPathOf(sectionName, method, index);
+
+            if (method.PermissionsFromTokenScopes)
+            {
+                this.LogOwnerFacingEntryNarrowedByTokenScopes(
+                    endpointName,
+                    entryPath,
+                    method.AcceptedMethod.Name,
+                    enforcement);
+            }
+            else
+            {
+                this.LogOwnerFacingEntry(endpointName, entryPath, method.AcceptedMethod.Name, enforcement);
+            }
+        }
+    }
+
     /// <summary>States what a written grant does on this surface, which is not the same on both.</summary>
     /// <remarks>
     /// Carried on every line rather than reported once per endpoint, because these lines are read by searching for the
@@ -218,6 +275,28 @@ internal sealed partial class TransportGrantStartupReport : IHostedService
         string endpointName,
         string entrySettingPath,
         string grantedPermissions,
+        string grantEnforcement);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The {EndpointName} endpoint entry {EntrySettingPath} accepts {AcceptedMethod}, and what each "
+            + "credential of that method grants is recorded beside the owner it resolves rather than here. Read it "
+            + "with 'mfctl credential list'. {GrantEnforcement}")]
+    private partial void LogOwnerFacingEntry(
+        string endpointName,
+        string entrySettingPath,
+        string acceptedMethod,
+        string grantEnforcement);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "The {EndpointName} endpoint entry {EntrySettingPath} accepts {AcceptedMethod}, and each token holds "
+            + "whichever of its credential's recorded permissions its own scopes carry. Read the ceiling with "
+            + "'mfctl credential list'. {GrantEnforcement}")]
+    private partial void LogOwnerFacingEntryNarrowedByTokenScopes(
+        string endpointName,
+        string entrySettingPath,
+        string acceptedMethod,
         string grantEnforcement);
 
     [LoggerMessage(

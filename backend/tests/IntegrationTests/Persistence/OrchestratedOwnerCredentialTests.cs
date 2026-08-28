@@ -18,23 +18,24 @@ namespace MailFathom.IntegrationTests.Persistence;
 /// <para>
 /// Everything this class covers is written as SQL the provider does not compose for us: an <c>INSERT … SELECT</c> whose
 /// <c>WHERE</c> carries the owner's existence and the per-owner ceiling, an <c>ON CONFLICT</c> naming a unique index by
-/// its column, a row lock taken in a statement of its own inside a transaction, and an <c>UPDATE</c> conditioned on the
+/// its columns, a row lock taken in a statement of its own inside a transaction, and an <c>UPDATE</c> conditioned on the
 /// record the caller verified against. A substitute settles none of them: a conflict target that does not match the
 /// index, an identifier PostgreSQL folds differently, and a lock that does not serialize what it was written to
 /// serialize all answer correctly in memory and wrongly on a deployment.
 /// </para>
 /// <para>
 /// The store is reached through the container rather than constructed, so what runs is the registration a deployment
-/// runs. It takes no caller: <c>OwnerPasswordCredentialAdministration</c> is where the grant is checked and is covered
-/// in the unit suite, and what is under test here is the row the statement leaves.
+/// runs. It takes no caller: <c>OwnerCredentialAdministration</c> is where the grant is checked and is covered in the
+/// unit suite, and what is under test here is the row the statement leaves.
 /// </para>
 /// <para>
-/// Each test provisions under usernames of its own, because the username index is deployment-wide and this class shares
-/// a database with every other class in the collection.
+/// Each test provisions under lookups of its own, because the lookup index is deployment-wide and this class shares a
+/// database with every other class in the collection. The index is over the method beside the lookup, which is why one
+/// test provisions the same value under two methods and expects both to land.
 /// </para>
 /// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
-public sealed class OrchestratedOwnerPasswordCredentialTests(MailFathomOrchestrationFixture orchestration)
+public sealed class OrchestratedOwnerCredentialTests(MailFathomOrchestrationFixture orchestration)
 {
     /// <summary>How many callers race for the last place under the ceiling.</summary>
     /// <remarks>More than two, because a pair can be serialized by the scheduler alone and would establish nothing about the lock.</remarks>
@@ -42,22 +43,27 @@ public sealed class OrchestratedOwnerPasswordCredentialTests(MailFathomOrchestra
 
     private const string StoredHash = "$mf1$stored$orchestrated$";
 
+    private static readonly IReadOnlyList<MailFathomPermission> WholeMailSurface =
+        MailFathomPermission.PublishedFor(ProtectedSurface.Mail);
+
     [Fact]
-    public async Task CreateAsync_AUsernameNobodyHolds_ProvisionsACredentialTheListingReports()
+    public async Task CreateAsync_ALookupNobodyHolds_ProvisionsACredentialTheListingReports()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var credentialId = Guid.CreateVersion7();
-        var username = OwnerCredentialUsername.Create("orchestrated-provisioned");
+        var lookup = OwnerCredentialLookup.ForUsername(OwnerCredentialUsername.Create("orchestrated-provisioned"));
 
         // Act
         var outcome = await services.InScopeAsync(
             (scope, token) => Store(scope).CreateAsync(
                 credentialId,
                 SyntheticMailAccount.Owner,
-                username,
+                OwnerCredentialMethod.Password,
+                lookup,
                 StoredHash,
+                WholeMailSurface,
                 token),
             cancellationToken);
 
@@ -69,33 +75,74 @@ public sealed class OrchestratedOwnerPasswordCredentialTests(MailFathomOrchestra
             cancellationToken);
 
         var provisioned = Assert.Single(listed, credential => credential.Id == credentialId);
-        Assert.Equal(username, provisioned.Username);
+        Assert.Equal(lookup, provisioned.Lookup);
+        Assert.Equal(OwnerCredentialMethod.Password, provisioned.Method);
+        Assert.Equal(WholeMailSurface, provisioned.Permissions);
         Assert.True(provisioned.Enabled);
     }
 
-    /// <summary>The username is unique across the deployment, and it is the unique index rather than a read that says so.</summary>
+    /// <summary>A lookup is unique within its method across the deployment, and it is the unique index rather than a read that says so.</summary>
     [Fact]
-    public async Task CreateAsync_AUsernameAlreadyHeld_IsRefusedByTheIndexRatherThanWritten()
+    public async Task CreateAsync_ALookupAlreadyHeldUnderTheSameMethod_IsRefusedByTheIndexRatherThanWritten()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var username = OwnerCredentialUsername.Create("orchestrated-taken");
-        await ProvisionAsync(services, username, cancellationToken);
+        var lookup = OwnerCredentialLookup.ForUsername(OwnerCredentialUsername.Create("orchestrated-taken"));
+        await ProvisionAsync(services, OwnerCredentialMethod.Password, lookup, cancellationToken);
 
         // Act
         var second = await services.InScopeAsync(
             (scope, token) => Store(scope).CreateAsync(
                 Guid.CreateVersion7(),
                 SyntheticMailAccount.Owner,
-                username,
+                OwnerCredentialMethod.Password,
+                lookup,
                 StoredHash,
+                WholeMailSurface,
                 token),
             cancellationToken);
 
         // Assert
-        Assert.Equal(OwnerCredentialWriteOutcome.UsernameTaken, second);
-        Assert.Equal(1, await CountUnderAsync(services, username, cancellationToken));
+        Assert.Equal(OwnerCredentialWriteOutcome.LookupTaken, second);
+        Assert.Equal(1, await CountUnderAsync(services, lookup, cancellationToken));
+    }
+
+    /// <summary>
+    /// The index is over the method beside the lookup, so one value resolves one credential per method rather than one
+    /// across the deployment. Nothing in a substitute would tell a conflict target naming both columns from one naming
+    /// the lookup alone, and the second shape would refuse a public key whose digest happened to equal a username.
+    /// </summary>
+    [Fact]
+    public async Task CreateAsync_OneValueUnderTwoMethods_ResolvesTwoCredentials()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var shared = OwnerCredentialLookup.ForDigest("orchestrated-shared-value");
+        await ProvisionAsync(services, OwnerCredentialMethod.ApiKey, shared, cancellationToken);
+
+        // Act
+        var second = await services.InScopeAsync(
+            (scope, token) => Store(scope).CreateAsync(
+                Guid.CreateVersion7(),
+                SyntheticMailAccount.Owner,
+                OwnerCredentialMethod.PublicKey,
+                shared,
+                StoredHash,
+                WholeMailSurface,
+                token),
+            cancellationToken);
+
+        // Assert
+        Assert.Equal(OwnerCredentialWriteOutcome.Written, second);
+        Assert.Equal(2, await CountUnderAsync(services, shared, cancellationToken));
+
+        var resolved = await services.InScopeAsync(
+            (scope, token) => Store(scope).FindAsync(OwnerCredentialMethod.PublicKey, shared, token),
+            cancellationToken);
+
+        Assert.Equal(OwnerCredentialMethod.PublicKey, resolved!.Method);
     }
 
     /// <summary>An owner this deployment holds no record for is answered rather than raised, which is what the <c>EXISTS</c> subquery is for.</summary>
@@ -106,21 +153,23 @@ public sealed class OrchestratedOwnerPasswordCredentialTests(MailFathomOrchestra
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
         var stranger = MailOwnerId.Create(Guid.CreateVersion7());
-        var username = OwnerCredentialUsername.Create("orchestrated-unheld-owner");
+        var lookup = OwnerCredentialLookup.ForUsername(OwnerCredentialUsername.Create("orchestrated-unheld-owner"));
 
         // Act
         var outcome = await services.InScopeAsync(
             (scope, token) => Store(scope).CreateAsync(
                 Guid.CreateVersion7(),
                 stranger,
-                username,
+                OwnerCredentialMethod.Password,
+                lookup,
                 StoredHash,
+                WholeMailSurface,
                 token),
             cancellationToken);
 
         // Assert
         Assert.Equal(OwnerCredentialWriteOutcome.UnknownOwner, outcome);
-        Assert.Equal(0, await CountUnderAsync(services, username, cancellationToken));
+        Assert.Equal(0, await CountUnderAsync(services, lookup, cancellationToken));
     }
 
     /// <summary>
@@ -145,19 +194,22 @@ public sealed class OrchestratedOwnerPasswordCredentialTests(MailFathomOrchestra
                 await OrchestratedForeignOwner.ProvisionAsync(services, contenderId, cancellationToken));
 
             Assert.Equal(
-                OwnerPasswordCredential.MaximumListedPerOwner - 1,
+                OwnerCredential.MaximumListedPerOwner - 1,
                 await FillToOnePlaceLeftAsync(services, contender, cancellationToken));
 
             // Act
             var attempts = await ConcurrentIdempotency.RunAsync(
-                $"{nameof(IOwnerPasswordCredentialStore)}.{nameof(IOwnerPasswordCredentialStore.CreateAsync)}",
+                $"{nameof(IOwnerCredentialStore)}.{nameof(IOwnerCredentialStore.CreateAsync)}",
                 ConcurrentProvisioners,
                 (ordinal, token) => services.InScopeAsync(
                     (scope, inner) => Store(scope).CreateAsync(
                         Guid.CreateVersion7(),
                         contender,
-                        OwnerCredentialUsername.Create($"orchestrated-ceiling-race-{contenderId:N}-{ordinal}"),
+                        OwnerCredentialMethod.Password,
+                        OwnerCredentialLookup.ForUsername(
+                            OwnerCredentialUsername.Create($"orchestrated-ceiling-race-{contenderId:N}-{ordinal}")),
                         StoredHash,
+                        WholeMailSurface,
                         inner),
                     token),
                 cancellationToken);
@@ -165,7 +217,7 @@ public sealed class OrchestratedOwnerPasswordCredentialTests(MailFathomOrchestra
             // Assert
             var held = await CountForOwnerAsync(services, contender, cancellationToken);
 
-            attempts.AssertSingleEffect(held - (OwnerPasswordCredential.MaximumListedPerOwner - 1));
+            attempts.AssertSingleEffect(held - (OwnerCredential.MaximumListedPerOwner - 1));
 
             Assert.All(
                 attempts.Results.Where(outcome => outcome != OwnerCredentialWriteOutcome.Written),
@@ -183,26 +235,28 @@ public sealed class OrchestratedOwnerPasswordCredentialTests(MailFathomOrchestra
     /// against, so what the rotation wrote is not overwritten by a request that read the record it replaced.
     /// </summary>
     [Fact]
-    public async Task RewritePasswordHashAsync_ARecordAlreadyReplacedByARotation_WritesNothing()
+    public async Task RewriteMaterialAsync_ARecordAlreadyReplacedByARotation_WritesNothing()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var username = OwnerCredentialUsername.Create("orchestrated-rehash-race");
-        var credentialId = await ProvisionAsync(services, username, cancellationToken);
+        var lookup = OwnerCredentialLookup.ForUsername(OwnerCredentialUsername.Create("orchestrated-rehash-race"));
+        var credentialId = await ProvisionAsync(services, OwnerCredentialMethod.Password, lookup, cancellationToken);
         const string Rotated = "$mf1$rotated$";
 
         await services.InScopeAsync(
-            (scope, token) => Store(scope).ReplacePasswordAsync(
+            (scope, token) => Store(scope).ReplaceMaterialAsync(
                 SyntheticMailAccount.Owner,
                 credentialId,
+                OwnerCredentialMethod.Password,
+                lookup,
                 Rotated,
                 token),
             cancellationToken);
 
         // Act
         var rehash = await services.InScopeAsync(
-            (scope, token) => Store(scope).RewritePasswordHashAsync(
+            (scope, token) => Store(scope).RewriteMaterialAsync(
                 SyntheticMailAccount.Owner,
                 credentialId,
                 StoredHash,
@@ -214,26 +268,26 @@ public sealed class OrchestratedOwnerPasswordCredentialTests(MailFathomOrchestra
         Assert.Equal(OwnerCredentialWriteOutcome.UnknownCredential, rehash);
 
         var stored = await services.InScopeAsync(
-            (scope, token) => Store(scope).FindByUsernameAsync(username, token),
+            (scope, token) => Store(scope).FindAsync(OwnerCredentialMethod.Password, lookup, token),
             cancellationToken);
 
-        Assert.Equal(Rotated, stored!.PasswordHash);
+        Assert.Equal(Rotated, stored!.Material);
     }
 
     /// <summary>The rehash the verification actually resolved does land, which is what says the refusal above is about the race rather than about the predicate refusing everything.</summary>
     [Fact]
-    public async Task RewritePasswordHashAsync_TheRecordTheRequestVerifiedAgainst_IsRewritten()
+    public async Task RewriteMaterialAsync_TheRecordTheRequestVerifiedAgainst_IsRewritten()
     {
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var username = OwnerCredentialUsername.Create("orchestrated-rehash-settled");
-        var credentialId = await ProvisionAsync(services, username, cancellationToken);
+        var lookup = OwnerCredentialLookup.ForUsername(OwnerCredentialUsername.Create("orchestrated-rehash-settled"));
+        var credentialId = await ProvisionAsync(services, OwnerCredentialMethod.Password, lookup, cancellationToken);
         const string Stronger = "$mf1$stronger$settled$";
 
         // Act
         var rehash = await services.InScopeAsync(
-            (scope, token) => Store(scope).RewritePasswordHashAsync(
+            (scope, token) => Store(scope).RewriteMaterialAsync(
                 SyntheticMailAccount.Owner,
                 credentialId,
                 StoredHash,
@@ -245,18 +299,19 @@ public sealed class OrchestratedOwnerPasswordCredentialTests(MailFathomOrchestra
         Assert.Equal(OwnerCredentialWriteOutcome.Written, rehash);
 
         var stored = await services.InScopeAsync(
-            (scope, token) => Store(scope).FindByUsernameAsync(username, token),
+            (scope, token) => Store(scope).FindAsync(OwnerCredentialMethod.Password, lookup, token),
             cancellationToken);
 
-        Assert.Equal(Stronger, stored!.PasswordHash);
+        Assert.Equal(Stronger, stored!.Material);
     }
 
-    private static IOwnerPasswordCredentialStore Store(IServiceProvider scope) =>
-        scope.GetRequiredService<IOwnerPasswordCredentialStore>();
+    private static IOwnerCredentialStore Store(IServiceProvider scope) =>
+        scope.GetRequiredService<IOwnerCredentialStore>();
 
     private static async Task<Guid> ProvisionAsync(
         OrchestratedMailFathomServices services,
-        OwnerCredentialUsername username,
+        OwnerCredentialMethod method,
+        OwnerCredentialLookup lookup,
         CancellationToken cancellationToken)
     {
         var credentialId = Guid.CreateVersion7();
@@ -265,8 +320,10 @@ public sealed class OrchestratedOwnerPasswordCredentialTests(MailFathomOrchestra
             (scope, token) => Store(scope).CreateAsync(
                 credentialId,
                 SyntheticMailAccount.Owner,
-                username,
+                method,
+                lookup,
                 StoredHash,
+                WholeMailSurface,
                 token),
             cancellationToken);
 
@@ -289,14 +346,16 @@ public sealed class OrchestratedOwnerPasswordCredentialTests(MailFathomOrchestra
             (scope, token) =>
             {
                 var provisionedAt = DateTimeOffset.UnixEpoch;
-                var usernamePrefix = $"orchestrated-ceiling-{owner.Value:N}-";
+                var lookupPrefix = $"orchestrated-ceiling-{owner.Value:N}-";
+                var method = OwnerCredentialMethod.Password.Name;
+                var permissions = WholeMailSurface.Select(permission => permission.Name).ToArray();
 
                 return scope.GetRequiredService<MailFathomDbContext>().Database.ExecuteSqlAsync(
                     $"""
-                     INSERT INTO owner_password_credentials
-                         ("Id", "OwnerId", "Username", "PasswordHash", "Enabled", "Version", "CreatedAt", "PasswordChangedAt")
-                     SELECT gen_random_uuid(), {owner.Value}, {usernamePrefix} || ordinal::text, {StoredHash}, TRUE, 1, {provisionedAt}, {provisionedAt}
-                     FROM generate_series(1, {OwnerPasswordCredential.MaximumListedPerOwner - 1}) AS ordinal
+                     INSERT INTO owner_credentials
+                         ("Id", "OwnerId", "Method", "Lookup", "Material", "Permissions", "Enabled", "Version", "CreatedAt", "MaterialChangedAt")
+                     SELECT gen_random_uuid(), {owner.Value}, {method}, {lookupPrefix} || ordinal::text, {StoredHash}, {permissions}, TRUE, 1, {provisionedAt}, {provisionedAt}
+                     FROM generate_series(1, {OwnerCredential.MaximumListedPerOwner - 1}) AS ordinal
                      """,
                     token);
             },
@@ -307,18 +366,18 @@ public sealed class OrchestratedOwnerPasswordCredentialTests(MailFathomOrchestra
         MailOwnerId owner,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailFathomDbContext>()
-                .OwnerPasswordCredentials
+                .OwnerCredentials
                 .AsNoTracking()
                 .CountAsync(credential => credential.OwnerId == owner.Value, token),
             cancellationToken);
 
     private static Task<int> CountUnderAsync(
         OrchestratedMailFathomServices services,
-        OwnerCredentialUsername username,
+        OwnerCredentialLookup lookup,
         CancellationToken cancellationToken) => services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailFathomDbContext>()
-                .OwnerPasswordCredentials
+                .OwnerCredentials
                 .AsNoTracking()
-                .CountAsync(credential => credential.Username == username.Value, token),
+                .CountAsync(credential => credential.Lookup == lookup.Value, token),
             cancellationToken);
 }

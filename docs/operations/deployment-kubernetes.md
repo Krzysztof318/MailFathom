@@ -66,7 +66,6 @@ kubectl create namespace mailfathom
 kubectl --namespace mailfathom create secret generic mailfathom-secrets \
   --from-literal=mailfathom-database-password='…' \
   --from-file=imap-primary-password=./imap-primary-password \
-  --from-file=mcp-workstation-key=./mcp-workstation-key \
   --from-file=mailfathom-data-key=./mailfathom-data-key
 
 # Only for a database the chart deploys, and named by database.deploy.superuserPasswordSecret.
@@ -151,9 +150,7 @@ config:
         "McpEndpoint": {
           "Enabled": true,
           "Authentication": [
-            {
-              "ApiKey": { "Name": "workstation", "SecretReference": "file:/etc/mailfathom/secrets/mcp-workstation-key" }
-            }
+            { "Method": "api-key" }
           ]
         }
       }
@@ -305,7 +302,7 @@ Every one of those is a MailFathom setting rather than a chart value, so turning
 
 | To turn on | Configure | Reference |
 | --- | --- | --- |
-| API keys | `McpEndpoint:Authentication` | [Authentication](mcp-endpoint.md#authentication) |
+| API keys | `McpEndpoint:Authentication`, which names the method; each owner's key is minted with [`mfctl credential create`](admin-endpoint.md#owner-credentials) rather than mounted as a Secret | [Authentication](mcp-endpoint.md#authentication) |
 | An `Origin` gate | `McpEndpoint:Cors` | [CORS and the `Origin` header](mcp-endpoint.md#cors-and-the-origin-header) |
 | Reading the public scheme and host from the ingress alone | `ReverseProxy:TrustedProxies` | [Behind a TLS-terminating reverse proxy](mcp-endpoint.md#behind-a-tls-terminating-reverse-proxy) |
 | TLS terminated by the pod itself | `McpEndpoint:Https:Endpoints` | [HTTPS and your own domain](mcp-endpoint.md#https-and-your-own-domain) |

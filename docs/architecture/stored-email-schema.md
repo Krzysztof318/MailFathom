@@ -245,26 +245,29 @@ On a deployment storing payloads in a bucket the erasure reaches that store as w
 
 ## What an owner signs in with
 
-`owner_password_credentials` holds the usernames and passwords an owner authenticates to
-[the client](../operations/client-endpoint.md) and [the MCP endpoint](../operations/mcp-endpoint.md#passwords) with. It
-is the one credential this deployment holds a record of rather than reads out of an operator's configuration, which is
-why it is a table at all: a key, a public key, and an authorization server are each written in a section and rotated by
-editing one, while a password belongs to a person and is provisioned, rotated, suspended, and removed while the
-deployment runs.
+`owner_credentials` holds every credential an owner authenticates to
+[the client](../operations/client-endpoint.md) and [the MCP endpoint](../operations/mcp-endpoint.md#authentication)
+with. Those are records rather than settings, which is why they are a table at all: a credential reaching one person's
+mail belongs to that person and is provisioned, rotated, suspended, and removed while the deployment runs, where a
+credential answering for the deployment itself is written in a section and rotated by editing one. The
+[administrative endpoint](../operations/admin-endpoint.md#owner-credentials) keeps the second shape and is the surface
+these rows are administered through.
 
 | Column | What it records |
 |---|---|
 | `Id` | The credential's identity, and the primary key. It is what an audit record, a rate-limiting partition, and a diagnostic name — so each of those names a credential without naming a way to sign in |
-| `OwnerId` | The owner this credential authenticates, a `uuid` foreign key onto `settings_accounts` that cascades. It is what an admitted request acts for, which is the whole point of the method: every other credential admits a caller acting for the owner the deployment was configured with |
-| `Username` | The name the owner types, folded to lower case and at most 128 characters. Unique **across the deployment** rather than within the owner, because it is what a presented credential is resolved by and nothing else in the request says whose it is. A colon cannot appear in one, since that is where [RFC 7617](https://www.rfc-editor.org/rfc/rfc7617.html) splits the header |
-| `PasswordHash` | The versioned record a presented password is verified against — the format version, the algorithm, the work parameters, the salt, and the derived key, as one string. The format version is what lets a later release move to another algorithm without rewriting anything: an unreadable record fails verification exactly as a wrong password does |
-| `Enabled` | Whether it still authenticates requests. A disabled credential keeps its username and its password, so the name stays claimed and the decision is one command away from being reversed |
+| `OwnerId` | The owner this credential authenticates, a `uuid` foreign key onto `settings_accounts` that cascades. It is what an admitted request acts for: a credential that resolves no owner admits nobody, and is refused exactly as an unknown one is |
+| `Method` | Which of the four ways in this credential is — `password`, `api-key`, `public-key`, or `oauth-subject` — as the published name rather than an ordinal. It is half of what a presented credential is resolved by, so one value may be held once under each method without either shadowing the other |
+| `Lookup` | The one indexed value that method resolves a credential by, at most 512 characters: the username folded to lower case for a password, a digest of the key for an API key, the fingerprint of the registered public key for a key pair, and the issuer and subject together for a mapped subject. Unique with `Method` **across the deployment** rather than within the owner, because it is what a presented credential is resolved by and nothing else in the request says whose it is. A colon cannot appear in a username, since that is where [RFC 7617](https://www.rfc-editor.org/rfc/rfc7617.html) splits the header |
+| `Material` | What a presented secret is verified against, and nothing a client could present. For a password that is the versioned hash record — the format version, the algorithm, the work parameters, the salt, and the derived key, as one string, so a later release moves to another algorithm without rewriting anything; for a key pair it is the registered public half. An API key has none, because the digest in `Lookup` is the whole verifier, and neither does a mapped subject, which states whose token this is rather than holding anything to check |
+| `Permissions` | What this credential may do, as published permission names. An empty set is a credential that authenticates and reaches no tool; a credential provisioned with none recorded holds everything its surface publishes |
+| `Enabled` | Whether it still authenticates requests. A disabled credential keeps everything about it, so the value it is resolved by stays claimed and the decision is one command away from being reversed |
 | `Version` | A counter every write to the row increments. It is what a listing reports so an administrator can see that a credential changed since they last read it; nothing reads it back to decide whether a write may proceed, so it orders the writes to one row rather than excluding any of them |
 | `CreatedAt` | When the credential was provisioned |
-| `PasswordChangedAt` | When the password was last replaced. A rotation moves it; the rehash the deployment performs on its own when a record falls behind the current work parameters does not, because nothing about the password changed |
+| `MaterialChangedAt` | When what the client presents was last replaced. A rotation moves it; the rehash the deployment performs on its own when a password record falls behind the current work parameters does not, because nothing about the password changed |
 
-Two indexes and no more: the unique one on `Username`, which is the read every authentication performs, and one on
-`(OwnerId, CreatedAt)`, which is the listing an administrator reads. That listing is bounded at 100 credentials per
+Two indexes and no more: the unique one on `(Method, Lookup)`, which is the read every authentication performs, and one
+on `(OwnerId, CreatedAt)`, which is the listing an administrator reads. That listing is bounded at 100 credentials per
 owner, which is a ceiling rather than a number anybody reaches — and it is the same ceiling provisioning enforces, in
 the insert itself rather than in a count read beforehand. Two administrators provisioning at the same instant cannot
 leave an owner above it either: the insert runs in a transaction that first takes a row lock on the owner's
@@ -272,11 +275,12 @@ leave an owner above it either: the insert runs in a transaction that first take
 past the bound would authenticate where nothing lists it, and therefore where nothing could be revoked from; the
 hundred-and-first credential is refused with `409` instead.
 
-**A password never appears here or anywhere else.** What is stored is a derivation, the plaintext is read within the
-call that hashes it and retained nowhere, and no answer, log line, metric, audit record, command argument, or refusal
-carries it — a refusal names the rule the password broke rather than the value. Verification is constant-time, and a
-request naming a username this deployment does not hold is verified against a decoy record so that an unknown username
-and a wrong password cost the same and are refused identically.
+**No secret appears here or anywhere else.** A password is stored as a derivation and an API key as a digest, each read
+within the call that reduces it and retained nowhere; a public key and a mapped subject are not secrets to begin with.
+No answer, log line, metric, audit record, command argument, or refusal carries a presented value — a refusal names the
+rule the password broke rather than the value, and a minted key is printed once by the command that minted it and never
+again. Verification is constant-time, and a request naming a username this deployment does not hold is verified against
+a decoy record so that an unknown username and a wrong password cost the same and are refused identically.
 
 **Removing an owner removes these with the rest.** The cascade from `settings_accounts` takes them, which is what the
 foreign key is for: a person erased from the deployment leaves nothing behind that could still be signed in as.

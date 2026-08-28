@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Hosting.Warnings;
 using MailFathom.Host.UnitTests.TestDoubles;
@@ -81,7 +82,7 @@ public sealed class ClientTransportSecurityWarningTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var settings = TlsTerminating();
-        settings.Authentication.Add(ConfiguredAuthentication.ApiKey("desktop-client"));
+        settings.Authentication.Add(ConfiguredAuthentication.Accepting(OwnerCredentialMethod.ApiKey));
         var warning = WarningFor(settings, logs);
 
         // Act
@@ -134,7 +135,7 @@ public sealed class ClientTransportSecurityWarningTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var settings = TlsTerminating();
-        settings.Authentication.Add(ConfiguredAuthentication.ApiKey("desktop-client"));
+        settings.Authentication.Add(ConfiguredAuthentication.Accepting(OwnerCredentialMethod.ApiKey));
         settings.Application.Enabled = true;
         var warning = WarningFor(settings, logs);
 
@@ -164,7 +165,7 @@ public sealed class ClientTransportSecurityWarningTests
     {
         var settings = new ClientEndpointOptions { Enabled = true };
 
-        settings.Authentication.Add(ConfiguredAuthentication.ApiKey("desktop-client"));
+        settings.Authentication.Add(ConfiguredAuthentication.Accepting(OwnerCredentialMethod.ApiKey));
 
         return settings;
     }

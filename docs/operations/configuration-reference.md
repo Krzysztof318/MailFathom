@@ -19,9 +19,10 @@ table on all four, the map to them, and the settings that are read from the envi
 | [Endpoint configuration](configuration-endpoints.md) | [where each surface is served](configuration-endpoints.md#where-each-surface-is-served), [`ReverseProxy`](configuration-endpoints.md#reverseproxy), [`ConnectionLimits`](configuration-endpoints.md#connectionlimits), [`McpEndpoint`](configuration-endpoints.md#mcpendpoint), [`AdminEndpoint`](configuration-endpoints.md#adminendpoint), [`ClientEndpoint`](configuration-endpoints.md#clientendpoint), [`HealthEndpoints`](configuration-endpoints.md#healthendpoints) |
 | [Storage, keys, jobs, and logging](configuration-runtime.md) | [`ConfigurationSources`](configuration-runtime.md#configurationsources), [`Accounts`](configuration-runtime.md#accounts), [`Secrets`](configuration-runtime.md#secrets), [`Persistence`](configuration-runtime.md#persistence-and-the-connection-string), [`ContentStorage`](configuration-runtime.md#contentstorage), [`DataEncryption`](configuration-runtime.md#dataencryption), [`Deployment`](configuration-runtime.md#deployment), [`Jobs`](configuration-runtime.md#jobs), [`Resilience`](configuration-runtime.md#resilience), [`Logging`](configuration-runtime.md#logging) |
 
-One setting group is not a section of configuration at all. `Permissions` on an `Authentication` entry names
-capabilities this repository publishes rather than values a section defines, and
-[what a credential may do](permissions.md) states the whole of it: the names, what each one reaches, how a grant is
+One setting group is not a section of configuration at all. A grant names capabilities this repository publishes rather
+than values a section defines, and it is written in two places: `Permissions` on an `AdminEndpoint:Authentication` entry
+for the deployment's own credential, and `mfctl credential create --permission` on a credential belonging to an owner.
+[What a credential may do](permissions.md) states the whole of it: the names, what each one reaches, where each grant is
 written, and what a caller the grant does not admit is told.
 
 ## How to read the tables

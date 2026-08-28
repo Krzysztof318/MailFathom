@@ -4,20 +4,23 @@
 
 using System.CommandLine;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Administration.Owners;
+using MailFathom.Domain.Access;
 
 namespace MailFathom.Cli.Commands.Owners;
 
-/// <summary>Provisions a username and password one owner signs in to their own mail with.</summary>
+/// <summary>Provisions a credential one owner's clients present to reach that owner's own mail.</summary>
 /// <remarks>
 /// <para>
-/// The one credential in MailFathom that belongs to a person rather than to a deployment, and the only way to create
-/// one: there is no self-service and no default. Whoever administers the deployment provisions it and tells the owner
-/// what it is, which is what keeps an owner from minting a way into anybody's mail, their own included.
+/// The only way to create one: there is no self-service and no default. Whoever administers the deployment provisions
+/// the credential and hands it over, which is what keeps an owner from minting a way into anybody's mail, their own
+/// included.
 /// </para>
 /// <para>
-/// The password is asked for rather than passed. It is read without echo where somebody is at the terminal and as one
-/// line where the input is a pipe, so it stays out of the shell history, the process table, and whatever a supervisor
-/// logged about the command it started.
+/// What the method decides is what has to be supplied and what comes back. A password is asked for at the prompt and
+/// never echoed; a key is drawn by the deployment and printed once, because that is the only moment it exists; a public
+/// key is read from a file and answered with the fingerprint the client's assertions must name; a mapped subject is
+/// two values the operator copies out of their authorization server.
 /// </para>
 /// </remarks>
 internal static class CreateOwnerCredentialCommand
@@ -32,18 +35,38 @@ internal static class CreateOwnerCredentialCommand
 
         var endpointOption = CliOptions.Endpoint();
         var ownerOption = OwnerCredentialOptions.Owner();
+        var methodOption = OwnerCredentialOptions.Method();
         var usernameOption = OwnerCredentialOptions.Username();
+        var publicKeyFileOption = OwnerCredentialOptions.PublicKeyFile();
+        var issuerOption = OwnerCredentialOptions.Issuer();
+        var subjectOption = OwnerCredentialOptions.Subject();
+        var permissionOption = OwnerCredentialOptions.Permission();
+        var noPermissionsOption = OwnerCredentialOptions.NoPermissions();
 
-        Command command = new("create", "Provision a username and password for one owner. The password is asked for, never passed.")
+        Command command = new("create", "Provision a credential for one owner. A password is asked for, never passed; a key is printed once.")
         {
+            methodOption,
             usernameOption,
+            publicKeyFileOption,
+            issuerOption,
+            subjectOption,
+            permissionOption,
+            noPermissionsOption,
             ownerOption,
             endpointOption,
         };
 
         command.SetAction((result, cancellationToken) => RunAsync(
             context,
-            result.GetValue(usernameOption)!,
+            new RequestedCredential(
+                result.GetValue(methodOption),
+                result.GetValue(usernameOption),
+                result.GetValue(publicKeyFileOption),
+                result.GetValue(issuerOption),
+                result.GetValue(subjectOption),
+                OwnerCredentialOptions.ResolveGrant(
+                    result.GetValue(permissionOption),
+                    result.GetValue(noPermissionsOption))),
             result.GetValue(ownerOption),
             CliOptions.RequestedDeployment(result.GetValue(endpointOption), context.Variable(CliOptions.EndpointVariable)),
             cancellationToken));
@@ -53,11 +76,13 @@ internal static class CreateOwnerCredentialCommand
 
     private static async Task<int> RunAsync(
         CliContext context,
-        string username,
+        RequestedCredential requested,
         Guid? requestedOwner,
         string? requestedDeployment,
         CancellationToken cancellationToken)
     {
+        var method = OwnerCredentialOptions.ResolveMethod(requested.Method);
+
         var profile = await context.Deployment().ReachAsync(requestedDeployment, cancellationToken);
 
         using var transport = context.OpenTransport(profile.Endpoint, profile.Trust);
@@ -69,19 +94,87 @@ internal static class CreateOwnerCredentialCommand
             requestedOwner,
             cancellationToken);
 
-        var password = OwnerCredentialOutput.ReadPassword(context, $"Password for '{username}': ");
+        var request = Compose(context, method, requested);
 
         var provisioned = await deployment.ProvisionOwnerCredentialAsync(
             profile.Token,
             owner,
-            username,
-            password,
+            request,
             cancellationToken);
 
-        context.Console.WriteLine(
-            $"Provisioned credential {provisioned.CredentialId:D} for owner {owner:D}. The owner signs in with '{username}' "
-            + "and the password you typed, which nothing here or in the deployment can report back.");
+        OwnerCredentialOutput.WriteProvisioned(context.Console, method, owner, provisioned);
 
         return CliExitCode.Success;
     }
+
+    /// <summary>Composes the request the named method asks for, reading whatever only this side can supply.</summary>
+    /// <remarks>The password is read here rather than in the action, so it is asked for after the deployment has been reached and the owner settled — a person typing one should not have it discarded because the endpoint was unreachable.</remarks>
+    private static OwnerCredentialProvisioningRequest Compose(
+        CliContext context,
+        OwnerCredentialMethod method,
+        RequestedCredential requested)
+    {
+        if (method == OwnerCredentialMethod.Password)
+        {
+            var username = requested.Username is { Length: > 0 } written
+                ? written
+                : throw new CliFailure("Provisioning a password needs the name the owner will sign in with. Pass '--username'.");
+
+            return new OwnerCredentialProvisioningRequest(
+                method.Name,
+                username,
+                OwnerCredentialOutput.ReadPassword(context, $"Password for '{username}': "),
+                PublicKey: null,
+                Issuer: null,
+                Subject: null,
+                requested.Permissions);
+        }
+
+        if (method == OwnerCredentialMethod.PublicKey)
+        {
+            return new OwnerCredentialProvisioningRequest(
+                method.Name,
+                Username: null,
+                Password: null,
+                OwnerCredentialOptions.ReadPublicKey(requested.PublicKeyFile),
+                Issuer: null,
+                Subject: null,
+                requested.Permissions);
+        }
+
+        if (method == OwnerCredentialMethod.OAuthSubject)
+        {
+            return new OwnerCredentialProvisioningRequest(
+                method.Name,
+                Username: null,
+                Password: null,
+                PublicKey: null,
+                RequiredValue(requested.Issuer, "--issuer"),
+                RequiredValue(requested.Subject, "--subject"),
+                requested.Permissions);
+        }
+
+        return new OwnerCredentialProvisioningRequest(
+            method.Name,
+            Username: null,
+            Password: null,
+            PublicKey: null,
+            Issuer: null,
+            Subject: null,
+            requested.Permissions);
+    }
+
+    private static string RequiredValue(string? written, string optionName) => written is { Length: > 0 } value
+        ? value
+        : throw new CliFailure($"Mapping an authorization server's subject onto an owner needs '{optionName}'.");
+
+    /// <summary>What the invocation asked for, before the method has decided which of it is read.</summary>
+    /// <remarks>A record rather than six parameters threaded through the action, so the argument list stays readable and so nothing here is positional enough to be swapped by accident.</remarks>
+    private sealed record RequestedCredential(
+        string? Method,
+        string? Username,
+        FileInfo? PublicKeyFile,
+        string? Issuer,
+        string? Subject,
+        IReadOnlyList<string>? Permissions);
 }

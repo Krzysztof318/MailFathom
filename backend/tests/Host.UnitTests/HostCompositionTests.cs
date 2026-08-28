@@ -109,8 +109,7 @@ public sealed class HostCompositionTests
             ["mcp and admin served"] =
             [
                 new("McpEndpoint:Enabled", "true"),
-                new("McpEndpoint:Authentication:0:ApiKey:Name", "workstation"),
-                new("McpEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-key"),
+                new("McpEndpoint:Authentication:0:Method", "api-key"),
                 new("AdminEndpoint:Enabled", "true"),
                 new("AdminEndpoint:Port", "8082"),
                 new("AdminEndpoint:Authentication:0:ApiKey:Name", "operator"),
@@ -120,8 +119,7 @@ public sealed class HostCompositionTests
             [
                 new("ClientEndpoint:Enabled", "true"),
                 new("ClientEndpoint:Port", "8084"),
-                new("ClientEndpoint:Authentication:0:ApiKey:Name", "desktop-client"),
-                new("ClientEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-client-key"),
+                new("ClientEndpoint:Authentication:0:Method", "api-key"),
             ],
             ["mail synchronized"] =
             [
@@ -160,16 +158,14 @@ public sealed class HostCompositionTests
             ["every capability at once"] =
             [
                 new("McpEndpoint:Enabled", "true"),
-                new("McpEndpoint:Authentication:0:ApiKey:Name", "workstation"),
-                new("McpEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-key"),
+                new("McpEndpoint:Authentication:0:Method", "api-key"),
                 new("AdminEndpoint:Enabled", "true"),
                 new("AdminEndpoint:Port", "8082"),
                 new("AdminEndpoint:Authentication:0:ApiKey:Name", "operator"),
                 new("AdminEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-key-either"),
                 new("ClientEndpoint:Enabled", "true"),
                 new("ClientEndpoint:Port", "8084"),
-                new("ClientEndpoint:Authentication:0:ApiKey:Name", "desktop-client"),
-                new("ClientEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-client-key"),
+                new("ClientEndpoint:Authentication:0:Method", "api-key"),
                 new("MailSynchronization:Enabled", "true"),
                 new("MailSynchronization:Accounts:0:AccountId", "personal"),
                 new("MailSynchronization:Accounts:0:DisplayName", "Personal"),
@@ -556,8 +552,7 @@ public sealed class HostCompositionTests
         .. mcpAuthenticates
             ?
             [
-                new("McpEndpoint:Authentication:0:ApiKey:Name", "workstation"),
-                new KeyValuePair<string, string?>("McpEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-key"),
+                new KeyValuePair<string, string?>("McpEndpoint:Authentication:0:Method", "api-key"),
             ]
             : Array.Empty<KeyValuePair<string, string?>>(),
         .. adminAuthenticates
@@ -570,8 +565,7 @@ public sealed class HostCompositionTests
         .. clientAuthenticates
             ?
             [
-                new("ClientEndpoint:Authentication:0:ApiKey:Name", "desktop-client"),
-                new KeyValuePair<string, string?>("ClientEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-client-key"),
+                new KeyValuePair<string, string?>("ClientEndpoint:Authentication:0:Method", "api-key"),
             ]
             : Array.Empty<KeyValuePair<string, string?>>(),
     ];
