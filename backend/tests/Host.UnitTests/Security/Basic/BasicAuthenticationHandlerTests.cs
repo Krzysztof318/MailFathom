@@ -217,6 +217,28 @@ public sealed class BasicAuthenticationHandlerTests
             .FindByUsernameAsync(default, TestContext.Current.CancellationToken);
     }
 
+    /// <summary>
+    /// A dual-stack listener reports an IPv4 proxy in its mapped form while the operator wrote the plain address, and
+    /// neither comparison matches across address families. Reading the peer any other way would leave the proxy
+    /// unrecognized as one, put every request in the deployment into a single per-source partition, and let ten wrong
+    /// passwords a minute from anybody behind it close password sign-in for every owner.
+    /// </summary>
+    [Fact]
+    public async Task AuthenticateAsync_TwoUsernamesArrivingThroughADeclaredProxyReportedAsIPv4Mapped_AreBoundedApart()
+    {
+        // Arrange
+        using var harness = new HandlerHarness();
+        var behindAProxy = new ReverseProxyOptions { TrustedProxies = { "10.0.0.1" } };
+
+        // Act
+        await harness.JudgeAsync("owner", peer: "::ffff:10.0.0.1", behindAProxy);
+        await harness.JudgeAsync("other", peer: "::ffff:10.0.0.1", behindAProxy);
+
+        // Assert
+        await harness.Credentials.ReceivedWithAnyArgs(2)
+            .FindByUsernameAsync(default, TestContext.Current.CancellationToken);
+    }
+
     private static string BasicHeader(string userId, string password) =>
         "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes($"{userId}:{password}"));
 

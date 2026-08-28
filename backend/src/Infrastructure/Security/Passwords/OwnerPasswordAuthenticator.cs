@@ -30,11 +30,12 @@ namespace MailFathom.Infrastructure.Security.Passwords;
 /// <strong>Cheap refusals first.</strong> The header is read, bounded, and folded into a canonical username before the
 /// bound is consulted, and the bound is consulted before any password is verified. An unauthenticated caller therefore
 /// cannot make this process perform a deliberately expensive derivation by writing a malformed header, and cannot make
-/// it perform an unbounded number of them by writing well-formed ones — the capacity is <em>taken</em> before the
-/// derivation rather than read before it, so five hundred requests issued at once cannot all observe the same free
-/// allowance. What a right password costs is nothing: the reservation is returned unspent, because the credential
-/// travels on every request and a bound a correct password paid into would bound the owner's own traffic rather than
-/// anybody's guessing.
+/// it perform an unbounded number of them by writing well-formed ones — a verification permit is <em>taken</em> before
+/// the derivation, on a ceiling the whole surface shares as well as one each axis holds, so five hundred requests
+/// issued at once meet that ceiling however many different usernames they name. What a right password costs is
+/// nothing: the reservation is returned unspent, because the credential travels on every request and a bound a correct
+/// password paid into would bound the owner's own traffic rather than anybody's guessing. Only a wrong password spends
+/// the guessing allowance, and it holds what it spent for a minute.
 /// </para>
 /// <para>
 /// <strong>Nothing written down is the credential.</strong> Neither the returned result nor anything logged on the way

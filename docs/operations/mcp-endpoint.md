@@ -653,21 +653,27 @@ to make guessing expensive rather than to give anybody a way to lock an owner ou
 is 600; a number above it is refused, because a thousand verifications a minute against one username is an offline
 guessing rate rather than a bound.
 
-**What bounds a burst is a second and much larger limit**, on how many password verifications one axis may have in
-flight at once. It is 32, sized for a browser opening several connections to one origin and an agent issuing calls in
-parallel, and deliberately unrelated to the allowance an operator lowers to make guessing expensive: a single limit
+**What bounds a burst is a second and much larger limit**, on how many password verifications may be in flight at once.
+It applies twice: 32 for one axis — one source, or one username — and 128 for the whole surface whatever a caller
+names. Both are sized for a browser opening several connections to one origin and an agent issuing calls in parallel,
+and both are deliberately unrelated to the allowance an operator lowers to make guessing expensive: a single limit
 serving both purposes would refuse an owner's eleventh simultaneous call at the default, however right their password
-was. That limit is what stops a client opening five hundred connections from making this process perform five hundred
-concurrent derivations, and it is also what bounds the overshoot in the allowance: the allowance is read before a
-verification and spent only after a wrong one, so a burst arriving together can exceed `AttemptsPerMinute` by at most
-32 attempts in the first minute and by nothing after it.
+was.
+
+The surface figure is the one that stops a client opening five hundred connections from making this process perform
+five hundred concurrent derivations, because every distinct username is a fresh partition with a fresh per-axis
+ceiling and a caller varying the name would meet no per-axis limit at all. The per-axis figure is what bounds the
+overshoot in the allowance: the allowance is read before a verification and spent only after a wrong one, so a burst
+arriving together can exceed `AttemptsPerMinute` by at most 32 attempts in the first minute and by nothing after it.
 
 **A peer this deployment cannot tell apart from the world is bounded by username alone.** MailFathom never reads
 `X-Forwarded-For`, so a request arriving from an address
 [`ReverseProxy:TrustedProxies`](configuration-endpoints.md) names carries that proxy's address and nobody else's — a
 per-source allowance over it would be one allowance for the whole world, and a single guesser filling it would close
 password sign-in for every owner at once. The source axis is therefore skipped for such a peer rather than applied to
-an address that distinguishes nobody, and the per-username allowance is what holds. Every other peer is the client that
+an address that distinguishes nobody, and the per-username allowance is what holds. The peer is read in its IPv4 form
+where it has one, exactly as the forwarded-headers policy reads the same list, so a dual-stack listener reporting an
+IPv4 proxy as `::ffff:10.0.0.5` still recognizes the `10.0.0.5` the operator wrote. Every other peer is the client that
 reached this process, whether or not anything is named in front, and both axes apply to it.
 
 **The method is refused on the administrative endpoint**, at startup, naming the section. That surface answers for the

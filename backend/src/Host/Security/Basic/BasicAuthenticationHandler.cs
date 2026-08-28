@@ -157,6 +157,15 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
     /// directly, and the peer arriving there is the real client and does tell two callers apart. Answering per process
     /// would drop the source axis on that listener too.
     /// </para>
+    /// <para>
+    /// The peer is read in its IPv4 form where it has one, because a dual-stack listener — the arrangement the endpoint
+    /// options recommend — reports an IPv4 proxy as <c>::ffff:10.0.0.5</c> while the operator wrote <c>10.0.0.5</c>,
+    /// and neither <see cref="IPAddress.Equals(object)" /> nor <see cref="IPNetwork.Contains" /> matches across
+    /// address families. The forwarded-headers middleware maps the same peer down before it reads the same section, so
+    /// reading it any other way here would leave the proxy's own scheme believed while the proxy went unrecognized as
+    /// one — every request in the deployment sharing that one partition, and ten wrong passwords a minute from anybody
+    /// behind it closing password sign-in for every owner. Mapping is what keeps one configured list read one way.
+    /// </para>
     /// </remarks>
     private string? SourceToBoundBy()
     {
@@ -165,7 +174,9 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
             return null;
         }
 
-        return this.DeclaredAsAProxy(peer) ? null : peer.ToString();
+        var address = peer.IsIPv4MappedToIPv6 ? peer.MapToIPv4() : peer;
+
+        return this.DeclaredAsAProxy(address) ? null : address.ToString();
     }
 
     /// <summary>Reports whether the operator named this address, or a range holding it, as something standing in front of this process.</summary>

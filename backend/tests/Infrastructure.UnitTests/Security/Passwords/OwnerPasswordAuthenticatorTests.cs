@@ -485,6 +485,42 @@ public sealed class OwnerPasswordAuthenticatorTests
             harness.AuthenticateAsync(Header("owner", Password), attemptsPerMinute: 0));
     }
 
+    /// <summary>
+    /// A per-partition ceiling bounds a partition rather than this process: every distinct username is a fresh
+    /// partition with a fresh one, and behind a declared proxy the username is the only axis there is. A caller
+    /// varying the name would otherwise have this process derive once per connection it cared to open, each
+    /// derivation deliberately expensive, which is what the ceiling the whole surface shares refuses.
+    /// </summary>
+    [Fact]
+    public async Task AuthenticateAsync_MoreGuessesInFlightUnderDistinctUsernamesThanTheSurfaceAdmits_RefusesTheSurplus()
+    {
+        // Arrange
+        using var harness = new AuthenticatorHarness();
+        var reads = harness.HoldsNothingUntilReleased();
+        const int Surplus = 3;
+        var admitted = PasswordAttemptLimiter.ConcurrentVerificationsPerSurface;
+
+        // Act
+        var inFlight = Enumerable
+            .Range(0, admitted)
+            .Select(ordinal => harness.AuthenticateAsync(Header($"stranger-{ordinal}", "wrongpassword"), source: null))
+            .ToArray();
+
+        await reads.WaitUntilWaitingAsync(admitted);
+
+        var surplus = await Task.WhenAll(Enumerable
+            .Range(admitted, Surplus)
+            .Select(ordinal => harness.AuthenticateAsync(Header($"stranger-{ordinal}", "wrongpassword"), source: null)));
+
+        reads.Release();
+        await Task.WhenAll(inFlight);
+
+        // Assert
+        Assert.All(surplus, static result =>
+            Assert.Equal(OwnerPasswordRejection.TooManyAttempts, result.Rejection));
+        Assert.Equal(admitted, harness.PasswordHasher.VerificationCount);
+    }
+
     private static string Header(string userId, string password) =>
         $"Basic {Convert.ToBase64String(Encoding.UTF8.GetBytes($"{userId}:{password}"))}";
 
@@ -521,7 +557,7 @@ public sealed class OwnerPasswordAuthenticatorTests
             }
         }
 
-        internal async Task<ResolvedOwnerPasswordCredential?> AnswerAsync(ResolvedOwnerPasswordCredential credential)
+        internal async Task<ResolvedOwnerPasswordCredential?> AnswerAsync(ResolvedOwnerPasswordCredential? credential)
         {
             Interlocked.Increment(ref this.waiting);
 
@@ -647,6 +683,19 @@ public sealed class OwnerPasswordAuthenticatorTests
                     Arg.Any<CancellationToken>())
                 .Returns(_ => gate.AnswerAsync(
                     new ResolvedOwnerPasswordCredential(CredentialId, Owner, enabled, StoredHash)));
+
+            return gate;
+        }
+
+        /// <summary>Holds every credential read open and answers that nobody holds the username, whichever one was presented.</summary>
+        /// <returns>The gate, which reports how many reads are waiting and releases them all.</returns>
+        /// <remarks>An unknown username still costs a derivation, against the decoy record, which is what makes varying the name an attack on this process rather than a way of being refused cheaply.</remarks>
+        internal CredentialReadGate HoldsNothingUntilReleased()
+        {
+            var gate = new CredentialReadGate();
+
+            this.Credentials.FindByUsernameAsync(Arg.Any<OwnerCredentialUsername>(), Arg.Any<CancellationToken>())
+                .Returns(_ => gate.AnswerAsync(null));
 
             return gate;
         }

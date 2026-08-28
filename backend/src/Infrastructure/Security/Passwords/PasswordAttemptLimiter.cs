@@ -50,6 +50,16 @@ namespace MailFathom.Infrastructure.Security.Passwords;
 /// minute of a burst, and <c>AttemptsPerMinute</c> a minute after it.
 /// </para>
 /// <para>
+/// <strong>A per-partition ceiling is not a bound on this process, which is why there is a third one.</strong> Every
+/// distinct username is a fresh partition with a fresh ceiling and a fresh allowance, and behind a declared proxy the
+/// username is the only axis there is — so a caller presenting five hundred well-formed usernames at once would meet
+/// no per-partition limit at all and have this process derive five hundred times concurrently, each derivation
+/// deliberately expensive and each occupying a thread. <see cref="ConcurrentVerificationsPerSurface" /> is the bound
+/// that does not move with what a caller names: one partition per transport surface, consulted before either of the
+/// others, so what a caller can spend of this process is decided by the surface it reached rather than by how many
+/// names it thought of.
+/// </para>
+/// <para>
 /// Nothing queues: a request that is out of capacity is refused immediately rather than held, because a queue in front
 /// of a deliberately expensive verification is a way to make this process hold connections on an attacker's behalf. The
 /// partitions are reclaimed once they go idle by the same machinery the endpoint limiters run on, and a partition
@@ -85,10 +95,20 @@ public sealed class PasswordAttemptLimiter : IDisposable
     /// </remarks>
     internal const int ConcurrentVerificationsPerPartition = 32;
 
+    /// <summary>How many password verifications one transport surface may have in flight at once, whatever they name.</summary>
+    /// <remarks>
+    /// Four times the per-partition ceiling, so several owners' partitions can be busy together and the smaller bound
+    /// still means something, while the process is never asked for an unbounded number of derivations by a caller that
+    /// varies the username. It is per surface rather than per process so a flood at one endpoint does not close
+    /// password sign-in at the other, which is the same isolation the endpoint limiters keep.
+    /// </remarks>
+    internal const int ConcurrentVerificationsPerSurface = 128;
+
     private const int DigestLength = 32;
 
     private readonly TimeProvider timeProvider;
     private readonly byte[] partitionKey = RandomNumberGenerator.GetBytes(DigestLength);
+    private readonly PartitionedRateLimiter<PasswordAttempt> perSurfaceVerifications;
     private readonly PartitionedRateLimiter<PasswordAttempt> perSourceVerifications;
     private readonly PartitionedRateLimiter<PasswordAttempt> perUsernameVerifications;
     private readonly PartitionedRateLimiter<PasswordAttempt> perSourceFailures;
@@ -103,6 +123,9 @@ public sealed class PasswordAttemptLimiter : IDisposable
 
         this.timeProvider = timeProvider;
 
+        // Every attempt on one surface digests the same empty value, so this axis holds exactly one partition per
+        // surface — which the partition name already names in clear — and is the bound no caller can widen.
+        this.perSurfaceVerifications = this.Axis("surface", static _ => string.Empty, static _ => ConcurrentVerificationsPerSurface);
         this.perSourceVerifications = this.Axis("source", Source, static _ => ConcurrentVerificationsPerPartition);
         this.perUsernameVerifications = this.Axis("username", Username, static _ => ConcurrentVerificationsPerPartition);
         this.perSourceFailures = this.Axis("source-failures", Source, static attempt => attempt.AttemptsPerMinute);
@@ -128,11 +151,21 @@ public sealed class PasswordAttemptLimiter : IDisposable
             return PasswordAttemptReservation.Refused;
         }
 
+        var surfaceLease = this.perSurfaceVerifications.AttemptAcquire(attempt);
+
+        if (!surfaceLease.IsAcquired)
+        {
+            surfaceLease.Dispose();
+
+            return PasswordAttemptReservation.Refused;
+        }
+
         var sourceLease = attempt.Source is null ? null : this.perSourceVerifications.AttemptAcquire(attempt);
 
         if (sourceLease is { IsAcquired: false })
         {
             sourceLease.Dispose();
+            surfaceLease.Dispose();
 
             return PasswordAttemptReservation.Refused;
         }
@@ -143,16 +176,18 @@ public sealed class PasswordAttemptLimiter : IDisposable
         {
             usernameLease.Dispose();
             sourceLease?.Dispose();
+            surfaceLease.Dispose();
 
             return PasswordAttemptReservation.Refused;
         }
 
-        return new PasswordAttemptReservation(this, attempt, sourceLease, usernameLease);
+        return new PasswordAttemptReservation(this, attempt, surfaceLease, sourceLease, usernameLease);
     }
 
     /// <inheritdoc />
     public void Dispose()
     {
+        this.perSurfaceVerifications.Dispose();
         this.perSourceVerifications.Dispose();
         this.perUsernameVerifications.Dispose();
         this.perSourceFailures.Dispose();
@@ -207,14 +242,15 @@ public sealed class PasswordAttemptLimiter : IDisposable
         release.Change(SpentAttemptWindow, Timeout.InfiniteTimeSpan);
     }
 
-    /// <summary>Returns whatever two leases hold, tolerating a limiter this process has already torn down.</summary>
+    /// <summary>Returns whatever the leases hold, tolerating a limiter this process has already torn down.</summary>
     /// <remarks>The limiter is a singleton disposed as the process ends and a scheduled release can fire after that, which is the end of a process rather than a fault to report.</remarks>
-    internal static void ReleasePermits(RateLimitLease? first, RateLimitLease? second)
+    internal static void ReleasePermits(RateLimitLease? first, RateLimitLease? second, RateLimitLease? third = null)
     {
         try
         {
             first?.Dispose();
             second?.Dispose();
+            third?.Dispose();
         }
         catch (ObjectDisposedException)
         {
@@ -277,6 +313,7 @@ public sealed class PasswordAttemptReservation : IDisposable
 {
     private readonly PasswordAttemptLimiter? limiter;
     private readonly PasswordAttempt? attempt;
+    private readonly RateLimitLease? surfaceLease;
     private readonly RateLimitLease? sourceLease;
     private readonly RateLimitLease? usernameLease;
     private bool released;
@@ -288,11 +325,13 @@ public sealed class PasswordAttemptReservation : IDisposable
     internal PasswordAttemptReservation(
         PasswordAttemptLimiter limiter,
         PasswordAttempt attempt,
+        RateLimitLease surfaceLease,
         RateLimitLease? sourceLease,
         RateLimitLease usernameLease)
     {
         this.limiter = limiter;
         this.attempt = attempt;
+        this.surfaceLease = surfaceLease;
         this.sourceLease = sourceLease;
         this.usernameLease = usernameLease;
     }
@@ -333,7 +372,7 @@ public sealed class PasswordAttemptReservation : IDisposable
 
         this.released = true;
 
-        PasswordAttemptLimiter.ReleasePermits(this.usernameLease, this.sourceLease);
+        PasswordAttemptLimiter.ReleasePermits(this.usernameLease, this.sourceLease, this.surfaceLease);
     }
 }
 
