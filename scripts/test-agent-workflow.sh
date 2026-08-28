@@ -6288,10 +6288,16 @@ stage_quick_start_checkout() {
   local case_name="$1"
   local checkout_root="$test_directory/$case_name-checkout"
 
-  mkdir -p "$checkout_root/deploy/compose/config" "$checkout_root/deploy/compose/secrets/mailfathom"
+  mkdir -p "$checkout_root/deploy/compose/config" "$checkout_root/deploy/compose/secrets/mailfathom" \
+    "$checkout_root/deploy/openssl"
 
   # Only its existence is read, which is what says this checkout carries the Compose deployment at all.
   printf 'name: mailfathom\n' > "$checkout_root/deploy/compose/compose.yaml"
+
+  # This one is read: the script copies it rather than writing its own, so the deployment runs under the file this
+  # repository reviews. The real one is staged rather than a stand-in, which is what makes the assertion below about
+  # what it configures rather than about what the fixture happened to contain.
+  cp "$source_repository_root/deploy/openssl/legacy-mail-server.cnf.example" "$checkout_root/deploy/openssl/"
 
   # A clone made under a strict umask is what leaves `config/` unlistable by the container's account, so the fixture
   # starts from one rather than from whatever the runner's umask happens to be.
@@ -6524,25 +6530,120 @@ quick_start_serves_the_administrative_endpoint_on_a_port_of_its_own() {
     "$compose_directory/config/10-mailfathom.json"
   assert_contains '"127.0.0.1:8090:8090"' "$compose_directory/compose.override.yaml"
 
-  # Off where nothing needs it, which is what keeps the override file the marker of a deliberate answer rather than of a
-  # run having happened. An MCP endpoint serving without a credential is that case: nothing has to be minted for it.
+  # Off where nothing needs it, which is what keeps the published port the marker of a deliberate answer rather than of
+  # a run having happened. That is a run asking for neither credential the administrative endpoint mints: an MCP
+  # endpoint serving without one, and no client.
   off_root="$(stage_quick_start_checkout 'quick-start-admin-off')"
-  run_quick_start "$off_root" --provider yahoo --mcp-authentication none > /dev/null 2>&1
+  run_quick_start "$off_root" --provider yahoo --mcp-authentication none --no-client > /dev/null 2>&1
 
   assert_excludes 'AdminEndpoint' "$off_root/deploy/compose/config/10-mailfathom.json"
 
-  if [[ -e "$off_root/deploy/compose/compose.override.yaml" ]]; then
-    printf 'An administrative endpoint nobody asked for was published.\n' >&2
+  # assert_excludes reads a file with grep, and a file that is not there excludes everything — so the claim below is
+  # about a published port only while the file it reads exists. Assert that first rather than resting on the TLS
+  # policy happening to write one.
+  if [[ ! -s "$off_root/deploy/compose/compose.override.yaml" ]]; then
+    printf 'No override was written, so nothing establishes that the administrative port is unpublished.\n' >&2
     return 1
   fi
+
+  assert_excludes '8090' "$off_root/deploy/compose/compose.override.yaml"
 }
 
-# What a client presents to the MCP endpoint is a record beside an owner, minted with `mfctl credential create` over the
-# administrative endpoint, so switching that endpoint off while the MCP endpoint demands a credential describes a
-# deployment nothing can ever be provisioned for. The default arrives at the combination without anybody choosing it and
-# is corrected; an operator who asked for it by name is refused, because correcting a stated answer is the worse failure.
-quick_start_serves_the_administrative_endpoint_wherever_an_mcp_key_has_to_be_minted() {
-  local derived_root refused_root
+# The client is what makes the quick start end somewhere a person can look at their own mail, and every part of that is
+# a file this run wrote: the surface, the page, and the credential. Provisioning itself needs a running deployment and
+# is therefore not reachable here, which is exactly why the report must not claim a credential that was never created.
+quick_start_prepares_the_client_and_the_credential_to_sign_in_with() {
+  local checkout_root compose_directory
+  local without_root
+  local output_file="$test_directory/quick-start-client-log"
+
+  checkout_root="$(stage_quick_start_checkout 'quick-start-client')"
+  compose_directory="$checkout_root/deploy/compose"
+
+  run_quick_start "$checkout_root" --provider fastmail > "$output_file" 2>&1
+
+  assert_contains '"ClientEndpoint"' "$compose_directory/config/10-mailfathom.json"
+  assert_contains '{ "Method": "password" }' "$compose_directory/config/10-mailfathom.json"
+  assert_contains 'MAILFATHOM_CLIENT=true' "$compose_directory/.env"
+
+  # The administrative endpoint follows the client rather than the other way round: provisioning a credential is an
+  # administrative operation and there is no other way to reach one.
+  assert_contains '"AdminEndpoint"' "$compose_directory/config/10-mailfathom.json"
+
+  if [[ ! -s "$compose_directory/secrets/client-owner-password" ]]; then
+    printf 'The client was prepared without a password to sign in to it with.\n' >&2
+    return 1
+  fi
+
+  local password_mode
+  password_mode="$(stat --format '%a' "$compose_directory/secrets/client-owner-password")"
+
+  if [[ "$password_mode" != '444' ]]; then
+    printf 'The client password carries mode %s rather than the 444 every generated credential gets.\n' \
+      "$password_mode" >&2
+    return 1
+  fi
+
+  # Nothing in the container reads it, and secrets/mailfathom/ is bind-mounted into one. A copy there would be
+  # readable by the process a compromised MailFathom is, for no purpose at all.
+  if [[ -e "$compose_directory/secrets/mailfathom/client-owner-password" ]]; then
+    printf 'The client password was written into the directory the container mounts.\n' >&2
+    return 1
+  fi
+
+  # Nothing was started, so nothing was provisioned. A report claiming otherwise would send somebody to a sign-in that
+  # refuses them.
+  assert_contains 'no credential was provisioned' "$output_file"
+  assert_excludes "$(cat "$compose_directory/secrets/client-owner-password")" "$output_file"
+
+  # Asked for by name, the deployment is the one this script produced before the client existed.
+  without_root="$(stage_quick_start_checkout 'quick-start-client-off')"
+  run_quick_start "$without_root" --provider fastmail --no-client > /dev/null 2>&1
+
+  assert_excludes 'ClientEndpoint' "$without_root/deploy/compose/config/10-mailfathom.json"
+  assert_excludes 'MAILFATHOM_CLIENT' "$without_root/deploy/compose/.env"
+}
+
+# A mail server the platform's own policy refuses is not something a first run can diagnose from the error it produces,
+# so the quick start reads its TLS parameters from the file this repository ships for exactly that server. It is the one
+# place anything here turns that relaxation on, which is why what it configures is asserted rather than assumed.
+quick_start_prepares_the_tls_policy_a_legacy_mail_server_needs() {
+  local checkout_root compose_directory
+  local strict_root
+  local output_file="$test_directory/quick-start-tls-log"
+
+  checkout_root="$(stage_quick_start_checkout 'quick-start-tls')"
+  compose_directory="$checkout_root/deploy/compose"
+
+  run_quick_start "$checkout_root" --provider fastmail > "$output_file" 2>&1
+
+  assert_contains 'CipherString = DEFAULT@SECLEVEL=1' "$compose_directory/openssl-legacy.cnf"
+  assert_contains 'OPENSSL_CONF: /etc/mailfathom/openssl-legacy.cnf' "$compose_directory/compose.override.yaml"
+  assert_contains 'source: ./openssl-legacy.cnf' "$compose_directory/compose.override.yaml"
+
+  # It reaches every TLS session the process makes, so a run that turned it on says so where the other postponed
+  # decisions are listed rather than only in a comment nobody opens.
+  assert_contains '  TLS policy ' "$output_file"
+
+  # Declined by name, the platform's own policy is what stands, and nothing names a file that is not there.
+  strict_root="$(stage_quick_start_checkout 'quick-start-tls-strict')"
+  run_quick_start "$strict_root" --provider fastmail --no-legacy-tls > /dev/null 2>&1
+
+  if [[ -e "$strict_root/deploy/compose/openssl-legacy.cnf" ]]; then
+    printf 'A TLS policy nobody asked for was written.\n' >&2
+    return 1
+  fi
+
+  assert_excludes 'OPENSSL_CONF' "$strict_root/deploy/compose/compose.override.yaml"
+}
+
+# What a client presents to the MCP endpoint is a record beside an owner, and so is the username and password a person
+# signs in to the MailFathom client with — both minted over the administrative endpoint. So switching that endpoint off
+# while either is wanted describes a deployment nothing can ever be provisioned for. The default arrives at the
+# combination without anybody choosing it and is corrected; an operator who asked for it by name is refused, because
+# correcting a stated answer is the worse failure. One mechanism reads both credentials, so one contract covers it.
+quick_start_serves_the_administrative_endpoint_wherever_a_credential_has_to_be_minted() {
+  local derived_root client_only_root refused_root
   local derived_log="$test_directory/quick-start-admin-derived-log"
   local refused_log="$test_directory/quick-start-admin-refused-log"
 
@@ -6553,12 +6654,22 @@ quick_start_serves_the_administrative_endpoint_wherever_an_mcp_key_has_to_be_min
   assert_contains '"127.0.0.1:8090:8090"' "$derived_root/deploy/compose/compose.override.yaml"
   assert_contains 'mfctl credential create --method api-key' "$derived_log"
 
+  # The client's own credential derives it just as the MCP key does, so a run wanting only that one still gets the
+  # endpoint. Nothing else would be able to provision the password the report names.
+  client_only_root="$(stage_quick_start_checkout 'quick-start-admin-client-only')"
+  run_quick_start "$client_only_root" --provider yahoo --mcp-authentication none > /dev/null 2>&1
+
+  assert_contains '"Port": 8090' "$client_only_root/deploy/compose/config/10-mailfathom.json"
+  assert_contains '"127.0.0.1:8090:8090"' "$client_only_root/deploy/compose/compose.override.yaml"
+
   refused_root="$(stage_quick_start_checkout 'quick-start-admin-refused')"
 
   if run_quick_start "$refused_root" --provider yahoo --admin-endpoint off > "$refused_log" 2>&1; then
-    printf 'A deployment whose MCP key could never be minted was prepared instead of refused.\n' >&2
+    printf 'A deployment whose credentials could never be minted was prepared instead of refused.\n' >&2
     return 1
   fi
+
+  assert_contains '--no-client' "$refused_log"
 
   assert_contains '--admin-endpoint off cannot be' "$refused_log"
 
@@ -8159,7 +8270,9 @@ run_test quick_start_refuses_to_overwrite_a_prepared_deployment
 run_test quick_start_refuses_a_mailbox_that_accepts_no_password
 run_test quick_start_authenticates_the_mcp_endpoint_unless_asked_otherwise
 run_test quick_start_serves_the_administrative_endpoint_on_a_port_of_its_own
-run_test quick_start_serves_the_administrative_endpoint_wherever_an_mcp_key_has_to_be_minted
+run_test quick_start_serves_the_administrative_endpoint_wherever_a_credential_has_to_be_minted
+run_test quick_start_prepares_the_client_and_the_credential_to_sign_in_with
+run_test quick_start_prepares_the_tls_policy_a_legacy_mail_server_needs
 run_test quick_start_refuses_a_value_that_would_write_broken_configuration
 run_test quick_start_says_it_is_an_evaluation_rather_than_a_recommended_deployment
 run_test every_external_action_names_an_approved_owner

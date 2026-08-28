@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs -->
+<!-- describes: backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -946,9 +946,10 @@ server reaches for it; the entry names the method and the credentials are provis
 ```
 
 The method is documented once, under [the MCP endpoint](mcp-endpoint.md#passwords) — including the bound on guessing,
-the indistinguishable refusal, and the rule that matters most here: **a surface accepting a password must terminate TLS
-itself or be declared to sit behind a proxy that does, and startup refuses it otherwise.** That is the one place this
-surface's transport stops being a warning and becomes a refusal.
+the indistinguishable refusal, and what this surface's transport does to it: **a password crossing a clear-text hop is
+reported at every startup and never refused**, naming this surface and its port, because this process can read the
+scheme of its own socket and nothing beyond it. A loopback deployment behind nothing, and a public socket nobody meant
+to expose, are one reading from here.
 
 A caller admitted this way acts for **the owner the credential belongs to**, and so does every other method here: each
 of the four resolves a record beside one owner. That is what lets one deployment serve more than one person's mail over
@@ -1024,13 +1025,18 @@ TLS-terminating reverse proxy and wrong anywhere else, so startup says so:
 - an enabled endpoint with no `Authentication` entry warns that anything reaching the address is served the mailbox, and
   names the section that fixes it;
 - an enabled endpoint terminating no TLS warns that any credential a client presents is readable on the path, and names
-  its clear-text port — except where one of those credentials is a password, which is refused rather than warned about;
+  its clear-text port;
+- an endpoint that accepts [a password](#signing-a-person-in) on that port warns again, separately, because a password
+  is the one credential here a person typed and may have typed elsewhere — it names this surface, the port, and, where
+  `ReverseProxy:TrustedProxies` names one, that the hop is the one between the proxy and this process;
 - an endpoint serving [the page](#serving-the-client-from-the-deployment) over clear text an operator explicitly
   permitted reports that separately, at every startup, naming the permission rather than assuming it is still true.
 
-Both are warnings rather than refusals, because a loopback bind, a private network, and a proxy that terminates TLS are
-each a deployment where one of them is the right answer, and only an operator knows which they have. Serving the page
-is the one part that is refused rather than warned about, for the reason the next section gives.
+All three are warnings rather than refusals, because a loopback bind, a private network, and a proxy that terminates
+TLS are each a deployment where one of them is the right answer, and only an operator knows which they have. Serving
+the page is the one part that is refused rather than warned about, for the reason the next section gives — and that
+refusal is about publishing a page rather than about a credential, which is why a deployment can accept a password on
+this port while still having to declare that the page may be served over it.
 
 ## Serving the client from the deployment
 

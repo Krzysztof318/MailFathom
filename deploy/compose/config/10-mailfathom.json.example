@@ -62,6 +62,34 @@
       }
     ]
   },
+  // The surface MailFathom's own client calls, and the listeners its page is served from. It shares the container's
+  // 8080 with the endpoint below, which is the port compose.yaml publishes, so no port is stated here.
+  //
+  // The `password` entry is what a person signs in with. It carries no credential and cannot: a username and password
+  // are a record beside the owner rather than something read out of a file, so they are provisioned over the
+  // administrative endpoint — `mfctl credential create --method password --username <name>`, or the route that command
+  // calls. The entry says the surface accepts the method; which people can use it is what has been provisioned.
+  //
+  // The page itself is a separate switch, in the environment rather than here: MAILFATHOM_CLIENT in .env sets both
+  // ClientEndpoint:Application keys, because serving a browser head over a clear-text socket is a statement about this
+  // deployment's shape and the two halves of it are one decision. The password crosses that hop readable, and the host
+  // says so at every startup.
+  //
+  // It is commented out, like everything else here that costs anything: serving a mailbox to a browser is always
+  // something an operator turned on, so a file copied verbatim serves the MCP endpoint and nothing else. Uncomment it
+  // beside MAILFATHOM_CLIENT=true in .env, and provision a credential to sign in with; scripts/quick-start-compose.sh
+  // does all three. The empty origin list is the same posture as the endpoint below and for the same reason: the page
+  // this deployment serves is same-origin, so no browser origin beyond it has any business calling the surface.
+  //
+  // "ClientEndpoint": {
+  //   "Enabled": true,
+  //   "Authentication": [
+  //     { "Method": "password" }
+  //   ],
+  //   "Cors": {
+  //     "AllowedOrigins": []
+  //   }
+  // },
   "McpEndpoint": {
     "Enabled": true,
     "Authentication": [

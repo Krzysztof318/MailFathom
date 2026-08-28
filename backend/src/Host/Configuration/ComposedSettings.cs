@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Rules.Conditions;
-using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Answering;
 using MailFathom.Host.Configuration.Chat;
 using MailFathom.Host.Configuration.Embeddings;
@@ -215,11 +214,14 @@ internal static class ComposedSettings
         }
 
         // Surfaces may share a socket — which is what lets a single-node deployment publish one port rather than three
-        // — but they may not disagree about it, and this is where that is settled before anything binds.
+        // — but they may not disagree about it, and this is where that is settled before anything binds. It reads after
+        // the short-circuit above, because declaring a listener reads a section as though it were valid.
         //
-        // Whether a surface accepting passwords is confidential is settled here as well, and only here: it is the one
-        // rule reading an endpoint's own transport against the proxy section, so neither section could hold it. Both
-        // read after the short-circuit above, because each of them reads a section as though it were valid.
+        // Whether a password may cross an unencrypted hop is deliberately not settled here. This process reads the
+        // scheme of its own socket and nothing beyond it, so a refusal written from that reading refused the deployment
+        // it existed to allow as readily as the one nobody meant to expose; PasswordClearTextTransportWarning reports
+        // the hop at every startup instead, which is what an API key crossing the same hop already gets. A bearer
+        // token is still refused on it, per request rather than at startup, and that is untouched by this.
         return
         [
             .. Refusal<McpEndpointOptions>(
@@ -231,22 +233,6 @@ internal static class ComposedSettings
                     .. client.DeclareListeners(),
                     .. health.DeclareListeners(),
                 ]).Errors),
-            .. Refusal<McpEndpointOptions>(
-                McpEndpointOptions.SectionName,
-                PasswordTransportConfidentiality.FindConfigurationErrors(
-                    McpEndpointOptions.SectionName,
-                    mcp.Enabled,
-                    mcp.AllowsBasic,
-                    mcp.ServesClearText,
-                    reverseProxy)),
-            .. Refusal<ClientEndpointOptions>(
-                ClientEndpointOptions.SectionName,
-                PasswordTransportConfidentiality.FindConfigurationErrors(
-                    ClientEndpointOptions.SectionName,
-                    client.Enabled,
-                    client.AllowsBasic,
-                    client.ServesClearText,
-                    reverseProxy)),
         ];
     }
 

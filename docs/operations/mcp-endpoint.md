@@ -1,6 +1,6 @@
 # The MCP endpoint and what protects it
 
-<!-- describes: backend/src/Mcp/**, backend/src/Host/Security/**, backend/src/Infrastructure/Security/**, backend/src/Common/OAuth/**, backend/src/Common/ClientAssertions/**, backend/src/Host/Hosting/Warnings/McpTransportAuthenticationWarning.cs, backend/src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, backend/src/Domain/Access/MailFathomPermission.cs, backend/src/Host/Configuration/Endpoints/TransportClearTextRedirectOptions.cs, backend/src/Host/Configuration/Endpoints/TransportListenerConfiguration.cs, backend/src/Host/Configuration/Endpoints/ExternalListenerConfiguration.cs, backend/src/Host/Configuration/Endpoints/ReverseProxyOptions.cs, backend/src/Host/Hosting/Startup/ClearTextRedirectToHttps.cs, backend/src/Host/Hosting/Warnings/TransportClearTextRedirectReport.cs, backend/src/Host/Hosting/Warnings/ReverseProxyTrustWarning.cs, backend/src/Host/Hosting/Warnings/McpTransportEncryptionWarning.cs -->
+<!-- describes: backend/src/Mcp/**, backend/src/Host/Security/**, backend/src/Infrastructure/Security/**, backend/src/Common/OAuth/**, backend/src/Common/ClientAssertions/**, backend/src/Host/Hosting/Warnings/McpTransportAuthenticationWarning.cs, backend/src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, backend/src/Domain/Access/MailFathomPermission.cs, backend/src/Host/Configuration/Endpoints/TransportClearTextRedirectOptions.cs, backend/src/Host/Configuration/Endpoints/TransportListenerConfiguration.cs, backend/src/Host/Configuration/Endpoints/ExternalListenerConfiguration.cs, backend/src/Host/Configuration/Endpoints/ReverseProxyOptions.cs, backend/src/Host/Hosting/Startup/ClearTextRedirectToHttps.cs, backend/src/Host/Hosting/Warnings/TransportClearTextRedirectReport.cs, backend/src/Host/Hosting/Warnings/ReverseProxyTrustWarning.cs, backend/src/Host/Hosting/Warnings/McpTransportEncryptionWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs -->
 
 The MCP endpoint is how an agent reaches MailFathom. This page records what enabling it means operationally, what a client
 has to present to reach it, which browser origins it answers, which client applications it accepts a certificate from,
@@ -623,26 +623,43 @@ The two halves are a username and a password joined by a colon and encoded as ba
 a protection, and is the whole reason for the transport rule below. A username is folded to lower case, so `Owner` and
 `owner` are one credential, and it names exactly one owner across the deployment.
 
-**A surface accepting a password must be confidential, and startup refuses it otherwise.** Every other method here is
-warned about over clear text and permitted, because a deployment may knowingly be on a loopback socket. A password is
-not: it is typed by a person, it is the credential that person is most likely to have typed somewhere else, and reading
-it once off the network is reading it for as long as it stands. Two arrangements satisfy the rule, and they are the two
-a deployment actually runs — the endpoint terminates TLS itself, through [`Transport`](#https-and-your-own-domain), or
-you have named what stands in front in
-[`ReverseProxy:TrustedProxies`](#behind-a-tls-terminating-reverse-proxy). A range covering every address is not naming
-one: it trusts whatever can open a connection, which is what a section naming nothing already does.
+**A password crossing a clear-text hop is reported at every startup and never refused.** It is the credential most
+worth protecting on this surface — typed by a person, likely typed somewhere else too, and readable for as long as it
+stands once anything on the path has read it once — which is why the warning names the surface and the port rather than
+being folded into the encryption warning beside it:
 
-What the rule reads is what the endpoint **serves**, not whether a certificate is configured. `HttpsOnly` satisfies it.
-`HttpAndHttps` satisfies it too, but only while [`Https:Redirect:Enabled`](#redirecting-a-client-still-pointed-at-http)
-is left on: with the redirect off, that mode's clear-text socket answers the routes rather than pointing away from them,
-which is the same unencrypted hop as no certificate at all. A `Basic` block beside that arrangement is refused at
-startup, with a sentence naming both ways out.
+```text
+ClientEndpoint accepts an owner's username and password and answers its routes on port 8080, which nothing encrypts,
+so every password signed in with crosses that hop readable by anything on the network path — and a password is the one
+credential here that a person typed and may have typed elsewhere. This is the expected posture on a loopback bind and
+behind a TLS-terminating reverse proxy; anywhere else, set ClientEndpoint:Transport to 'HttpsOnly' and configure
+ClientEndpoint:Https:Endpoints so this process presents your domain's certificate, or name the proxy that terminates
+TLS in ReverseProxy:TrustedProxies.
+```
 
-**A request that reaches this process as clear text is refused before its header is read**, even on a deployment the
-rule above admits. The arrangement it admits behind a proxy leaves a clear-text socket open, and a request arriving
-there from anywhere but the named proxy carries no forwarded scheme — so it is answered with the challenge below rather
-than having its password compared. The startup rule decides which deployments may accept a password; this decides which
-requests may carry one.
+Naming a proxy in [`ReverseProxy:TrustedProxies`](#behind-a-tls-terminating-reverse-proxy) changes what it describes,
+the same way it changes the encryption warning: the hop becomes the one between that proxy and this process, and the
+warning says to keep it inside a network you control. Nothing is silenced by it.
+
+It reports rather than refuses because this process can read the scheme of its own socket and nothing beyond it. A
+deployment publishing on loopback for a proxy that need not be declared, and one exposing that socket to a network
+nobody meant to reach, are one reading from here — so a refusal written from that reading refused the first as readily
+as the second. **This was a startup refusal in an earlier release**, and the deployment it most often stopped was the
+Compose quick start it existed to protect. Whether that hop is encrypted is your decision about your own deployment;
+what MailFathom owes you is that it is never invisible.
+
+A request arriving over clear text is likewise **authenticated rather than refused**, and it meets the same
+`WWW-Authenticate` challenge an encrypted one does. A surface that read a password over a hop and then declined to ask
+for one would be a surface no browser client could sign in to, which is a way of refusing the arrangement rather than
+of protecting it.
+
+The one refusal of a password that remains is [the administrative endpoint's](configuration-endpoints.md#adminendpoint),
+and it is a different rule under a different reason: that surface answers for the deployment rather than for a person.
+
+None of this reaches an OAuth bearer token, which is **still refused per request** on a hop this process reads as
+unencrypted, before the token is read at all — see [what the default costs](#behind-a-tls-terminating-reverse-proxy).
+A token names an authorization server this deployment did not issue it against, and the two credentials are judged
+separately.
 
 An endpoint accepts the method **at most once** and startup refuses a second entry naming it, exactly as it does for
 every other method. Rotation is a second credential row rather than a second entry, because a presented credential names
@@ -662,11 +679,10 @@ Both challenges are offered, which is what lets an OAuth client's discovery keep
 accepts a password. The `charset` parameter is the only one RFC 7617 permits and is what makes a password outside
 US-ASCII survive the round trip.
 
-**A request the deployment cannot establish as encrypted is offered the bearer challenge alone.** A challenge is an
-instruction to send the credential again, so offering the password half over a hop that says it was clear text would be
-this deployment asking for a password in the open. That is reachable on the one arrangement clear text is permitted in
-— a socket behind a named proxy, reached by something that is not the proxy and therefore carries no forwarded scheme.
-Such a request is refused before its header is read, and the refusal it gets back names only `Bearer`.
+**The same two challenges are offered on every hop, encrypted or not.** A surface that reads a password over a
+clear-text hop and then withholds the challenge that asks for one is a surface no browser client can sign in to, which
+refuses the arrangement rather than protecting it. What the deployment owes an operator there is the startup warning
+above, which names the hop and the port every time the process starts.
 
 `AttemptsPerMinute` bounds guessing and defaults to 10, which is a person correcting a mistyped password. It is applied
 **per source and per username** rather than per endpoint, because those are the two shapes an attack takes: one host

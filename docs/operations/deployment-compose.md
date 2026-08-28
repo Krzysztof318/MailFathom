@@ -24,11 +24,33 @@ knowing before you start, because neither announces itself:
 
 `scripts/quick-start-compose.sh` performs everything on this page that is typed rather than decided: it asks where the
 mailbox lives, generates the credentials, writes the configuration, sets the modes, starts the stack, offers the schema
-step, and reports the two probes.
+step, reports the two probes, and provisions the credential to sign in to the client with.
 
 ```bash
 scripts/quick-start-compose.sh
 ```
+
+**It ends with an address for a chat client and an address for a browser.** The client travels inside the same image,
+so preparing it is two settings and a credential rather than anything to install: `MAILFATHOM_CLIENT=true` in `.env`, a
+`Basic` entry in `ClientEndpoint:Authentication`, and a generated username and password provisioned over the
+administrative endpoint once the stack answers. The password is written to `secrets/client-<name>-password` with the
+mode every other generated credential gets — beside the two database passwords rather than in `secrets/mailfathom/`,
+which is bind-mounted into the container and would make it readable there for no purpose — and the closing report
+names the address, the username, and that file. `--no-client` prepares the MCP endpoint alone, and
+`--client-user-name` names somebody other than `owner`.
+
+That credential is why the administrative endpoint is served whether or not you would otherwise have asked for it:
+provisioning one is an administrative operation and there is no other way to reach one. `--admin-endpoint off` together
+with the client is refused naming the conflict rather than quietly overridden.
+
+**It also relaxes the platform's TLS policy for this deployment**, by copying
+[`deploy/openssl/legacy-mail-server.cnf.example`](https://github.com/Krzysztof318/MailFathom/blob/main/deploy/openssl/legacy-mail-server.cnf.example)
+to `openssl-legacy.cnf` beside `compose.yaml` and naming it in `OPENSSL_CONF` through the same
+`compose.override.yaml` the administrative port is published from. That is what makes a mailbox on a server offering
+only a 1024-bit group, a 1024-bit key, or a SHA-1 signature reachable from a first run instead of failing it with a
+handshake error that names nothing. It covers every TLS session the process makes, the database's included, it is
+listed in the closing report, and `--no-legacy-tls` prepares the same deployment under the platform default —
+[the platform TLS policy](platform-tls-policy.md) is the page.
 
 **It prepares a deployment to evaluate MailFathom with, and that is not the recommended way to run one.** What it
 produces serves this machine over plain HTTP, keeps its credentials in files under the checkout, narrows no grant, and
@@ -47,17 +69,32 @@ Four things it will not decide for you, because each is a decision rather than a
 - **It overwrites nothing.** An existing `.env`, configuration file, or secret stops the run naming the file, so it
   cannot replace the credentials of a deployment already prepared here.
 
-The two answers it does ask for are the ones with a cost worth stating before they are given. The MCP endpoint accepts an
-API key unless you ask for none, which is legal, announced with a startup warning, and the only shape the chat clients
-with no field for a static header can connect to. The key itself is not written here: what a client presents to that
-endpoint is a record beside the owner whose mail it reaches, minted with `mfctl credential create` once the deployment is
-running, and the script prints that command when it finishes. That is also why an authenticated MCP endpoint turns the
-administrative endpoint on — it is where the key is minted rather than an extra — and enabling it publishes port 8090
-through a generated `compose.override.yaml`; its own default port is 8080, which is the socket the MCP endpoint is
-already served on, and `compose.yaml` publishes nothing for it.
+**The MCP endpoint is the answer it asks for**, and it is the one with a cost worth stating before it is given. The
+endpoint accepts an API key unless you ask for none, which is legal, announced with a startup warning, and the only
+shape the chat clients with no field for a static header can connect to. The key itself is not written here: what a
+client presents to that endpoint is a record beside the owner whose mail it reaches, minted with
+`mfctl credential create` once the deployment is running, and the script prints that command when it finishes.
+
+The administrative endpoint comes with what those two credentials need rather than from an answer. Minting the MCP key
+is an administrative operation, and so is provisioning the username and password a person signs in to the client with —
+neither has another way to reach one. So a default run serves that endpoint on port 8090 through a generated
+`compose.override.yaml`, with a generated key of its own; its own default port is 8080, which is the socket the MCP
+endpoint is already served on, and `compose.yaml` publishes nothing for it. Only a run that asked for neither — both
+`--no-client` and `--mcp-authentication none` — leaves it off, and that run is asked whether to serve it and whether to
+serve it without a key.
+
+**The client's password crosses an unencrypted hop**, which is the same hop everything else here crosses and is worth
+naming separately because a password is the one credential a person typed. On a port published to `127.0.0.1` that hop
+is this machine. MailFathom reports it at every startup, naming the surface and the port, and does not refuse it: this
+process reads the scheme of its own socket and nothing beyond it, so it cannot tell this deployment from one exposed to
+a network. Moving `MAILFATHOM_HTTP_BIND` off loopback without putting TLS in front is what makes the warning matter.
 
 `--non-interactive` takes every answer as an argument instead, with `--password-file` for the credential, and
-`--no-start` writes the files and stops. `scripts/quick-start-compose.sh --help` lists all of them.
+`--no-start` writes the files and stops. Both end before the schema and before the client credential is provisioned —
+an unattended run declines the schema question the same way it declines every other — so what either leaves is a
+prepared deployment and a password nothing has been told about yet.
+[Provisioning it](client-endpoint.md#signing-a-person-in) is one administrative call afterwards.
+`scripts/quick-start-compose.sh --help` lists all of them.
 
 ## Before the first start
 

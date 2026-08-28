@@ -1132,6 +1132,11 @@ internal static class HostComposition
         // same reason they are: the report is what decides whether either surface has a clear-text port to account for.
         builder.Services.AddHostedService<TransportClearTextRedirectReport>();
 
+        // Beside it, reading the same two surfaces and for the same reason, and separate from the encryption warnings
+        // above because it answers a narrower question than either: not whether the transport is confidential, but
+        // whether a password crosses the hop it leaves open.
+        builder.Services.AddHostedService<PasswordClearTextTransportWarning>();
+
         // Mapped once, next to the decision that reads it, so the numbers the limiters are built from and the numbers the
         // startup report states are the same reading of the same settings. Null means an operator turned limiting off, or
         // the endpoint is not served at all, which is the one case in which no limiter is registered for it rather than one
