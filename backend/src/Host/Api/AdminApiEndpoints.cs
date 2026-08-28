@@ -110,11 +110,18 @@ namespace MailFathom.Host.Api;
 /// should bound who may add to it, read it out, or erase somebody from it.
 /// </para>
 /// <para>
-/// Then come the passwords an owner signs in with, which <see cref="OwnerCredentialEndpoints" /> describes: listing
-/// the owners this deployment holds, and provisioning, listing, rotating, disabling, and removing one owner's
-/// credentials. They are here because a credential this deployment keeps a record of has to be administered over a
-/// route rather than edited into a configuration file, and because deciding who can read a person's mail belongs under
-/// the credential that already bounds placing a mailbox owner's long-lived one.
+/// Then come the owners themselves, which <see cref="OwnerRecordEndpoints" /> describes: the roster, recording an
+/// owner, erasing one, and everything done to one owner's own record — reading it, saving it edited, declaring a
+/// mailbox, withdrawing one, and the adoption that moves them off this deployment's files. They are here because a
+/// deployment-wide list of the people it serves is the one listing an owner-facing surface must never compose, and
+/// because who this deployment serves is an operator's decision rather than anything a model reasons over.
+/// </para>
+/// <para>
+/// Then come the passwords an owner signs in with, which <see cref="OwnerCredentialEndpoints" /> describes:
+/// provisioning, listing, rotating, disabling, and removing one owner's credentials. They are here because a credential
+/// this deployment keeps a record of has to be administered over a route rather than edited into a configuration file,
+/// and because deciding who can read a person's mail belongs under the credential that already bounds placing a mailbox
+/// owner's long-lived one.
 /// </para>
 /// <para>
 /// The last of all are the deployment's own settings, which <see cref="ConfigurationEndpoints" /> describes: reading
@@ -178,6 +185,7 @@ internal static class AdminApiEndpoints
         api.MapOutbox();
         api.MapMailFolderErasure();
         api.MapContacts();
+        api.MapOwnerRecords();
         api.MapOwnerCredentials();
         api.MapConfiguration();
 

@@ -40,12 +40,20 @@ public interface IMailOwnerProvisioning
     /// <param name="owner">The owner whose row is relabelled.</param>
     /// <param name="displayName">The label the owner is now declared under.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns>A task that completes once the row carries the label.</returns>
+    /// <returns><see langword="true" /> when the row carries the label once the write has run, <see langword="false" /> when the label belongs to somebody else.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody, or <paramref name="displayName" /> is <see langword="null" />, empty, or white space.</exception>
     /// <remarks>
+    /// <para>
     /// A label is what an administrator reads a roster by rather than anything an account hangs on, so a file that
-    /// renames an owner renames them. The identifier is the opposite case and is refused rather than followed, because
-    /// changing it would orphan every mail account and every stored message recorded under the old one.
+    /// renames an owner renames them, and so does an administrator over the endpoint. The identifier is the opposite
+    /// case and is refused rather than followed, because changing it would orphan every mail account and every stored
+    /// message recorded under the old one.
+    /// </para>
+    /// <para>
+    /// The answer is read the way <see cref="ProvisionAsync" />'s is, and for the same race: a label taken between a
+    /// roster being read and this statement reaching the table is a refusal a caller states, never a unique-violation
+    /// sentence raised out of a start or returned to an operator as a failure.
+    /// </para>
     /// </remarks>
-    Task RelabelAsync(MailOwnerId owner, string displayName, CancellationToken cancellationToken);
+    Task<bool> RelabelAsync(MailOwnerId owner, string displayName, CancellationToken cancellationToken);
 }

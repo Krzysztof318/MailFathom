@@ -5,6 +5,7 @@
 using MailFathom.Application.Access;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Access;
+using MailFathom.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace MailFathom.Infrastructure.Persistence.Owners;
@@ -57,19 +58,45 @@ internal sealed class PersistedMailOwnerProvisioning(MailFathomDbContext dbConte
     }
 
     /// <inheritdoc />
-    public async Task RelabelAsync(MailOwnerId owner, string displayName, CancellationToken cancellationToken)
+    public async Task<bool> RelabelAsync(MailOwnerId owner, string displayName, CancellationToken cancellationToken)
     {
         var ownerId = RequireNamed(owner);
         ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
 
-        // The version is deliberately left where it is. It guards the document a writer composes over, and the label is
-        // not part of that document, so stepping it here would refuse a write that had read the record correctly.
-        await dbContext.OwnerAccounts
-            .Where(record => record.Id == ownerId && record.DisplayName != displayName)
+        // Guarded by the label's own index rather than by a read before it, for the reason the insert above is guarded
+        // by ON CONFLICT: a roster read a moment earlier says nothing about the row another writer is committing, and
+        // the alternative to a conditional statement is the server's unique-violation sentence reaching an operator.
+        // The version is deliberately left where it is — it guards the document a writer composes over, and the label
+        // is not part of that document, so stepping it here would refuse a write that had read the record correctly.
+        await RowsToRelabel(dbContext.OwnerAccounts, ownerId, displayName)
             .ExecuteUpdateAsync(
                 record => record.SetProperty(owner => owner.DisplayName, displayName),
                 cancellationToken);
+
+        // What the row carries afterwards rather than whether this statement was the one that wrote it, so a caller
+        // relabelling to the label the row already had is told it holds it rather than that somebody else does.
+        return await dbContext.OwnerAccounts
+            .AsNoTracking()
+            .AnyAsync(record => record.Id == ownerId && record.DisplayName == displayName, cancellationToken);
     }
+
+    /// <summary>Composes the rows a relabel writes to: this owner's, and only while no other owner carries the label.</summary>
+    /// <param name="records">The owner records to select from.</param>
+    /// <param name="ownerId">The owner being relabelled.</param>
+    /// <param name="displayName">The label they would carry.</param>
+    /// <returns>The row to write, or nothing where the label is already theirs or is somebody else's.</returns>
+    /// <remarks>
+    /// Composed apart from the statement so that what it translates to is assertable without a server: the guard is a
+    /// correlated existence check, and a predicate the provider could not translate would first be met as an exception
+    /// out of a deployment's own rename.
+    /// </remarks>
+    internal static IQueryable<OwnerAccountEntity> RowsToRelabel(
+        IQueryable<OwnerAccountEntity> records,
+        Guid ownerId,
+        string displayName) =>
+        records.Where(record => record.Id == ownerId
+            && record.DisplayName != displayName
+            && !records.Any(held => held.Id != ownerId && held.DisplayName == displayName));
 
     private static Guid RequireNamed(MailOwnerId owner) =>
         owner.IsSpecified

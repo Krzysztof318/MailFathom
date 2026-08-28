@@ -6,6 +6,8 @@ using System.Globalization;
 using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.Emails.DownloadAttachment;
+using MailFathom.Domain.Access;
+using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Transport;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
@@ -62,7 +64,7 @@ internal static class EmailAttachmentDownloadEndpoint
     /// <param name="deploymentOwner">Names the owner whose mail a redeemed capability reaches.</param>
     /// <param name="context">The request being answered, whose response body the attachment is written to.</param>
     /// <param name="cancellationToken">Cancels the read when the reader disconnects.</param>
-    /// <returns>The attachment's octets, or <c>404</c> with a body that says nothing about why.</returns>
+    /// <returns>The attachment's octets, <c>404</c> with a body that says nothing about why, or <c>409</c> where this deployment has no sole owner for a ticket naming nobody.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any resolved dependency is <see langword="null" />.</exception>
     /// <remarks>
     /// The verified ticket is what the request runs under, and it is stated onto the scope before the use case is
@@ -71,7 +73,7 @@ internal static class EmailAttachmentDownloadEndpoint
     /// inherit a permission from somewhere. The principal states an owner beside the capability, because the read behind
     /// it is bounded to one owner's accounts like every other mail read rather than to the deployment's.
     /// </remarks>
-    internal static async Task<Results<EmptyHttpResult, NotFound<ProblemDetails>>> DownloadAsync(
+    internal static async Task<Results<EmptyHttpResult, NotFound<ProblemDetails>, ProblemHttpResult>> DownloadAsync(
         string capability,
         IAttachmentDownloadTicketReader ticketReader,
         EmailAttachmentDownloadReader downloadReader,
@@ -92,11 +94,25 @@ internal static class EmailAttachmentDownloadEndpoint
             return Refused();
         }
 
-        // The owner comes from the deployment rather than from the ticket, and that is exact rather than approximate
-        // while mail accounts are declared in configuration: such a deployment holds one owner, the startup gate refuses
-        // to serve one that does not, and every account the capability could name is therefore that owner's. A ticket
-        // that recorded the owner it was minted for is what replaces this once an account can belong to a second one.
-        principals.Assume(AuthorizedPrincipal.SignedCapability(deploymentOwner.Owner, AuthorizedObjectOf(ticket)));
+        // The owner comes from the deployment rather than from the ticket, which is exact on a deployment holding one
+        // owner and has no answer on one holding several: the capability is a signed ticket rather than a credential, so
+        // nothing presented here names a person. Such a deployment refuses the download rather than guessing whose mail
+        // it is, and the refusal is composed by the same helper the route groups' filter uses — this route is mapped
+        // outside every group deliberately, so nothing else would classify it and the caller would meet an unhandled
+        // fault carrying the capability into a framework log. Recording the owner in the ticket is what ends the
+        // refusal itself, and it changes the capability's own format.
+        MailOwnerId owner;
+
+        try
+        {
+            owner = deploymentOwner.Owner;
+        }
+        catch (DeploymentMailOwnerUnresolvedException unattributable)
+        {
+            return RouteAuthorization.Unattributable(unattributable);
+        }
+
+        principals.Assume(AuthorizedPrincipal.SignedCapability(owner, AuthorizedObjectOf(ticket)));
 
         await using var attachment = await downloadReader.OpenAsync(ticket, cancellationToken);
         if (attachment is null)

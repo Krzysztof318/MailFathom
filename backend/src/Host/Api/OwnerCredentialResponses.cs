@@ -185,24 +185,3 @@ internal sealed record OwnerCredentialRotatedResponse(string? Lookup, string? Ke
     /// <inheritdoc />
     public override string ToString() => nameof(OwnerCredentialRotatedResponse);
 }
-
-/// <summary>The owners this deployment holds records for.</summary>
-/// <param name="Owners">The owner identifiers, in the directory's own stable order.</param>
-/// <remarks>
-/// The identifiers alone. An owner's identifier is MailFathom's own generated handle for a record and says nothing
-/// about the person, which is what makes it safe to list; a display name would be personal data served to answer a
-/// question about credentials, so a client that wants one reads the owner's own record instead.
-/// </remarks>
-internal sealed record MailOwnerListResponse(IReadOnlyList<Guid> Owners)
-{
-    /// <summary>Describes the owners a directory read produced.</summary>
-    /// <param name="owners">The owners the deployment holds.</param>
-    /// <returns>The response body.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="owners" /> is <see langword="null" />.</exception>
-    internal static MailOwnerListResponse For(IReadOnlyList<MailOwnerId> owners)
-    {
-        ArgumentNullException.ThrowIfNull(owners);
-
-        return new MailOwnerListResponse([.. owners.Select(owner => owner.Value)]);
-    }
-}

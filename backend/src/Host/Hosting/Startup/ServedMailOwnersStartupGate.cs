@@ -6,10 +6,9 @@ using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration;
-using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.OwnerSettings;
 using MailFathom.Infrastructure.Persistence.Owners;
-using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host.Hosting.Startup;
 
@@ -51,9 +50,7 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
     private readonly IConfiguration configuration;
     private readonly ServedMailOwners servedOwners;
     private readonly HostStartupGates startupGates;
-    private readonly McpEndpointOptions mcpEndpointSettings;
-    private readonly ClientEndpointOptions clientEndpointSettings;
-    private readonly AdminEndpointOptions adminEndpointSettings;
+    private readonly SeveralOwnerAdmission admission;
     private readonly ILogger<ServedMailOwnersStartupGate> logger;
 
     /// <summary>Initializes a new served-owner startup gate.</summary>
@@ -61,9 +58,7 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
     /// <param name="configuration">The configuration the owner declarations are read from.</param>
     /// <param name="servedOwners">The holder this gate publishes the roster into.</param>
     /// <param name="startupGates">The tracker this gate reports its completion to, which is what the startup probe reads.</param>
-    /// <param name="mcpEndpointSettings">The MCP endpoint settings startup was composed from.</param>
-    /// <param name="clientEndpointSettings">The client endpoint settings startup was composed from.</param>
-    /// <param name="adminEndpointSettings">The administrative endpoint settings startup was composed from.</param>
+    /// <param name="admission">The reading that decides whether this deployment's endpoints could tell one owner's caller from another's.</param>
     /// <param name="logger">The startup logger.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public ServedMailOwnersStartupGate(
@@ -71,26 +66,20 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
         IConfiguration configuration,
         ServedMailOwners servedOwners,
         HostStartupGates startupGates,
-        IOptions<McpEndpointOptions> mcpEndpointSettings,
-        IOptions<ClientEndpointOptions> clientEndpointSettings,
-        IOptions<AdminEndpointOptions> adminEndpointSettings,
+        SeveralOwnerAdmission admission,
         ILogger<ServedMailOwnersStartupGate> logger)
     {
         ArgumentNullException.ThrowIfNull(scopeFactory);
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(servedOwners);
         ArgumentNullException.ThrowIfNull(startupGates);
-        ArgumentNullException.ThrowIfNull(mcpEndpointSettings);
-        ArgumentNullException.ThrowIfNull(clientEndpointSettings);
-        ArgumentNullException.ThrowIfNull(adminEndpointSettings);
+        ArgumentNullException.ThrowIfNull(admission);
 
         this.scopeFactory = scopeFactory;
         this.configuration = configuration;
         this.servedOwners = servedOwners;
         this.startupGates = startupGates;
-        this.mcpEndpointSettings = mcpEndpointSettings.Value;
-        this.clientEndpointSettings = clientEndpointSettings.Value;
-        this.adminEndpointSettings = adminEndpointSettings.Value;
+        this.admission = admission;
         this.logger = logger;
     }
 
@@ -127,11 +116,23 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
                 newOwners);
         }
 
-        var served = declared.Count == 0
-            ? [await this.ServeTheSoleOwnerAsync(scope, held, cancellationToken)]
+        var declaredOwners = declared.Count == 0
+            ? await this.ServeTheSoleOwnerAsync(scope, held, cancellationToken)
             : await this.ServeDeclaredOwnersAsync(scope, declared, held, cancellationToken);
 
+        IReadOnlyList<ServedMailOwner> served =
+        [
+            .. declaredOwners,
+            .. await this.ServeOwnersOfTheirOwnRecordAsync(scope, declaredOwners, held, cancellationToken),
+        ];
+
         this.RefuseSeveralOwnersOnAnOwnerFacingSurface(served);
+
+        this.RefuseMailAccountNamesTwoOwnersShare(served);
+
+        this.RefuseADeploymentSectionNobodyReads(served);
+
+        this.RefuseNothingToSynchronize(served);
 
         await this.RefuseUnusableMailAccountSecretsAsync(scope, served, cancellationToken);
 
@@ -145,72 +146,120 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
     /// <inheritdoc />
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
-    /// <summary>Serves the shape a deployment that declares no owner keeps, which is the one every upgrade arrives in.</summary>
+    /// <summary>Serves the owner of the deployment's own mail section, which a deployment declaring none keeps.</summary>
+    /// <returns>That owner, or nothing where every owner this deployment holds reads their own record instead.</returns>
     /// <remarks>
+    /// <para>
     /// The mail accounts stay in <c>MailSynchronization:Accounts</c> and no file has to change. The identifier is
     /// generated once and recorded, which the release's own migration ordinarily did; generating one here is what
     /// answers a database whose row is not there at all, and it is a version 4 value for the reason the column is —
     /// an owner identifier reaches administrative APIs, audit records, and logs, and a time-ordered one would publish
     /// when each owner was created and in what order.
+    /// </para>
+    /// <para>
+    /// Only an owner still reading that section contends for it. An owner whose record was written at runtime reads
+    /// none of it, so they neither make a deployment ambiguous about whose section it is nor keep one from being
+    /// served, and they are served beside this from their own record. Where every owner is of that kind the section
+    /// belongs to nobody and this serves nobody: recording an owner for it would mint a person the operator never
+    /// asked for, on every start.
+    /// </para>
     /// </remarks>
-    private async Task<ServedMailOwner> ServeTheSoleOwnerAsync(
+    private async Task<IReadOnlyList<ServedMailOwner>> ServeTheSoleOwnerAsync(
         AsyncServiceScope scope,
         IReadOnlyList<MailOwnerRecord> held,
         CancellationToken cancellationToken)
     {
-        if (held.Count > 1)
+        var readingTheSection = held.Where(record => !record.DocumentWrittenAtRuntime).ToArray();
+
+        if (readingTheSection.Length > 1)
         {
             throw DeploymentMailOwnerUnresolvedException.SeveralOwners();
         }
 
-        if (held is not [var soleOwner])
+        if (readingTheSection is [var soleOwner])
         {
-            var generated = MailOwnerId.Create(Guid.NewGuid());
-
-            var recorded = await scope.ServiceProvider
-                .GetRequiredService<IMailOwnerProvisioning>()
-                .ProvisionAsync(generated, SoleOwnerDisplayName, cancellationToken);
-
-            if (!recorded)
-            {
-                // Another replica of this deployment recorded the sole owner first, under an identifier it minted
-                // rather than this one. Serving the identifier this process generated would hang every message on a
-                // row that is not there, so the owner the deployment actually holds is read back and served instead.
-                var winners = await scope.ServiceProvider
-                    .GetRequiredService<IMailOwnerDirectory>()
-                    .ReadOwnersAsync(2, cancellationToken);
-
-                if (winners is not [var winner])
-                {
-                    throw DeploymentMailOwnerUnresolvedException.SeveralOwners();
-                }
-
-                return winner.DocumentWrittenAtRuntime
-                    ? await this.ServeFromTheOwnDocumentAsync(scope, winner, cancellationToken)
-                    : new ServedMailOwner(
-                        winner.Owner,
-                        winner.DisplayName,
-                        MailOwnerAccountSource.DeploymentSection,
-                        MailAccounts: []);
-            }
-
-            this.LogSoleOwnerRecorded();
-
-            return new ServedMailOwner(
-                generated,
-                SoleOwnerDisplayName,
-                MailOwnerAccountSource.DeploymentSection,
-                MailAccounts: []);
+            return [ServedFromTheSection(soleOwner)];
         }
 
-        return soleOwner.DocumentWrittenAtRuntime
-            ? await this.ServeFromTheOwnDocumentAsync(scope, soleOwner, cancellationToken)
-            : new ServedMailOwner(
-                soleOwner.Owner,
-                soleOwner.DisplayName,
-                MailOwnerAccountSource.DeploymentSection,
-                MailAccounts: []);
+        if (held.Count > 0)
+        {
+            return [];
+        }
+
+        var generated = MailOwnerId.Create(Guid.NewGuid());
+
+        var recorded = await scope.ServiceProvider
+            .GetRequiredService<IMailOwnerProvisioning>()
+            .ProvisionAsync(generated, SoleOwnerDisplayName, cancellationToken);
+
+        if (recorded)
+        {
+            this.LogSoleOwnerRecorded();
+
+            return
+            [
+                new ServedMailOwner(
+                    generated,
+                    SoleOwnerDisplayName,
+                    MailOwnerAccountSource.DeploymentSection,
+                    MailAccounts: []),
+            ];
+        }
+
+        // Another replica of this deployment recorded the sole owner first, under an identifier it minted rather than
+        // this one. Serving the identifier this process generated would hang every message on a row that is not there,
+        // so the owner the deployment actually holds is read back and served instead.
+        var winners = await scope.ServiceProvider
+            .GetRequiredService<IMailOwnerDirectory>()
+            .ReadOwnersAsync(2, cancellationToken);
+
+        if (winners is not [var winner])
+        {
+            throw DeploymentMailOwnerUnresolvedException.SeveralOwners();
+        }
+
+        return
+        [
+            winner.DocumentWrittenAtRuntime
+                ? await this.ServeFromTheOwnDocumentAsync(scope, winner, cancellationToken)
+                : ServedFromTheSection(winner),
+        ];
     }
+
+    /// <summary>Serves every owner whose record was written at runtime and whom nothing above has served already.</summary>
+    /// <remarks>
+    /// An owner an administrator provisioned is declared in no file, so nothing else on this path reaches them and a
+    /// deployment would hold a row it never served. They are served last, after the owners a file names, because the
+    /// roster's order is the operator's own reading of their configuration and an owner outside it has no place in
+    /// that order to take.
+    /// </remarks>
+    private async Task<IReadOnlyList<ServedMailOwner>> ServeOwnersOfTheirOwnRecordAsync(
+        AsyncServiceScope scope,
+        IReadOnlyList<ServedMailOwner> alreadyServed,
+        IReadOnlyList<MailOwnerRecord> held,
+        CancellationToken cancellationToken)
+    {
+        var records = held
+            .Where(record => record.DocumentWrittenAtRuntime
+                && alreadyServed.All(owner => owner.Owner != record.Owner))
+            .ToArray();
+
+        var served = new List<ServedMailOwner>(records.Length);
+
+        foreach (var record in records)
+        {
+            served.Add(await this.ServeFromTheOwnDocumentAsync(scope, record, cancellationToken));
+        }
+
+        return served;
+    }
+
+    /// <summary>Serves one owner from the deployment's own mail section, which holds their accounts rather than their record.</summary>
+    private static ServedMailOwner ServedFromTheSection(MailOwnerRecord record) => new(
+        record.Owner,
+        record.DisplayName,
+        MailOwnerAccountSource.DeploymentSection,
+        MailAccounts: []);
 
     /// <summary>Gives every declared owner their row, and serves each of them from the source their own row names.</summary>
     private async Task<IReadOnlyList<ServedMailOwner>> ServeDeclaredOwnersAsync(
@@ -277,7 +326,14 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
 
             if (!StringComparer.Ordinal.Equals(record.DisplayName, label))
             {
-                await provisioning.RelabelAsync(owner, label, cancellationToken);
+                // False is the label having been taken between the roster being read and this statement reaching the
+                // table, which no reading of a snapshot could have refused earlier — the same race the insert above
+                // answers, and the same refusal, because a start whose file renames an owner onto a label somebody
+                // else now holds is a start that cannot say who is who.
+                if (!await provisioning.RelabelAsync(owner, label, cancellationToken))
+                {
+                    throw DeploymentMailOwnerUnresolvedException.OwnerLabelHeldByAnother(label);
+                }
 
                 roster[roster.IndexOf(record)] = record with { DisplayName = label };
             }
@@ -369,37 +425,136 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
     /// <summary>Refuses a deployment whose served surfaces could not say which owner an act is for.</summary>
     /// <remarks>
     /// <para>
-    /// An owner-facing surface answers one person about their own mail, and nothing this release admits a caller with
-    /// names the owner they act for: authentication-free operation admits them with no credential at all, and a
-    /// configured credential authenticates without carrying an owner. Both leave a deployment serving several owners
-    /// with no way to compose a caller, so the surface is refused rather than served against whichever owner a read
-    /// happened to find.
+    /// An owner-facing surface answers one person about their own mail, so it may be served on a roster of several only
+    /// where every caller it admits says which owner it is acting for. The reading that decides that is shared with the
+    /// provisioning this refusal is the start-time half of, because a deployment refused a second owner over a route
+    /// and one refused it at its next start are the same operator correcting the same setting.
     /// </para>
     /// <para>
-    /// The administrative surface is in that set for a reason of its own. An administrator's acts are the deployment's
-    /// rather than one person's, so they carry no owner and every act of theirs that needs one resolves it through
-    /// <see cref="IDeploymentMailOwnerSource.Owner" /> — the contact book above all. That read has no answer on a
-    /// roster of several, so serving the surface would answer each such route with an unclassified failure rather than
-    /// with somebody's contacts.
+    /// The administrative surface is deliberately outside it, which is what makes a second owner reachable at all. An
+    /// administrator's acts are the deployment's rather than one person's, so they carry no owner and each of their
+    /// owner-scoped routes names the owner it is for. What that costs is the administrative routes which still resolve
+    /// <see cref="IDeploymentMailOwnerSource.Owner" /> — the contact book above all — and those have no answer on a
+    /// roster of several rather than a wrong one.
     /// </para>
     /// </remarks>
     private void RefuseSeveralOwnersOnAnOwnerFacingSurface(IReadOnlyList<ServedMailOwner> served)
     {
-        var surfacesResolvingASoleOwner =
-            this.mcpEndpointSettings.Enabled
-            || this.clientEndpointSettings.Enabled
-            || this.adminEndpointSettings.Enabled;
-
-        if (served.Count > 1 && surfacesResolvingASoleOwner)
+        if (served.Count > 1 && this.admission.AdmitsACallerNamingNoOwner)
         {
-            var authenticationDisabled =
-                (this.mcpEndpointSettings.Enabled && !this.mcpEndpointSettings.RequiresAuthentication)
-                || (this.clientEndpointSettings.Enabled && !this.clientEndpointSettings.RequiresAuthentication)
-                || (this.adminEndpointSettings.Enabled && !this.adminEndpointSettings.RequiresAuthentication);
-
-            throw DeploymentMailOwnerUnresolvedException.SeveralOwnersOnAnOwnerFacingSurface(authenticationDisabled);
+            throw DeploymentMailOwnerUnresolvedException.SeveralOwnersOnAnOwnerFacingSurface(this.admission.Refusal);
         }
     }
+
+    /// <summary>Refuses a roster in which one mail-account name would reach two owners.</summary>
+    /// <remarks>
+    /// The deployment-wide rule <c>DeclaredOwners</c> states over a file, asked here over the roster this start would
+    /// actually serve. It has to be asked in both places and neither is redundant: the file's own reading is what names
+    /// the entry an operator corrects, and this one is what sees a record. A write into one owner's record is judged
+    /// against the roster this process settled, so two writes into two record-served owners in one process run — each
+    /// judged against a snapshot the other had not moved — can name the same account, and the start that composes them
+    /// is where the two are first in one place.
+    /// <para>
+    /// An owner served from the deployment's own section carries no accounts on their roster entry, so this reads that
+    /// section for them. Without it the one collision the write-time check cannot see — a record naming an account
+    /// <c>MailSynchronization:Accounts</c> declares — would pass a start, which is the case this refusal exists for.
+    /// </para>
+    /// <para>
+    /// It refuses the start rather than serving both, because serving them is a lookup by identifier reaching whichever
+    /// owner it met first: one person's mailbox settings resolved for another person's account.
+    /// </para>
+    /// </remarks>
+    private void RefuseMailAccountNamesTwoOwnersShare(IReadOnlyList<ServedMailOwner> served)
+    {
+        var deploymentAccounts = DeclaredOwners.DeploymentMailAccountsIn(this.configuration);
+
+        var shared = served
+            .SelectMany(owner => NamesOf(AccountsOf(owner, deploymentAccounts))
+                .Select(name => (owner.Owner, Name: name)))
+            .GroupBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.DistinctBy(entry => entry.Owner).Count() > 1)
+            .Select(group => group.Key)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (shared.Length > 0)
+        {
+            throw DeploymentMailOwnerUnresolvedException.MailAccountNameSharedByOwners(shared);
+        }
+    }
+
+    /// <summary>Refuses mail accounts left in the deployment's own section that no served owner reads.</summary>
+    /// <remarks>
+    /// <para>
+    /// Adopting the sole owner of a deployment that declares none copies <c>MailSynchronization:Accounts</c> into their
+    /// record and leaves the section where it was. Their entry then reads that record rather than the section, so the
+    /// section belongs to nobody — and it is still bound, still searched first by the per-account lookup, and still the
+    /// answer every read gets. What the operator was told is the opposite: that editing the configuration those
+    /// accounts came from no longer changes what the deployment reads for them.
+    /// </para>
+    /// <para>
+    /// The file's own reading cannot see this. <c>DeclaredOwners</c> refuses that section beside declared owners, and
+    /// here there are none: the owners are records, which only the roster holds. So this is the reading that closes
+    /// the invariant <c>MailSynchronizationOptions.FindConfiguredAccount</c> states about itself — the section and the
+    /// roster never both answer — and it holds whether or not synchronization is switched on, because the lookup in
+    /// front of every per-account read does not ask.
+    /// </para>
+    /// </remarks>
+    private void RefuseADeploymentSectionNobodyReads(IReadOnlyList<ServedMailOwner> served)
+    {
+        if (served.Any(owner => owner.Source == MailOwnerAccountSource.DeploymentSection))
+        {
+            return;
+        }
+
+        var deploymentAccounts = DeclaredOwners.DeploymentMailAccountsIn(this.configuration);
+
+        if (deploymentAccounts.Count > 0)
+        {
+            throw DeploymentMailOwnerUnresolvedException.DeploymentSectionServesNobody(deploymentAccounts.Count);
+        }
+    }
+
+    /// <summary>Refuses a deployment that switched synchronization on with nothing at all to synchronize.</summary>
+    /// <remarks>
+    /// The deployment's own rule, held here rather than against the files because an owner's mailboxes are a record as
+    /// well as a section: a deployment whose only mailbox was declared through <c>mfctl owner account add</c> or by the
+    /// owner themselves has an empty <c>MailSynchronization:Accounts</c> and an empty top-level collection, and reading
+    /// the files alone would refuse to start it. The roster is the first place every source is in one place, which is
+    /// what makes this the only reading that can tell a worker with no work from one whose work is in the database.
+    /// </remarks>
+    private void RefuseNothingToSynchronize(IReadOnlyList<ServedMailOwner> served)
+    {
+        if (!DeclaredOwners.SynchronizationIsOn(this.configuration))
+        {
+            return;
+        }
+
+        var deploymentAccounts = DeclaredOwners.DeploymentMailAccountsIn(this.configuration);
+
+        if (served.All(owner => AccountsOf(owner, deploymentAccounts).Count == 0))
+        {
+            throw DeploymentMailOwnerUnresolvedException.NothingToSynchronize();
+        }
+    }
+
+    /// <summary>Reads the mail accounts one served owner's mailboxes are declared in, whichever source holds them.</summary>
+    private static IReadOnlyList<MailSynchronizationAccountOptions> AccountsOf(
+        ServedMailOwner owner,
+        IReadOnlyList<MailSynchronizationAccountOptions> deploymentAccounts) =>
+        owner.Source == MailOwnerAccountSource.DeploymentSection ? deploymentAccounts : owner.MailAccounts;
+
+    /// <summary>Names the strings one owner's mail accounts answer to.</summary>
+    /// <remarks>Both spellings, because a caller may name an account by either and the lookup resolves both.</remarks>
+    private static IEnumerable<string> NamesOf(IReadOnlyList<MailSynchronizationAccountOptions> accounts) =>
+        accounts
+            .SelectMany(account => new[]
+            {
+                MailSynchronizationOptions.TryReadAccountId(account.AccountId),
+                string.IsNullOrWhiteSpace(account.DisplayName) ? null : account.DisplayName.Trim(),
+            })
+            .OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Reports which owners are served, where each is read from, and which held owners are not served at all.</summary>
     private void Report(IReadOnlyList<ServedMailOwner> served, IReadOnlyList<MailOwnerRecord> held)

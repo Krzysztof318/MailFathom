@@ -18,9 +18,18 @@ namespace MailFathom.Host.UnitTests.TestDoubles;
 /// keeps a reference under an unserved scheme refused.
 /// </para>
 /// <para>The reference's target is handed back as the material, because what the material is never decides anything here.</para>
+/// <para>
+/// A target beginning with <see cref="UnreadableTarget" /> is the exception, and it is what a test states when the
+/// question is the resolution rather than the scheme: a record may only carry a reference under a scheme this
+/// deployment registers — the binder refuses anything else before the walk runs — so an unregistered scheme cannot
+/// reach it, and a well-formed reference to material that is not there is the one shape that can.
+/// </para>
 /// </remarks>
 internal sealed class RegisteredSchemeSecretReferenceResolver : ISecretReferenceResolver
 {
+    /// <summary>The target prefix a test writes to state a reference that reaches nothing.</summary>
+    internal const string UnreadableTarget = "reaches-nothing";
+
     public Task<SecretResolutionResult> ResolveAsync(string? configuredValue, CancellationToken cancellationToken)
     {
         if (!SecretReference.TryParse(configuredValue, out var reference, out var grammarFailure))
@@ -28,10 +37,13 @@ internal sealed class RegisteredSchemeSecretReferenceResolver : ISecretReference
             return Task.FromResult(SecretResolutionResult.Failed(grammarFailure));
         }
 
-        var served = DeclaredSecretScheme.Registered.Any(adapter => adapter.Scheme == reference.Scheme);
+        if (!DeclaredSecretScheme.Registered.Any(adapter => adapter.Scheme == reference.Scheme))
+        {
+            return Task.FromResult(SecretResolutionResult.Failed(SecretResolutionFailure.SchemeNotSupported));
+        }
 
-        return Task.FromResult(served
-            ? SecretResolutionResult.Resolved(ResolvedSecret.FromText(reference.Target), SecretMaterialSource.SchemeAdapter)
-            : SecretResolutionResult.Failed(SecretResolutionFailure.SchemeNotSupported));
+        return Task.FromResult(reference.Target.StartsWith(UnreadableTarget, StringComparison.Ordinal)
+            ? SecretResolutionResult.Failed(SecretResolutionFailure.MaterialNotFound)
+            : SecretResolutionResult.Resolved(ResolvedSecret.FromText(reference.Target), SecretMaterialSource.SchemeAdapter));
     }
 }

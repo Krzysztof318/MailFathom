@@ -171,7 +171,9 @@ public sealed class PersistedSettingsAdministrationTests
 
     /// <summary>
     /// A secret left at the marker is left exactly as it was, which is what makes an editing session safe over a
-    /// document carrying one: the buffer never had the reference to save back.
+    /// document carrying one: the buffer never had the reference to save back. The edit is outside the block the secret
+    /// belongs to, which is what a save leaving a marker may change — everything inside that block is what the two
+    /// tests below refuse.
     /// </summary>
     [Fact]
     public async Task ApplyDocumentAsync_ASecretLeftAtTheMarker_LeavesTheReferenceStanding()
@@ -184,7 +186,8 @@ public sealed class PersistedSettingsAdministrationTests
                 "Address": "https://models.example/",
                 "Model": "small",
                 "ApiKey": { "Name": "chat-key", "SecretReference": "file:/run/secrets/chat" }
-              }
+              },
+              "MailboxSearch": { "WordsPerSnippet": "12" }
             }
             """;
 
@@ -193,7 +196,7 @@ public sealed class PersistedSettingsAdministrationTests
 
         // Act
         var outcome = await deployment.ApplyDocumentAsync(
-            opened.Json.Replace("\"chat-key\"", "\"chat-key-renamed\"", StringComparison.Ordinal),
+            opened.Json.Replace("\"12\"", "\"14\"", StringComparison.Ordinal),
             opened.Version);
 
         // Assert
@@ -385,6 +388,88 @@ public sealed class PersistedSettingsAdministrationTests
         var refusal = Assert.Single(outcome.Messages);
         Assert.Contains("MailSynchronization:Accounts:0", refusal, StringComparison.Ordinal);
         Assert.Contains("mfctl config set", refusal, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The same rule where the operator keyed the collection by name rather than by position. Nothing in the path says
+    /// which of the two a segment is — the binder builds the list from whatever child keys it finds — so a save
+    /// repointing this mailbox at another server while leaving its credential at the marker would otherwise commit,
+    /// and the next start would present the provisioned credential to that server.
+    /// </summary>
+    [Fact]
+    public async Task ApplyDocumentAsync_AMarkerWhoseNameKeyedElementChanged_IsRefusedNamingTheElement()
+    {
+        // Arrange
+        using var deployment = Composed(
+            provisioned: "{}",
+            persisted: """
+                {
+                  "MailSynchronization": {
+                    "Accounts": {
+                      "work": {
+                        "AccountId": "work",
+                        "Host": "imap.example.test",
+                        "Secrets": { "Password": { "SecretReference": "file:/run/secrets/work" } }
+                      }
+                    }
+                  }
+                }
+                """);
+
+        var opened = await deployment.ReadDocumentAsync();
+
+        // Act
+        var outcome = await deployment.ApplyDocumentAsync(
+            opened.Json.Replace("imap.example.test", "imap.elsewhere.test", StringComparison.Ordinal),
+            opened.Version);
+
+        // Assert
+        Assert.False(outcome.Committed);
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome.Refusal);
+        Assert.Equal(0, deployment.Row.AcceptedCommits);
+
+        var refusal = Assert.Single(outcome.Messages);
+
+        Assert.Contains("MailSynchronization:Accounts:work", refusal, StringComparison.Ordinal);
+        Assert.Contains("mfctl config set", refusal, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A credential belongs to whatever it is presented to, and the block it sits in is what says which that is. So a
+    /// save changing the address beside a key left at the marker is the same refusal as one changing an element around
+    /// it: neither can be committed on the strength of a path that no longer means what it did.
+    /// </summary>
+    [Fact]
+    public async Task ApplyDocumentAsync_AMarkerWhoseOwnBlockWasRepointed_IsRefusedNamingTheBlock()
+    {
+        // Arrange
+        using var deployment = Composed(
+            provisioned: "{}",
+            persisted: """
+                {
+                  "Chat": {
+                    "Alias": "primary",
+                    "Address": "https://models.example/",
+                    "Model": "small",
+                    "ApiKey": { "Name": "chat-key", "SecretReference": "file:/run/secrets/chat" }
+                  }
+                }
+                """);
+
+        var opened = await deployment.ReadDocumentAsync();
+
+        // Act
+        var outcome = await deployment.ApplyDocumentAsync(
+            opened.Json.Replace("https://models.example/", "https://models.elsewhere/", StringComparison.Ordinal),
+            opened.Version);
+
+        // Assert
+        Assert.False(outcome.Committed);
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome.Refusal);
+
+        var refusal = Assert.Single(outcome.Messages);
+
+        Assert.Contains("'Chat'", refusal, StringComparison.Ordinal);
     }
 
     /// <summary>

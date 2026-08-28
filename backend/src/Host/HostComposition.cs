@@ -57,6 +57,7 @@ using MailFathom.Host.Configuration.Jobs;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Mail.Readers;
 using MailFathom.Host.Configuration.OwnerSettings;
+using MailFathom.Host.Configuration.OwnerSettings.Administration;
 using MailFathom.Host.Configuration.Persistence;
 using MailFathom.Host.Configuration.Providers;
 using MailFathom.Host.Configuration.RootSettings;
@@ -239,6 +240,19 @@ internal static class HostComposition
         // it — the deployment's settings and every owner's record alike.
         builder.Services.AddSingleton<PersistedSecretMaterial>();
         builder.Services.AddSingleton<OwnerAccountDocumentBinder>();
+        // Whether this deployment's endpoints could tell one owner's caller from another's, which decides whether it
+        // may serve a second owner at all. A singleton over the startup snapshot, because it is the posture the
+        // authentication schemes were registered from: the startup gate and the provisioning ask the same instance so
+        // the two cannot come to different answers about one deployment.
+        builder.Services.AddSingleton<SeveralOwnerAdmission>();
+        // What a configuration source still supplies for one owner, which is what an adoption moves and what a record
+        // is judged against. A singleton because both halves of it — the file and the roster this process settled — are
+        // properties of the deployment rather than of a request.
+        builder.Services.AddSingleton<ConfiguredOwnerMailAccounts>();
+        // Scoped for the reason PersistedSettingsAdministration is: each asks AccessAuthorization for the permission
+        // its operations are published under, and that service is scoped to whatever admitted the caller.
+        builder.Services.AddScoped<OwnerRosterAdministration>();
+        builder.Services.AddScoped<OwnerRecordAdministration>();
     }
 
     /// <summary>Registers the scanners this deployment switched on, and reports what it declared.</summary>

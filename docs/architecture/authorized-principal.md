@@ -134,17 +134,23 @@ is, so a request admitted on one carries that owner as a claim and the adapter a
 deployment serve more than one person's mail over one address, and what makes a credential resolving no owner refusable
 exactly as an unknown credential is.
 
-The gate answers for the callers that carry nobody, and it settles the whole roster while the host starts — every owner
-the file declares, each with the mail accounts they own, and the deployment's own `MailSynchronization:Accounts`
-belonging to the sole owner such a deployment holds. It refuses to come up on any number but one **while
-`McpEndpoint`, `ClientEndpoint`, or `AdminEndpoint` is enabled**, and it refuses on the enablement alone rather than on
-whether the surface requires a credential. Two things are behind that. An unauthenticated mail-serving surface admits a
-caller that presented nothing, and an administrator acts for the deployment rather than for a person, so the acts of
-theirs that need an owner — the contact book above all — resolve the sole one. And a caller the credential *does* name
-still reaches reads that resolve the owner from the deployment rather than from the caller, `OwnedMailAccountCatalog`
-and the attachment download route above all, so a roster of several would answer those with an unclassified failure.
-The credential naming the owner is what makes lifting the bound possible; lifting it waits for those readers to take
-the owner from the caller.
+The gate settles the whole roster while the host starts — every owner the file declares, each with the mail accounts
+they own, every owner whose record is already their own and whom no file declares, and the deployment's own
+`MailSynchronization:Accounts` belonging to the sole owner such a deployment holds. A caller that names no owner needs exactly one owner
+to act for, so the gate refuses to come up on any other number **while `McpEndpoint` or `ClientEndpoint` admits such a
+caller** — which is a surface requiring no authentication and nothing else. Every credential these two surfaces admit is
+a record naming the owner it belongs to, whichever of the four methods presents it, so what an entry states is a method
+rather than a person and reading the entry would answer nothing; what frees the roster is requiring a credential on both
+surfaces — or the surfaces being off.
+
+**The administrative surface is deliberately outside that reading.** An administrator acts for the deployment rather
+than for a person, and every route there that is about one owner names the owner it is about, so a roster of several
+leaves nothing unanswered. That is also what makes recording a second owner reachable at all: the surface an operator
+would use to correct the other two cannot be the surface the refusal closes. What it costs is the handful of
+administrative reads that still resolve the sole owner — the contact book among them — and those have no answer on a
+roster of several; each is a separate act to scope, and no route silently picks one owner out of several. Which mail
+accounts a caller owns is not one of them: it is resolved from the owner each served account carries, so every mailbox
+read answers a caller with their own half of a deployment serving several.
 [The health endpoints](../operations/health-endpoints.md#the-three-probes) record what each refusal means to an
 operator.
 
@@ -169,8 +175,10 @@ differently — and a use case that raised either shape directly would have deci
 
 A use case that acts on one owner's mail and is reached by a principal acting for no owner is refused the same way and
 with the same code, because from the use case's side it is the same fact: what reached it cannot say whose mail it is
-about. A deployment that cannot resolve its own owner never reaches a use case at all — it fails to start, with
-`14002 DeploymentMailOwnerUnresolved`.
+about. A deployment that cannot resolve its own owner never reaches a use case at all, and answers
+`14002 DeploymentMailOwnerUnresolved` in the two places that reading is taken. A roster the start cannot settle at all
+is a refusal to start, so nothing serves. A roster of several is a start that succeeds, and the code is then answered
+per request, as `409` on the handful of acts above that resolve the sole owner and name none themselves.
 
 A use case reached under no principal at all is refused the same way. That is the case an entrypoint produces by
 omission — it never said what admitted the work — and refusing it is what "fails rather than defaulting to permitted"

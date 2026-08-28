@@ -166,18 +166,18 @@ the folder.
 **The owner gate refuses to start rather than reporting unready.** A mail account says nothing about whose mail it
 holds unless the owner who owns it declares it, so the gate settles the question before anything serves a request: it
 reads the owners the file declares, gives each of them the `settings_accounts` row the mail graph's foreign keys hang
-on, proves the secrets their own mailboxes carry, and reports which of them is read from configuration and which
-from a document of their own. It runs behind the
+on, serves every owner whose record is already their own and whom no file names, proves the secrets their own mailboxes
+carry, and reports which of them is read from configuration and which from a document of their own. It runs behind the
 schema gate, because that table is the schema's, and a deployment it cannot reconcile does not come up:
 
 | What the gate found | What it means | What to do |
 |---|---|---|
-| Several owner records and no owner declared | The deployment has acquired owners while its mail accounts are still in `MailSynchronization:Accounts`, which says whose none of them are | Declare each owner in the top-level `Accounts` collection with the mail accounts they own, so every mailbox says whose it is |
+| Several owner records still reading the deployment's section, and no owner declared | The deployment has acquired owners while its mail accounts are still in `MailSynchronization:Accounts`, which says whose none of them are | Declare each owner in the top-level `Accounts` collection with the mail accounts they own, so every mailbox says whose it is; an owner whose record is already their own is not one of these, and a deployment whose owners have all been adopted starts without declaring anybody |
 | More owner records than a deployment serves | The roster is longer than the 256 one deployment may hold, which is a table something generated rather than provisioned | Find what wrote `settings_accounts`; nothing MailFathom ships writes a roster that long |
 | A start that would leave more owner records than a deployment serves | The records held and the owners newly declared each fit within the 256, and only their sum does not — an owner the file no longer declares keeps their record | Nothing was written: remove the owner records this deployment no longer serves, then declare the new owners |
 | An owner declared under an identifier the deployment does not hold them under | The identifier every mail account, stored message, and job of theirs hangs on was changed in the file | Restore the identifier the deployment holds, or give the new one a label of its own if it is meant to be a second person |
 | A label declared for one owner while another still carries it | Two owners would be told apart by one label, which the unique index refuses | Relabel the owner holding it in one start and declare it for its new owner in the next; removing them from the file frees nothing, because a held owner keeps their record and their label |
-| Several owners while `AdminEndpoint` is on, or while `McpEndpoint` or `ClientEndpoint` is on with an empty `Authentication` list | Those are the shapes that admit a caller carrying no owner — nothing was presented, or an administrator whose acts are the deployment's rather than one person's — so neither could say whose mail or whose contacts an act is about. A mail-serving surface requiring a credential is unaffected, because every method names the owner it admits | Require a credential on the mail-serving surface, or serve one owner while `AdminEndpoint` is enabled |
+| Several owners while `McpEndpoint` or `ClientEndpoint` requires no authentication | Such a surface admits a caller that brought nothing, so it could not say whose mail an act is about and every caller reaching it is composed against the single owner the deployment holds | Require a credential on those two surfaces — every one of them is a record naming its owner, whichever method presents it — or switch them off. `AdminEndpoint` is not among them: an administrator acts for the deployment, and every owner-scoped route there names the owner it is for |
 | An owner's own document that will not bind | That owner is served from their document rather than from configuration, and it is not the settings a document holds | Repair the record; the refusal names each sentence of what must change |
 | An owner's own mailbox whose secret reference or trust anchor cannot be resolved | An owner's mailboxes are declared outside the section the secret gate walks, so without this they would start clean and fail one connection at a time | Repair the reference or the anchor; the refusal names the owner and the `Accounts:<index>` path to it |
 
@@ -187,8 +187,10 @@ while it cannot say whose mail it is serving.
 **A deployment that declares no owner is the ordinary shape and is not refused.** Its mail accounts stay in
 `MailSynchronization:Accounts` and belong to the one owner such a deployment holds — the row the release's schema
 provisions, or one the gate records where the deployment holds none at all. An owner the deployment holds and the file
-no longer declares is not refused either: they are kept, they are not served, and a warning names them, because their
-mail is neither read nor refreshed while they stay that way.
+no longer declares is not refused either: where their record is their own — every owner recorded through `mfctl owner
+add`, and every one that has been adopted — they are served from it, after the owners a file names; where it is not,
+they are kept, they are not served, and a warning names them, because their mail is neither read nor refreshed while
+they stay that way.
 
 The startup gates are reported rather than re-run. The probe reads a flag the gates set as they complete, so polling it
 opens no connection and costs nothing, and once it turns healthy it stays healthy.

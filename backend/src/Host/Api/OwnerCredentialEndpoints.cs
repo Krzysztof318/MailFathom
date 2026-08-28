@@ -34,8 +34,8 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// Every act names the owner in the route as well as the credential, which is what the store's contract asks for: an
 /// identifier copied out of the wrong listing answers that no such credential exists rather than rotating a secret out
-/// from under somebody else. The owner listing is here for the same reason — an administrator selects an owner before
-/// doing any of this, and the identifier is the only handle either side has for one.
+/// from under somebody else. Where that identifier comes from is <see cref="OwnerRecordEndpoints" />, which holds the
+/// roster because recording an owner and erasing one are acts on the same list.
 /// </para>
 /// <para>
 /// No answer carries a password, a hash, or a key digest, and no refusal quotes what was sent. A password this
@@ -46,9 +46,6 @@ namespace MailFathom.Host.Api;
 /// </remarks>
 internal static class OwnerCredentialEndpoints
 {
-    /// <summary>The route the owners this deployment holds are listed at, relative to the administrative prefix.</summary>
-    internal const string OwnersRoute = "/owners";
-
     /// <summary>The route one owner's credentials are listed and provisioned at, relative to the administrative prefix.</summary>
     internal const string OwnerCredentialsRoute = "/owners/{ownerId:guid}/credentials";
 
@@ -61,10 +58,6 @@ internal static class OwnerCredentialEndpoints
 
     /// <summary>The route one credential is turned on or off at, relative to the administrative prefix.</summary>
     internal const string OwnerCredentialEnablementRoute = $"{OwnerCredentialRoute}/enablement";
-
-    /// <summary>The greatest number of owners a listing reads.</summary>
-    /// <remarks>A single-owner deployment is what this system serves and the roster is bounded by the records an administrator created, so the ceiling exists to keep the query bounded rather than to be reached.</remarks>
-    internal const int MaximumListedOwners = 100;
 
     /// <summary>The greatest request body the write routes read before refusing it.</summary>
     /// <remarks>
@@ -82,9 +75,6 @@ internal static class OwnerCredentialEndpoints
     internal static void MapOwnerCredentials(this RouteGroupBuilder api)
     {
         ArgumentNullException.ThrowIfNull(api);
-
-        api.MapGet(OwnersRoute, ListOwnersAsync)
-            .RequirePermission(MailFathomPermission.AdminRead);
 
         api.MapGet(OwnerCredentialsRoute, ListAsync)
             .RequirePermission(MailFathomPermission.AdminRead);
@@ -106,22 +96,6 @@ internal static class OwnerCredentialEndpoints
 
         api.MapDelete(OwnerCredentialRoute, DeleteAsync)
             .RequirePermission(MailFathomPermission.AdminCredentialsWrite);
-    }
-
-    /// <summary>Lists the owners this deployment holds records for.</summary>
-    /// <param name="credentials">Reads the roster, for a caller the use case's own grant admits.</param>
-    /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
-    /// <returns><c>200</c> with the owner identifiers.</returns>
-    /// <remarks>An administrator selects an owner before administering a credential, and this is where the identifier to select comes from; a deployment serving one person answers with one entry, which is what lets a client act without asking.</remarks>
-    internal static async Task<Ok<MailOwnerListResponse>> ListOwnersAsync(
-        [FromServices] OwnerCredentialAdministration credentials,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(credentials);
-
-        var roster = await credentials.ReadOwnersAsync(MaximumListedOwners, cancellationToken);
-
-        return TypedResults.Ok(MailOwnerListResponse.For(roster));
     }
 
     /// <summary>Lists one owner's credentials, of every method.</summary>

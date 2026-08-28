@@ -154,6 +154,25 @@ public readonly record struct MailFathomErrorCode
     /// </remarks>
     public static MailFathomErrorCode ConfigurationWriteShadowed { get; } = new(12013);
 
+    /// <summary>Gets subcategory 2, configuration sources: an owner's persisted record could not be written.</summary>
+    /// <remarks>
+    /// The counterpart of <see cref="OwnerSettingsUnreadable" /> on the other direction of travel, and separate from
+    /// it for the reason <see cref="RootSettingsUnwritable" /> is separate from <see cref="RootSettingsUnreadable" />:
+    /// a read is refused to somebody asking about a record, and a write is refused to somebody who had already read
+    /// one and composed a change over it. It is not <see cref="ConfigurationVersionSuperseded" />, which is another
+    /// writer having won rather than the database having declined.
+    /// </remarks>
+    public static MailFathomErrorCode OwnerSettingsUnwritable { get; } = new(12014);
+
+    /// <summary>Gets subcategory 2, configuration sources: an owner's record was written while a configuration source still supplies their mail accounts.</summary>
+    /// <remarks>
+    /// The refusal that keeps an adoption an explicit act. An owner a file declares is served from that declaration
+    /// and holds an empty document, so a change accepted into it would leave them served from a record holding less
+    /// than the file was supplying — a mailbox that stops being synchronized because somebody edited a setting beside
+    /// it. What the message names is the command that moves the owner, after which every later write is ordinary.
+    /// </remarks>
+    public static MailFathomErrorCode OwnerRecordReadFromConfiguration { get; } = new(12015);
+
     /// <summary>Gets subcategory 3, mailbox access tokens: an account's authorization server did not issue an access token its OAuth mechanisms require.</summary>
     public static MailFathomErrorCode MailAccessTokenUnavailable { get; } = new(13001);
 
@@ -959,6 +978,8 @@ public readonly record struct MailFathomErrorCode
         ConfigurationDocumentTooLarge,
         OwnerSettingsUnreadable,
         ConfigurationWriteShadowed,
+        OwnerSettingsUnwritable,
+        OwnerRecordReadFromConfiguration,
         MailAccessTokenUnavailable,
         MailboxAuthorizationFailed,
         PrincipalNotAuthorized,

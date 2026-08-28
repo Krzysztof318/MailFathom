@@ -7,13 +7,10 @@ using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.OwnerSettings;
-using MailFathom.Host.Configuration.Persistence;
 using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.UnitTests.TestDoubles;
-using MailFathom.Infrastructure;
-using MailFathom.Infrastructure.Certificates;
-using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Owners;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Configuration;
@@ -145,7 +142,7 @@ public sealed class ServedMailOwnersStartupGateTests
     public async Task StartAsync_ADeclaredOwnerRelabelled_PutsTheNewLabelOnTheRowTheyAlreadyHold()
     {
         // Arrange
-        var provisioning = Substitute.For<IMailOwnerProvisioning>();
+        var provisioning = ProvisioningThatAccepts();
 
         // Act
         await CreateGate(
@@ -159,6 +156,34 @@ public sealed class ServedMailOwnersStartupGateTests
             .RelabelAsync(MailOwnerId.Create(DeclaredIdentifier), "alex", Arg.Any<CancellationToken>());
         await provisioning.DidNotReceive()
             .ProvisionAsync(Arg.Any<MailOwnerId>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// A label taken between the roster being read and the relabel reaching the table is what no reading of a snapshot
+    /// could refuse earlier, and the statement writes nothing rather than raising. A start that read that as success
+    /// would go on serving an owner under a label another owner holds, which is the one thing the column's unique index
+    /// exists to prevent.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_ADeclaredLabelTakenWhileTheRelabelWasInFlight_FailsStartupNamingTheLabel()
+    {
+        // Arrange
+        var provisioning = ProvisioningThatAccepts();
+
+        provisioning
+            .RelabelAsync(Arg.Any<MailOwnerId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<DeploymentMailOwnerUnresolvedException>(() =>
+            CreateGate(
+                    [Held(MailOwnerId.Create(DeclaredIdentifier), "alexandra")],
+                    Declaring(DeclaredIdentifier, "alex"),
+                    provisioning)
+                .StartAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Contains("'alex'", refusal.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -379,86 +404,90 @@ public sealed class ServedMailOwnersStartupGateTests
     }
 
     /// <summary>
-    /// An owner-facing surface answers one person about their own mail, and nothing this release admits a caller with
-    /// names the owner they act for — neither the absence of a credential nor a configured one.
+    /// An owner-facing surface answers one person about their own mail, and a surface requiring no credential admits a
+    /// caller who names nobody — which leaves the owner to be supplied by the deployment, and it has one to supply only
+    /// while it serves one person.
     /// </summary>
-    [Theory]
-    [InlineData(true, "it admits callers without authenticating them")]
-    [InlineData(false, "a configured credential authenticates a caller without naming the owner")]
-    public async Task StartAsync_SeveralOwnersServedWithAnOwnerFacingSurfaceEnabled_FailsStartupSayingWhy(
-        bool authenticationDisabled,
-        string reasonNamed)
+    [Fact]
+    public async Task StartAsync_SeveralOwnersServedWithAnOwnerFacingSurfaceAuthenticatingNobody_FailsStartupSayingWhy()
     {
-        // Arrange
-        var mcp = new McpEndpointOptions { Enabled = true };
-
-        if (!authenticationDisabled)
-        {
-            mcp.Authentication.Add(new());
-        }
-
         // Act
         var refusal = await Assert.ThrowsAsync<DeploymentMailOwnerUnresolvedException>(() =>
             CreateGate(
                     [],
                     TwoDeclaredOwners(),
-                    mcpEndpointSettings: mcp)
+                    mcpEndpointSettings: new McpEndpointOptions { Enabled = true })
                 .StartAsync(CancellationToken.None));
 
         // Assert
-        Assert.Contains(reasonNamed, refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("requires no authentication", refusal.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
     /// The client surface is owner-facing on exactly the terms the MCP one is, so a deployment serving several owners
-    /// is refused for having it open even where no MCP endpoint is served at all.
+    /// is refused for having it open unauthenticated even where no MCP endpoint is served at all.
     /// </summary>
-    [Theory]
-    [InlineData(true, "it admits callers without authenticating them")]
-    [InlineData(false, "a configured credential authenticates a caller without naming the owner")]
-    public async Task StartAsync_SeveralOwnersServedWithTheClientEndpointAlone_FailsStartupSayingWhy(
-        bool authenticationDisabled,
-        string reasonNamed)
+    [Fact]
+    public async Task StartAsync_SeveralOwnersServedWithTheClientEndpointAuthenticatingNobody_FailsStartupSayingWhy()
     {
-        // Arrange
-        var client = new ClientEndpointOptions { Enabled = true };
-
-        if (!authenticationDisabled)
-        {
-            client.Authentication.Add(new());
-        }
-
         // Act
         var refusal = await Assert.ThrowsAsync<DeploymentMailOwnerUnresolvedException>(() =>
             CreateGate(
                     [],
                     TwoDeclaredOwners(),
-                    clientEndpointSettings: client)
+                    clientEndpointSettings: new ClientEndpointOptions { Enabled = true })
                 .StartAsync(CancellationToken.None));
 
         // Assert
-        Assert.Contains(reasonNamed, refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("requires no authentication", refusal.Message, StringComparison.Ordinal);
     }
 
     /// <summary>
-    /// An administrator acts for the deployment rather than for a person, so the acts of theirs that need an owner —
-    /// the contact book above all — resolve the sole one, and a roster of several leaves that with no answer.
+    /// An administrator acts for the deployment rather than for a person, so every owner-scoped act of theirs names the
+    /// owner it is for and none of them has to be resolved from the roster. The administrative surface is therefore not
+    /// among the ones this refusal reads, whatever it is configured with — which is what makes recording a second owner
+    /// reachable at all — so a deployment serving nobody an owner-facing surface serves several people.
     /// </summary>
     [Fact]
-    public async Task StartAsync_SeveralOwnersServedWithTheAdministrativeEndpointAlone_FailsStartupSayingWhy()
+    public async Task StartAsync_SeveralOwnersServedWithNoOwnerFacingSurfaceEnabled_ServesEveryDeclaredOwner()
     {
         // Arrange
-        var administration = new AdminEndpointOptions { Enabled = true };
-
-        administration.Authentication.Add(new());
+        var servedOwners = new ServedMailOwners();
 
         // Act
-        var refusal = await Assert.ThrowsAsync<DeploymentMailOwnerUnresolvedException>(() =>
-            CreateGate([], TwoDeclaredOwners(), adminEndpointSettings: administration)
-                .StartAsync(CancellationToken.None));
+        await CreateGate([], TwoDeclaredOwners(), servedOwners: servedOwners)
+            .StartAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Contains("AdminEndpoint", refusal.Message, StringComparison.Ordinal);
+        Assert.Equal(2, servedOwners.Owners.Count);
+    }
+
+    /// <summary>
+    /// Every credential an owner-facing surface admits is a record naming its owner, whichever method presents it, so a
+    /// surface requiring one can say which owner every caller acts for — which is the posture under which a deployment
+    /// may serve several people, and it holds for each of the four methods rather than for one of them.
+    /// </summary>
+    /// <param name="method">The method the enabled surface accepts.</param>
+    [Theory]
+    [InlineData("password")]
+    [InlineData("api-key")]
+    [InlineData("public-key")]
+    [InlineData("oauth-subject")]
+    public async Task StartAsync_SeveralOwnersServedWhereTheOwnerFacingSurfaceRequiresACredential_ServesEveryDeclaredOwner(
+        string method)
+    {
+        // Arrange
+        var mcp = new McpEndpointOptions { Enabled = true };
+        var servedOwners = new ServedMailOwners();
+
+        mcp.Authentication.Add(new() { Method = method });
+
+        // Act
+        await CreateGate([], TwoDeclaredOwners(), servedOwners: servedOwners, mcpEndpointSettings: mcp)
+            .StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(2, servedOwners.Owners.Count);
     }
 
     /// <summary>
@@ -488,6 +517,76 @@ public sealed class ServedMailOwnersStartupGateTests
             StringComparison.Ordinal);
         await provisioning.DidNotReceive()
             .ProvisionAsync(Arg.Any<MailOwnerId>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// A worker switched on with no work is the deployment's own defect, and the roster is the first place every source
+    /// of a mailbox is in one place: the deployment's section, an owner's declaration, and an owner's own record.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_SynchronizationOnAndNoServedOwnerHoldingAMailbox_FailsStartupNamingWhereToDeclareOne()
+    {
+        // Arrange
+        var declared = Configuration(new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            [$"{MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.Enabled)}"] = "true",
+            [$"{DeclaredOwnerOptions.SectionName}:0:{nameof(DeclaredOwnerOptions.Id)}"] = DeclaredIdentifier.ToString(),
+            [$"{DeclaredOwnerOptions.SectionName}:0:{nameof(DeclaredOwnerOptions.DisplayName)}"] = "alex",
+        });
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<DeploymentMailOwnerUnresolvedException>(() =>
+            CreateGate([], declared, servedOwners: new ServedMailOwners()).StartAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Contains("no owner this deployment serves has a mail account", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("mfctl owner account add", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The case reading the files alone would refuse: both collections are empty and the mailbox this deployment exists
+    /// to synchronize is in the one place a file never carries, which is the owner's own record.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_SynchronizationOnAndTheOnlyMailboxDeclaredInAnOwnersRecord_ServesThem()
+    {
+        // Arrange
+        var owner = MailOwnerId.Create(DeclaredIdentifier);
+        var roster = new ServedMailOwners();
+        var documents = Substitute.For<IOwnerSettingsDocumentReader>();
+
+        DocumentOf(documents, owner, "adopted", "alex@example.test");
+
+        var declared = Configuration(new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            [$"{MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.Enabled)}"] = "true",
+            [$"{DeclaredOwnerOptions.SectionName}:0:{nameof(DeclaredOwnerOptions.Id)}"] = DeclaredIdentifier.ToString(),
+            [$"{DeclaredOwnerOptions.SectionName}:0:{nameof(DeclaredOwnerOptions.DisplayName)}"] = "alex",
+        });
+
+        // Act
+        await CreateGate([Adopted(owner, "alex")], declared, servedOwners: roster, documents: documents)
+            .StartAsync(CancellationToken.None);
+
+        // Assert
+        var served = Assert.Single(roster.Owners);
+
+        Assert.Equal(["adopted"], served.MailAccounts.Select(account => account.AccountId));
+    }
+
+    /// <summary>A deployment that asked for nothing to be refreshed is served whatever its owners declare, including nothing.</summary>
+    [Fact]
+    public async Task StartAsync_SynchronizationOffAndNoMailboxAnywhere_ServesTheOwnerAnyway()
+    {
+        // Arrange
+        var roster = new ServedMailOwners();
+
+        // Act
+        await CreateGate([], Declaring(DeclaredIdentifier, "alex"), servedOwners: roster)
+            .StartAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Single(roster.Owners);
     }
 
     /// <summary>A deployment that serves no owner-facing surface synchronizes several owners' mail perfectly well.</summary>
@@ -556,6 +655,253 @@ public sealed class ServedMailOwnersStartupGateTests
         // Assert
         Assert.Contains("'alex'", refusal.Message, StringComparison.Ordinal);
         Assert.Contains("served from it rather than from configuration", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An owner an administrator recorded is declared in no file, so nothing that reads the declarations reaches them.
+    /// Leaving them unserved would be a deployment holding a row whose mail it never synchronizes and whose caller it
+    /// could not compose, which is what every provisioned owner would be until somebody edited a file.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_AnOwnerRecordedAtRuntimeThatNoFileDeclares_ServesThemFromTheirOwnRecord()
+    {
+        // Arrange
+        var provisioned = SyntheticMailOwner.Another;
+        var roster = new ServedMailOwners();
+        var documents = DocumentsHolding(
+            provisioned,
+            """
+            {"MailAccounts":[{"AccountId":"recorded","DisplayName":"Recorded at work","Host":"imap.example.test",
+            "UserName":"sam@example.test",
+            "Secrets":{"Password":{"Name":"imap-recorded-password","SecretReference":"systemd-credential:imap-recorded-password"}}}]}
+            """);
+
+        // Act
+        await CreateGate(
+                [Held(SyntheticMailOwner.Deployment, "owner"), Adopted(provisioned, "sam")],
+                servedOwners: roster,
+                documents: documents)
+            .StartAsync(CancellationToken.None);
+
+        // Assert
+        var served = Assert.Single(roster.Owners, owner => owner.Owner == provisioned);
+        Assert.Equal(MailOwnerAccountSource.OwnerDocument, served.Source);
+        Assert.Equal(["recorded"], served.MailAccounts.Select(account => account.AccountId));
+    }
+
+    /// <summary>
+    /// The roster's order is the operator's own reading of their configuration, and an owner outside it has no place in
+    /// that order to take — so a recorded owner is served after the ones a file names rather than among them.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_AnOwnerRecordedAtRuntimeBesideADeclaredOne_ServesThemAfterTheOwnersAFileNames()
+    {
+        // Arrange
+        var declared = MailOwnerId.Create(DeclaredIdentifier);
+        var roster = new ServedMailOwners();
+
+        // Act
+        await CreateGate(
+                [Adopted(SyntheticMailOwner.Another, "sam"), Held(declared, "alex")],
+                Declaring(DeclaredIdentifier, "alex"),
+                servedOwners: roster,
+                documents: DocumentsHolding(SyntheticMailOwner.Another, "{}"))
+            .StartAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal([declared, SyntheticMailOwner.Another], roster.Owners.Select(owner => owner.Owner));
+    }
+
+    /// <summary>
+    /// The deployment-wide naming rule a file is already held to, asked of the roster a start would serve — which is
+    /// where a collision two owners wrote into their own records while a process ran first becomes visible. A write is
+    /// judged against the roster this process settled, so two such writes in one run are each judged against a roster
+    /// the other had not moved; this start is the first moment both records are in one place, and an account name
+    /// reaching two owners resolves to whichever of them the lookup met first.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_TwoOwnersWhoseOwnRecordsNameOneMailAccount_FailsStartupNamingTheAccount()
+    {
+        // Arrange
+        var documents = Substitute.For<IOwnerSettingsDocumentReader>();
+
+        DocumentOf(documents, SyntheticMailOwner.Deployment, "work", "alex@example.test");
+        DocumentOf(documents, SyntheticMailOwner.Another, "work", "sam@example.test");
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<DeploymentMailOwnerUnresolvedException>(() =>
+            CreateGate(
+                    [Adopted(SyntheticMailOwner.Deployment, "alex"), Adopted(SyntheticMailOwner.Another, "sam")],
+                    servedOwners: new ServedMailOwners(),
+                    documents: documents)
+                .StartAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Contains("work", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An owner served from the deployment's own section carries no accounts on their roster entry, so a check reading
+    /// that entry alone would never see <c>MailSynchronization:Accounts</c> — and the one collision the write-time
+    /// reading cannot catch, a record naming an account the section already declares, would start clean and resolve one
+    /// person's mailbox for another's.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_ARecordNamingAnAccountTheDeploymentSectionDeclares_FailsStartupNamingTheAccount()
+    {
+        // Arrange
+        var documents = Substitute.For<IOwnerSettingsDocumentReader>();
+
+        DocumentOf(documents, SyntheticMailOwner.Another, "work", "sam@example.test");
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<DeploymentMailOwnerUnresolvedException>(() =>
+            CreateGate(
+                    [Held(SyntheticMailOwner.Deployment, "owner"), Adopted(SyntheticMailOwner.Another, "sam")],
+                    declared: DeploymentSectionDeclaring("work"),
+                    servedOwners: new ServedMailOwners(),
+                    documents: documents)
+                .StartAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Contains("work", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>The same two mailboxes named apart is the ordinary case, and it starts.</summary>
+    [Fact]
+    public async Task StartAsync_ARecordNamingAnAccountTheDeploymentSectionDoesNot_ServesBothOwners()
+    {
+        // Arrange
+        var roster = new ServedMailOwners();
+        var documents = Substitute.For<IOwnerSettingsDocumentReader>();
+
+        DocumentOf(documents, SyntheticMailOwner.Another, "sam-work", "sam@example.test");
+
+        // Act
+        await CreateGate(
+                [Held(SyntheticMailOwner.Deployment, "owner"), Adopted(SyntheticMailOwner.Another, "sam")],
+                declared: DeploymentSectionDeclaring("alex-work"),
+                servedOwners: roster,
+                documents: documents)
+            .StartAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(2, roster.Owners.Count);
+    }
+
+    /// <summary>
+    /// What an adoption leaves on a deployment that declares no owners: the accounts are copied into the record and
+    /// the section they were copied from is still bound. Nothing serves it any more, and the per-account lookup still
+    /// searches it before any record — so a start that accepted this would synchronize each mailbox under the file the
+    /// operator was told had stopped being read.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_ADeploymentSectionNoServedOwnerReads_FailsStartupNamingTheSectionToClear()
+    {
+        // Arrange
+        var documents = Substitute.For<IOwnerSettingsDocumentReader>();
+
+        DocumentOf(documents, SyntheticMailOwner.Deployment, "work", "alex@example.test");
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<DeploymentMailOwnerUnresolvedException>(() =>
+            CreateGate(
+                    [Adopted(SyntheticMailOwner.Deployment, "alex")],
+                    declared: DeploymentSectionDeclaring("work"),
+                    servedOwners: new ServedMailOwners(),
+                    documents: documents)
+                .StartAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Contains("MailSynchronization:Accounts", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("no owner this deployment serves reads that section", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The refusal above is about which declaration a mailbox's settings are read from, and every per-account read
+    /// resolves that whether or not a synchronization run is what asked. Switching synchronization off therefore
+    /// changes nothing about it, which is what keeps the abandoned section from being a rule only a worker enforces.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_ADeploymentSectionNoServedOwnerReadsWithSynchronizationOff_IsRefusedJustTheSame()
+    {
+        // Arrange
+        var documents = Substitute.For<IOwnerSettingsDocumentReader>();
+        var keys = DeploymentSectionKeys("work");
+
+        DocumentOf(documents, SyntheticMailOwner.Deployment, "work", "alex@example.test");
+        keys[$"{MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.Enabled)}"] = "false";
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<DeploymentMailOwnerUnresolvedException>(() =>
+            CreateGate(
+                    [Adopted(SyntheticMailOwner.Deployment, "alex")],
+                    declared: Configuration(keys),
+                    servedOwners: new ServedMailOwners(),
+                    documents: documents)
+                .StartAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Contains("MailSynchronization:Accounts", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>The same two owners naming their mailboxes apart is the ordinary case, and it starts.</summary>
+    [Fact]
+    public async Task StartAsync_TwoOwnersWhoseOwnRecordsNameTheirMailAccountsApart_ServesBothOfThem()
+    {
+        // Arrange
+        var roster = new ServedMailOwners();
+        var documents = Substitute.For<IOwnerSettingsDocumentReader>();
+
+        DocumentOf(documents, SyntheticMailOwner.Deployment, "alex-work", "alex@example.test");
+        DocumentOf(documents, SyntheticMailOwner.Another, "sam-work", "sam@example.test");
+
+        // Act
+        await CreateGate(
+                [Adopted(SyntheticMailOwner.Deployment, "alex"), Adopted(SyntheticMailOwner.Another, "sam")],
+                servedOwners: roster,
+                documents: documents)
+            .StartAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(2, roster.Owners.Count);
+    }
+
+    /// <summary>
+    /// Only an owner still reading the deployment's own section contends for it, so a deployment whose every owner has
+    /// adopted has no sole owner to serve — and minting one would record a person nobody asked for on every start.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_NoOwnerDeclaredAndEveryHeldOwnerReadingTheirOwnRecord_RecordsNobodyNew()
+    {
+        // Arrange
+        var provisioning = ProvisioningThatRecords();
+        var roster = new ServedMailOwners();
+
+        // Act
+        await CreateGate(
+                [Adopted(SyntheticMailOwner.Deployment, "owner")],
+                provisioning: provisioning,
+                servedOwners: roster,
+                documents: DocumentsHolding(SyntheticMailOwner.Deployment, "{}"))
+            .StartAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(SyntheticMailOwner.Deployment, Assert.Single(roster.Owners).Owner);
+        await provisioning.DidNotReceiveWithAnyArgs().ProvisionAsync(default, default!, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Two owners reading one section is a deployment with no answer to whose mailboxes those are, and picking either
+    /// would hang one person's mail on the other's row.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_NoOwnerDeclaredAndTwoHeldOwnersStillReadingTheSection_FailsStartup()
+    {
+        // Act & Assert
+        await Assert.ThrowsAsync<DeploymentMailOwnerUnresolvedException>(() =>
+            CreateGate([Held(SyntheticMailOwner.Deployment, "owner"), Held(SyntheticMailOwner.Another, "sam")])
+                .StartAsync(CancellationToken.None));
     }
 
     [Fact]
@@ -637,8 +983,50 @@ public sealed class ServedMailOwnersStartupGateTests
         return documents;
     }
 
+    /// <summary>States one owner's own record, holding a single mail account named as the test asks.</summary>
+    private static void DocumentOf(
+        IOwnerSettingsDocumentReader documents,
+        MailOwnerId owner,
+        string accountId,
+        string userName) =>
+        documents.ReadAsync(owner, Arg.Any<CancellationToken>()).Returns(
+            Task.FromResult<OwnerSettingsDocument?>(new OwnerSettingsDocument(
+                owner,
+                $"owner-{owner.Value:D}",
+                $$"""
+                  {
+                    "MailAccounts": [
+                      {
+                        "AccountId": "{{accountId}}",
+                        "DisplayName": "{{accountId}}",
+                        "Host": "imap.example.test",
+                        "UserName": "{{userName}}",
+                        "Secrets": { "Password": { "Name": "imap-password", "SecretReference": "systemd-credential:imap-password" } }
+                      }
+                    ]
+                  }
+                  """,
+                Version: 2,
+                WrittenAtRuntime: true)));
+
     private static IConfiguration Configuration(Dictionary<string, string?> keys) =>
         new ConfigurationBuilder().AddInMemoryCollection(keys).Build();
+
+    /// <summary>The deployment's own mail section, declaring one account under the identifier a test names.</summary>
+    private static IConfiguration DeploymentSectionDeclaring(string accountId) =>
+        Configuration(DeploymentSectionKeys(accountId));
+
+    /// <summary>The same section as keys, for a test that states one more setting beside it.</summary>
+    private static Dictionary<string, string?> DeploymentSectionKeys(string accountId) =>
+        new(StringComparer.Ordinal)
+        {
+            [$"{MailSynchronizationOptions.SectionName}:Accounts:0:AccountId"] = accountId,
+            [$"{MailSynchronizationOptions.SectionName}:Accounts:0:DisplayName"] = accountId,
+            [$"{MailSynchronizationOptions.SectionName}:Accounts:0:Host"] = "imap.example.test",
+            [$"{MailSynchronizationOptions.SectionName}:Accounts:0:UserName"] = "alex@example.test",
+            [$"{MailSynchronizationOptions.SectionName}:Accounts:0:Secrets:Password:Name"] = "imap-password",
+            [$"{MailSynchronizationOptions.SectionName}:Accounts:0:Secrets:Password:SecretReference"] = "systemd-credential:imap-password",
+        };
 
     private static IConfiguration Declaring(Guid identifier, string displayName) =>
         new ConfigurationBuilder()
@@ -678,7 +1066,6 @@ public sealed class ServedMailOwnersStartupGateTests
         McpEndpointOptions? mcpEndpointSettings = null,
         IOwnerSettingsDocumentReader? documents = null,
         ClientEndpointOptions? clientEndpointSettings = null,
-        AdminEndpointOptions? adminEndpointSettings = null,
         ILogger<ServedMailOwnersStartupGate>? startupLog = null) =>
         CreateGate(
             DirectoryOf(held),
@@ -689,7 +1076,6 @@ public sealed class ServedMailOwnersStartupGateTests
             mcpEndpointSettings,
             documents,
             clientEndpointSettings,
-            adminEndpointSettings,
             startupLog);
 
     private static ServedMailOwnersStartupGate CreateGate(
@@ -701,7 +1087,6 @@ public sealed class ServedMailOwnersStartupGateTests
         McpEndpointOptions? mcpEndpointSettings = null,
         IOwnerSettingsDocumentReader? documents = null,
         ClientEndpointOptions? clientEndpointSettings = null,
-        AdminEndpointOptions? adminEndpointSettings = null,
         ILogger<ServedMailOwnersStartupGate>? startupLog = null)
     {
         var services = new ServiceCollection();
@@ -719,14 +1104,21 @@ public sealed class ServedMailOwnersStartupGateTests
             declared ?? new ConfigurationBuilder().Build(),
             servedOwners ?? new ServedMailOwners(),
             startupGates ?? new HostStartupGates(HostStartupGate.ServedMailOwners),
-            Options.Create(mcpEndpointSettings ?? new McpEndpointOptions()),
-            Options.Create(clientEndpointSettings ?? new ClientEndpointOptions()),
-            Options.Create(adminEndpointSettings ?? new AdminEndpointOptions()),
+            new SeveralOwnerAdmission(
+                Options.Create(mcpEndpointSettings ?? new McpEndpointOptions()),
+                Options.Create(clientEndpointSettings ?? new ClientEndpointOptions())),
             startupLog ?? NullLogger<ServedMailOwnersStartupGate>.Instance);
     }
 
     /// <summary>A provisioning that reports the row as recorded, which is what every case but the contested label is.</summary>
-    private static IMailOwnerProvisioning ProvisioningThatRecords()
+    private static IMailOwnerProvisioning ProvisioningThatRecords() => ProvisioningThatAccepts();
+
+    /// <summary>
+    /// A provisioning standing for a database that accepts what it is given. Both of its writes are conditional and
+    /// report what the row carries afterwards, so the default a substitute returns — false — is the contested label
+    /// rather than the ordinary case, and a test arranging neither would be arranging a race it did not mean to.
+    /// </summary>
+    private static IMailOwnerProvisioning ProvisioningThatAccepts()
     {
         var provisioning = Substitute.For<IMailOwnerProvisioning>();
 
@@ -734,22 +1126,14 @@ public sealed class ServedMailOwnersStartupGateTests
             .ProvisionAsync(Arg.Any<MailOwnerId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(true));
 
+        provisioning
+            .RelabelAsync(Arg.Any<MailOwnerId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(true));
+
         return provisioning;
     }
 
     /// <summary>Resolves a reference under any scheme a deployment registers, which is what an owner's secrets are proven through here.</summary>
-    private static SecretConfigurationValidator SecretValidator()
-    {
-        var resolver = new RegisteredSchemeSecretReferenceResolver();
-
-        return new SecretConfigurationValidator(
-            resolver,
-            new TrustAnchorLoader(resolver),
-            new DatabaseConnectionSettingsMapper(new ConfigurationBuilder().Build()),
-            new StubDatabaseConnectionSettingsValidator(),
-            PostgresTextSearchConfiguration.Default,
-            new DatabaseCommandTimeout(TimeSpan.FromSeconds(HostApplicationBuilderExtensions.DefaultDatabaseCommandTimeoutSeconds)),
-            new FakeTimeProvider(),
-            new RecordingLogger<SecretConfigurationValidator>());
-    }
+    /// <remarks>Composed where the record administration's tests compose it too, because the same validator judges an owner's mail accounts at a start and at a write.</remarks>
+    private static SecretConfigurationValidator SecretValidator() => SecretValidation.OverRegisteredSchemes();
 }

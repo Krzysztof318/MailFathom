@@ -132,6 +132,30 @@ public readonly record struct MailFathomPermission
     /// </remarks>
     public static MailFathomPermission MailSend { get; } = new("mailfathom.mail.send", ProtectedSurface.Mail);
 
+    /// <summary>Gets the permission covering an owner maintaining the mail accounts their own record declares.</summary>
+    /// <remarks>
+    /// <para>
+    /// The one grant on this surface that changes what the deployment does rather than what it holds: withdrawing a
+    /// mail account stops a mailbox being synchronized, and declaring one points this deployment at a mail server and
+    /// gives it a credential reference to authenticate with. That is why it follows from nothing —
+    /// <see cref="MailRead" /> is a person reading their own mail, and nothing about reading implies deciding which
+    /// mailboxes are read at all.
+    /// </para>
+    /// <para>
+    /// It reaches one owner's own record and cannot reach another's. Whose record it is comes from the principal
+    /// rather than from the request, so the grant says what may be done and never to whom, exactly as every other name
+    /// on this surface does.
+    /// </para>
+    /// <para>
+    /// It is deliberately not the administrative <see cref="AdminConfigurationWrite" /> under another name. That one
+    /// decides what the deployment is — the endpoints it opens, the grants it honours, the model it bills — and an
+    /// owner holds none of it; this one decides which mailboxes are that person's, which is the only configuration
+    /// that is theirs at all.
+    /// </para>
+    /// </remarks>
+    public static MailFathomPermission MailAccountsWrite { get; } =
+        new("mailfathom.mail.accounts.write", ProtectedSurface.Mail);
+
     #endregion
 
     #region Administration
@@ -151,7 +175,13 @@ public readonly record struct MailFathomPermission
     /// <summary>Gets the permission covering the one operation that starts a provider bill, which is activating the declared embedding model.</summary>
     public static MailFathomPermission AdminSpend { get; } = new("mailfathom.admin.spend", ProtectedSurface.Administration);
 
-    /// <summary>Gets the permission covering erasing the mail stored for a folder an account no longer mirrors.</summary>
+    /// <summary>Gets the permission covering disposing of what this deployment holds: the mail stored for a folder an account no longer mirrors, one person and what the contact book derived from them, and an owner together with every message, folder, attachment, and derived index held for them.</summary>
+    /// <remarks>
+    /// Erasing an owner is here rather than under <see cref="AdminConfigurationWrite" /> because the two decide
+    /// different things: recording somebody decides what the deployment reads next, and removing them destroys what it
+    /// already read. An operator granting this is granting the reach to delete a person and all of their mail, which is
+    /// why the reach is stated rather than left to the routes that publish it.
+    /// </remarks>
     public static MailFathomPermission AdminErase { get; } = new("mailfathom.admin.erase", ProtectedSurface.Administration);
 
     /// <summary>Gets the permission covering changing the deployment's own persisted configuration.</summary>
@@ -178,6 +208,7 @@ public readonly record struct MailFathomPermission
         MailFlagsWrite,
         MailDraftsWrite,
         MailSend,
+        MailAccountsWrite,
         AdminRead,
         AdminAuditRead,
         AdminOperate,

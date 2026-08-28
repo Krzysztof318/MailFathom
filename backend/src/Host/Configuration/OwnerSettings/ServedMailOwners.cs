@@ -94,19 +94,26 @@ internal sealed class ServedMailOwners : IDeploymentMailOwnerSource
     }
 
     /// <inheritdoc />
-    /// <exception cref="InvalidOperationException">Thrown when the startup gate has not yet run, or when this deployment serves more than one owner and there is therefore no sole owner to name.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the startup gate has not yet run.</exception>
+    /// <exception cref="DeploymentMailOwnerUnresolvedException">Thrown when this deployment serves more than one owner and there is therefore no sole owner to name.</exception>
     /// <remarks>
+    /// <para>
     /// The sole owner is what a surface with no credential to read an owner off acts for, so a deployment serving
     /// several has no answer here rather than a first one. Nothing picks between them: attributing a caller to whichever
     /// owner came first is how one person is handed another person's mail.
+    /// </para>
+    /// <para>
+    /// The two absences are different failures and are raised as different types. A roster that has not been settled is
+    /// this process asking a question before the gate that answers it, which is a defect in the host's own ordering and
+    /// nothing an operator or a caller did. A roster of several is a deployment an operator composed and a start
+    /// admitted, reached by a request that names no owner — so it carries a code and a sentence naming what would have
+    /// been answered, rather than arriving at a caller as an unclassified fault.
+    /// </para>
     /// </remarks>
     public MailOwnerId Owner =>
         this.Owners is [var soleOwner]
             ? soleOwner.Owner
-            : throw new InvalidOperationException(
-                "This deployment serves more than one owner, so there is no sole owner for a caller to be composed "
-                + "against. A credential names the owner it acts for; until every owner-facing surface reads one, a "
-                + "deployment serving several owners serves no owner-facing surface.");
+            : throw DeploymentMailOwnerUnresolvedException.NoSoleOwnerToActFor();
 
     /// <summary>Finds the owner a mail account belongs to and the declaration this roster holds for it.</summary>
     /// <param name="accountId">The identifier the account is named by.</param>

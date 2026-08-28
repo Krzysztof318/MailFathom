@@ -16,9 +16,11 @@ using MailFathom.Application.Emails.Summaries;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authorship;
+using MailFathom.Domain.Failures;
 using MailFathom.Domain.Folders;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Transport;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
@@ -282,6 +284,41 @@ public sealed class EmailAttachmentDownloadEndpointTests
         var body = $"{refusal.Value?.Title} {refusal.Value?.Detail}";
         Assert.DoesNotContain(storedEmailId.Value.ToString(), body, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("a-capability-somebody-presented", body, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A ticket names an attachment rather than a person, so this route resolves the owner from the deployment and has
+    /// no answer where it serves several. The refusal is the classified conflict the route groups' filter composes,
+    /// which is what this route being mapped outside every group would otherwise leave as an unhandled fault carrying
+    /// the presented capability into a framework log.
+    /// </summary>
+    [Fact]
+    public async Task DownloadAsync_ADeploymentServingSeveralOwners_AnswersTheConflictRatherThanFaulting()
+    {
+        // Arrange
+        var context = RequestToTheRoute();
+        var principals = PrincipalsFor(context);
+        var deploymentOwner = Substitute.For<IDeploymentMailOwnerSource>();
+
+        deploymentOwner.Owner.Returns(_ => throw DeploymentMailOwnerUnresolvedException.NoSoleOwnerToActFor());
+
+        // Act
+        var result = await EmailAttachmentDownloadEndpoint.DownloadAsync(
+            "capability",
+            TicketReaderRedeeming(new AttachmentDownloadTicket(StoredEmailId.Create(Guid.CreateVersion7()), 0)),
+            AttachmentOpening(principals, new StubOpenedEmailAttachment("invoice.pdf", "application/pdf", "%PDF-1.7"u8.ToArray())),
+            principals,
+            deploymentOwner,
+            context,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+
+        Assert.Equal(StatusCodes.Status409Conflict, refusal.StatusCode);
+        Assert.Equal(
+            MailFathomErrorCode.DeploymentMailOwnerUnresolved.Value,
+            refusal.ProblemDetails.Extensions[RouteAuthorization.ErrorCodeExtension]);
     }
 
     /// <summary>Composes a request to this route's own path, which is what decides the principal the scope reports.</summary>

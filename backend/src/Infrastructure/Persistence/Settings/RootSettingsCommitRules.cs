@@ -125,6 +125,25 @@ public static class RootSettingsCommitRules
         return utf8.Length + separators;
     }
 
+    /// <summary>Gets whether a candidate document's root is the object a configuration layer composes from.</summary>
+    /// <param name="json">The candidate document.</param>
+    /// <returns><see langword="true" /> when the root is an object; otherwise <see langword="false" />.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="json" /> is <see langword="null" />.</exception>
+    /// <exception cref="JsonException">Thrown when the candidate is not JSON at all.</exception>
+    /// <remarks>
+    /// Published beside the measurement because the owner records are held under the same rule and in the same column
+    /// type, so the question is asked twice and answered here once. What each caller keeps for itself is the sentence
+    /// it refuses with, which names the document the operator has to correct.
+    /// </remarks>
+    internal static bool RootIsAnObject(string json)
+    {
+        ArgumentNullException.ThrowIfNull(json);
+
+        var reader = new Utf8JsonReader(Encoding.UTF8.GetBytes(json));
+
+        return reader.Read() && reader.TokenType == JsonTokenType.StartObject;
+    }
+
     /// <summary>Refuses a candidate whose root is not an object, which no configuration layer can be composed from.</summary>
     /// <remarks>
     /// A configuration source publishes colon-delimited keys, and only an object has any. An array, a number, or a bare
@@ -134,9 +153,7 @@ public static class RootSettingsCommitRules
     /// </remarks>
     private static void RefuseWhatIsNotAnObject(string json)
     {
-        var reader = new Utf8JsonReader(Encoding.UTF8.GetBytes(json));
-
-        if (reader.Read() && reader.TokenType == JsonTokenType.StartObject)
+        if (RootIsAnObject(json))
         {
             return;
         }

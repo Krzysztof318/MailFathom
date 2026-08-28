@@ -15,9 +15,10 @@ namespace MailFathom.Application.UnitTests.Accounts;
 
 /// <summary>Covers the one place the owner axis enters a mailbox read.</summary>
 /// <remarks>
-/// Everything a caller may reach is composed from this answer, so the three outcomes worth stating are all here: the
-/// owner the deployment serves owns what it serves, another owner owns none of it, and a principal acting for no owner
-/// is refused rather than answered with an empty set.
+/// Everything a caller may reach is composed from this answer, so the outcomes worth stating are all here: an owner owns
+/// the accounts served under their own name, another owner owns none of them, a deployment serving two owners answers
+/// each with their own half rather than refusing both, and a principal acting for no owner is refused rather than
+/// answered with an empty set.
 /// </remarks>
 public sealed class OwnedMailAccountCatalogTests
 {
@@ -25,6 +26,12 @@ public sealed class OwnedMailAccountCatalogTests
         SyntheticMailOwner.Deployment,
         MailAccountId.Create("personal"),
         MailAccountDisplayName.Create("Personal mail"),
+        MailSynchronizationMode.Polling);
+
+    private static readonly ServedMailAccount AnotherOwnersAccount = new(
+        SyntheticMailOwner.Another,
+        MailAccountId.Create("work"),
+        MailAccountDisplayName.Create("Work mail"),
         MailSynchronizationMode.Polling);
 
     [Fact]
@@ -90,6 +97,32 @@ public sealed class OwnedMailAccountCatalogTests
         Assert.IsType<PrincipalNotAuthorizedException>(refusal);
     }
 
+    /// <summary>
+    /// The deployment this change exists to enable serves several owners, and every owner-facing read runs through here.
+    /// Each of them is answered with the accounts served under their own name rather than with a refusal that no sole
+    /// owner could be named, which is what asking the deployment for one would have produced.
+    /// </summary>
+    [Fact]
+    public void OwnedAccounts_ADeploymentServingTwoOwners_AnswersEachWithTheirOwnAccounts()
+    {
+        // Arrange
+        var deploymentOwner = CatalogFor(
+            AccessAuthorizations.ForOwnerGranted(SyntheticMailOwner.Deployment),
+            servedAccounts: [ServedAccount, AnotherOwnersAccount]);
+
+        var anotherOwner = CatalogFor(
+            AccessAuthorizations.ForOwnerGranted(SyntheticMailOwner.Another),
+            servedAccounts: [ServedAccount, AnotherOwnersAccount]);
+
+        // Act
+        var deploymentOwnersAccounts = deploymentOwner.OwnedAccounts;
+        var anotherOwnersAccounts = anotherOwner.OwnedAccounts;
+
+        // Assert
+        Assert.Equal([ServedAccount], deploymentOwnersAccounts);
+        Assert.Equal([AnotherOwnersAccount], anotherOwnersAccounts);
+    }
+
     /// <summary>Whether synchronization runs is a deployment fact rather than a caller's, so it is reported unchanged.</summary>
     [Theory]
     [InlineData(true)]
@@ -113,15 +146,13 @@ public sealed class OwnedMailAccountCatalogTests
 
     private static OwnedMailAccountCatalog CatalogFor(
         AccessAuthorization authorization,
-        bool synchronizationEnabled = true)
+        bool synchronizationEnabled = true,
+        IReadOnlyList<ServedMailAccount>? servedAccounts = null)
     {
-        var servedAccounts = Substitute.For<IDeploymentMailAccountCatalog>();
-        servedAccounts.ServedAccounts.Returns([ServedAccount]);
-        servedAccounts.SynchronizationEnabled.Returns(synchronizationEnabled);
+        var deploymentAccounts = Substitute.For<IDeploymentMailAccountCatalog>();
+        deploymentAccounts.ServedAccounts.Returns(servedAccounts ?? [ServedAccount]);
+        deploymentAccounts.SynchronizationEnabled.Returns(synchronizationEnabled);
 
-        var deploymentOwner = Substitute.For<IDeploymentMailOwnerSource>();
-        deploymentOwner.Owner.Returns(SyntheticMailOwner.Deployment);
-
-        return new OwnedMailAccountCatalog(servedAccounts, deploymentOwner, authorization);
+        return new OwnedMailAccountCatalog(deploymentAccounts, authorization);
     }
 }

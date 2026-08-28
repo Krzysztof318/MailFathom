@@ -31,6 +31,13 @@ namespace MailFathom.Infrastructure.Persistence.Owners;
 /// by the same statement, where a subquery over the account table would have found no account row and left it behind.
 /// </para>
 /// <para>
+/// The walk runs twice, once before the owner row is deleted and once after. Deleting that row is what stops any
+/// further write keyed onto it, and nothing stops a writer that only names a mail account — so the second pass is what
+/// reaches the rows such a writer committed while the first was running. What it does not reach is one committed after
+/// it, which no statement here can bound: that is quiescing the owner's synchronization and job work, and it belongs
+/// with whatever comes to own the running deployment's reconfiguration.
+/// </para>
+/// <para>
 /// The contact book is reached by the cascade rather than by the walk. <c>contacts</c> and <c>contact_addresses</c>
 /// record no mail account, so nothing here names either, and the cascade reaches them in two hops rather than one:
 /// <c>contacts</c> keys onto the owner row, and <c>contact_addresses</c> keys onto <c>contacts</c> through
@@ -74,14 +81,49 @@ internal static class OwnerAccountErasure
         // What it does not hold is a plain read. Under MVCC a row lock blocks no `SELECT`, so a run resolving this
         // owner while the statements below run is handed the identifier at once; what stops that run is its own insert
         // rather than its resolution. And a writer that never touches the owner row at all — an enqueue keyed to a mail
-        // account it already held — is outside any lock this statement could take. Bounding that belongs with the
-        // operation that gives this seam a caller.
+        // account it already held — is outside any lock this statement could take, which is why the walk below runs
+        // twice.
         await writeContext.Database
             .SqlQueryRaw<Guid>(OwnerRowLockStatement(writeContext.Model), ownerId)
             .ToListAsync(cancellationToken);
 
-        var rowsErasedBesideTheCascade = 0;
-        foreach (var entityType in TablesTheCascadeDoesNotReach(writeContext.Model))
+        var tables = TablesTheCascadeDoesNotReach(writeContext.Model);
+
+        var rowsErasedBesideTheCascade = await EraseTablesTheCascadeMissesAsync(
+            writeContext,
+            tables,
+            ownerId,
+            cancellationToken);
+
+        var erasedOwners = await writeContext.OwnerAccounts
+            .Where(owner => owner.Id == ownerId)
+            .ExecuteDeleteAsync(cancellationToken);
+
+        // The same walk again, after the owner row is gone. Everything keyed onto that row is refused from here on, so
+        // what the second pass reaches is what a writer holding a mail account of its own committed while the first
+        // pass was running — rows the transaction would otherwise leave behind for an owner it reports as erased. It
+        // is one repeat rather than a loop: what remains after it is a writer that committed later still, and stopping
+        // that is quiescing the owner's synchronization and job work rather than deleting harder.
+        rowsErasedBesideTheCascade += await EraseTablesTheCascadeMissesAsync(
+            writeContext,
+            tables,
+            ownerId,
+            cancellationToken);
+
+        return new OwnerErasure(erasedOwners > 0, rowsErasedBesideTheCascade);
+    }
+
+    /// <summary>Deletes one owner's rows from every table the cascade leaves behind.</summary>
+    /// <returns>How many rows the pass removed.</returns>
+    private static async Task<int> EraseTablesTheCascadeMissesAsync(
+        MailFathomDbContext writeContext,
+        IReadOnlyList<IEntityType> tables,
+        Guid ownerId,
+        CancellationToken cancellationToken)
+    {
+        var erased = 0;
+
+        foreach (var entityType in tables)
         {
             // The owner is named on the row rather than through the accounts it holds, so the statement reaches every
             // row written for this owner including one whose account the deployment no longer has a row for. The owner
@@ -92,17 +134,10 @@ internal static class OwnerAccountErasure
                 WHERE {{QuotedColumn(entityType, OwnerPropertyName)}} = {0}
                 """;
 
-            rowsErasedBesideTheCascade += await writeContext.Database.ExecuteSqlRawAsync(
-                statement,
-                [ownerId],
-                cancellationToken);
+            erased += await writeContext.Database.ExecuteSqlRawAsync(statement, [ownerId], cancellationToken);
         }
 
-        var erasedOwners = await writeContext.OwnerAccounts
-            .Where(owner => owner.Id == ownerId)
-            .ExecuteDeleteAsync(cancellationToken);
-
-        return new OwnerErasure(erasedOwners > 0, rowsErasedBesideTheCascade);
+        return erased;
     }
 
     /// <summary>Names the tables that record a mail account and that deleting the owner would leave behind.</summary>

@@ -133,7 +133,7 @@ internal static class FakeOwnerCredentialDeployment
         {
             return FakeAdminEndpoint.Json(
                 HttpStatusCode.OK,
-                $$"""{"owners":[{{string.Join(',', owners.Select(owner => $"\"{owner:D}\""))}}]}""");
+                $$"""{"owners":[{{string.Join(',', owners.Select(Roster))}}]}""");
         }
 
         if (path.EndsWith("/credentials", StringComparison.Ordinal))
@@ -166,6 +166,10 @@ internal static class FakeOwnerCredentialDeployment
     }
 
     private static string Written(string? value) => value is null ? "null" : $"\"{value}\"";
+
+    /// <summary>States one owner the way the roster route publishes them, with the label and the two states beside the identifier.</summary>
+    private static string Roster(Guid owner) =>
+        $$"""{"id":"{{owner:D}}","displayName":"owner-{{owner:D}}","recordIsTheirOwn":true,"served":true}""";
 
     private static HttpResponseMessage Written(HttpStatusCode status, string detail, string body) =>
         status == HttpStatusCode.OK

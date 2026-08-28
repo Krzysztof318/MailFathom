@@ -98,7 +98,7 @@ internal sealed partial class RootSettingsWriter(
         try
         {
             var candidate = new RootSettingsDocument(
-                RootSettingsDocumentPatch.Apply(inForce.Json, edits),
+                SettingsDocumentPatch.Apply(inForce.Json, edits),
                 inForce.Version + 1);
 
             // Before the candidate is composed rather than after, because a document past the ceiling is refused
@@ -186,13 +186,12 @@ internal sealed partial class RootSettingsWriter(
             return null;
         }
 
-        // An owner's record is the one store with an answer better than "configure it elsewhere". An owner still read
-        // from configuration holds an empty document, so a write accepted into it would leave that owner served from a
-        // record holding less than the file was supplying — which is a mailbox that stops being synchronized because
-        // somebody edited a setting beside it. Every owner of this release is in that state, so the sentence names the
-        // declaration an operator can actually change rather than an adoption no command performs yet.
+        // An owner's record is the one store with an answer better than "configure it elsewhere", and which answer it
+        // is depends on where that owner is read from — which this writer cannot know, because a change names a path
+        // rather than an owner. So the sentence names both halves: the declaration to edit while the owner is still
+        // read from a configuration source, and the owner commands that change the record once one has been adopted.
         return target.Route == ConfigurationStorageRoute.OwnerAccounts
-            ? $"MailFathom persists {path} in the {target.Route.Name} store, and every owner of this release is served from the declaration a configuration source supplies rather than from that store. Change the declaration where it is written — the owner's own section of the top-level Accounts collection — and restart."
+            ? $"MailFathom persists {path} in the {target.Route.Name} store rather than in the deployment's own document, so this is not where it is changed. An owner still read from a configuration source is changed in the declaration that supplies them — the owner's own section of the top-level Accounts collection — and served from it at the next restart; an owner who has been adopted is changed with 'mfctl owner account add' and 'mfctl owner account remove'."
             : $"MailFathom persists {path} in the {target.Route.Name} store, which this build does not write. Configure it where that store is provisioned from.";
     }
 

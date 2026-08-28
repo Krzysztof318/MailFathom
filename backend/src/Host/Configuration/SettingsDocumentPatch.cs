@@ -7,9 +7,9 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using MailFathom.Application.Configuration;
 
-namespace MailFathom.Host.Configuration.RootSettings;
+namespace MailFathom.Host.Configuration;
 
-/// <summary>Applies a write's changes to a copy of the persisted configuration document.</summary>
+/// <summary>Applies a write's changes to a copy of a persisted settings document.</summary>
 /// <remarks>
 /// <para>
 /// A configuration path is a sequence of property names and nothing else, so applying a change is walking that
@@ -32,16 +32,22 @@ namespace MailFathom.Host.Configuration.RootSettings;
 /// is configuration the deployment can bind is decided against the composed configuration, which is where a setting
 /// means something.
 /// </para>
+/// <para>
+/// Both persisted documents are patched with this — the deployment's own settings and one owner's record — because a
+/// path is a path whichever document it addresses. Nothing here knows which of the two it was given, which is why every
+/// sentence it produces names a settings document rather than either one; a caller that has to say which one names it
+/// in the refusal it composes around this.
+/// </para>
 /// </remarks>
-internal static class RootSettingsDocumentPatch
+internal static class SettingsDocumentPatch
 {
     /// <summary>Produces the document a write would persist.</summary>
-    /// <param name="json">The document as it stands.</param>
+    /// <param name="json">The settings document as it stands, whether it is the deployment's own or one owner's record.</param>
     /// <param name="edits">The changes, applied in the order given.</param>
     /// <returns>The candidate document.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    /// <exception cref="FormatException">Thrown when the document as it stands is not a JSON object.</exception>
-    /// <exception cref="JsonException">Thrown when the document as it stands is not JSON at all, which for a <c>jsonb</c> column means one nested deeper than the reader's maximum.</exception>
+    /// <exception cref="FormatException">Thrown when the settings document as it stands is not a JSON object.</exception>
+    /// <exception cref="JsonException">Thrown when the settings document as it stands is not JSON at all, which for a <c>jsonb</c> column means one nested deeper than the reader's maximum.</exception>
     public static string Apply(string json, IReadOnlyList<ConfigurationEdit> edits)
     {
         ArgumentNullException.ThrowIfNull(json);
@@ -50,7 +56,7 @@ internal static class RootSettingsDocumentPatch
         if (JsonNode.Parse(json) is not JsonObject document)
         {
             throw new FormatException(
-                "The persisted configuration document is not a JSON object of configuration keys, so there is nothing for a write to change.");
+                "The persisted settings document is not a JSON object of configuration keys, so there is nothing for a write to change.");
         }
 
         foreach (var edit in edits)

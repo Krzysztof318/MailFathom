@@ -626,6 +626,82 @@ people that account corresponds with as its mail is synchronized. Those records 
 about the whole thing, `mfctl contact delete-collected` erases everything it collected and keeps everything you entered
 — and switching collection off in configuration is the separate act that stops the book filling again.
 
+## Serving more than one person
+
+A deployment that reads your own mail declares one person in its files and needs nothing here. When a second person is
+to be served — a household, a small team — `mfctl owner` is where each of them is recorded and where what MailFathom
+reads for them is maintained:
+
+```console
+$ mfctl owner list
+3f1d... (Alex)
+    mail accounts: a configuration source; 'mfctl owner adopt' moves them into their own record
+7c02... (Sam)
+    mail accounts: their own record, maintained with 'mfctl owner account'
+
+$ mfctl owner add --display-name Morgan
+Recorded Morgan as 9b41....
+Their mail accounts are read from their own record; no configuration source reaches them. Declare one with
+'mfctl owner account add', and provision a way for them to sign in with 'mfctl credential create'. The running
+deployment settled its roster at start, so it begins serving this owner at its next restart.
+```
+
+Every command but `list` and `add` takes `--owner` and does not need it while the deployment holds one person: it acts
+on the single owner there is, and refuses rather than guessing where there are several. `mfctl owner rename` replaces
+the label you tell somebody apart by; nothing is keyed by it, so it moves no mail and invalidates no identifier — and
+where the person is one your configuration declares, that file is where the label is changed, since a start puts the
+declared one back.
+
+**Recording a second person is refused while a surface they reach authenticates nobody.** A deployment serving one
+person may leave the MCP endpoint open, or hold it with a key, because there is only one answer to whose mail a caller
+is asking about. With two people there is no such answer, so give the MCP and client endpoints a username and password
+belonging to a person — `mfctl credential create` is that — or switch them off. The refusal says which of the two
+applies.
+
+**Their mailboxes come from your files until you adopt them.** An owner your configuration declares is read from that
+declaration on every start, so changing their mailboxes here is refused until `mfctl owner adopt` moves them into their
+own record. It shows what it would move and asks first, and after it there is no going back: the files no longer decide
+that person's mailboxes, and `mfctl owner account add` and `mfctl owner account remove` are what change them. Everyone
+else goes on being read from the files exactly as before.
+
+```console
+$ mfctl owner adopt --owner 3f1d...
+Adopting Alex (3f1d...) would move 2 mail accounts into their own record:
+  work (Work mailbox)
+  family (Family mailbox)
+  from MailSynchronization:Accounts
+Move these 2 mail accounts into this owner's record, so the configuration stops deciding them? [y/N]
+```
+
+Clear `MailSynchronization:Accounts` afterwards. The adoption copies those declarations into the record and leaves the
+file untouched, and an account's settings are still resolved from that section before any record — so a deployment whose
+every owner reads a record of their own would go on synchronizing each mailbox under the file the adoption said had
+stopped being read. The next start refuses rather than doing that, and names the section to clear.
+
+**Withdrawing a mailbox is not deleting mail, and removing an owner is.** `mfctl owner account remove` stops MailFathom
+synchronizing one mailbox and leaves everything already stored for it exactly where it is. `mfctl owner remove` erases
+the person and every message, folder, attachment, and derived index the deployment holds for them; it shows what it is
+about to do and asks, and nothing puts it back.
+
+It refuses one person: an owner your configuration declares. A start writes every declared owner it no longer holds back
+into the roster, so the erasure would run, the mail would go, and the same person would be recreated at the next restart
+with their mailboxes downloaded again. Remove their entry from the files first — and the refusal names it — then erase
+them once nothing declares them.
+
+**A mailbox somebody declares from the client names a credential you provisioned for them.** A record carries a
+reference rather than a password, and a reference is a path into what the deployment can read, so a person declaring
+their own mailbox may name material provisioned for them and nothing else: its name begins with `owner-<their
+identifier>-`. Provision one that way — a file or a systemd credential called `owner-3f1d…-work-password` — and they
+declare the mailbox themselves; provision it under any other name and `mfctl owner account add` is what declares it, on
+this side. [The client endpoint](../operations/client-endpoint.md#the-record-routes) states the rule in full.
+
+A person served this way maintains their own mailboxes from [the client](../operations/client-endpoint.md) without
+reaching this command at all — and sees only their own. Who else a deployment serves is administrative, and no surface
+a person signs in to publishes it.
+
+[Administering a deployment](../operations/admin-endpoint.md#owners-and-their-records) is the operator's reference for
+every route behind these commands.
+
 ## Changing a setting without a restart
 
 Most of what MailFathom reads comes from the files your deployment provisioned, and those stay yours: nothing in the
@@ -665,6 +741,8 @@ of what a write proves before it commits and every refusal it can answer with.
 - [Administering a deployment](../operations/admin-endpoint.md) — the operator's reference for everything above
 - [Configuration sources](../operations/configuration-sources.md) — where every setting can come from, and what
   `mfctl config` changes
+- [Owners and their records](../operations/admin-endpoint.md#owners-and-their-records) — every route behind
+  `mfctl owner`, and what each refusal names
 - [Contacts](../features/contacts.md) — what the contact book holds, and every rule a writer of it obeys
 - [Mail rules](../features/mail-rules.md) — every fact, operator, and action a rule can use
 - [Mailbox OAuth](../operations/mailbox-oauth.md) — registering the application, and every mode of the sign-in above

@@ -803,12 +803,18 @@ $ mfctl credential create --method api-key --owner 6f1c… --permission mailfath
 $ mfctl credential list --owner 6f1c…
 ```
 
-This surface's half of the published set is seven names — `mailfathom.mail.read`, `mailfathom.mail.ask`,
+This surface's half of the published set is eight names — `mailfathom.mail.read`, `mailfathom.mail.ask`,
 `mailfathom.mail.contacts.read`, `mailfathom.mail.contacts.write`, `mailfathom.mail.flags.write`,
-`mailfathom.mail.drafts.write`, and `mailfathom.mail.send` — and
+`mailfathom.mail.drafts.write`, `mailfathom.mail.send`, and `mailfathom.mail.accounts.write` — and
 [what a credential may do](permissions.md) holds the model behind them in full: what each name reaches, which tool each
 one covers, how a grant is written, what naming no permission and naming `--no-permissions` each mean, what
 `PermissionsFromTokenScopes` turns the recorded grant into, and what is refused.
+
+Seven of the eight publish a tool here. `mailfathom.mail.accounts.write` publishes none: it reaches [the client
+endpoint's record routes](client-endpoint.md#the-record-routes), which is where a person maintains which mailboxes this
+deployment reads for them. It is written on an entry of this surface only because the two endpoints draw grants from one
+vocabulary; a caller granted it here is offered nothing it did not already have, and an entry that means to reach the
+record routes is one on `ClientEndpoint`.
 
 Two things about it are this surface's own, and both are below. The first is what a grant does to what a caller is
 offered; the second is what startup writes about every entry.
@@ -846,11 +852,11 @@ with no entry at all gets one line naming the section a method would be written 
 
 **The endpoint asks whether this is a method the deployment accepts; the credential answers who is calling.** What an
 admitted caller may then do is the grant recorded on that credential, and that decides one thing: which of this
-surface's tools it is offered and may call. Which tool each of the seven names covers is
+surface's tools it is offered and may call. Which tool each name covers is
 [what a credential may do](permissions.md#which-tool-each-name-covers); a credential narrowed to the contact half
-therefore reaches the contact book and nothing else, and one granted none of the seven is served an empty tool list and
-refused every call it makes. `mailfathom.mail.send` is the one worth checking a narrowed credential against
-deliberately, because it is the only name here whose effect leaves the deployment and cannot be recalled.
+therefore reaches the contact book and nothing else, and one granted no name that publishes a tool here is served an
+empty tool list and refused every call it makes. `mailfathom.mail.send` is the one worth checking a narrowed credential
+against deliberately, because it is the only name here whose effect leaves the deployment and cannot be recalled.
 
 **A refused caller is told nothing**, for the reason
 [what a refused caller is told](permissions.md#what-a-refused-caller-is-told) gives: a message a client could tell apart
