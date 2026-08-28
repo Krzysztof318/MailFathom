@@ -67,6 +67,15 @@ internal sealed class MailBodyDrawing
     private readonly Action<MailBodyLink, string> follow;
     private readonly List<PendingPicture> pictures = [];
 
+    /// <summary>What the words being drawn actually sit on, where a cell painted something other than the surface.</summary>
+    /// <remarks>
+    /// Carried as state rather than threaded through every drawing method because the walk is synchronous and
+    /// depth-first: a cell sets it while its own content is drawn and restores it on the way out, so nesting reads
+    /// exactly as the tree does. It is the only piece of drawing state that is not a parameter, and it is here because
+    /// a run's colour has to be judged against what is behind it rather than against what is behind the pane.
+    /// </remarks>
+    private Windows.UI.Color? behind;
+
     /// <summary>Initializes a drawing over the sentences it composes and what it hands a followed link to.</summary>
     /// <param name="words">The sentences the drawing itself needs.</param>
     /// <param name="follow">What a link and the words the message put on it are handed to when it is chosen.</param>
@@ -178,14 +187,14 @@ internal sealed class MailBodyDrawing
     /// draws on, and gives way to the theme's own ink otherwise. Nothing is adjusted towards legibility: a colour is
     /// the sender's or it is the theme's, because a shifted colour is a third thing neither of them chose.
     /// </remarks>
-    private static SolidColorBrush? Ink(string? notation)
+    private SolidColorBrush? Ink(string? notation)
     {
         if (Shade(notation) is not { } ink)
         {
             return null;
         }
 
-        return Theme(SurfaceBrushKey) is { } surface && Contrast(ink, surface) < MinimumContrast
+        return (this.behind ?? Theme(SurfaceBrushKey)) is { } ground && !Legible(ink, ground)
             ? null
             : new SolidColorBrush(ink);
     }
@@ -198,10 +207,18 @@ internal sealed class MailBodyDrawing
             return null;
         }
 
-        return Theme(InkBrushKey) is { } ink && Contrast(ink, ground) < MinimumContrast
+        return Theme(InkBrushKey) is { } ink && !Legible(ink, ground)
             ? null
             : new SolidColorBrush(ground);
     }
+
+    /// <summary>Says whether words of one colour can be read on the other, which is the whole of the floor.</summary>
+    /// <remarks>
+    /// WCAG's AA ratio for body text. Stated as a predicate rather than inline at each guard so the two guards cannot
+    /// come to mean different things, and so the floor itself is decidable without a loaded theme.
+    /// </remarks>
+    internal static bool Legible(Windows.UI.Color ink, Windows.UI.Color ground) =>
+        Contrast(ink, ground) >= MinimumContrast;
 
     /// <summary>The contrast ratio between two colours, as WCAG defines it.</summary>
     private static double Contrast(Windows.UI.Color first, Windows.UI.Color second)
@@ -287,7 +304,7 @@ internal sealed class MailBodyDrawing
         }
     }
 
-    private static void Dress(Run run, MailBodyRun content)
+    private void Dress(Run run, MailBodyRun content)
     {
         if (content.Emphasis.HasFlag(MailBodyEmphasis.Bold))
         {
@@ -318,7 +335,7 @@ internal sealed class MailBodyDrawing
 
         run.TextDecorations = decorations;
 
-        if (Ink(content.Foreground) is { } ink)
+        if (this.Ink(content.Foreground) is { } ink)
         {
             run.Foreground = ink;
         }
@@ -396,7 +413,7 @@ internal sealed class MailBodyDrawing
                 continue;
             }
 
-            Break(text.Inlines, run.Text, dressed => Dress(dressed, run));
+            Break(text.Inlines, run.Text, dressed => this.Dress(dressed, run));
         }
 
         return text;
@@ -406,7 +423,7 @@ internal sealed class MailBodyDrawing
     private void Anchor(InlineCollection inlines, MailBodyRun run, MailBodyLink link)
     {
         var anchor = new Hyperlink();
-        Break(anchor.Inlines, run.Text, dressed => Dress(dressed, run));
+        Break(anchor.Inlines, run.Text, dressed => this.Dress(dressed, run));
 
         // No NavigateUri: setting it would have the platform open the target on a click, which is the one thing this
         // pane may not do. The reader is shown where the link goes and answers, and the pane opens it from there.
@@ -531,15 +548,30 @@ internal sealed class MailBodyDrawing
         return grid;
     }
 
+    /// <summary>Draws one cell, with what it paints behind the words drawn inside it.</summary>
+    /// <remarks>
+    /// The two colour guards used to answer independently — a run against the pane's surface, a cell against the
+    /// theme's ink — and neither was told what the other admitted, so a sender choosing one colour for the cell and the
+    /// same colour for its text cleared both and drew words at a contrast of one against their own background. The
+    /// background this cell actually painted is what the runs inside it are now judged against.
+    /// </remarks>
     private Border Cell(MailBodyTableCell cell, bool isHeader, int depth)
     {
+        var ground = Ground(cell.Background);
+        var outer = this.behind;
+
+        this.behind = ground?.Color ?? outer;
+
         var content = this.Stack(cell.Blocks, depth + 1);
+
+        this.behind = outer;
+
         content.HorizontalAlignment = Sits(cell.Alignment);
 
         var border = new Border { Child = content };
         Apply(border, isHeader ? HeaderCellStyleKey : CellStyleKey);
 
-        if (Ground(cell.Background) is { } ground)
+        if (ground is not null)
         {
             border.Background = ground;
         }

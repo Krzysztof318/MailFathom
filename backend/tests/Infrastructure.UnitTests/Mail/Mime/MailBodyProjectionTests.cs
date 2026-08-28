@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
 using System.Text;
 using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Rendering.Document;
@@ -712,23 +713,44 @@ public sealed class MailBodyProjectionTests
         Assert.Equal(0, document.RemovedRemoteReferenceCount);
     }
 
-    /// <summary>A style attribute past the bound still hides what it asked to hide, rather than being read as nothing.</summary>
+    /// <summary>A style attribute past the bound still hides what it asked to hide, wherever it wrote the declaration.</summary>
     /// <remarks>
-    /// Discarding the whole attribute made its length the way to defeat every hiding check at once: a message could
-    /// write <c>display:none</c> and pad past the bound, and this pane alone would draw the element in full.
+    /// Reading nothing past the bound made length the way to defeat every hiding check at once, and reading only the
+    /// prefix moves that rather than closing it: the padding has to precede the declaration instead of following it.
+    /// So the hiding declaration is read out of the whole attribute and this covers both sides of the padding.
     /// </remarks>
+    [Theory]
+    [InlineData("display:none;{0}")]
+    [InlineData("{0}display:none")]
+    [InlineData("{0}visibility:hidden")]
+    [InlineData("{0}display:none !important")]
+    public async Task ProduceAsync_HidingDeclarationBuriedUnderAnOverLongAttribute_IsStillHidden(string shape)
+    {
+        // Arrange
+        var padding = string.Concat(Enumerable.Repeat("color:#112233;", 500));
+        var declarations = string.Format(CultureInfo.InvariantCulture, shape, padding);
+
+        // Act
+        var document = await DocumentOf($"<p>Readable</p><div style=\"{declarations}\">Hidden</div>");
+
+        // Assert
+        Assert.DoesNotContain("Hidden", TextOf(document), StringComparison.Ordinal);
+        Assert.Contains("Readable", TextOf(document), StringComparison.Ordinal);
+    }
+
+    /// <summary>An attribute past the bound still applies the properties that fit, so the cut loses only the rest.</summary>
     [Fact]
-    public async Task ProduceAsync_HidingDeclarationBuriedUnderAnOverLongAttribute_IsStillHidden()
+    public async Task ProduceAsync_AnOverLongAttributeStatingNoHiding_KeepsWhatFitsWithinTheBound()
     {
         // Arrange
         var padding = string.Concat(Enumerable.Repeat("color:#112233;", 500));
 
         // Act
-        var document = await DocumentOf($"<p>Readable</p><div style=\"display:none;{padding}\">Hidden</div>");
+        var document = await DocumentOf($"<div style=\"text-align:center;{padding}\">Readable</div>");
 
         // Assert
-        Assert.DoesNotContain("Hidden", TextOf(document), StringComparison.Ordinal);
-        Assert.Contains("Readable", TextOf(document), StringComparison.Ordinal);
+        var paragraph = Assert.IsType<MailParagraphBlock>(Assert.Single(document.Blocks));
+        Assert.Equal(MailBlockAlignment.Center, paragraph.Alignment);
     }
 
     /// <summary>A picture a heading holds survives beside it rather than being dropped with the words it is not.</summary>

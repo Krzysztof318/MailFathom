@@ -557,9 +557,10 @@ internal sealed class MailBodyReducer
 
     /// <summary>Counts the picture a hidden element names, which the emission that would have counted it never reaches.</summary>
     /// <remarks>
-    /// A source the message carries in itself is not counted, because nothing is asked of anybody for it; nor is one
-    /// the reader consented to, because a hidden picture is not drawn and so is not fetched either. What is left is a
-    /// reference to somebody else's server that the document will not carry, which is what the count is about.
+    /// A source the message carries in itself is not counted, because nothing is asked of anybody for it. Everything
+    /// else is, whether or not the reader consented to remote content: consent widens what a picture the reader is
+    /// shown may fetch, and a hidden picture is not drawn under either reading, so the document does not carry it
+    /// either way. What is left is a reference the document will not carry, which is what the count is about.
     /// </remarks>
     private void NoteHiddenPicture(IElement element)
     {

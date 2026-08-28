@@ -24,6 +24,8 @@ namespace MailFathom.Infrastructure.Mail.Mime.Rendering;
 /// </para>
 /// <para>
 /// The attribute is bounded before it is split, so a declaration block written to cost a parse costs the bound instead.
+/// Whether the element asked not to be drawn is read out of the whole of it regardless, because that one decision is
+/// about whether anything is drawn rather than about how, and any bound on reading it is a bound a sender can pad past.
 /// </para>
 /// </remarks>
 internal static class MailStyleReader
@@ -80,16 +82,67 @@ internal static class MailStyleReader
                 Declared(declaration[(separator + 1)..]));
         }
 
-        return style;
+        return style with { Hidden = style.Hidden || HidesPastTheBound(written) };
     }
+
+    /// <summary>Reads whether an attribute the bound cut asked not to be drawn, wherever it wrote that.</summary>
+    /// <remarks>
+    /// A hiding declaration decides whether anything is drawn at all, so it is read out of the whole attribute rather
+    /// than out of the prefix a parse bound admits — and it has to be, because bounding it either way round leaves
+    /// padding as the way to defeat it: written past the bound, which the walk stops before, or written in front of
+    /// the padding, which is what leaves the rest of the block unreached. This does one pass and allocates nothing, so
+    /// the bound stays a bound on what is parsed rather than on what is looked at, and an attribute inside it is not
+    /// walked twice.
+    /// </remarks>
+    private static bool HidesPastTheBound(string written)
+    {
+        if (written.Length <= MaximumStyleLength)
+        {
+            return false;
+        }
+
+        var remaining = written.AsSpan();
+
+        while (!remaining.IsEmpty)
+        {
+            var end = remaining.IndexOf(';');
+            var declaration = end < 0 ? remaining : remaining[..end];
+
+            remaining = end < 0 ? [] : remaining[(end + 1)..];
+
+            var separator = declaration.IndexOf(':');
+
+            if (separator > 0 && Hides(declaration[..separator].Trim(), Stated(declaration[(separator + 1)..])))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Says whether one declaration is the element asking not to be drawn.</summary>
+    /// <remarks>
+    /// The two readers of a style attribute — the walk that resolves every property, and the scan that answers only
+    /// this question over the whole of it — decide it here rather than each in their own words, because a pair that
+    /// drifted apart would leave an element hidden to one and drawn by the other.
+    /// </remarks>
+    private static bool Hides(ReadOnlySpan<char> property, ReadOnlySpan<char> value) =>
+        (property.Equals("display", StringComparison.OrdinalIgnoreCase)
+            && value.Equals("none", StringComparison.OrdinalIgnoreCase))
+        || (property.Equals("visibility", StringComparison.OrdinalIgnoreCase)
+            && value.Equals("hidden", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Cuts an over-long attribute back to the last declaration that fits, rather than discarding them all.</summary>
     /// <remarks>
     /// The bound exists so a block written to cost a parse costs the bound instead, and it used to be answered by
-    /// reading nothing — which made length the way to defeat every <see cref="MailNodeStyle.Hidden" /> check at once:
-    /// a message could write <c>display:none</c> and then pad past the bound, and the element would be drawn in full
-    /// while every other client hid it. Every other refusal in this file fails towards showing less, and so does this
-    /// one now. The cut is taken back to the last complete declaration, because half a declaration means nothing.
+    /// reading nothing, which lost every property the attribute stated rather than the ones past the cut. The cut is
+    /// taken back to the last complete declaration, because half a declaration means nothing.
+    /// <para>
+    /// What this bound deliberately does not decide is <see cref="MailNodeStyle.Hidden" />, which
+    /// <see cref="HidesPastTheBound" /> reads out of the whole attribute. A cut that decided it would leave padding as
+    /// the way to defeat every hiding check at once, whichever side of the padding the declaration was written on.
+    /// </para>
     /// </remarks>
     private static string Bounded(string declarations)
     {
@@ -112,13 +165,16 @@ internal static class MailStyleReader
     /// The qualifier decides which declaration wins a cascade, and there is no cascade here, so it is dropped rather
     /// than carried.
     /// </remarks>
-    private static string Declared(string value)
+    private static string Declared(string value) => Stated(value).ToString();
+
+    /// <summary>The same reading over a span, which the hiding scan needs and which allocates nothing.</summary>
+    private static ReadOnlySpan<char> Stated(ReadOnlySpan<char> value)
     {
         var stated = value.Trim();
         var qualifier = stated.LastIndexOf('!');
 
         return qualifier >= 0
-            && stated.AsSpan(qualifier + 1).Trim().Equals("important", StringComparison.OrdinalIgnoreCase)
+            && stated[(qualifier + 1)..].Trim().Equals("important", StringComparison.OrdinalIgnoreCase)
                 ? stated[..qualifier].TrimEnd()
                 : stated;
     }
@@ -141,14 +197,7 @@ internal static class MailStyleReader
                     : style with { RemovedEmphasis = style.RemovedEmphasis | MailTextEmphasis.Italic },
             "text-decoration" or "text-decoration-line" => Decorated(style, value),
             "font-family" => style with { AddedEmphasis = style.AddedEmphasis | FaceEmphasis(value) },
-            "display" => style with
-            {
-                Hidden = style.Hidden || value.Equals("none", StringComparison.OrdinalIgnoreCase),
-            },
-            "visibility" => style with
-            {
-                Hidden = style.Hidden || value.Equals("hidden", StringComparison.OrdinalIgnoreCase),
-            },
+            "display" or "visibility" => style with { Hidden = style.Hidden || Hides(property, value) },
             "width" => style with { WidthShare = ShareOf(value), PixelWidth = PixelsOf(value) },
             _ => style,
         };

@@ -40,9 +40,12 @@ is resolved until that refusal has been decided, so a call carrying a list besid
 conversation identifier is told which of the two to drop rather than that the argument it will not be read by is too
 short or malformed.
 
-Every flag governs the whole call rather than one email each. A caller asking for markup or for the attached files
-wants them for what it is about to read, and a flag per identifier would make the argument list grow with the batch
-while answering a question no caller asks per email.
+Every flag but `RetainRemoteImageReferences` governs the whole call rather than one email each. A caller asking for
+markup or for the attached files wants them for what it is about to read, and a flag per identifier would make the
+argument list grow with the batch while answering a question no caller asks per email. The exception is the one flag
+that is a reader's act rather than a caller's preference, so a request carrying it names exactly one email and is
+refused otherwise — [Nothing in a body reaches another server unless the reader asked](#nothing-in-a-body-reaches-another-server-unless-the-reader-asked)
+holds why.
 
 The last two are init properties rather than factory arguments, because one caller asks for them — the client
 endpoint a person's reading pane reads — and every other entrypoint would have to name them only to decline them.
