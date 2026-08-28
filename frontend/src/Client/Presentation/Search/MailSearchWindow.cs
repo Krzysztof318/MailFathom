@@ -11,13 +11,17 @@ namespace MailFathom.Client.Presentation.Search;
 internal readonly record struct MailSearchWindow(
     MailSearchQuery? Query,
     IImmutableList<DeploymentMailSearchResult> Results,
+    IImmutableList<int> PageLengths,
     string? NextCursor,
     MailSearchRetrievalMode Ranking,
     SemanticSearchStanding SemanticStanding)
 {
+    internal const int MaximumPages = 4;
+
     internal static MailSearchWindow Nothing { get; } = new(
         Query: null,
         Results: [],
+        PageLengths: [],
         NextCursor: null,
         MailSearchRetrievalMode.Unrecognized,
         SemanticSearchStanding.Unrecognized);
@@ -25,15 +29,29 @@ internal readonly record struct MailSearchWindow(
     internal static MailSearchWindow Opening(MailSearchQuery query, DeploymentMailSearchPage page) => new(
         query,
         [.. page.Rows],
+        page.Rows.Count is 0 ? [] : [page.Rows.Count],
         page.NextCursor,
         page.Ranking,
         page.SemanticStanding);
 
-    internal MailSearchWindow Extended(DeploymentMailSearchPage page) => this with
+    internal MailSearchWindow Extended(DeploymentMailSearchPage page)
     {
-        Results = [.. this.Results, .. page.Rows],
-        NextCursor = page.NextCursor,
-        Ranking = page.Ranking,
-        SemanticStanding = page.SemanticStanding,
-    };
+        var results = this.Results.AddRange(page.Rows);
+        var pageLengths = page.Rows.Count is 0 ? this.PageLengths : this.PageLengths.Add(page.Rows.Count);
+
+        if (pageLengths.Count > MaximumPages)
+        {
+            results = results.RemoveRange(0, pageLengths[0]);
+            pageLengths = pageLengths.RemoveAt(0);
+        }
+
+        return this with
+        {
+            Results = results,
+            PageLengths = pageLengths,
+            NextCursor = page.NextCursor,
+            Ranking = page.Ranking,
+            SemanticStanding = page.SemanticStanding,
+        };
+    }
 }

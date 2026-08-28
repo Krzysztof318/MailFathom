@@ -270,11 +270,11 @@ public sealed class DeploymentMailSearch : IMailSearch
         Folder = Named(await this.Folder.Value(cancellationToken).ConfigureAwait(false)),
         Sender = Named(await this.Sender.Value(cancellationToken).ConfigureAwait(false)),
         Recipient = Named(await this.Recipient.Value(cancellationToken).ConfigureAwait(false)),
-        ReceivedOnOrAfter = await this.ReceivedOnOrAfter.Value(cancellationToken).ConfigureAwait(false),
-        ReceivedBefore = await this.ReceivedBefore.Value(cancellationToken).ConfigureAwait(false),
-        Unread = await this.Unread.Value(cancellationToken).ConfigureAwait(false),
-        Flagged = await this.Flagged.Value(cancellationToken).ConfigureAwait(false),
-        HasAttachments = await this.HasAttachments.Value(cancellationToken).ConfigureAwait(false),
+        ReceivedOnOrAfter = await Optional(this.ReceivedOnOrAfter, cancellationToken).ConfigureAwait(false),
+        ReceivedBefore = await Optional(this.ReceivedBefore, cancellationToken).ConfigureAwait(false),
+        Unread = await Optional(this.Unread, cancellationToken).ConfigureAwait(false),
+        Flagged = await Optional(this.Flagged, cancellationToken).ConfigureAwait(false),
+        HasAttachments = await Optional(this.HasAttachments, cancellationToken).ConfigureAwait(false),
         PageSize = PageSize,
     };
 
@@ -377,6 +377,13 @@ public sealed class DeploymentMailSearch : IMailSearch
     };
 
     private static string? Named(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static async ValueTask<T?> Optional<T>(IState<T> state, CancellationToken cancellationToken)
+        where T : struct
+    {
+        var value = await state.Option(cancellationToken).ConfigureAwait(false);
+        return value.IsSome(out var stated) ? stated : null;
+    }
 
     private readonly record struct MailSearchRun(MailSearchQuery? Query, int Sequence)
     {

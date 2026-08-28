@@ -45,6 +45,9 @@ public sealed class DeploymentMailSearchTests
         Assert.Contains("folder=role%3AInbox", asked.Query, StringComparison.Ordinal);
         Assert.Contains("sender=someone%40example.test", asked.Query, StringComparison.Ordinal);
         Assert.Contains("unread=true", asked.Query, StringComparison.Ordinal);
+        Assert.DoesNotContain("receivedBefore=", asked.Query, StringComparison.Ordinal);
+        Assert.DoesNotContain("flagged=", asked.Query, StringComparison.Ordinal);
+        Assert.DoesNotContain("hasAttachments=", asked.Query, StringComparison.Ordinal);
 
         Assert.Equal(MailMessages.Key(1), row.Key);
         Assert.Equal("Matched by words", row.MatchReason);
@@ -89,6 +92,40 @@ public sealed class DeploymentMailSearchTests
         Assert.Equal([MailMessages.Key(1), MailMessages.Key(2)], rows.Select(row => row.Key));
         Assert.Equal([(MailThreads.Identity, MailMessages.Identity(2))], thread.Opened);
         Assert.Equal([MailMessages.Key(1), MailMessages.Key(2)], (await search.Results)!.Select(row => row.Key));
+    }
+
+    /// <summary>Paging beyond the search window drops the oldest page instead of retaining a mailbox-sized list.</summary>
+    [Fact]
+    public async Task ShowMoreAsync_MorePagesThanTheBound_DropsTheOldestPage()
+    {
+        // Arrange
+        var pageNumber = 0;
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ =>
+            {
+                pageNumber++;
+                return StubTransport.JsonResponse(
+                    Page(
+                        pageNumber,
+                        pageNumber <= MailSearchWindow.MaximumPages ? $"next-{pageNumber}" : null,
+                        "LexicalRanking",
+                        "Available"));
+            },
+            cancellationToken: TestContext.Current.CancellationToken);
+        var search = Search(harness, Workspace(WorkspaceScope.Everything), new StubMailThread());
+        await search.Query.SetAsync("quarter", TestContext.Current.CancellationToken);
+
+        // Act
+        await search.SearchAsync(TestContext.Current.CancellationToken);
+        for (var page = 0; page < MailSearchWindow.MaximumPages; page++)
+        {
+            await search.ShowMoreAsync(TestContext.Current.CancellationToken);
+        }
+
+        // Assert
+        var rows = (await search.Results)!;
+        Assert.Equal(MailSearchWindow.MaximumPages, rows.Count);
+        Assert.DoesNotContain(rows, row => row.Key == MailMessages.Key(1));
     }
 
     /// <summary>A result found only by meaning explains itself without inventing an extract containing the query words.</summary>

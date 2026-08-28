@@ -126,6 +126,8 @@ public sealed class DeploymentClient
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>The page and what explains both its rows and the ranking available.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="query" /> is <see langword="null" />.</exception>
+    /// <exception cref="DeploymentFailure">Thrown when the deployment refused, was unreachable, did not answer in time, or answered with something else.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when nothing has pointed this client at a deployment yet.</exception>
     public Task<DeploymentMailSearchPage> SearchMailAsync(
         MailSearchQuery query,
         CancellationToken cancellationToken = default)
