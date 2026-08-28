@@ -200,7 +200,7 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
         CancellationToken cancellationToken)
     {
         var provisioning = scope.ServiceProvider.GetRequiredService<IMailOwnerProvisioning>();
-        var served = new List<ServedMailOwner>(declared.Count);
+        var served = new List<(int Index, ServedMailOwner Owner)>(declared.Count);
 
         // The roster this start has actually reached rather than the snapshot it opened with. Every write below is
         // applied to it, because the label check reads it: a file that renames one owner and gives their old label to
@@ -208,11 +208,22 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
         // the next start — which is the proof that the file was legal all along.
         var roster = held.ToList();
 
-        foreach (var declaration in declared)
+        // The owners the deployment already holds are reconciled first, so every relabel this start commits is in the
+        // roster before a new owner's label is judged against it. Otherwise a file that declares the new owner above
+        // the rename — one owner taking the label another is being renamed out of — would be refused on the order its
+        // entries happen to be written in, while the same two entries the other way round start cleanly. Ordering is
+        // stable, so within each of the two groups the file's own order is what is walked, and a swap between two held
+        // owners stays refused because both are in the first group and the loser still carries the label when it is
+        // checked. The entry's own index travels with it, because the roster is published in the order the file
+        // declares rather than in the order it was reconciled in.
+        var reconciliationOrder = declared.Index()
+            .OrderBy(entry => held.Any(record => record.Owner == IdentifierOf(entry.Item)) ? 0 : 1);
+
+        foreach (var (index, declaration) in reconciliationOrder)
         {
             // Every declaration has already been proven to carry one, by the composed rules a start refuses before its
             // container exists, so the identifier is read rather than judged again here.
-            var owner = MailOwnerId.Create(DeclaredOwners.TryReadIdentifier(declaration.Id)!.Value);
+            var owner = IdentifierOf(declaration);
             var label = declaration.DisplayName.Trim();
             var record = roster.FirstOrDefault(candidate => candidate.Owner == owner);
 
@@ -239,7 +250,7 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
                 }
 
                 roster.Add(new MailOwnerRecord(owner, label, DocumentWrittenAtRuntime: false));
-                served.Add(new ServedMailOwner(owner, label, MailOwnerAccountSource.OwnerDeclaration, declaration.MailAccounts));
+                served.Add((index, new ServedMailOwner(owner, label, MailOwnerAccountSource.OwnerDeclaration, declaration.MailAccounts)));
 
                 continue;
             }
@@ -251,13 +262,17 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
                 roster[roster.IndexOf(record)] = record with { DisplayName = label };
             }
 
-            served.Add(record.DocumentWrittenAtRuntime
+            served.Add((index, record.DocumentWrittenAtRuntime
                 ? await this.ServeFromTheOwnDocumentAsync(scope, record with { DisplayName = label }, cancellationToken)
-                : new ServedMailOwner(owner, label, MailOwnerAccountSource.OwnerDeclaration, declaration.MailAccounts));
+                : new ServedMailOwner(owner, label, MailOwnerAccountSource.OwnerDeclaration, declaration.MailAccounts)));
         }
 
-        return served;
+        return [.. served.OrderBy(entry => entry.Index).Select(entry => entry.Owner)];
     }
+
+    /// <summary>Reads the identifier a declaration carries, which the composed rules have already proven it has.</summary>
+    private static MailOwnerId IdentifierOf(DeclaredOwnerOptions declaration) =>
+        MailOwnerId.Create(DeclaredOwners.TryReadIdentifier(declaration.Id)!.Value);
 
     /// <summary>Serves one owner from the document their row holds, which is what an adoption made the source.</summary>
     /// <remarks>

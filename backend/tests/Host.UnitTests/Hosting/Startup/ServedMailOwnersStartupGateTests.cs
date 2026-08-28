@@ -72,6 +72,39 @@ public sealed class ServedMailOwnersStartupGateTests
     }
 
     /// <summary>
+    /// Another replica of this deployment recorded the sole owner between this one reading an empty directory and its
+    /// own insert reaching the table. Serving the identifier this process minted would hang every mail account, stored
+    /// message, and job on a row that is not there.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_TheSoleOwnerAnotherReplicaRecordedFirst_ServesTheRowTheDeploymentHolds()
+    {
+        // Arrange
+        var roster = new ServedMailOwners();
+        var winner = Held(SyntheticMailOwner.Another, "owner");
+
+        var directory = Substitute.For<IMailOwnerDirectory>();
+        directory.ReadOwnersAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns(
+            Task.FromResult<IReadOnlyList<MailOwnerRecord>>([]),
+            Task.FromResult<IReadOnlyList<MailOwnerRecord>>([winner]));
+
+        var provisioning = Substitute.For<IMailOwnerProvisioning>();
+        provisioning
+            .ProvisionAsync(Arg.Any<MailOwnerId>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult(false));
+
+        // Act
+        await CreateGate(directory, provisioning: provisioning, servedOwners: roster)
+            .StartAsync(CancellationToken.None);
+
+        // Assert
+        var served = Assert.Single(roster.Owners);
+        Assert.Equal(SyntheticMailOwner.Another, served.Owner);
+        Assert.Equal("owner", served.DisplayName);
+        Assert.Equal(MailOwnerAccountSource.DeploymentSection, served.Source);
+    }
+
+    /// <summary>
     /// Several rows and no declaration is a deployment whose mailboxes are still in the section that names no owner, so
     /// nothing could say which of them a configured account is for.
     /// </summary>
@@ -199,6 +232,37 @@ public sealed class ServedMailOwnersStartupGateTests
 
         // Assert
         Assert.Equal(["sam", "alex"], roster.Owners.Select(owner => owner.DisplayName));
+    }
+
+    /// <summary>
+    /// The same handover written the other way round — the owner taking the label declared above the one being renamed
+    /// out of it. A file is judged by what it declares rather than by the order it declares it in, so the owners the
+    /// deployment already holds are reconciled before the ones it does not.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_ALabelPassedToAnOwnerDeclaredAboveTheOneLosingIt_ServesBothInOneStart()
+    {
+        // Arrange
+        var roster = new ServedMailOwners();
+        var renamed = MailOwnerId.Create(DeclaredIdentifier);
+
+        var declared = Configuration(new Dictionary<string, string?>
+        {
+            ["Accounts:0:Id"] = SyntheticMailOwner.Another.Value.ToString(),
+            ["Accounts:0:DisplayName"] = "alex",
+            ["Accounts:1:Id"] = DeclaredIdentifier.ToString(),
+            ["Accounts:1:DisplayName"] = "sam",
+        });
+
+        // Act
+        await CreateGate([Held(renamed, "alex")], declared, servedOwners: roster)
+            .StartAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(["alex", "sam"], roster.Owners.Select(owner => owner.DisplayName));
+        Assert.Equal(
+            [SyntheticMailOwner.Another, renamed],
+            roster.Owners.Select(owner => owner.Owner));
     }
 
     /// <summary>

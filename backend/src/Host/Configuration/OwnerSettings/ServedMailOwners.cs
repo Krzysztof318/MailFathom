@@ -76,6 +76,23 @@ internal sealed class ServedMailOwners : IDeploymentMailOwnerSource
         }
     }
 
+    /// <summary>Gets whether any served owner's mail accounts are their own rather than the deployment's section.</summary>
+    /// <returns><see langword="true" /> when at least one owner is served from their own declaration or their own document.</returns>
+    /// <remarks>
+    /// It answers rather than refusing before the gate, for the reason <see cref="MailAccountsOfEveryOwner" /> does: its
+    /// caller judges a reloaded candidate, and a deployment whose roster is not settled yet has nothing for a candidate
+    /// to conflict with. The question is about the source rather than about the count, because the deployment's own
+    /// section belongs to whichever sole owner a deployment holds and is legitimately populated for that one.
+    /// </remarks>
+    public bool ServesAnyOwnerFromTheirOwnAccounts()
+    {
+        lock (this.mutex)
+        {
+            return (this.resolvedOwners ?? [])
+                .Any(owner => owner.Source != MailOwnerAccountSource.DeploymentSection);
+        }
+    }
+
     /// <inheritdoc />
     /// <exception cref="InvalidOperationException">Thrown when the startup gate has not yet run, or when this deployment serves more than one owner and there is therefore no sole owner to name.</exception>
     /// <remarks>

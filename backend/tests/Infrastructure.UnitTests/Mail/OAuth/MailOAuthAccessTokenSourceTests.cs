@@ -218,7 +218,7 @@ public sealed class MailOAuthAccessTokenSourceTests
 
         var host = OutboundResilienceTestHost.WithConfiguredSettings();
         var cache = new MailAccessTokenCache(host.TimeProvider);
-        var refreshTokenStore = new FakeMailboxRefreshTokenStore(storedRefreshToken);
+        var refreshTokenStore = new FakeMailboxRefreshTokenStore(AccountIdentity, storedRefreshToken);
 
         // A fresh client per call, as the factory hands out: the source opens one per exchange and disposes it, so a
         // double returning the same instance twice would answer the second exchange from a disposed client and report a

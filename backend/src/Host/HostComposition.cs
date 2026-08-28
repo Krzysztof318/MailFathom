@@ -410,10 +410,11 @@ internal static class HostComposition
         // resolve is rejected and leaves the previous configuration active for new operations.
         builder.Services.AddSingleton<DatabaseConnectionSettingsMapper>();
         builder.Services.AddSingleton<SecretConfigurationValidator>();
+        builder.Services.AddSingleton<MailSettingsReloadValidator>();
         builder.Services.AddSingleton(provider => new ValidatedSettingsSnapshot<MailSynchronizationOptions>(
             provider.GetRequiredService<IOptionsMonitor<MailSynchronizationOptions>>(),
-            (candidate, cancellationToken) => provider.GetRequiredService<SecretConfigurationValidator>()
-                .FindMailConfigurationErrorsAsync(candidate, cancellationToken),
+            (candidate, cancellationToken) => provider.GetRequiredService<MailSettingsReloadValidator>()
+                .FindConfigurationErrorsAsync(candidate, cancellationToken),
             "MailSynchronization",
             provider.GetRequiredService<ILogger<ValidatedSettingsSnapshot<MailSynchronizationOptions>>>()));
         builder.Services.AddSingleton(provider => new ValidatedSettingsSnapshot<PersistenceOptions>(

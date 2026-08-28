@@ -80,7 +80,7 @@ Kestrel's own default address.
 
 | Probe | Path | Consults | A failure means |
 |---|---|---|---|
-| Startup | `/started` | The host's own startup gates: every secret reference resolved, the database schema verified, every owner the deployment serves reconciled against the rows it holds, and — only where its own switch is on — the spam scanner naming the corpus it scores under | The process has not finished coming up; the grace period continues |
+| Startup | `/started` | The host's own startup gates: every secret reference the deployment's own sections carry resolved, the database schema verified, every owner the deployment serves reconciled against the rows it holds and their own mailboxes' secrets resolved with them, and — only where its own switch is on — the spam scanner naming the corpus it scores under | The process has not finished coming up; the grace period continues |
 | Readiness | `/health` | The dependencies a request needs: the database, each declared AI provider, and — only where its own switch is on — the personal-data analyzer and the object-storage bucket, or, where no endpoint is configured, whether stored content points into one anyway | The instance stops receiving traffic; it is not restarted |
 | Liveness | `/alive` | Process-local state only | The container is restarted |
 
@@ -166,7 +166,8 @@ the folder.
 **The owner gate refuses to start rather than reporting unready.** A mail account says nothing about whose mail it
 holds unless the owner who owns it declares it, so the gate settles the question before anything serves a request: it
 reads the owners the file declares, gives each of them the `settings_accounts` row the mail graph's foreign keys hang
-on, and reports which of them is read from configuration and which from a document of their own. It runs behind the
+on, proves the secrets their own mailboxes carry, and reports which of them is read from configuration and which
+from a document of their own. It runs behind the
 schema gate, because that table is the schema's, and a deployment it cannot reconcile does not come up:
 
 | What the gate found | What it means | What to do |
@@ -177,6 +178,7 @@ schema gate, because that table is the schema's, and a deployment it cannot reco
 | A label declared for one owner while another still carries it | Two owners would be told apart by one label, which the unique index refuses | Free the label in one start — relabel or remove the owner holding it — and declare it for its new owner in the next |
 | Several owners while `McpEndpoint` or `ClientEndpoint` is on | Nothing this release admits a caller with names the owner they act for, so such a surface could not say whose mail it is answering about | Serve one owner while either surface is enabled, or disable them on a deployment serving several |
 | An owner's own document that will not bind | That owner is served from their document rather than from configuration, and it is not the settings a document holds | Repair the record; the refusal names each sentence of what must change |
+| An owner's own mailbox whose secret reference or trust anchor cannot be resolved | An owner's mailboxes are declared outside the section the secret gate walks, so without this they would start clean and fail one connection at a time | Repair the reference or the anchor; the refusal names the owner and the `Accounts:<index>` path to it |
 
 Every one is a refusal rather than degraded readiness, and deliberately: the alternative is a process that serves mail
 while it cannot say whose mail it is serving.
