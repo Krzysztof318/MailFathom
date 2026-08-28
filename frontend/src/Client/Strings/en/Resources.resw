@@ -681,6 +681,10 @@
     <value>The formatted version of this message held nothing to show, so it is shown as text.</value>
     <comment>Why a message is read as words where its formatted version reduced to no content at all.</comment>
   </data>
+  <data name="MailBody.Refusal.Unrecognized" xml:space="preserve">
+    <value>MailFathom gave a reason this version of the app does not know, so this message is shown as text.</value>
+    <comment>Why a message is read as words where the deployment is ahead of this build. Said plainly rather than hidden: an unexplained fallback reads as a defect in the message.</comment>
+  </data>
   <data name="MailBody.Availability.EncryptedNotReadableLocally" xml:space="preserve">
     <value>This message arrived encrypted, so MailFathom cannot read it.</value>
     <comment>Why there is no body at all. The deployment states the state and the client names it; a state added there is a missing string here rather than a blank pane.</comment>

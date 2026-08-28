@@ -410,6 +410,13 @@ what it withheld through the other. The addresses
 beside those names, the identifiers, the sizes, the flags, the two domains the sender verdict's evidence publishes, and
 every attachment's file name are left as they are, on the line that page draws between a routing identity and free text.
 
+The first 500 texts of a reduced document are scanned, and past that the text is withheld rather than published
+unscanned, with `Truncated` saying the document was cut. How many texts one document holds is the sender's choice — a
+body written as one span per word reduces to thousands out of a kilobyte of markup — and a scan is paid per value, so
+the alternative to a bound is one message deciding how long every other caller waits. Withholding rather than
+publishing is the only reading of it that keeps the promise the redaction makes, which is that every character a caller
+receives is one a scanner saw.
+
 The display names of the first 40 named participants of a message are scanned, and past that the address is published
 with no display name at all. A scan is a round trip where the personal-data analyzer runs in a container of its own, and
 a parse publishes up to 256 addresses per header role, so a list expansion would otherwise turn one read into thousands
@@ -479,9 +486,12 @@ a browser would not display either.
 The sanitization above answers what a model should be handed. A person reading the same message needs the layout the
 sender wrote, and giving a client that sanitized markup would put the decision the sanitizer just took back where it
 was taken from: a renderer resolves references, runs what it recognizes, and treats an unfamiliar construct as
-something to try. `MailDocument` is the other answer. It is opt-in through `IncludeMailDocument`, it is produced from
-the same parsed document the sanitizer reads rather than from the string that pass returns — two parses of one body by
-two parsers is the structure mutation attacks are built out of — and it carries no markup at all.
+something to try. `MailDocument` is the other answer. It is opt-in through `IncludeMailDocument`, it is reduced from the
+message's own HTML parts rather than from the string the sanitizing pass returns, and it carries no markup at all.
+Neither representation is derived from the other's output, which is the property that matters: the mutation attacks
+built out of two parsers are built out of one parser reading what another parser wrote, and nothing here does that. The
+two are still two parses — the sanitizing pass reparses its own result while it shrinks a body to the character bound —
+so they are cut from one allowance and nothing reconciles them afterwards.
 
 **It is a closed tree.** A document is a list of typed blocks — `paragraph`, `heading`, `list`, `table`, `quote`,
 `image`, `separator`, `preformatted` — and every value inside one is text, a number, a colour normalized to `#rrggbb`,
@@ -510,8 +520,15 @@ side of the boundary writes it down, so opening the message again asks again. A 
 nothing ever fetched it, and no other reference in the tree has anywhere to be widened to.
 
 A picture the message carries itself is not remote and is resolved here rather than by a second request: a part reached
-by `Content-Id` or `Content-Location` becomes a `data:` URI, bounded both by how many are inlined and by how large each
-may be, with `InlineImageCount` and `UndrawnInlineImageCount` saying how many were drawn and how many a bound left out.
+by `Content-Id` or `Content-Location` becomes a `data:` URI, bounded three times — by how many are inlined, by how large
+each may be, and by how much they may come to together — with `InlineImageCount` and `UndrawnInlineImageCount` saying
+how many were drawn and how many a bound left out. The third of those is the bound the answer is sized by rather than
+the message: without it a message carrying the permitted count at the permitted size composes a response no reading pane
+will buffer, and the reader loses the whole message rather than one photograph.
+
+`RetainRemoteImageReferences` carries one reader's consent about one message, so a request asking for it names exactly
+one email and is refused otherwise. It is the one flag on this request that is an act rather than a preference: a read
+naming ten messages would apply a decision taken about one of them to nine the reader never saw.
 
 ### A link carries where it actually goes
 
@@ -530,7 +547,8 @@ loudly to warn, and a client that never learned what a homograph is still shows 
 `ReductionFailed` where the markup could not be read, `NothingRenderable` where it reduced to no content, and `None`
 where the document is the message. The plain text travels beside it in every case, so a pane falls back to the words
 with a reason it can show rather than to an empty frame. `Truncated` says a bound stopped the reduction before the end
-of the body, the way `EmailBodyTruncation` says the same about a representation.
+of the body, the way `EmailBodyTruncation` says the same about a representation, and it says the same about a scan that
+withheld what it could not reach — every way a document is cut short reads as one flag.
 
 ## When the local copy is unusable
 

@@ -1124,6 +1124,40 @@ public sealed class EmailContentReaderTests
             MailDocumentTexts.Collect(document));
     }
 
+    /// <summary>A document of more texts than one read scans is cut at the bound rather than published unscanned.</summary>
+    /// <remarks>
+    /// The scan is per value, so the count of values is what a sender chooses: a body written as one span per word
+    /// reduces to thousands of texts out of a kilobyte of markup. Withholding what was not scanned is the answer,
+    /// because publishing it would put words past a scanner that the read promised had seen every character.
+    /// </remarks>
+    [Fact]
+    public async Task ReadContentAsync_ADocumentOfMoreTextsThanOneReadScans_WithholdsTheRestAndSaysItWasCut()
+    {
+        // Arrange
+        const int Texts = 600;
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var summary = SyntheticEmailSummaries.Create();
+        var reader = ReaderOver(
+            summary,
+            RendererReturning(RenderingOf(plainText: "Body") with { Document = DocumentOfParagraphs(Texts) }),
+            egressGuard: egress.Guard);
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId]) with { IncludeMailDocument = true },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var document = ContentOf(Assert.Single(result.Emails)).Body.Document;
+        Assert.NotNull(document);
+        Assert.True(document.Truncated);
+
+        var texts = MailDocumentTexts.Collect(document);
+        Assert.Equal(Texts, texts.Count);
+        Assert.Equal(500, texts.Count(text => text.Length > 0));
+        Assert.DoesNotContain(Marker, string.Concat(texts), StringComparison.Ordinal);
+    }
+
     /// <summary>The message is the unit a caller waits for, so its guarding is reported once rather than once per field.</summary>
     [Fact]
     public async Task ReadContentAsync_ASwitchedOnScanner_ReportsOneGuardedOperationForTheWholeMessage()
@@ -1826,6 +1860,25 @@ public sealed class EmailContentReaderTests
             carriesUnverifiedSignature: false,
             containsUnexpandedTnefPart: false),
         attachments ?? []);
+
+    /// <summary>A document written as one paragraph per text, which is how a sender chooses how many values a read scans.</summary>
+    private static MailDocument DocumentOfParagraphs(int count) => MailDocument.Reduced(
+        [
+            .. Enumerable.Range(0, count).Select(index => new MailParagraphBlock(
+                [
+                    new MailInlineRun(
+                        $"line {index} holds {Marker}",
+                        MailTextEmphasis.None,
+                        Foreground: null,
+                        Link: null),
+                ],
+                MailBlockAlignment.Inherited)),
+        ],
+        removedRemoteReferenceCount: 0,
+        retainedRemoteImageCount: 0,
+        inlineImageCount: 0,
+        undrawnInlineImageCount: 0,
+        truncated: false);
 
     /// <summary>A document saying the same thing twice, so a rewrite that lost a place would report the wrong words.</summary>
     private static MailDocument DocumentSaying(string text) => MailDocument.Reduced(

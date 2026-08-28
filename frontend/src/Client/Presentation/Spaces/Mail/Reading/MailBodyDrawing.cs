@@ -48,6 +48,11 @@ internal sealed class MailBodyDrawing
     private const string HeaderCellStyleKey = "MailBodyTableHeaderCellStyle";
     private const string MonospaceFontKey = "MailBodyMonospaceFontFamily";
     private const string BlockSpacingKey = "MailBodyBlockSpacing";
+    private const string SurfaceBrushKey = "MailBodySurfaceBrush";
+    private const string InkBrushKey = "MailBodyInkBrush";
+
+    /// <summary>The contrast a sender's colour clears to be drawn, which is what WCAG asks of body text.</summary>
+    private const double MinimumContrast = 4.5;
 
     private readonly MailBodyWords words;
     private readonly Action<MailBodyLink, string> follow;
@@ -66,27 +71,35 @@ internal sealed class MailBodyDrawing
         this.follow = follow;
     }
 
-    /// <summary>Draws the blocks, then fills in whichever pictures could be resolved.</summary>
+    /// <summary>Draws the blocks, leaving each picture a place to arrive in.</summary>
     /// <param name="blocks">The blocks the deployment reduced the message to.</param>
     /// <returns>The element the pane hosts.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="blocks" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// The tree is built before any picture is resolved, so a message whose pictures are slow, unreachable, or refused
-    /// is readable while they are being decided rather than after. A picture that resolves to nothing leaves what the
-    /// message said it shows in its place, which is what a reader can act on.
+    /// Nothing is resolved here, which is what makes the message readable while its pictures are being decided rather
+    /// than after: a remote picture the reader consented to is fetched from somebody else's server, and a server that
+    /// answers slowly or never would otherwise hold the whole message — its words included — off the screen for as long
+    /// as the platform waits. The caller attaches this and then calls <see cref="FillPicturesAsync" />.
     /// </remarks>
-    internal async Task<UIElement> DrawAsync(IReadOnlyList<MailBodyBlock> blocks)
+    internal UIElement Draw(IReadOnlyList<MailBodyBlock> blocks)
     {
         ArgumentNullException.ThrowIfNull(blocks);
 
-        var root = this.Stack(blocks, depth: 0);
+        return this.Stack(blocks, depth: 0);
+    }
 
+    /// <summary>Fills in whichever pictures resolve, into the tree the drawing already produced.</summary>
+    /// <returns>A task that completes when every picture has been decided.</returns>
+    /// <remarks>
+    /// A picture that resolves to nothing leaves what the message said it shows in its place, which is what a reader can
+    /// act on. Awaited on the pane's own context, because every one of these continuations ends at the visual tree.
+    /// </remarks>
+    internal async Task FillPicturesAsync()
+    {
         foreach (var pending in this.pictures)
         {
             await Fill(pending);
         }
-
-        return root;
     }
 
     /// <summary>Reads a resource the styles dictionary authored, or nothing where it is absent.</summary>
@@ -104,7 +117,7 @@ internal sealed class MailBodyDrawing
     }
 
     /// <summary>Reads a colour the deployment wrote as <c>#rrggbb</c>, or nothing where it wrote something else.</summary>
-    private static SolidColorBrush? Paint(string? notation)
+    private static Windows.UI.Color? Shade(string? notation)
     {
         if (notation is not { Length: 7 } || notation[0] != '#')
         {
@@ -113,11 +126,68 @@ internal sealed class MailBodyDrawing
 
         var digits = notation.AsSpan(1);
 
-        return byte.TryParse(digits[..2], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var red)
-            && byte.TryParse(digits[2..4], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var green)
-            && byte.TryParse(digits[4..], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var blue)
-                ? new SolidColorBrush(Windows.UI.Color.FromArgb(byte.MaxValue, red, green, blue))
+        // AllowHexSpecifier alone, because HexNumber also admits surrounding whitespace inside the pair.
+        return byte.TryParse(digits[..2], NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var red)
+            && byte.TryParse(digits[2..4], NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var green)
+            && byte.TryParse(digits[4..], NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var blue)
+                ? Windows.UI.Color.FromArgb(byte.MaxValue, red, green, blue)
                 : null;
+    }
+
+    /// <summary>Reads the pane's own colour behind a resource key, or nothing where the dictionary is not loaded.</summary>
+    private static Windows.UI.Color? Theme(string key) =>
+        Authored(key) is SolidColorBrush brush ? brush.Color : null;
+
+    /// <summary>Paints a sender's text colour, or nothing where drawing it would cost the reader the words.</summary>
+    /// <remarks>
+    /// A message is written for the background its author had in mind, and most mail was written for white paper. Taken
+    /// verbatim, <c>color:#000000</c> is black text on a dark theme's surface and <c>color:#ffffff</c> is nothing at all
+    /// on a light one — so the colour is honoured only while it stays legible against the surface this pane actually
+    /// draws on, and gives way to the theme's own ink otherwise. Nothing is adjusted towards legibility: a colour is
+    /// the sender's or it is the theme's, because a shifted colour is a third thing neither of them chose.
+    /// </remarks>
+    private static SolidColorBrush? Ink(string? notation)
+    {
+        if (Shade(notation) is not { } ink)
+        {
+            return null;
+        }
+
+        return Theme(SurfaceBrushKey) is { } surface && Contrast(ink, surface) < MinimumContrast
+            ? null
+            : new SolidColorBrush(ink);
+    }
+
+    /// <summary>Paints a sender's cell background, or nothing where the pane's own text would not read on it.</summary>
+    private static SolidColorBrush? Ground(string? notation)
+    {
+        if (Shade(notation) is not { } ground)
+        {
+            return null;
+        }
+
+        return Theme(InkBrushKey) is { } ink && Contrast(ink, ground) < MinimumContrast
+            ? null
+            : new SolidColorBrush(ground);
+    }
+
+    /// <summary>The contrast ratio between two colours, as WCAG defines it.</summary>
+    private static double Contrast(Windows.UI.Color first, Windows.UI.Color second)
+    {
+        var brighter = Math.Max(Luminance(first), Luminance(second));
+        var darker = Math.Min(Luminance(first), Luminance(second));
+
+        return (brighter + 0.05) / (darker + 0.05);
+    }
+
+    private static double Luminance(Windows.UI.Color colour) =>
+        (0.2126 * Channel(colour.R)) + (0.7152 * Channel(colour.G)) + (0.0722 * Channel(colour.B));
+
+    private static double Channel(byte value)
+    {
+        var share = value / 255.0;
+
+        return share <= 0.03928 ? share / 12.92 : Math.Pow((share + 0.055) / 1.055, 2.4);
     }
 
     private static TextAlignment Across(MailBodyAlignment alignment) => alignment switch
@@ -216,7 +286,7 @@ internal sealed class MailBodyDrawing
 
         run.TextDecorations = decorations;
 
-        if (Paint(content.Foreground) is { } ink)
+        if (Ink(content.Foreground) is { } ink)
         {
             run.Foreground = ink;
         }
@@ -437,7 +507,7 @@ internal sealed class MailBodyDrawing
         var border = new Border { Child = content };
         Apply(border, isHeader ? HeaderCellStyleKey : CellStyleKey);
 
-        if (Paint(cell.Background) is { } ground)
+        if (Ground(cell.Background) is { } ground)
         {
             border.Background = ground;
         }

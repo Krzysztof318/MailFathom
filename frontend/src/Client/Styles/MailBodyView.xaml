@@ -20,6 +20,14 @@ Project repository: https://github.com/Krzysztof318/MailFathom
        contents the same way the body does. -->
   <x:Double x:Key="MailBodyBlockSpacing">8</x:Double>
 
+  <!-- What the pane draws on and what it draws with, named here so the drawing can judge a sender's colour against
+       them. A message is written for the background its author imagined, and a body written for white paper says
+       black; drawn unexamined on a dark theme that is a message the reader cannot see. So the drawing composes: a
+       colour that stays legible against these is honoured and one that does not gives way to the theme's own, which is
+       the pane keeping the last word on legibility where a sender would otherwise decide it. -->
+  <StaticResource x:Key="MailBodySurfaceBrush" ResourceKey="SurfaceBrush" />
+  <StaticResource x:Key="MailBodyInkBrush" ResourceKey="OnSurfaceBrush" />
+
   <!-- What a message's fixed-width text is drawn in. Named here rather than in the drawing so the one place a face is
        chosen is a resource dictionary, and so a head whose platform lacks this family falls back to the system default
        rather than to whatever the sender asked for. -->

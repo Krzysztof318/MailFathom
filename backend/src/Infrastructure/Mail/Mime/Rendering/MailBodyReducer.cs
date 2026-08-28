@@ -33,6 +33,12 @@ namespace MailFathom.Infrastructure.Mail.Mime.Rendering;
 /// </remarks>
 internal sealed class MailBodyReducer
 {
+    /// <summary>The longest anchor text a target is judged against, past which the words name no place anyway.</summary>
+    private const int MaximumComparedTextLength = 1024;
+
+    /// <summary>How deeply the anchor's own text is gathered, so a nested body cannot cost the walk its stack.</summary>
+    private const int MaximumComparedDepth = 32;
+
     private readonly MailInlineImages inlineImages;
     private readonly bool retainRemoteImages;
 
@@ -99,7 +105,7 @@ internal sealed class MailBodyReducer
         switch (node)
         {
             case IText text:
-                AppendText(pending, text.Data, context);
+                this.AppendText(pending, text.Data, context);
 
                 break;
 
@@ -346,19 +352,41 @@ internal sealed class MailBodyReducer
         }
     }
 
+    /// <summary>Reduces a list, whose items the ordinary element walk never reaches.</summary>
+    /// <remarks>
+    /// An item is read here rather than by the walk, so everything the walk does to an element it meets has to be done
+    /// to it here too: an item that asked not to be drawn is dropped exactly as any other hidden element is, and the
+    /// references to somebody else's server an item carries are counted exactly as any other element's are. Reading
+    /// only the style it inherits, which is what this did, made a list the one place a message could put a hidden
+    /// item and an uncounted tracking reference.
+    /// </remarks>
     private void EmitList(
         IElement element,
         bool ordered,
         MailReductionContext context,
         List<MailDocumentBlock> blocks)
     {
-        var items = element.Children
-            .Where(child => string.Equals(child.LocalName, "li", StringComparison.OrdinalIgnoreCase))
-            .Select(item => new MailListItem(this.ReduceChildren(item, context.Inside(MailStyleReader.Read(item)))))
-            .Where(item => item.Blocks.Count > 0)
-            .ToArray();
+        var items = new List<MailListItem>();
 
-        if (items.Length > 0)
+        foreach (var item in element.Children.Where(child =>
+            string.Equals(child.LocalName, "li", StringComparison.OrdinalIgnoreCase)))
+        {
+            var style = MailStyleReader.Read(item);
+            if (style.Hidden)
+            {
+                continue;
+            }
+
+            this.NoteRemoteReferences(item);
+
+            var reduced = this.ReduceChildren(item, context.Inside(style));
+            if (reduced.Count > 0)
+            {
+                items.Add(new MailListItem(reduced));
+            }
+        }
+
+        if (items.Count > 0)
         {
             this.Emit(blocks, new MailListBlock(ordered, items));
         }
@@ -403,7 +431,7 @@ internal sealed class MailBodyReducer
 
         this.Flush(blocks, pending, context);
 
-        return Merged([.. blocks.SelectMany(RunsOf)]);
+        return this.Merged([.. blocks.SelectMany(RunsOf)]);
     }
 
     private static IEnumerable<MailInlineRun> RunsOf(MailDocumentBlock block) => block switch
@@ -450,7 +478,7 @@ internal sealed class MailBodyReducer
 
     private void Flush(List<MailDocumentBlock> blocks, List<MailInlineRun> pending, MailReductionContext context)
     {
-        var merged = Merged(pending);
+        var merged = this.Merged(pending);
 
         pending.Clear();
 
@@ -485,13 +513,19 @@ internal sealed class MailBodyReducer
     /// the newlines and indentation between tags are the author's formatting of their own source rather than something
     /// the reader is meant to see. A run of whitespace at the start of a paragraph is dropped for the same reason.
     /// </remarks>
-    private static void AppendText(List<MailInlineRun> pending, string data, MailReductionContext context)
+    private void AppendText(List<MailInlineRun> pending, string data, MailReductionContext context)
     {
         var text = Collapse(data, pending.Count == 0);
 
         if (text.Length == 0)
         {
             return;
+        }
+
+        if (text.Length > this.Bounds.MaximumCharactersPerRun)
+        {
+            text = text[..this.Bounds.MaximumCharactersPerRun];
+            this.truncated = true;
         }
 
         pending.Add(new MailInlineRun(text, context.Emphasis, context.Foreground, context.Link));
@@ -524,21 +558,38 @@ internal sealed class MailBodyReducer
 
     /// <summary>Joins the runs that are drawn identically and drops what a reader would see as nothing.</summary>
     /// <remarks>
+    /// <para>
     /// A body written as one span per word is ordinary in templated mail, and a document carrying it that way would
     /// cost a pane a text element per word. Joining is safe because a run carries only what it is drawn with, so two
     /// adjacent runs agreeing on all four members are one run by construction.
+    /// </para>
+    /// <para>
+    /// This is where the two bounds a block's own words are held to are applied, because it is the last place the
+    /// words of one block are all in hand. A join that would carry a run past the character bound is not taken — the
+    /// two stay two runs saying the same thing — while a block whose runs reach the count bound stops there and says
+    /// the document was truncated, since alternating formatting is exactly what defeats the join.
+    /// </para>
     /// </remarks>
-    private static IReadOnlyList<MailInlineRun> Merged(List<MailInlineRun> pending)
+    private IReadOnlyList<MailInlineRun> Merged(List<MailInlineRun> pending)
     {
         var merged = new List<MailInlineRun>(pending.Count);
 
         foreach (var run in pending)
         {
-            if (merged.Count > 0 && SameFormatting(merged[^1], run))
+            if (merged.Count > 0
+                && SameFormatting(merged[^1], run)
+                && merged[^1].Text.Length + run.Text.Length <= this.Bounds.MaximumCharactersPerRun)
             {
                 merged[^1] = merged[^1] with { Text = merged[^1].Text + run.Text };
 
                 continue;
+            }
+
+            if (merged.Count >= this.Bounds.MaximumRunsPerBlock)
+            {
+                this.truncated = true;
+
+                break;
             }
 
             merged.Add(run);
@@ -558,8 +609,58 @@ internal sealed class MailBodyReducer
         && Equals(left.Link, right.Link);
 
     /// <summary>Reads the words an anchor shows, which is what its target is judged against.</summary>
-    private static string DisplayTextOf(IElement element) =>
-        Collapse(Cut(element.TextContent, 1024), atStart: true).Trim();
+    /// <remarks>
+    /// The words the reduction draws rather than every character the element holds. <c>TextContent</c> carries what a
+    /// script, a style block, and an element styled out of the drawing say too, and a sender needs only one space
+    /// among them to make the anchor's text stop reading as a host name — at which point there is nothing left to
+    /// compare and a link claiming to be somebody's bank is reported as making no claim at all. So what the judgement
+    /// is made from is what a reader is shown, which is what the claim was about in the first place.
+    /// </remarks>
+    private static string DisplayTextOf(IElement element)
+    {
+        var drawn = new StringBuilder();
+
+        AppendDrawnText(element, drawn, depth: 0);
+
+        return Collapse(drawn.ToString(), atStart: true).Trim();
+    }
+
+    /// <summary>Gathers the text a walk of this element would draw, skipping what the walk removes.</summary>
+    private static void AppendDrawnText(IElement element, StringBuilder drawn, int depth)
+    {
+        if (depth >= MaximumComparedDepth)
+        {
+            return;
+        }
+
+        foreach (var child in element.ChildNodes)
+        {
+            if (drawn.Length >= MaximumComparedTextLength)
+            {
+                return;
+            }
+
+            switch (child)
+            {
+                case IText text:
+                    drawn.Append(
+                        text.Data.AsSpan(0, Math.Min(text.Data.Length, MaximumComparedTextLength - drawn.Length)));
+
+                    break;
+
+                case IElement nested
+                    when !MailBodyElements.Dropped.Contains(nested.LocalName)
+                        && !MailStyleReader.Read(nested).Hidden:
+                    AppendDrawnText(nested, drawn, depth + 1);
+
+                    break;
+
+                default:
+                    // A comment, a dropped element, and one styled out of the drawing all show a reader nothing.
+                    break;
+            }
+        }
+    }
 
     private static string? Bounded(string? text) =>
         text is null ? null : Cut(Collapse(text, atStart: true).Trim(), 1024);

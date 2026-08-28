@@ -139,7 +139,8 @@ public sealed class DeploymentClient
             this.Transport(),
             new HttpRequestMessage(HttpMethod.Get, DeploymentRoutes.MailBodyPath(storedEmailId, remoteImages)),
             DeploymentJsonContext.Default.DeploymentMailBody,
-            cancellationToken);
+            cancellationToken,
+            DeploymentExchange.MaxMailBodyBytes);
 
     /// <summary>Takes a transport aimed at wherever the client is pointed right now.</summary>
     /// <remarks>

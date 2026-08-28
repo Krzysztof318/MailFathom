@@ -35,19 +35,31 @@ internal static class DeploymentExchange
     /// </remarks>
     internal const int MaxDocumentBytes = 1024 * 1024;
 
+    /// <summary>The largest message body this assembly will read.</summary>
+    /// <remarks>
+    /// A body is the one document here that carries a message's own content rather than a description of something —
+    /// the pictures a sender put in the message travel inside it, so that drawing them needs no second request to
+    /// anybody. The deployment bounds what it composes, in octets before they are encoded; this is the same ceiling
+    /// read from the other side with room for the encoding and for the words around it, so an ordinary photograph
+    /// arrives rather than costing the reader the whole message it came in.
+    /// </remarks>
+    internal const int MaxMailBodyBytes = 8 * 1024 * 1024;
+
     /// <summary>Sends one request and reads the document it answers with.</summary>
     /// <typeparam name="TDocument">The contract the body is read against.</typeparam>
     /// <param name="transport">The client the request is sent on.</param>
     /// <param name="request">The request, which this method disposes.</param>
     /// <param name="contract">The source-generated reader for the body.</param>
     /// <param name="cancellationToken">Cancels the request, which is not the same thing as the request timing out.</param>
+    /// <param name="maximumBytes">The largest answer this exchange will read, which defaults to <see cref="MaxDocumentBytes" />.</param>
     /// <returns>The document the answer carried.</returns>
     /// <exception cref="DeploymentFailure">Thrown for every way the exchange can fail to produce one.</exception>
     internal static async Task<TDocument> ReadAsync<TDocument>(
         HttpClient transport,
         HttpRequestMessage request,
         JsonTypeInfo<TDocument> contract,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int maximumBytes = MaxDocumentBytes)
         where TDocument : class
     {
         using (request)
@@ -56,7 +68,7 @@ internal static class DeploymentExchange
 
             RefuseUnusableStatus(response);
 
-            return await ReadBodyAsync(response, contract, cancellationToken).ConfigureAwait(false);
+            return await ReadBodyAsync(response, contract, cancellationToken, maximumBytes).ConfigureAwait(false);
         }
     }
 
@@ -109,6 +121,7 @@ internal static class DeploymentExchange
     /// <param name="response">The answer to read.</param>
     /// <param name="contract">The source-generated reader.</param>
     /// <param name="cancellationToken">Cancels the read.</param>
+    /// <param name="maximumBytes">The largest answer this read will take, which defaults to <see cref="MaxDocumentBytes" />.</param>
     /// <returns>The document.</returns>
     /// <exception cref="DeploymentFailure">Thrown when the body is not the document it should be.</exception>
     /// <remarks>
@@ -119,13 +132,15 @@ internal static class DeploymentExchange
     internal static async Task<TDocument> ReadBodyAsync<TDocument>(
         HttpResponseMessage response,
         JsonTypeInfo<TDocument> contract,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int maximumBytes = MaxDocumentBytes)
         where TDocument : class
     {
         // Refused on the declared length before a byte is buffered. The transport's own
         // MaxResponseContentBufferSize is the backstop for an answer that declares none, and it is set where the
-        // clients are registered; this is the half that can say what happened.
-        if (response.Content.Headers.ContentLength is > MaxDocumentBytes)
+        // clients are registered; this is the half that can say what happened, and the half that can be narrower for
+        // a route whose answers are smaller than the largest one this transport carries.
+        if (response.Content.Headers.ContentLength > maximumBytes)
         {
             throw new DeploymentFailure(
                 DeploymentFailureReason.Unusable,

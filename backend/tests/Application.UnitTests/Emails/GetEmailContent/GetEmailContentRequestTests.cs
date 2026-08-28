@@ -48,6 +48,39 @@ public sealed class GetEmailContentRequestTests
         Assert.False(request.RetainRemoteImageReferences);
     }
 
+    /// <summary>The consent is about one message, so the one request that may carry it names one message.</summary>
+    [Fact]
+    public void RetainRemoteImageReferences_ARequestNamingOneEmail_CarriesTheReadersConsent()
+    {
+        // Act
+        var request = GetEmailContentRequest.Create(IdentitiesOf(1)) with { RetainRemoteImageReferences = true };
+
+        // Assert
+        Assert.True(request.RetainRemoteImageReferences);
+    }
+
+    /// <summary>A read naming several messages cannot carry a consent one reader gave about one of them.</summary>
+    /// <remarks>
+    /// A conversation read is the second case and it is the same defect: it names no email at all until the thread
+    /// resolves, so the consent would be applied to whatever the conversation turned out to hold.
+    /// </remarks>
+    [Fact]
+    public void RetainRemoteImageReferences_ARequestNamingOtherThanOneEmail_IsRefused()
+    {
+        // Arrange
+        var several = GetEmailContentRequest.Create(IdentitiesOf(2));
+        var conversation = GetEmailContentRequest.CreateForSelection(
+            namedEmails: null,
+            () => EmailThreadId.Create(Guid.CreateVersion7()));
+
+        // Act
+        var refusals = new[] { several, conversation }
+            .Select(request => Record.Exception(() => request with { RetainRemoteImageReferences = true }));
+
+        // Assert
+        Assert.All(refusals, refusal => Assert.IsType<InvalidOperationException>(refusal));
+    }
+
     /// <summary>A read naming nothing and a read naming too much are one finding about a count the caller chose.</summary>
     [Theory]
     [InlineData(0)]

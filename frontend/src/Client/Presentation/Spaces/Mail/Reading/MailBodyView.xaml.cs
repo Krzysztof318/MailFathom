@@ -107,12 +107,19 @@ public sealed partial class MailBodyView : UserControl
             reading.Words,
             (link, displayed) => _ = this.AskAsync(link, displayed, reading.Words));
 
-        var drawn = await drawing.DrawAsync(reading.Blocks);
+        // The tree is attached before a picture is resolved, so the message is on the screen while its pictures are
+        // being decided. A remote one the reader consented to is a request to somebody else's server, and waiting for
+        // it here would leave the reader an empty pane for as long as that server takes to answer or fail.
+        var drawn = drawing.Draw(reading.Blocks);
 
-        if (ReferenceEquals(this.Reading, reading))
+        if (!ReferenceEquals(this.Reading, reading))
         {
-            this.Document.Child = drawn;
+            return;
         }
+
+        this.Document.Child = drawn;
+
+        await drawing.FillPicturesAsync();
     }
 
     /// <summary>Shows where a link actually goes, and opens it only if the reader says so.</summary>
@@ -149,8 +156,11 @@ public sealed partial class MailBodyView : UserControl
             this.LinkPunycodeValue.Text = link.AsciiHost ?? string.Empty;
             this.LinkPunycodeValue.Visibility = spelled;
 
+            // Read off the contract rather than re-derived here: a homograph host whose link text is prose names no
+            // host to disagree with, so the mismatch verdict is absent while the two spellings above are exactly what
+            // the reader needs warning about — and a dialog deciding for itself is how the two come to disagree.
             this.LinkDeception.Message = words.LinkDeception;
-            this.LinkDeception.IsOpen = link.Deception is MailBodyLinkDeception.DisplayedHostDiffers;
+            this.LinkDeception.IsOpen = link.IsWorthWarningAbout;
 
             if (await this.LinkQuestion.ShowAsync() is not ContentDialogResult.Primary)
             {

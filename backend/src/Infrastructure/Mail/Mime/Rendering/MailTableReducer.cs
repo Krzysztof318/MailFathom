@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
 using AngleSharp.Dom;
 using MailFathom.Application.EmailContent.Rendering.Document;
 using MailFathom.Application.EmailContent.Rendering.Document.Blocks;
@@ -58,7 +59,7 @@ internal static class MailTableReducer
             }
         }
 
-        return rows.Count == 0 ? null : new MailTableBlock(ColumnsOf(element, rows), rows);
+        return rows.Count == 0 ? null : new MailTableBlock(ColumnsOf(element, rows, reducer), rows);
     }
 
     /// <summary>Names the rows that belong to this table rather than to one nested inside it.</summary>
@@ -83,6 +84,15 @@ internal static class MailTableReducer
         MailBodyReducer reducer,
         MailDocumentBounds bounds)
     {
+        var rowStyle = MailStyleReader.Read(row);
+        if (rowStyle.Hidden)
+        {
+            // A row that asked not to be drawn is dropped exactly as a hidden cell and a hidden element on the
+            // ordinary walk are. Reading only the cells' styles, which is what this did, left the row the one place a
+            // message could hide something from every renderer but this one.
+            return new MailTableRow(IsHeader: false, []);
+        }
+
         var cells = new List<MailTableCell>();
         var headerSection = row.ParentElement is { } parent && IsNamed(parent, "thead");
 
@@ -124,12 +134,26 @@ internal static class MailTableReducer
     }
 
     /// <summary>Describes each column, resolving whatever width the message wrote into a share of the table.</summary>
-    private static IReadOnlyList<MailTableColumn> ColumnsOf(IElement table, IReadOnlyList<MailTableRow> rows)
+    /// <remarks>
+    /// The count is what the spans declare, and spans multiply: a row of the permitted number of cells each claiming
+    /// the permitted span declares that number squared, out of markup a message writes in a kilobyte. So the count is
+    /// held to the same bound one row's cells are, because a column is an object on the answer and a definition on the
+    /// thread that draws, and the reader is told the table was cut rather than handed the amplification.
+    /// </remarks>
+    private static IReadOnlyList<MailTableColumn> ColumnsOf(
+        IElement table,
+        IReadOnlyList<MailTableRow> rows,
+        MailBodyReducer reducer)
     {
-        var columnCount = rows.Max(row => row.Cells.Sum(cell => cell.ColumnSpan));
-        var declared = DeclaredWidths(table, columnCount);
+        var declaredCount = rows.Max(row => row.Cells.Sum(cell => cell.ColumnSpan));
+        var columnCount = Math.Min(declaredCount, reducer.Bounds.MaximumTableCells);
 
-        return [.. Shares(declared).Select(share => new MailTableColumn(share))];
+        if (columnCount < declaredCount)
+        {
+            reducer.NoteTruncated();
+        }
+
+        return [.. Shares(DeclaredWidths(table, columnCount)).Select(share => new MailTableColumn(share))];
     }
 
     /// <summary>Reads what each column asked for, preferring an explicit column element to the first row's cells.</summary>
@@ -186,8 +210,15 @@ internal static class MailTableReducer
             : declared.Select(column => column.PixelWidth is { } pixels ? pixels / total : (double?)null);
     }
 
+    /// <summary>Reads a span a cell declared, which is a count in the markup rather than a number in anybody's locale.</summary>
     private static int SpanOf(IElement cell, string attribute, int maximum) =>
-        int.TryParse(cell.GetAttribute(attribute), out var span) ? Math.Clamp(span, 1, maximum) : 1;
+        int.TryParse(
+            cell.GetAttribute(attribute),
+            NumberStyles.None,
+            CultureInfo.InvariantCulture,
+            out var span)
+            ? Math.Clamp(span, 1, maximum)
+            : 1;
 
     private static bool IsCell(IElement element) => IsNamed(element, "td") || IsNamed(element, "th");
 

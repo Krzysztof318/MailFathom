@@ -58,7 +58,11 @@ public static class DeploymentRegistration
                     // fails loudly rather than reaching somewhere nobody named.
                     transport.BaseAddress = provider.GetRequiredService<DeploymentAddress>().Current;
                     transport.Timeout = options.Timeout;
-                    transport.MaxResponseContentBufferSize = DeploymentExchange.MaxDocumentBytes;
+
+                    // The backstop for an answer that declares no length, so it is the largest any route on this
+                    // transport may read rather than the ordinary one. Each route states its own narrower bound where
+                    // it reads, which is the half that can say what happened.
+                    transport.MaxResponseContentBufferSize = DeploymentExchange.MaxMailBodyBytes;
                 })
             .AddHttpMessageHandler<AccessTokenHandler>();
 

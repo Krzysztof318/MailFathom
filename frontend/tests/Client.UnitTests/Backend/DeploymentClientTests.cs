@@ -209,4 +209,61 @@ public sealed class DeploymentClientTests
         Assert.Equal("Bearer the-token", request.Authorization);
         Assert.DoesNotContain("the-token", request.RequestUri.ToString(), StringComparison.Ordinal);
     }
+
+    /// <summary>A body is the one document here that carries a message's own pictures, so it reads past the ordinary bound.</summary>
+    /// <remarks>
+    /// Every other route reads a description of something and is bounded at a megabyte. Holding a body to that number
+    /// would refuse a message carrying one ordinary photograph, and refuse it as an answer this client will not read
+    /// rather than as a picture it will not draw — costing the reader the words as well.
+    /// </remarks>
+    [Fact]
+    public async Task ReadMailBodyAsync_AnAnswerPastTheOrdinaryDocumentBound_IsStillRead()
+    {
+        // Arrange
+        using var harness = new DeploymentHarness(
+            _ => StubTransport.JsonResponse(
+                ABodyWhosePlainTextIs(new string('a', DeploymentExchange.MaxDocumentBytes))));
+
+        // Act
+        var body = await harness.Client.ReadMailBodyAsync(
+            Guid.Parse("8f14e45f-ceea-467a-9f3e-1c3ecdf1e9a1"),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(DeploymentExchange.MaxDocumentBytes, body.PlainText.Text.Length);
+    }
+
+    /// <summary>Past the bound a body is held to, the answer is refused on its declared length before a byte is read.</summary>
+    [Fact]
+    public async Task ReadMailBodyAsync_AnAnswerLargerThanABodyMayBe_IsRefusedOnTheDeclaredLength()
+    {
+        // Arrange
+        using var harness = new DeploymentHarness(_ =>
+        {
+            var response = StubTransport.JsonResponse(ABodyWhosePlainTextIs("Words"));
+            response.Content.Headers.ContentLength = DeploymentExchange.MaxMailBodyBytes + 1;
+
+            return response;
+        });
+
+        // Act
+        var failure = await Assert.ThrowsAsync<DeploymentFailure>(
+            () => harness.Client.ReadMailBodyAsync(
+                Guid.Parse("8f14e45f-ceea-467a-9f3e-1c3ecdf1e9a1"),
+                cancellationToken: TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(DeploymentFailureReason.Unusable, failure.Reason);
+    }
+
+    private static string ABodyWhosePlainTextIs(string text) =>
+        $$"""
+        {
+          "storedEmailId": "8f14e45f-ceea-467a-9f3e-1c3ecdf1e9a1",
+          "availability": "Readable",
+          "plainText": { "text": "{{text}}", "originalCharacterCount": {{text.Length}}, "truncation": "None" },
+          "document": null,
+          "remoteImagesRequested": false
+        }
+        """;
 }

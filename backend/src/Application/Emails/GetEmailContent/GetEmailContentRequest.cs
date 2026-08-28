@@ -13,9 +13,14 @@ namespace MailFathom.Application.Emails.GetEmailContent;
 /// own boundary, and a malformed identifier is refused before it reaches a use case.
 /// </para>
 /// <para>
-/// The two representation flags govern the whole call rather than one email each. A caller asking for markup or for
+/// The representation flags govern the whole call rather than one email each. A caller asking for markup or for
 /// attachment links wants it for what it is about to read, and a flag per identifier would make the argument list grow
 /// with the batch while answering a question no caller asks per email.
+/// </para>
+/// <para>
+/// <see cref="RetainRemoteImageReferences" /> is the exception, and it is enforced rather than described: it carries
+/// one reader's consent about one message, so a request that asks for it names exactly one email. Everything else here
+/// is a preference about a call and that one is an act about a message, which is the whole difference.
 /// </para>
 /// </remarks>
 public sealed record GetEmailContentRequest
@@ -92,11 +97,28 @@ public sealed record GetEmailContentRequest
 
     /// <summary>Gets whether the reduced document may carry this message's remote picture references.</summary>
     /// <remarks>
-    /// It is a per-message act by the reader and nothing else may set it: asking for it loads the sender's pictures,
-    /// which tells whoever wrote the message that it was opened and from where. Nothing remembers the answer, so it is
-    /// asked again the next time the message is opened.
+    /// It is a per-message act by the reader: asking for it loads the sender's pictures, which tells whoever wrote the
+    /// message that it was opened and from where. Nothing remembers the answer, so it is asked again the next time the
+    /// message is opened — and the request refuses to carry the consent across a list, because one reader deciding
+    /// about one message is exactly what it means and a read naming ten would apply it to nine they never saw.
     /// </remarks>
-    public bool RetainRemoteImageReferences { get; init; }
+    /// <exception cref="InvalidOperationException">Thrown when it is asked for by a request naming other than one email.</exception>
+    public bool RetainRemoteImageReferences
+    {
+        get;
+
+        init
+        {
+            if (value && this.StoredEmailIds.Count != 1)
+            {
+                throw new InvalidOperationException(
+                    "Remote picture references carry one reader's consent about one message, so a request asking for "
+                        + "them names exactly one email.");
+            }
+
+            field = value;
+        }
+    }
 
     /// <summary>Creates a request from the emails a caller named.</summary>
     /// <param name="storedEmailIds">The emails to read, in the order they were named.</param>

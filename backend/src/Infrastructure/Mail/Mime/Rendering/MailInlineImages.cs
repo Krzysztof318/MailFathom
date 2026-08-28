@@ -16,9 +16,10 @@ namespace MailFathom.Infrastructure.Mail.Mime.Rendering;
 /// documents that there is none.
 /// </para>
 /// <para>
-/// This is the one place a message's own octets are held in memory during a rendering, and it is bounded twice: how
-/// many pictures are resolved at all, and how large one may be. A part past either is reported as a picture the message
-/// carries and the pane does not draw, never as a reference for something to resolve later.
+/// This is the one place a message's own octets are held in memory during a rendering, and it is bounded three times:
+/// how many pictures are resolved at all, how large one may be, and how much they may come to together — the last of
+/// those being the bound the answer is sized by rather than the message. A part past any of them is reported as a
+/// picture the message carries and the pane does not draw, never as a reference for something to resolve later.
 /// </para>
 /// <para>
 /// The media types are an allow-list, and <c>image/svg+xml</c> is deliberately absent from it. An SVG is a document
@@ -55,18 +56,28 @@ internal sealed class MailInlineImages
     /// <param name="message">The parsed message.</param>
     /// <param name="maximumImages">How many pictures may be resolved at all.</param>
     /// <param name="maximumOctets">How large one picture may be.</param>
+    /// <param name="maximumOctetsInTotal">How many octets every resolved picture may come to together.</param>
     /// <param name="cancellationToken">Cancels the decode.</param>
     /// <returns>The resolution.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="message" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The count is of pictures rather than of the references that reach them, which is why a part already inlined
+    /// under another reference costs nothing here: a message naming one photograph by both its content identifier and
+    /// its location is carrying one picture, and counting it twice would leave a reader a photograph short of the
+    /// bound they were promised.
+    /// </remarks>
     public static async Task<MailInlineImages> ResolveAsync(
         MimeMessage message,
         int maximumImages,
         int maximumOctets,
+        int maximumOctetsInTotal,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(message);
 
         var byReference = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var resolved = 0;
+        var octets = 0L;
         var undrawn = 0;
 
         foreach (var part in message.BodyParts.OfType<MimePart>().Where(IsDrawable))
@@ -77,14 +88,20 @@ internal sealed class MailInlineImages
                 continue;
             }
 
-            if (byReference.Count >= maximumImages)
+            if (resolved >= maximumImages)
             {
                 undrawn++;
 
                 continue;
             }
 
-            var inlined = await InlineAsync(part, maximumOctets, cancellationToken);
+            // The per-picture bound is narrowed to what the document has left, so a decode stops at the aggregate
+            // rather than completing and being discarded.
+            var remaining = maximumOctetsInTotal - octets;
+            var inlined = remaining <= 0
+                ? null
+                : await InlineAsync(part, (int)Math.Min(maximumOctets, remaining), cancellationToken);
+
             if (inlined is null)
             {
                 undrawn++;
@@ -92,14 +109,21 @@ internal sealed class MailInlineImages
                 continue;
             }
 
+            resolved++;
+            octets += OctetsBehind(inlined);
+
             foreach (var reference in references)
             {
                 byReference[reference] = inlined;
             }
         }
 
-        return new MailInlineImages(byReference, byReference.Values.Distinct(StringComparer.Ordinal).Count(), undrawn);
+        return new MailInlineImages(byReference, resolved, undrawn);
     }
+
+    /// <summary>Reads how many octets a composed <c>data:</c> URI carries, which is what the aggregate counts.</summary>
+    private static long OctetsBehind(string inlined) =>
+        (long)(inlined.Length - inlined.IndexOf(',', StringComparison.Ordinal) - 1) * 3 / 4;
 
     /// <summary>Resolves one reference the body wrote.</summary>
     /// <param name="reference">The reference as the body wrote it, with or without its scheme.</param>

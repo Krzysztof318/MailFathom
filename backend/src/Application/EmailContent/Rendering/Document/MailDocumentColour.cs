@@ -53,9 +53,11 @@ public readonly record struct MailDocumentColour(byte Red, byte Green, byte Blue
 
         var digits = notation.AsSpan(1);
 
-        if (!byte.TryParse(digits[..2], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var red)
-            || !byte.TryParse(digits[2..4], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var green)
-            || !byte.TryParse(digits[4..], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var blue))
+        // AllowHexSpecifier alone, because HexNumber also admits surrounding whitespace: "#  ff 00" would otherwise
+        // parse as a colour, and this notation is one the contract publishes rather than one a person types.
+        if (!byte.TryParse(digits[..2], NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var red)
+            || !byte.TryParse(digits[2..4], NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var green)
+            || !byte.TryParse(digits[4..], NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var blue))
         {
             return false;
         }

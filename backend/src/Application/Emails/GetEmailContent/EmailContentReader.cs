@@ -72,6 +72,15 @@ public sealed class EmailContentReader
     /// </remarks>
     private const int MaximumScannedDisplayNames = 40;
 
+    /// <summary>How many of a reduced document's texts one read scans before the rest are withheld.</summary>
+    /// <remarks>
+    /// Set where a message stops and a generated layout begins: a reduction emits one text per run of body words, per
+    /// preformatted block, and per picture's description, and an ordinary message — newsletters included — reduces to
+    /// a few hundred. Past that the body is one a template composed a span at a time, and the cheaper side of the
+    /// bound is losing its tail rather than spending thousands of scanner round trips on one reading pane.
+    /// </remarks>
+    private const int MaximumScannedDocumentTexts = 500;
+
     private readonly IStoredEmailSummaryReader summaryReader;
     private readonly IEmailThreadReader threadReader;
     private readonly IEmailContentStore contentStore;
@@ -472,8 +481,14 @@ public sealed class EmailContentReader
     /// <para>
     /// The texts are guarded as a flat list and put back positionally rather than joined into one pass, for the reason
     /// every value here is scanned on its own: a finding straddling the join between two runs would redact across words
-    /// that have nothing to do with each other. Nothing is dropped and no count is capped, so a long newsletter costs a
-    /// scan per run — which is why the whole projection is opt-in and why no tool asks for it.
+    /// that have nothing to do with each other.
+    /// </para>
+    /// <para>
+    /// The count is bounded for the same reason the display names above are, and the bound bites harder here: a scan is
+    /// a round trip on the deployment running the personal-data analyzer in a container, a body of short styled spans
+    /// reduces to thousands of runs, and this projection is now asked for on every opening of a reading pane. Past
+    /// <see cref="MaximumScannedDocumentTexts" /> a text is withheld rather than published unscanned, and the document
+    /// says it was truncated — which is the statement the pane already draws.
     /// </para>
     /// </remarks>
     private async Task<MailDocument> GuardedAsync(MailDocument document, CancellationToken cancellationToken)
@@ -484,12 +499,22 @@ public sealed class EmailContentReader
             return document;
         }
 
-        return MailDocumentTexts.Rewrite(
+        var scanned = texts.Count <= MaximumScannedDocumentTexts
+            ? texts
+            : [.. texts.Take(MaximumScannedDocumentTexts)];
+
+        var guarded = await this.egressGuard.GuardAllAsync(
+            SensitiveContentEgressPoint.McpEmailContent,
+            scanned,
+            cancellationToken);
+
+        var rewritten = MailDocumentTexts.Rewrite(
             document,
-            await this.egressGuard.GuardAllAsync(
-                SensitiveContentEgressPoint.McpEmailContent,
-                texts,
-                cancellationToken));
+            texts.Count == scanned.Count
+                ? guarded
+                : [.. guarded, .. Enumerable.Repeat(string.Empty, texts.Count - scanned.Count)]);
+
+        return texts.Count == scanned.Count ? rewritten : rewritten with { Truncated = true };
     }
 
     /// <summary>Scans one representation and states the analyzed ceiling as the bound it is.</summary>
@@ -589,9 +614,20 @@ public sealed class EmailContentReader
     /// returned rather than the length the message held, so a body the per-representation bound already cut spends only
     /// what it actually published.
     /// </remarks>
+    /// <summary>Counts what one email spent of the call's budget, which is every representation it returned.</summary>
+    /// <remarks>
+    /// The document is counted as the words it holds rather than as the JSON it serializes to. What the budget governs
+    /// is how much mail one call draws out of a mailbox, and a picture the message carried is bounded by
+    /// <see cref="MailDocumentBounds" /> in octets rather than in characters, so counting its encoding here would
+    /// spend a text budget on something no text bound was written for.
+    /// </remarks>
     private static int CharactersReturnedBy(EmailContentReadOutcome outcome) =>
         outcome.Content is { } content
-            ? content.Body.PlainText.Text.Length + (content.Body.SanitizedHtml?.Text.Length ?? 0)
+            ? content.Body.PlainText.Text.Length
+                + (content.Body.SanitizedHtml?.Text.Length ?? 0)
+                + (content.Body.Document is { } document
+                    ? MailDocumentTexts.Collect(document).Sum(text => text.Length)
+                    : 0)
             : 0;
 
     /// <summary>Records the defect durably and produces the outcome to report for it.</summary>

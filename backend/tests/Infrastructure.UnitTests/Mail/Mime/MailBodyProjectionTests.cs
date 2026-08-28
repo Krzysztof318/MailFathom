@@ -374,7 +374,138 @@ public sealed class MailBodyProjectionTests
         // Assert
         Assert.Equal(MailDocumentRefusal.None, document.Refusal);
         Assert.True(document.Blocks.Count < 200);
+        Assert.True(document.Truncated);
     }
+
+    /// <summary>What a link claims is judged on the words a reader is shown, not on every character the anchor holds.</summary>
+    /// <remarks>
+    /// Both markups put a space into the anchor's <c>TextContent</c> without putting one in front of anybody. Read that
+    /// way the text stops naming a host, the claim reads as no claim, and the link to somewhere else is reported as
+    /// making none — which is the quiet failure the reduction has to be immune to.
+    /// </remarks>
+    [Theory]
+    [InlineData("<span style=\"display:none\">not </span>bank.test")]
+    [InlineData("<script>var spacer = 1;</script>bank.test")]
+    public async Task ProduceAsync_AnchorHidingWordsBehindItsText_IsStillJudgedOnWhatIsDrawn(string inside)
+    {
+        // Act
+        var document = await DocumentOf($"<a href=\"https://evil.test/login\">{inside}</a>");
+
+        // Assert
+        var link = Assert.Single(LinksIn(document));
+        Assert.Equal(MailLinkDeception.DisplayedHostDiffers, link.Deception);
+    }
+
+    /// <summary>An anchor whose words name where it goes claims nothing worth warning about.</summary>
+    [Fact]
+    public async Task ProduceAsync_AnchorNamingTheHostItGoesTo_ReportsNoDeception()
+    {
+        // Act
+        var document = await DocumentOf("<a href=\"https://bank.test/login\"><b>bank.test</b></a>");
+
+        // Assert
+        Assert.Equal(MailLinkDeception.None, Assert.Single(LinksIn(document)).Deception);
+    }
+
+    /// <summary>A list item is read as the walk reads any element, so one asking not to be drawn is not drawn.</summary>
+    [Fact]
+    public async Task ProduceAsync_ListItemAskingNotToBeDrawn_IsLeftOutOfTheList()
+    {
+        // Act
+        var document = await DocumentOf(
+            "<ul><li>Shown</li><li style=\"display:none\">Hidden</li></ul>");
+
+        // Assert
+        var list = Assert.IsType<MailListBlock>(Assert.Single(document.Blocks));
+        Assert.Equal("Shown", TextOf(document));
+        Assert.Single(list.Items);
+    }
+
+    /// <summary>A list item's own reference to somebody else's server is counted like any other element's.</summary>
+    [Fact]
+    public async Task ProduceAsync_ListItemCarryingARemoteReference_HasItCounted()
+    {
+        // Act
+        var document = await DocumentOf(
+            "<ul><li style=\"background: url(https://tracker.test/p.gif)\">Shown</li></ul>");
+
+        // Assert
+        Assert.Equal(1, document.RemovedRemoteReferenceCount);
+        Assert.DoesNotContain("tracker.test", Sources(document), StringComparison.Ordinal);
+    }
+
+    /// <summary>A row asking not to be drawn is not drawn, which a table's own walk has to decide for itself.</summary>
+    [Fact]
+    public async Task ProduceAsync_TableRowAskingNotToBeDrawn_IsLeftOutOfTheTable()
+    {
+        // Arrange
+        const string Markup = """
+            <table>
+              <tr><td>Shown</td></tr>
+              <tr style="display:none"><td>Hidden</td></tr>
+            </table>
+            """;
+
+        // Act
+        var document = await DocumentOf(Markup);
+
+        // Assert
+        var table = Assert.IsType<MailTableBlock>(Assert.Single(document.Blocks));
+        Assert.Single(table.Rows);
+        Assert.DoesNotContain("Hidden", TextOf(document), StringComparison.Ordinal);
+    }
+
+    /// <summary>A table declaring more columns than the bound admits is clamped rather than believed.</summary>
+    /// <remarks>
+    /// The count is read from the widest row's spans, and spans multiply: a row of the permitted number of cells each
+    /// claiming the permitted span declares that number squared out of a kilobyte of markup, and every column declared
+    /// is an object on the answer and a definition on the thread that draws.
+    /// </remarks>
+    [Fact]
+    public async Task ProduceAsync_TableClaimingMoreColumnsThanTheBound_IsClampedAndSaysSo()
+    {
+        // Arrange
+        var span = MailDocumentBounds.Default.MaximumTableCells;
+        var cells = string.Concat(Enumerable.Repeat($"<td colspan=\"{span}\">Wide</td>", 3));
+        var markup = $"<table><tr>{cells}</tr></table>";
+
+        // Act
+        var document = await DocumentOf(markup);
+
+        // Assert
+        var table = Assert.IsType<MailTableBlock>(Assert.Single(document.Blocks));
+        Assert.Equal(MailDocumentBounds.Default.MaximumTableCells, table.Columns.Count);
+        Assert.True(document.Truncated);
+    }
+
+    /// <summary>A block written as more runs than the bound admits stops at it and says the document was cut.</summary>
+    /// <remarks>
+    /// Alternating emphasis is what defeats the join, so this is the shape a message uses to make one paragraph cost a
+    /// pane a text element per word.
+    /// </remarks>
+    [Fact]
+    public async Task ProduceAsync_ParagraphWrittenAsMoreRunsThanTheBound_StopsAtItAndSaysSo()
+    {
+        // Arrange
+        var runs = MailDocumentBounds.Default.MaximumRunsPerBlock + 200;
+        var markup = $"<p>{string.Concat(Enumerable.Repeat("<b>a</b>b", runs))}</p>";
+
+        // Act
+        var document = await DocumentOf(markup);
+
+        // Assert
+        var paragraph = Assert.IsType<MailParagraphBlock>(Assert.Single(document.Blocks));
+        Assert.Equal(MailDocumentBounds.Default.MaximumRunsPerBlock, paragraph.Content.Count);
+        Assert.True(document.Truncated);
+    }
+
+    /// <summary>Every link the document carries, in reading order.</summary>
+    private static IEnumerable<MailDocumentLink> LinksIn(MailDocument document) => document.Blocks
+        .OfType<MailParagraphBlock>()
+        .SelectMany(paragraph => paragraph.Content)
+        .Select(run => run.Link)
+        .OfType<MailDocumentLink>()
+        .Distinct();
 
     private static async Task<MailDocument> DocumentOf(
         string markup,

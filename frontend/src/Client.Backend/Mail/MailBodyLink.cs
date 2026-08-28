@@ -27,8 +27,14 @@ public sealed record MailBodyLink(
     MailBodyLinkDeception Deception)
 {
     /// <summary>Gets whether the reader is warned before this link is followed.</summary>
+    /// <remarks>
+    /// Three things say yes and each is enough on its own: the deployment found the text and the target disagree, the
+    /// host is written in two spellings, or the verdict is one this build cannot read. The last of those errs towards
+    /// warning, because a verdict that cannot be read cannot be reported as clean.
+    /// </remarks>
     public bool IsWorthWarningAbout =>
-        this.Deception is MailBodyLinkDeception.DisplayedHostDiffers || this.AsciiHost is not null;
+        this.Deception is MailBodyLinkDeception.DisplayedHostDiffers or MailBodyLinkDeception.Unrecognized
+        || this.AsciiHost is not null;
 
     /// <summary>Gets what the pane shows as the place this link goes.</summary>
     /// <remarks>

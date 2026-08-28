@@ -55,4 +55,14 @@ public sealed record MailDocumentBounds
     /// than replaced by a reference, because a reference is the thing this path exists not to carry.
     /// </remarks>
     public int MaximumInlineImageOctets { get; init; } = 2 * 1024 * 1024;
+
+    /// <summary>Gets how many octets of its own pictures one document may carry in total.</summary>
+    /// <remarks>
+    /// The bound on the picture is about one part and this one is about the answer, which is the number a client sizes
+    /// its read against: without it a message carrying the permitted count of the permitted size would compose a
+    /// response two orders of magnitude past anything a reading pane will buffer, and the pane would lose the whole
+    /// message — its text included — rather than one photograph. A picture past this is reported as undrawn exactly as
+    /// one past the per-picture bound is, so what the reader loses is stated rather than silent.
+    /// </remarks>
+    public int MaximumInlineImageOctetsPerDocument { get; init; } = 4 * 1024 * 1024;
 }

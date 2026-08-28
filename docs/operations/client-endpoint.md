@@ -700,8 +700,11 @@ removed while the tree is built rather than left for a renderer to decline to fo
 the document not carrying it. `removedRemoteReferenceCount` is what survives instead — a count a pane can put in front
 of the reader — and it counts a remote `img`, a `url(` in a style declaration, and a `background` attribute alike. A
 picture the message carries itself is different and is resolved in the deployment: an inline part reached by
-`Content-Id` or `Content-Location` becomes a `data:` URI, bounded by count and by size, with `inlineImageCount` and
-`undrawnInlineImageCount` saying how many were drawn and how many were beyond a bound.
+`Content-Id` or `Content-Location` becomes a `data:` URI, bounded by count, by the size of each, and by how much they
+come to together, with `inlineImageCount` and `undrawnInlineImageCount` saying how many were drawn and how many were
+beyond a bound. That last bound is what makes this route's answer a size a client can plan for: a body is the one
+document this surface serves that carries a message's own content rather than a description of something, so a pane
+reads it against a ceiling of its own rather than against the megabyte every other route here is held to.
 
 **Asking for remote pictures is a second request, and nothing on either side remembers it:**
 

@@ -42,10 +42,17 @@ public sealed record EmailContentRendering(
 {
     /// <summary>Gets the body reduced to the document tree a reading pane draws, or <see langword="null" /> when none was asked for.</summary>
     /// <remarks>
-    /// It comes from the same parse of the same document as <see cref="SanitizedHtmlBody" /> rather than from a second
-    /// reading of the markup that one produced. Two parses of one body by two different parsers is the structure
-    /// mutation attacks are built out of, and the point of holding one parsed document is that neither representation
-    /// is derived from the other's string.
+    /// <para>
+    /// It is reduced from the message's own HTML parts rather than from the markup <see cref="SanitizedHtmlBody" />
+    /// produced, which is the property that matters: neither representation is a reading of the other's string, so
+    /// there is no pass where one parser's output becomes another parser's input. The two are cut from the same
+    /// character allowance, so they reduce the same prefix of the same body.
+    /// </para>
+    /// <para>
+    /// They are two parses of that prefix rather than one, because the sanitized representation reparses while it
+    /// shrinks its source to fit the bound. Nothing reconciles the two: a reading pane is handed this document and no
+    /// markup at all, and a caller reading the markup is handed no tree, so no client draws one thing from both.
+    /// </para>
     /// </remarks>
     public MailDocument? Document { get; init; }
 }

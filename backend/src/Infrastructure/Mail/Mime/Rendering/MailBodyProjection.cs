@@ -53,14 +53,14 @@ internal static class MailBodyProjection
         }
 
         var bounds = MailDocumentBounds.Default;
-        var source = MailTextBounds.TruncateAtTextElementBoundary(
-            string.Join('\n', htmlParts),
-            maximumCharacters);
+        var joined = string.Join('\n', htmlParts);
+        var source = MailTextBounds.TruncateAtTextElementBoundary(joined, maximumCharacters);
 
         var inlineImages = await MailInlineImages.ResolveAsync(
             message,
             bounds.MaximumInlineImages,
             bounds.MaximumInlineImageOctets,
+            bounds.MaximumInlineImageOctetsPerDocument,
             cancellationToken);
 
         // The default configuration builds a parser with no requester and no script engine, so parsing fetches nothing
@@ -68,8 +68,20 @@ internal static class MailBodyProjection
         // would turn this line into the one place mail could reach the network from.
         var parsed = new HtmlParser().ParseDocument(source);
 
-        return parsed.Body is { } body
-            ? new MailBodyReducer(bounds, inlineImages, retainRemoteImages).Reduce(body)
-            : MailDocument.Refused(MailDocumentRefusal.ReductionFailed);
+        if (parsed.Body is not { } body)
+        {
+            return MailDocument.Refused(MailDocumentRefusal.ReductionFailed);
+        }
+
+        var reducer = new MailBodyReducer(bounds, inlineImages, retainRemoteImages);
+
+        // The cut happens before the parse, so the reducer never meets the words it removed and would report a whole
+        // document. Telling it here is what keeps every way a body is shortened readable as one flag.
+        if (source.Length < joined.Length)
+        {
+            reducer.NoteTruncated();
+        }
+
+        return reducer.Reduce(body);
     }
 }
