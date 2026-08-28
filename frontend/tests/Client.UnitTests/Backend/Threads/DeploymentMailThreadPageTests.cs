@@ -16,7 +16,9 @@ public sealed class DeploymentMailThreadPageTests
     public async Task ReadMailThreadAsync_AnyRequest_NamesTheConversationInThePathAndScopesItByNothing()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(MailThreads.Document(2)));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(MailThreads.Document(2)),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         await harness.Client.ReadMailThreadAsync(
@@ -34,7 +36,9 @@ public sealed class DeploymentMailThreadPageTests
     public async Task ReadMailThreadAsync_APageSizeAndACursor_WritesBothIntoTheQuery()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(MailThreads.Document(1)));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(MailThreads.Document(1)),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         await harness.Client.ReadMailThreadAsync(
@@ -54,7 +58,9 @@ public sealed class DeploymentMailThreadPageTests
     public async Task ReadMailThreadAsync_ADeploymentAnswering_ReadsEveryFieldOfTheContract()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(MailThreads.Document(2, "after-2")));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(MailThreads.Document(2, "after-2")),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         var page = await harness.Client.ReadMailThreadAsync(
@@ -87,8 +93,10 @@ public sealed class DeploymentMailThreadPageTests
     public async Task ReadMailThreadAsync_ADocumentNamingNeitherList_ReadsBothAsEmptyRatherThanAsNothing()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(
-            $$"""{"threadId":"{{MailThreads.Identity}}","messageCount":0,"pageSize":50}"""));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(
+                $$"""{"threadId":"{{MailThreads.Identity}}","messageCount":0,"pageSize":50}"""),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         var page = await harness.Client.ReadMailThreadAsync(
@@ -105,8 +113,9 @@ public sealed class DeploymentMailThreadPageTests
     public async Task ReadMailThreadAsync_ACursorTheDeploymentRefuses_ReportsTheCaseTheClientCanActOn()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
-            _ => StubTransport.JsonResponse("{}", HttpStatusCode.BadRequest));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse("{}", HttpStatusCode.BadRequest),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         var failure = await Assert.ThrowsAsync<DeploymentFailure>(
@@ -124,8 +133,9 @@ public sealed class DeploymentMailThreadPageTests
     public async Task ReadMailThreadAsync_ARefusedCredential_ReportsTheOneCaseThePersonCanActOn()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
-            _ => StubTransport.JsonResponse("{}", HttpStatusCode.Forbidden));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse("{}", HttpStatusCode.Forbidden),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         var failure = await Assert.ThrowsAsync<DeploymentFailure>(

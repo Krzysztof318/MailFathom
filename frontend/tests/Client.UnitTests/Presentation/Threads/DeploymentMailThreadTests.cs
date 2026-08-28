@@ -36,7 +36,8 @@ public sealed class DeploymentMailThreadTests
     public async Task Messages_NothingOpened_AsksTheDeploymentForNothing()
     {
         // Arrange
-        using var over = new ThreadOver(_ => Answer(MailThreads.Document(2)));
+        using var over = await ThreadOver.CreateAsync(_ => Answer(MailThreads.Document(2)),
+            TestContext.Current.CancellationToken);
 
         // Act
         var messages = await over.Thread.Messages;
@@ -51,7 +52,8 @@ public sealed class DeploymentMailThreadTests
     public async Task OpenAsync_AConversation_ReadsItFromItsBeginningInOneRequest()
     {
         // Arrange
-        using var over = new ThreadOver(_ => Answer(MailThreads.Document(3)));
+        using var over = await ThreadOver.CreateAsync(_ => Answer(MailThreads.Document(3)),
+            TestContext.Current.CancellationToken);
 
         // Act
         await over.Thread.OpenAsync(MailThreads.Identity, null, TestContext.Current.CancellationToken);
@@ -69,7 +71,8 @@ public sealed class DeploymentMailThreadTests
     public async Task Reading_AConversationOpened_DrawsTheHeaderTheDeploymentAnswered()
     {
         // Arrange
-        using var over = new ThreadOver(_ => Answer(MailThreads.Document(2)));
+        using var over = await ThreadOver.CreateAsync(_ => Answer(MailThreads.Document(2)),
+            TestContext.Current.CancellationToken);
 
         // Act
         await over.Thread.OpenAsync(MailThreads.Identity, null, TestContext.Current.CancellationToken);
@@ -86,7 +89,8 @@ public sealed class DeploymentMailThreadTests
     public async Task Chosen_OneMessageSelectedInTheList_OpensTheConversationItIsIn()
     {
         // Arrange
-        using var over = new ThreadOver(_ => Answer(MailThreads.Document(2)));
+        using var over = await ThreadOver.CreateAsync(_ => Answer(MailThreads.Document(2)),
+            TestContext.Current.CancellationToken);
 
         // Act
         await over.List.Chosen.UpdateAsync(
@@ -108,7 +112,8 @@ public sealed class DeploymentMailThreadTests
     public async Task Chosen_SeveralMessagesSelected_LeavesTheScreenWithNothingOpen()
     {
         // Arrange
-        using var over = new ThreadOver(_ => Answer(MailThreads.Document(2)));
+        using var over = await ThreadOver.CreateAsync(_ => Answer(MailThreads.Document(2)),
+            TestContext.Current.CancellationToken);
 
         await over.List.Chosen.UpdateAsync(
             _ => ImmutableList.Create(Row(1)),
@@ -132,7 +137,8 @@ public sealed class DeploymentMailThreadTests
     public async Task Chosen_AMessageInNoConversation_AsksTheDeploymentForNothing()
     {
         // Arrange
-        using var over = new ThreadOver(_ => Answer(MailThreads.Document(2)));
+        using var over = await ThreadOver.CreateAsync(_ => Answer(MailThreads.Document(2)),
+            TestContext.Current.CancellationToken);
 
         // Act
         await over.List.Chosen.UpdateAsync(
@@ -150,7 +156,8 @@ public sealed class DeploymentMailThreadTests
     public async Task ToggleAsync_AMessageOfTheConversation_ShowsWhatItAddedWithoutAskingTheDeployment()
     {
         // Arrange
-        using var over = new ThreadOver(_ => Answer(MailThreads.Document(3)));
+        using var over = await ThreadOver.CreateAsync(_ => Answer(MailThreads.Document(3)),
+            TestContext.Current.CancellationToken);
         await over.Opened();
 
         // Act
@@ -167,7 +174,8 @@ public sealed class DeploymentMailThreadTests
     public async Task ToggleAsync_AnOpenMessageWhoseWholeWasRead_DropsTheWholeMessageWithTheExpansion()
     {
         // Arrange
-        using var over = new ThreadOver(Answering(MailThreads.Document(2)));
+        using var over = await ThreadOver.CreateAsync(Answering(MailThreads.Document(2)),
+            TestContext.Current.CancellationToken);
 
         await over.Opened();
         await over.Thread.ShowWholeMessageAsync(MailMessages.Key(2), TestContext.Current.CancellationToken);
@@ -190,7 +198,8 @@ public sealed class DeploymentMailThreadTests
     public async Task ShowWholeMessageAsync_AMessageSomebodyAskedFor_ReadsThatMessageAndNoOther()
     {
         // Arrange
-        using var over = new ThreadOver(Answering(MailThreads.Document(3)));
+        using var over = await ThreadOver.CreateAsync(Answering(MailThreads.Document(3)),
+            TestContext.Current.CancellationToken);
         await over.Opened();
 
         // Act
@@ -212,7 +221,8 @@ public sealed class DeploymentMailThreadTests
     public async Task ShowRemoteContentAsync_AMessageTheReaderAllowed_ReadsThatMessageAgainWithThemAsked()
     {
         // Arrange
-        using var over = new ThreadOver(Answering(MailThreads.Document(2)));
+        using var over = await ThreadOver.CreateAsync(Answering(MailThreads.Document(2)),
+            TestContext.Current.CancellationToken);
 
         await over.Opened();
         await over.Thread.ShowWholeMessageAsync(MailMessages.Key(1), TestContext.Current.CancellationToken);
@@ -234,9 +244,10 @@ public sealed class DeploymentMailThreadTests
     public async Task ShowWholeMessageAsync_AReadThatFailed_SaysSoOnTheMessageAndLeavesTheConversationDrawn()
     {
         // Arrange
-        using var over = new ThreadOver(request => IsBody(request)
+        using var over = await ThreadOver.CreateAsync(request => IsBody(request)
             ? Answer("{}", HttpStatusCode.BadGateway)
-            : Answer(MailThreads.Document(2)));
+            : Answer(MailThreads.Document(2)),
+            TestContext.Current.CancellationToken);
 
         await over.Opened();
 
@@ -266,7 +277,7 @@ public sealed class DeploymentMailThreadTests
         using var reached = new ManualResetEventSlim(false);
         using var released = new ManualResetEventSlim(false);
 
-        using var over = new ThreadOver(request =>
+        using var over = await ThreadOver.CreateAsync(request =>
         {
             if (!IsBody(request))
             {
@@ -277,7 +288,8 @@ public sealed class DeploymentMailThreadTests
             released.Wait(Patience, cancellation);
 
             return Answer(WholeMessage);
-        });
+        },
+            TestContext.Current.CancellationToken);
 
         await over.Opened();
 
@@ -312,10 +324,11 @@ public sealed class DeploymentMailThreadTests
     public async Task ShowMoreAsync_MoreOfTheConversation_TakesThePageOntoTheEndOfWhatWasRead()
     {
         // Arrange
-        using var over = new ThreadOver(request => Answer(
+        using var over = await ThreadOver.CreateAsync(request => Answer(
             Cursor(request) is null
                 ? MailThreads.Document(2, nextCursor: "after-2")
-                : MailThreads.Document(2, from: 3)));
+                : MailThreads.Document(2, from: 3)),
+            TestContext.Current.CancellationToken);
 
         await over.Opened();
 
@@ -340,9 +353,10 @@ public sealed class DeploymentMailThreadTests
     public async Task ShowMoreAsync_APageThatFailed_KeepsWhatIsDrawnAndSaysThePageDidNotArrive()
     {
         // Arrange
-        using var over = new ThreadOver(request => Cursor(request) is null
+        using var over = await ThreadOver.CreateAsync(request => Cursor(request) is null
             ? Answer(MailThreads.Document(2, nextCursor: "after-2"))
-            : Answer("{}", HttpStatusCode.ServiceUnavailable));
+            : Answer("{}", HttpStatusCode.ServiceUnavailable),
+            TestContext.Current.CancellationToken);
 
         await over.Opened();
 
@@ -359,7 +373,8 @@ public sealed class DeploymentMailThreadTests
     public async Task AskAgainAsync_AConversationThatDidNotArrive_AsksTheSessionAndTheDeploymentAgain()
     {
         // Arrange
-        using var over = new ThreadOver(_ => Answer(MailThreads.Document(1)));
+        using var over = await ThreadOver.CreateAsync(_ => Answer(MailThreads.Document(1)),
+            TestContext.Current.CancellationToken);
         await over.Opened();
 
         // Act
@@ -375,7 +390,8 @@ public sealed class DeploymentMailThreadTests
     public async Task OpenAsync_TheSameConversationAtAnotherMessage_OpensAtTheMessageNamed()
     {
         // Arrange
-        using var over = new ThreadOver(_ => Answer(MailThreads.Document(3)));
+        using var over = await ThreadOver.CreateAsync(_ => Answer(MailThreads.Document(3)),
+            TestContext.Current.CancellationToken);
 
         await over.Thread.OpenAsync(
             MailThreads.Identity,
@@ -436,9 +452,9 @@ public sealed class DeploymentMailThreadTests
 
     private sealed class ThreadOver : IDisposable
     {
-        internal ThreadOver(Func<HttpRequestMessage, HttpResponseMessage> deployment)
+        private ThreadOver(DeploymentHarness harness)
         {
-            this.Harness = new DeploymentHarness(deployment);
+            this.Harness = harness;
             this.Session = new StubClientSession(
                 SessionStanding.Of(new DeploymentSession("MailFathom", "0.8.0", ["mailfathom.mail.read"])));
 
@@ -446,6 +462,15 @@ public sealed class DeploymentMailThreadTests
 
             this.Thread = new DeploymentMailThread(this.Harness.Client, this.Session, this.List, Words());
         }
+
+        /// <summary>Builds the conversation over a scripted deployment the client is already pointed at.</summary>
+        /// <param name="deployment">How the deployment answers.</param>
+        /// <param name="cancellationToken">Abandons the pointing.</param>
+        /// <returns>The arrangement the test owns.</returns>
+        internal static async ValueTask<ThreadOver> CreateAsync(
+            Func<HttpRequestMessage, HttpResponseMessage> deployment,
+            CancellationToken cancellationToken = default) =>
+            new(await DeploymentHarness.CreateAsync(deployment, cancellationToken: cancellationToken));
 
         internal DeploymentHarness Harness { get; }
 
