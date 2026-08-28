@@ -23,7 +23,9 @@ public sealed class DeploymentClientSessionTests
     public async Task Standing_ADeploymentAnswering_IsWhatTheClientOffers()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(ACallerWhoMayRead));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(ACallerWhoMayRead),
+            cancellationToken: TestContext.Current.CancellationToken);
         using var session = SessionOver(harness);
 
         // Act
@@ -44,7 +46,9 @@ public sealed class DeploymentClientSessionTests
     public async Task Standing_ReadMoreThanOnce_AsksTheDeploymentOnce()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(ACallerWhoMayRead));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(ACallerWhoMayRead),
+            cancellationToken: TestContext.Current.CancellationToken);
         using var session = SessionOver(harness);
 
         // Act
@@ -63,7 +67,9 @@ public sealed class DeploymentClientSessionTests
     public async Task Standing_TheSignedInIdentityChanging_IsAskedAgain()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(ACallerWhoMayRead));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(ACallerWhoMayRead),
+            cancellationToken: TestContext.Current.CancellationToken);
         using var session = SessionOver(harness);
         await session.Standing;
 
@@ -83,7 +89,9 @@ public sealed class DeploymentClientSessionTests
     public async Task Standing_TheClientBeingPointedElsewhere_IsAskedAgain()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(ACallerWhoMayRead));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(ACallerWhoMayRead),
+            cancellationToken: TestContext.Current.CancellationToken);
         var address = new DeploymentAddress(harness.Owner);
         await address.PointAtAsync(new Uri("https://mail.example/"), TestContext.Current.CancellationToken);
 
@@ -103,7 +111,9 @@ public sealed class DeploymentClientSessionTests
     public async Task Refresh_AfterAnAnswer_AsksTheDeploymentAgain()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(ACallerWhoMayRead));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(ACallerWhoMayRead),
+            cancellationToken: TestContext.Current.CancellationToken);
         using var session = SessionOver(harness);
         await session.Standing;
 
@@ -124,7 +134,8 @@ public sealed class DeploymentClientSessionTests
     {
         // Arrange
         using var harness = await DeploymentHarness.CreateAsync(
-            _ => StubTransport.JsonResponse("{}", HttpStatusCode.Unauthorized));
+            _ => StubTransport.JsonResponse("{}", HttpStatusCode.Unauthorized),
+            cancellationToken: TestContext.Current.CancellationToken);
         using var session = SessionOver(harness);
 
         // Act
@@ -151,7 +162,8 @@ public sealed class DeploymentClientSessionTests
 
         using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse("{}", HttpStatusCode.Unauthorized),
-            store: kept);
+            store: kept,
+            cancellationToken: TestContext.Current.CancellationToken);
 
         using var session = SessionOver(harness);
 
@@ -182,7 +194,8 @@ public sealed class DeploymentClientSessionTests
 
         using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse("{}", HttpStatusCode.Unauthorized),
-            store: kept);
+            store: kept,
+            cancellationToken: TestContext.Current.CancellationToken);
 
         using var session = SessionOver(harness);
 
@@ -198,7 +211,9 @@ public sealed class DeploymentClientSessionTests
     public async Task Dispose_AfterTheSessionIsGone_LeavesNothingListeningToTheCredential()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(ACallerWhoMayRead));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(ACallerWhoMayRead),
+            cancellationToken: TestContext.Current.CancellationToken);
         var session = SessionOver(harness);
         await session.Standing;
 
@@ -218,7 +233,9 @@ public sealed class DeploymentClientSessionTests
     public async Task Reach_ADeploymentAnswering_IsReached()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(ACallerWhoMayRead));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(ACallerWhoMayRead),
+            cancellationToken: TestContext.Current.CancellationToken);
         using var session = SessionOver(harness);
 
         // Act
@@ -241,7 +258,8 @@ public sealed class DeploymentClientSessionTests
     {
         // Arrange
         using var harness = await DeploymentHarness.CreateAsync(
-            _ => StubTransport.JsonResponse("{}", HttpStatusCode.Unauthorized));
+            _ => StubTransport.JsonResponse("{}", HttpStatusCode.Unauthorized),
+            cancellationToken: TestContext.Current.CancellationToken);
         using var session = SessionOver(harness);
 
         // Act
@@ -266,7 +284,8 @@ public sealed class DeploymentClientSessionTests
         using var harness = await DeploymentHarness.CreateAsync(_ =>
             ++answers is 1
                 ? throw new HttpRequestException("nothing is answering")
-                : StubTransport.JsonResponse(ACallerWhoMayRead));
+                : StubTransport.JsonResponse(ACallerWhoMayRead),
+            cancellationToken: TestContext.Current.CancellationToken);
         using var session = SessionOver(harness, attempts: 3);
 
         // Act
@@ -295,7 +314,8 @@ public sealed class DeploymentClientSessionTests
         using var harness = await DeploymentHarness.CreateAsync(_ =>
             ++answers is 1
                 ? throw new TaskCanceledException("this client's own timeout elapsed")
-                : StubTransport.JsonResponse(ACallerWhoMayRead));
+                : StubTransport.JsonResponse(ACallerWhoMayRead),
+            cancellationToken: TestContext.Current.CancellationToken);
         using var session = SessionOver(harness, attempts: 3);
 
         // Act
@@ -316,7 +336,8 @@ public sealed class DeploymentClientSessionTests
     {
         // Arrange
         using var harness = await DeploymentHarness.CreateAsync(
-            _ => throw new TaskCanceledException("this client's own timeout elapsed"));
+            _ => throw new TaskCanceledException("this client's own timeout elapsed"),
+            cancellationToken: TestContext.Current.CancellationToken);
         using var session = SessionOver(harness, attempts: 3);
 
         // Act
@@ -338,7 +359,8 @@ public sealed class DeploymentClientSessionTests
     {
         // Arrange
         using var harness = await DeploymentHarness.CreateAsync(
-            _ => throw new HttpRequestException("nothing is answering"));
+            _ => throw new HttpRequestException("nothing is answering"),
+            cancellationToken: TestContext.Current.CancellationToken);
         using var session = SessionOver(harness, attempts: 3);
 
         // Act
@@ -363,7 +385,9 @@ public sealed class DeploymentClientSessionTests
     public async Task Standing_ADeploymentAnsweringSomethingElse_IsNotAskedAgain()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse("not a document"));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse("not a document"),
+            cancellationToken: TestContext.Current.CancellationToken);
         using var session = SessionOver(harness, attempts: 3);
 
         // Act
@@ -383,7 +407,9 @@ public sealed class DeploymentClientSessionTests
     public async Task Connection_AFailureThatIsNotAFailedExchange_EndsTheStandingRatherThanLeavingItMidAttempt()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => throw new InvalidOperationException("nothing composed this"));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => throw new InvalidOperationException("nothing composed this"),
+            cancellationToken: TestContext.Current.CancellationToken);
         using var session = SessionOver(harness, attempts: 3);
 
         // Act
@@ -403,7 +429,9 @@ public sealed class DeploymentClientSessionTests
     public async Task Constructor_AMissingService_IsRefused()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(ACallerWhoMayRead));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(ACallerWhoMayRead),
+            cancellationToken: TestContext.Current.CancellationToken);
         var address = new DeploymentAddress(harness.Owner);
         var retry = DeploymentConnectionRetry.Standard;
         var clock = new StubClock(DateTimeOffset.UnixEpoch);

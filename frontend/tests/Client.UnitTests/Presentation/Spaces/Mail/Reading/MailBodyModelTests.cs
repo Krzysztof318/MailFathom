@@ -42,7 +42,9 @@ public sealed class MailBodyModelTests
     public async Task Body_NothingOpened_ReadsNothingAndAsksTheDeploymentForNothing()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(Readable));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(Readable),
+            cancellationToken: TestContext.Current.CancellationToken);
         await using var model = new MailBodyModel(harness.Client, Localizer());
 
         // Act
@@ -59,7 +61,9 @@ public sealed class MailBodyModelTests
     public async Task Open_AMessage_ReadsItWithoutItsRemoteContent()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(Readable));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(Readable),
+            cancellationToken: TestContext.Current.CancellationToken);
         await using var model = new MailBodyModel(harness.Client, Localizer());
 
         // Act
@@ -83,7 +87,9 @@ public sealed class MailBodyModelTests
     public async Task ShowRemoteContent_AnOpenMessage_ReadsThatMessageAgainAskingForIt()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(Readable));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(Readable),
+            cancellationToken: TestContext.Current.CancellationToken);
         await using var model = new MailBodyModel(harness.Client, Localizer());
 
         // Act
@@ -108,7 +114,9 @@ public sealed class MailBodyModelTests
     public async Task ShowRemoteContent_NothingOpened_AsksTheDeploymentForNothing()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(Readable));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(Readable),
+            cancellationToken: TestContext.Current.CancellationToken);
         await using var model = new MailBodyModel(harness.Client, Localizer());
 
         // Act
@@ -129,7 +137,9 @@ public sealed class MailBodyModelTests
     public async Task Open_AnotherMessageAfterRemoteContentWasShown_AsksForThatMessageWithoutIt()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(Readable));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(Readable),
+            cancellationToken: TestContext.Current.CancellationToken);
         await using var model = new MailBodyModel(harness.Client, Localizer());
 
         // Act
@@ -152,7 +162,9 @@ public sealed class MailBodyModelTests
     public async Task Open_TheSameMessageAfterRemoteContentWasShown_AsksForItWithoutRemoteContentAgain()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(Readable));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(Readable),
+            cancellationToken: TestContext.Current.CancellationToken);
         await using var model = new MailBodyModel(harness.Client, Localizer());
 
         // Act
@@ -179,7 +191,9 @@ public sealed class MailBodyModelTests
     public async Task Close_AnOpenMessage_LeavesThePaneWithNothingInIt()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(Readable));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(Readable),
+            cancellationToken: TestContext.Current.CancellationToken);
         await using var model = new MailBodyModel(harness.Client, Localizer());
 
         // Act
@@ -199,7 +213,9 @@ public sealed class MailBodyModelTests
     public async Task Constructor_AMissingService_IsRefused()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(Readable));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(Readable),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act, Assert
         Assert.Throws<ArgumentNullException>(() => new MailBodyModel(null!, Localizer()));

@@ -40,7 +40,9 @@ public sealed class DeploymentMailAccountsTests
     public async Task ReadMailAccountsAsync_ADeploymentAnswering_ReadsEveryFieldOfTheContract()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(TwoAccounts));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(TwoAccounts),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         var answered = await harness.Client.ReadMailAccountsAsync(TestContext.Current.CancellationToken);
@@ -67,7 +69,9 @@ public sealed class DeploymentMailAccountsTests
     public async Task ReadMailAccountsAsync_AnyRequest_GoesToTheClientSurface()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(TwoAccounts));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(TwoAccounts),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         await harness.Client.ReadMailAccountsAsync(TestContext.Current.CancellationToken);
@@ -84,7 +88,8 @@ public sealed class DeploymentMailAccountsTests
     {
         // Arrange
         using var harness = await DeploymentHarness.CreateAsync(
-            _ => StubTransport.JsonResponse("""{"synchronizationEnabled":true,"accounts":[]}"""));
+            _ => StubTransport.JsonResponse("""{"synchronizationEnabled":true,"accounts":[]}"""),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         var answered = await harness.Client.ReadMailAccountsAsync(TestContext.Current.CancellationToken);
@@ -102,7 +107,8 @@ public sealed class DeploymentMailAccountsTests
     {
         // Arrange
         using var harness = await DeploymentHarness.CreateAsync(
-            _ => StubTransport.JsonResponse("""{"synchronizationEnabled":false}"""));
+            _ => StubTransport.JsonResponse("""{"synchronizationEnabled":false}"""),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         var answered = await harness.Client.ReadMailAccountsAsync(TestContext.Current.CancellationToken);
@@ -121,7 +127,8 @@ public sealed class DeploymentMailAccountsTests
     {
         // Arrange
         using var harness = await DeploymentHarness.CreateAsync(
-            _ => StubTransport.JsonResponse("{}", HttpStatusCode.Forbidden));
+            _ => StubTransport.JsonResponse("{}", HttpStatusCode.Forbidden),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         var failure = await Assert.ThrowsAsync<DeploymentFailure>(

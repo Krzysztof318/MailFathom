@@ -27,7 +27,9 @@ public sealed class DeploymentMessageListTests
     public async Task Rows_ADeploymentAnswering_DrawsThePageItServed()
     {
         // Arrange
-        using var over = await ListOver.CreateAsync(_ => Answer(Page(1, 3, next: "after-3", previous: null)));
+        using var over = await ListOver.CreateAsync(
+            _ => Answer(Page(1, 3, next: "after-3", previous: null)),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         var rows = await over.List.Rows;
@@ -47,7 +49,9 @@ public sealed class DeploymentMessageListTests
     public async Task Rows_AScopeNarrowedToAFolder_AsksTheDeploymentAboutThatFolder()
     {
         // Arrange
-        using var over = await ListOver.CreateAsync(_ => Answer(Page(1, 1, next: null, previous: null)));
+        using var over = await ListOver.CreateAsync(
+            _ => Answer(Page(1, 1, next: null, previous: null)),
+            cancellationToken: TestContext.Current.CancellationToken);
         await over.List.Rows;
 
         // Act
@@ -74,7 +78,9 @@ public sealed class DeploymentMessageListTests
     public async Task Rows_AScopeWhoseSelectionChanged_DoesNotReadTheFolderAgain()
     {
         // Arrange
-        using var over = await ListOver.CreateAsync(_ => Answer(Page(1, 3, next: null, previous: null)));
+        using var over = await ListOver.CreateAsync(
+            _ => Answer(Page(1, 3, next: null, previous: null)),
+            cancellationToken: TestContext.Current.CancellationToken);
         var rows = await over.List.Rows;
 
         // Act
@@ -96,7 +102,9 @@ public sealed class DeploymentMessageListTests
     public async Task Chosen_RowsSomebodySelected_ReachTheWorkspaceAsWhatIsInScope()
     {
         // Arrange
-        using var over = await ListOver.CreateAsync(_ => Answer(Page(1, 3, next: null, previous: null)));
+        using var over = await ListOver.CreateAsync(
+            _ => Answer(Page(1, 3, next: null, previous: null)),
+            cancellationToken: TestContext.Current.CancellationToken);
         var rows = await over.List.Rows;
 
         // Act
@@ -119,7 +127,8 @@ public sealed class DeploymentMessageListTests
         using var over = await ListOver.CreateAsync(request => Answer(
             Cursor(request) is null
                 ? Page(1, 2, next: "after-2", previous: null)
-                : Page(3, 2, next: null, previous: "before-3")));
+                : Page(3, 2, next: null, previous: "before-3")),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         await over.List.Rows;
 
@@ -143,7 +152,8 @@ public sealed class DeploymentMessageListTests
         using var over = await ListOver.CreateAsync(request => Answer(
             Cursor(request) is null
                 ? Page(3, 2, next: null, previous: "before-3")
-                : Page(1, 2, next: "after-2", previous: null)));
+                : Page(1, 2, next: "after-2", previous: null)),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         await over.List.Rows;
 
@@ -164,7 +174,9 @@ public sealed class DeploymentMessageListTests
     public async Task ShowMoreAsync_AtTheEndOfTheList_AsksTheDeploymentForNothing()
     {
         // Arrange
-        using var over = await ListOver.CreateAsync(_ => Answer(Page(1, 2, next: null, previous: null)));
+        using var over = await ListOver.CreateAsync(
+            _ => Answer(Page(1, 2, next: null, previous: null)),
+            cancellationToken: TestContext.Current.CancellationToken);
         await over.List.Rows;
 
         // Act
@@ -188,7 +200,8 @@ public sealed class DeploymentMessageListTests
         // Arrange
         using var over = await ListOver.CreateAsync(request => Cursor(request) is null
             ? Answer(Page(1, 2, next: "after-2", previous: null))
-            : StubTransport.JsonResponse("{}", HttpStatusCode.InternalServerError));
+            : StubTransport.JsonResponse("{}", HttpStatusCode.InternalServerError),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         await over.List.Rows;
 
@@ -228,7 +241,8 @@ public sealed class DeploymentMessageListTests
             return request.RequestUri!.Query.Contains("folder=INBOX", StringComparison.Ordinal)
                 ? Answer(Page(5, 2, next: null, previous: null))
                 : Answer(Page(1, 2, next: "after-2", previous: null));
-        });
+        },
+            cancellationToken: TestContext.Current.CancellationToken);
 
         await over.List.Rows;
 
@@ -284,7 +298,8 @@ public sealed class DeploymentMessageListTests
             released.Wait(Patience, cancellation);
 
             return Answer(Page(9, 2, next: null, previous: "before-9"));
-        });
+        },
+            cancellationToken: TestContext.Current.CancellationToken);
 
         await over.List.Rows;
 
@@ -318,7 +333,8 @@ public sealed class DeploymentMessageListTests
                 MessagePlace.Everything.RememberedAs,
                 "after-8",
                 MailTimelinePageDirection.Forward,
-                MessageListArrangement.Default));
+                MessageListArrangement.Default),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         var rows = await over.List.Rows;
@@ -344,7 +360,8 @@ public sealed class DeploymentMessageListTests
                 MessagePlace.Everything.RememberedAs,
                 "issued-under-another-arrangement",
                 MailTimelinePageDirection.Forward,
-                MessageListArrangement.Default));
+                MessageListArrangement.Default),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         var rows = await over.List.Rows;
@@ -370,7 +387,8 @@ public sealed class DeploymentMessageListTests
                 MessagePlace.Everything.RememberedAs,
                 Cursor: null,
                 MailTimelinePageDirection.Backward,
-                MessageListArrangement.Default));
+                MessageListArrangement.Default),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         var rows = await over.List.Rows;
@@ -394,7 +412,8 @@ public sealed class DeploymentMessageListTests
                 MessagePlace.Everything.RememberedAs,
                 Cursor: null,
                 MailTimelinePageDirection.Forward,
-                new MessageListArrangement { Order = MailTimelineOrder.OldestFirst, UnreadOnly = true }));
+                new MessageListArrangement { Order = MailTimelineOrder.OldestFirst, UnreadOnly = true }),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         await over.List.Rows;
@@ -416,7 +435,9 @@ public sealed class DeploymentMessageListTests
     public async Task ArrangeAsync_AListArrangedDifferently_ReadsItAgainUnderTheNewArrangement()
     {
         // Arrange
-        using var over = await ListOver.CreateAsync(_ => Answer(Page(1, 2, next: null, previous: null)));
+        using var over = await ListOver.CreateAsync(
+            _ => Answer(Page(1, 2, next: null, previous: null)),
+            cancellationToken: TestContext.Current.CancellationToken);
         await over.List.Rows;
 
         // Act
@@ -439,7 +460,8 @@ public sealed class DeploymentMessageListTests
         using var over = await ListOver.CreateAsync(request => Answer(
             Cursor(request) is null
                 ? Page(1, 2, next: "after-2", previous: null)
-                : Page(3, 2, next: null, previous: "before-3")));
+                : Page(3, 2, next: null, previous: "before-3")),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         await over.List.Rows;
 
@@ -458,7 +480,9 @@ public sealed class DeploymentMessageListTests
     public async Task AskAgainAsync_AReadSomebodyAskedForAgain_ReachesTheSessionAndTheDeployment()
     {
         // Arrange
-        using var over = await ListOver.CreateAsync(_ => Answer(Page(1, 2, next: null, previous: null)));
+        using var over = await ListOver.CreateAsync(
+            _ => Answer(Page(1, 2, next: null, previous: null)),
+            cancellationToken: TestContext.Current.CancellationToken);
         await over.List.Rows;
 
         // Act
@@ -475,7 +499,9 @@ public sealed class DeploymentMessageListTests
     public async Task Construction_AMissingCollaborator_IsRefused()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => Answer(Page(1, 1, next: null, previous: null)));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => Answer(Page(1, 1, next: null, previous: null)),
+            cancellationToken: TestContext.Current.CancellationToken);
         using var session = Session();
         var memory = new StubMessageListMemory();
         var workspace = new SharedWorkspace(new StubMailboxTreeMemory());
@@ -567,11 +593,11 @@ public sealed class DeploymentMessageListTests
     /// <summary>One list and everything it is composed over, owned together so a test states its arrangement once.</summary>
     private sealed class ListOver : IDisposable
     {
-        private ListOver(DeploymentHarness harness, RememberedMessageList[] remembered)
+        private ListOver(DeploymentHarness harness, RememberedMessageList? remembered)
         {
             this.Harness = harness;
             this.Session = DeploymentMessageListTests.Session();
-            this.Memory = new StubMessageListMemory(remembered);
+            this.Memory = new StubMessageListMemory(remembered is null ? [] : [remembered]);
             this.Workspace = new SharedWorkspace(new StubMailboxTreeMemory());
 
             this.List = new DeploymentMessageList(
@@ -585,8 +611,11 @@ public sealed class DeploymentMessageListTests
 
         internal static async ValueTask<ListOver> CreateAsync(
             Func<HttpRequestMessage, HttpResponseMessage> deployment,
-            params RememberedMessageList[] remembered) =>
-            new(await DeploymentHarness.CreateAsync(deployment), remembered);
+            RememberedMessageList? remembered = null,
+            CancellationToken cancellationToken = default) =>
+            new(
+                await DeploymentHarness.CreateAsync(deployment, cancellationToken: cancellationToken),
+                remembered);
 
         internal DeploymentHarness Harness { get; }
 

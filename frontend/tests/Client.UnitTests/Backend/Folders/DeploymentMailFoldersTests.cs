@@ -38,7 +38,9 @@ public sealed class DeploymentMailFoldersTests
     public async Task ReadMailFoldersAsync_ADeploymentAnswering_ReadsEveryFieldOfTheContract()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(OneMailbox));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(OneMailbox),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         var answered = await harness.Client.ReadMailFoldersAsync(TestContext.Current.CancellationToken);
@@ -71,7 +73,9 @@ public sealed class DeploymentMailFoldersTests
     public async Task ReadMailFoldersAsync_AnyRequest_GoesToTheClientSurface()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(OneMailbox));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(OneMailbox),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         await harness.Client.ReadMailFoldersAsync(TestContext.Current.CancellationToken);
@@ -91,7 +95,8 @@ public sealed class DeploymentMailFoldersTests
     {
         // Arrange
         using var harness = await DeploymentHarness.CreateAsync(
-            _ => StubTransport.JsonResponse("""{"synchronizationEnabled":false}"""));
+            _ => StubTransport.JsonResponse("""{"synchronizationEnabled":false}"""),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         var answered = await harness.Client.ReadMailFoldersAsync(TestContext.Current.CancellationToken);
@@ -110,7 +115,8 @@ public sealed class DeploymentMailFoldersTests
     {
         // Arrange
         using var harness = await DeploymentHarness.CreateAsync(
-            _ => StubTransport.JsonResponse("{}", HttpStatusCode.Forbidden));
+            _ => StubTransport.JsonResponse("{}", HttpStatusCode.Forbidden),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         var failure = await Assert.ThrowsAsync<DeploymentFailure>(

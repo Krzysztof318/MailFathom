@@ -31,7 +31,8 @@ public sealed class OwnerSignInTests
         // Arrange
         using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse(SessionDocument),
-            store: new StubOwnerCredentialStore());
+            store: new StubOwnerCredentialStore(),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         var signIn = new OwnerSignIn(harness.SignIn, harness.Owner);
 
@@ -60,7 +61,9 @@ public sealed class OwnerSignInTests
         string? password)
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(SessionDocument));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(SessionDocument),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         var signIn = new OwnerSignIn(harness.SignIn, harness.Owner);
 
@@ -80,7 +83,9 @@ public sealed class OwnerSignInTests
     public async Task SignInAsync_ACredentialTheDeploymentRefuses_SaysOneThingAboutBothHalves()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => RefusedWithAPasswordChallenge());
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => RefusedWithAPasswordChallenge(),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         var signIn = new OwnerSignIn(harness.SignIn, harness.Owner);
 
@@ -97,7 +102,8 @@ public sealed class OwnerSignInTests
     {
         // Arrange
         using var harness = await DeploymentHarness.CreateAsync(
-            _ => new HttpResponseMessage(HttpStatusCode.Unauthorized));
+            _ => new HttpResponseMessage(HttpStatusCode.Unauthorized),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         var signIn = new OwnerSignIn(harness.SignIn, harness.Owner);
 
@@ -112,7 +118,9 @@ public sealed class OwnerSignInTests
     public async Task SignInAsync_ADeploymentNothingAnswersAt_SaysItWasNotReached()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => throw new HttpRequestException("no route to host"));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => throw new HttpRequestException("no route to host"),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         var signIn = new OwnerSignIn(harness.SignIn, harness.Owner);
 
@@ -128,7 +136,8 @@ public sealed class OwnerSignInTests
     {
         // Arrange
         using var harness = await DeploymentHarness.CreateAsync(
-            _ => StubTransport.JsonResponse("""{"service":"SomebodyElse","version":"3.1","permissions":[]}"""));
+            _ => StubTransport.JsonResponse("""{"service":"SomebodyElse","version":"3.1","permissions":[]}"""),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         var signIn = new OwnerSignIn(harness.SignIn, harness.Owner);
 
@@ -144,7 +153,9 @@ public sealed class OwnerSignInTests
     public async Task SignInAsync_ARefusedCredential_ReportsNeitherHalfOfWhatWasTyped()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => RefusedWithAPasswordChallenge());
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => RefusedWithAPasswordChallenge(),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         var signIn = new OwnerSignIn(harness.SignIn, harness.Owner);
 
@@ -166,7 +177,8 @@ public sealed class OwnerSignInTests
 
         using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse(SessionDocument),
-            store: store);
+            store: store,
+            cancellationToken: TestContext.Current.CancellationToken);
 
         var signIn = new OwnerSignIn(harness.SignIn, harness.Owner);
 
@@ -184,7 +196,9 @@ public sealed class OwnerSignInTests
     public async Task Constructor_AMissingService_IsRefused()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(SessionDocument));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(SessionDocument),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act, Assert
         Assert.Throws<ArgumentNullException>(() => new OwnerSignIn(null!, harness.Owner));

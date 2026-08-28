@@ -114,6 +114,7 @@ internal sealed class DeploymentHarness : IDisposable
     /// <param name="store">Where a completed sign-in is kept, which defaults to a head that keeps nothing.</param>
     /// <param name="throughCredentialHandler">Whether requests to the deployment go through the handler that presents the credential, which is how the registration composes them.</param>
     /// <param name="pointed">Whether the client starts pointed at the deployment, which every caller but the probe needs.</param>
+    /// <param name="cancellationToken">Abandons the pointing.</param>
     /// <returns>The harness, ready for the test that owns it.</returns>
     /// <remarks>
     /// A factory rather than a constructor because pointing the client somewhere is asynchronous, and the alternative
@@ -126,13 +127,14 @@ internal sealed class DeploymentHarness : IDisposable
         Func<HttpRequestMessage, HttpResponseMessage>? signIn = null,
         IOwnerCredentialStore? store = null,
         bool throughCredentialHandler = false,
-        bool pointed = true)
+        bool pointed = true,
+        CancellationToken cancellationToken = default)
     {
         var harness = new DeploymentHarness(deployment, signIn, store, throughCredentialHandler);
 
         if (pointed)
         {
-            await harness.Address.PointAtAsync(DeploymentAddress);
+            await harness.Address.PointAtAsync(DeploymentAddress, cancellationToken);
         }
 
         return harness;

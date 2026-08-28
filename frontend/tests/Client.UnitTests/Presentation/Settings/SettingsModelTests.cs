@@ -27,7 +27,8 @@ public sealed class SettingsModelTests : IAsyncLifetime
         this.deployment = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse(
                 """{"service":"MailFathom","version":"0.8.0","permissions":[]}"""),
-            store: new StubOwnerCredentialStore());
+            store: new StubOwnerCredentialStore(),
+            cancellationToken: TestContext.Current.CancellationToken);
 
     /// <inheritdoc />
     public ValueTask DisposeAsync()

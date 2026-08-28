@@ -46,7 +46,8 @@ public sealed class SignInModelTests
         // Arrange
         using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse(SessionDocument),
-            store: new StubOwnerCredentialStore());
+            store: new StubOwnerCredentialStore(),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         var navigator = new StubNavigator();
 
@@ -73,7 +74,8 @@ public sealed class SignInModelTests
         // Arrange
         using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse(SessionDocument),
-            store: new StubOwnerCredentialStore());
+            store: new StubOwnerCredentialStore(),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         var navigator = new StubNavigator();
 
@@ -94,7 +96,9 @@ public sealed class SignInModelTests
     public async Task SignIn_ACredentialTheDeploymentRefuses_SaysSoAndStaysOnTheScreen()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => RefusedWithAPasswordChallenge());
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => RefusedWithAPasswordChallenge(),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         var navigator = new StubNavigator();
 
@@ -118,7 +122,8 @@ public sealed class SignInModelTests
     {
         // Arrange
         using var harness = await DeploymentHarness.CreateAsync(
-            _ => new HttpResponseMessage(HttpStatusCode.Unauthorized));
+            _ => new HttpResponseMessage(HttpStatusCode.Unauthorized),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         await using var model = ModelOver(harness, new StubNavigator());
 
@@ -142,7 +147,9 @@ public sealed class SignInModelTests
     public async Task SignIn_AfterARefusal_ClearsThePasswordAndKeepsTheUsername()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => RefusedWithAPasswordChallenge());
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => RefusedWithAPasswordChallenge(),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         await using var model = ModelOver(harness, new StubNavigator());
 
@@ -164,7 +171,9 @@ public sealed class SignInModelTests
     public async Task SignIn_BeforeAnythingIsPressed_MayBeOfferedAndSaysNothingIsBeingAsked()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(SessionDocument));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(SessionDocument),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         await using var model = ModelOver(harness, new StubNavigator());
 
@@ -180,7 +189,8 @@ public sealed class SignInModelTests
         // Arrange
         using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse(SessionDocument),
-            store: new StubOwnerCredentialStore());
+            store: new StubOwnerCredentialStore(),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         await using var model = ModelOver(harness, new StubNavigator());
 
@@ -194,7 +204,9 @@ public sealed class SignInModelTests
     public async Task Keeping_AHeadThatKeepsNothing_SaysTheNextStartWillAsk()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(SessionDocument));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(SessionDocument),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         await using var model = ModelOver(harness, new StubNavigator());
 
@@ -213,7 +225,8 @@ public sealed class SignInModelTests
         // Arrange
         using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse(SessionDocument),
-            store: new StubOwnerCredentialStore(CredentialPersistence.StoreUnavailable));
+            store: new StubOwnerCredentialStore(CredentialPersistence.StoreUnavailable),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         await using var model = ModelOver(harness, new StubNavigator());
 
@@ -257,7 +270,9 @@ public sealed class SignInModelTests
     public async Task Constructor_AMissingService_IsRefused()
     {
         // Arrange
-        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(SessionDocument));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(SessionDocument),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         var signIn = new OwnerSignIn(harness.SignIn, harness.Owner);
         var navigator = new StubNavigator();
