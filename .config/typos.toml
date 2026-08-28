@@ -86,6 +86,13 @@ extend-ignore-re = [
   '\bEnabeld\b',
   '\bPasswrod\b',
   '\bEndpont\b',
+  '\bMetod\b',
+  '\bBasci\b',
+  # `passwrod` in lower case, which is not a key but a value: the credential method an operator
+  # writes into an `Authentication` entry or hands `mfctl credential create`. The published methods
+  # are compared case-insensitively, so the test that proves a method nobody publishes is refused
+  # spells one the way it would actually be mistyped.
+  '\bpasswrod\b',
   # `MinimumConfidance`, written whole for the reason `MaxAttemps` is: the misspelling sits inside a
   # camel-cased key rather than at its start.
   '\bMinimumConfidance\b',
