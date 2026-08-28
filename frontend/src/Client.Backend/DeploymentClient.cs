@@ -4,6 +4,7 @@
 
 using MailFathom.Client.Backend.Accounts;
 using MailFathom.Client.Backend.Folders;
+using MailFathom.Client.Backend.Timeline;
 
 namespace MailFathom.Client.Backend;
 
@@ -17,9 +18,10 @@ namespace MailFathom.Client.Backend;
 /// written without one by accident.
 /// </para>
 /// <para>
-/// The three routes it carries are the ones a client reads before it draws anything: what the deployment made of the
-/// caller, which mailboxes that caller has beside a statement of how current each copy is, and the folders those
-/// mailboxes hold. None of them reaches a mail server, so no screen here can wait on IMAP or set the remote
+/// Three of the four routes it carries are the ones a client reads before it draws anything: what the deployment made
+/// of the caller, which mailboxes that caller has beside a statement of how current each copy is, and the folders those
+/// mailboxes hold. The fourth is the one a mail screen then spends its time in — one page of the message list, asked
+/// for by cursor. None of them reaches a mail server, so no screen here can wait on IMAP or set the remote
 /// <c>\Seen</c> flag.
 /// </para>
 /// </remarks>
@@ -87,6 +89,33 @@ public sealed class DeploymentClient
             new HttpRequestMessage(HttpMethod.Get, DeploymentRoutes.MailFoldersPath),
             DeploymentJsonContext.Default.DeploymentMailFolders,
             cancellationToken);
+
+    /// <summary>Asks the deployment for one page of the owner's message list.</summary>
+    /// <param name="query">The place, the filters, the order, and where the page continues from.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The page, and the cursor continuing it at each end where one exists.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="query" /> is <see langword="null" />.</exception>
+    /// <exception cref="DeploymentFailure">Thrown when the deployment refused, was unreachable, did not answer in time, or answered with something else.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when nothing has pointed this client at a deployment yet.</exception>
+    /// <remarks>
+    /// A cursor the deployment will not honour — one it never issued, or one issued for a list the request no longer
+    /// describes — arrives as <see cref="DeploymentFailureReason.RequestRefused" /> rather than as a defect, because it
+    /// is a value this client sent and can therefore stop sending.
+    /// </remarks>
+    public Task<DeploymentMailTimelinePage> ReadMailTimelineAsync(
+        MailTimelineQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        return DeploymentExchange.ReadAsync(
+            this.Transport(),
+            new HttpRequestMessage(
+                HttpMethod.Get,
+                $"{DeploymentRoutes.MailTimelinePath}{query.QueryString()}"),
+            DeploymentJsonContext.Default.DeploymentMailTimelinePage,
+            cancellationToken);
+    }
 
     /// <summary>Takes a transport aimed at wherever the client is pointed right now.</summary>
     /// <remarks>

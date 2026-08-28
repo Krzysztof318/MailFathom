@@ -6,6 +6,7 @@ using MailFathom.Client.Backend;
 using MailFathom.Client.Deployment;
 using MailFathom.Client.Presentation;
 using MailFathom.Client.Presentation.Mailboxes;
+using MailFathom.Client.Presentation.Messages;
 using MailFathom.Client.Presentation.Workspace;
 
 namespace MailFathom.Client.UnitTests.Strings;
@@ -234,6 +235,25 @@ public sealed class ResourceTableTests
         // Assert
         Assert.True(table.ContainsKey(MailboxWords.EverythingKey), MailboxWords.EverythingKey);
         Assert.True(table.ContainsKey(MailboxWords.UnifiedRoleKey), MailboxWords.UnifiedRoleKey);
+    }
+
+    /// <summary>
+    /// A message row is composed from what a deployment answered rather than fixed per control, so its sentences are
+    /// asked for from code instead of through a <c>x:Uid</c> — which makes each of them a name a reader would meet on
+    /// the screen as the key itself.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Languages))]
+    public void Tables_TheWordsAMessageRowIsComposedFrom_AreNamedInEveryLanguage(string culture)
+    {
+        // Arrange
+        var expected = MessageWords.ResourceKeys;
+
+        // Act
+        var table = DeclaredLanguages.TableOf(culture);
+
+        // Assert
+        Assert.All(expected, key => Assert.True(table.ContainsKey(key), key));
     }
 
     private static IEnumerable<string> KeysOf(string culture) =>

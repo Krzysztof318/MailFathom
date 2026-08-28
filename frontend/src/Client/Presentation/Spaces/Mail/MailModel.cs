@@ -2,6 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Collections.Immutable;
+using MailFathom.Client.Backend.Timeline;
+using MailFathom.Client.Presentation.Messages;
 using MailFathom.Client.Session;
 
 namespace MailFathom.Client.Presentation.Spaces.Mail;
@@ -15,20 +18,42 @@ namespace MailFathom.Client.Presentation.Spaces.Mail;
 /// mailboxes drawn here beside it would be the same answer twice, the second already stale relative to the first.
 /// </para>
 /// <para>
-/// What is left is the space's own reading of the session: whether correspondence may be put in front of this caller
-/// at all, read here rather than derived from a request the deployment refused.
+/// What this space owns is the list of that folder's mail and the controls that arrange it, and it owns neither by
+/// holding one: the list is the run's own, for the reason the tree and the workspace are, so leaving the space and
+/// coming back is finding the list where it was rather than reading its first page again.
+/// </para>
+/// <para>
+/// Beside that is the space's own reading of the session: whether correspondence may be put in front of this caller at
+/// all, read here rather than derived from a request the deployment refused.
 /// </para>
 /// </remarks>
 public partial record MailModel
 {
-    /// <summary>Initializes the space over what decides whether it may be offered.</summary>
+    private readonly IMessageList messages;
+
+    /// <summary>Initializes the space over what decides whether it may be offered, and the list it is read through.</summary>
     /// <param name="session">What the deployment allows this caller.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
-    public MailModel(IClientSession session)
+    /// <param name="messages">The run's own message list, drawn from wherever the mailbox tree says somebody is.</param>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    public MailModel(IClientSession session, IMessageList messages)
     {
         ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(messages);
+
+        this.messages = messages;
 
         this.WithholdsMail = session.Standing.Select(standing => standing.Withholds(ClientCapability.Mail));
+
+        this.ReadsOldestFirst = messages.Arrangement.Select(static arrangement => arrangement.OldestFirst);
+        this.KeepsUnreadOnly = messages.Arrangement.Select(static arrangement => arrangement.UnreadOnly);
+        this.KeepsFlaggedOnly = messages.Arrangement.Select(static arrangement => arrangement.FlaggedOnly);
+        this.KeepsWithAttachmentsOnly =
+            messages.Arrangement.Select(static arrangement => arrangement.WithAttachmentsOnly);
+        this.KeepsJunk = messages.Arrangement.Select(static arrangement => arrangement.IncludeJunk);
+        this.KeepsLessThanEverything =
+            messages.Arrangement.Select(static arrangement => arrangement.KeepsLessThanEverything);
+        this.KeepsEverything =
+            messages.Arrangement.Select(static arrangement => !arrangement.KeepsLessThanEverything);
     }
 
     /// <summary>Whether this session keeps the space correspondence is read in from being put in front of this caller.</summary>
@@ -38,4 +63,128 @@ public partial record MailModel
     /// screen before the session had answered.
     /// </remarks>
     public IFeed<bool> WithholdsMail { get; }
+
+    /// <summary>The loaded lines of the folder's mail, in the order the list is read in.</summary>
+    /// <remarks>The run's own list read through this model rather than one built here, so moving between spaces keeps where it was scrolled and costs no second page.</remarks>
+    public IListFeed<MessageRow> Messages => this.messages.Rows;
+
+    /// <summary>What is selected in the list, which is what the rest of the client reads as the scope of a question.</summary>
+    public IState<IImmutableList<MessageRow>> Chosen => this.messages.Chosen;
+
+    /// <summary>Whether there is more mail after what is loaded.</summary>
+    public IFeed<bool> HasMoreAfter => this.messages.HasMoreAfter;
+
+    /// <summary>Whether there is more mail before what is loaded, which there is once the window has moved on.</summary>
+    public IFeed<bool> HasMoreBefore => this.messages.HasMoreBefore;
+
+    /// <summary>Whether the last attempt to take another page did not arrive.</summary>
+    public IFeed<bool> PagingFailed => this.messages.PagingFailed;
+
+    /// <summary>Whether the list is read oldest first.</summary>
+    public IFeed<bool> ReadsOldestFirst { get; }
+
+    /// <summary>Whether the list keeps only unread mail.</summary>
+    public IFeed<bool> KeepsUnreadOnly { get; }
+
+    /// <summary>Whether the list keeps only flagged mail.</summary>
+    public IFeed<bool> KeepsFlaggedOnly { get; }
+
+    /// <summary>Whether the list keeps only mail carrying an attachment.</summary>
+    public IFeed<bool> KeepsWithAttachmentsOnly { get; }
+
+    /// <summary>Whether the list lets junk mail take part where the place would otherwise leave it out.</summary>
+    public IFeed<bool> KeepsJunk { get; }
+
+    /// <summary>Whether anything the list keeps narrows it, which is what the mark on the filters is shown on.</summary>
+    /// <remarks>Stated so a list showing less than the folder holds says so on the control that did it, rather than reading as a folder with less mail in it than it has.</remarks>
+    public IFeed<bool> KeepsLessThanEverything { get; }
+
+    /// <summary>Whether the list keeps everything the place holds, which is what an empty folder is said on.</summary>
+    /// <remarks>
+    /// Stated beside its opposite rather than derived from it in the view, because the two lead to different sentences
+    /// and the converter that turns a decision into a visibility shows a control on an outright yes and on nothing
+    /// else: a place holding no mail and a place whose mail this list is keeping out are not the same thing to be told,
+    /// and neither may be announced while the answer is still on its way.
+    /// </remarks>
+    public IFeed<bool> KeepsEverything { get; }
+
+    /// <summary>Takes the next page onto the end of the list.</summary>
+    /// <param name="cancellationToken">Abandons the page.</param>
+    /// <returns>A task completing once the page has arrived or the attempt has been reported.</returns>
+    /// <remarks>It carries no parameter, so the command generated from it reports its own progress and the control bound to it is disabled while the page is on its way.</remarks>
+    public ValueTask ShowMore(CancellationToken cancellationToken) =>
+        this.messages.ShowMoreAsync(cancellationToken);
+
+    /// <summary>Takes the previous page back onto the start of the list.</summary>
+    /// <param name="cancellationToken">Abandons the page.</param>
+    /// <returns>A task completing once the page has arrived or the attempt has been reported.</returns>
+    public ValueTask ShowEarlier(CancellationToken cancellationToken) =>
+        this.messages.ShowEarlierAsync(cancellationToken);
+
+    /// <summary>Asks the deployment for the list again, which is what a person presses when it did not arrive.</summary>
+    /// <param name="cancellationToken">Abandons the ask.</param>
+    /// <returns>A task completing once the ask has been made.</returns>
+    public ValueTask RetryMessages(CancellationToken cancellationToken) =>
+        this.messages.AskAgainAsync(cancellationToken);
+
+    /// <summary>Reads the list from the other end of the timeline.</summary>
+    /// <param name="cancellationToken">Abandons the change.</param>
+    /// <returns>A task completing once the list is being read again.</returns>
+    public ValueTask ReverseOrder(CancellationToken cancellationToken) =>
+        this.ArrangeAsync(
+            arrangement => arrangement with
+            {
+                Order = arrangement.Order is MailTimelineOrder.OldestFirst
+                    ? MailTimelineOrder.NewestFirst
+                    : MailTimelineOrder.OldestFirst,
+            },
+            cancellationToken);
+
+    /// <summary>Keeps only unread mail, or stops doing so.</summary>
+    /// <param name="cancellationToken">Abandons the change.</param>
+    /// <returns>A task completing once the list is being read again.</returns>
+    public ValueTask ToggleUnreadOnly(CancellationToken cancellationToken) =>
+        this.ArrangeAsync(
+            arrangement => arrangement with { UnreadOnly = !arrangement.UnreadOnly },
+            cancellationToken);
+
+    /// <summary>Keeps only flagged mail, or stops doing so.</summary>
+    /// <param name="cancellationToken">Abandons the change.</param>
+    /// <returns>A task completing once the list is being read again.</returns>
+    public ValueTask ToggleFlaggedOnly(CancellationToken cancellationToken) =>
+        this.ArrangeAsync(
+            arrangement => arrangement with { FlaggedOnly = !arrangement.FlaggedOnly },
+            cancellationToken);
+
+    /// <summary>Keeps only mail carrying an attachment, or stops doing so.</summary>
+    /// <param name="cancellationToken">Abandons the change.</param>
+    /// <returns>A task completing once the list is being read again.</returns>
+    public ValueTask ToggleWithAttachmentsOnly(CancellationToken cancellationToken) =>
+        this.ArrangeAsync(
+            arrangement => arrangement with { WithAttachmentsOnly = !arrangement.WithAttachmentsOnly },
+            cancellationToken);
+
+    /// <summary>Lets junk mail take part in the list, or stops doing so.</summary>
+    /// <param name="cancellationToken">Abandons the change.</param>
+    /// <returns>A task completing once the list is being read again.</returns>
+    /// <remarks>It changes nothing in a junk folder somebody opened on purpose, which takes part whatever this says.</remarks>
+    public ValueTask ToggleJunk(CancellationToken cancellationToken) =>
+        this.ArrangeAsync(
+            arrangement => arrangement with { IncludeJunk = !arrangement.IncludeJunk },
+            cancellationToken);
+
+    /// <summary>Applies one change to how the list is arranged and reads it again under the result.</summary>
+    /// <remarks>
+    /// The change is composed from what is in force rather than from what a control shows, because the two can differ
+    /// for as long as a read is under way — and a toggle that wrote what its own visual state said would then undo the
+    /// change beside it.
+    /// </remarks>
+    private async ValueTask ArrangeAsync(
+        Func<MessageListArrangement, MessageListArrangement> change,
+        CancellationToken cancellationToken)
+    {
+        var arrangement = await this.messages.Arrangement ?? MessageListArrangement.Default;
+
+        await this.messages.ArrangeAsync(change(arrangement), cancellationToken).ConfigureAwait(false);
+    }
 }

@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using MailFathom.Client.Backend;
 using MailFathom.Client.Deployment;
 using MailFathom.Client.Presentation.Mailboxes;
+using MailFathom.Client.Presentation.Messages;
 using MailFathom.Client.Presentation.Settings;
 using MailFathom.Client.Presentation.Spaces;
 using MailFathom.Client.Presentation.Spaces.Mail;
@@ -96,6 +97,13 @@ public partial class App : Application
                     // is what makes starting the client again opening it rather than finding one's way back.
                     services.AddSingleton<IMailboxTreeMemory, LocalSettingsMailboxTreeMemory>();
                     services.AddSingleton<IMailboxTree, DeploymentMailboxTree>();
+
+                    // The mail that tree is narrowed to, on the same terms and for the same reason: a list held per
+                    // model would read the folder's first page again every time somebody moved between spaces, and
+                    // would forget how far they had scrolled while doing it. Where it was left outlives the run for
+                    // the place the tree reopens on, and outlives only the run for every other place it visited.
+                    services.AddSingleton<IMessageListMemory, LocalSettingsMessageListMemory>();
+                    services.AddSingleton<IMessageList, DeploymentMessageList>();
 
                     // What the deployment allows this caller, for the same reason and on the same terms. It is the
                     // one place that answers whether something may be offered, so every screen reads one answer

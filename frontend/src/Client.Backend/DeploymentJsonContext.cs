@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using MailFathom.Client.Backend.Accounts;
 using MailFathom.Client.Backend.Authorization;
 using MailFathom.Client.Backend.Folders;
+using MailFathom.Client.Backend.Timeline;
 
 namespace MailFathom.Client.Backend;
 
@@ -27,6 +28,7 @@ namespace MailFathom.Client.Backend;
 [JsonSerializable(typeof(DeploymentSession))]
 [JsonSerializable(typeof(DeploymentMailAccounts))]
 [JsonSerializable(typeof(DeploymentMailFolders))]
+[JsonSerializable(typeof(DeploymentMailTimelinePage))]
 [JsonSerializable(typeof(ProtectedResourceMetadata))]
 [JsonSerializable(typeof(AuthorizationServerMetadata))]
 [JsonSerializable(typeof(OAuthTokenResponse))]

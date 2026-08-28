@@ -6,19 +6,310 @@ Project repository: https://github.com/Krzysztof318/MailFathom
 <Page x:Class="MailFathom.Client.Presentation.Spaces.Mail.MailPage"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:mvux="using:Uno.Extensions.Reactive.UI"
+      xmlns:utu="using:Uno.Toolkit.UI"
+      xmlns:messages="using:MailFathom.Client.Presentation.Messages"
       xmlns:spaces="using:MailFathom.Client.Presentation.Spaces"
       xmlns:workspace="using:MailFathom.Client.Presentation.Workspace"
       NavigationCacheMode="Required">
 
   <Grid>
     <!-- The list beside what is open on a wide window, and the list alone on a narrow one, where opening something is
-         a screen rather than a second column. What either column holds is #1159's to decide.
+         a screen rather than a second column. What the companion column holds is #1159's to decide.
 
          Which mailbox and which folder the list is of is not asked here: the tree in the frame is the client's scope
          selector, and this space reads the scope it wrote. -->
     <workspace:WorkspaceColumns>
       <workspace:WorkspaceColumns.Primary>
-        <spaces:SpacePlaceholder x:Uid="MailPage.Messages" />
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition />
+            <RowDefinition Height="Auto" />
+          </Grid.RowDefinitions>
+
+          <!-- How the list is arranged, above the list rather than behind a menu: what a list is keeping out is the
+               thing most easily mistaken for a folder holding less than it does, so the controls that did it are on
+               screen beside the mail they narrowed. Each is a command rather than a two-way binding, because changing
+               any of them reads the list again from its leading end — the cursors held under the old arrangement name
+               a list that no longer exists. -->
+          <ScrollViewer Grid.Row="0"
+                        HorizontalScrollBarVisibility="Auto"
+                        VerticalScrollBarVisibility="Disabled"
+                        HorizontalScrollMode="Auto"
+                        VerticalScrollMode="Disabled">
+            <StackPanel Orientation="Horizontal"
+                        Padding="12,8"
+                        Spacing="8">
+              <ToggleButton x:Uid="MailPage.Toggle.Order"
+                            Command="{Binding ReverseOrder}"
+                            IsChecked="{Binding ReadsOldestFirst, Mode=OneWay}">
+                <FontIcon Glyph="&#xE8CB;"
+                          FontSize="14" />
+              </ToggleButton>
+
+              <ToggleButton x:Uid="MailPage.Toggle.Unread"
+                            Command="{Binding ToggleUnreadOnly}"
+                            IsChecked="{Binding KeepsUnreadOnly, Mode=OneWay}">
+                <FontIcon Glyph="&#xE8BD;"
+                          FontSize="14" />
+              </ToggleButton>
+
+              <ToggleButton x:Uid="MailPage.Toggle.Flagged"
+                            Command="{Binding ToggleFlaggedOnly}"
+                            IsChecked="{Binding KeepsFlaggedOnly, Mode=OneWay}">
+                <FontIcon Glyph="&#xE7C1;"
+                          FontSize="14" />
+              </ToggleButton>
+
+              <ToggleButton x:Uid="MailPage.Toggle.Attachments"
+                            Command="{Binding ToggleWithAttachmentsOnly}"
+                            IsChecked="{Binding KeepsWithAttachmentsOnly, Mode=OneWay}">
+                <FontIcon Glyph="&#xE723;"
+                          FontSize="14" />
+              </ToggleButton>
+
+              <ToggleButton x:Uid="MailPage.Toggle.Junk"
+                            Command="{Binding ToggleJunk}"
+                            IsChecked="{Binding KeepsJunk, Mode=OneWay}">
+                <FontIcon Glyph="&#xE74D;"
+                          FontSize="14" />
+              </ToggleButton>
+
+              <!-- The touch way into a multiple selection, and the way back out of one. A long press on a row sets it
+                   too, so the gesture a phone reader expects and a control they can see are one state rather than
+                   two. -->
+              <ToggleButton x:Name="SelectingToggle"
+                            x:Uid="MailPage.Toggle.Selecting"
+                            Checked="OnSelectingMany"
+                            Unchecked="OnSelectingOne">
+                <FontIcon Glyph="&#xE762;"
+                          FontSize="14" />
+              </ToggleButton>
+
+              <!-- A list showing less than the folder holds says so, rather than reading as a folder with less mail
+                   in it. -->
+              <TextBlock x:Uid="MailPage.TextBlock.Narrowed"
+                         VerticalAlignment="Center"
+                         Style="{StaticResource CaptionTextBlockStyle}"
+                         Foreground="{ThemeResource OnSurfaceVariantBrush}"
+                         Visibility="{Binding KeepsLessThanEverything, Converter={StaticResource AffirmedVisibility}}" />
+            </StackPanel>
+          </ScrollViewer>
+
+          <!-- The window is bounded, so the pages somebody scrolled past are asked for again rather than kept. This is
+               where they are asked for: it is present only once there is something before what is loaded, which on a
+               list nobody has scrolled is never. -->
+          <Button x:Uid="MailPage.Button.ShowEarlier"
+                  Grid.Row="1"
+                  Margin="12,0,12,4"
+                  HorizontalAlignment="Stretch"
+                  Command="{Binding ShowEarlier}"
+                  Style="{StaticResource TextBlockButtonStyle}"
+                  Visibility="{Binding HasMoreBefore, Converter={StaticResource AffirmedVisibility}}" />
+
+          <Grid Grid.Row="2">
+            <!-- One virtualized list over a bounded window. The panel realizes the rows on screen rather than the rows
+                 loaded, and the window bounds what is loaded rather than what has been scrolled past, so message forty
+                 thousand of a folder costs what message one costs. Every row carries its own key, so a page arriving
+                 updates the rows it changed and leaves the containers of the rest — and what was selected stays
+                 selected.
+
+                 Extended is the selection a pointer expects: the modifiers, the range, the drag, and the keyboard all
+                 belong to the control rather than to anything written here, and a touch head reaches a multiple
+                 selection through the long press below. What comes out of it is the workspace scope, which is what
+                 makes selecting four messages the scope of the next question rather than a highlight. -->
+            <ListView x:Name="MessageRows"
+                      x:Uid="MailPage.List.Messages"
+                      ItemsSource="{Binding Messages}"
+                      SelectionMode="Extended"
+                      IsItemClickEnabled="False"
+                      Holding="OnRowHeld"
+                      Padding="4,0,4,12">
+              <ListView.ItemTemplate>
+                <DataTemplate x:DataType="messages:MessageRow">
+                  <!-- The row states itself once for a screen reader and draws itself in parts for everybody else. The
+                       parts are raw to the accessibility tree deliberately: read out separately they would be six
+                       fragments per row and fifty rows of them. -->
+                  <Grid Padding="4,8"
+                        ColumnSpacing="8"
+                        AutomationProperties.Name="{x:Bind Announcement}">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Unread is a mark rather than a word, and absent rather than drawn faint where the message has
+                         been read. -->
+                    <Border Width="8"
+                            Height="8"
+                            CornerRadius="4"
+                            VerticalAlignment="Top"
+                            Margin="0,6,0,0"
+                            AutomationProperties.AccessibilityView="Raw"
+                            Background="{ThemeResource PrimaryBrush}"
+                            Visibility="{x:Bind IsUnread, Converter={StaticResource AffirmedVisibility}}" />
+
+                    <StackPanel Grid.Column="1"
+                                Spacing="2">
+                      <TextBlock Text="{x:Bind Correspondent}"
+                                 Style="{StaticResource BodyStrongTextBlockStyle}"
+                                 Foreground="{ThemeResource OnSurfaceBrush}"
+                                 AutomationProperties.AccessibilityView="Raw"
+                                 TextTrimming="CharacterEllipsis" />
+
+                      <TextBlock Text="{x:Bind Subject}"
+                                 Style="{StaticResource BodyTextBlockStyle}"
+                                 Foreground="{ThemeResource OnSurfaceBrush}"
+                                 AutomationProperties.AccessibilityView="Raw"
+                                 TextTrimming="CharacterEllipsis" />
+
+                      <!-- A message this deployment holds but has not extracted yet draws one line less rather than an
+                           empty one. -->
+                      <TextBlock Text="{x:Bind Preview}"
+                                 Style="{StaticResource CaptionTextBlockStyle}"
+                                 Foreground="{ThemeResource OnSurfaceVariantBrush}"
+                                 AutomationProperties.AccessibilityView="Raw"
+                                 TextTrimming="CharacterEllipsis"
+                                 Visibility="{x:Bind HasPreview, Converter={StaticResource AffirmedVisibility}}" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2"
+                                Spacing="2"
+                                HorizontalAlignment="Right">
+                      <TextBlock Text="{x:Bind Received}"
+                                 HorizontalAlignment="Right"
+                                 Style="{StaticResource CaptionTextBlockStyle}"
+                                 Foreground="{ThemeResource OnSurfaceVariantBrush}"
+                                 AutomationProperties.AccessibilityView="Raw" />
+
+                      <StackPanel Orientation="Horizontal"
+                                  HorizontalAlignment="Right"
+                                  Spacing="4">
+                        <FontIcon Glyph="&#xE172;"
+                                  FontSize="12"
+                                  AutomationProperties.AccessibilityView="Raw"
+                                  Foreground="{ThemeResource OnSurfaceVariantBrush}"
+                                  Visibility="{x:Bind IsAnswered, Converter={StaticResource AffirmedVisibility}}" />
+
+                        <FontIcon Glyph="&#xE7C1;"
+                                  FontSize="12"
+                                  AutomationProperties.AccessibilityView="Raw"
+                                  Foreground="{ThemeResource TertiaryBrush}"
+                                  Visibility="{x:Bind IsFlagged, Converter={StaticResource AffirmedVisibility}}" />
+
+                        <FontIcon Glyph="&#xE723;"
+                                  FontSize="12"
+                                  AutomationProperties.AccessibilityView="Raw"
+                                  Foreground="{ThemeResource OnSurfaceVariantBrush}"
+                                  Visibility="{x:Bind HasAttachments, Converter={StaticResource AffirmedVisibility}}" />
+
+                        <!-- One attachment is what the mark already says, so the number appears only where there is
+                             more than one of them. -->
+                        <TextBlock Text="{x:Bind AttachmentCountText}"
+                                   Style="{StaticResource CaptionTextBlockStyle}"
+                                   AutomationProperties.AccessibilityView="Raw"
+                                   Foreground="{ThemeResource OnSurfaceVariantBrush}"
+                                   Visibility="{x:Bind ShowsAttachmentCount, Converter={StaticResource AffirmedVisibility}}" />
+                      </StackPanel>
+                    </StackPanel>
+                  </Grid>
+                </DataTemplate>
+              </ListView.ItemTemplate>
+            </ListView>
+
+            <!-- The three states the list genuinely has, rendered by the feed rather than remembered by this page. Its
+                 value template draws nothing, because the list above is what draws a list that arrived — the same
+                 arrangement the frame uses for the session it is composed over. -->
+            <mvux:FeedView Source="{Binding Messages}">
+              <mvux:FeedView.ValueTemplate>
+                <DataTemplate>
+                  <Border Height="0" />
+                </DataTemplate>
+              </mvux:FeedView.ValueTemplate>
+
+              <mvux:FeedView.ProgressTemplate>
+                <DataTemplate>
+                  <ProgressBar IsIndeterminate="True"
+                               VerticalAlignment="Top"
+                               HorizontalAlignment="Stretch" />
+                </DataTemplate>
+              </mvux:FeedView.ProgressTemplate>
+
+              <!-- Two sentences rather than one, because they lead to different acts. A place this list is keeping mail
+                   out of is widened by pressing one of the controls above; a place with nothing in it is either a
+                   folder holding no mail or a copy MailFathom has not taken in yet, and which of those it is, is said
+                   per folder by the mailbox pane rather than repeated here. -->
+              <mvux:FeedView.NoneTemplate>
+                <DataTemplate>
+                  <StackPanel Padding="16"
+                              Spacing="8"
+                              VerticalAlignment="Top">
+                    <InfoBar x:Uid="MailPage.InfoBar.NoMessages"
+                             IsOpen="{Binding Parent.KeepsEverything}"
+                             IsClosable="False"
+                             Severity="Informational" />
+
+                    <InfoBar x:Uid="MailPage.InfoBar.NoKeptMessages"
+                             IsOpen="{Binding Parent.KeepsLessThanEverything}"
+                             IsClosable="False"
+                             Severity="Informational" />
+                  </StackPanel>
+                </DataTemplate>
+              </mvux:FeedView.NoneTemplate>
+
+              <!-- What it means and what to try, in this application's own words: the failure carries an English
+                   message written for a log, and one of its cases can carry text from a machine this process does not
+                   own. Asking again is reached through the template's parent, because it is the list's act rather than
+                   this view's. -->
+              <mvux:FeedView.ErrorTemplate>
+                <DataTemplate>
+                  <InfoBar x:Uid="MailPage.InfoBar.MessagesUnavailable"
+                           Margin="16"
+                           VerticalAlignment="Top"
+                           IsOpen="True"
+                           IsClosable="False"
+                           Severity="Error">
+                    <InfoBar.ActionButton>
+                      <Button x:Uid="MailPage.Button.RetryMessages"
+                              Command="{Binding Parent.RetryMessages}" />
+                    </InfoBar.ActionButton>
+                  </InfoBar>
+                </DataTemplate>
+              </mvux:FeedView.ErrorTemplate>
+            </mvux:FeedView>
+          </Grid>
+
+          <StackPanel Grid.Row="3"
+                      Padding="12,4,12,8"
+                      Spacing="4">
+            <!-- A page that did not arrive is said beside the list rather than instead of it, because what is already
+                 drawn is still true. -->
+            <InfoBar x:Uid="MailPage.InfoBar.PageUnavailable"
+                     IsOpen="{Binding PagingFailed}"
+                     IsClosable="False"
+                     Severity="Warning" />
+
+            <!-- The command carries no parameter, so the loading view reads its own progress from it and the button is
+                 disabled while the page is on its way. -->
+            <utu:LoadingView Source="{Binding ShowMore}"
+                             Visibility="{Binding HasMoreAfter, Converter={StaticResource AffirmedVisibility}}">
+              <utu:LoadingView.Content>
+                <Button x:Uid="MailPage.Button.ShowMore"
+                        HorizontalAlignment="Stretch"
+                        Command="{Binding ShowMore}"
+                        Style="{StaticResource TextBlockButtonStyle}" />
+              </utu:LoadingView.Content>
+
+              <utu:LoadingView.LoadingContent>
+                <ProgressBar IsIndeterminate="True"
+                             HorizontalAlignment="Stretch" />
+              </utu:LoadingView.LoadingContent>
+            </utu:LoadingView>
+          </StackPanel>
+        </Grid>
       </workspace:WorkspaceColumns.Primary>
       <workspace:WorkspaceColumns.Companion>
         <spaces:SpacePlaceholder x:Uid="MailPage.Reading" />

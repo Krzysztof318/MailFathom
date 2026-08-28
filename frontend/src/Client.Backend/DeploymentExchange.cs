@@ -162,8 +162,11 @@ internal static class DeploymentExchange
     /// <exception cref="DeploymentFailure">Thrown when the status is not a success.</exception>
     /// <remarks>
     /// <c>401</c> and <c>403</c> are separated from the rest because they are the one case the person can act on: the
-    /// sign-in has ended, or the credential was never granted this. Everything else is a deployment that is not
-    /// answering the way its contract says, which is somebody's defect rather than a person's next step.
+    /// sign-in has ended, or the credential was never granted this. <c>400</c> is separated for the opposite reason —
+    /// it is the client's own request the deployment would not serve, so the caller that composed it can compose
+    /// another, and answering it as a defect would leave a screen stuck on a value nobody typed. Everything else is a
+    /// deployment that is not answering the way its contract says, which is somebody's defect rather than a person's
+    /// next step.
     /// </remarks>
     internal static void RefuseUnusableStatus(HttpResponseMessage response)
     {
@@ -172,12 +175,17 @@ internal static class DeploymentExchange
             return;
         }
 
-        throw response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden
-            ? new DeploymentFailure(
+        throw response.StatusCode switch
+        {
+            HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => new DeploymentFailure(
                 DeploymentFailureReason.CredentialRefused,
-                "MailFathom did not accept this sign-in. Sign in again.")
-            : new DeploymentFailure(
+                "MailFathom did not accept this sign-in. Sign in again."),
+            HttpStatusCode.BadRequest => new DeploymentFailure(
+                DeploymentFailureReason.RequestRefused,
+                "MailFathom would not serve this request as it was asked."),
+            _ => new DeploymentFailure(
                 DeploymentFailureReason.Unusable,
-                "MailFathom answered in a way this version does not understand.");
+                "MailFathom answered in a way this version does not understand."),
+        };
     }
 }

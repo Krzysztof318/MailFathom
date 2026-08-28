@@ -277,13 +277,81 @@
     <value>This column is still being built.</value>
     <comment>The companion column's counterpart to the sentence above.</comment>
   </data>
-  <data name="MailPage.Messages.Heading" xml:space="preserve">
-    <value>Mail</value>
-    <comment>Names the primary column of the Mail space while that space is being built.</comment>
+  <data name="MailPage.List.Messages.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Messages in this place</value>
+    <comment>Names the list itself, so a screen reader announces what the rows belong to before it reads one.</comment>
   </data>
-  <data name="MailPage.Messages.Detail" xml:space="preserve">
-    <value>This space is still being built.</value>
-    <comment>Says plainly that the space is empty because nothing has been put in it yet, rather than because something failed.</comment>
+  <data name="MailPage.Toggle.Order.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Read oldest first</value>
+    <comment>Names the control that reads the list from the other end of the timeline, which carries an icon rather than words.</comment>
+  </data>
+  <data name="MailPage.Toggle.Unread.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Keep only unread mail</value>
+    <comment>Names the filter that keeps unread mail alone. Icon-only, like every other control on this bar.</comment>
+  </data>
+  <data name="MailPage.Toggle.Flagged.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Keep only flagged mail</value>
+    <comment>Names the filter that keeps flagged mail alone.</comment>
+  </data>
+  <data name="MailPage.Toggle.Attachments.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Keep only mail with attachments</value>
+    <comment>Names the filter that keeps mail carrying an attachment alone.</comment>
+  </data>
+  <data name="MailPage.Toggle.Junk.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Include junk mail</value>
+    <comment>Names the filter that lets junk mail take part. A junk folder opened on purpose takes part whatever this says.</comment>
+  </data>
+  <data name="MailPage.Toggle.Selecting.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Select several messages</value>
+    <comment>Names the control that puts the list into a selection several rows at a time, which a touch head also reaches by holding a row.</comment>
+  </data>
+  <data name="MailPage.TextBlock.Narrowed.Text" xml:space="preserve">
+    <value>Filtered</value>
+    <comment>Says that the list is showing less than the place holds, so a filtered folder is not mistaken for an emptier one.</comment>
+  </data>
+  <data name="MailPage.Button.ShowEarlier.Content" xml:space="preserve">
+    <value>Show earlier mail</value>
+    <comment>Asks for the pages before what is loaded, which the bounded window gave up rather than kept.</comment>
+  </data>
+  <data name="MailPage.Button.ShowMore.Content" xml:space="preserve">
+    <value>Show more mail</value>
+    <comment>Asks for the next page of the list.</comment>
+  </data>
+  <data name="MailPage.InfoBar.NoMessages.Title" xml:space="preserve">
+    <value>Nothing here</value>
+    <comment>Heads the state a place with no mail to draw is shown. It is a state rather than a failure, so it is not worded as one.</comment>
+  </data>
+  <data name="MailPage.InfoBar.NoMessages.Message" xml:space="preserve">
+    <value>There is no mail to show here. Either this place holds none, or MailFathom has not taken it in yet — the mailbox pane says how current this copy is.</value>
+    <comment>Names both readings of an empty list and points at where the difference between them is actually said, which is per folder in the tree.</comment>
+  </data>
+  <data name="MailPage.InfoBar.NoKeptMessages.Title" xml:space="preserve">
+    <value>Nothing matches</value>
+    <comment>Heads the state a filtered list with nothing left in it is shown, which is a different thing from a place holding nothing.</comment>
+  </data>
+  <data name="MailPage.InfoBar.NoKeptMessages.Message" xml:space="preserve">
+    <value>Nothing here is kept by what this list is filtering for. Turn a filter off above to see the rest.</value>
+    <comment>Says what to press rather than leaving somebody looking at an empty folder they have filtered themselves into.</comment>
+  </data>
+  <data name="MailPage.InfoBar.MessagesUnavailable.Title" xml:space="preserve">
+    <value>This list could not be read</value>
+    <comment>Heads the state a failed read of the list is shown.</comment>
+  </data>
+  <data name="MailPage.InfoBar.MessagesUnavailable.Message" xml:space="preserve">
+    <value>MailFathom did not answer with the mail for this place. Try again, and look at the mailbox pane if it keeps failing.</value>
+    <comment>Says what to try in this application's own words rather than repeating a message written for a log.</comment>
+  </data>
+  <data name="MailPage.Button.RetryMessages.Content" xml:space="preserve">
+    <value>Try again</value>
+    <comment>Asks the deployment for the list again, which is what a person presses when it did not arrive.</comment>
+  </data>
+  <data name="MailPage.InfoBar.PageUnavailable.Title" xml:space="preserve">
+    <value>That page did not arrive</value>
+    <comment>Heads a page that failed, which leaves the mail already drawn on the screen rather than replacing it.</comment>
+  </data>
+  <data name="MailPage.InfoBar.PageUnavailable.Message" xml:space="preserve">
+    <value>What is already shown is still current. Ask for the page again.</value>
+    <comment>Says that nothing was lost, because a warning over a list that is still correct otherwise reads as the list being wrong.</comment>
   </data>
   <data name="MailPage.Reading.Heading" xml:space="preserve">
     <value>Reading</value>
@@ -528,5 +596,41 @@
   <data name="Mailboxes.Freshness.LongerAgo" xml:space="preserve">
     <value>Nothing taken in for over a week</value>
     <comment>The widest gap band. It states the gap without calling the copy stale, which is the reader's judgement rather than the client's.</comment>
+  </data>
+  <data name="Messages.NoSender" xml:space="preserve">
+    <value>Unknown sender</value>
+    <comment>Stands in for a message whose sender no header carried, so the column reads as a message rather than as a row that failed to load.</comment>
+  </data>
+  <data name="Messages.NoSubject" xml:space="preserve">
+    <value>(no subject)</value>
+    <comment>Stands in for a message carrying no subject, on the same terms.</comment>
+  </data>
+  <data name="Messages.NoDate" xml:space="preserve">
+    <value>No date</value>
+    <comment>Stands in for a message no header dated, which the timeline still orders by what it recorded.</comment>
+  </data>
+  <data name="Messages.MoreRecipients" xml:space="preserve">
+    <value>{0} +{1}</value>
+    <comment>Names the first recipient beside how many others there are, for a row of mail this owner sent. {0} is that recipient and {1} is the count of the rest.</comment>
+  </data>
+  <data name="Messages.Announcement" xml:space="preserve">
+    <value>{0}. {1}. {2}.</value>
+    <comment>The whole row as one sentence for a screen reader: {0} is who the message is with, {1} is what it is about, and {2} is when it arrived.</comment>
+  </data>
+  <data name="Messages.Announcement.Unread" xml:space="preserve">
+    <value>Unread.</value>
+    <comment>Appended to the sentence above where the row has not been read, since the mark that says so is drawn rather than announced.</comment>
+  </data>
+  <data name="Messages.Announcement.Flagged" xml:space="preserve">
+    <value>Flagged.</value>
+    <comment>Appended on the same terms for a flagged row.</comment>
+  </data>
+  <data name="Messages.Announcement.Answered" xml:space="preserve">
+    <value>Answered.</value>
+    <comment>Appended on the same terms for a row that has been answered.</comment>
+  </data>
+  <data name="Messages.Announcement.Attachments" xml:space="preserve">
+    <value>Has attachments.</value>
+    <comment>Appended on the same terms for a row carrying an attachment.</comment>
   </data>
 </root>

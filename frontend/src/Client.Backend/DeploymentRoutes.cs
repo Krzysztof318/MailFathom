@@ -38,6 +38,14 @@ internal static class DeploymentRoutes
     /// </remarks>
     internal const string MailFoldersPath = $"{Prefix}/folders";
 
+    /// <summary>Where a deployment serves one page of the owner's message list, keyset-paged in either direction.</summary>
+    /// <remarks>
+    /// The route a mail screen spends its time in. It is asked with a query string composed from
+    /// <see cref="Timeline.MailTimelineQuery" /> rather than with a path of its own, because everything that narrows a
+    /// list is a filter over the same walk rather than a different resource.
+    /// </remarks>
+    internal const string MailTimelinePath = $"{Prefix}/emails";
+
     /// <summary>Where a deployment publishes what a client must obtain before it holds any credential.</summary>
     internal const string ProtectedResourceMetadataPath = $"/.well-known/oauth-protected-resource{Prefix}";
 }

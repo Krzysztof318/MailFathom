@@ -25,11 +25,11 @@ What is inside the two projects:
 | `Client.Backend/` | The typed client, the wire records, and the source-generated readers for them |
 | `Client.Backend/Authorization/` | Signing in: discovery, the proof key, the exchange, and the token held in memory for the run |
 
-The application is empty of features, and it is no longer empty of structure: it opens on the frame the three spaces
-are shown inside, and the section below says what that frame is. What it can do beyond moving between them is what a
-reader decides about the application itself — which language it is read in, and which theme it is shown in — beside the
-version this build was stamped with, read from the assembly rather than written here so the client and the service
-report one number.
+The application opens on the frame the three spaces are shown inside, and the section below says what that frame is.
+One of the three reads something today: Mail draws the mail of wherever the tree says somebody is. The other two are
+still empty, and what the application can do beside them is what a reader decides about it — which language it is read
+in, and which theme it is shown in — beside the version this build was stamped with, read from the assembly rather than
+written here so the client and the service report one number.
 
 It reaches MailFathom over the endpoints `backend/src/Host/` exposes and shares nothing else with it: no build file, no
 package manifest, no configuration file, and no type. Which deployment it reaches is the composing host's to state, and
@@ -39,8 +39,9 @@ nothing states it yet. `AGENTS.md` beside this file states why, and states the c
 
 The product is three spaces — **Discover**, **Mail**, and **Cases** — and they are one application rather than three.
 What makes them one is the frame around them, which is what `Client/Presentation/Workspace/` holds and what a client
-already pointed at a deployment opens on. The spaces themselves are empty: `Client/Presentation/Spaces/` carries a page
-per space that says so, and each of the three parents that owns a space fills its own page in.
+already pointed at a deployment opens on. `Client/Presentation/Spaces/` carries a page per space; Mail's holds the
+message list described below, and Discover's and Cases' say they are empty until the parent that owns each fills its
+own page in.
 
 **Each space is a route, and so is everything else on screen.** `App.RegisterRoutes` nests `Discover`, `Mail`, and
 `Cases` inside the frame and registers `Settings` and `Connect` beside it, every one of them named once in
@@ -94,6 +95,39 @@ written: a selection names mail somebody was reading a moment ago rather than wh
 may be gone by the next run. What is written is a folder alias, a hierarchy path, and an account identifier, which are
 mail metadata and therefore personal data — held on the device, in the store the platform gives this application alone,
 never logged and never sent anywhere.
+
+**The mail of that place is one list, and it is the run's own.** `Client/Presentation/Messages/` holds it, and
+`IMessageList` is registered once for the run beside the tree and the workspace — so leaving Mail and coming back finds
+the list where it was rather than reading its first page again. It follows the *place* the scope names rather than the
+whole scope, which is load-bearing rather than an optimization: the list writes what is selected back into that same
+scope, and a list keyed on the whole of one would read the folder again on every click.
+
+**What is loaded is a bounded window rather than everything somebody has scrolled past.** A page is asked for by cursor
+in either direction, four of them are held at once, and taking a page at one end drops the one at the other — so the
+number of rows the client holds is a property of the window rather than of how long the list has been scrolled, whatever
+the folder holds. Dropping a page is safe because each one keeps the request that produced it: the page that becomes the
+far end carries the cursor that reads back towards what went. That same value is what is written down when a folder is
+left, so returning is a continuation rather than a jump to the top — remembered to the page rather than to the pixel,
+since a page is the unit a cursor names. Every place one run visited is kept in memory, bounded; the one somebody is in
+outlives the run in `ApplicationData.LocalSettings`, as a cursor and an arrangement and never as a row. A cursor a
+deployment no longer honours is a position to give up rather than an error to show, so the list quietly opens at the
+leading end instead.
+
+**A row is drawn from the page that carried it and from nothing else** — sender or recipients, subject, date, read,
+flagged and answered marks, whether there is an attachment, and the opening of the message's own text — so fifty rows
+are one request rather than fifty. It carries the message's own identity as its key, which is what lets a refresh update
+the rows that changed and leave the containers of the rest alone, and it states itself once as a sentence for a screen
+reader instead of as six unlabelled controls. How the list is arranged — which end leads, and whether it keeps only
+unread, only flagged, only mail carrying an attachment, or lets junk take part — is shown on the controls that did it
+and is remembered with the place, because a cursor is only honoured against the filters and the order it was issued
+under.
+
+**What is selected is the application's rather than the control's.** The list mirrors its selection into
+`IWorkspace.Scope`, which is what lets a question in Discover be asked about mail somebody picked in Mail; on a pointer
+head that is the ordinary extended selection with its modifiers and its drag, and on a touch head a press and hold puts
+the list into a selecting mode that is visible and can be left. Loading, a read that failed, a folder holding no mail,
+and a folder whose mail this list is keeping out are four rendered states rather than one blank list — the last two are
+told apart in words, and how current the copy is stays the tree's to say.
 
 **Settings is reached from the frame rather than named among the spaces**, because it is not one. It is the screen that
 says which build is running and which deployment this client is pointed at, carries the two choices below and the way to

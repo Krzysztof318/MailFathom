@@ -6,10 +6,11 @@ namespace MailFathom.Client.Backend;
 
 /// <summary>Why one exchange with a deployment did not produce an answer.</summary>
 /// <remarks>
-/// Four cases rather than a status code, because what a screen does about them differs and nothing else about the
+/// Five cases rather than a status code, because what a screen does about them differs and nothing else about the
 /// answer does: a refused credential asks the person to sign in again, an unreachable deployment asks them to check
-/// their connection, a timeout is worth retrying unchanged, and an unusable answer is a defect somebody has to be told
-/// about rather than something the person can act on.
+/// their connection, a timeout is worth retrying unchanged, a refused request is something the client asked for and can
+/// therefore ask differently, and an unusable answer is a defect somebody has to be told about rather than something
+/// the person can act on.
 /// </remarks>
 public enum DeploymentFailureReason
 {
@@ -24,6 +25,15 @@ public enum DeploymentFailureReason
 
     /// <summary>Something answered, but not with what the contract says it answers with.</summary>
     Unusable = 3,
+
+    /// <summary>The deployment understood the request and would not serve it as asked.</summary>
+    /// <remarks>
+    /// Kept apart from <see cref="Unusable" /> because the two lead to opposite acts. This is the client's own request
+    /// being wrong rather than the deployment being wrong, so the caller that composed it is the one that can ask
+    /// differently — a message list handed a cursor issued for a list somebody has since re-sorted drops the cursor and
+    /// reads from the leading end, where reporting a defect would strand the screen on a value nobody typed.
+    /// </remarks>
+    RequestRefused = 4,
 }
 
 /// <summary>One exchange with a deployment that did not produce an answer, stated as something a screen can act on.</summary>
