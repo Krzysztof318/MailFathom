@@ -493,7 +493,7 @@ which is what makes a second sanitizer on the client unnecessary rather than mer
 Each block names its own revision beside its identity, and `MailDocument.SchemaVersion` names the revision of the
 document itself. A client keys its renderers by the pair and draws a placeholder for a pair it does not implement, so a
 deployment ahead of the client on the other end of the connection costs that client one block rather than the message.
-[Rendering mail HTML in the client](../decisions/0019-rendering-mail-html-in-the-client.md) is the decision this
+[Rendering mail HTML in the client](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0019-rendering-mail-html-in-the-client.md) is the decision this
 implements, and it holds the reasoning for the whole of this section.
 
 ### Nothing in a body reaches another server unless the reader asked

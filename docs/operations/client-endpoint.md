@@ -749,7 +749,7 @@ a message cannot set the remote `\Seen` flag. The words and the document both pa
 guard the tool surface's readings pass, so a redaction rule configured for this deployment applies to what a pane draws
 exactly as it applies to what a model reads.
 
-[Rendering mail HTML in the client](../decisions/0019-rendering-mail-html-in-the-client.md)
+[Rendering mail HTML in the client](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0019-rendering-mail-html-in-the-client.md)
 is the decision this route implements, and it holds the reasoning for every paragraph above.
 
 ## Credentials do not cross surfaces
