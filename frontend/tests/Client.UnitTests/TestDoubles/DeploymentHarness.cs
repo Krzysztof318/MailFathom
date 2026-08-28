@@ -4,7 +4,6 @@
 
 using MailFathom.Client.Backend;
 using MailFathom.Client.Backend.Authorization;
-using MailFathom.Client.Backend.Authorization.Redirect;
 
 namespace MailFathom.Client.UnitTests.TestDoubles;
 
@@ -17,7 +16,7 @@ namespace MailFathom.Client.UnitTests.TestDoubles;
 /// </para>
 /// <para>
 /// The stubs are created from descriptions rather than handed in, which is the same reason: what a test states is how
-/// the deployment and the authorization server behave, not which objects hold that behaviour.
+/// the deployment behaves, not which objects hold that behaviour.
 /// </para>
 /// </remarks>
 internal sealed class DeploymentHarness : IDisposable
@@ -26,80 +25,82 @@ internal sealed class DeploymentHarness : IDisposable
     internal static readonly Uri DeploymentAddress = new("https://mail.example/");
 
     private readonly HttpClient deploymentTransport;
-    private readonly HttpClient authorizationServerTransport;
+    private readonly HttpClient signInTransport;
     private readonly HttpClient probeTransport;
-    private readonly AccessTokenHandler? tokenHandler;
+    private readonly OwnerCredentialHandler? credentialHandler;
 
-    /// <summary>Builds a deployment answering from a script, reached with or without a signed-in token.</summary>
+    /// <summary>Builds a deployment answering from a script, reached with or without the signed-in credential.</summary>
     /// <param name="deployment">How the deployment answers.</param>
-    /// <param name="authorizationServer">How the authorization server answers.</param>
-    /// <param name="redirect">What the person's approval comes back as.</param>
-    /// <param name="throughTokenHandler">Whether requests to the deployment go through the handler that attaches the token, which is how the registration composes them.</param>
-    internal DeploymentHarness(
+    /// <param name="signIn">How the deployment answers a credential offered to it, where that differs from the above.</param>
+    /// <param name="store">Where a completed sign-in is kept, which defaults to a head that keeps nothing.</param>
+    /// <param name="throughCredentialHandler">Whether requests to the deployment go through the handler that presents the credential, which is how the registration composes them.</param>
+    private DeploymentHarness(
         Func<HttpRequestMessage, HttpResponseMessage> deployment,
-        Func<HttpRequestMessage, HttpResponseMessage>? authorizationServer = null,
-        Func<Uri, SignInRedirect>? redirect = null,
-        bool throughTokenHandler = false)
+        Func<HttpRequestMessage, HttpResponseMessage>? signIn = null,
+        IOwnerCredentialStore? store = null,
+        bool throughCredentialHandler = false)
     {
-        this.Deployment = new StubTransport(deployment);
-        this.AuthorizationServer = new StubTransport(authorizationServer ?? (_ => StubTransport.JsonResponse("{}")));
-        this.Probed = new StubTransport(deployment);
-        this.Listener = new StubSignInRedirectListener(redirect ?? (_ => new SignInRedirect(null, null, null)));
-        this.probeTransport = new HttpClient(this.Probed);
+        this.Store = store ?? UnkeptOwnerCredentialStore.Instance;
+        this.Owner = new SignedInOwner(this.Store);
+        this.Address = new DeploymentAddress(this.Owner);
 
-        if (throughTokenHandler)
+        this.Deployment = new StubTransport(deployment);
+        this.SignedInAt = new StubTransport(signIn ?? deployment);
+        this.Probed = new StubTransport(deployment);
+
+        if (throughCredentialHandler)
         {
-            this.tokenHandler = new AccessTokenHandler(this.Tokens) { InnerHandler = this.Deployment };
+            this.credentialHandler = new OwnerCredentialHandler(this.Owner) { InnerHandler = this.Deployment };
         }
 
-        this.deploymentTransport = new HttpClient((HttpMessageHandler?)this.tokenHandler ?? this.Deployment)
+        this.deploymentTransport = new HttpClient((HttpMessageHandler?)this.credentialHandler ?? this.Deployment)
         {
             BaseAddress = DeploymentAddress,
         };
 
-        this.authorizationServerTransport = new HttpClient(this.AuthorizationServer);
+        // The sign-in and the probe are aimed by absolute address rather than by a base one, exactly as the
+        // registration leaves them, so the same scripted deployment answers both.
+        this.signInTransport = new HttpClient(this.SignedInAt);
+        this.probeTransport = new HttpClient(this.Probed);
 
-        // The probe is aimed by absolute address rather than by a base one, exactly as the registration leaves it, so
-        // the same scripted deployment answers it.
         this.Transports = new StubHttpClientFactory(
             new Dictionary<string, HttpClient>(StringComparer.Ordinal)
             {
                 [DeploymentHttpClients.Deployment] = this.deploymentTransport,
-                [DeploymentHttpClients.AuthorizationServer] = this.authorizationServerTransport,
+                [DeploymentHttpClients.SignIn] = this.signInTransport,
                 [DeploymentHttpClients.DeploymentProbe] = this.probeTransport,
             });
 
         this.Client = new DeploymentClient(this.Transports);
         this.Probe = new DeploymentProbe(this.Transports);
-
-        this.SignIn = new DeploymentSignIn(
-            this.Transports,
-            new DeploymentOptions("the-client"),
-            this.Listener,
-            this.Tokens);
+        this.SignIn = new DeploymentSignIn(this.Transports, this.Address, this.Owner);
     }
 
     /// <summary>Gets what the deployment was asked, in order.</summary>
     internal StubTransport Deployment { get; }
 
-    /// <summary>Gets what the authorization server was asked, in order.</summary>
-    internal StubTransport AuthorizationServer { get; }
+    /// <summary>Gets what the deployment was asked while a credential was being offered to it, in order.</summary>
+    /// <remarks>Separate from <see cref="Deployment" /> although it can answer the same way, because what a test asserts about a sign-in is which credential it carried — which is only visible if the two are not the same recording.</remarks>
+    internal StubTransport SignedInAt { get; }
 
     /// <summary>Gets what the candidate address was asked while it was being probed, in order.</summary>
-    /// <remarks>Separate from <see cref="Deployment" /> although it answers the same way, because what a test asserts about a probe is that it carried no credential — which is only visible if the two are not the same recording.</remarks>
+    /// <remarks>Separate for the same reason: what a test asserts about a probe is that it carried no credential.</remarks>
     internal StubTransport Probed { get; }
 
     /// <summary>Gets the factory the client, the sign-in, and the probe take their transports from.</summary>
     internal StubHttpClientFactory Transports { get; }
 
+    /// <summary>Gets where this head keeps a credential, which by default is nowhere.</summary>
+    internal IOwnerCredentialStore Store { get; }
+
+    /// <summary>Gets who is signed in during this run.</summary>
+    internal SignedInOwner Owner { get; }
+
+    /// <summary>Gets which deployment the client is pointed at.</summary>
+    internal DeploymentAddress Address { get; }
+
     /// <summary>Gets the probe under test.</summary>
     internal DeploymentProbe Probe { get; }
-
-    /// <summary>Gets the stand-in for the head's redirect listener.</summary>
-    internal StubSignInRedirectListener Listener { get; }
-
-    /// <summary>Gets where a completed sign-in's token is held.</summary>
-    internal AccessTokenStore Tokens { get; } = new();
 
     /// <summary>Gets the client under test.</summary>
     internal DeploymentClient Client { get; }
@@ -107,16 +108,47 @@ internal sealed class DeploymentHarness : IDisposable
     /// <summary>Gets the sign-in under test.</summary>
     internal DeploymentSignIn SignIn { get; }
 
+    /// <summary>Builds the harness and points the client at the deployment.</summary>
+    /// <param name="deployment">How the deployment answers.</param>
+    /// <param name="signIn">How the deployment answers a credential offered to it, where that differs from the above.</param>
+    /// <param name="store">Where a completed sign-in is kept, which defaults to a head that keeps nothing.</param>
+    /// <param name="throughCredentialHandler">Whether requests to the deployment go through the handler that presents the credential, which is how the registration composes them.</param>
+    /// <param name="pointed">Whether the client starts pointed at the deployment, which every caller but the probe needs.</param>
+    /// <param name="cancellationToken">Abandons the pointing.</param>
+    /// <returns>The harness, ready for the test that owns it.</returns>
+    /// <remarks>
+    /// A factory rather than a constructor because pointing the client somewhere is asynchronous, and the alternative
+    /// is a constructor that blocks on it. That it happens to complete without yielding on a client pointed nowhere yet
+    /// is an implementation detail of <see cref="DeploymentAddress.PointAtAsync" />, and a
+    /// test double may not be the thing that depends on it.
+    /// </remarks>
+    internal static async ValueTask<DeploymentHarness> CreateAsync(
+        Func<HttpRequestMessage, HttpResponseMessage> deployment,
+        Func<HttpRequestMessage, HttpResponseMessage>? signIn = null,
+        IOwnerCredentialStore? store = null,
+        bool throughCredentialHandler = false,
+        bool pointed = true,
+        CancellationToken cancellationToken = default)
+    {
+        var harness = new DeploymentHarness(deployment, signIn, store, throughCredentialHandler);
+
+        if (pointed)
+        {
+            await harness.Address.PointAtAsync(DeploymentAddress, cancellationToken);
+        }
+
+        return harness;
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {
         this.deploymentTransport.Dispose();
-        this.authorizationServerTransport.Dispose();
+        this.signInTransport.Dispose();
         this.probeTransport.Dispose();
-        this.tokenHandler?.Dispose();
+        this.credentialHandler?.Dispose();
         this.Deployment.Dispose();
-        this.AuthorizationServer.Dispose();
+        this.SignedInAt.Dispose();
         this.Probed.Dispose();
-        this.Listener.Dispose();
     }
 }

@@ -14,9 +14,9 @@ namespace MailFathom.Client.Backend;
 /// <para>
 /// A transport is asked for per exchange rather than held, which is what makes the deployment this reaches follow
 /// <see cref="DeploymentAddress" /> instead of whatever it was when the host was composed. No route here is ever an
-/// absolute address and nothing in this assembly decides where the deployment is. The bearer token, when there is one,
-/// is attached by the handler in the pipeline rather than by any method below — which is what keeps a route from being
-/// written without one by accident.
+/// absolute address and nothing in this assembly decides where the deployment is. The signed-in owner's credential,
+/// when there is one, is presented by the handler in the pipeline rather than by any method below — which is what
+/// keeps a route from being written without one by accident.
 /// </para>
 /// <para>
 /// Three of the four routes it carries are the ones a client reads before it draws anything: what the deployment made
@@ -46,7 +46,7 @@ public sealed class DeploymentClient
     /// <exception cref="DeploymentFailure">Thrown when the deployment refused, was unreachable, did not answer in time, or answered with something else.</exception>
     /// <exception cref="InvalidOperationException">Thrown when nothing has pointed this client at a deployment yet.</exception>
     /// <remarks>
-    /// A caller holding no token still gets an answer, because the route requires no permission at the other end: it
+    /// A caller holding no credential still gets an answer, because the route requires no permission at the other end: it
     /// reports an anonymous caller with an empty grant. That is what makes it usable as a reachability check once
     /// somebody has chosen a deployment; asking an address nobody has chosen yet is <see cref="DeploymentProbe" />.
     /// </remarks>

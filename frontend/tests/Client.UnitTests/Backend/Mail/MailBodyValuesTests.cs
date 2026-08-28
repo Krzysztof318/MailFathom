@@ -132,7 +132,9 @@ public sealed class MailBodyValuesTests
 
     private static async Task<MailBodyDocument> DocumentOf(string? block, string refusal = "\"None\"")
     {
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(BodyHolding(block, refusal)));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(BodyHolding(block, refusal)),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         var body = await harness.Client.ReadMailBodyAsync(
             Guid.Parse("8f14e45f-ceea-467a-9f3e-1c3ecdf1e9a1"),

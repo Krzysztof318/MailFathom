@@ -33,4 +33,10 @@ internal static class ClientRoutes
 
     /// <summary>The screen that asks which deployment this client reaches, which is where one pointed nowhere starts.</summary>
     internal const string Connect = "Connect";
+
+    /// <summary>
+    /// The screen that asks who somebody is on that deployment, which is where a client pointed somewhere with no
+    /// usable credential starts and where one whose session ended returns.
+    /// </summary>
+    internal const string SignIn = "SignIn";
 }

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Client.Backend;
+using MailFathom.Client.Backend.Authorization;
 using MailFathom.Client.Deployment;
 using MailFathom.Client.Presentation.Mailboxes;
 using MailFathom.Client.Presentation.Messages;
@@ -35,18 +36,21 @@ internal static class ClientComposition
     /// <param name="services">The collection the head's host is being built from.</param>
     /// <param name="configuration">What the installation states, which is where the deployment settings are read from.</param>
     /// <param name="deploymentAddress">How this head learns where its deployment is, already wrapped in whatever the build stated.</param>
+    /// <param name="credentialStore">Where this head keeps the credential somebody signs in with, if it keeps one.</param>
     /// <returns>The same collection, so registration composes.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     internal static IServiceCollection Compose(
         IServiceCollection services,
         IConfiguration configuration,
-        IDeploymentAddressSource deploymentAddress)
+        IDeploymentAddressSource deploymentAddress,
+        IOwnerCredentialStore credentialStore)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(deploymentAddress);
+        ArgumentNullException.ThrowIfNull(credentialStore);
 
-        ComposeDeployment(services, configuration, deploymentAddress);
+        ComposeDeployment(services, configuration, deploymentAddress, credentialStore);
 
         // What the three spaces share, so that moving between them keeps the question somebody was composing and what
         // it would be asked against. One for the run rather than one per model: a model is discarded as its view is
@@ -73,6 +77,11 @@ internal static class ClientComposition
         // invalidate it happen.
         services.AddSingleton<IClientSession, DeploymentClientSession>();
 
+        // Signing in and out as the screens above Client.Backend reach it, which is the seam DeploymentChoice is for
+        // an address: one place turns everything that assembly raises into the closed set of outcomes a screen has a
+        // sentence for. One for the run, because the shell subscribes to what it wraps.
+        services.AddSingleton<OwnerSignIn>();
+
         // How many times a client that has lost its deployment asks again before it stops and offers the ask as a
         // button, and what the wait between attempts is measured against. Both are registered rather than written into
         // the session, because what they decide is a policy this composition states and a test states differently.
@@ -90,10 +99,12 @@ internal static class ClientComposition
     /// there by something readable — a file somebody wrote, a build somebody ran, or an address somebody typed.
     /// </para>
     /// <para>
-    /// What each of the three registrations is for: the settings are what an installation stated, the source is what
-    /// this head knows for itself, and the store is where a person's own choice outlives a restart.
-    /// <see cref="DeploymentChoice" /> is where they meet, and it is asked once, after the host is built and before
-    /// anything is navigated to.
+    /// What each registration is for: the settings are what an installation stated, the source is what this head knows
+    /// for itself, and the choice store is where a person's own answer outlives a restart.
+    /// <see cref="DeploymentChoice" /> is where those three meet, and it is asked once, after the host is built and
+    /// before anything is navigated to. The credential store is the fourth and is a different question with the same
+    /// shape — where this head may keep a password, which is a property of the operating system it runs on — so it is
+    /// handed in by the head rather than chosen here.
     /// </para>
     /// <para>
     /// The stated values are read by name rather than bound onto the record. Binding is reflection over properties, and
@@ -105,21 +116,22 @@ internal static class ClientComposition
     private static void ComposeDeployment(
         IServiceCollection services,
         IConfiguration configuration,
-        IDeploymentAddressSource deploymentAddress)
+        IDeploymentAddressSource deploymentAddress,
+        IOwnerCredentialStore credentialStore)
     {
         var stated = configuration.GetSection(DeploymentSettings.SectionName);
 
         var settings = new DeploymentSettings
         {
             Address = stated[nameof(DeploymentSettings.Address)] ?? string.Empty,
-            ClientId = stated[nameof(DeploymentSettings.ClientId)] ?? string.Empty,
         };
 
         services
             .AddSingleton(settings)
             .AddSingleton(deploymentAddress)
+            .AddSingleton(credentialStore)
             .AddSingleton<IDeploymentChoiceStore, LocalSettingsDeploymentChoiceStore>()
             .AddSingleton<DeploymentChoice>()
-            .AddMailFathomDeployment(new DeploymentOptions(settings.ClientId));
+            .AddMailFathomDeployment(new DeploymentOptions());
     }
 }

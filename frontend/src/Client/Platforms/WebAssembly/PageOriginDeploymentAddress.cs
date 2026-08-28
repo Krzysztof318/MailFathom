@@ -50,7 +50,7 @@ internal sealed partial class PageOriginDeploymentAddress : IDeploymentAddressSo
     /// </para>
     /// <para>
     /// The origin is judged here rather than handed on unjudged, and that is what keeps the loud half of
-    /// <see cref="DeploymentChoice.Restore" /> loud. An address a person or a build <em>stated</em> and that this
+    /// <see cref="DeploymentChoice.RestoreAsync" /> loud. An address a person or a build <em>stated</em> and that this
     /// client may not be pointed at is a mistake somebody can go and correct, so it fails while the application is
     /// starting and names itself. An origin is neither: nobody wrote it, and a bundle served over clear text from
     /// something that is not this machine — a page opened from a colleague's development server, a static host on a

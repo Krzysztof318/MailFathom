@@ -6,7 +6,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using MailFathom.Client.Backend;
 using MailFathom.Client.Backend.Authorization;
-using MailFathom.Client.Backend.Authorization.Redirect;
 using MailFathom.Client.Deployment;
 using MailFathom.Client.Presentation.Mailboxes;
 using MailFathom.Client.Presentation.Messages;
@@ -54,7 +53,6 @@ public sealed class ClientCompositionTests
     private static readonly KeyValuePair<string, string?>[] StatedDeployment =
     [
         new($"{DeploymentSettings.SectionName}:{nameof(DeploymentSettings.Address)}", "https://mail.example/"),
-        new($"{DeploymentSettings.SectionName}:{nameof(DeploymentSettings.ClientId)}", "mailfathom-client"),
     ];
 
     /// <summary>
@@ -76,7 +74,9 @@ public sealed class ClientCompositionTests
         typeof(IClientSession),
         typeof(DeploymentChoice),
         typeof(DeploymentAddress),
-        typeof(AccessTokenStore),
+        typeof(SignedInOwner),
+        typeof(IOwnerCredentialStore),
+        typeof(OwnerSignIn),
     ];
 
     /// <summary>The assertion this class exists for.</summary>
@@ -212,7 +212,8 @@ public sealed class ClientCompositionTests
         ClientComposition.Compose(
             services,
             StatedConfiguration(StatedDeployment),
-            new StubDeploymentAddressSource(null));
+            new StubDeploymentAddressSource(null),
+            UnkeptOwnerCredentialStore.Instance);
 
         // Assert
         Assert.Equal(
@@ -245,7 +246,6 @@ public sealed class ClientCompositionTests
 
         // Assert
         Assert.Equal("https://mail.example/", settings.Address);
-        Assert.Equal("mailfathom-client", settings.ClientId);
     }
 
     /// <summary>
@@ -256,10 +256,7 @@ public sealed class ClientCompositionTests
     public void Compose_WithNoAddressStated_ComposesAHeadThatAsksForOne()
     {
         // Arrange
-        var services = ComposeServices(StatedConfiguration(
-        [
-            new($"{DeploymentSettings.SectionName}:{nameof(DeploymentSettings.ClientId)}", "mailfathom-client"),
-        ]));
+        var services = ComposeServices(StatedConfiguration([]));
 
         // Act
         using var provider = BuiltProvider(services);
@@ -267,35 +264,6 @@ public sealed class ClientCompositionTests
         // Assert
         Assert.Empty(provider.GetRequiredService<DeploymentSettings>().Address);
         Assert.Null(provider.GetRequiredService<DeploymentAddress>().Current);
-    }
-
-    /// <summary>
-    /// A section stating no client identifier refuses while the application is starting, which is where that has to
-    /// happen.
-    /// </summary>
-    /// <remarks>
-    /// The identifier is what every grant this public client makes is registered under, so a head composed without one
-    /// could sign nobody in — and a setting that was quietly ignored is worse than one that was refused. The refusal
-    /// names the argument, which is what an operator reading a startup failure has to go on.
-    /// </remarks>
-    [Fact]
-    public void Compose_WithNoClientIdStated_RefusesToCompose()
-    {
-        // Arrange
-        var configuration = StatedConfiguration(
-        [
-            new($"{DeploymentSettings.SectionName}:{nameof(DeploymentSettings.Address)}", "https://mail.example/"),
-        ]);
-
-        // Act
-        var refusal = Assert.Throws<ArgumentException>(
-            () => ClientComposition.Compose(
-                new ServiceCollection(),
-                configuration,
-                new StubDeploymentAddressSource(null)));
-
-        // Assert
-        Assert.Equal("clientId", refusal.ParamName);
     }
 
     /// <summary>
@@ -308,80 +276,87 @@ public sealed class ClientCompositionTests
     /// created, and the two aimed at machines nobody has vouched for carry none at all.
     /// </remarks>
     [Fact]
-    public void Compose_ConfiguresOneTransportPerKindOfMachineItReaches()
+    public async Task Compose_ConfiguresOneTransportPerKindOfMachineItReaches()
     {
         // Arrange
         var services = ComposeServices();
 
-        using var provider = BuiltProvider(services);
+        await using var provider = BuiltProvider(services);
 
-        provider.GetRequiredService<DeploymentAddress>().PointAt(new Uri("https://mail.example/"));
+        await provider.GetRequiredService<DeploymentAddress>()
+            .PointAtAsync(new Uri("https://mail.example/"), TestContext.Current.CancellationToken);
 
         var transports = provider.GetRequiredService<IHttpClientFactory>();
 
         // Act
         using var deployment = transports.CreateClient(DeploymentHttpClients.Deployment);
-        using var authorizationServer = transports.CreateClient(DeploymentHttpClients.AuthorizationServer);
+        using var signIn = transports.CreateClient(DeploymentHttpClients.SignIn);
         using var probe = transports.CreateClient(DeploymentHttpClients.DeploymentProbe);
 
         // Assert
         Assert.Equal(new Uri("https://mail.example/"), deployment.BaseAddress);
-        Assert.Null(authorizationServer.BaseAddress);
+        Assert.Null(signIn.BaseAddress);
         Assert.Null(probe.BaseAddress);
 
         Assert.All(
-            new[] { deployment, authorizationServer, probe },
+            new[] { deployment, signIn, probe },
             transport => Assert.Equal(DeploymentOptions.DefaultTimeout, transport.Timeout));
 
         Assert.Equal(DeploymentExchange.MaxMailBodyBytes, deployment.MaxResponseContentBufferSize);
-        Assert.Equal(DeploymentExchange.MaxDocumentBytes, authorizationServer.MaxResponseContentBufferSize);
+        Assert.Equal(DeploymentExchange.MaxDocumentBytes, signIn.MaxResponseContentBufferSize);
         Assert.Equal(DeploymentExchange.MaxDocumentBytes, probe.MaxResponseContentBufferSize);
     }
 
-    /// <summary>The head that catches its redirect differently keeps its own listener, which is what the browser head does.</summary>
+    /// <summary>The head that keeps a credential keeps it where it said, which is what the desktop head hands in.</summary>
     [Fact]
-    public void Compose_WithAHeadThatCatchesItsOwnRedirect_KeepsThatListener()
+    public void Compose_WithAHeadThatKeepsACredential_RegistersThatStore()
     {
         // Arrange
         var services = new ServiceCollection();
 
-        using var listener = new StubSignInRedirectListener(static _ => new SignInRedirect(null, null, null));
-
-        services.AddSingleton<ISignInRedirectListenerFactory>(listener);
+        var store = new StubOwnerCredentialStore();
 
         // Act
         ClientComposition.Compose(
             services,
             StatedConfiguration(StatedDeployment),
-            new StubDeploymentAddressSource(null));
+            new StubDeploymentAddressSource(null),
+            store);
 
         // Assert
         var registered = Assert.Single(
             services,
-            static descriptor => descriptor.ServiceType == typeof(ISignInRedirectListenerFactory));
+            static descriptor => descriptor.ServiceType == typeof(IOwnerCredentialStore));
 
-        Assert.Same(listener, registered.ImplementationInstance);
+        Assert.Same(store, registered.ImplementationInstance);
     }
 
-    /// <summary>A head that catches none is given the loopback listener an installed head signs in through.</summary>
+    /// <summary>
+    /// A head that keeps none composes all the same, and says so rather than falling back to somewhere a password may
+    /// not be written.
+    /// </summary>
+    /// <remarks>
+    /// The browser head is the case: every store a browser offers is scoped to the page's origin rather than to a
+    /// person, so it keeps nothing and the person signs in each time. What this asserts is that composing without a
+    /// store leaves the client saying it will ask again — never that some other place quietly took the password.
+    /// </remarks>
     [Fact]
-    public void Compose_WithAHeadThatCatchesNoRedirect_RegistersTheLoopbackListener()
+    public void Compose_WithAHeadThatKeepsNoCredential_ComposesAHeadThatSaysItWillAskAgain()
     {
         // Arrange
-        var services = new ServiceCollection();
+        var services = ComposeServices();
 
         // Act
-        ClientComposition.Compose(
-            services,
-            StatedConfiguration(StatedDeployment),
-            new StubDeploymentAddressSource(null));
+        using var provider = BuiltProvider(services);
 
         // Assert
-        var registered = Assert.Single(
-            services,
-            static descriptor => descriptor.ServiceType == typeof(ISignInRedirectListenerFactory));
+        Assert.Equal(
+            CredentialPersistence.NotOfferedOnThisHead,
+            provider.GetRequiredService<IOwnerCredentialStore>().Persistence);
 
-        Assert.Equal(typeof(LoopbackSignInRedirectListenerFactory), registered.ImplementationType);
+        Assert.Equal(
+            CredentialPersistence.NotOfferedOnThisHead,
+            provider.GetRequiredService<OwnerSignIn>().Persistence);
     }
 
     /// <summary>Composes the client with one configuration, and with the services a running head's builder contributes.</summary>
@@ -392,7 +367,8 @@ public sealed class ClientCompositionTests
         ClientComposition.Compose(
             services,
             configuration ?? StatedConfiguration(StatedDeployment),
-            new StubDeploymentAddressSource(null));
+            new StubDeploymentAddressSource(null),
+            UnkeptOwnerCredentialStore.Instance);
 
         // What the Use* calls in App.OnLaunched put in beside the composition. Every one of them is the framework's,
         // and a screen reaching one of them is reaching a running head rather than anything registered here.

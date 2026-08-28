@@ -29,27 +29,27 @@ namespace MailFathom.Client.Backend;
 /// </remarks>
 public sealed class DeploymentAddress
 {
-    private readonly AccessTokenStore tokens;
+    private readonly SignedInOwner owner;
     private readonly Lock guard = new();
     private Uri? current;
 
-    /// <summary>Initializes the address with the credential store whose session it ends when the deployment changes.</summary>
-    /// <param name="tokens">Where the signed-in credential is held for this run.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="tokens" /> is <see langword="null" />.</exception>
-    public DeploymentAddress(AccessTokenStore tokens)
+    /// <summary>Initializes the address with the session it ends when the deployment changes.</summary>
+    /// <param name="owner">Who is signed in during this run, and where that credential is kept.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="owner" /> is <see langword="null" />.</exception>
+    public DeploymentAddress(SignedInOwner owner)
     {
-        ArgumentNullException.ThrowIfNull(tokens);
+        ArgumentNullException.ThrowIfNull(owner);
 
-        this.tokens = tokens;
+        this.owner = owner;
     }
 
     /// <summary>Raised when the client stops reaching one deployment and starts reaching another.</summary>
     /// <remarks>
     /// Everything the client holds about a deployment describes the one it was reached from, so a move invalidates it
     /// whether or not anybody was signed in. The credential is dropped here already; this is the same fact stated for
-    /// readers that hold an answer rather than a token — announced from the one place the change happens, rather than
-    /// left to every caller that points the client somewhere to remember. A move made while somebody was signed in
-    /// therefore raises both this and <see cref="AccessTokenStore.SignedInChanged" />, which is
+    /// readers that hold an answer rather than a credential — announced from the one place the change happens, rather
+    /// than left to every caller that points the client somewhere to remember. A move made while somebody was signed in
+    /// therefore raises both this and <see cref="SignedInOwner.SignedInChanged" />, which is
     /// deliberate: the two say different things, and a reader that acted on either alone would go on holding an answer
     /// in the case the other one covers.
     /// </remarks>
@@ -73,10 +73,20 @@ public sealed class DeploymentAddress
 
     /// <summary>Points the client at a deployment, ending any session held against a different one.</summary>
     /// <param name="address">The deployment's base address, which every route is resolved against.</param>
+    /// <param name="cancellationToken">Abandons clearing the credential the client is leaving behind.</param>
+    /// <returns>A task completing once the client is pointed there and nothing of the previous session is held.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="address" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when the address is not one this client may be pointed at, as <see cref="DeploymentAddressRule" /> decides.</exception>
-    /// <remarks>Pointing it at the address it already carries changes nothing, session included, so re-reading what was persisted at every start does not sign anybody out.</remarks>
-    public void PointAt(Uri address)
+    /// <remarks>
+    /// Pointing it at the address it already carries changes nothing, session included, so re-reading what was
+    /// persisted at every start does not sign anybody out.
+    /// <para>
+    /// Asynchronous because ending the session reaches the operating system's own secret store, which is where a head
+    /// that keeps a credential keeps it. Clearing it as the client is pointed away rather than at the next start is
+    /// what keeps a password for a deployment nobody is reaching from lying in a keyring for the rest of the run.
+    /// </para>
+    /// </remarks>
+    public async ValueTask PointAtAsync(Uri address, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(address);
 
@@ -100,7 +110,8 @@ public sealed class DeploymentAddress
 
         if (moved)
         {
-            this.tokens.Forget();
+            await this.owner.ForgetAsync(cancellationToken).ConfigureAwait(false);
+
             this.Moved?.Invoke(this, EventArgs.Empty);
         }
     }

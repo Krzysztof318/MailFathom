@@ -54,15 +54,15 @@ public sealed class DeploymentChoiceTests : IDisposable
 
     /// <summary>The point of keeping it: a second launch opens on the deployment the first one was pointed at.</summary>
     [Fact]
-    public void Restore_AChoiceKeptFromAnEarlierRun_IsWhereTheClientIsPointedAndTheHeadIsNotAsked()
+    public async Task RestoreAsync_AChoiceKeptFromAnEarlierRun_IsWhereTheClientIsPointedAndTheHeadIsNotAsked()
     {
         // Arrange
         var head = new StubDeploymentAddressSource();
-        var address = new DeploymentAddress(new AccessTokenStore());
+        var address = new DeploymentAddress(new SignedInOwner(UnkeptOwnerCredentialStore.Instance));
         var choice = this.ChoiceOver(new StubDeploymentChoiceStore(new Uri("https://kept.example/")), head, address);
 
         // Act
-        var pointed = choice.Restore();
+        var pointed = await choice.RestoreAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(pointed);
@@ -71,14 +71,14 @@ public sealed class DeploymentChoiceTests : IDisposable
     }
 
     [Fact]
-    public void Restore_NothingKept_TakesWhateverTheHeadAnswers()
+    public async Task RestoreAsync_NothingKept_TakesWhateverTheHeadAnswers()
     {
         // Arrange
-        var address = new DeploymentAddress(new AccessTokenStore());
+        var address = new DeploymentAddress(new SignedInOwner(UnkeptOwnerCredentialStore.Instance));
         var choice = this.ChoiceOver(new StubDeploymentChoiceStore(), new StubDeploymentAddressSource(), address);
 
         // Act
-        var pointed = choice.Restore();
+        var pointed = await choice.RestoreAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(pointed);
@@ -87,17 +87,17 @@ public sealed class DeploymentChoiceTests : IDisposable
 
     /// <summary>The state a fresh installation is genuinely in, which is what puts a person in front of the screen that asks.</summary>
     [Fact]
-    public void Restore_NothingKeptAndAHeadThatKnowsNothing_PointsTheClientNowhere()
+    public async Task RestoreAsync_NothingKeptAndAHeadThatKnowsNothing_PointsTheClientNowhere()
     {
         // Arrange
-        var address = new DeploymentAddress(new AccessTokenStore());
+        var address = new DeploymentAddress(new SignedInOwner(UnkeptOwnerCredentialStore.Instance));
         var choice = this.ChoiceOver(
             new StubDeploymentChoiceStore(),
             new StubDeploymentAddressSource(answer: null),
             address);
 
         // Act
-        var pointed = choice.Restore();
+        var pointed = await choice.RestoreAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(pointed);
@@ -106,17 +106,18 @@ public sealed class DeploymentChoiceTests : IDisposable
 
     /// <summary>A configured deployment that was quietly ignored is the worst of the outcomes, so a stated address the rule refuses fails loudly.</summary>
     [Fact]
-    public void Restore_AStatedAddressTheRuleRefuses_FailsRatherThanBeingDropped()
+    public async Task RestoreAsync_AStatedAddressTheRuleRefuses_FailsRatherThanBeingDropped()
     {
         // Arrange
-        var address = new DeploymentAddress(new AccessTokenStore());
+        var address = new DeploymentAddress(new SignedInOwner(UnkeptOwnerCredentialStore.Instance));
         var choice = this.ChoiceOver(
             new StubDeploymentChoiceStore(),
             new StubDeploymentAddressSource(new Uri("http://mail.example/")),
             address);
 
         // Act
-        var failure = Assert.Throws<InvalidOperationException>(() => choice.Restore());
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => choice.RestoreAsync(TestContext.Current.CancellationToken).AsTask());
 
         // Assert
         Assert.Contains("http://mail.example", failure.Message, StringComparison.Ordinal);
@@ -124,17 +125,18 @@ public sealed class DeploymentChoiceTests : IDisposable
 
     /// <summary>A stated address fails loudly, and loudly is into a log — so what it names is the origin and never a credential written into it.</summary>
     [Fact]
-    public void Restore_AStatedAddressCarryingEmbeddedCredentials_FailsWithoutNamingTheSecret()
+    public async Task RestoreAsync_AStatedAddressCarryingEmbeddedCredentials_FailsWithoutNamingTheSecret()
     {
         // Arrange
-        var address = new DeploymentAddress(new AccessTokenStore());
+        var address = new DeploymentAddress(new SignedInOwner(UnkeptOwnerCredentialStore.Instance));
         var choice = this.ChoiceOver(
             new StubDeploymentChoiceStore(),
             new StubDeploymentAddressSource(new Uri("https://somebody:secret@mail.example/")),
             address);
 
         // Act
-        var failure = Assert.Throws<InvalidOperationException>(() => choice.Restore());
+        var failure = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => choice.RestoreAsync(TestContext.Current.CancellationToken).AsTask());
 
         // Assert
         Assert.DoesNotContain("secret", failure.Message, StringComparison.Ordinal);
@@ -144,17 +146,17 @@ public sealed class DeploymentChoiceTests : IDisposable
 
     /// <summary>A kept choice is not a statement anybody can go and read, so one that no longer passes is forgotten rather than fatal.</summary>
     [Fact]
-    public void Restore_AKeptChoiceTheRuleNoLongerAllows_FallsBackToTheHead()
+    public async Task RestoreAsync_AKeptChoiceTheRuleNoLongerAllows_FallsBackToTheHead()
     {
         // Arrange
-        var address = new DeploymentAddress(new AccessTokenStore());
+        var address = new DeploymentAddress(new SignedInOwner(UnkeptOwnerCredentialStore.Instance));
         var choice = this.ChoiceOver(
             new StubDeploymentChoiceStore(new Uri("http://kept.example/")),
             new StubDeploymentAddressSource(),
             address);
 
         // Act
-        var pointed = choice.Restore();
+        var pointed = await choice.RestoreAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.True(pointed);
@@ -166,7 +168,7 @@ public sealed class DeploymentChoiceTests : IDisposable
     {
         // Arrange
         var store = new StubDeploymentChoiceStore();
-        var address = new DeploymentAddress(new AccessTokenStore());
+        var address = new DeploymentAddress(new SignedInOwner(UnkeptOwnerCredentialStore.Instance));
         var choice = this.ChoiceOver(store, new StubDeploymentAddressSource(), address);
 
         // Act
@@ -184,7 +186,7 @@ public sealed class DeploymentChoiceTests : IDisposable
     {
         // Arrange
         var store = new StubDeploymentChoiceStore();
-        var address = new DeploymentAddress(new AccessTokenStore());
+        var address = new DeploymentAddress(new SignedInOwner(UnkeptOwnerCredentialStore.Instance));
         var choice = this.ChoiceOver(store, new StubDeploymentAddressSource(), address);
 
         this.Answer = _ => throw new HttpRequestException("no route to host");
@@ -206,7 +208,7 @@ public sealed class DeploymentChoiceTests : IDisposable
         var choice = this.ChoiceOver(
             store,
             new StubDeploymentAddressSource(),
-            new DeploymentAddress(new AccessTokenStore()));
+            new DeploymentAddress(new SignedInOwner(UnkeptOwnerCredentialStore.Instance)));
 
         this.Answer = _ => StubTransport.JsonResponse(
             """{"service":"SomebodyElse","version":"3.1","credential":"anonymous","permissions":[]}""");
@@ -236,7 +238,7 @@ public sealed class DeploymentChoiceTests : IDisposable
         var choice = this.ChoiceOver(
             store,
             new StubDeploymentAddressSource(),
-            new DeploymentAddress(new AccessTokenStore()));
+            new DeploymentAddress(new SignedInOwner(UnkeptOwnerCredentialStore.Instance)));
 
         // Act
         var outcome = await choice.ChooseAsync(written, TestContext.Current.CancellationToken);
@@ -252,21 +254,27 @@ public sealed class DeploymentChoiceTests : IDisposable
     public async Task ChooseAsync_AnotherDeployment_EndsTheSessionHeldAgainstTheFirst()
     {
         // Arrange
-        var tokens = new AccessTokenStore();
-        var address = new DeploymentAddress(tokens);
+        var kept = new StubOwnerCredentialStore();
+        var owner = new SignedInOwner(kept);
+        var address = new DeploymentAddress(owner);
         var choice = this.ChoiceOver(
             new StubDeploymentChoiceStore(new Uri("https://first.example/")),
             new StubDeploymentAddressSource(),
             address);
 
-        choice.Restore();
-        tokens.Accept("issued-by-the-first-deployment");
+        await choice.RestoreAsync(TestContext.Current.CancellationToken);
+
+        await owner.AcceptAsync(
+            new Uri("https://first.example/"),
+            new OwnerCredential("ada", "a-long-password"),
+            TestContext.Current.CancellationToken);
 
         // Act
         await choice.ChooseAsync("second.example", TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.False(tokens.IsSignedIn);
+        Assert.False(owner.IsSignedIn);
+        Assert.Null(kept.Held);
         Assert.Equal(new Uri("https://second.example/"), address.Current);
     }
 

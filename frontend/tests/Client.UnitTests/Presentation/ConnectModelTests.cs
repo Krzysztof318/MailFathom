@@ -53,8 +53,8 @@ public sealed class ConnectModelTests : IDisposable
     public async Task Address_AClientAlreadyPointedSomewhere_OpensOnWhereItIsPointed()
     {
         // Arrange
-        var address = new DeploymentAddress(new AccessTokenStore());
-        address.PointAt(new Uri("https://mail.example/"));
+        var address = new DeploymentAddress(new SignedInOwner(UnkeptOwnerCredentialStore.Instance));
+        await address.PointAtAsync(new Uri("https://mail.example/"), TestContext.Current.CancellationToken);
 
         await using var model = this.ModelOver(address: address);
 
@@ -83,7 +83,7 @@ public sealed class ConnectModelTests : IDisposable
     public async Task Connect_AnAddressAMailFathomAnswersAt_PointsTheClientAtItAndLeavesTheScreen()
     {
         // Arrange
-        var address = new DeploymentAddress(new AccessTokenStore());
+        var address = new DeploymentAddress(new SignedInOwner(UnkeptOwnerCredentialStore.Instance));
         var navigator = new StubNavigator();
 
         await using var model = this.ModelOver(address: address, navigator: navigator);
@@ -95,7 +95,9 @@ public sealed class ConnectModelTests : IDisposable
 
         // Assert
         Assert.Equal(new Uri("https://mail.example/"), address.Current);
-        Assert.NotEmpty(navigator.Requests);
+        // The sign-in screen rather than the application: an address is not a credential, and a person who has just
+        // said where their MailFathom is has said nothing yet about who they are.
+        Assert.Equal(ClientRoutes.SignIn, Assert.Single(navigator.Requests).Route.Base);
         Assert.False(await model.IsRefused);
     }
 
@@ -164,8 +166,8 @@ public sealed class ConnectModelTests : IDisposable
     public void Constructor_AMissingService_IsRefused()
     {
         // Arrange
-        var choice = this.ChoiceOver(new DeploymentAddress(new AccessTokenStore()));
-        var address = new DeploymentAddress(new AccessTokenStore());
+        var choice = this.ChoiceOver(new DeploymentAddress(new SignedInOwner(UnkeptOwnerCredentialStore.Instance)));
+        var address = new DeploymentAddress(new SignedInOwner(UnkeptOwnerCredentialStore.Instance));
         var navigator = new StubNavigator();
         var localizer = RefusalWords();
 
@@ -188,7 +190,7 @@ public sealed class ConnectModelTests : IDisposable
 
     private ConnectModel ModelOver(DeploymentAddress? address = null, StubNavigator? navigator = null)
     {
-        var pointed = address ?? new DeploymentAddress(new AccessTokenStore());
+        var pointed = address ?? new DeploymentAddress(new SignedInOwner(UnkeptOwnerCredentialStore.Instance));
 
         return new ConnectModel(
             this.ChoiceOver(pointed),

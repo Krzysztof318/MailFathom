@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Client.Backend;
+using MailFathom.Client.Backend.Authorization;
 using MailFathom.Client.Backend.Mail;
 using MailFathom.Client.Deployment;
 using MailFathom.Client.Presentation;
@@ -10,6 +11,7 @@ using MailFathom.Client.Presentation.Mailboxes;
 using MailFathom.Client.Presentation.Messages;
 using MailFathom.Client.Presentation.Spaces.Mail.Reading;
 using MailFathom.Client.Presentation.Workspace;
+using MailFathom.Client.Session;
 
 namespace MailFathom.Client.UnitTests.Strings;
 
@@ -289,6 +291,57 @@ public sealed class ResourceTableTests
         var expected = Enum.GetValues<MailBodyRefusal>()
             .Where(refusal => refusal is not MailBodyRefusal.None)
             .Select(MailBodyWords.RefusalResourceKeyFor);
+
+        // Act
+        var table = DeclaredLanguages.TableOf(culture);
+
+        // Assert
+        Assert.All(expected, key => Assert.True(table.ContainsKey(key), key));
+    }
+
+    /// <summary>
+    /// Every way a sign-in can end in something other than being signed in is a sentence the screen has to be able to
+    /// show, in the language it is being read in.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="SignInOutcome.Accepted" /> is excluded because it is the case that leaves the screen rather than
+    /// saying anything on it. The names are composed from the set exactly as <c>SignInModel</c> composes them, so a case
+    /// added to that set is named here rather than reaching somebody as the key itself.
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(Languages))]
+    public void Tables_EveryWayASignInCanBeRefused_IsExplainedInEveryLanguage(string culture)
+    {
+        // Arrange
+        var expected = Enum
+            .GetValues<SignInOutcome>()
+            .Where(outcome => outcome != SignInOutcome.Accepted)
+            .Select(outcome => $"SignInPage.Refusal.{outcome}");
+
+        // Act
+        var table = DeclaredLanguages.TableOf(culture);
+
+        // Assert
+        Assert.All(expected, key => Assert.True(table.ContainsKey(key), key));
+    }
+
+    /// <summary>
+    /// Every head that does not keep the credential owes a sentence saying so, because a start that asks again without
+    /// explaining itself reads as a sign-in that did not work.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="CredentialPersistence.Kept" /> is excluded for the reason the model excludes it: a head that keeps
+    /// the credential has nothing to say, since opening already signed in is what somebody expects.
+    /// </remarks>
+    [Theory]
+    [MemberData(nameof(Languages))]
+    public void Tables_EveryWayAHeadCanFailToKeepACredential_IsExplainedInEveryLanguage(string culture)
+    {
+        // Arrange
+        var expected = Enum
+            .GetValues<CredentialPersistence>()
+            .Where(persistence => persistence != CredentialPersistence.Kept)
+            .Select(persistence => $"SignInPage.Keeping.{persistence}");
 
         // Act
         var table = DeclaredLanguages.TableOf(culture);

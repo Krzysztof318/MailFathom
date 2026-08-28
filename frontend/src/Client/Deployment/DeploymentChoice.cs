@@ -89,6 +89,7 @@ internal sealed class DeploymentChoice
     }
 
     /// <summary>Points the client at whatever was decided before this run.</summary>
+    /// <param name="cancellationToken">Abandons clearing a credential the previous run left behind.</param>
     /// <returns><see langword="true" /> when the client is now pointed somewhere; <see langword="false" /> when nobody has said where.</returns>
     /// <exception cref="InvalidOperationException">Thrown when a build or an installation stated an address this client may not be pointed at.</exception>
     /// <remarks>
@@ -98,13 +99,13 @@ internal sealed class DeploymentChoice
     /// three outcomes. A kept choice is not a statement anybody can go and read, so one that no longer passes the rule
     /// is simply forgotten and the person is asked again.
     /// </remarks>
-    public bool Restore()
+    public async ValueTask<bool> RestoreAsync(CancellationToken cancellationToken = default)
     {
         var chosen = this.store.Read();
 
         if (chosen is not null && DeploymentAddressRule.Judge(chosen) == DeploymentAddressRefusal.None)
         {
-            this.address.PointAt(chosen);
+            await this.address.PointAtAsync(chosen, cancellationToken).ConfigureAwait(false);
 
             return true;
         }
@@ -127,7 +128,7 @@ internal sealed class DeploymentChoice
                 + "https to anything but this machine.");
         }
 
-        this.address.PointAt(stated);
+        await this.address.PointAtAsync(stated, cancellationToken).ConfigureAwait(false);
 
         return true;
     }
@@ -168,7 +169,8 @@ internal sealed class DeploymentChoice
         }
 
         this.store.Write(candidate);
-        this.address.PointAt(candidate);
+
+        await this.address.PointAtAsync(candidate, cancellationToken).ConfigureAwait(false);
 
         return DeploymentChoiceOutcome.Accepted;
     }

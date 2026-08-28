@@ -167,6 +167,16 @@
                                     Trim="false" />
   </ItemGroup>
 
+  <!-- The desktop head alone, and for one thing rather than for any code written by hand. Reading a CREDENTIALW back
+       out of the Windows Credential Manager is a pointer walk over a structure the platform allocated, and the
+       marshaller's own structure readers carry a dynamic-code requirement a published head would report — so the one
+       file that does it, Platforms/Desktop/Credentials/WindowsCredentialManager.cs, reads it directly. No other head
+       compiles that directory, which is why the property is scoped to the one target framework that needs it rather
+       than declared for the project. -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-desktop'">
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
   <!-- The bootstrapper deploys and loads what it finds embedded under WasmScripts, but the Uno SDK only ever adds one
        file there by itself: Uno.SingleProject.Wasm.targets includes AppManifest.js by name and globs nothing. A second
        script therefore has to be named here, or it stays an ordinary None item, never reaches the bundle, and the

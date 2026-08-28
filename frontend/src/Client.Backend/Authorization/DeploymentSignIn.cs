@@ -2,239 +2,153 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Client.Backend.Authorization.Redirect;
+using System.Net;
 
 namespace MailFathom.Client.Backend.Authorization;
 
-/// <summary>Signs a person in to their deployment, and holds the result for as long as the application runs.</summary>
+/// <summary>What the deployment made of a credential offered to it.</summary>
+/// <param name="Result">Whether it was accepted, and where it was not, which of the two refusals it was.</param>
+/// <param name="Persistence">What became of keeping it, which is meaningful only where it was accepted.</param>
+public sealed record SignInAttempt(SignInResult Result, CredentialPersistence Persistence);
+
+/// <summary>What a deployment answered a credential with.</summary>
+/// <remarks>
+/// Three cases rather than two, because a deployment whose operator never enabled password sign-in is not a wrong
+/// password and telling somebody it is sends them to change a password that was never the problem. Everything that is
+/// not an answer — nothing there, nothing in time, something that is not MailFathom — is a
+/// <see cref="DeploymentFailure" /> as it is everywhere else in this assembly.
+/// </remarks>
+public enum SignInResult
+{
+    /// <summary>The deployment accepted the credential, and the client is signed in.</summary>
+    Accepted = 0,
+
+    /// <summary>The deployment offers password sign-in and did not accept this username and password.</summary>
+    /// <remarks>One case rather than two, because that is what the deployment answers with: its refusal is identical for an unknown username, a wrong password, a disabled credential, and a caller that has spent its attempts. A client that guessed which of them it was would be inventing a distinction the service deliberately does not make.</remarks>
+    CredentialRefused = 1,
+
+    /// <summary>The deployment does not offer password sign-in at all.</summary>
+    /// <remarks>Read from the refusal's own challenge rather than guessed: a surface with the password method configured names it there, and one without it does not.</remarks>
+    PasswordSignInNotOffered = 2,
+}
+
+/// <summary>Signs a person in to their deployment with their owner username and password, and holds the result.</summary>
 /// <remarks>
 /// <para>
-/// Authorization code with PKCE, which is the grant <c>mfctl</c> already performs against the administrative surface
-/// and for the same reason: this application is a public client in both heads it runs as, so it holds no client secret
-/// and every grant is bound by a proof key instead. The <c>resource</c> parameter of RFC 8707 names the deployment, so
-/// the issued token's audience is the endpoint being signed in to rather than anything else that server protects.
+/// HTTP Basic against the credential the deployment's own administrator provisioned, which is the one way into this
+/// client. There is no authorization server to discover, no grant to redeem, and no token to renew: the password is
+/// presented on every request, it stays valid until an administrator rotates it, and the session ends when somebody
+/// signs out or when the deployment stops accepting it.
 /// </para>
 /// <para>
-/// What differs between the heads is one step — putting the authorization page in front of the person and catching what
-/// comes back — and that is <see cref="ISignInRedirectListener" />. Everything here runs identically on a desktop
-/// window and in a browser tab.
+/// Signing in is one exchange: the credential is offered to the session route, which every caller may reach and which
+/// answers about whatever was presented to it. That makes the answer authoritative in one request — an accepted
+/// credential comes back as MailFathom's own session document, and a refused one as the surface's own challenge.
 /// </para>
 /// <para>
-/// No refresh token is asked for and none is kept. The session lasts as long as the token the authorization server
-/// issued, and then the person signs in again; persisting anything that would outlive the process is a separate
-/// decision with its own privacy reasoning, and this class deliberately does not take it.
+/// The offered credential is presented on a transport that carries no ambient one, so a candidate is never mixed with
+/// whoever is already signed in, and a refused attempt leaves the running session exactly as it was.
 /// </para>
 /// </remarks>
 public sealed class DeploymentSignIn
 {
     private readonly IHttpClientFactory transports;
-    private readonly DeploymentOptions options;
-    private readonly ISignInRedirectListenerFactory listeners;
-    private readonly AccessTokenStore tokens;
+    private readonly DeploymentAddress address;
+    private readonly SignedInOwner owner;
 
-    /// <summary>Initializes the sign-in over the transports, the head's redirect listener, and the token store.</summary>
-    /// <param name="transports">Supplies the two configured clients this flow talks to.</param>
-    /// <param name="options">As which registered client this application signs in.</param>
-    /// <param name="listeners">How this head catches the redirect.</param>
-    /// <param name="tokens">Where the issued token is held for this run.</param>
+    /// <summary>Initializes the sign-in over the transports, the deployment reached, and the session it fills.</summary>
+    /// <param name="transports">Supplies the credential-free transport a candidate is offered on.</param>
+    /// <param name="address">Which deployment the credential is offered to.</param>
+    /// <param name="owner">Who is signed in during this run.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    /// <remarks>The transports are asked for per sign-in rather than held, so the deployment this reaches is whichever one <see cref="DeploymentAddress" /> carries when somebody signs in rather than the one the host was composed against.</remarks>
-    public DeploymentSignIn(
-        IHttpClientFactory transports,
-        DeploymentOptions options,
-        ISignInRedirectListenerFactory listeners,
-        AccessTokenStore tokens)
+    /// <remarks>The transport is asked for per attempt rather than held, so the deployment this reaches is whichever one <see cref="DeploymentAddress" /> carries when somebody signs in rather than the one the host was composed against.</remarks>
+    public DeploymentSignIn(IHttpClientFactory transports, DeploymentAddress address, SignedInOwner owner)
     {
         ArgumentNullException.ThrowIfNull(transports);
-        ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(listeners);
-        ArgumentNullException.ThrowIfNull(tokens);
+        ArgumentNullException.ThrowIfNull(address);
+        ArgumentNullException.ThrowIfNull(owner);
 
         this.transports = transports;
-        this.options = options;
-        this.listeners = listeners;
-        this.tokens = tokens;
+        this.address = address;
+        this.owner = owner;
     }
 
-    /// <summary>Runs the whole sign-in and keeps what it produced.</summary>
-    /// <param name="cancellationToken">Abandons the sign-in, releasing whatever the head reserved for the redirect.</param>
-    /// <returns>A task completing once the token is held.</returns>
-    /// <exception cref="DeploymentFailure">Thrown when discovery, the person's approval, or the exchange did not produce a token.</exception>
-    public async Task SignInAsync(CancellationToken cancellationToken = default)
+    /// <summary>Offers a credential to the deployment, and keeps it where it is accepted.</summary>
+    /// <param name="credential">The username and password somebody typed.</param>
+    /// <param name="cancellationToken">Abandons the attempt, which is not the same thing as it timing out.</param>
+    /// <returns>What the deployment made of it, and what became of keeping it.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="credential" /> is <see langword="null" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when nothing has pointed this client at a deployment yet.</exception>
+    /// <exception cref="DeploymentFailure">Thrown when nothing answered, nothing answered in time, or what answered is not MailFathom.</exception>
+    public async Task<SignInAttempt> SignInAsync(
+        OwnerCredential credential,
+        CancellationToken cancellationToken = default)
     {
-        var deployment = this.transports.CreateClient(DeploymentHttpClients.Deployment);
-        var authorizationServer = this.transports.CreateClient(DeploymentHttpClients.AuthorizationServer);
+        ArgumentNullException.ThrowIfNull(credential);
 
-        var authorization = await new DeploymentAuthorizationDiscovery(deployment, authorizationServer)
-            .ReadAsync(cancellationToken)
-            .ConfigureAwait(false);
+        var deployment = this.address.Current ?? throw new InvalidOperationException(
+            "This client has not been pointed at a deployment, so there is nothing to sign in to. "
+            + $"Point {nameof(DeploymentAddress)} at one before offering a credential.");
 
-        using var listener = this.listeners.Open();
+        var transport = this.transports.CreateClient(DeploymentHttpClients.SignIn);
 
-        var pending = BuildAuthorization(authorization, this.options.ClientId, listener.RedirectUri);
-
-        var redirect = await listener
-            .AuthorizeAsync(pending.AuthorizationUrl, cancellationToken)
-            .ConfigureAwait(false);
-
-        var authorizationCode = ReadAuthorizationCode(redirect, pending);
-
-        var issued = await this
-            .RedeemAsync(
-                authorizationServer,
-                authorization,
-                pending,
-                listener.RedirectUri,
-                authorizationCode,
-                cancellationToken)
-            .ConfigureAwait(false);
-
-        this.tokens.Accept(issued);
-    }
-
-    /// <summary>Builds the address the person opens, and the proof the code will be redeemed with.</summary>
-    internal static PendingSignIn BuildAuthorization(
-        DeploymentAuthorization authorization,
-        string clientId,
-        Uri redirectUri)
-    {
-        ArgumentNullException.ThrowIfNull(authorization);
-        ArgumentNullException.ThrowIfNull(redirectUri);
-        ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
-
-        var proofKey = PkceCodeChallenge.Create();
-        var state = AntiForgeryState.Create();
-
-        var query = new List<KeyValuePair<string, string>>
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(deployment, DeploymentRoutes.SessionPath))
         {
-            new("client_id", clientId),
-            new("response_type", "code"),
-            new("redirect_uri", redirectUri.AbsoluteUri),
-            new("state", state),
-            new("code_challenge", proofKey.Challenge),
-            new("code_challenge_method", "S256"),
-
-            // RFC 8707. Without it a server protecting several resources issues a token whose audience is its own
-            // default, and the deployment refuses it — correctly, and for a reason nothing in the refusal explains.
-            new("resource", authorization.Resource),
-        };
-
-        // Verbatim from the deployment's metadata document. An empty scope parameter is not the same thing as an absent
-        // one, and a deployment that requires none publishes an empty list, so nothing is sent rather than a blank.
-        if (!string.IsNullOrWhiteSpace(authorization.Scope))
-        {
-            query.Add(new KeyValuePair<string, string>("scope", authorization.Scope));
-        }
-
-        return new PendingSignIn(
-            new UriBuilder(authorization.AuthorizationEndpoint)
-            {
-                Query = Merge(authorization.AuthorizationEndpoint.Query, Encode(query)),
-            }.Uri,
-            state,
-            proofKey);
-    }
-
-    /// <summary>Reads the code out of a redirect, once the redirect has been shown to belong to this sign-in.</summary>
-    /// <remarks>
-    /// The state is compared before anything else is read, including the error. A redirect that echoes something else
-    /// was produced by an exchange this process did not start, so neither its code nor its refusal is this sign-in's to
-    /// act on — and acting on the refusal would let anything that can navigate a browser end somebody's sign-in.
-    /// </remarks>
-    private static string ReadAuthorizationCode(SignInRedirect redirect, PendingSignIn pending)
-    {
-        if (!pending.MatchesReturnedState(redirect.State))
-        {
-            throw new DeploymentFailure(
-                DeploymentFailureReason.Unusable,
-                "The sign-in came back with an answer to a different request, so it was not completed.");
-        }
-
-        if (redirect.Error is { Length: > 0 })
-        {
-            throw new DeploymentFailure(
-                DeploymentFailureReason.CredentialRefused,
-                "The sign-in was refused or dismissed. Try again.");
-        }
-
-        return redirect.Code is { Length: > 0 } code
-            ? code
-            : throw new DeploymentFailure(
-                DeploymentFailureReason.Unusable,
-                "The sign-in came back without an authorization code, so there was nothing to exchange.");
-    }
-
-    /// <summary>Adds this request's parameters to whatever query the authorization endpoint already publishes.</summary>
-    /// <remarks>
-    /// RFC 6749 section 3.1: an authorization endpoint may carry a query component of its own — a tenant's policy
-    /// parameter is the one that appears in practice — and it must be retained when parameters are added to it.
-    /// Assigning <see cref="UriBuilder.Query" /> replaces the whole component, so the published one is read first and
-    /// the request's parameters appended to it.
-    /// </remarks>
-    private static string Merge(string publishedQuery, string parameters)
-    {
-        var published = publishedQuery.TrimStart('?');
-
-        return published.Length == 0 ? parameters : $"{published}&{parameters}";
-    }
-
-    /// <summary>Writes a query the way a form-encoded one is written.</summary>
-    /// <remarks>
-    /// Hand-rolled because <c>System.Web</c> is not part of a net10.0 library's framework, and because the alternative —
-    /// reading a <see cref="FormUrlEncodedContent" /> back as a string — would make building an address an asynchronous
-    /// operation for no gain.
-    /// </remarks>
-    private static string Encode(IEnumerable<KeyValuePair<string, string>> parameters) =>
-        string.Join(
-            '&',
-            parameters.Select(parameter =>
-                $"{Uri.EscapeDataString(parameter.Key)}={Uri.EscapeDataString(parameter.Value)}"));
-
-    /// <summary>Exchanges the authorization code the redirect carried for an access token.</summary>
-    private async Task<string> RedeemAsync(
-        HttpClient authorizationServer,
-        DeploymentAuthorization authorization,
-        PendingSignIn pending,
-        Uri redirectUri,
-        string authorizationCode,
-        CancellationToken cancellationToken)
-    {
-        var form = new List<KeyValuePair<string, string>>
-        {
-            new("grant_type", "authorization_code"),
-            new("code", authorizationCode),
-            new("client_id", this.options.ClientId),
-            new("code_verifier", pending.ProofKey.Verifier),
-            new("redirect_uri", redirectUri.AbsoluteUri),
-            new("resource", authorization.Resource),
-        };
-
-        using var request = new HttpRequestMessage(HttpMethod.Post, authorization.TokenEndpoint)
-        {
-            Content = new FormUrlEncodedContent(form),
+            Headers = { Authorization = BasicCredentialHeader.ComposedFrom(credential) },
         };
 
         using var response = await DeploymentExchange
-            .SendAsync(authorizationServer, request, cancellationToken)
+            .SendAsync(transport, request, cancellationToken)
             .ConfigureAwait(false);
 
-        // The status code is not the verdict. RFC 6749 requires a rejected grant to arrive as 400 with a
-        // machine-readable 'error', so the body is read either way and the status consulted only when it holds nothing.
-        var issued = await DeploymentExchange
-            .ReadBodyAsync(response, DeploymentJsonContext.Default.OAuthTokenResponse, cancellationToken)
-            .ConfigureAwait(false);
-
-        if (issued.Error is { Length: > 0 })
+        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
         {
-            throw new DeploymentFailure(
-                DeploymentFailureReason.CredentialRefused,
-                "The authorization server did not accept the sign-in. Start it again.");
+            return new SignInAttempt(
+                BasicCredentialHeader.InvitesAPassword(response)
+                    ? SignInResult.CredentialRefused
+                    : SignInResult.PasswordSignInNotOffered,
+                this.owner.Persistence);
         }
 
-        return issued.AccessToken is { Length: > 0 } accessToken
-            ? accessToken
-            : throw new DeploymentFailure(
+        DeploymentExchange.RefuseUnusableStatus(response);
+
+        // Read rather than assumed from the status, for the reason the probe reads it: anything can answer 200 on a
+        // port, and a captive portal that admits everything would otherwise sign somebody in to nothing.
+        var reported = await DeploymentExchange
+            .ReadBodyAsync(response, DeploymentJsonContext.Default.DeploymentSession, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (!string.Equals(reported.Service, DeploymentProbe.ServiceName, StringComparison.Ordinal))
+        {
+            throw new DeploymentFailure(
                 DeploymentFailureReason.Unusable,
-                "The authorization server answered without an access token, so there is nothing to present to MailFathom.");
+                "Something answered at that address, but it is not a MailFathom deployment.");
+        }
+
+        var persistence = await this.owner
+            .AcceptAsync(deployment, credential, cancellationToken)
+            .ConfigureAwait(false);
+
+        return new SignInAttempt(SignInResult.Accepted, persistence);
     }
+
+    /// <summary>Ends the session and clears whatever this head kept of it.</summary>
+    /// <param name="cancellationToken">Abandons the removal, which does not un-end the session.</param>
+    /// <returns>A task completing once nothing is held here or in the store.</returns>
+    /// <remarks>Local, and it revokes nothing: HTTP Basic has no server-side session to end, so the password stays valid on the deployment until an administrator rotates it under <c>AdminEndpoint</c>.</remarks>
+    public ValueTask SignOutAsync(CancellationToken cancellationToken = default) =>
+        this.owner.ForgetAsync(cancellationToken);
+
+    /// <summary>Restores a kept credential where this head kept one for the deployment it came up pointed at.</summary>
+    /// <param name="cancellationToken">Abandons the read.</param>
+    /// <returns><see langword="true" /> where the client is now signed in without anybody typing anything.</returns>
+    /// <remarks>
+    /// Asked once, after the deployment address has been restored and before anything is navigated to, so the client
+    /// opens on the shell or on the sign-in screen rather than on a shell whose first request fails. It presents
+    /// nothing to the deployment: a credential the deployment has since stopped accepting is discovered by the first
+    /// request that carries it, which is the same answer a session that expired mid-run gets and is answered the same
+    /// way.
+    /// </remarks>
+    public ValueTask<bool> RestoreAsync(CancellationToken cancellationToken = default) =>
+        this.owner.RestoreAsync(this.address.Current, cancellationToken);
 }

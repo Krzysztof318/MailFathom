@@ -177,13 +177,17 @@ project here and neither build reads the other's files.
 - A third target framework, plain `net10.0`, builds no head. It exists so a unit-test project can reference the
   application, since a test host is neither a browser nor a window.
 - `src/Client.Backend` is everything that reaches the service: the typed client, the wire records and their
-  source-generated readers, and the OAuth sign-in. It targets that plain `net10.0` alone and references no Uno package,
-  which is the point of it — the boundary between a view and a service call is a reference graph here rather than a
-  convention, so a WinUI type written in it does not compile. `Client` references it and it references nothing here.
-- The one step of signing in that a head cannot share is a port, `ISignInRedirectListener`. The loopback implementation
-  the desktop head uses ships in `Client.Backend`; the browser head's lives under `src/Client/Platforms/WebAssembly/`,
-  because it needs the JavaScript interop only that target framework compiles — and that interop is why the browser
-  head is the one place the application project sets `AllowUnsafeBlocks`, which the `[JSImport]` generator requires.
+  source-generated readers, and the password sign-in that presents an owner's credential as an RFC 7617
+  `Authorization: Basic` header. It targets that plain `net10.0` alone and references no Uno package, which is the point
+  of it — the boundary between a view and a service call is a reference graph here rather than a convention, so a WinUI
+  type written in it does not compile. `Client` references it and it references nothing here.
+- The one part of signing in that a head cannot share is a port, `IOwnerCredentialStore`: where the credential outlives
+  the process. `Client.Backend` declares it and ships the implementation that keeps nothing, which is what the browser
+  head composes because every store a browser offers is scoped to the page's origin rather than to a person. The
+  desktop head's implementations live under `src/Client/Platforms/Desktop/Credentials/`, one per operating system —
+  the Credential Manager, the login keychain, and Secret Service over D-Bus — reached by source-generated P/Invoke, and
+  the Windows one is why the desktop head is the one place the application project sets `AllowUnsafeBlocks` for that
+  target framework. The browser head sets the same property for its own reason, which is the `[JSImport]` generator.
 - A published desktop head carries the repository's own `LICENSE` and `NOTICE` beside it, and those are the two files
   this project attaches by hand. The project file attaches both to every `net10.0-desktop` publish and fails the build
   when one is missing, so the attribution travels with the artifact rather than with the workflow that happens to
@@ -222,7 +226,7 @@ project here and neither build reads the other's files.
   them and says what a lock file there would have recorded instead.
 
 The client reaches MailFathom over the endpoints `Host` exposes and shares no type with it — its wire records and its
-OAuth code are its own, stated again at this end rather than referenced across the boundary. Which deployment it
+password sign-in are its own, stated again at this end rather than referenced across the boundary. Which deployment it
 reaches is the composing head's to supply, through `IDeploymentAddressSource`: an installed head reads the `Deployment`
 section out of an embedded `appsettings.json`, and the browser head reads the origin it was served from, because the
 container image serves the bundle from the same origin as the surface it calls. One source belongs to neither head and

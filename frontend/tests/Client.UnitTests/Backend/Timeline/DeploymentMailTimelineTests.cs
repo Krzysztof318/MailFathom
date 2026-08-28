@@ -47,7 +47,9 @@ public sealed class DeploymentMailTimelineTests
     public async Task ReadMailTimelineAsync_ADeploymentAnswering_ReadsEveryFieldOfTheContract()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(OnePage));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(OnePage),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         var page = await harness.Client.ReadMailTimelineAsync(
@@ -84,7 +86,9 @@ public sealed class DeploymentMailTimelineTests
     public async Task ReadMailTimelineAsync_ARequestNarrowingSomewhere_GoesToTheClientSurfaceCarryingIt()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(OnePage));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(OnePage),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         await harness.Client.ReadMailTimelineAsync(
@@ -103,7 +107,9 @@ public sealed class DeploymentMailTimelineTests
     public async Task ReadMailTimelineAsync_ADocumentNamingNoRow_ReadsAsEmptyRatherThanFailing()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse("""{"pageSize":25}"""));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse("""{"pageSize":25}"""),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         var page = await harness.Client.ReadMailTimelineAsync(
@@ -125,8 +131,9 @@ public sealed class DeploymentMailTimelineTests
     public async Task ReadMailTimelineAsync_ACursorTheDeploymentRefuses_ReachesTheCallerAsARefusedRequest()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
-            _ => StubTransport.JsonResponse("{}", HttpStatusCode.BadRequest));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse("{}", HttpStatusCode.BadRequest),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         var failure = await Assert.ThrowsAsync<DeploymentFailure>(
@@ -143,8 +150,9 @@ public sealed class DeploymentMailTimelineTests
     public async Task ReadMailTimelineAsync_ACredentialWithoutTheGrant_IsRefusedRatherThanAnsweredWithNothing()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
-            _ => StubTransport.JsonResponse("{}", HttpStatusCode.Forbidden));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse("{}", HttpStatusCode.Forbidden),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act
         var failure = await Assert.ThrowsAsync<DeploymentFailure>(
@@ -161,7 +169,9 @@ public sealed class DeploymentMailTimelineTests
     public async Task ReadMailTimelineAsync_NoQuery_IsRefused()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(OnePage));
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(OnePage),
+            cancellationToken: TestContext.Current.CancellationToken);
 
         // Act, Assert
         await Assert.ThrowsAsync<ArgumentNullException>(

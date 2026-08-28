@@ -11,8 +11,8 @@ namespace MailFathom.Client.Backend;
 /// <para>
 /// The client is configured with an address and appends the rest, so these paths are the whole of what it assumes
 /// about the other side. Stated together rather than beside each caller, because they are one agreement with the
-/// service: the deployment publishes the client surface beneath the prefix and derives its resource identifier from
-/// that same prefix, which is what puts the metadata document exactly where RFC 9728 says to look for it.
+/// service: the deployment publishes its whole client surface beneath the prefix, so an address and this list are
+/// between them everything needed to reach any of it.
 /// </para>
 /// <para>
 /// The same agreement is stated at the other end, in <c>backend/src/Cli/Administration/AdminEndpointRoutes.cs</c> for
@@ -60,7 +60,4 @@ internal static class DeploymentRoutes
     internal static string MailBodyPath(Guid storedEmailId, bool remoteImages) => string.Create(
         CultureInfo.InvariantCulture,
         $"{Prefix}/messages/{storedEmailId:D}/body{(remoteImages ? "?remoteImages=true" : string.Empty)}");
-
-    /// <summary>Where a deployment publishes what a client must obtain before it holds any credential.</summary>
-    internal const string ProtectedResourceMetadataPath = $"/.well-known/oauth-protected-resource{Prefix}";
 }

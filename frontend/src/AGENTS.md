@@ -201,11 +201,14 @@ frontend/
   there does not compile, and neither does a `DependencyObject` in a service call. That is the rule this page states
   about a model taking on a view's work, made into a reference graph rather than something a reviewer has to remember.
   The reference goes one way and only one way: `Client` references `Client.Backend`, never the reverse.
-- **The browser head is the one place the application project sets `AllowUnsafeBlocks`**, and it is set for a generator
-  rather than for any code written here. `[JSImport]` marshals through pointers, so the interop source generator emits
-  unsafe code and refuses to run without the property — `SYSLIB1074` says so by name. Nothing under
-  `Platforms/WebAssembly/` contains an `unsafe` block of its own, which is why the property is conditioned on that one
-  target framework instead of declared for the project.
+- **`AllowUnsafeBlocks` is set per head and never for the project**, because each head needs it for a reason of its own
+  and a project-wide property would license unsafe code in the two thirds of this project that need none. The browser
+  head sets it for a generator rather than for any code written here: `[JSImport]` marshals through pointers, so the
+  interop source generator emits unsafe code and refuses to run without the property — `SYSLIB1074` says so by name —
+  and nothing under `Platforms/WebAssembly/` contains an `unsafe` block of its own. The desktop head sets it for code
+  that is written here, and for one call: reading an entry out of the Windows Credential Manager hands back a pointer
+  to a `CREDENTIALW` the caller walks, and `Marshal.PtrToStructure` is the safe alternative that a trimmed or
+  ahead-of-time head may not use.
 - **The two stacks share no build file.** `frontend/Directory.Build.props` and `frontend/Directory.Packages.props` are
   this stack's own, and a property that has to hold in both is written in both rather than lifted to the root — with
   one exception, `Version.props`, which both import so the client and the service report one number.
@@ -364,11 +367,11 @@ deployment, because that is what a correctly configured one does; the probe repo
 than as not MailFathom. This is what turns a typing mistake into a sentence on the screen a person is still looking at
 rather than an authentication failure after they have entered a password.
 
-**Pointing the client elsewhere ends the session.** `DeploymentAddress` holds the current address and drops the access
-token when it moves, because a credential belongs to an owner on one deployment and means nothing on another. It is
-also why `DeploymentClient`, `DeploymentSignIn`, and `DeploymentProbe` ask `IHttpClientFactory` for a transport per
-exchange instead of holding one: a captured transport keeps the base address it was created with, and the client would
-go on reaching the deployment somebody had just left.
+**Pointing the client elsewhere ends the session.** `DeploymentAddress` holds the current address and forgets the
+credential when it moves — from memory and from wherever the head kept it — because a credential belongs to an owner on
+one deployment and means nothing on another. It is also why `DeploymentClient`, `DeploymentSignIn`, and
+`DeploymentProbe` ask `IHttpClientFactory` for a transport per exchange instead of holding one: a captured transport
+keeps the base address it was created with, and the client would go on reaching the deployment somebody had just left.
 
 **The build-stated source exists for the case none of the head answers fits.** A head an orchestration started is served
 by a development server on a socket of its own while the service listens on another, so the origin it was fetched from
@@ -390,19 +393,20 @@ never references a backend project, never links a backend source file, and never
 `backend/src/`.
 
 **All of it lives in `src/Client.Backend/`**, and a screen reaches the service only through what that assembly
-publishes. Nothing under `src/Client/` opens an `HttpClient`, holds a token, or writes a route — the boundary above is
-what keeps that from being a rule somebody has to enforce by reading.
+publishes. Nothing under `src/Client/` opens an `HttpClient`, holds a credential, or writes a route — the boundary
+above is what keeps that from being a rule somebody has to enforce by reading.
 
 - **The contract is the wire format**, so the client declares its own types for what it sends and receives, named for
   what the client does with them. Two records that happen to have the same fields on both sides of an HTTP call are not
   duplication — they are one contract stated at each end, and coupling them would put a domain type in a view. The same
-  holds for the OAuth code: `Client.Backend` carries its own proof key, anti-forgery value, and metadata addresses
-  rather than sharing `backend/src/Common/OAuth/`, for exactly the reason nothing here reaches into `backend/`.
+  holds for the authentication scheme: `Client.Backend` composes its own `Authorization: Basic` header and reads its own
+  challenge rather than sharing anything under `backend/src/Host/Security/`, for exactly the reason nothing here reaches
+  into `backend/`.
 - **Serialization is source-generated.** The browser head is trimmed, and a reflection-based `ReadFromJsonAsync` is
   removed by the trimmer rather than reported; `.config/BannedSymbols.txt` already refuses those overloads. One
   `JsonSerializerContext` covers every document the client reads.
 - **Where the deployment is, is nobody's to state here**, and `AddMailFathomDeployment` does not take it. What it takes
-  is `DeploymentOptions` — the registered client identifier and the timeout — and it registers `DeploymentAddress`,
+  is `DeploymentOptions` — the timeout, and nothing else — and it registers `DeploymentAddress`,
   which starts pointed at nothing and is pointed by whoever composes the application. There is no default address
   anywhere and nothing composes one from a literal, because a client that guessed would reach somebody else's
   deployment on a mistyped value. What this assembly does own is the rule that judges one: `DeploymentAddressRule`
@@ -427,35 +431,42 @@ what keeps that from being a rule somebody has to enforce by reading.
   surface publishes more than the client has reached yet, so
   [the client endpoint](../../docs/operations/client-endpoint.md) rather than this file is what says what is there. No
   route reaches a mail server, so no screen here can wait on IMAP or set the remote `\Seen` flag.
-- **Signing in is authorization code with PKCE**, which is the grant `mfctl` performs against the administrative
-  surface and for the same reason: a desktop binary and a WebAssembly bundle are both readable by whoever runs them, so
-  this is a public client and holds no secret. Where to sign in is discovered rather than configured — the deployment's
-  RFC 9728 document names the authorization server, and that server's own discovery document names the endpoints — and
-  a discovery document that does not report the issuer that led to it is refused, so nothing can move a sign-in to a
-  server the deployment never named.
-- **One step of that is head-specific, and it is a port**: `ISignInRedirectListener` puts the authorization page in
-  front of the person and catches what comes back. The desktop head binds a loopback address and starts the platform's
-  browser at it, as `mfctl` does; the browser head opens a window on the application's own origin and reads the
-  redirect out of it. **The browser head must not navigate the document away** — that destroys the page along with the
-  proof key and the anti-forgery value, leaving browser storage as the only place to put them back, which is exactly
-  what this application does not do.
-- **The credential lives in memory for the process's lifetime and nowhere else** — no file, no browser storage, no
-  platform credential store — and it is not readable outside `Client.Backend`: a screen may ask whether somebody is
-  signed in, and the handler in the transport pipeline is the only thing that sees it. No refresh token is asked for or
-  kept, so the session ends when the issued token does or when the process does, and the person signs in again.
-- **Where it may be kept instead is settled and not yet built**, and
-  [ADR 0018](../../docs/decisions/0018-where-the-client-keeps-its-sign-in-credential.md) is the whole of it — read the
-  record before writing any of it rather than deciding a store while building a screen. It keeps the credential only
-  where the operating system holds a secret for one user: the Credential Manager on Windows,
-  the login keychain on macOS, Secret Service over D-Bus on Linux, and `PasswordVault` on a mobile head, which Uno backs
-  with the Keystore and the Keychain but marks unsupported on its Skia targets — which is why the desktop head reaches
-  its three operating systems itself. **The browser head keeps nothing**, because every store a browser offers is scoped
-  to the page's origin rather than to a person, so anything running on the origin would read an owner's password.
-  `Client.Backend` declares the port and is the only thing that reads the credential back out of it; a head's
-  implementation under `Platforms/` reaches that platform's store and hands the value to nothing else, as
-  `BrowserSignInRedirectListener` already does for a port of the same shape. A head whose store is absent or refuses
-  falls back to memory and says so, never to a file beside the binary and never to
+- **Signing in is a username and a password**, presented as an RFC 7617 `Authorization: Basic` header on every request.
+  It is the owner credential the deployment's `/api/client` surface admits, and it is the whole of what this client
+  offers: there is no authorization server to discover, no proof key, no anti-forgery value, no redirect to catch, and
+  no head-specific listener. `SignInPage` asks for the two halves and nothing else, and a start with an address and no
+  usable credential opens there rather than on a shell whose every request would be refused.
+- **A refusal is one thing or another thing, and the challenge is what tells them apart.** A deployment offering the
+  method names `Basic` in its `WWW-Authenticate` challenge, so a refusal that names it is a credential the deployment
+  did not accept and one that does not is a deployment whose operator never enabled password sign-in. The first is
+  reported as one sentence about the pair — never as a guess about which half was wrong, which is a distinction the
+  service deliberately does not make and a client may not invent — and the second sends somebody to their operator
+  rather than back to their keyboard.
+- **The credential is not readable outside `Client.Backend`.** `SignedInOwner` holds it, `OwnerCredentialHandler` in
+  the transport pipeline is the only thing that composes it into a header, and what a screen may ask is whether
+  somebody is signed in and under which username. Neither half reaches a log, an error message, an exception, or a
+  telemetry event: `OwnerCredential` overrides `ToString` so a record's generated printing cannot carry the password,
+  and every refusal reaches a screen as a case of a closed set with a sentence chosen from the string table.
+- **Where a head keeps it is `IOwnerCredentialStore`**, and
+  [ADR 0018](../../docs/decisions/0018-where-the-client-keeps-its-sign-in-credential.md) is the whole of that decision —
+  read the record before changing any of it. `Client.Backend` declares the port and is the only thing that reads the
+  credential back out of it; an implementation under `Platforms/Desktop/Credentials/` reaches its own operating
+  system's store — the Credential Manager on Windows, the login keychain on macOS, Secret Service over D-Bus on Linux —
+  and hands the value to nothing else. A mobile head's `PasswordVault` is the same port again, which Uno backs with the
+  Keystore and the Keychain but marks unsupported on its Skia targets, which is why the desktop head reaches its three
+  operating systems itself. **The browser head keeps nothing**, because every store a browser offers is scoped to the
+  page's origin rather than to a person, so anything running on the origin would read an owner's password. A head that
+  keeps none, and a machine whose store cannot be reached, each say so on the sign-in screen before anything is typed
+  rather than being discovered by being asked again — never falling back to a file beside the binary and never to
   `ApplicationData.Current.LocalSettings`, which holds the deployment address and no secret.
+- **At most one credential is held, and three rules clear it.** Pointing the client at another deployment forgets the
+  one belonging to the deployment being left; a start reconciles what is kept against wherever the client came up
+  pointed and clears what does not match; and a start that resolved no address at all clears whatever was kept. A
+  deployment that stops accepting a credential it once accepted ends the session where the refusal is read, and signing
+  out clears what is held, what was kept, and the session answer derived from it. All of those end in one place —
+  `SignedInOwner.SignedInChanged`, answered by `ShellModel` — so no screen has to remember to check. Signing out asks
+  the deployment nothing, because HTTP Basic has no server-side session to end and the interface may not read as
+  revocation.
 
 ## What the session decides, and where that decision is taken
 
