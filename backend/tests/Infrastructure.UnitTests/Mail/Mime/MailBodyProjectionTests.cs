@@ -788,6 +788,142 @@ public sealed class MailBodyProjectionTests
         Assert.StartsWith("data:image/png;base64,", picture.Source, StringComparison.Ordinal);
     }
 
+    /// <summary>A run cut at a bound is cut between characters rather than through one.</summary>
+    /// <remarks>
+    /// The single letter in front of the emoji is what puts the bound in the middle of an astral pair rather than
+    /// between two of them, which is the offset a sender chooses. The lone surrogate that a raw slice would leave is
+    /// replaced by a UTF-8 writer and rejected by a JSON one, so the reader loses the whole message rather than the
+    /// tail of one paragraph — and the round trip below is the assertion because it is the same encode the response
+    /// performs on the way out of this boundary.
+    /// </remarks>
+    [Theory]
+    [InlineData("<p>x{0}</p>")]
+    [InlineData("<pre>x{0}</pre>")]
+    public async Task ProduceAsync_TextCutWhereAnAstralPairFalls_LeavesNoHalfCharacter(string shape)
+    {
+        // Arrange
+        var written = string.Format(
+            CultureInfo.InvariantCulture,
+            shape,
+            string.Concat(Enumerable.Repeat("\U0001F600", 30_000)));
+
+        // Act
+        var document = await DocumentOf(written, maxBodyCharacters: 200_000);
+
+        // Assert
+        var text = TextOf(document);
+        Assert.True(document.Truncated);
+        Assert.NotEmpty(text);
+        Assert.Equal(text, Encoding.UTF8.GetString(Encoding.UTF8.GetBytes(text)));
+    }
+
+    /// <summary>A preformatted block cut at the bound says so, because what it holds is meant to be complete.</summary>
+    /// <remarks>
+    /// A log or a diff arriving with its tail dropped and nothing saying so reads as the whole of what the sender
+    /// wrote, which is the one thing a block that preserves its own formatting must not do.
+    /// </remarks>
+    [Fact]
+    public async Task ProduceAsync_PreformattedBlockPastTheCharacterBound_SaysItWasCut()
+    {
+        // Arrange
+        var written = new string('a', 30_000);
+
+        // Act
+        var document = await DocumentOf($"<pre>{written}</pre>", maxBodyCharacters: 200_000);
+
+        // Assert
+        var preformatted = Assert.IsType<MailPreformattedBlock>(Assert.Single(document.Blocks));
+        Assert.Equal(20_000, preformatted.Text.Length);
+        Assert.True(document.Truncated);
+    }
+
+    /// <summary>A picture the message wrote into its own markup that no allow-list admits is reported as undrawn.</summary>
+    /// <remarks>
+    /// The same loss reached through a part of the message is counted where the part is decoded, and reached through
+    /// the document's budget where a picture is charged against it. This is the third way to it, and a reader is owed
+    /// the same sentence about all three. An SVG is the media type the allow-list exists to exclude: it is a document
+    /// that can carry script and name a remote address, which is everything the reduction takes out of a message.
+    /// </remarks>
+    [Theory]
+    [InlineData("data:image/svg+xml;base64,PHN2Zy8+")]
+    [InlineData("data:text/html;base64,PGgxLz4=")]
+    public async Task ProduceAsync_ADataUriNoAllowListAdmits_DrawsNothingAndSaysSo(string source)
+    {
+        // Act
+        var document = await DocumentOf($"<p>Readable</p><img src=\"{source}\" alt=\"A picture\">");
+
+        // Assert
+        Assert.Empty(ImagesIn(document.Blocks));
+        Assert.Equal(1, document.UndrawnInlineImageCount);
+        Assert.True(document.Truncated);
+    }
+
+    /// <summary>A picture written into the markup past what one picture may weigh is reported as undrawn too.</summary>
+    [Fact]
+    public async Task ProduceAsync_ADataUriPastWhatOnePictureMayWeigh_DrawsNothingAndSaysSo()
+    {
+        // Arrange
+        var written = Convert.ToBase64String(new byte[(2 * 1024 * 1024) + 1]);
+
+        // Act
+        var document = await DocumentOf(
+            $"<p>Readable</p><img src=\"data:image/png;base64,{written}\">",
+            maxBodyCharacters: 4_000_000);
+
+        // Assert
+        Assert.Empty(ImagesIn(document.Blocks));
+        Assert.Equal(1, document.UndrawnInlineImageCount);
+        Assert.True(document.Truncated);
+    }
+
+    /// <summary>A picture the markup writes within every bound is drawn from the markup itself.</summary>
+    /// <remarks>The affirmative beside the two refusals above, so the allow-list is shown to admit as well as refuse.</remarks>
+    [Fact]
+    public async Task ProduceAsync_ADataUriTheAllowListAdmits_IsDrawnFromTheMarkup()
+    {
+        // Arrange
+        var written = Convert.ToBase64String(new byte[64]);
+
+        // Act
+        var document = await DocumentOf($"<img src=\"data:image/png;base64,{written}\" alt=\"A picture\">");
+
+        // Assert
+        var picture = Assert.Single(ImagesIn(document.Blocks));
+        Assert.StartsWith("data:image/png;base64,", picture.Source, StringComparison.Ordinal);
+        Assert.Equal(0, document.UndrawnInlineImageCount);
+    }
+
+    /// <summary>The words a list holds outside its items are kept, because that is what they are anywhere else.</summary>
+    /// <remarks>
+    /// A parser foster-parents stray content out of a table and leaves it in place in a list, so a sentence written
+    /// beside two items is ordinary content of the message rather than markup nobody meant. It is emitted before the
+    /// list, which is where the message put it.
+    /// </remarks>
+    [Fact]
+    public async Task ProduceAsync_WordsAListHoldsOutsideItsItems_AreKept()
+    {
+        // Act
+        var document = await DocumentOf("<ul><div>Sale ends today</div><li>One</li><li>Two</li></ul>");
+
+        // Assert
+        Assert.Contains("Sale ends today", TextOf(document), StringComparison.Ordinal);
+        var list = Assert.IsType<MailListBlock>(document.Blocks[^1]);
+        Assert.Equal(2, list.Items.Count);
+    }
+
+    /// <summary>A reference a list carries outside its items is counted, as one anywhere else on the walk is.</summary>
+    [Fact]
+    public async Task ProduceAsync_AReferenceAListCarriesOutsideItsItems_IsCounted()
+    {
+        // Act
+        var document = await DocumentOf(
+            "<ul><div style=\"background-image:url(https://tracker.test/p.gif)\">Tracked</div><li>One</li></ul>");
+
+        // Assert
+        Assert.Equal(1, document.RemovedRemoteReferenceCount);
+        Assert.Contains("Tracked", TextOf(document), StringComparison.Ordinal);
+    }
+
     /// <summary>Every link the document carries, in reading order.</summary>
     private static IEnumerable<MailDocumentLink> LinksIn(MailDocument document) => document.Blocks
         .OfType<MailParagraphBlock>()

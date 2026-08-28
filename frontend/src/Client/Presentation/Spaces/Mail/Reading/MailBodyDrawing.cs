@@ -6,6 +6,7 @@ using System.Globalization;
 using MailFathom.Client.Backend.Mail;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Documents;
+using Microsoft.UI.Xaml.Media.Imaging;
 
 namespace MailFathom.Client.Presentation.Spaces.Mail.Reading;
 
@@ -59,6 +60,13 @@ internal sealed class MailBodyDrawing
 
     /// <summary>Material's own key for what this pane draws with, read per drawing for the reason above.</summary>
     private const string InkBrushKey = "OnSurfaceBrush";
+
+    /// <summary>What a header cell is painted with, which is the one background the styles decide rather than a sender.</summary>
+    /// <remarks>
+    /// Named here as well as in <c>Styles/MailBodyView.xaml</c> because a run drawn inside a header has to be judged
+    /// against what the header actually paints, and the drawing cannot read a setter out of an applied style.
+    /// </remarks>
+    private const string HeaderCellBrushKey = "SecondaryContainerBrush";
 
     /// <summary>The contrast a sender's colour clears to be drawn, which is what WCAG asks of body text.</summary>
     private const double MinimumContrast = 4.5;
@@ -256,6 +264,12 @@ internal sealed class MailBodyDrawing
     };
 
     /// <summary>Puts a picture in place, or what the message said it shows where nothing could be drawn.</summary>
+    /// <remarks>
+    /// A remote source fails after this method has returned rather than inside it. Resolving one hands back a bitmap
+    /// that fetches and decodes on its own, so an address that answers with a 404, a timeout, or something that is not
+    /// a picture reports itself through <c>ImageFailed</c> — and without that subscription the reader is left with a
+    /// blank gap where the message said what the picture shows, which is the one outcome this method exists to avoid.
+    /// </remarks>
     private static async Task Fill(PendingPicture pending)
     {
         ImageSource? resolved;
@@ -273,13 +287,24 @@ internal sealed class MailBodyDrawing
 
         if (resolved is null)
         {
-            pending.Element.Visibility = Visibility.Collapsed;
-            pending.Description.Visibility = Visibility.Visible;
+            Describe(pending);
 
             return;
         }
 
+        if (resolved is BitmapImage bitmap)
+        {
+            bitmap.ImageFailed += (_, _) => Describe(pending);
+        }
+
         pending.Element.Source = resolved;
+    }
+
+    /// <summary>Puts what the message said a picture shows in the picture's place.</summary>
+    private static void Describe(PendingPicture pending)
+    {
+        pending.Element.Visibility = Visibility.Collapsed;
+        pending.Description.Visibility = Visibility.Visible;
     }
 
     private static void Break(InlineCollection inlines, string text, Action<Run> dress)
@@ -553,14 +578,18 @@ internal sealed class MailBodyDrawing
     /// The two colour guards used to answer independently — a run against the pane's surface, a cell against the
     /// theme's ink — and neither was told what the other admitted, so a sender choosing one colour for the cell and the
     /// same colour for its text cleared both and drew words at a contrast of one against their own background. The
-    /// background this cell actually painted is what the runs inside it are now judged against.
+    /// background this cell actually painted is what the runs inside it are now judged against, whether the sender
+    /// chose it or the header style did.
     /// </remarks>
     private Border Cell(MailBodyTableCell cell, bool isHeader, int depth)
     {
         var ground = Ground(cell.Background);
         var outer = this.behind;
 
-        this.behind = ground?.Color ?? outer;
+        // A header with no sender background is still not drawn on the surface: the style below paints it. Falling
+        // back to what the pane draws on would admit a colour that clears the surface and fails against the container
+        // the words actually sit on, which is the same wrong-background case the sender's own colour was closing.
+        this.behind = ground?.Color ?? (isHeader ? Theme(HeaderCellBrushKey) : null) ?? outer;
 
         var content = this.Stack(cell.Blocks, depth + 1);
 

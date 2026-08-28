@@ -7,6 +7,7 @@ using System.Text;
 using AngleSharp.Dom;
 using MailFathom.Application.EmailContent.Rendering.Document;
 using MailFathom.Application.EmailContent.Rendering.Document.Blocks;
+using MailFathom.Domain.Emails;
 
 namespace MailFathom.Infrastructure.Mail.Mime.Rendering;
 
@@ -353,7 +354,18 @@ internal sealed class MailBodyReducer
 
         if (reference.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
         {
-            return MailDataUri.Drawable(reference, this.Bounds.MaximumInlineImageOctets);
+            // The same loss reached through a part of the message is counted where that part is decoded, and reached
+            // through the document's own budget where a picture is charged against it. A picture the message wrote
+            // into its own markup is the third way to it, and the reader is owed the same sentence about all three.
+            if (MailDataUri.Drawable(reference, this.Bounds.MaximumInlineImageOctets) is not { } drawable)
+            {
+                this.undrawnPictures++;
+                this.truncated = true;
+
+                return null;
+            }
+
+            return drawable;
         }
 
         if (!Uri.TryCreate(reference, UriKind.Absolute, out var absolute)
@@ -379,9 +391,21 @@ internal sealed class MailBodyReducer
         return absolute.AbsoluteUri;
     }
 
+    /// <summary>Emits a preformatted block, whose whole point is that what it holds is complete.</summary>
+    /// <remarks>
+    /// Which is why reaching the bound is stated rather than left implicit: a log or a diff arriving with its tail
+    /// dropped and nothing saying so reads as the whole of what the sender wrote.
+    /// </remarks>
     private void EmitPreformatted(IElement element, List<MailDocumentBlock> blocks)
     {
-        var text = Cut(element.TextContent, this.Bounds.MaximumCharactersPerRun);
+        var written = element.TextContent;
+
+        if (written.Length > this.Bounds.MaximumCharactersPerRun)
+        {
+            this.truncated = true;
+        }
+
+        var text = Cut(written, this.Bounds.MaximumCharactersPerRun);
 
         if (text.Trim().Length > 0)
         {
@@ -434,6 +458,12 @@ internal sealed class MailBodyReducer
     /// references to somebody else's server an item carries are counted exactly as any other element's are. Reading
     /// only the style it inherits, which is what this did, made a list the one place a message could put a hidden
     /// item and an uncounted tracking reference.
+    /// <para>
+    /// What a list holds outside its items goes back to the walk rather than being dropped. A parser foster-parents
+    /// stray content out of a table and leaves it in place in a list, so a heading or a sentence written between two
+    /// items is ordinary content of the message — and the walk's general answer to an element it does not recognize is
+    /// to keep its words. It is emitted before the list, which is where the message put it.
+    /// </para>
     /// </remarks>
     private void EmitList(
         IElement element,
@@ -442,10 +472,17 @@ internal sealed class MailBodyReducer
         List<MailDocumentBlock> blocks)
     {
         var items = new List<MailListItem>();
+        var pending = new List<MailInlineRun>();
 
-        foreach (var item in element.Children.Where(child =>
-            string.Equals(child.LocalName, "li", StringComparison.OrdinalIgnoreCase)))
+        foreach (var child in element.ChildNodes)
         {
+            if (child is not IElement item || !string.Equals(item.LocalName, "li", StringComparison.OrdinalIgnoreCase))
+            {
+                this.ReduceNode(child, context, blocks, pending);
+
+                continue;
+            }
+
             var style = MailStyleReader.Read(item);
             if (style.Hidden)
             {
@@ -462,6 +499,8 @@ internal sealed class MailBodyReducer
                 items.Add(new MailListItem(reduced));
             }
         }
+
+        this.Flush(blocks, pending, context);
 
         if (items.Count > 0)
         {
@@ -647,7 +686,7 @@ internal sealed class MailBodyReducer
 
         if (text.Length > this.Bounds.MaximumCharactersPerRun)
         {
-            text = text[..this.Bounds.MaximumCharactersPerRun];
+            text = Cut(text, this.Bounds.MaximumCharactersPerRun);
             this.truncated = true;
         }
 
@@ -788,8 +827,16 @@ internal sealed class MailBodyReducer
     private static string? Bounded(string? text) =>
         text is null ? null : Cut(Collapse(text, atStart: true).Trim(), 1024);
 
+    /// <summary>Cuts mail text to a bound without cutting a character in half.</summary>
+    /// <remarks>
+    /// A raw slice lands between the two halves of an astral pair whenever a sender puts an emoji or a CJK extension
+    /// character at the offset, and the lone surrogate that leaves is what a JSON writer replaces or rejects — so the
+    /// reader loses the whole message, its plain text included, over one character position a stranger chose. Every
+    /// other cut of mail text in this repository goes through the same helper, which is why this one does too rather
+    /// than repeating the reasoning.
+    /// </remarks>
     private static string Cut(string text, int maximumCharacters) =>
-        text.Length <= maximumCharacters ? text : text[..maximumCharacters];
+        MailTextBounds.TruncateAtTextElementBoundary(text, maximumCharacters);
 
     /// <summary>Reads a pixel dimension a picture asked for, which a pane uses for the shape rather than the size.</summary>
     private static int? DimensionOf(string? value)
