@@ -49,16 +49,27 @@ public sealed record EmailContentBody
         EmailBodyAvailability availability,
         EmailBodyRepresentation plainText,
         EmailBodyRepresentation? sanitizedHtml,
-        MailDocument? document)
+        MailDocument? document,
+        EmailBodyForms forms)
     {
         this.Availability = availability;
         this.PlainText = plainText;
         this.SanitizedHtml = sanitizedHtml;
         this.Document = document;
+        this.Forms = forms;
     }
 
     /// <summary>Gets whether the body could be read, or why it could not.</summary>
     public EmailBodyAvailability Availability { get; }
+
+    /// <summary>Gets which forms of its own body the message carried, whatever the caller asked to be produced from them.</summary>
+    /// <remarks>
+    /// It is what the representations above cannot say. The plain text is present for every readable body, derived from
+    /// the markup where the sender wrote no text part, so a caller reading it back learns nothing about what arrived —
+    /// and a caller choosing between the words and a richer rendering is asking exactly that. A body nothing parsed
+    /// carries <see cref="EmailBodyForms.None" />, and the availability beside it says why.
+    /// </remarks>
+    public EmailBodyForms Forms { get; }
 
     /// <summary>Gets the plain-text representation, which is empty whenever the body could not be read.</summary>
     public EmailBodyRepresentation PlainText { get; }
@@ -79,35 +90,46 @@ public sealed record EmailContentBody
         EmailBodyAvailability.EncryptedNotReadableLocally,
         EmailBodyRepresentation.Empty,
         sanitizedHtml: null,
-        document: null);
+        document: null,
+        EmailBodyForms.None);
 
     /// <summary>Gets the body of a message whose raw MIME exceeded the size limit and was never stored.</summary>
     public static EmailContentBody NotStoredExceededSizeLimit { get; } = new(
         EmailBodyAvailability.NotStoredExceededSizeLimit,
         EmailBodyRepresentation.Empty,
         sanitizedHtml: null,
-        document: null);
+        document: null,
+        EmailBodyForms.None);
 
     /// <summary>Gets the body of a message whose content storage had no room for it yet.</summary>
     public static EmailContentBody NotStoredAwaitingStorageHeadroom { get; } = new(
         EmailBodyAvailability.NotStoredAwaitingStorageHeadroom,
         EmailBodyRepresentation.Empty,
         sanitizedHtml: null,
-        document: null);
+        document: null,
+        EmailBodyForms.None);
 
     /// <summary>Reports a body that was read from the stored message.</summary>
     /// <param name="plainText">The plain-text representation, bounded and carrying its truncation metadata.</param>
     /// <param name="sanitizedHtml">The sanitized HTML representation, or <see langword="null" /> when none was produced.</param>
     /// <param name="document">The reduced document tree, or <see langword="null" /> when none was produced.</param>
+    /// <param name="forms">Which forms of its own body the message carried.</param>
     /// <returns>The readable body.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="plainText" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="plainText" /> or <paramref name="forms" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The forms are stated by every caller rather than defaulted, because the one honest default is
+    /// <see cref="EmailBodyForms.None" /> and a body that was read carried something: a caller that forgot would publish
+    /// a message as carrying neither form, which reads as a finding about the message instead of as an omission.
+    /// </remarks>
     public static EmailContentBody Readable(
         EmailBodyRepresentation plainText,
         EmailBodyRepresentation? sanitizedHtml,
-        MailDocument? document = null)
+        MailDocument? document,
+        EmailBodyForms forms)
     {
         ArgumentNullException.ThrowIfNull(plainText);
+        ArgumentNullException.ThrowIfNull(forms);
 
-        return new EmailContentBody(EmailBodyAvailability.Readable, plainText, sanitizedHtml, document);
+        return new EmailContentBody(EmailBodyAvailability.Readable, plainText, sanitizedHtml, document, forms);
     }
 }

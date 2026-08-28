@@ -105,6 +105,91 @@ public sealed class MimeKitEmailContentRendererTests
         Assert.Equal("Just words.", rendering.PlainTextBody.Text);
     }
 
+    /// <summary>
+    /// The forms describe the message rather than the call. A caller that asked for no markup still learns that the
+    /// sender wrote some, which is the question a screen choosing between the words and a richer rendering asks — and it
+    /// is one no returned representation answers, because the words come back whatever arrived.
+    /// </summary>
+    [Fact]
+    public async Task RenderAsync_MessageWritingBothForms_ReportsBothWhateverWasAskedFor()
+    {
+        // Arrange
+        var content = MultipartAlternativeMessage("Just words.", "<p>Just words.</p>");
+
+        // Act
+        var rendering = await RenderAsync(content, includeSanitizedHtml: false);
+
+        // Assert
+        Assert.Null(rendering.SanitizedHtmlBody);
+        Assert.True(rendering.BodyForms.PlainText);
+        Assert.True(rendering.BodyForms.Html);
+    }
+
+    /// <summary>A message written in one form says so, which is what tells a pane the words are the whole of it.</summary>
+    [Fact]
+    public async Task RenderAsync_MessageWritingPlainTextAlone_ReportsThatFormAlone()
+    {
+        // Arrange
+        var content = PlainTextMessage("Just words.");
+
+        // Act
+        var rendering = await RenderAsync(content);
+
+        // Assert
+        Assert.True(rendering.BodyForms.PlainText);
+        Assert.False(rendering.BodyForms.Html);
+    }
+
+    /// <summary>
+    /// A message written as markup alone reports the markup rather than the text derived from it, so a reader is never
+    /// told the sender wrote words they did not write.
+    /// </summary>
+    [Fact]
+    public async Task RenderAsync_MessageWritingHtmlAlone_ReportsThatFormAlone()
+    {
+        // Arrange
+        var content = HtmlOnlyMessage("<p>Body</p>");
+
+        // Act
+        var rendering = await RenderAsync(content);
+
+        // Assert
+        Assert.False(rendering.BodyForms.PlainText);
+        Assert.True(rendering.BodyForms.Html);
+        Assert.Equal("Body", rendering.PlainTextBody.Text);
+    }
+
+    /// <summary>
+    /// A text file attached to a message is not a form of its body. Reporting it as one would tell a reader there are
+    /// words to draw where the message displayed none.
+    /// </summary>
+    [Fact]
+    public async Task RenderAsync_TextAttachedToAnHtmlMessage_IsNotReportedAsAFormOfItsBody()
+    {
+        // Arrange
+        var content = MimeFixtures.StoredMessage(
+            "From: sender@example.test",
+            "Content-Type: multipart/mixed; boundary=\"mix\"",
+            string.Empty,
+            "--mix",
+            "Content-Type: text/html; charset=utf-8",
+            string.Empty,
+            "<p>See the attachment.</p>",
+            "--mix",
+            "Content-Type: text/plain; charset=utf-8",
+            "Content-Disposition: attachment; filename=\"notes.txt\"",
+            string.Empty,
+            "Notes nobody displayed.",
+            "--mix--");
+
+        // Act
+        var rendering = await RenderAsync(content);
+
+        // Assert
+        Assert.False(rendering.BodyForms.PlainText);
+        Assert.True(rendering.BodyForms.Html);
+    }
+
     /// <summary>A body beyond the bound is cut and says so, together with the length it had.</summary>
     [Fact]
     public async Task RenderAsync_PlainTextBodyBeyondTheBound_CutsItAndReportsTheOriginalLength()
@@ -720,4 +805,20 @@ public sealed class MimeKitEmailContentRendererTests
         "Content-Type: text/html; charset=utf-8",
         string.Empty,
         markup);
+
+    /// <summary>Builds the ordinary shape of mail a person sends: the same body written twice, as words and as markup.</summary>
+    private static StoredEmailContent MultipartAlternativeMessage(string body, string markup) =>
+        MimeFixtures.StoredMessage(
+            "From: sender@example.test",
+            "Content-Type: multipart/alternative; boundary=\"alt\"",
+            string.Empty,
+            "--alt",
+            "Content-Type: text/plain; charset=utf-8",
+            string.Empty,
+            body,
+            "--alt",
+            "Content-Type: text/html; charset=utf-8",
+            string.Empty,
+            markup,
+            "--alt--");
 }

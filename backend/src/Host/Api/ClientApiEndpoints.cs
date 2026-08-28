@@ -64,7 +64,9 @@ internal static class ClientApiEndpoints
         api.MapClientMailTimeline();
         api.MapClientMailSearch();
         api.MapClientMailThread();
+        api.MapClientMailMessage();
         api.MapClientMailBody();
+        api.MapClientMailAttachment();
 
         return api;
     }

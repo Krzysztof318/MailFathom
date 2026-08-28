@@ -169,7 +169,8 @@ public sealed class ClientMailBodyEndpointTests
         Body = EmailContentBody.Readable(
             new EmailBodyRepresentation("Just words.", 11, EmailBodyTruncation.None),
             sanitizedHtml: null,
-            document),
+            document,
+            new EmailBodyForms(PlainText: true, Html: document is not null)),
         Attachments = [],
         RemoteFlags = RemoteEmailFlagSnapshot.NeverObserved,
         SenderVerification = SenderVerification.NotEstablished,

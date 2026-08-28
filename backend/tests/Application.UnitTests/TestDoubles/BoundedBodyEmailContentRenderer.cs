@@ -68,6 +68,7 @@ internal sealed class BoundedBodyEmailContentRenderer(
                 new EmailContentHeaders("Subject", SentAt: null, ReceivedAt: null, [], EmailThreadReferences.None),
                 plainText,
                 sanitizedHtml,
+                new EmailBodyForms(PlainText: true, Html: sanitizedHtml is not null),
                 BodyIsEncrypted: false,
                 EmailAttachmentSummary.Create(
                     attachments,

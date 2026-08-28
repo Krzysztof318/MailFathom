@@ -84,9 +84,16 @@ owner](../features/contacts.md#a-book-belongs-to-one-owner) is where what it dec
 
 The signed capability is what `GET /attachments/{capability}` runs under. That route authenticates nobody by design: the
 URL carries a ticket verified against the deployment's key ring, and what it names is one attachment of one email rather
-than a surface. So the capability *is* the authorization, already bounded to a single object and a lifetime, and the use
-case behind it admits that kind and asks for no permission beside it. It is a principal kind rather than an exception,
-so the next capability-authorized route does not have to argue for its own.
+than a surface. So the capability *is* the authorization, already bounded to a single object and a lifetime, and the
+entrypoint behind that route admits that kind and asks for no permission beside it. It is a principal kind rather than
+an exception, so the next capability-authorized route does not have to argue for its own.
+
+The use case those two share serves the client surface's own attachment route as well, and the second entrypoint admits
+a caller granted `mailfathom.mail.read` and no capability at all — a reader who authenticated needs nothing minted for
+them. The two are disjoint in both directions rather than one being a relaxation of the other: a caller however broadly
+granted cannot redeem a link's entrypoint, and a redeemed capability cannot reach the client's. Everything either of
+them establishes afterwards is the same, which is why they are two authorizations over one resolution rather than two
+use cases.
 
 ## How it gets there
 

@@ -476,7 +476,8 @@ public sealed class EmailContentReader
                 : null,
             body.Document is { } document
                 ? await this.GuardedAsync(document, cancellationToken)
-                : null);
+                : null,
+            body.Forms);
     }
 
     /// <summary>Scans every text the reduced document holds, and writes the document back with what came out.</summary>
@@ -690,7 +691,8 @@ public sealed class EmailContentReader
                 : EmailContentBody.Readable(
                     rendering.PlainTextBody,
                     rendering.SanitizedHtmlBody,
-                    rendering.Document),
+                    rendering.Document,
+                    rendering.BodyForms),
             AttachmentSummary = SummaryOf(rendering.AttachmentSummary),
             Attachments = attachments,
             RemoteFlags = summary.RemoteFlags,

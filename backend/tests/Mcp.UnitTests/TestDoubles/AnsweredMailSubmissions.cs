@@ -182,6 +182,7 @@ internal static class AnsweredMailSubmissions
                 EmailThreadReferences.Create("parent@example.test", inReplyTo: null, references: null)),
             new EmailBodyRepresentation(PlainText, PlainText.Length, EmailBodyTruncation.None),
             null,
+            new EmailBodyForms(PlainText: true, Html: false),
             false,
             EmailAttachmentSummary.Create(
                 carried,

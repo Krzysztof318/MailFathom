@@ -1948,6 +1948,7 @@ public sealed class EmailContentReaderTests
         headers ?? HeadersOf("Subject"),
         plainText,
         sanitizedHtml,
+        new EmailBodyForms(PlainText: !bodyIsEncrypted, Html: sanitizedHtml is not null),
         bodyIsEncrypted,
         EmailAttachmentSummary.Create(
             attachments ?? [],

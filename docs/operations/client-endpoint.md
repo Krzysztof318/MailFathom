@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs -->
+<!-- describes: backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -69,7 +69,9 @@ for you.
 | `GET /api/client/emails` | `mailfathom.mail.read` |
 | `GET /api/client/emails/search` | `mailfathom.mail.read` |
 | `GET /api/client/threads/{threadId}` | `mailfathom.mail.read` |
+| `GET /api/client/messages/{storedEmailId}` | `mailfathom.mail.read` |
 | `GET /api/client/messages/{storedEmailId}/body` | `mailfathom.mail.read` |
+| `GET /api/client/messages/{storedEmailId}/attachments/{position}` | `mailfathom.mail.read` |
 
 There is no version segment in either path: the major version is `0` and
 [ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
@@ -624,6 +626,113 @@ UUID matches no route and is the same `404`. A credential whose grant does not c
 **The conversation is served from the local copy.** Nothing here contacts a mail server, so no screen waits on IMAP, and
 opening a thread cannot set the remote `\Seen` flag.
 
+### The message route
+
+```http
+GET /api/client/messages/0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90
+```
+
+It answers with everything a reading pane draws around a message and none of what it draws inside one — the headers the
+message displays, what this deployment established about the author it displays, the files it carries, and which forms
+of its body exist to be asked for:
+
+```jsonc
+{
+  "storedEmailId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90",
+  "account": "personal",
+  "folder": "INBOX",
+  "threadId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a91",
+  "sizeOctets": 2416381,
+  "headers": {
+    "subject": "Release 0.8.0",
+    "sentAt": "2026-08-27T09:14:00+00:00",
+    "receivedAt": "2026-08-27T09:14:06+00:00",
+    "participants": [
+      { "role": "From", "address": "release@example.test", "displayName": "Release notices" },
+      { "role": "To", "address": "reader@example.test", "displayName": null }
+    ],
+    "messageId": "release-0-8-0@example.test",
+    "inReplyTo": null,
+    "references": []
+  },
+  "body": { "availability": "Readable", "plainText": true, "html": true },
+  "sender": { "authorAuthentication": "Authenticated", "deploymentTrust": "Trusted" },
+  "attachments": [
+    {
+      "position": 0,
+      "fileName": "release-notes.pdf",
+      "wasFileNameNormalized": false,
+      "mediaType": "application/pdf",
+      "sizeOctets": 2401337
+    }
+  ],
+  "carried": {
+    "attachmentCount": 1,
+    "totalSizeOctets": 2401337,
+    "inlineResourceCount": 2,
+    "encrypted": false,
+    "unverifiedSignature": false,
+    "unexpandedTnefPart": false
+  },
+  "unread": true,
+  "flagged": false,
+  "answered": false
+}
+```
+
+**It is the other half of the pane, and the body is the first.** The two are separate requests because they are
+separately expensive: a header block is drawn as soon as this answers, whatever the body costs, and a client that had
+asked for both at once would wait for the slower of them to draw either.
+
+**The headers are parsed from the stored message rather than read off a list row.** That is why a display name, a `Bcc`
+the message carried for its own recipient, and the three threading identifiers are here and not on a row: the columns a
+list is served from keep the comparison forms a filter needs, and a reader shown those would be shown a narrower message
+than the one that arrived. A message whose content the size limit kept out of storage has the narrower set a row can
+answer for, which is what its `availability` says.
+
+**`body` says what the sender wrote, not what a request would return.** The body route answers with words for every
+readable message, deriving them from the markup where the sender wrote no text part, so a returned representation says
+nothing about what arrived — and whether there is a richer rendering to draw is exactly what a pane is asking. `html`
+is `true` where the message carried an HTML part, which is what the body route's document is reduced from; both are
+`false` for a body nothing could read, and `availability` is the same set that route reports.
+
+**`sender` is two states and is never one.** `authorAuthentication` is what the receiving mail server established about
+the author the message displays, and `deploymentTrust` is whether this deployment recognizes that author — a fact about
+the message beside a classification of a list. They are published side by side because collapsing them into one badge
+would mean inventing the rule that combines them: an authenticated author nobody has named is the ordinary state of
+legitimate mail and carries the same trust value as one whose authentication failed outright. Both are read back as they
+were stored; nothing on this path re-reads a header, resolves DNS, or evaluates a policy, so what a reader is shown is
+what was concluded about the authenticated author rather than a reading of the `From` header.
+
+**No octet of a file is here, at any size and in any encoding.** Each entry says what the file is called, what it
+declares itself to be, and how large it decodes to — which is what a reader decides against — and `position` is what its
+own [attachment route](#the-attachment-route) is asked with. The position is the identity because it is the only stable
+one a message's parts have: MIME gives an attachment no identifier, a `Content-ID` is optional and sender-chosen, and a
+file name is neither unique nor required. A file name is text a sender chose and arrives normalized to a bare name —
+never a path, never a traversal segment, never a control character — with `wasFileNameNormalized` saying whether that
+rewrote anything.
+
+**The pictures a message displays inside its own body are not in this list and are not a route.** An inline part is
+resolved against the message's own parts while the [body](#the-message-body-route) is reduced, so a sender's own images
+arrive drawn rather than as references a pane would have to fetch, and `inlineResourceCount` is where they are counted
+instead. That is also what keeps them from being confused with the remote ones, whose addresses are removed there rather
+than turned into something this surface would resolve.
+
+**`carried` is `null` rather than zero for a message nothing has ever parsed** — the case of content the size limit kept
+out of storage. Zero would claim the message carries no files, which no local copy exists to support; `attachments` is
+empty beside it for the same reason.
+
+| Parameter | Accepts | Default |
+| --- | --- | --- |
+| `storedEmailId` | The message's identifier, as a list row or a conversation published it | required, in the path |
+
+**A message this owner does not hold is answered `404`**, and so is one no deployment ever held, and so is one whose
+stored content is missing or damaged. Text that is not a UUID matches no route and is the same `404`. A credential whose
+grant does not carry `mailfathom.mail.read` is answered `403`, as everywhere else on this surface.
+
+**It is served from the local copy.** Nothing here contacts a mail server, so no screen waits on IMAP, and opening a
+message cannot set the remote `\Seen` flag.
+
 ### The message body route
 
 ```http
@@ -754,6 +863,57 @@ exactly as it applies to what a model reads.
 
 [Rendering mail HTML in the client](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0019-rendering-mail-html-in-the-client.md)
 is the decision this route implements, and it holds the reasoning for every paragraph above.
+
+### The attachment route
+
+```http
+GET /api/client/messages/0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90/attachments/0
+```
+
+It answers with one file's octets and nothing else:
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/pdf
+Content-Length: 2401337
+Content-Disposition: attachment; filename=release-notes.pdf
+X-Content-Type-Options: nosniff
+Cache-Control: no-store
+```
+
+**`position` is the place the file holds in the message route's `attachments` list**, which is the order the message's
+structure is walked. A position that list does not have is answered `404`, as is a negative one, and neither reads the
+mailbox to find out.
+
+**The three headers are the sender's own values, encoded for where they are being written.** The media type is parsed
+before it is echoed, so a header value the sender wrote cannot introduce a parameter or a second header, and a value
+that is not a media type at all is served as `application/octet-stream` rather than repaired into something plausible.
+The file name is written through RFC 5987 encoding rather than concatenated into a header. `Content-Length` is the size
+the parse measured — the same number the message route published — so a client knows what to expect and a transfer cut
+short is visible as one rather than as a shorter file.
+
+**The disposition is always `attachment` and `nosniff` is always set.** These are bytes a sender chose, served from the
+origin the client itself is served from: rendered in place, a message carrying HTML would be a scripted page on the
+address the operator publishes MailFathom at. `no-store` is there because this is an ordinary cacheable `GET` whose
+response is mail content, and the deployments this surface is documented for put a reverse proxy in front of it.
+
+**The octets are streamed rather than buffered**, decoded from the stored copy straight into the response, so a large
+attachment costs the copy buffer rather than its own size on either side.
+
+**It is the client's own route rather than the signed link the tool surface mints**, and the difference is who is being
+served. [A download link](mcp-endpoint.md#the-one-route-on-this-surface-that-admits-no-credential) exists to be handed
+to something holding no credential, which is why it is a bearer capability that expires within minutes; a reader here
+has already authenticated and holds
+`mailfathom.mail.read`, so the credential they presented is the access control and nothing is minted. That is also what
+keeps this working on a deployment serving no MCP endpoint, which serves no link route either.
+
+**A file of a message this owner does not hold is answered `404`**, and so is one of a message no deployment ever held,
+and so is one whose stored content is missing or damaged: nothing in the answer separates somebody else's mail from mail
+that never existed or from this deployment's own defect. A credential whose grant does not carry `mailfathom.mail.read`
+is answered `403`, as everywhere else on this surface.
+
+**It is served from the local copy.** Nothing here contacts a mail server, so downloading a file cannot fetch a message
+and cannot set the remote `\Seen` flag.
 
 ## Credentials do not cross surfaces
 

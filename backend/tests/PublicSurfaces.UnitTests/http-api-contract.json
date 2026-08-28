@@ -76,6 +76,46 @@
         ],
         "type": "object"
       },
+      "ClientMailAttachmentResponse": {
+        "properties": {
+          "fileName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "mediaType": {
+            "type": "string"
+          },
+          "position": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "sizeOctets": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "wasFileNameNormalized": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "position",
+          "fileName",
+          "wasFileNameNormalized",
+          "mediaType",
+          "sizeOctets"
+        ],
+        "type": "object"
+      },
       "ClientMailBodyResponse": {
         "properties": {
           "availability": {
@@ -132,6 +172,52 @@
           "text",
           "originalCharacterCount",
           "truncation"
+        ],
+        "type": "object"
+      },
+      "ClientMailCarriedResponse": {
+        "properties": {
+          "attachmentCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "encrypted": {
+            "type": "boolean"
+          },
+          "inlineResourceCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "totalSizeOctets": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "unexpandedTnefPart": {
+            "type": "boolean"
+          },
+          "unverifiedSignature": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "attachmentCount",
+          "totalSizeOctets",
+          "inlineResourceCount",
+          "encrypted",
+          "unverifiedSignature",
+          "unexpandedTnefPart"
         ],
         "type": "object"
       },
@@ -227,6 +313,184 @@
         "required": [
           "synchronizationEnabled",
           "accounts"
+        ],
+        "type": "object"
+      },
+      "ClientMailMessageBodyResponse": {
+        "properties": {
+          "availability": {
+            "type": "string"
+          },
+          "html": {
+            "type": "boolean"
+          },
+          "plainText": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "availability",
+          "plainText",
+          "html"
+        ],
+        "type": "object"
+      },
+      "ClientMailMessageHeadersResponse": {
+        "properties": {
+          "inReplyTo": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "messageId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "participants": {
+            "items": {
+              "$ref": "#/components/schemas/ClientMailParticipantResponse"
+            },
+            "type": "array"
+          },
+          "receivedAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "references": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "sentAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "subject": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "subject",
+          "sentAt",
+          "receivedAt",
+          "participants",
+          "messageId",
+          "inReplyTo",
+          "references"
+        ],
+        "type": "object"
+      },
+      "ClientMailMessageResponse": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "answered": {
+            "type": "boolean"
+          },
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/ClientMailAttachmentResponse"
+            },
+            "type": "array"
+          },
+          "body": {
+            "$ref": "#/components/schemas/ClientMailMessageBodyResponse"
+          },
+          "carried": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ClientMailCarriedResponse"
+              }
+            ]
+          },
+          "flagged": {
+            "type": "boolean"
+          },
+          "folder": {
+            "type": "string"
+          },
+          "headers": {
+            "$ref": "#/components/schemas/ClientMailMessageHeadersResponse"
+          },
+          "sender": {
+            "$ref": "#/components/schemas/ClientMailSenderVerdictResponse"
+          },
+          "sizeOctets": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "storedEmailId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "threadId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "unread": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "storedEmailId",
+          "account",
+          "folder",
+          "threadId",
+          "sizeOctets",
+          "headers",
+          "body",
+          "sender",
+          "attachments",
+          "carried",
+          "unread",
+          "flagged",
+          "answered"
+        ],
+        "type": "object"
+      },
+      "ClientMailParticipantResponse": {
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "address",
+          "displayName"
         ],
         "type": "object"
       },
@@ -393,6 +657,21 @@
           "preview",
           "snippets",
           "matchedBy"
+        ],
+        "type": "object"
+      },
+      "ClientMailSenderVerdictResponse": {
+        "properties": {
+          "authorAuthentication": {
+            "type": "string"
+          },
+          "deploymentTrust": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "authorAuthentication",
+          "deploymentTrust"
         ],
         "type": "object"
       },
@@ -4104,6 +4383,10 @@
           "mutation"
         ],
         "type": "object"
+      },
+      "Stream": {
+        "format": "binary",
+        "type": "string"
       }
     },
     "securitySchemes": {
@@ -6517,6 +6800,92 @@
               }
             },
             "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/messages/{storedEmailId}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "storedEmailId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientMailMessageResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/messages/{storedEmailId}/attachments/{position}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "storedEmailId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "position",
+            "required": true,
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stream"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           }
         },
         "security": [
