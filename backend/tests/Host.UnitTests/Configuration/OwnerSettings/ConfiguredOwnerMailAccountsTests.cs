@@ -61,6 +61,35 @@ public sealed class ConfiguredOwnerMailAccountsTests
     }
 
     /// <summary>
+    /// A source may number its entries with a gap, and the binder records no key: it appends one element per child, so
+    /// the position an owner bound at and the key an operator wrote come apart. Addressing by the position then reads a
+    /// section nobody wrote, which is an adoption committing an empty record over mailboxes the file declares.
+    /// </summary>
+    [Fact]
+    public void DeclaredFor_ACollectionNumberedWithAGap_ReadsTheEntryTheKeyNamesRatherThanThePosition()
+    {
+        // Arrange
+        var reading = Reading(
+            new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                ["Accounts:0:Id"] = Alex.Value.ToString("D"),
+                ["Accounts:0:DisplayName"] = "alex",
+                ["Accounts:0:MailAccounts:0:AccountId"] = "alex-work",
+                ["Accounts:3:Id"] = Morgan.Value.ToString("D"),
+                ["Accounts:3:DisplayName"] = "morgan",
+                ["Accounts:3:MailAccounts:0:AccountId"] = "morgan-work",
+            },
+            Serving(Alex, MailOwnerAccountSource.OwnerDeclaration),
+            Serving(Morgan, MailOwnerAccountSource.OwnerDeclaration));
+
+        // Act
+        var declared = reading.DeclaredFor(Morgan);
+
+        // Assert
+        Assert.Equal(["morgan-work"], declared.Select(account => account.AccountId));
+    }
+
+    /// <summary>
     /// An owner who has adopted answers with nothing because their record is their own from now on, and an owner this
     /// process's roster does not hold answers with nothing because no file has ever named them. Neither is a failure:
     /// both are owners an ordinary write reaches.

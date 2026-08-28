@@ -37,12 +37,14 @@ public sealed class PersistedMailOwnerProvisioningTests
 
         // Assert
         Assert.Contains("EXISTS", sql, StringComparison.Ordinal);
-        Assert.Contains("\"DisplayName\"", sql, StringComparison.Ordinal);
+        Assert.Contains("\"Id\" <> ", sql, StringComparison.Ordinal);
     }
 
     /// <summary>
     /// A label that is already the row's is written by nobody, which is what lets the read afterwards report the row as
-    /// carrying it rather than as contested. The predicate is where that is decided, so it names the comparison.
+    /// carrying it rather than as contested. The predicate is where that is decided, so the assertion names the
+    /// comparison against the label rather than the presence of an inequality — the correlated guard above contributes
+    /// one of its own, and asserting that shape alone would pass with this comparison deleted.
     /// </summary>
     [Fact]
     public void RowsToRelabel_TheLabelTheRowAlreadyCarries_SelectsNothingToWrite()
@@ -56,7 +58,7 @@ public sealed class PersistedMailOwnerProvisioningTests
             .ToQueryString();
 
         // Assert
-        Assert.Contains("<>", sql, StringComparison.Ordinal);
+        Assert.Contains("\"DisplayName\" <> ", sql, StringComparison.Ordinal);
     }
 
     private static MailFathomDbContext DesignTimeContext() => new(

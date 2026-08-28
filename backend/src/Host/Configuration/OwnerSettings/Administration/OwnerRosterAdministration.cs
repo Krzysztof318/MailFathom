@@ -66,6 +66,10 @@ internal sealed partial class OwnerRosterAdministration(
 
         var held = await directory.ReadOwnersAsync(DeclaredOwners.MaximumDeclaredOwners + 1, cancellationToken);
 
+        // Read once rather than per entry: the declarations are a reflection bind of the whole collection, and this
+        // route is read unconditionally by six of the commands `mfctl owner` publishes.
+        var declaredInConfiguration = configured.OwnersAConfigurationSourceDeclares();
+
         return
         [
             .. held.Select(record => new OwnerRosterEntry(
@@ -73,7 +77,7 @@ internal sealed partial class OwnerRosterAdministration(
                 record.DisplayName,
                 record.DocumentWrittenAtRuntime,
                 Served: servedOwners.Owners.Any(served => served.Owner == record.Owner),
-                DeclaredInConfiguration: configured.DeclaredByAConfigurationSource(record.Owner))),
+                DeclaredInConfiguration: declaredInConfiguration.Contains(record.Owner))),
         ];
     }
 

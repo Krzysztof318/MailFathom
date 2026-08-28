@@ -128,7 +128,7 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
 
         this.RefuseSeveralOwnersOnAnOwnerFacingSurface(served);
 
-        RefuseMailAccountNamesTwoOwnersShare(served);
+        this.RefuseMailAccountNamesTwoOwnersShare(served);
 
         await this.RefuseUnusableMailAccountSecretsAsync(scope, served, cancellationToken);
 
@@ -451,14 +451,22 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
     /// judged against a snapshot the other had not moved — can name the same account, and the start that composes them
     /// is where the two are first in one place.
     /// <para>
+    /// An owner served from the deployment's own section carries no accounts on their roster entry, so this reads that
+    /// section for them. Without it the one collision the write-time check cannot see — a record naming an account
+    /// <c>MailSynchronization:Accounts</c> declares — would pass a start, which is the case this refusal exists for.
+    /// </para>
+    /// <para>
     /// It refuses the start rather than serving both, because serving them is a lookup by identifier reaching whichever
     /// owner it met first: one person's mailbox settings resolved for another person's account.
     /// </para>
     /// </remarks>
-    private static void RefuseMailAccountNamesTwoOwnersShare(IReadOnlyList<ServedMailOwner> served)
+    private void RefuseMailAccountNamesTwoOwnersShare(IReadOnlyList<ServedMailOwner> served)
     {
+        var deploymentAccounts = DeclaredOwners.DeploymentMailAccountsIn(this.configuration);
+
         var shared = served
-            .SelectMany(owner => NamesOf(owner).Select(name => (owner.Owner, Name: name)))
+            .SelectMany(owner => NamesOf(AccountsOf(owner, deploymentAccounts))
+                .Select(name => (owner.Owner, Name: name)))
             .GroupBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
             .Where(group => group.DistinctBy(entry => entry.Owner).Count() > 1)
             .Select(group => group.Key)
@@ -471,10 +479,16 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
         }
     }
 
-    /// <summary>Names the strings one served owner's mail accounts answer to.</summary>
+    /// <summary>Reads the mail accounts one served owner's mailboxes are declared in, whichever source holds them.</summary>
+    private static IReadOnlyList<MailSynchronizationAccountOptions> AccountsOf(
+        ServedMailOwner owner,
+        IReadOnlyList<MailSynchronizationAccountOptions> deploymentAccounts) =>
+        owner.Source == MailOwnerAccountSource.DeploymentSection ? deploymentAccounts : owner.MailAccounts;
+
+    /// <summary>Names the strings one owner's mail accounts answer to.</summary>
     /// <remarks>Both spellings, because a caller may name an account by either and the lookup resolves both.</remarks>
-    private static IEnumerable<string> NamesOf(ServedMailOwner owner) =>
-        owner.MailAccounts
+    private static IEnumerable<string> NamesOf(IReadOnlyList<MailSynchronizationAccountOptions> accounts) =>
+        accounts
             .SelectMany(account => new[]
             {
                 MailSynchronizationOptions.TryReadAccountId(account.AccountId),

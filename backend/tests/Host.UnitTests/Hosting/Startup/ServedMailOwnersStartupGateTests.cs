@@ -7,6 +7,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.OwnerSettings;
 using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.UnitTests.TestDoubles;
@@ -686,6 +687,55 @@ public sealed class ServedMailOwnersStartupGateTests
         Assert.Contains("work", refusal.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// An owner served from the deployment's own section carries no accounts on their roster entry, so a check reading
+    /// that entry alone would never see <c>MailSynchronization:Accounts</c> — and the one collision the write-time
+    /// reading cannot catch, a record naming an account the section already declares, would start clean and resolve one
+    /// person's mailbox for another's.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_ARecordNamingAnAccountTheDeploymentSectionDeclares_FailsStartupNamingTheAccount()
+    {
+        // Arrange
+        var documents = Substitute.For<IOwnerSettingsDocumentReader>();
+
+        DocumentOf(documents, SyntheticMailOwner.Another, "work", "sam@example.test");
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<DeploymentMailOwnerUnresolvedException>(() =>
+            CreateGate(
+                    [Held(SyntheticMailOwner.Deployment, "owner"), Adopted(SyntheticMailOwner.Another, "sam")],
+                    declared: DeploymentSectionDeclaring("work"),
+                    servedOwners: new ServedMailOwners(),
+                    documents: documents)
+                .StartAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Contains("work", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>The same two mailboxes named apart is the ordinary case, and it starts.</summary>
+    [Fact]
+    public async Task StartAsync_ARecordNamingAnAccountTheDeploymentSectionDoesNot_ServesBothOwners()
+    {
+        // Arrange
+        var roster = new ServedMailOwners();
+        var documents = Substitute.For<IOwnerSettingsDocumentReader>();
+
+        DocumentOf(documents, SyntheticMailOwner.Another, "sam-work", "sam@example.test");
+
+        // Act
+        await CreateGate(
+                [Held(SyntheticMailOwner.Deployment, "owner"), Adopted(SyntheticMailOwner.Another, "sam")],
+                declared: DeploymentSectionDeclaring("alex-work"),
+                servedOwners: roster,
+                documents: documents)
+            .StartAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(2, roster.Owners.Count);
+    }
+
     /// <summary>The same two owners naming their mailboxes apart is the ordinary case, and it starts.</summary>
     [Fact]
     public async Task StartAsync_TwoOwnersWhoseOwnRecordsNameTheirMailAccountsApart_ServesBothOfThem()
@@ -852,6 +902,18 @@ public sealed class ServedMailOwnersStartupGateTests
 
     private static IConfiguration Configuration(Dictionary<string, string?> keys) =>
         new ConfigurationBuilder().AddInMemoryCollection(keys).Build();
+
+    /// <summary>The deployment's own mail section, declaring one account under the identifier a test names.</summary>
+    private static IConfiguration DeploymentSectionDeclaring(string accountId) =>
+        Configuration(new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            [$"{MailSynchronizationOptions.SectionName}:Accounts:0:AccountId"] = accountId,
+            [$"{MailSynchronizationOptions.SectionName}:Accounts:0:DisplayName"] = accountId,
+            [$"{MailSynchronizationOptions.SectionName}:Accounts:0:Host"] = "imap.example.test",
+            [$"{MailSynchronizationOptions.SectionName}:Accounts:0:UserName"] = "alex@example.test",
+            [$"{MailSynchronizationOptions.SectionName}:Accounts:0:Secrets:Password:Name"] = "imap-password",
+            [$"{MailSynchronizationOptions.SectionName}:Accounts:0:Secrets:Password:SecretReference"] = "systemd-credential:imap-password",
+        });
 
     private static IConfiguration Declaring(Guid identifier, string displayName) =>
         new ConfigurationBuilder()

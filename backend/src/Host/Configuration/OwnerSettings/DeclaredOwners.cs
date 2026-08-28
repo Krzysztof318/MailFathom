@@ -103,7 +103,14 @@ internal static class DeclaredOwners
         Guid.TryParse(declaredId, out var identifier) && identifier != Guid.Empty ? identifier : null;
 
     /// <summary>Gets the mail accounts the deployment's own section declares, which belong to whichever sole owner it holds.</summary>
-    private static List<MailSynchronizationAccountOptions> DeploymentMailAccountsIn(IConfiguration configuration) =>
+    /// <param name="configuration">The configuration to read.</param>
+    /// <returns>The declarations, empty when the deployment's own section declares none.</returns>
+    /// <remarks>
+    /// Read here rather than off the roster, because an owner served from this section carries no accounts of their own:
+    /// the declarations stay in the reloadable mail snapshot so a reload can reach them, which leaves this the one place
+    /// a rule about the whole deployment's mailboxes can see them.
+    /// </remarks>
+    public static List<MailSynchronizationAccountOptions> DeploymentMailAccountsIn(IConfiguration configuration) =>
         configuration.GetSection($"{MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.Accounts)}")
             .Get<List<MailSynchronizationAccountOptions>>()
             ?? [];

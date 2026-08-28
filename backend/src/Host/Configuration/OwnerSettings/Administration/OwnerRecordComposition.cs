@@ -139,6 +139,8 @@ internal static class OwnerRecordComposition
     /// </remarks>
     private static string Rewritten(JsonObject record, JsonNode[] declarations)
     {
+        // Defensive rather than observable: every caller hands this a graph parsed from a string it was given, so
+        // nothing outside could see the record mutated. It is what keeps that true if a caller is ever given a node.
         var candidate = record.DeepClone().AsObject();
 
         candidate.Remove(ExistingNameOf(candidate, MailAccountsProperty));

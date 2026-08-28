@@ -164,9 +164,11 @@ internal static class OwnerRecordEndpoints
     /// <returns><c>200</c> with what was removed, or <c>400</c> when the request names nobody or a configuration source declares the owner.</returns>
     /// <remarks>
     /// An owner this deployment does not hold is reported as nothing erased rather than as a refusal, because the
-    /// caller asked for a state and the deployment is in it — and telling the two apart would report which owner
-    /// identifiers exist. An owner a file declares is the one erasure that is refused instead, because a start writes
-    /// them back and the refusal names the declaration to remove first.
+    /// caller asked for a state and the deployment is in it. That is a claim about the status code and not about the
+    /// body: the answer carries whether a row was there, so a caller granted the erasure learns which identifiers this
+    /// deployment holds — which the sibling relabel withholds because nothing about a rename needs it. An owner a file
+    /// declares is the one erasure that is refused instead, because a start writes them back and the refusal names the
+    /// declaration to remove first.
     /// </remarks>
     internal static async Task<Results<Ok<OwnerErasureResponse>, ProblemHttpResult>> EraseAsync(
         Guid ownerId,

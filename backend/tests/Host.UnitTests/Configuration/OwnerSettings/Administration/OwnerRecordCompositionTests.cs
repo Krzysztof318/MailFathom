@@ -188,20 +188,6 @@ public sealed class OwnerRecordCompositionTests
         Assert.Null(candidate);
     }
 
-    /// <summary>The record is cloned rather than mutated, so a refused candidate leaves the caller holding what it read.</summary>
-    [Fact]
-    public void WithMailAccountRemoved_AnyRecord_LeavesTheRecordItWasGivenAsItWas()
-    {
-        // Arrange
-        const string record = """{"MailAccounts":{"0":{"AccountId":"primary"}}}""";
-
-        // Act
-        _ = OwnerRecordComposition.WithMailAccountRemoved(record, "primary");
-
-        // Assert
-        Assert.Equal(["primary"], OwnerRecordComposition.MailAccountIdentifiersIn(record));
-    }
-
     /// <summary>
     /// A property spelled differently is the same setting to every provider in the pipeline, so a record that spelled
     /// the collection its own way must not come back carrying both spellings — which would leave the next reader with

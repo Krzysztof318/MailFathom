@@ -193,6 +193,56 @@ public sealed class ClientOwnerRecordEndpointTests
         await deployment.Documents.DidNotReceiveWithAnyArgs().ReadAsync(default, TestContext.Current.CancellationToken);
     }
 
+    /// <summary>
+    /// The whole-record save is the widest write this surface publishes, so it is the one that has to prove the bound
+    /// on what an owner may name. A record naming material provisioned for them commits as an ordinary write.
+    /// </summary>
+    [Fact]
+    public async Task SaveAsync_ARecordNamingMaterialProvisionedForThem_CommitsToTheSignedInOwnersRecord()
+    {
+        // Arrange
+        var deployment = SignedInAs(SyntheticMailOwner.Deployment, MailFathomPermission.MailAccountsWrite);
+        deployment.Holding(SyntheticMailOwner.Deployment, EmptyRecord, version: 6);
+
+        // Act
+        var result = await ClientOwnerRecordEndpoint.SaveAsync(
+            deployment.Records,
+            new OwnerRecordSaveRequest(6, RecordDeclaring(AccountProvisionedFor(SyntheticMailOwner.Deployment, "archive"))),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(Assert.IsType<Ok<OwnerRecordWriteResponse>>(result.Result).Value!.Committed);
+        await deployment.Store.Received(1).CommitAsync(
+            SyntheticMailOwner.Deployment,
+            Arg.Any<string>(),
+            6,
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The same route with a reference outside this owner's own material, which is the write that would hand one person
+    /// another's credential to present to a mail server. It is refused before the commit, so a save that pasted the
+    /// whole record past the narrower routes reaches the same bound they do.
+    /// </summary>
+    [Fact]
+    public async Task SaveAsync_ARecordNamingAnotherOwnersCredential_IsRefusedBeforeItIsCommitted()
+    {
+        // Arrange
+        var deployment = SignedInAs(SyntheticMailOwner.Deployment, MailFathomPermission.MailAccountsWrite);
+        deployment.Holding(SyntheticMailOwner.Deployment, EmptyRecord, version: 6);
+
+        // Act
+        var result = await ClientOwnerRecordEndpoint.SaveAsync(
+            deployment.Records,
+            new OwnerRecordSaveRequest(6, RecordDeclaring(AccountProvisionedFor(SyntheticMailOwner.Another, "archive"))),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(Assert.IsType<Ok<OwnerRecordWriteResponse>>(result.Result).Value!.Committed);
+        await deployment.Store.DidNotReceiveWithAnyArgs()
+            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]
@@ -276,6 +326,9 @@ public sealed class ClientOwnerRecordEndpointTests
             "Secrets": { "Password": { "Name": "{{accountId}}-password", "SecretReference": "file:/run/secrets/owner-{{owner.Value:D}}-{{accountId}}" } }
           }
           """;
+
+    /// <summary>A whole record declaring one mailbox, which is what the save route is handed.</summary>
+    private static string RecordDeclaring(string account) => $$"""{ "MailAccounts": [ {{account}} ] }""";
 
     private static string Account(string accountId) =>
         $$"""

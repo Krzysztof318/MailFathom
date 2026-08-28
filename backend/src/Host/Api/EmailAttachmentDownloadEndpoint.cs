@@ -92,10 +92,11 @@ internal static class EmailAttachmentDownloadEndpoint
             return Refused();
         }
 
-        // The owner comes from the deployment rather than from the ticket, and that is exact rather than approximate
-        // while mail accounts are declared in configuration: such a deployment holds one owner, the startup gate refuses
-        // to serve one that does not, and every account the capability could name is therefore that owner's. A ticket
-        // that recorded the owner it was minted for is what replaces this once an account can belong to a second one.
+        // The owner comes from the deployment rather than from the ticket, which is exact on a deployment holding one
+        // owner and has no answer on one holding several: the capability is a signed ticket rather than a credential, so
+        // nothing presented here names a person. Such a deployment therefore refuses the download rather than guessing
+        // whose mail it is — the refusal is classified and reaches the caller as a status code. Recording the owner in
+        // the ticket is what ends that, and it changes the capability's own format.
         principals.Assume(AuthorizedPrincipal.SignedCapability(deploymentOwner.Owner, AuthorizedObjectOf(ticket)));
 
         await using var attachment = await downloadReader.OpenAsync(ticket, cancellationToken);

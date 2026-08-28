@@ -15,13 +15,13 @@ namespace MailFathom.Application.Accounts;
 /// read model that reached the deployment's catalog instead names a member this port does not publish.
 /// </para>
 /// <para>
-/// A configured mail account names no owner, so what decides the answer is the deployment's own single-owner invariant
-/// rather than a per-account column: while accounts are declared in configuration a deployment holds exactly one owner
-/// record and every configured account belongs to it. A caller acting for that owner therefore owns everything the
-/// deployment serves, and a caller acting for any other owner owns none of it. The invariant is established before the
-/// host serves anything, so this is a comparison rather than a hope. When accounts, owners, and credentials move into
-/// the database together, what an owner owns becomes a column and this reads that instead; nothing above it changes,
-/// which is the point of resolving it here.
+/// What decides the answer is the owner each served account already carries. The deployment's own
+/// <c>MailSynchronization:Accounts</c> section names nobody, so the roster is what attributes its accounts, and an
+/// owner's own declared section or record arrives with the owner attached; either way the attribution is settled before
+/// this reads it, and a caller owns exactly the accounts attributed to the owner they were admitted for. Nothing here
+/// compares against a sole owner the deployment holds, because a deployment whose owner-facing surfaces authenticate
+/// every caller as a person serves several — which is the arrangement the roster exists for, and one where asking for a
+/// sole owner has no answer to give.
 /// </para>
 /// <para>
 /// The empty answer and the refusal are deliberately different outcomes. An owner who owns nothing is answered with an
@@ -33,25 +33,20 @@ namespace MailFathom.Application.Accounts;
 public sealed class OwnedMailAccountCatalog : ICallerMailAccountCatalog
 {
     private readonly IDeploymentMailAccountCatalog servedAccounts;
-    private readonly IDeploymentMailOwnerSource deploymentOwner;
     private readonly AccessAuthorization authorization;
 
     /// <summary>Initializes the caller-scoped catalog.</summary>
-    /// <param name="servedAccounts">Describes every account this deployment serves.</param>
-    /// <param name="deploymentOwner">Names the owner every configured account belongs to.</param>
+    /// <param name="servedAccounts">Describes every account this deployment serves, each under the owner it belongs to.</param>
     /// <param name="authorization">Answers which owner the work in hand is acting for.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public OwnedMailAccountCatalog(
         IDeploymentMailAccountCatalog servedAccounts,
-        IDeploymentMailOwnerSource deploymentOwner,
         AccessAuthorization authorization)
     {
         ArgumentNullException.ThrowIfNull(servedAccounts);
-        ArgumentNullException.ThrowIfNull(deploymentOwner);
         ArgumentNullException.ThrowIfNull(authorization);
 
         this.servedAccounts = servedAccounts;
-        this.deploymentOwner = deploymentOwner;
         this.authorization = authorization;
     }
 
@@ -62,8 +57,17 @@ public sealed class OwnedMailAccountCatalog : ICallerMailAccountCatalog
     public MailOwnerId Owner => this.authorization.RequireOwner();
 
     /// <inheritdoc />
-    public IReadOnlyList<ServedMailAccount> OwnedAccounts =>
-        this.authorization.RequireOwner() == this.deploymentOwner.Owner
-            ? this.servedAccounts.ServedAccounts
-            : [];
+    /// <remarks>
+    /// The order the deployment's catalog established is preserved, because a scope resolved from this set is what a
+    /// continuation cursor is issued against and filtering a canonical order leaves it canonical.
+    /// </remarks>
+    public IReadOnlyList<ServedMailAccount> OwnedAccounts
+    {
+        get
+        {
+            var owner = this.authorization.RequireOwner();
+
+            return [.. this.servedAccounts.ServedAccounts.Where(account => account.Owner == owner)];
+        }
+    }
 }

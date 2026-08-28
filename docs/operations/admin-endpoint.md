@@ -1182,11 +1182,17 @@ the deployment reach a state in which one caller's request would be answered out
 administrative endpoint is deliberately not part of that check: it is the surface an operator is holding while they
 correct the others, and its credentials never name an owner in the first place.
 
-That leaves a few administrative routes with nobody to act for on such a deployment. The contact book and the mail
-account catalogue are read for one person, and a credential that names no owner leaves the deployment to supply one —
-which it can do only where it holds a single owner. Those routes answer `409` on a deployment serving several, with a
-sentence naming the credential that would have been answered, rather than reporting the deployment as broken. Every
-route that names the owner in its own path is unaffected, which is every route in the table above.
+That leaves the reads with nobody to act for on such a deployment. The contact book is read for one person, and a
+credential that names no owner leaves the deployment to supply one — which it can do only where it holds a single
+owner. Those routes answer `409` on a deployment serving several, with a sentence naming the credential that would have
+been answered, rather than reporting the deployment as broken. Every route that names the owner in its own path is
+unaffected, which is every route in the table above, and so is every mailbox read: which accounts a caller owns is
+resolved from the owner each served account carries rather than from a sole one.
+
+The attachment download the client endpoint serves is in the first group rather than the second. Its capability is a
+signed ticket rather than a credential, so nothing in the URL names an owner and the deployment supplies one; on a
+deployment serving several it therefore answers `409` instead of the file. Recording the owner in the ticket is what
+ends that, and it changes the capability's own format.
 
 **Adoption is what moves an owner off this deployment's files, and nothing else does.** Until then that owner's mail
 accounts are read from a configuration source on every start, and a write to their record is refused rather than

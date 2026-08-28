@@ -88,6 +88,30 @@ internal sealed class ConfiguredOwnerMailAccounts(IConfiguration configuration, 
                 served.Owner == owner && served.Source == MailOwnerAccountSource.DeploymentSection);
     }
 
+    /// <summary>Reads which owners a configuration source names, for a caller asking about more than one of them.</summary>
+    /// <returns>The owners a file declares, or the sole owner of a deployment declaring none, empty when no source names anybody.</returns>
+    /// <remarks>
+    /// The same question <see cref="DeclaredByAConfigurationSource" /> answers, asked once for a whole roster. Reading
+    /// the declarations is a reflection bind of the collection and every mailbox in it, so asking per entry makes a
+    /// listing of the deployment's owners quadratic in a number an operator writes by hand and the roster route reads
+    /// unconditionally.
+    /// </remarks>
+    public IReadOnlySet<MailOwnerId> OwnersAConfigurationSourceDeclares()
+    {
+        var declared = DeclaredOwners.ReadFrom(configuration);
+
+        return declared.Count > 0
+            ? declared
+                .Select(declaration => DeclaredOwners.TryReadIdentifier(declaration.Id))
+                .OfType<Guid>()
+                .Select(MailOwnerId.Create)
+                .ToHashSet()
+            : servedOwners.Owners
+                .Where(served => served.Source == MailOwnerAccountSource.DeploymentSection)
+                .Select(served => served.Owner)
+                .ToHashSet();
+    }
+
     /// <summary>Reads the mail accounts a configuration source declares for one owner.</summary>
     /// <param name="owner">The owner asked about.</param>
     /// <returns>The declarations, empty when no configuration source reaches this owner.</returns>
@@ -124,21 +148,33 @@ internal sealed class ConfiguredOwnerMailAccounts(IConfiguration configuration, 
         ];
     }
 
-    /// <summary>Finds the numbered entry of the owner collection this owner is declared in.</summary>
+    /// <summary>Finds the entry of the owner collection this owner is declared in, by the key it was written under.</summary>
     /// <remarks>
-    /// The position is the address rather than a property of the owner, because that is how a configuration key names
-    /// an element. A declaration the file no longer carries answers with nothing, which is a file edited between the
-    /// start that reconciled the roster and this read.
+    /// The key rather than the position the entry bound at, for the reason
+    /// <see cref="Access.TransportAuthenticationOptions.ConfigurationKey" /> states about the other collection an
+    /// operator numbers by hand: the binder appends one element per child and records no key, so a source numbering its
+    /// entries with a gap makes the two different numbers and the position then addresses a section nobody wrote. What
+    /// that would cost here is an adoption committing an empty record over an owner whose mailboxes the file declares.
+    /// <para>
+    /// A declaration the file no longer carries answers with nothing, which is a file edited between the start that
+    /// reconciled the roster and this read, and so does a collection whose children and bound elements no longer
+    /// correspond — a shape only a source changing under the read produces, and one where no key can be trusted.
+    /// </para>
     /// </remarks>
     private IConfigurationSection? DeclaredSectionFor(MailOwnerId owner)
     {
-        var declared = DeclaredOwners.ReadFrom(configuration)
-            .Index()
-            .FirstOrDefault(entry => DeclaredOwners.TryReadIdentifier(entry.Item.Id) == owner.Value);
+        var declared = DeclaredOwners.ReadFrom(configuration);
+        var entries = configuration.GetSection(DeclaredOwnerOptions.SectionName).GetChildren().ToArray();
 
-        return declared.Item is null
-            ? null
-            : configuration.GetSection(
-                $"{DeclaredOwnerOptions.SectionName}:{declared.Index}:{nameof(DeclaredOwnerOptions.MailAccounts)}");
+        if (entries.Length != declared.Count)
+        {
+            return null;
+        }
+
+        var entry = entries
+            .Zip(declared)
+            .FirstOrDefault(candidate => DeclaredOwners.TryReadIdentifier(candidate.Second.Id) == owner.Value);
+
+        return entry.First?.GetSection(nameof(DeclaredOwnerOptions.MailAccounts));
     }
 }

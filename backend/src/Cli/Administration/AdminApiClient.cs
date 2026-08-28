@@ -1155,11 +1155,16 @@ internal sealed class AdminApiClient
             JsonContent.Create(request, CliJsonContext.Default.ConfigurationAdoptionRequest));
     }
 
-    /// <summary>The sentence an owner-scoped route answers with when the deployment holds no such owner.</summary>
+    /// <summary>The sentence an owner-record route answers with when the deployment holds no such owner.</summary>
     /// <remarks>
-    /// Every route beneath one owner answers <c>404</c> for an owner the deployment does not hold, so without this the
+    /// The owner-record routes answer <c>404</c> for an owner the deployment does not hold, so without this the
     /// operator would be sent after a listener and a port by a deployment that is answering perfectly well. It names
     /// the owner as the thing that is absent and the listing the identifier comes from.
+    /// <para>
+    /// Not every route beneath one owner: the credential routes answer an unheld owner with an empty listing, because
+    /// what they address is a credential rather than the owner, and the erasure answers <c>200</c> with nothing erased.
+    /// A route that adopts this sentence is one whose <c>404</c> means the owner.
+    /// </para>
     /// </remarks>
     private const string NoSuchOwner =
         "This deployment holds no owner under that identifier. Run 'mfctl owner list' and name one it holds.";
@@ -1491,7 +1496,7 @@ internal sealed class AdminApiClient
     /// <para>
     /// <c>404</c> means the port serves no administrative endpoint on most routes, because a route addressing a single
     /// record answers <c>200</c> with a nullable field where the deployment holds nothing. The exceptions are the
-    /// routes that address a thing by identity — one queued send, and everything beneath one owner — and each says so
+    /// routes that address a thing by identity — one queued send, and the owner-record routes — and each says so
     /// through <paramref name="absenceMessage" />: their absence is the absence of the thing addressed, and telling
     /// that operator to check the port would send them after a deployment that is answering perfectly well.
     /// </para>

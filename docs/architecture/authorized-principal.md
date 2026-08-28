@@ -149,7 +149,9 @@ than for a person, and every route there that is about one owner names the owner
 leaves nothing unanswered. That is also what makes recording a second owner reachable at all: the surface an operator
 would use to correct the other two cannot be the surface the refusal closes. What it costs is the handful of
 administrative reads that still resolve the sole owner — the contact book among them — and those have no answer on a
-roster of several; each is a separate act to scope, and no route silently picks one owner out of several.
+roster of several; each is a separate act to scope, and no route silently picks one owner out of several. Which mail
+accounts a caller owns is not one of them: it is resolved from the owner each served account carries, so every mailbox
+read answers a caller with their own half of a deployment serving several.
 [The health endpoints](../operations/health-endpoints.md#the-three-probes) record what each refusal means to an
 operator.
 
