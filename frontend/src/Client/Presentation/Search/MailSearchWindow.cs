@@ -13,7 +13,6 @@ internal readonly record struct MailSearchWindow(
     IImmutableList<DeploymentMailSearchResult> Results,
     IImmutableList<int> PageLengths,
     string? NextCursor,
-    MailSearchRetrievalMode Ranking,
     SemanticSearchStanding SemanticStanding)
 {
     internal const int MaximumPages = 4;
@@ -23,7 +22,6 @@ internal readonly record struct MailSearchWindow(
         Results: [],
         PageLengths: [],
         NextCursor: null,
-        MailSearchRetrievalMode.Unrecognized,
         SemanticSearchStanding.Unrecognized);
 
     internal static MailSearchWindow Opening(MailSearchQuery query, DeploymentMailSearchPage page) => new(
@@ -31,7 +29,6 @@ internal readonly record struct MailSearchWindow(
         [.. page.Rows],
         page.Rows.Count is 0 ? [] : [page.Rows.Count],
         page.NextCursor,
-        page.Ranking,
         page.SemanticStanding);
 
     internal MailSearchWindow Extended(DeploymentMailSearchPage page)
@@ -50,7 +47,6 @@ internal readonly record struct MailSearchWindow(
             Results = results,
             PageLengths = pageLengths,
             NextCursor = page.NextCursor,
-            Ranking = page.Ranking,
             SemanticStanding = page.SemanticStanding,
         };
     }

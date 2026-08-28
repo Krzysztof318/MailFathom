@@ -53,6 +53,7 @@ internal sealed class DeploymentClientSession : IClientSession, IDisposable
     private readonly TimeProvider clock;
     private readonly IState<DeploymentConnection> connection;
     private readonly Signal refresh = new();
+    private long revision;
 
     /// <summary>Initializes the session over the client that fetches it and the things that end its usefulness.</summary>
     /// <param name="deployment">Where the session document is asked for.</param>
@@ -92,16 +93,24 @@ internal sealed class DeploymentClientSession : IClientSession, IDisposable
         // and a fourth value would be one no screen is ever shown.
         this.connection = State.Value(this, () => new DeploymentConnection(ConnectionStanding.Reaching, 1, retry.Attempts));
         this.Standing = State.Async(this, this.ReadStandingAsync, this.refresh);
+        this.Revision = State.Async(this, this.ReadRevisionAsync, this.refresh);
     }
 
     /// <inheritdoc />
     public IFeed<SessionStanding> Standing { get; }
 
     /// <inheritdoc />
+    public IFeed<long> Revision { get; }
+
+    /// <inheritdoc />
     public IFeed<DeploymentConnection> Connection => this.connection;
 
     /// <inheritdoc />
-    public void Refresh() => this.refresh.Raise();
+    public void Refresh()
+    {
+        Interlocked.Increment(ref this.revision);
+        this.refresh.Raise();
+    }
 
     /// <inheritdoc />
     public void Dispose()
@@ -204,5 +213,8 @@ internal sealed class DeploymentClientSession : IClientSession, IDisposable
             _ => new DeploymentConnection(standing, attempt, this.retry.Attempts),
             cancellationToken);
 
-    private void AskAgain(object? sender, EventArgs e) => this.refresh.Raise();
+    private ValueTask<long> ReadRevisionAsync(CancellationToken cancellationToken) =>
+        ValueTask.FromResult(Interlocked.Read(ref this.revision));
+
+    private void AskAgain(object? sender, EventArgs e) => this.Refresh();
 }

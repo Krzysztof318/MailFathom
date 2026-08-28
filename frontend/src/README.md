@@ -137,8 +137,9 @@ the received range, attachment presence, read state, and flag state. Each can be
 empty result can be widened without reconstructing the query. The deployment ranks words and meaning together where
 it can; every row says which ranking found it, and a deployment with no active embedding profile or an unavailable
 embedding provider says that the page was lexical instead of silently returning a narrower answer. Results walk
-forward by keyset cursor and stay in place when one opens its conversation. Recent searches are kept only in this
-run's state — query text reaches neither `ApplicationData.LocalSettings`, a log, nor telemetry.
+forward by keyset cursor and stay in place when one opens its conversation. Recent searches are kept only in the
+current session's run state and are cleared with its results and editor whenever that session is invalidated — query
+text reaches neither `ApplicationData.LocalSettings`, a log, nor telemetry.
 
 **The conversation that selection is in is the other half of the space.** `Client/Presentation/Threads/` holds it, and
 `IMailThread` is registered once for the run beside the list — not because a screen keeps it, but because a conversation

@@ -3,10 +3,12 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Collections.Immutable;
+using MailFathom.Client.Backend;
 using MailFathom.Client.Presentation.Mailboxes;
 using MailFathom.Client.Presentation.Messages;
 using MailFathom.Client.Presentation.Search;
 using MailFathom.Client.Presentation.Workspace;
+using MailFathom.Client.Session;
 using MailFathom.Client.UnitTests.TestDoubles;
 
 namespace MailFathom.Client.UnitTests.Presentation.Search;
@@ -22,8 +24,9 @@ public sealed class DeploymentMailSearchTests
         using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse(Page(1, nextCursor: null, "LexicalRanking", "Inactive")),
             cancellationToken: TestContext.Current.CancellationToken);
+        using var session = Session();
         var workspace = Workspace(new WorkspaceScope { Account = "work", Role = "Inbox" });
-        var search = Search(harness, workspace, new StubMailThread());
+        var search = Search(harness, session, workspace, new StubMailThread());
 
         await search.OpenAsync(TestContext.Current.CancellationToken);
         await search.Query.SetAsync("quarter", TestContext.Current.CancellationToken);
@@ -48,6 +51,7 @@ public sealed class DeploymentMailSearchTests
         Assert.DoesNotContain("receivedBefore=", asked.Query, StringComparison.Ordinal);
         Assert.DoesNotContain("flagged=", asked.Query, StringComparison.Ordinal);
         Assert.DoesNotContain("hasAttachments=", asked.Query, StringComparison.Ordinal);
+        Assert.Equal("Inbox display", await search.Folder);
 
         Assert.Equal(MailMessages.Key(1), row.Key);
         Assert.Equal("Matched by words", row.MatchReason);
@@ -59,7 +63,7 @@ public sealed class DeploymentMailSearchTests
         Assert.True(reading!.HasSearched);
         Assert.True(reading.SemanticSearchInactive);
         Assert.False(reading.SemanticSearchDegraded);
-        Assert.Equal("work / Inbox", reading.Scope);
+        Assert.Equal("work / Inbox display", reading.Scope);
 
         var recent = Assert.Single((await search.Recent)!);
         Assert.Equal("quarter", recent.Query);
@@ -76,8 +80,9 @@ public sealed class DeploymentMailSearchTests
                     ? Page(2, nextCursor: null, "LexicalRanking", "Available")
                     : Page(1, "next", "LexicalRanking", "Available")),
             cancellationToken: TestContext.Current.CancellationToken);
+        using var session = Session();
         var thread = new StubMailThread();
-        var search = Search(harness, Workspace(WorkspaceScope.Everything), thread);
+        var search = Search(harness, session, Workspace(WorkspaceScope.Everything), thread);
 
         await search.OpenAsync(TestContext.Current.CancellationToken);
         await search.Query.SetAsync("quarter", TestContext.Current.CancellationToken);
@@ -112,7 +117,8 @@ public sealed class DeploymentMailSearchTests
                         "Available"));
             },
             cancellationToken: TestContext.Current.CancellationToken);
-        var search = Search(harness, Workspace(WorkspaceScope.Everything), new StubMailThread());
+        using var session = Session();
+        var search = Search(harness, session, Workspace(WorkspaceScope.Everything), new StubMailThread());
         await search.Query.SetAsync("quarter", TestContext.Current.CancellationToken);
 
         // Act
@@ -136,7 +142,8 @@ public sealed class DeploymentMailSearchTests
         using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse(Page(1, nextCursor: null, "SemanticRanking", "Available")),
             cancellationToken: TestContext.Current.CancellationToken);
-        var search = Search(harness, Workspace(WorkspaceScope.Everything), new StubMailThread());
+        using var session = Session();
+        var search = Search(harness, session, Workspace(WorkspaceScope.Everything), new StubMailThread());
         await search.Query.SetAsync("roof leak", TestContext.Current.CancellationToken);
 
         // Act
@@ -156,8 +163,10 @@ public sealed class DeploymentMailSearchTests
         using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse(Page(1, nextCursor: null, "LexicalRanking", "Available")),
             cancellationToken: TestContext.Current.CancellationToken);
+        using var session = Session();
         var search = Search(
             harness,
+            session,
             Workspace(new WorkspaceScope { Role = "Sent" }),
             new StubMailThread());
         await search.OpenAsync(TestContext.Current.CancellationToken);
@@ -179,7 +188,8 @@ public sealed class DeploymentMailSearchTests
         using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse(Page(1, nextCursor: null, "BothRankings", "Available")),
             cancellationToken: TestContext.Current.CancellationToken);
-        var search = Search(harness, Workspace(WorkspaceScope.Everything), new StubMailThread());
+        using var session = Session();
+        var search = Search(harness, session, Workspace(WorkspaceScope.Everything), new StubMailThread());
 
         await search.Query.SetAsync("quarter", TestContext.Current.CancellationToken);
         await search.Sender.SetAsync("someone@example.test", TestContext.Current.CancellationToken);
@@ -204,7 +214,8 @@ public sealed class DeploymentMailSearchTests
         using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse(Page(1, nextCursor: null, "BothRankings", "Available")),
             cancellationToken: TestContext.Current.CancellationToken);
-        var search = Search(harness, Workspace(WorkspaceScope.Everything), new StubMailThread());
+        using var session = Session();
+        var search = Search(harness, session, Workspace(WorkspaceScope.Everything), new StubMailThread());
         await search.Query.SetAsync("quarter", TestContext.Current.CancellationToken);
 
         // Act
@@ -223,7 +234,8 @@ public sealed class DeploymentMailSearchTests
         using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse(Page(1, nextCursor: null, "BothRankings", "Available")),
             cancellationToken: TestContext.Current.CancellationToken);
-        var search = Search(harness, Workspace(WorkspaceScope.Everything), new StubMailThread());
+        using var session = Session();
+        var search = Search(harness, session, Workspace(WorkspaceScope.Everything), new StubMailThread());
         await search.Query.SetAsync("quarter", TestContext.Current.CancellationToken);
         await search.Account.SetAsync("work", TestContext.Current.CancellationToken);
         await search.Folder.SetAsync("INBOX", TestContext.Current.CancellationToken);
@@ -240,12 +252,39 @@ public sealed class DeploymentMailSearchTests
         Assert.Contains("query=quarter", asked.Query, StringComparison.Ordinal);
     }
 
+    /// <summary>A session refresh hides the previous owner's results and recent terms even when the grants are unchanged.</summary>
+    [Fact]
+    public async Task SessionChanged_TheSameStandingArrivesAgain_ClearsOwnerScopedSearchState()
+    {
+        // Arrange
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(Page(1, nextCursor: null, "BothRankings", "Available")),
+            cancellationToken: TestContext.Current.CancellationToken);
+        using var session = Session();
+        var search = Search(harness, session, Workspace(WorkspaceScope.Everything), new StubMailThread());
+        await search.Query.SetAsync("private quarter", TestContext.Current.CancellationToken);
+        await search.SearchAsync(TestContext.Current.CancellationToken);
+        Assert.Single((await search.Results)!);
+        Assert.Single((await search.Recent)!);
+
+        // Act
+        session.Refresh();
+        await Until(async () =>
+            (await search.Results)?.Count is 0
+            && (await search.Recent)?.Count is 0);
+
+        // Assert
+        Assert.True(string.IsNullOrEmpty(await search.Query));
+    }
+
     private static DeploymentMailSearch Search(
         DeploymentHarness harness,
+        IClientSession session,
         IWorkspace workspace,
         StubMailThread thread) =>
         new(
             harness.Client,
+            session,
             workspace,
             thread,
             new StubClock(new DateTimeOffset(2026, 8, 25, 12, 0, 0, TimeSpan.Zero)),
@@ -274,7 +313,27 @@ public sealed class DeploymentMailSearchTests
             [MailSearchWords.ScopeEverythingKey] = "All mail",
             [MailSearchWords.ScopeAccountKey] = "{0}",
             [MailSearchWords.ScopeFolderKey] = "{0} / {1}",
+            [MailboxWords.RoleResourceKeyFor("Inbox")] = "Inbox display",
+            [MailboxWords.RoleResourceKeyFor("Sent")] = "Sent display",
         });
+
+    private static StubClientSession Session() =>
+        new(SessionStanding.Of(new DeploymentSession("MailFathom", "0.8.0", ["mailfathom.mail.read"])));
+
+    private static async Task Until(Func<ValueTask<bool>> settled)
+    {
+        for (var attempt = 0; attempt < 400; attempt++)
+        {
+            if (await settled())
+            {
+                return;
+            }
+
+            await Task.Delay(10, TestContext.Current.CancellationToken);
+        }
+
+        Assert.Fail("The search did not settle on the new session.");
+    }
 
     private static string Page(int number, string? nextCursor, string matchedBy, string semanticSearch) =>
         $$"""

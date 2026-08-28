@@ -6,9 +6,11 @@ using System.Collections.Immutable;
 using MailFathom.Client.Backend;
 using MailFathom.Client.Backend.Search;
 using MailFathom.Client.Backend.Timeline;
+using MailFathom.Client.Presentation.Mailboxes;
 using MailFathom.Client.Presentation.Messages;
 using MailFathom.Client.Presentation.Threads;
 using MailFathom.Client.Presentation.Workspace;
+using MailFathom.Client.Session;
 using Microsoft.Extensions.Localization;
 
 namespace MailFathom.Client.Presentation.Search;
@@ -24,20 +26,31 @@ public sealed class DeploymentMailSearch : IMailSearch
     private readonly IMailThread thread;
     private readonly TimeProvider clock;
     private readonly IStringLocalizer words;
+    private readonly IState<long> sessionRevision;
     private readonly IState<MailSearchRun> run;
     private readonly IState<MailSearchWindow> loaded;
-    private readonly IState<ImmutableArray<RecentMailSearch>> recent;
+    private readonly IState<MailSearchHistory> recent;
+    private readonly IState<string> folderRole;
     private readonly IState<bool> pagingFailed;
 
     /// <summary>Initializes search over the deployment, workspace, and one conversation shared by the client.</summary>
+    /// <param name="deployment">Where ranked mail is asked for.</param>
+    /// <param name="session">What separates state held before and after the current session changes.</param>
+    /// <param name="workspace">The mailbox scope a newly opened search starts from.</param>
+    /// <param name="thread">The conversation a result opens.</param>
+    /// <param name="clock">What a result's date is written relative to.</param>
+    /// <param name="words">Where the sentences and special-use folder names come from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public DeploymentMailSearch(
         DeploymentClient deployment,
+        IClientSession session,
         IWorkspace workspace,
         IMailThread thread,
         TimeProvider clock,
         IStringLocalizer words)
     {
         ArgumentNullException.ThrowIfNull(deployment);
+        ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(workspace);
         ArgumentNullException.ThrowIfNull(thread);
         ArgumentNullException.ThrowIfNull(clock);
@@ -49,12 +62,15 @@ public sealed class DeploymentMailSearch : IMailSearch
         this.clock = clock;
         this.words = words;
 
+        this.sessionRevision = State.FromFeed(this, session.Revision);
+
         this.IsOpen = State.Value(this, () => false);
         this.Query = State.Value(this, () => string.Empty);
         this.Account = State.Value(this, () => string.Empty);
         this.Folder = State.Value(this, () => string.Empty);
         this.Sender = State.Value(this, () => string.Empty);
         this.Recipient = State.Value(this, () => string.Empty);
+        this.folderRole = State.Value(this, () => string.Empty);
         this.ReceivedOnOrAfter = State<DateTimeOffset>.Empty(this);
         this.ReceivedBefore = State<DateTimeOffset>.Empty(this);
         this.Unread = State<bool>.Empty(this);
@@ -62,16 +78,23 @@ public sealed class DeploymentMailSearch : IMailSearch
         this.HasAttachments = State<bool>.Empty(this);
 
         this.run = State.Value(this, () => MailSearchRun.Nothing);
-        this.loaded = State.FromFeed(this, this.run.SelectAsync(this.ReadAsync));
-        this.recent = State.Value(this, () => ImmutableArray<RecentMailSearch>.Empty);
+        this.loaded = State.FromFeed(
+            this,
+            Feed.Combine(this.sessionRevision, this.run).SelectAsync(this.ReadAsync));
+        this.recent = State.Value(this, () => MailSearchHistory.Nothing);
         this.pagingFailed = State.Value(this, () => false);
 
         this.Results = this.loaded.Select(this.Draw).AsListFeed();
-        this.Recent = this.recent
-            .Select(static entries => (IImmutableList<RecentMailSearch>)entries)
+        this.Recent = Feed.Combine(this.sessionRevision, this.recent)
+            .Select(static current =>
+                (IImmutableList<RecentMailSearch>)(current.Item1 == current.Item2.Revision
+                    ? current.Item2.Entries
+                    : ImmutableArray<RecentMailSearch>.Empty))
             .AsListFeed();
         this.Reading = this.loaded.Select(this.Describe);
         this.PagingFailed = this.pagingFailed;
+
+        this.sessionRevision.ForEach(this.ResetForAsync);
     }
 
     /// <summary>Whether the ranked list is shown instead of the timeline.</summary>
@@ -122,6 +145,13 @@ public sealed class DeploymentMailSearch : IMailSearch
     /// <summary>Shows search and starts its filters at the place currently in force.</summary>
     public async ValueTask OpenAsync(CancellationToken cancellationToken)
     {
+        var active = await this.sessionRevision.Option(cancellationToken).ConfigureAwait(false);
+        if (!active.IsSome(out var session))
+        {
+            return;
+        }
+
+        await this.ResetForAsync(session, cancellationToken).ConfigureAwait(false);
         await this.IsOpen.SetAsync(true, cancellationToken).ConfigureAwait(false);
 
         if ((await this.run.Value(cancellationToken).ConfigureAwait(false)).Query is null)
@@ -140,14 +170,21 @@ public sealed class DeploymentMailSearch : IMailSearch
         var scope = await this.workspace.Scope.Value(cancellationToken).ConfigureAwait(false) ?? WorkspaceScope.Everything;
 
         await this.Account.SetAsync(scope.Account ?? string.Empty, cancellationToken).ConfigureAwait(false);
-        await this.Folder.SetAsync(
-            scope.Role is { } role ? $"role:{role}" : scope.Folder ?? string.Empty,
+        await this.SetFolderAsync(
+            scope.Role is { } role ? $"role:{role}" : scope.Folder,
             cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Runs the current query and filters from their leading page.</summary>
     public async ValueTask SearchAsync(CancellationToken cancellationToken)
     {
+        var active = await this.sessionRevision.Option(cancellationToken).ConfigureAwait(false);
+        if (!active.IsSome(out var session))
+        {
+            return;
+        }
+
+        await this.ResetForAsync(session, cancellationToken).ConfigureAwait(false);
         var query = await this.ComposeAsync(cancellationToken).ConfigureAwait(false);
 
         if (string.IsNullOrWhiteSpace(query.Query))
@@ -156,14 +193,14 @@ public sealed class DeploymentMailSearch : IMailSearch
         }
 
         var sequence = (await this.run.Value(cancellationToken).ConfigureAwait(false)).Sequence;
-        await this.run.SetAsync(new MailSearchRun(query, sequence + 1), cancellationToken).ConfigureAwait(false);
+        await this.run.SetAsync(new MailSearchRun(session, query, sequence + 1), cancellationToken).ConfigureAwait(false);
         await this.pagingFailed.SetAsync(false, cancellationToken).ConfigureAwait(false);
 
         var held = await this.recent.Value(cancellationToken).ConfigureAwait(false);
         var entry = new RecentMailSearch(query.Query, query);
         ImmutableArray<RecentMailSearch> updated =
-            [entry, .. held.Where(recent => !string.Equals(recent.Key, entry.Key, StringComparison.Ordinal)).Take(RecentLimit - 1)];
-        await this.recent.SetAsync(updated, cancellationToken).ConfigureAwait(false);
+            [entry, .. held.Entries.Where(recent => !string.Equals(recent.Key, entry.Key, StringComparison.Ordinal)).Take(RecentLimit - 1)];
+        await this.recent.SetAsync(new MailSearchHistory(session, updated), cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Takes the next page onto the ranked list already drawn.</summary>
@@ -233,7 +270,7 @@ public sealed class DeploymentMailSearch : IMailSearch
     public ValueTask ClearFilterAsync(MailSearchFilter filter, CancellationToken cancellationToken) => filter switch
     {
         MailSearchFilter.Account => this.Account.SetAsync(string.Empty, cancellationToken),
-        MailSearchFilter.Folder => this.Folder.SetAsync(string.Empty, cancellationToken),
+        MailSearchFilter.Folder => this.SetFolderAsync(folder: null, cancellationToken),
         MailSearchFilter.Sender => this.Sender.SetAsync(string.Empty, cancellationToken),
         MailSearchFilter.Recipient => this.Recipient.SetAsync(string.Empty, cancellationToken),
         MailSearchFilter.ReceivedOnOrAfter => this.ReceivedOnOrAfter.SetAsync(null, cancellationToken),
@@ -252,7 +289,7 @@ public sealed class DeploymentMailSearch : IMailSearch
         var query = recent.Search;
         await this.Query.SetAsync(query.Query, cancellationToken).ConfigureAwait(false);
         await this.Account.SetAsync(query.Account ?? string.Empty, cancellationToken).ConfigureAwait(false);
-        await this.Folder.SetAsync(query.Folder ?? string.Empty, cancellationToken).ConfigureAwait(false);
+        await this.SetFolderAsync(query.Folder, cancellationToken).ConfigureAwait(false);
         await this.Sender.SetAsync(query.Sender ?? string.Empty, cancellationToken).ConfigureAwait(false);
         await this.Recipient.SetAsync(query.Recipient ?? string.Empty, cancellationToken).ConfigureAwait(false);
         await this.ReceivedOnOrAfter.SetAsync(query.ReceivedOnOrAfter, cancellationToken).ConfigureAwait(false);
@@ -267,7 +304,7 @@ public sealed class DeploymentMailSearch : IMailSearch
     {
         Query = (await this.Query.Value(cancellationToken).ConfigureAwait(false) ?? string.Empty).Trim(),
         Account = Named(await this.Account.Value(cancellationToken).ConfigureAwait(false)),
-        Folder = Named(await this.Folder.Value(cancellationToken).ConfigureAwait(false)),
+        Folder = await this.FolderForQueryAsync(cancellationToken).ConfigureAwait(false),
         Sender = Named(await this.Sender.Value(cancellationToken).ConfigureAwait(false)),
         Recipient = Named(await this.Recipient.Value(cancellationToken).ConfigureAwait(false)),
         ReceivedOnOrAfter = await Optional(this.ReceivedOnOrAfter, cancellationToken).ConfigureAwait(false),
@@ -279,10 +316,10 @@ public sealed class DeploymentMailSearch : IMailSearch
     };
 
     private async ValueTask<MailSearchWindow> ReadAsync(
-        MailSearchRun run,
+        (long Revision, MailSearchRun Run) trigger,
         CancellationToken cancellationToken)
     {
-        if (run.Query is not { } query)
+        if (trigger.Revision != trigger.Run.Revision || trigger.Run.Query is not { } query)
         {
             return MailSearchWindow.Nothing;
         }
@@ -337,7 +374,7 @@ public sealed class DeploymentMailSearch : IMailSearch
     private string ScopeOf(MailSearchQuery query)
     {
         var folder = query.Folder?.StartsWith("role:", StringComparison.Ordinal) is true
-            ? query.Folder[5..]
+            ? this.RoleName(query.Folder[5..])
             : query.Folder;
 
         return (query.Account, folder) switch
@@ -378,6 +415,58 @@ public sealed class DeploymentMailSearch : IMailSearch
 
     private static string? Named(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    private async ValueTask<string?> FolderForQueryAsync(CancellationToken cancellationToken)
+    {
+        var folder = Named(await this.Folder.Value(cancellationToken).ConfigureAwait(false));
+        var role = Named(await this.folderRole.Value(cancellationToken).ConfigureAwait(false));
+
+        return role is not null && string.Equals(folder, this.RoleName(role), StringComparison.Ordinal)
+            ? $"role:{role}"
+            : folder;
+    }
+
+    private async ValueTask SetFolderAsync(string? folder, CancellationToken cancellationToken)
+    {
+        var role = folder?.StartsWith("role:", StringComparison.Ordinal) is true ? folder[5..] : null;
+        await this.folderRole.SetAsync(role ?? string.Empty, cancellationToken).ConfigureAwait(false);
+        await this.Folder.SetAsync(role is null ? folder ?? string.Empty : this.RoleName(role), cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private string RoleName(string role) => this.words[MailboxWords.RoleResourceKeyFor(role)].Value;
+
+    private async ValueTask ResetForAsync(long revision, CancellationToken cancellationToken)
+    {
+        var held = await this.run.Value(cancellationToken).ConfigureAwait(false);
+
+        if (held.Revision == revision)
+        {
+            return;
+        }
+
+        await this.run.SetAsync(new MailSearchRun(revision, Query: null, Sequence: 0), cancellationToken)
+            .ConfigureAwait(false);
+        await this.recent.SetAsync(new MailSearchHistory(revision, []), cancellationToken).ConfigureAwait(false);
+
+        if (held.Revision is null)
+        {
+            return;
+        }
+
+        await this.IsOpen.SetAsync(false, cancellationToken).ConfigureAwait(false);
+        await this.Query.SetAsync(string.Empty, cancellationToken).ConfigureAwait(false);
+        await this.Account.SetAsync(string.Empty, cancellationToken).ConfigureAwait(false);
+        await this.SetFolderAsync(folder: null, cancellationToken).ConfigureAwait(false);
+        await this.Sender.SetAsync(string.Empty, cancellationToken).ConfigureAwait(false);
+        await this.Recipient.SetAsync(string.Empty, cancellationToken).ConfigureAwait(false);
+        await this.ReceivedOnOrAfter.SetAsync(null, cancellationToken).ConfigureAwait(false);
+        await this.ReceivedBefore.SetAsync(null, cancellationToken).ConfigureAwait(false);
+        await this.Unread.SetAsync(null, cancellationToken).ConfigureAwait(false);
+        await this.Flagged.SetAsync(null, cancellationToken).ConfigureAwait(false);
+        await this.HasAttachments.SetAsync(null, cancellationToken).ConfigureAwait(false);
+        await this.pagingFailed.SetAsync(false, cancellationToken).ConfigureAwait(false);
+    }
+
     private static async ValueTask<T?> Optional<T>(IState<T> state, CancellationToken cancellationToken)
         where T : struct
     {
@@ -385,8 +474,15 @@ public sealed class DeploymentMailSearch : IMailSearch
         return value.IsSome(out var stated) ? stated : null;
     }
 
-    private readonly record struct MailSearchRun(MailSearchQuery? Query, int Sequence)
+    private readonly record struct MailSearchRun(long? Revision, MailSearchQuery? Query, int Sequence)
     {
-        internal static MailSearchRun Nothing { get; } = new(Query: null, Sequence: 0);
+        internal static MailSearchRun Nothing { get; } = new(Revision: null, Query: null, Sequence: 0);
+    }
+
+    private readonly record struct MailSearchHistory(
+        long? Revision,
+        ImmutableArray<RecentMailSearch> Entries)
+    {
+        internal static MailSearchHistory Nothing { get; } = new(Revision: null, []);
     }
 }
