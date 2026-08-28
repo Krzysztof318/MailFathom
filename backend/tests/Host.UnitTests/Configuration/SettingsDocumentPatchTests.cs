@@ -4,19 +4,20 @@
 
 using System.Text.Json;
 using MailFathom.Application.Configuration;
+using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.RootSettings;
 using MailFathom.Infrastructure.Persistence.Settings;
 using Microsoft.Extensions.Configuration;
 using Xunit;
 
-namespace MailFathom.Host.UnitTests.Configuration.RootSettings;
+namespace MailFathom.Host.UnitTests.Configuration;
 
 /// <summary>
 /// Covers what a write does to the document itself. The assertions read the keys the candidate flattens to rather than
 /// the JSON text, because what the document is for is the configuration it contributes and two spellings of one
 /// setting are the same contribution.
 /// </summary>
-public sealed class RootSettingsDocumentPatchTests
+public sealed class SettingsDocumentPatchTests
 {
     /// <summary>A setting the document did not carry is added at the path the write named.</summary>
     [Fact]
@@ -26,7 +27,7 @@ public sealed class RootSettingsDocumentPatchTests
         var edits = new[] { ConfigurationEdit.SetTo("MailboxSearch:SnippetsPerEmail", "3") };
 
         // Act
-        var candidate = RootSettingsDocumentPatch.Apply("""{ "Deployment": { "PublicBaseAddress": "https://mail.example" } }""", edits);
+        var candidate = SettingsDocumentPatch.Apply("""{ "Deployment": { "PublicBaseAddress": "https://mail.example" } }""", edits);
 
         // Assert
         Assert.Equal("3", Flatten(candidate)["MailboxSearch:SnippetsPerEmail"]);
@@ -41,7 +42,7 @@ public sealed class RootSettingsDocumentPatchTests
         var edits = new[] { ConfigurationEdit.SetTo("MailboxSearch:SnippetsPerEmail", "3") };
 
         // Act
-        var candidate = RootSettingsDocumentPatch.Apply("{}", edits);
+        var candidate = SettingsDocumentPatch.Apply("{}", edits);
 
         // Assert
         Assert.Contains("\"3\"", candidate, StringComparison.Ordinal);
@@ -55,7 +56,7 @@ public sealed class RootSettingsDocumentPatchTests
         var edits = new[] { ConfigurationEdit.SetTo("MailboxSearch:SnippetsPerEmail", "5") };
 
         // Act
-        var candidate = RootSettingsDocumentPatch.Apply("""{ "MailboxSearch": { "SnippetsPerEmail": "3" } }""", edits);
+        var candidate = SettingsDocumentPatch.Apply("""{ "MailboxSearch": { "SnippetsPerEmail": "3" } }""", edits);
 
         // Assert
         Assert.Equal("5", Flatten(candidate)["MailboxSearch:SnippetsPerEmail"]);
@@ -73,7 +74,7 @@ public sealed class RootSettingsDocumentPatchTests
         var edits = new[] { ConfigurationEdit.SetTo("mailboxsearch:snippetsperemail", "5") };
 
         // Act
-        var candidate = RootSettingsDocumentPatch.Apply("""{ "MailboxSearch": { "SnippetsPerEmail": "3" } }""", edits);
+        var candidate = SettingsDocumentPatch.Apply("""{ "MailboxSearch": { "SnippetsPerEmail": "3" } }""", edits);
 
         // Assert
         Assert.Equal("5", Assert.Single(Flatten(candidate)).Value);
@@ -90,7 +91,7 @@ public sealed class RootSettingsDocumentPatchTests
         var edits = new[] { ConfigurationEdit.SetTo("MailRules:Rules:1:Name", "second") };
 
         // Act
-        var candidate = RootSettingsDocumentPatch.Apply("{}", edits);
+        var candidate = SettingsDocumentPatch.Apply("{}", edits);
 
         // Assert
         Assert.Equal("second", Flatten(candidate)["MailRules:Rules:1:Name"]);
@@ -108,7 +109,7 @@ public sealed class RootSettingsDocumentPatchTests
         var edits = new[] { ConfigurationEdit.SetTo("MailRules:Rules:1:Name", "rewritten") };
 
         // Act
-        var candidate = RootSettingsDocumentPatch.Apply(
+        var candidate = SettingsDocumentPatch.Apply(
             """{ "MailRules": { "Rules": [ { "Name": "first" }, { "Name": "second" } ] } }""",
             edits);
 
@@ -130,7 +131,7 @@ public sealed class RootSettingsDocumentPatchTests
         var edits = new[] { ConfigurationEdit.Removing("MailRules:Rules:1:Name") };
 
         // Act
-        var candidate = RootSettingsDocumentPatch.Apply(
+        var candidate = SettingsDocumentPatch.Apply(
             """{ "MailRules": { "Rules": [ { "Name": "first" }, { "Name": "second", "Enabled": "false" } ] } }""",
             edits);
 
@@ -149,7 +150,7 @@ public sealed class RootSettingsDocumentPatchTests
         var edits = new[] { ConfigurationEdit.SetTo("MailboxSearch:SnippetsPerEmail", "3") };
 
         // Act
-        var candidate = RootSettingsDocumentPatch.Apply("""{ "MailboxSearch": "whatever" }""", edits);
+        var candidate = SettingsDocumentPatch.Apply("""{ "MailboxSearch": "whatever" }""", edits);
 
         // Assert
         Assert.Equal("3", Assert.Single(Flatten(candidate)).Value);
@@ -163,7 +164,7 @@ public sealed class RootSettingsDocumentPatchTests
         var edits = new[] { ConfigurationEdit.Removing("MailboxSearch:SnippetsPerEmail") };
 
         // Act
-        var candidate = RootSettingsDocumentPatch.Apply(
+        var candidate = SettingsDocumentPatch.Apply(
             """{ "MailboxSearch": { "SnippetsPerEmail": "3", "MaximumResults": "20" } }""",
             edits);
 
@@ -184,7 +185,7 @@ public sealed class RootSettingsDocumentPatchTests
         var edits = new[] { ConfigurationEdit.Removing("MailboxSearch:SnippetsPerEmail") };
 
         // Act
-        var candidate = RootSettingsDocumentPatch.Apply("""{ "MailboxSearch": { "SnippetsPerEmail": "3" } }""", edits);
+        var candidate = SettingsDocumentPatch.Apply("""{ "MailboxSearch": { "SnippetsPerEmail": "3" } }""", edits);
 
         // Assert
         Assert.Empty(Flatten(candidate));
@@ -199,7 +200,7 @@ public sealed class RootSettingsDocumentPatchTests
         var edits = new[] { ConfigurationEdit.Removing("MailboxSearch:SnippetsPerEmail") };
 
         // Act
-        var candidate = RootSettingsDocumentPatch.Apply("""{ "Deployment": { "PublicBaseAddress": "https://mail.example" } }""", edits);
+        var candidate = SettingsDocumentPatch.Apply("""{ "Deployment": { "PublicBaseAddress": "https://mail.example" } }""", edits);
 
         // Assert
         Assert.Equal("https://mail.example", Assert.Single(Flatten(candidate)).Value);
@@ -217,7 +218,7 @@ public sealed class RootSettingsDocumentPatchTests
         };
 
         // Act
-        var candidate = RootSettingsDocumentPatch.Apply("{}", edits);
+        var candidate = SettingsDocumentPatch.Apply("{}", edits);
 
         // Assert
         Assert.Equal("5", Flatten(candidate)["MailboxSearch:SnippetsPerEmail"]);
@@ -231,7 +232,7 @@ public sealed class RootSettingsDocumentPatchTests
         var edits = new[] { ConfigurationEdit.SetTo("MailboxSearch:SnippetsPerEmail", "3") };
 
         // Act & Assert
-        Assert.Throws<FormatException>(() => RootSettingsDocumentPatch.Apply("\"not settings\"", edits));
+        Assert.Throws<FormatException>(() => SettingsDocumentPatch.Apply("\"not settings\"", edits));
     }
 
     /// <summary>A document that is not JSON at all reaches the caller as the parser's own failure.</summary>
@@ -242,7 +243,7 @@ public sealed class RootSettingsDocumentPatchTests
         var edits = new[] { ConfigurationEdit.SetTo("MailboxSearch:SnippetsPerEmail", "3") };
 
         // Act & Assert
-        Assert.ThrowsAny<JsonException>(() => RootSettingsDocumentPatch.Apply("{ not json", edits));
+        Assert.ThrowsAny<JsonException>(() => SettingsDocumentPatch.Apply("{ not json", edits));
     }
 
     /// <summary>Reads the configuration keys a candidate document contributes, which is what the layer publishes from it.</summary>

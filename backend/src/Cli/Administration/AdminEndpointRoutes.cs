@@ -208,19 +208,50 @@ internal static class AdminEndpointRoutes
     /// <summary>Where an adoption of the deployment's file-decided settings is previewed, and where it is performed.</summary>
     internal const string ConfigurationAdoptionPath = $"{ConfigurationPath}/adoption";
 
-    /// <summary>Where the owners a deployment holds records for are listed.</summary>
+    /// <summary>Where the owners a deployment holds records for are listed, and where one is recorded.</summary>
     /// <remarks>
-    /// The identifiers alone, and they are what every credential path below is composed from: an administrator selects
-    /// an owner before administering a credential, and a generated identifier is the only handle either side has for
-    /// one. A deployment serving one person answers with one entry, which is what lets the command act without asking
-    /// which owner was meant.
+    /// The listing every owner-scoped path below is composed from: an administrator selects an owner before doing
+    /// anything else, and a generated identifier is the only handle either side has for one. A deployment serving one
+    /// person answers with one entry, which is what lets a command act without asking which owner was meant.
     /// </remarks>
     internal const string OwnersPath = $"{Prefix}/owners";
+
+    /// <summary>Where one owner and everything the deployment recorded for them are erased.</summary>
+    /// <param name="ownerId">The owner the path names.</param>
+    /// <returns>The path, with the identity written the way a deployment's route constraint reads one.</returns>
+    internal static string OwnerPath(Guid ownerId) => $"{OwnersPath}/{ownerId:D}";
+
+    /// <summary>Where the label one owner is told apart by is replaced.</summary>
+    /// <param name="ownerId">The owner the path names.</param>
+    /// <returns>The path.</returns>
+    internal static string OwnerDisplayNamePath(Guid ownerId) => $"{OwnerPath(ownerId)}/display-name";
+
+    /// <summary>Where one owner's record is read whole, and where an edited one is saved back.</summary>
+    /// <param name="ownerId">The owner the path names.</param>
+    /// <returns>The path.</returns>
+    internal static string OwnerRecordPath(Guid ownerId) => $"{OwnerPath(ownerId)}/record";
+
+    /// <summary>Where one mail account is declared into an owner's record.</summary>
+    /// <param name="ownerId">The owner the mailbox belongs to.</param>
+    /// <returns>The path.</returns>
+    internal static string OwnerMailAccountsPath(Guid ownerId) => $"{OwnerRecordPath(ownerId)}/mail-accounts";
+
+    /// <summary>Where one mail account is withdrawn from an owner's record.</summary>
+    /// <param name="ownerId">The owner the mailbox belongs to.</param>
+    /// <returns>The path.</returns>
+    /// <remarks>A path of its own carrying the identifier in the body, because an account is named by something its owner chose: a dot or a space in one would decide whether the route matched at all.</remarks>
+    internal static string OwnerMailAccountRemovalPath(Guid ownerId) =>
+        $"{OwnerMailAccountsPath(ownerId)}/removal";
+
+    /// <summary>Where one owner's adoption is previewed, and where it is performed.</summary>
+    /// <param name="ownerId">The owner the path names.</param>
+    /// <returns>The path.</returns>
+    internal static string OwnerAdoptionPath(Guid ownerId) => $"{OwnerRecordPath(ownerId)}/adoption";
 
     /// <summary>Where one owner's credentials are listed and provisioned, whichever method each is presented by.</summary>
     /// <param name="ownerId">The owner the path names.</param>
     /// <returns>The path, with the identity written the way a deployment's route constraint reads one.</returns>
-    internal static string OwnerCredentialsPath(Guid ownerId) => $"{OwnersPath}/{ownerId:D}/credentials";
+    internal static string OwnerCredentialsPath(Guid ownerId) => $"{OwnerPath(ownerId)}/credentials";
 
     /// <summary>Where one credential is removed.</summary>
     /// <param name="ownerId">The owner the credential belongs to.</param>

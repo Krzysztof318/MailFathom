@@ -34,7 +34,7 @@ internal static class CreateOwnerCredentialCommand
         ArgumentNullException.ThrowIfNull(context);
 
         var endpointOption = CliOptions.Endpoint();
-        var ownerOption = OwnerCredentialOptions.Owner();
+        var ownerOption = OwnerOptions.Owner();
         var methodOption = OwnerCredentialOptions.Method();
         var usernameOption = OwnerCredentialOptions.Username();
         var publicKeyFileOption = OwnerCredentialOptions.PublicKeyFile();
@@ -88,7 +88,7 @@ internal static class CreateOwnerCredentialCommand
         using var transport = context.OpenTransport(profile.Endpoint, profile.Trust);
         var deployment = new AdminApiClient(transport, context.Console);
 
-        var owner = await OwnerCredentialOptions.ResolveOwnerAsync(
+        var owner = await OwnerOptions.ResolveOwnerAsync(
             deployment,
             profile.Token,
             requestedOwner,

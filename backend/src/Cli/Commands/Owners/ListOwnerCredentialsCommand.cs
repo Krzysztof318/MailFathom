@@ -25,7 +25,7 @@ internal static class ListOwnerCredentialsCommand
         ArgumentNullException.ThrowIfNull(context);
 
         var endpointOption = CliOptions.Endpoint();
-        var ownerOption = OwnerCredentialOptions.Owner();
+        var ownerOption = OwnerOptions.Owner();
 
         Command command = new("list", "Read the credentials one owner's clients present.")
         {
@@ -53,7 +53,7 @@ internal static class ListOwnerCredentialsCommand
         using var transport = context.OpenTransport(profile.Endpoint, profile.Trust);
         var deployment = new AdminApiClient(transport, context.Console);
 
-        var owner = await OwnerCredentialOptions.ResolveOwnerAsync(
+        var owner = await OwnerOptions.ResolveOwnerAsync(
             deployment,
             profile.Token,
             requestedOwner,

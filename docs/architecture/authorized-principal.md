@@ -134,17 +134,22 @@ is, so a request admitted on one carries that owner as a claim and the adapter a
 deployment serve more than one person's mail over one address, and what makes a credential resolving no owner refusable
 exactly as an unknown credential is.
 
-The gate answers for the callers that carry nobody, and it settles the whole roster while the host starts — every owner
-the file declares, each with the mail accounts they own, and the deployment's own `MailSynchronization:Accounts`
-belonging to the sole owner such a deployment holds. It refuses to come up on any number but one **while
-`McpEndpoint`, `ClientEndpoint`, or `AdminEndpoint` is enabled**, and it refuses on the enablement alone rather than on
-whether the surface requires a credential. Two things are behind that. An unauthenticated mail-serving surface admits a
-caller that presented nothing, and an administrator acts for the deployment rather than for a person, so the acts of
-theirs that need an owner — the contact book above all — resolve the sole one. And a caller the credential *does* name
-still reaches reads that resolve the owner from the deployment rather than from the caller, `OwnedMailAccountCatalog`
-and the attachment download route above all, so a roster of several would answer those with an unclassified failure.
-The credential naming the owner is what makes lifting the bound possible; lifting it waits for those readers to take
-the owner from the caller.
+The gate settles the whole roster while the host starts — every owner the file declares, each with the mail accounts
+they own, every owner whose record is already their own and whom no file declares, and the deployment's own
+`MailSynchronization:Accounts` belonging to the sole owner such a deployment holds. A caller whose credential names no
+owner needs exactly one owner to act for, so the gate refuses to come up on any other number **while `McpEndpoint` or
+`ClientEndpoint` admits such a caller** — which is a surface requiring no authentication, or one any of whose methods is
+a key, a public key, or an access token rather than a person's password. It is the methods rather than the enablement:
+a surface accepting a password accepts whatever is configured beside it, and a caller admitted by one of those still
+arrives carrying nobody, so what frees the roster is every method on both surfaces naming an owner — or the surfaces
+being off.
+
+**The administrative surface is deliberately outside that reading.** An administrator acts for the deployment rather
+than for a person, and every route there that is about one owner names the owner it is about, so a roster of several
+leaves nothing unanswered. That is also what makes recording a second owner reachable at all: the surface an operator
+would use to correct the other two cannot be the surface the refusal closes. What it costs is the handful of
+administrative reads that still resolve the sole owner — the contact book among them — and those have no answer on a
+roster of several; each is a separate act to scope, and no route silently picks one owner out of several.
 [The health endpoints](../operations/health-endpoints.md#the-three-probes) record what each refusal means to an
 operator.
 

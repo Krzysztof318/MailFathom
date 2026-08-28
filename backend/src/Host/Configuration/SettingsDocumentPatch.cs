@@ -7,7 +7,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using MailFathom.Application.Configuration;
 
-namespace MailFathom.Host.Configuration.RootSettings;
+namespace MailFathom.Host.Configuration;
 
 /// <summary>Applies a write's changes to a copy of the persisted configuration document.</summary>
 /// <remarks>
@@ -33,7 +33,7 @@ namespace MailFathom.Host.Configuration.RootSettings;
 /// means something.
 /// </para>
 /// </remarks>
-internal static class RootSettingsDocumentPatch
+internal static class SettingsDocumentPatch
 {
     /// <summary>Produces the document a write would persist.</summary>
     /// <param name="json">The document as it stands.</param>

@@ -49,7 +49,6 @@ namespace MailFathom.Application.Access.Credentials;
 public sealed class OwnerCredentialAdministration
 {
     private readonly AccessAuthorization authorization;
-    private readonly IMailOwnerDirectory owners;
     private readonly IOwnerCredentialStore credentials;
     private readonly IPasswordHasher passwordHasher;
     private readonly IOwnerApiKeyMinter apiKeyMinter;
@@ -59,7 +58,6 @@ public sealed class OwnerCredentialAdministration
 
     /// <summary>Initializes the administration over one deployment's credential records.</summary>
     /// <param name="authorization">What each act is admitted by.</param>
-    /// <param name="owners">Where the roster an administrator selects an owner from is read.</param>
     /// <param name="credentials">Where the credentials are kept.</param>
     /// <param name="passwordHasher">What turns a password into the record that is stored.</param>
     /// <param name="apiKeyMinter">What draws a key and reduces one to the value it is resolved by.</param>
@@ -69,7 +67,6 @@ public sealed class OwnerCredentialAdministration
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public OwnerCredentialAdministration(
         AccessAuthorization authorization,
-        IMailOwnerDirectory owners,
         IOwnerCredentialStore credentials,
         IPasswordHasher passwordHasher,
         IOwnerApiKeyMinter apiKeyMinter,
@@ -78,7 +75,6 @@ public sealed class OwnerCredentialAdministration
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(authorization);
-        ArgumentNullException.ThrowIfNull(owners);
         ArgumentNullException.ThrowIfNull(credentials);
         ArgumentNullException.ThrowIfNull(passwordHasher);
         ArgumentNullException.ThrowIfNull(apiKeyMinter);
@@ -87,37 +83,12 @@ public sealed class OwnerCredentialAdministration
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         this.authorization = authorization;
-        this.owners = owners;
         this.credentials = credentials;
         this.passwordHasher = passwordHasher;
         this.apiKeyMinter = apiKeyMinter;
         this.publicKeyReader = publicKeyReader;
         this.auditor = auditor;
         this.timeProvider = timeProvider;
-    }
-
-    /// <summary>Reads the owners this deployment holds records for.</summary>
-    /// <param name="limit">The greatest number of owners to read.</param>
-    /// <param name="cancellationToken">Cancels the read.</param>
-    /// <returns>The owners, in a stable order, and no more than <paramref name="limit" /> of them.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="limit" /> is not positive.</exception>
-    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminRead" />.</exception>
-    /// <remarks>
-    /// The roster is where an administrator gets the identifier every other act here names, so it is published beside
-    /// them and under the same grant rather than left to the port. Which owners a deployment holds is what a listing of
-    /// their credentials would otherwise be a way of discovering, and an entrypoint reaching the port directly would be
-    /// an entrypoint that never asked.
-    /// </remarks>
-    public async Task<IReadOnlyList<MailOwnerId>> ReadOwnersAsync(int limit, CancellationToken cancellationToken)
-    {
-        this.authorization.RequirePermission(MailFathomPermission.AdminRead);
-
-        // The directory answers with each owner's whole record, because that is what the startup roster is reconciled
-        // from. What an administrator names every act here by is the identifier alone, so the label is dropped rather
-        // than widening what this publishes.
-        var records = await this.owners.ReadOwnersAsync(limit, cancellationToken);
-
-        return [.. records.Select(record => record.Owner)];
     }
 
     /// <summary>Reads the credentials one owner holds, of every method.</summary>

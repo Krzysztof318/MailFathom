@@ -1158,7 +1158,7 @@ internal sealed class AdminApiClient
     /// <summary>Reads the owners a deployment holds records for.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
-    /// <returns>The owner identifiers.</returns>
+    /// <returns>The owners, each with the label and the two states the deployment reports beside the identifier.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
     /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a roster.</exception>
     internal Task<MailOwnerList> ReadOwnersAsync(string token, CancellationToken cancellationToken) =>
@@ -1168,6 +1168,180 @@ internal sealed class AdminApiClient
             token,
             CliJsonContext.Default.MailOwnerList,
             cancellationToken);
+
+    /// <summary>Records an owner the deployment did not hold.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="request">The label the owner is told apart by.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The identifier the deployment minted.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an identifier.</exception>
+    internal Task<OwnerProvisioned> ProvisionOwnerAsync(
+        string token,
+        OwnerProvisioningRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.OwnersPath,
+            token,
+            CliJsonContext.Default.OwnerProvisioned,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.OwnerProvisioningRequest));
+    }
+
+    /// <summary>Replaces the label one owner is told apart by.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="ownerId">The owner to relabel.</param>
+    /// <param name="request">The label the owner carries from now on.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>A task that completes once the deployment has accepted the label.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> or <paramref name="request" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, or could not be reached.</exception>
+    /// <remarks>Acceptance is the whole answer: the label the command sent is what the owner now carries, so a body echoing it would report the command's own argument back to it.</remarks>
+    internal Task RelabelOwnerAsync(
+        string token,
+        Guid ownerId,
+        OwnerRelabelRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Put,
+            AdminEndpointRoutes.OwnerDisplayNamePath(ownerId),
+            token,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.OwnerRelabelRequest));
+    }
+
+    /// <summary>Erases one owner and everything the deployment recorded for them.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="ownerId">The owner to remove.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What was removed, and whether the running deployment was serving them.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
+    internal Task<OwnerErasure> EraseOwnerAsync(string token, Guid ownerId, CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Delete,
+            AdminEndpointRoutes.OwnerPath(ownerId),
+            token,
+            CliJsonContext.Default.OwnerErasure,
+            cancellationToken);
+
+    /// <summary>Reads one owner's record whole, as the redacted document an editing session opens.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="ownerId">The owner asked about.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The record and the version it was read at.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a record.</exception>
+    internal Task<OwnerRecord> ReadOwnerRecordAsync(
+        string token,
+        Guid ownerId,
+        CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Get,
+            AdminEndpointRoutes.OwnerRecordPath(ownerId),
+            token,
+            CliJsonContext.Default.OwnerRecord,
+            cancellationToken);
+
+    /// <summary>Declares one more mail account in an owner's record.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="ownerId">The owner the mailbox belongs to.</param>
+    /// <param name="request">The declaration and the version the record was read at.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What the write did.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
+    internal Task<OwnerRecordWriteAnswer> AddOwnerMailAccountAsync(
+        string token,
+        Guid ownerId,
+        OwnerMailAccountRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.OwnerMailAccountsPath(ownerId),
+            token,
+            CliJsonContext.Default.OwnerRecordWriteAnswer,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.OwnerMailAccountRequest));
+    }
+
+    /// <summary>Withdraws one mail account from an owner's record.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="ownerId">The owner the mailbox belongs to.</param>
+    /// <param name="request">The identifier and the version the record was read at.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What the write did.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
+    internal Task<OwnerRecordWriteAnswer> RemoveOwnerMailAccountAsync(
+        string token,
+        Guid ownerId,
+        OwnerMailAccountRemovalRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.OwnerMailAccountRemovalPath(ownerId),
+            token,
+            CliJsonContext.Default.OwnerRecordWriteAnswer,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.OwnerMailAccountRemovalRequest));
+    }
+
+    /// <summary>Reads what adopting one owner would move out of the deployment's files into their record.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="ownerId">The owner asked about.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The preview and the version the adoption is composed over.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="token" /> is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not a preview.</exception>
+    internal Task<OwnerAdoptionPreview> ReadOwnerAdoptionAsync(
+        string token,
+        Guid ownerId,
+        CancellationToken cancellationToken) =>
+        this.RequestAsync(
+            HttpMethod.Get,
+            AdminEndpointRoutes.OwnerAdoptionPath(ownerId),
+            token,
+            CliJsonContext.Default.OwnerAdoptionPreview,
+            cancellationToken);
+
+    /// <summary>Moves one owner's mail accounts out of the deployment's files and into their own record.</summary>
+    /// <param name="token">The bearer credential to present.</param>
+    /// <param name="ownerId">The owner being adopted.</param>
+    /// <param name="request">The version the preview was read over.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>What the adoption did.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="CliFailure">Thrown when the deployment refused the request or the credential, could not be reached, or answered with something that is not an outcome.</exception>
+    internal Task<OwnerRecordWriteAnswer> AdoptOwnerAsync(
+        string token,
+        Guid ownerId,
+        OwnerAdoptionRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        return this.RequestAsync(
+            HttpMethod.Post,
+            AdminEndpointRoutes.OwnerAdoptionPath(ownerId),
+            token,
+            CliJsonContext.Default.OwnerRecordWriteAnswer,
+            cancellationToken,
+            JsonContent.Create(request, CliJsonContext.Default.OwnerAdoptionRequest));
+    }
 
     /// <summary>Reads the credentials one owner's clients present.</summary>
     /// <param name="token">The bearer credential to present.</param>

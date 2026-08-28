@@ -364,6 +364,11 @@ public sealed class RootSettingsWriterTests
     }
 
     /// <summary>A setting another store owns is refused rather than written into the root document.</summary>
+    /// <remarks>
+    /// The refusal names both ways an owner's mail accounts are changed, because this writer sees a path rather than an
+    /// owner and cannot tell which of the two applies: an operator handed only one of them would be sent to edit a file
+    /// that no longer reaches that owner, or to a command that refuses one who has not been adopted.
+    /// </remarks>
     [Fact]
     public async Task WriteAsync_ASettingAnotherStoreOwns_IsRefused()
     {
@@ -376,7 +381,11 @@ public sealed class RootSettingsWriterTests
         // Assert
         Assert.False(result.IsCommitted);
         Assert.Equal(MailFathomErrorCode.ConfigurationPathNotWritable, result.Refusal);
-        Assert.Contains(result.RefusalMessages, message => message.Contains("owner-accounts", StringComparison.Ordinal));
+        var refusal = Assert.Single(result.RefusalMessages);
+
+        Assert.Contains("owner-accounts", refusal, StringComparison.Ordinal);
+        Assert.Contains("Accounts collection", refusal, StringComparison.Ordinal);
+        Assert.Contains("mfctl owner account add", refusal, StringComparison.Ordinal);
         Assert.Equal(0, deployment.Row.AcceptedCommits);
     }
 

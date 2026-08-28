@@ -1,0 +1,119 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Configuration;
+using MailFathom.Domain.Access;
+using MailFathom.Host.Configuration.Mail;
+
+namespace MailFathom.Host.Configuration.OwnerSettings;
+
+/// <summary>Finds where a configuration source declares one owner's mail accounts, and what adopting them would write.</summary>
+/// <remarks>
+/// <para>
+/// An owner is served from one of three sources and only two of them are configuration. Which of the two it is decides
+/// the section their declarations are written in, and the two sections are not interchangeable: the deployment's own
+/// <c>MailSynchronization:Accounts</c> names no owner and therefore belongs to whichever sole owner such a deployment
+/// holds, while a declared owner's mailboxes are a numbered entry of the top-level collection of owners.
+/// </para>
+/// <para>
+/// What an adoption writes is those same settings as configuration keys rather than as a serialized object, and that is
+/// the whole reason this reads the section instead of the bound records beside it. A key survives a property the binder
+/// does not know about, a value the file wrote in a shape the type would have normalized, and a setting a later release
+/// adds — so what is persisted is what the operator wrote, which is what makes an adoption a move rather than a
+/// rewrite.
+/// </para>
+/// <para>
+/// It reads the deployment's live configuration rather than the roster's copy for the same reason: the roster is what
+/// the start reconciled, and what an adoption moves is what the files say now.
+/// </para>
+/// </remarks>
+[SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this reading.")]
+internal sealed class ConfiguredOwnerMailAccounts(IConfiguration configuration, ServedMailOwners servedOwners)
+{
+    /// <summary>The property an owner's record holds their mail accounts under, which every adopted key is rooted at.</summary>
+    private const string MailAccountsProperty = nameof(OwnerAccountOptions.MailAccounts);
+
+    /// <summary>Finds the configuration section one owner's mail accounts are declared in.</summary>
+    /// <param name="owner">The owner asked about.</param>
+    /// <returns>The section, or <see langword="null" /> when no configuration source reaches this owner.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
+    /// <remarks>
+    /// An owner who has adopted, and an owner this process's roster does not hold at all, both answer with nothing —
+    /// the first because their record is their own from now on, the second because they were provisioned after the
+    /// roster was settled and no file has ever named them. Neither is a failure: both are owners an ordinary write
+    /// reaches.
+    /// </remarks>
+    public IConfigurationSection? SectionFor(MailOwnerId owner)
+    {
+        if (!owner.IsSpecified)
+        {
+            throw new ArgumentException("A configured declaration is looked up for a named owner.", nameof(owner));
+        }
+
+        var served = servedOwners.Owners.FirstOrDefault(candidate => candidate.Owner == owner);
+
+        return served?.Source switch
+        {
+            MailOwnerAccountSource.DeploymentSection => configuration.GetSection(
+                $"{MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.Accounts)}"),
+            MailOwnerAccountSource.OwnerDeclaration => this.DeclaredSectionFor(owner),
+            _ => null,
+        };
+    }
+
+    /// <summary>Reads the mail accounts a configuration source declares for one owner.</summary>
+    /// <param name="owner">The owner asked about.</param>
+    /// <returns>The declarations, empty when no configuration source reaches this owner.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
+    /// <remarks>Bound rather than left as keys, because this is what a preview names the accounts by and an operator confirms an adoption against.</remarks>
+    public IReadOnlyList<MailSynchronizationAccountOptions> DeclaredFor(MailOwnerId owner) =>
+        this.SectionFor(owner)?.Get<List<MailSynchronizationAccountOptions>>() ?? [];
+
+    /// <summary>States the changes that would materialize one owner's configured declarations into their record.</summary>
+    /// <param name="owner">The owner asked about.</param>
+    /// <returns>One change per configuration key the section supplies, empty when no configuration source reaches this owner.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
+    /// <remarks>
+    /// The section's keys are taken relative to it and re-rooted at the record's own collection, so
+    /// <c>Accounts:1:MailAccounts:0:Host</c> and <c>MailSynchronization:Accounts:0:Host</c> both become
+    /// <c>MailAccounts:0:Host</c> — which is the one property an owner's record holds mailboxes under, whichever of the
+    /// two sections the operator had been writing in.
+    /// </remarks>
+    public IReadOnlyList<ConfigurationEdit> AdoptionEditsFor(MailOwnerId owner)
+    {
+        if (this.SectionFor(owner) is not { } section)
+        {
+            return [];
+        }
+
+        // A section enumerates itself under the empty key, and a key whose value is null is a section rather than a
+        // setting: neither states a value, and an edit composed from either would address nothing.
+        return
+        [
+            .. section.AsEnumerable(makePathsRelative: true)
+                .Where(setting => !string.IsNullOrEmpty(setting.Key) && setting.Value is not null)
+                .OrderBy(setting => setting.Key, StringComparer.Ordinal)
+                .Select(setting => ConfigurationEdit.SetTo($"{MailAccountsProperty}:{setting.Key}", setting.Value!)),
+        ];
+    }
+
+    /// <summary>Finds the numbered entry of the owner collection this owner is declared in.</summary>
+    /// <remarks>
+    /// The position is the address rather than a property of the owner, because that is how a configuration key names
+    /// an element. A declaration the file no longer carries answers with nothing, which is a file edited between the
+    /// start that reconciled the roster and this read.
+    /// </remarks>
+    private IConfigurationSection? DeclaredSectionFor(MailOwnerId owner)
+    {
+        var declared = DeclaredOwners.ReadFrom(configuration)
+            .Index()
+            .FirstOrDefault(entry => DeclaredOwners.TryReadIdentifier(entry.Item.Id) == owner.Value);
+
+        return declared.Item is null
+            ? null
+            : configuration.GetSection(
+                $"{DeclaredOwnerOptions.SectionName}:{declared.Index}:{nameof(DeclaredOwnerOptions.MailAccounts)}");
+    }
+}

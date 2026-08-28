@@ -131,6 +131,10 @@ public sealed class ClientApiEndpointsTests
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailMessageEndpoint.MailMessageRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailAttachmentEndpoint.MailAttachmentRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailBodyEndpoint.MailBodyRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientOwnerRecordEndpoint.RecordRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientOwnerRecordEndpoint.RecordRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientOwnerRecordEndpoint.MailAccountsRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientOwnerRecordEndpoint.MailAccountRemovalRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientApiEndpoints.SessionRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailThreadEndpoint.MailThreadRoute}",
             ],
@@ -181,8 +185,12 @@ public sealed class ClientApiEndpointsTests
                 $"GET {prefix}{ClientMailMessageEndpoint.MailMessageRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailAttachmentEndpoint.MailAttachmentRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailBodyEndpoint.MailBodyRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientOwnerRecordEndpoint.RecordRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientApiEndpoints.SessionRoute} -> none",
                 $"GET {prefix}{ClientMailThreadEndpoint.MailThreadRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"POST {prefix}{ClientOwnerRecordEndpoint.RecordRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
+                $"POST {prefix}{ClientOwnerRecordEndpoint.MailAccountsRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
+                $"POST {prefix}{ClientOwnerRecordEndpoint.MailAccountRemovalRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
             ],
             PublishedAllocation(endpoints).Order(StringComparer.Ordinal));
     }
@@ -209,9 +217,13 @@ public sealed class ClientApiEndpointsTests
                 published => Assert.Equal(ProtectedSurface.Mail, published.Permission.Surface)));
     }
 
-    /// <summary>A read is all this surface publishes, so anything else arriving on it is a route somebody added without deciding what it costs.</summary>
+    /// <summary>
+    /// A read, or a write to the caller's own record and nothing else. Everything this surface serves about mail is a
+    /// <c>GET</c>, and the only thing a client changes here is what this deployment reads for the person signed in — so
+    /// a write arriving under any other grant is a route somebody added without deciding what it costs.
+    /// </summary>
     [Fact]
-    public void MapClientApi_Always_PublishesReadsAndNothingElse()
+    public void MapClientApi_Always_PublishesReadsAndWritesToTheCallersOwnRecordAlone()
     {
         // Arrange
         var endpoints = BuildRouteBuilder();
@@ -222,10 +234,19 @@ public sealed class ClientApiEndpointsTests
         // Assert
         Assert.All(
             endpoints.Materialize(),
-            endpoint => Assert.Equal(
-                ["GET"],
-                endpoint.Metadata.GetMetadata<IHttpMethodMetadata>()?.HttpMethods));
+            endpoint => Assert.All(
+                endpoint.Metadata.GetMetadata<IHttpMethodMetadata>()?.HttpMethods ?? [],
+                method => Assert.True(
+                    method == "GET"
+                    || (method == "POST" && WritesTheCallersOwnRecord(endpoint)),
+                    $"{method} {endpoint} is published as neither a read nor a write to the caller's own record.")));
     }
+
+    /// <summary>Reports whether a route is one of the caller's own record's writes, by the grant it was published under.</summary>
+    /// <remarks>The grant rather than the path, because what makes such a write admissible on an owner-facing surface is that it is separately provisioned: a path renamed keeps the claim, and a route quietly published under the read grant breaks it.</remarks>
+    private static bool WritesTheCallersOwnRecord(Endpoint endpoint) =>
+        endpoint.Metadata.GetOrderedMetadata<RoutePermission>()
+            .Any(published => published.Permission == MailFathomPermission.MailAccountsWrite);
 
     /// <summary>
     /// The decision published on a route is worth nothing unless something reads it, and only a request establishes

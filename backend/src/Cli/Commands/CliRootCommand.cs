@@ -172,6 +172,30 @@ internal static class CliRootCommand
             AdoptSettingsCommand.Create(context),
         };
 
+        // The mailboxes one owner's record declares, which is what this deployment reads for them once their record is
+        // their own. It is a group beneath "owner" rather than beside it because every one of these acts is a change to
+        // one owner's record, and the record is what "owner" administers.
+        Command ownerAccountCommand = new("account", "Declare and withdraw the mailboxes one owner's record carries.")
+        {
+            AddOwnerMailAccountCommand.Create(context),
+            RemoveOwnerMailAccountCommand.Create(context),
+        };
+
+        // Who this deployment serves, and what it reads for each of them. "adopt" is apart from the rest for the reason
+        // "config adopt" is: it moves a decision out of the deployment's files and into its database, which nothing else
+        // in MailFathom does and which no upgrade or import will do behind an operator's back. "remove" is apart for the
+        // opposite reason — it is the one command here that destroys mail, and nothing undoes it.
+        Command ownerCommand = new("owner", "Record the people this deployment serves, and maintain what it reads for each.")
+        {
+            AddOwnerCommand.Create(context),
+            ListOwnersCommand.Create(context),
+            ShowOwnerRecordCommand.Create(context),
+            RenameOwnerCommand.Create(context),
+            AdoptOwnerCommand.Create(context),
+            RemoveOwnerCommand.Create(context),
+            ownerAccountCommand,
+        };
+
         // The one group whose credentials belong to a person rather than to this deployment, which is why every command
         // in it reads a password from a prompt or a pipe and none of them takes one as an argument. One group for four
         // methods, because what an administrator does with them is identical whatever is presented. "disable" and
@@ -207,6 +231,7 @@ internal static class CliRootCommand
             contentCommand,
             contactCommand,
             configCommand,
+            ownerCommand,
             credentialCommand,
         };
     }

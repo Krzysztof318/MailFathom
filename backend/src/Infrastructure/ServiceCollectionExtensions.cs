@@ -490,6 +490,15 @@ public static class ServiceCollectionExtensions
         // between calls — and separate from the directory above because that answers for the deployment and this for
         // a person.
         services.AddSingleton<IOwnerSettingsDocumentReader, PersistedOwnerSettingsDocumentReader>();
+        // The other direction of travel over the same row, registered as a singleton over the pool beside the read for
+        // the same reason. It is a second service rather than a second method on the reader because a deployment that
+        // never administers an owner still reads one on every start, and the two are granted separately in the
+        // database.
+        services.AddSingleton<IOwnerSettingsDocumentWriter, PersistedOwnerSettingsDocumentWriter>();
+        // Taking an owner off the deployment, with everything it recorded for them. Scoped because the whole walk runs
+        // in one of the request's own transactions, and separate from the provisioning above because provisioning runs
+        // on every start and is idempotent while this runs when a person asked for it and cannot be undone.
+        services.AddScoped<IMailOwnerErasure, PersistedMailOwnerErasure>();
         // Whose mail a background unit of work is acting on. A worker acts for nobody, so the ceilings it is bounded by
         // reach an owner through this rather than through a principal, and it is scoped because both reads are ordinary
         // queries on the caller's context.

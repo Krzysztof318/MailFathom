@@ -590,21 +590,6 @@ public sealed class OwnerCredentialAdministrationTests
         Assert.Equal([held], credentials);
     }
 
-    [Fact]
-    public async Task ReadOwnersAsync_ACallerGrantedTheAdministrativeRead_IsAnsweredWithWhatTheDirectoryHolds()
-    {
-        // Arrange
-        var harness = new AdministrationHarness(MailFathomPermission.AdminRead);
-
-        // Act
-        var owners = await harness.Administration.ReadOwnersAsync(
-            OwnerCredential.MaximumListedPerOwner,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Equal([Owner], owners);
-    }
-
     /// <summary>
     /// Reading says which credentials exist and whose they are; writing decides who can read a person's mail. A grant
     /// carrying one is never a grant carrying the other, which is what these two cases are about.
@@ -789,14 +774,8 @@ public sealed class OwnerCredentialAdministrationTests
 
             this.Auditor = Substitute.For<IOwnerCredentialAuditor>();
 
-            this.Owners = Substitute.For<IMailOwnerDirectory>();
-            this.Owners.ReadOwnersAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
-                .Returns(Task.FromResult<IReadOnlyList<MailOwnerRecord>>(
-                    [new MailOwnerRecord(Owner, "owner", DocumentWrittenAtRuntime: false)]));
-
             this.Administration = new OwnerCredentialAdministration(
                 new AccessAuthorization(principals),
-                this.Owners,
                 this.Credentials,
                 this.PasswordHasher,
                 new StatedApiKeyMinter(),
@@ -806,8 +785,6 @@ public sealed class OwnerCredentialAdministrationTests
         }
 
         internal OwnerCredentialAdministration Administration { get; }
-
-        internal IMailOwnerDirectory Owners { get; }
 
         internal IOwnerCredentialStore Credentials { get; }
 

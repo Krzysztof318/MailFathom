@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs -->
+<!-- describes: backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientOwnerRecordEndpoint.cs -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -69,6 +69,10 @@ for you.
 | `GET /api/client/messages/{storedEmailId}` | `mailfathom.mail.read` |
 | `GET /api/client/messages/{storedEmailId}/body` | `mailfathom.mail.read` |
 | `GET /api/client/messages/{storedEmailId}/attachments/{position}` | `mailfathom.mail.read` |
+| `GET /api/client/record` | `mailfathom.mail.read` |
+| `POST /api/client/record` | `mailfathom.mail.accounts.write` |
+| `POST /api/client/record/mail-accounts` | `mailfathom.mail.accounts.write` |
+| `POST /api/client/record/mail-accounts/removal` | `mailfathom.mail.accounts.write` |
 
 There is no version segment in either path: the major version is `0` and
 [ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
@@ -911,6 +915,56 @@ is answered `403`, as everywhere else on this surface.
 
 **It is served from the local copy.** Nothing here contacts a mail server, so downloading a file cannot fetch a message
 and cannot set the remote `\Seen` flag.
+
+### The record routes
+
+These four are how a person maintains what this deployment reads for them: which mailboxes it synchronizes, what each
+one is reached with, and the settings that are theirs rather than the deployment's. Reading is `mailfathom.mail.read`
+like the rest of this surface; the three writes are `mailfathom.mail.accounts.write`, separately granted for the reason
+every write here is separately granted — reading somebody's mail is not deciding which mailboxes are read for them.
+
+| Route | What it does |
+| --- | --- |
+| `GET /api/client/record` | Hands over the signed-in owner's record as redacted JSON, with the version it was read at |
+| `POST /api/client/record` | Commits that record back edited, as one change against the version it was opened over |
+| `POST /api/client/record/mail-accounts` | Declares one more mailbox in it |
+| `POST /api/client/record/mail-accounts/removal` | Stops it declaring one mailbox, named by the identifier it was declared under |
+
+**No route here names an owner, and that is the whole of the isolation.** The record acted on is the one belonging to
+the credential that authenticated, resolved from the request rather than read out of the body or the path, so there is
+no identifier a client could put in a request to reach somebody else's record. It follows that a request naming another
+owner cannot be composed at all — there is nowhere to put the name — and a deployment serving several people publishes
+no route through which any of them learns that the others exist. [The administrative
+surface](admin-endpoint.md#owners-and-their-records) is where a roster is read, and it is not reachable with a
+credential issued for this one.
+
+**A withdrawal withdraws no mail.** Stopping the record declaring a mailbox stops this deployment synchronizing it;
+every message, folder, and attachment already stored for that account stays exactly where it is and stays readable
+through the routes above. Disposing of stored mail is administrative and irreversible, and it is deliberately not
+something a client can reach.
+
+**Nothing here reports a secret, and nothing here can overwrite one blindly.** A record is handed over with every
+password, token, and client secret replaced by the redaction marker; a save is read as the difference from what the row
+holds, so a marker saved back leaves the credential beneath it as it was, and a marker this deployment cannot place is
+refused rather than committed over somebody's password. Material supplied here is sealed under the deployment's
+[data-encryption key](secret-provisioning.md) like every other MailFathom secret, and what the record keeps is the
+reference to it.
+
+**A candidate is validated before it is committed, and committed whole or not at all.** It is bound strictly against
+the same rules a configuration file is, checked for two mail accounts declared under one identifier, checked that every
+account in it belongs to this owner, and put through the same mail-synchronization validators a start applies. A
+refusal names what to correct and carries nothing that was supplied as a secret. A record another writer moved on in the
+meantime — the owner from a second device, or an administrator — is refused as superseded rather than overwritten, so
+the client re-reads and composes the change again.
+
+**An owner whose mail accounts are still read from this deployment's configuration cannot write here.** The write is
+refused, naming the administrative `mfctl owner adopt` that moves them into the record first, because committing it
+would leave two answers to which mailboxes this deployment reads and the files would win at the next restart. Nothing on
+this surface can perform that move: which decisions leave a deployment's own files is the operator's, not the owner's.
+
+**What a record changes takes effect when the process next starts.** A mailbox declared here is stored at once and
+synchronized from the next restart, which is the same rule the deployment's own configuration follows and the same
+reason: what a synchronization run reads is decided once, so a run in flight never reads two answers.
 
 ## Credentials do not cross surfaces
 

@@ -117,23 +117,20 @@ public sealed class DeploymentMailOwnerUnresolvedException : MailFathomException
     }
 
     /// <summary>Reports several owners on a deployment whose surfaces cannot say which of them an act is for.</summary>
-    /// <param name="authenticationDisabled">Whether one of those surfaces admits callers without authenticating them at all.</param>
+    /// <param name="refusal">The sentence naming which surface cannot name an owner and what an operator changes about it.</param>
     /// <returns>The failure to raise.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="refusal" /> is <see langword="null" />, empty, or white space.</exception>
     /// <remarks>
-    /// Both halves are the same fact one step apart: an owner-facing surface acts for exactly one owner, and nothing
-    /// this release admits a caller with names which. Authentication-free operation says so outright, and a configured
-    /// credential says it too — it authenticates a caller and carries no owner. Which of the two it is decides what an
-    /// operator does next, so the message says which.
+    /// The sentence is composed by the reading that decides the question rather than here, because the same fact
+    /// refuses two acts a start apart — a roster this start would serve, and an owner an administrator is provisioning
+    /// into a deployment that is already running — and an operator correcting one is correcting the other.
     /// </remarks>
-    public static DeploymentMailOwnerUnresolvedException SeveralOwnersOnAnOwnerFacingSurface(bool authenticationDisabled) => new(
-        "This deployment serves more than one owner while a surface that resolves a sole owner — McpEndpoint, "
-        + "ClientEndpoint, or AdminEndpoint — is enabled. Such a surface acts for one person's mail, and "
-        + (authenticationDisabled
-            ? "it admits callers without authenticating them, so there is nothing for it to resolve an owner from. "
-            : "a configured credential authenticates a caller without naming the owner they act for, so there is "
-            + "nothing for it to resolve an owner from. ")
-        + "Serve one owner while any of those surfaces is enabled, or disable them on a deployment that serves "
-        + "several.");
+    public static DeploymentMailOwnerUnresolvedException SeveralOwnersOnAnOwnerFacingSurface(string refusal)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(refusal);
+
+        return new(refusal);
+    }
 
     /// <summary>Reports an owner whose own mail accounts carry a secret or a trust anchor this deployment cannot use.</summary>
     /// <param name="displayName">The label the owner is declared under.</param>

@@ -156,7 +156,9 @@ At most **256** owners may be declared. A file past that was generated rather th
 
 ### The identifier is yours to generate
 
-**MailFathom does not invent it.** Nothing in a file could derive an identifier that is the same across restarts and across replicas, and one invented per start would attach a deployment's stored mail to a person who existed for one process. So the operator states it, and it is a **version 4 UUID** — deliberately unlike the version 7 identifiers the rest of persistence mints, because an owner identifier reaches administrative APIs, audit records, and logs, and a time-ordered one would publish when each owner was created and in what order.
+**MailFathom does not invent it for a *declared* owner.** Nothing in a file could derive an identifier that is the same across restarts and across replicas, and one invented per start would attach a deployment's stored mail to a person who existed for one process. So the operator states it, and it is a **version 4 UUID** — deliberately unlike the version 7 identifiers the rest of persistence mints, because an owner identifier reaches administrative APIs, audit records, and logs, and a time-ordered one would publish when each owner was created and in what order.
+
+[`mfctl owner add`](admin-endpoint.md#owners-and-their-records) mints one under exactly that rule, and reports it, because an owner recorded through the administrative endpoint is recorded once against a database that will keep it. An owner recorded that way is declared in no file and is read from their own record from the start; there is no identifier for an operator to state and none to keep in step.
 
 Produce one with whatever is already on the machine:
 
@@ -168,7 +170,7 @@ cat /proc/sys/kernel/random/uuid          # Linux, no tools at all
 
 A value that is not a well-formed UUID stops the start, and so does the all-zero UUID, which is what a template emits for a field nobody filled in and which names nobody. Two owners declared under one identifier stop it too: an identifier names one person, and everything either of them owned would be recorded against the same row.
 
-**Never change it afterwards.** A declaration whose identifier has moved for an owner the database already holds under that label stops the start naming them, rather than orphaning every message that hangs on the old value. Restore the identifier the deployment holds, and rename the owner instead if the label is what you meant to change — a changed label is applied to the row and is not a refusal.
+**Never change it afterwards.** A declaration whose identifier has moved for an owner the database already holds under that label stops the start naming them, rather than orphaning every message that hangs on the old value. Restore the identifier the deployment holds, and rename the owner instead if the label is what you meant to change — a changed label is applied to the row and is not a refusal. [`mfctl owner rename`](admin-endpoint.md#owners-and-their-records) changes one over the endpoint, and is what renames an owner nothing declares; for a declared owner the file is still where the label is decided, because every start puts the declared one back.
 
 A label is applied only where nobody else holds it. A label declared for one owner while another owner the deployment holds still carries it stops the start too, because a label names one owner and the column that stores it is unique. That makes two owners exchanging labels two starts rather than one: free the label in the first — relabel or remove whoever holds it — and declare it for its new owner in the second.
 
@@ -182,7 +184,7 @@ This deployment declared no owner and held none, so one has been recorded for th
 
 Every account in `MailSynchronization:Accounts` belongs to that sole owner. Once owners *are* declared there is no sole owner for that section's accounts to belong to, so declaring both is **refused**: move each of those accounts under the owner who owns it, as an entry of that owner's `MailAccounts`.
 
-Two further bounds hold while owners are declared. Only one owner may be served whenever the MCP endpoint, the client endpoint, or the administrative endpoint is enabled, because a credential does not yet name the owner it acts for and every admitted caller is composed for the sole owner — and because an administrator acts for the deployment rather than for a person, so the acts of theirs that need an owner resolve the sole one. A deployment serving several with any of those surfaces on is refused, and the message says whether the surface admits callers without authenticating them or authenticates them without naming an owner. And no two owners may name a mail account alike — this release resolves an account's settings by its identifier alone, so a name two owners shared would reach whichever declaration the lookup met first. Give each mailbox a name no other owner uses.
+Two further bounds hold while owners are declared. Only one owner may be served whenever an **owner-facing** surface — the MCP endpoint or the client endpoint — admits a caller that names no owner, because such a caller is composed against whichever owner the deployment happens to hold, and a second owner would leave that surface serving one person another person's mail. What names an owner is an owner's own username and password; a key, a public key, and an access token are the deployment's or an authorization server's and name nobody, and a surface requiring no authentication admits a caller that brought nothing at all. A deployment serving several with either of those surfaces in that state is refused, and the message says which of the two it is: an unauthenticated surface is switched to authenticating somebody, while one configured with a key is given the credential that belongs to a person. **The administrative endpoint is deliberately outside that bound** — an administrator acts for the deployment rather than for a person, so a caller there is admitted for no owner and every owner-scoped route names the owner it is for, which is what makes recording a second owner something an operator can do at all. And no two owners may name a mail account alike — this release resolves an account's settings by its identifier alone, so a name two owners shared would reach whichever declaration the lookup met first. Give each mailbox a name no other owner uses.
 
 ### What a start reports
 
@@ -198,7 +200,9 @@ and then one line per owner whose source is not their file:
 The owner labelled morgan is read from their own document; no configuration source reaches their mail accounts. Change them with mfctl.
 ```
 
-An owner the database holds and no file declares is **neither deleted nor stripped of their mail**. They stop being served — their mail is kept, and neither read nor refreshed — and the start says so at `Warning`:
+An owner the database holds and no file declares is served from their own record where they have one, which is what an owner recorded through [`mfctl owner add`](admin-endpoint.md#owners-and-their-records) always has: nothing in a file reaches them, and a deployment that held a row it never served would be one where recording somebody did nothing. They are served after every owner a file names, because the roster's order is the operator's own reading of their configuration and an owner outside it has no place in that order to take.
+
+An owner the database holds, no file declares, and who has **no record of their own** is **neither deleted nor stripped of their mail**. They stop being served — their mail is kept, and neither read nor refreshed — and the start says so at `Warning`:
 
 ```
 The owner labelled sam is held by this deployment and declared nowhere, so they are not served. Their mail is kept and neither read nor refreshed; removing them is an explicit act through mfctl.
@@ -206,15 +210,19 @@ The owner labelled sam is held by this deployment and declared nowhere, so they 
 
 ### The handover, and what it costs
 
-**The handover is per owner and never happens by itself.** A start reads each row's runtime-written marker and serves that owner from whichever source it names — their declaration while the marker is unset, their document once it is set. Nothing here sets it: no upgrade, no import, and no first start adopts anybody, and this release ships no command that sets it either, so **every owner of this release is read from configuration** and the document half of the rule is what the marker will select once something writes an owner's document.
+**The handover is per owner and never happens by itself.** A start reads each row's runtime-written marker and serves that owner from whichever source it names — their declaration while the marker is unset, their document once it is set. Nothing in a start sets it: no upgrade, no import, and no first start adopts anybody. What sets it is [`mfctl owner adopt`](admin-endpoint.md#owners-and-their-records), which an operator runs for one owner at a time, having been shown what it would move and having said yes. An owner recorded through `mfctl owner add` was never read from a file and is read from their own record from the start.
 
-Until something does, a configuration write naming an owner is **refused** rather than applied, because a write against an empty document would silently drop every mailbox the file was supplying:
+**`mfctl config` never writes an owner's mail accounts, adopted or not.** They live in a store of their own rather than in the deployment's document, so a change naming one is **refused** there and the refusal names both ways they are actually changed:
 
 ```
-MailFathom persists Accounts:0:MailAccounts:0:Host in the owner-accounts store, and every owner of this release is
-served from the declaration a configuration source supplies rather than from that store. Change the declaration where
-it is written — the owner's own section of the top-level Accounts collection — and restart.
+MailFathom persists Accounts:0:MailAccounts:0:Host in the owner-accounts store rather than in the deployment's own
+document, so this is not where it is changed. An owner still read from a configuration source is changed in the
+declaration that supplies them — the owner's own section of the top-level Accounts collection — and served from it at
+the next restart; an owner who has been adopted is changed with 'mfctl owner account add' and 'mfctl owner account
+remove'.
 ```
+
+The owner routes are the ones that do write that store, and until an owner is adopted **they refuse too** — through the administrative record routes and through the client's own alike — because a write against an empty document would silently drop every mailbox the file was supplying. That refusal names `mfctl owner adopt`, which is the one act that moves them.
 
 **Once an owner is adopted the change is permanent for them, and no configuration source reaches their mail accounts at all** — not the provisioned file, and not an environment variable or a command-line argument either. Those accounts have stopped being configuration keys rather than merely losing precedence, so the precedence table at the top of this page has nothing to say about them. `mfctl` over the administrative port is what changes them afterwards, and what repairs a deployment whose file no longer reaches an owner it used to.
 
