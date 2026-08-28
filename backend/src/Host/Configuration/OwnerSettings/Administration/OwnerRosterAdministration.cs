@@ -43,6 +43,7 @@ internal sealed partial class OwnerRosterAdministration(
     IOwnerSettingsDocumentWriter documents,
     ServedMailOwners servedOwners,
     SeveralOwnerAdmission admission,
+    ConfiguredOwnerMailAccounts configured,
     ILogger<OwnerRosterAdministration> logger)
 {
     /// <summary>The record an owner is provisioned with, which is the empty one until they declare something.</summary>
@@ -71,7 +72,8 @@ internal sealed partial class OwnerRosterAdministration(
                 record.Owner,
                 record.DisplayName,
                 record.DocumentWrittenAtRuntime,
-                Served: servedOwners.Owners.Any(served => served.Owner == record.Owner))),
+                Served: servedOwners.Owners.Any(served => served.Owner == record.Owner),
+                DeclaredInConfiguration: configured.DeclaredByAConfigurationSource(record.Owner))),
         ];
     }
 
@@ -129,7 +131,16 @@ internal sealed partial class OwnerRosterAdministration(
         // or from nothing at all. It is the empty object the envelope already carries, so what the commit changes is
         // the marker beside it — which is what the next start reads to decide that this owner is not waiting on a
         // configuration section that does not exist.
-        await documents.CommitAsync(owner, EmptyRecord, ProvisionedVersion, cancellationToken);
+        if (await documents.CommitAsync(owner, EmptyRecord, ProvisionedVersion, cancellationToken) is null)
+        {
+            // The envelope was written and the row is gone again, which is another administrator erasing this owner
+            // between the two statements. Reporting the owner as recorded would hand back an identifier nothing holds;
+            // reporting it as provisioned without the marker would leave the next start reading their mail accounts
+            // out of a configuration section that was never written for them, and refusing to start over the second
+            // such row it met.
+            return OwnerProvisioningOutcome.Refused(
+                "The owner was recorded and then removed before their record could be written, so this deployment holds nobody under that label. Record them again.");
+        }
 
         this.LogOwnerProvisioned(label);
 
@@ -140,7 +151,7 @@ internal sealed partial class OwnerRosterAdministration(
     /// <param name="owner">The owner to relabel.</param>
     /// <param name="displayName">The label the owner is told apart by from now on.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns>Nothing when the row carries the label, or the sentence naming what has to change first.</returns>
+    /// <returns>What the relabel did: whether the deployment holds this owner at all, and the sentence naming what has to change first where it holds them and refused.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminConfigurationWrite" />.</exception>
     /// <remarks>
@@ -149,7 +160,7 @@ internal sealed partial class OwnerRosterAdministration(
     /// file declares is relabelled by that file at every start, so a rename written here for one of them lasts until
     /// the next; the label to change is the declaration's, and this reaches an owner nothing declares.
     /// </remarks>
-    internal async Task<string?> RelabelAsync(
+    internal async Task<OwnerRelabelOutcome> RelabelAsync(
         MailOwnerId owner,
         string? displayName,
         CancellationToken cancellationToken)
@@ -163,7 +174,7 @@ internal sealed partial class OwnerRosterAdministration(
 
         if (FindLabelRefusal(displayName) is { } unusable)
         {
-            return unusable;
+            return OwnerRelabelOutcome.Refused(unusable);
         }
 
         var label = displayName!.Trim();
@@ -171,24 +182,24 @@ internal sealed partial class OwnerRosterAdministration(
 
         if (held.All(record => record.Owner != owner))
         {
-            return "This deployment holds no owner under that identifier. Read the roster and relabel one it holds.";
+            return OwnerRelabelOutcome.NoSuchOwner;
         }
 
         if (held.Any(record => record.Owner != owner && StringComparer.Ordinal.Equals(record.DisplayName, label)))
         {
-            return LabelTaken(label);
+            return OwnerRelabelOutcome.Refused(LabelTaken(label));
         }
 
         if (!await provisioning.RelabelAsync(owner, label, cancellationToken))
         {
             // The label was taken between the roster being read and the statement reaching the table, which no reading
             // of a snapshot could have refused earlier.
-            return LabelTaken(label);
+            return OwnerRelabelOutcome.Refused(LabelTaken(label));
         }
 
         this.LogOwnerRelabelled();
 
-        return null;
+        return OwnerRelabelOutcome.Relabelled;
     }
 
     /// <summary>Erases one owner and everything this deployment recorded for them.</summary>
@@ -198,9 +209,18 @@ internal sealed partial class OwnerRosterAdministration(
     /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminErase" />.</exception>
     /// <remarks>
+    /// <para>
     /// Whether the owner was served is read before the erasure rather than after, because the roster is what this
     /// process settled at start and the answer must describe the deployment the caller asked about rather than the one
     /// the erasure left.
+    /// </para>
+    /// <para>
+    /// An owner a configuration source names is refused rather than erased. The next start reconciles the declarations
+    /// against the roster and writes back every declared owner the roster no longer holds, under the identifier the
+    /// declaration carries and with the mail accounts it supplies — so the erasure would run, the mail would go, and
+    /// the person would be recreated and their mailboxes downloaded again. A deletion request answered that way is
+    /// worse than one refused, so what comes back names the declaration to remove first.
+    /// </para>
     /// </remarks>
     internal async Task<OwnerErasureOutcome> EraseAsync(MailOwnerId owner, CancellationToken cancellationToken)
     {
@@ -212,6 +232,12 @@ internal sealed partial class OwnerRosterAdministration(
         authorization.RequirePermission(MailFathomPermission.AdminErase);
 
         var served = servedOwners.Owners.Any(candidate => candidate.Owner == owner);
+
+        if (configured.DeclaredByAConfigurationSource(owner))
+        {
+            return new OwnerErasureOutcome(OwnerErased: false, served, DeclaredElsewhere);
+        }
+
         var erased = await erasure.EraseAsync(owner, cancellationToken);
 
         if (erased)
@@ -237,6 +263,14 @@ internal sealed partial class OwnerRosterAdministration(
             ? $"The label is {label.Length} characters, past the {MailOwnerRecord.MaximumDisplayNameLength} an owner's label is stored as. Shorten it."
             : null;
     }
+
+    /// <summary>The sentence an erasure a start would undo is refused with.</summary>
+    /// <remarks>
+    /// It names both shapes a declaration takes, because which one an operator has is decided by their own file rather
+    /// than by anything this deployment could report without publishing that file back to them.
+    /// </remarks>
+    private const string DeclaredElsewhere =
+        "A configuration source declares this owner, and a start writes every declared owner it no longer holds back into the roster — so erasing them here would destroy their mail and then recreate the person and download it again. Remove their entry from the top-level Accounts collection, or the mail accounts of MailSynchronization:Accounts where this deployment declares no owners, and erase them once no source names them.";
 
     private static string LabelTaken(string label) =>
         $"Another owner of this deployment is already recorded as '{label}'. A label is what an administrator selects an owner by, so two owners carrying one would leave nothing to select on: choose another.";

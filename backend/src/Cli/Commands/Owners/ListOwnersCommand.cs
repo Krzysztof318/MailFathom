@@ -53,8 +53,9 @@ internal static class ListOwnersCommand
         if (roster.Owners is not { Count: > 0 } owners)
         {
             context.Console.WriteLine(
-                "This deployment holds no owner records. One is written when it first composes its settings, so an "
-                + "empty roster means it has not started successfully yet.");
+                "This deployment holds no owner records. One is written when it first composes its settings and "
+                + "'owner add' records another, so an empty roster is a deployment that has not started successfully "
+                + "yet, or one whose owners have all been removed.");
 
             return CliExitCode.Success;
         }

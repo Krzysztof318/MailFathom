@@ -1155,6 +1155,15 @@ internal sealed class AdminApiClient
             JsonContent.Create(request, CliJsonContext.Default.ConfigurationAdoptionRequest));
     }
 
+    /// <summary>The sentence an owner-scoped route answers with when the deployment holds no such owner.</summary>
+    /// <remarks>
+    /// Every route beneath one owner answers <c>404</c> for an owner the deployment does not hold, so without this the
+    /// operator would be sent after a listener and a port by a deployment that is answering perfectly well. It names
+    /// the owner as the thing that is absent and the listing the identifier comes from.
+    /// </remarks>
+    private const string NoSuchOwner =
+        "This deployment holds no owner under that identifier. Run 'mfctl owner list' and name one it holds.";
+
     /// <summary>Reads the owners a deployment holds records for.</summary>
     /// <param name="token">The bearer credential to present.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
@@ -1214,7 +1223,8 @@ internal sealed class AdminApiClient
             AdminEndpointRoutes.OwnerDisplayNamePath(ownerId),
             token,
             cancellationToken,
-            JsonContent.Create(request, CliJsonContext.Default.OwnerRelabelRequest));
+            JsonContent.Create(request, CliJsonContext.Default.OwnerRelabelRequest),
+            NoSuchOwner);
     }
 
     /// <summary>Erases one owner and everything the deployment recorded for them.</summary>
@@ -1248,7 +1258,8 @@ internal sealed class AdminApiClient
             AdminEndpointRoutes.OwnerRecordPath(ownerId),
             token,
             CliJsonContext.Default.OwnerRecord,
-            cancellationToken);
+            cancellationToken,
+            absenceMessage: NoSuchOwner);
 
     /// <summary>Declares one more mail account in an owner's record.</summary>
     /// <param name="token">The bearer credential to present.</param>
@@ -1272,7 +1283,8 @@ internal sealed class AdminApiClient
             token,
             CliJsonContext.Default.OwnerRecordWriteAnswer,
             cancellationToken,
-            JsonContent.Create(request, CliJsonContext.Default.OwnerMailAccountRequest));
+            JsonContent.Create(request, CliJsonContext.Default.OwnerMailAccountRequest),
+            NoSuchOwner);
     }
 
     /// <summary>Withdraws one mail account from an owner's record.</summary>
@@ -1297,7 +1309,8 @@ internal sealed class AdminApiClient
             token,
             CliJsonContext.Default.OwnerRecordWriteAnswer,
             cancellationToken,
-            JsonContent.Create(request, CliJsonContext.Default.OwnerMailAccountRemovalRequest));
+            JsonContent.Create(request, CliJsonContext.Default.OwnerMailAccountRemovalRequest),
+            NoSuchOwner);
     }
 
     /// <summary>Reads what adopting one owner would move out of the deployment's files into their record.</summary>
@@ -1316,7 +1329,8 @@ internal sealed class AdminApiClient
             AdminEndpointRoutes.OwnerAdoptionPath(ownerId),
             token,
             CliJsonContext.Default.OwnerAdoptionPreview,
-            cancellationToken);
+            cancellationToken,
+            absenceMessage: NoSuchOwner);
 
     /// <summary>Moves one owner's mail accounts out of the deployment's files and into their own record.</summary>
     /// <param name="token">The bearer credential to present.</param>
@@ -1340,7 +1354,8 @@ internal sealed class AdminApiClient
             token,
             CliJsonContext.Default.OwnerRecordWriteAnswer,
             cancellationToken,
-            JsonContent.Create(request, CliJsonContext.Default.OwnerAdoptionRequest));
+            JsonContent.Create(request, CliJsonContext.Default.OwnerAdoptionRequest),
+            NoSuchOwner);
     }
 
     /// <summary>Reads the credentials one owner's clients present.</summary>
@@ -1474,11 +1489,11 @@ internal sealed class AdminApiClient
     /// the operator needs.
     /// </para>
     /// <para>
-    /// <c>404</c> means the port serves no administrative endpoint on every route but one, because a route addressing a
-    /// single record answers <c>200</c> with a nullable field where the deployment holds nothing. The outbox's own
-    /// single-record reading is the exception and says so through <paramref name="absenceMessage" />: it addresses a
-    /// send by identity, so its absence is the absence of the thing addressed, and telling that operator to check the
-    /// port would send them after a deployment that is answering perfectly well.
+    /// <c>404</c> means the port serves no administrative endpoint on most routes, because a route addressing a single
+    /// record answers <c>200</c> with a nullable field where the deployment holds nothing. The exceptions are the
+    /// routes that address a thing by identity — one queued send, and everything beneath one owner — and each says so
+    /// through <paramref name="absenceMessage" />: their absence is the absence of the thing addressed, and telling
+    /// that operator to check the port would send them after a deployment that is answering perfectly well.
     /// </para>
     /// <para>
     /// <paramref name="overBoundRemedy" /> is the same shape for an answer past what this command buffers: a route
@@ -1531,14 +1546,15 @@ internal sealed class AdminApiClient
         string path,
         string token,
         CancellationToken cancellationToken,
-        HttpContent? content = null)
+        HttpContent? content = null,
+        string? absenceMessage = null)
     {
         using var response = await this.SendCredentialedAsync(
             method,
             path,
             token,
             content,
-            absenceMessage: null,
+            absenceMessage,
             overBoundRemedy: null,
             cancellationToken);
     }

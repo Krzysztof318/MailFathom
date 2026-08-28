@@ -234,12 +234,21 @@ public sealed class ClientApiEndpointsTests
         // Assert
         Assert.All(
             endpoints.Materialize(),
-            endpoint => Assert.All(
-                endpoint.Metadata.GetMetadata<IHttpMethodMetadata>()?.HttpMethods ?? [],
-                method => Assert.True(
-                    method == "GET"
-                    || (method == "POST" && WritesTheCallersOwnRecord(endpoint)),
-                    $"{method} {endpoint} is published as neither a read nor a write to the caller's own record.")));
+            endpoint =>
+            {
+                // A route carrying no verb metadata answers every verb, so reading the absence as an empty set would
+                // pass this test on exactly the route it exists to refuse.
+                var verbs = endpoint.Metadata.GetMetadata<IHttpMethodMetadata>();
+
+                Assert.NotNull(verbs);
+                Assert.NotEmpty(verbs.HttpMethods);
+                Assert.All(
+                    verbs.HttpMethods,
+                    method => Assert.True(
+                        method == "GET"
+                        || (method == "POST" && WritesTheCallersOwnRecord(endpoint)),
+                        $"{method} {endpoint} is published as neither a read nor a write to the caller's own record."));
+            });
     }
 
     /// <summary>Reports whether a route is one of the caller's own record's writes, by the grant it was published under.</summary>

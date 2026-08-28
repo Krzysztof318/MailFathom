@@ -10,6 +10,7 @@ using MailFathom.Host.Configuration.OwnerSettings;
 using MailFathom.Host.Configuration.OwnerSettings.Administration;
 using MailFathom.Infrastructure.Persistence.Owners;
 using MailFathom.TestSupport;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
@@ -51,6 +52,31 @@ public sealed class OwnerRosterAdministrationTests
                     entry.RecordIsTheirOwn ? "recordIsTheirOwn" : null,
                     entry.Served ? "served" : null,
                 }.OfType<string>())));
+    }
+
+    /// <summary>
+    /// A declaration is what decides whether an owner can be erased or usefully relabelled, and it is read from a file
+    /// this process composed rather than from anything the row carries — so an administrator reading the roster is
+    /// told, instead of finding out from a refusal.
+    /// </summary>
+    [Fact]
+    public async Task ReadRosterAsync_AnOwnerAConfigurationSourceDeclares_ReportsThemAsDeclaredInConfiguration()
+    {
+        // Arrange
+        var harness = new RosterHarness(
+            MailFathomPermission.AdminRead,
+            declaredInConfiguration: SyntheticMailOwner.Deployment);
+        harness.Holding(
+            new MailOwnerRecord(SyntheticMailOwner.Deployment, "alex", DocumentWrittenAtRuntime: false),
+            new MailOwnerRecord(SyntheticMailOwner.Another, "morgan", DocumentWrittenAtRuntime: true));
+
+        // Act
+        var roster = await harness.Roster.ReadRosterAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            [("alex", true), ("morgan", false)],
+            roster.Select(entry => (entry.DisplayName, entry.DeclaredInConfiguration)));
     }
 
     /// <summary>
@@ -158,6 +184,28 @@ public sealed class OwnerRosterAdministrationTests
         Assert.False(outcome.IsProvisioned);
         await harness.Documents.DidNotReceiveWithAnyArgs()
             .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// The envelope and the record are two writes, so the owner can be removed between them — and an outcome reporting
+    /// the provisioning as done would leave an administrator believing this deployment holds somebody it holds no
+    /// record for, which is the one state every read of that owner then answers as an absence.
+    /// </summary>
+    [Fact]
+    public async Task ProvisionAsync_AnOwnerRemovedBeforeTheirRecordWasWritten_IsRefusedRatherThanReportedAsProvisioned()
+    {
+        // Arrange
+        var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
+        harness.Documents
+            .CommitAsync(Arg.Any<MailOwnerId>(), Arg.Any<string>(), Arg.Any<long>(), Arg.Any<CancellationToken>())
+            .Returns((long?)null);
+
+        // Act
+        var outcome = await harness.Roster.ProvisionAsync("alex", TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(outcome.IsProvisioned);
+        Assert.NotNull(outcome.RefusalMessage);
     }
 
     [Theory]
@@ -323,6 +371,55 @@ public sealed class OwnerRosterAdministrationTests
         Assert.False(outcome.OwnerErased);
     }
 
+    /// <summary>
+    /// An owner a file declares is written back by the next start, so erasing them would dispose of their mail and
+    /// hand the person straight back — with their mailboxes downloaded again. The refusal names the declaration to
+    /// remove first rather than performing a deletion the deployment would undo.
+    /// </summary>
+    [Fact]
+    public async Task EraseAsync_AnOwnerADeclarationNames_IsRefusedNamingWhatToRemoveFirst()
+    {
+        // Arrange
+        var harness = new RosterHarness(
+            MailFathomPermission.AdminErase,
+            declaredInConfiguration: SyntheticMailOwner.Deployment);
+        harness.Erasing(SyntheticMailOwner.Deployment);
+
+        // Act
+        var outcome = await harness.Roster.EraseAsync(
+            SyntheticMailOwner.Deployment,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(outcome.OwnerErased);
+        Assert.NotNull(outcome.RefusalMessage);
+        await harness.Erasure.DidNotReceiveWithAnyArgs().EraseAsync(default, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// The deployment's own mail-account section names no owner, so the sole owner it is attributed to is declared by
+    /// that section exactly as a listed owner is declared by theirs — and the next start supplies them again.
+    /// </summary>
+    [Fact]
+    public async Task EraseAsync_AnOwnerServedFromTheDeploymentsOwnSection_IsRefusedNamingWhatToRemoveFirst()
+    {
+        // Arrange
+        var harness = new RosterHarness(MailFathomPermission.AdminErase);
+        harness.ServingFromTheDeploymentSection(SyntheticMailOwner.Deployment);
+        harness.Erasing(SyntheticMailOwner.Deployment);
+
+        // Act
+        var outcome = await harness.Roster.EraseAsync(
+            SyntheticMailOwner.Deployment,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(outcome.OwnerErased);
+        Assert.True(outcome.WasServed);
+        Assert.NotNull(outcome.RefusalMessage);
+        await harness.Erasure.DidNotReceiveWithAnyArgs().EraseAsync(default, CancellationToken.None);
+    }
+
     [Fact]
     public async Task EraseAsync_AnOwnerNamingNobody_IsRefusedWithoutReachingTheErasure()
     {
@@ -357,13 +454,13 @@ public sealed class OwnerRosterAdministrationTests
         harness.Holding(new MailOwnerRecord(SyntheticMailOwner.Deployment, "alexandra", DocumentWrittenAtRuntime: true));
 
         // Act
-        var refusal = await harness.Roster.RelabelAsync(
+        var outcome = await harness.Roster.RelabelAsync(
             SyntheticMailOwner.Deployment,
             "alex",
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Null(refusal);
+        Assert.True(outcome.IsRelabelled);
         await harness.Provisioning.Received(1)
             .RelabelAsync(SyntheticMailOwner.Deployment, "alex", Arg.Any<CancellationToken>());
     }
@@ -398,14 +495,15 @@ public sealed class OwnerRosterAdministrationTests
             new MailOwnerRecord(SyntheticMailOwner.Another, "alex", DocumentWrittenAtRuntime: true));
 
         // Act
-        var refusal = await harness.Roster.RelabelAsync(
+        var outcome = await harness.Roster.RelabelAsync(
             SyntheticMailOwner.Deployment,
             "alex",
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.NotNull(refusal);
-        Assert.Contains("'alex'", refusal, StringComparison.Ordinal);
+        Assert.True(outcome.OwnerHeld);
+        Assert.NotNull(outcome.RefusalMessage);
+        Assert.Contains("'alex'", outcome.RefusalMessage, StringComparison.Ordinal);
         await harness.Provisioning.DidNotReceiveWithAnyArgs()
             .RelabelAsync(default, default!, CancellationToken.None);
     }
@@ -425,33 +523,38 @@ public sealed class OwnerRosterAdministrationTests
             .Returns(false);
 
         // Act
-        var refusal = await harness.Roster.RelabelAsync(
+        var outcome = await harness.Roster.RelabelAsync(
             SyntheticMailOwner.Deployment,
             "alex",
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.NotNull(refusal);
-        Assert.Contains("'alex'", refusal, StringComparison.Ordinal);
+        Assert.True(outcome.OwnerHeld);
+        Assert.NotNull(outcome.RefusalMessage);
+        Assert.Contains("'alex'", outcome.RefusalMessage, StringComparison.Ordinal);
     }
 
-    /// <summary>An owner this deployment does not hold is a roster to re-read rather than a row to write.</summary>
+    /// <summary>An owner this deployment does not hold is an absence to report rather than a label to refuse.</summary>
+    /// <remarks>
+    /// The two are one sentence to an administrator and two answers to a caller: the route publishes this one as the
+    /// same absence every other owner-scoped route answers with, so the outcome carries which of them it is.
+    /// </remarks>
     [Fact]
-    public async Task RelabelAsync_AnOwnerThisDeploymentDoesNotHold_IsRefusedWithoutReachingTheRow()
+    public async Task RelabelAsync_AnOwnerThisDeploymentDoesNotHold_ReportsTheOwnerAsUnheld()
     {
         // Arrange
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
         harness.Holding(new MailOwnerRecord(SyntheticMailOwner.Deployment, "alex", DocumentWrittenAtRuntime: true));
 
         // Act
-        var refusal = await harness.Roster.RelabelAsync(
+        var outcome = await harness.Roster.RelabelAsync(
             SyntheticMailOwner.Another,
             "sam",
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.NotNull(refusal);
-        Assert.Contains("holds no owner", refusal, StringComparison.Ordinal);
+        Assert.False(outcome.OwnerHeld);
+        Assert.False(outcome.IsRelabelled);
         await harness.Provisioning.DidNotReceiveWithAnyArgs()
             .RelabelAsync(default, default!, CancellationToken.None);
     }
@@ -467,13 +570,14 @@ public sealed class OwnerRosterAdministrationTests
         var harness = new RosterHarness(MailFathomPermission.AdminConfigurationWrite);
 
         // Act
-        var refusal = await harness.Roster.RelabelAsync(
+        var outcome = await harness.Roster.RelabelAsync(
             SyntheticMailOwner.Deployment,
             label,
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.NotNull(refusal);
+        Assert.True(outcome.OwnerHeld);
+        Assert.NotNull(outcome.RefusalMessage);
         await harness.Directory.DidNotReceiveWithAnyArgs()
             .ReadOwnersAsync(default, CancellationToken.None);
     }
@@ -512,7 +616,10 @@ public sealed class OwnerRosterAdministrationTests
     {
         private readonly ServedMailOwners servedOwners = new();
 
-        internal RosterHarness(MailFathomPermission granted, ClientEndpointOptions? clientEndpoint = null)
+        internal RosterHarness(
+            MailFathomPermission granted,
+            ClientEndpointOptions? clientEndpoint = null,
+            MailOwnerId declaredInConfiguration = default)
         {
             var principals = Substitute.For<IAuthorizedPrincipalSource>();
             principals.Current.Returns(AuthorizedPrincipal.Caller(AdministratorIdentity, [granted]));
@@ -546,6 +653,17 @@ public sealed class OwnerRosterAdministrationTests
                     []),
             ]);
 
+            var settings = new ConfigurationBuilder()
+                .AddInMemoryCollection(declaredInConfiguration.IsSpecified
+                    ? new Dictionary<string, string?>
+                    {
+                        [$"{DeclaredOwnerOptions.SectionName}:0:{nameof(DeclaredOwnerOptions.Id)}"] =
+                            declaredInConfiguration.Value.ToString(),
+                        [$"{DeclaredOwnerOptions.SectionName}:0:{nameof(DeclaredOwnerOptions.DisplayName)}"] = "declared",
+                    }
+                    : [])
+                .Build();
+
             this.Roster = new OwnerRosterAdministration(
                 new AccessAuthorization(principals),
                 this.Directory,
@@ -556,6 +674,7 @@ public sealed class OwnerRosterAdministrationTests
                 new SeveralOwnerAdmission(
                     Options.Create(new McpEndpointOptions()),
                     Options.Create(clientEndpoint ?? new ClientEndpointOptions())),
+                new ConfiguredOwnerMailAccounts(settings, this.servedOwners),
                 NullLogger<OwnerRosterAdministration>.Instance);
         }
 
@@ -574,6 +693,9 @@ public sealed class OwnerRosterAdministrationTests
 
         internal void Serving(MailOwnerId owner) =>
             this.servedOwners.Resolved([new(owner, "served", MailOwnerAccountSource.OwnerDocument, [])]);
+
+        internal void ServingFromTheDeploymentSection(MailOwnerId owner) =>
+            this.servedOwners.Resolved([new(owner, "served", MailOwnerAccountSource.DeploymentSection, [])]);
 
         internal void Erasing(MailOwnerId owner) =>
             this.Erasure.EraseAsync(owner, Arg.Any<CancellationToken>()).Returns(true);

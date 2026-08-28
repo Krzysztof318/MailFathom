@@ -132,6 +132,23 @@ public sealed class DeploymentMailOwnerUnresolvedException : MailFathomException
         return new(refusal);
     }
 
+    /// <summary>Reports a request that names no owner reaching a deployment that serves several.</summary>
+    /// <returns>The failure to raise.</returns>
+    /// <remarks>
+    /// The only member here raised while the process serves requests rather than while it starts. Every other one
+    /// refuses a start; this one refuses one act, because a deployment serving several owners is a state a start now
+    /// admits — the several-owner bound holds over the surfaces that serve a person their own mail, and the
+    /// administrative surface is deliberately outside it. What is left is an administrative act reached by a
+    /// credential naming nobody and asking about one person's contacts, mail accounts, or mailbox, which has no answer
+    /// rather than a first one. It is classified so that a caller reads which failure it is instead of an unclassified
+    /// fault, and so that the sentence names the credential that would have been answered.
+    /// </remarks>
+    public static DeploymentMailOwnerUnresolvedException NoSoleOwnerToActFor() => new(
+        "This deployment serves more than one owner, so a request that names none has nobody to act for. The acts "
+        + "that read or write one person's contacts, mail accounts, or mailbox are reached by a credential that names "
+        + "the owner it acts for; grant one such credential per owner, and use the deployment-wide administrative "
+        + "routes — which name the owner they act on — for everything an administrator does across the roster.");
+
     /// <summary>Reports an owner whose own mail accounts carry a secret or a trust anchor this deployment cannot use.</summary>
     /// <param name="displayName">The label the owner is declared under.</param>
     /// <param name="refusals">The sentences naming each setting that must change, each already carrying its configuration path.</param>
@@ -154,6 +171,35 @@ public sealed class DeploymentMailOwnerUnresolvedException : MailFathomException
             $"The mail accounts of the owner labelled '{displayName}' carry a setting this deployment cannot use, so "
             + "they would have failed one connection at a time rather than the start: "
             + string.Join(" ", refusals));
+    }
+
+    /// <summary>Reports a mail-account name more than one served owner would answer to.</summary>
+    /// <param name="sharedNames">The names two owners of this roster both carry.</param>
+    /// <returns>The failure to raise.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="sharedNames" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="sharedNames" /> names nothing.</exception>
+    /// <remarks>
+    /// The deployment-wide naming rule the declarations are already held to, asked again of the roster a start would
+    /// actually serve — which is the only place a collision written into two owners' records while a process ran can
+    /// be seen. Neither owner is named: the answer is about a name two people share, and which two they are is read
+    /// from the roster rather than from a line that would outlive the collision.
+    /// </remarks>
+    public static DeploymentMailOwnerUnresolvedException MailAccountNameSharedByOwners(
+        IReadOnlyList<string> sharedNames)
+    {
+        ArgumentNullException.ThrowIfNull(sharedNames);
+
+        if (sharedNames.Count == 0)
+        {
+            throw new ArgumentException("A shared mail-account name is reported for at least one name.", nameof(sharedNames));
+        }
+
+        return new(
+            $"More than one owner this deployment would serve names a mail account {string.Join(", ", sharedNames)}. "
+            + "A mail account belongs to its owner, but this release resolves an account's settings by its identifier "
+            + "alone, so a name two owners share would reach whichever of the two the lookup met first. Give each of "
+            + "them a name no other owner uses, with 'mfctl owner account remove' and 'mfctl owner account add' for an "
+            + "owner whose record is their own, and in the declaration for one a file supplies.");
     }
 
     /// <summary>Reports an owner whose own record could not be read as the settings it is meant to hold.</summary>

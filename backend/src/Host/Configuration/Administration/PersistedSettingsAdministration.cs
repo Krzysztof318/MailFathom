@@ -52,8 +52,9 @@ internal sealed class PersistedSettingsAdministration(
     IRootSettingsDocumentReader documents,
     IConfigurationWriter writer)
 {
-    /// <summary>The command a refused save is sent to, which changes one setting without rewriting a secret reference.</summary>
-    private const string NarrowerChange = "'mfctl config set'";
+    /// <summary>What a refused save is sent to, which is the change that reaches one setting without rewriting a secret reference.</summary>
+    private const string NarrowerChange =
+        "change the settings beneath it one at a time with 'mfctl config set', which never rewrites a secret reference.";
 
     /// <summary>Gets the persisted configuration version this process composed its settings over.</summary>
     internal long ComposedVersion => reader.ComposedVersion;

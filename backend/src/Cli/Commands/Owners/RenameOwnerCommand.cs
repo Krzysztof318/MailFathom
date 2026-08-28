@@ -16,9 +16,10 @@ namespace MailFathom.Cli.Commands.Owners;
 /// commands beside it that move a decision out of a file or destroy mail.
 /// </para>
 /// <para>
-/// It reaches an owner nothing declares. A file that names an owner names their label too, and a start puts that label
-/// back, so renaming a declared owner here lasts until the next restart — the declaration is where their label is
-/// changed, and the deployment says so rather than this command guessing which kind of owner it was handed.
+/// A file that names an owner names their label too, and a start puts that label back, so renaming a declared owner
+/// here lasts until the next restart and the declaration is where their label is actually changed. Which kind of owner
+/// this was handed is read from the roster rather than guessed, because nothing in the acceptance says it: the route
+/// answers with no body, and a label written over a declaration is written exactly as any other is.
 /// </para>
 /// </remarks>
 internal static class RenameOwnerCommand
@@ -75,6 +76,13 @@ internal static class RenameOwnerCommand
             requestedOwner,
             cancellationToken);
 
+        // The roster rather than the write's own answer, which is an acceptance and nothing else. What it settles is
+        // whether a configuration source declares this owner, because a start rewrites a declared owner's label from
+        // the file — and reporting the new label without saying so would be reporting a change that is undone.
+        var roster = await deployment.ReadOwnersAsync(profile.Token, cancellationToken);
+        var declared = roster.Owners?.FirstOrDefault(candidate => candidate.Id == owner)?.DeclaredInConfiguration
+            ?? false;
+
         await deployment.RelabelOwnerAsync(
             profile.Token,
             owner,
@@ -82,6 +90,13 @@ internal static class RenameOwnerCommand
             cancellationToken);
 
         context.Console.WriteLine($"Owner {owner:D} is now labelled {displayName}.");
+
+        if (declared)
+        {
+            context.Console.WriteNotice(
+                "A configuration source declares this owner, and a start reads their label from it, so this one lasts "
+                + "until the deployment is restarted. Change the label in the declaration to keep it.");
+        }
 
         return CliExitCode.Success;
     }

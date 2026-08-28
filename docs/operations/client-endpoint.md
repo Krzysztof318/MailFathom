@@ -952,10 +952,30 @@ reference to it.
 
 **A candidate is validated before it is committed, and committed whole or not at all.** It is bound strictly against
 the same rules a configuration file is, checked for two mail accounts declared under one identifier, checked that every
-account in it belongs to this owner, and put through the same mail-synchronization validators a start applies. A
-refusal names what to correct and carries nothing that was supplied as a secret. A record another writer moved on in the
-meantime — the owner from a second device, or an administrator — is refused as superseded rather than overwritten, so
-the client re-reads and composes the change again.
+account in it belongs to this owner, and put through the same mail-synchronization validators a start applies —
+including the walk that resolves every credential the record names, so a reference that reaches nothing is refused here
+rather than committed and then refusing the whole deployment's next start. A refusal names what to correct and carries
+nothing that was supplied as a secret. A record another writer moved on in the meantime — the owner from a second
+device, or an administrator — is refused as superseded rather than overwritten, so the client re-reads and composes the
+change again.
+
+**A mailbox declared here names a credential this deployment provisioned for this owner, and nothing else.** A record
+never carries a password: what it carries is a [reference](secret-provisioning.md) to material the deployment can
+resolve, and that material is reached by whatever the reference names — a mounted file, a systemd credential, an
+environment variable. The mail server the account names is the owner's own, so a reference written here decides what
+this deployment hands to a machine that person controls; unbounded, `mailfathom.mail.accounts.write` would reach the
+database password and every other secret this deployment can resolve.
+
+Two references are therefore admissible and no others. One the record already carries stays admissible whoever put it
+there, so a change that was never about the credential is never refused over it. And one whose material was provisioned
+for this owner is admissible, which is read from the name the operator gave it: **the last segment of the reference's
+target begins with `owner-<owner identifier>-`**. So `file:/run/secrets/owner-3f1d…-work-password` and
+`systemd-credential:owner-3f1d…-work-password` are the owner's to name, and `file:/run/secrets/database-password` is
+not — whatever path is written in front of it, because the bound is the name of the material rather than the way to it.
+An operator provisioning a mailbox credential for somebody to declare themselves names it that way; one who would
+rather not writes the mail account through [`mfctl owner account
+add`](admin-endpoint.md#owners-and-their-records) instead, which is bounded by nothing here. A refusal names both
+routes out.
 
 **An owner whose mail accounts are still read from this deployment's configuration cannot write here.** The write is
 refused, naming the administrative `mfctl owner adopt` that moves them into the record first, because committing it

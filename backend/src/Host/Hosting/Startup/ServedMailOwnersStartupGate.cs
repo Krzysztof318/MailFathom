@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration;
+using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.OwnerSettings;
 using MailFathom.Infrastructure.Persistence.Owners;
 
@@ -126,6 +127,8 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
         ];
 
         this.RefuseSeveralOwnersOnAnOwnerFacingSurface(served);
+
+        RefuseMailAccountNamesTwoOwnersShare(served);
 
         await this.RefuseUnusableMailAccountSecretsAsync(scope, served, cancellationToken);
 
@@ -438,6 +441,47 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
             throw DeploymentMailOwnerUnresolvedException.SeveralOwnersOnAnOwnerFacingSurface(this.admission.Refusal);
         }
     }
+
+    /// <summary>Refuses a roster in which one mail-account name would reach two owners.</summary>
+    /// <remarks>
+    /// The deployment-wide rule <c>DeclaredOwners</c> states over a file, asked here over the roster this start would
+    /// actually serve. It has to be asked in both places and neither is redundant: the file's own reading is what names
+    /// the entry an operator corrects, and this one is what sees a record. A write into one owner's record is judged
+    /// against the roster this process settled, so two writes into two record-served owners in one process run — each
+    /// judged against a snapshot the other had not moved — can name the same account, and the start that composes them
+    /// is where the two are first in one place.
+    /// <para>
+    /// It refuses the start rather than serving both, because serving them is a lookup by identifier reaching whichever
+    /// owner it met first: one person's mailbox settings resolved for another person's account.
+    /// </para>
+    /// </remarks>
+    private static void RefuseMailAccountNamesTwoOwnersShare(IReadOnlyList<ServedMailOwner> served)
+    {
+        var shared = served
+            .SelectMany(owner => NamesOf(owner).Select(name => (owner.Owner, Name: name)))
+            .GroupBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.DistinctBy(entry => entry.Owner).Count() > 1)
+            .Select(group => group.Key)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (shared.Length > 0)
+        {
+            throw DeploymentMailOwnerUnresolvedException.MailAccountNameSharedByOwners(shared);
+        }
+    }
+
+    /// <summary>Names the strings one served owner's mail accounts answer to.</summary>
+    /// <remarks>Both spellings, because a caller may name an account by either and the lookup resolves both.</remarks>
+    private static IEnumerable<string> NamesOf(ServedMailOwner owner) =>
+        owner.MailAccounts
+            .SelectMany(account => new[]
+            {
+                MailSynchronizationOptions.TryReadAccountId(account.AccountId),
+                string.IsNullOrWhiteSpace(account.DisplayName) ? null : account.DisplayName.Trim(),
+            })
+            .OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Reports which owners are served, where each is read from, and which held owners are not served at all.</summary>
     private void Report(IReadOnlyList<ServedMailOwner> served, IReadOnlyList<MailOwnerRecord> held)

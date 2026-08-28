@@ -3,11 +3,9 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
-using System.Text.Json;
 using MailFathom.CodeCoverage;
 using MailFathom.Domain.Access;
 using MailFathom.Infrastructure.Persistence.Connections;
-using MailFathom.Infrastructure.Persistence.Settings;
 using Npgsql;
 
 namespace MailFathom.Infrastructure.Persistence.Owners;
@@ -30,6 +28,11 @@ namespace MailFathom.Infrastructure.Persistence.Owners;
 /// <para>
 /// The marker is set unconditionally rather than only where it was false, because the statement has to leave the same
 /// row whichever it met and a conditional would make the write's meaning depend on how many times it had already run.
+/// </para>
+/// <para>
+/// What is under the integration marker is the statement and nothing else. The rules a candidate is refused by need no
+/// server to decide, so they sit in <see cref="OwnerSettingsCommitRules" /> where the unit suite's measurement reaches
+/// them.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this writer.")]
@@ -70,7 +73,7 @@ internal sealed class PersistedOwnerSettingsDocumentWriter(
             throw new ArgumentException("An owner record is written for a named owner.", nameof(owner));
         }
 
-        RefuseWhatCannotBeCommitted(json, expectedVersion);
+        OwnerSettingsCommitRules.RefuseWhatCannotBeCommitted(json, expectedVersion);
 
         // Opened in a step of its own rather than left to the command, because the driver reports a connect timeout
         // and a command timeout as the same shape and the two are opposite answers: one is a database that could not
@@ -111,47 +114,6 @@ internal sealed class PersistedOwnerSettingsDocumentWriter(
             {
                 throw new OwnerSettingsUnwritableException(OwnerSettingsWriteFailures.Diagnose(exception), exception);
             }
-        }
-    }
-
-    /// <summary>Refuses a candidate no statement should be issued for.</summary>
-    /// <remarks>
-    /// Every refusal is an <see cref="ArgumentException" /> because each is a candidate this build composed wrongly
-    /// rather than anything the database has an opinion about. The measurement and the shape question are the ones the
-    /// deployment's own document is judged by, asked of the same rules so the two documents cannot come to be held to
-    /// different ones; the bound they are asked against is this document's.
-    /// </remarks>
-    private static void RefuseWhatCannotBeCommitted(string json, long expectedVersion)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(json);
-        ArgumentOutOfRangeException.ThrowIfNegative(expectedVersion);
-
-        int persistedOctets;
-
-        try
-        {
-            if (!RootSettingsCommitRules.RootIsAnObject(json))
-            {
-                throw new ArgumentException(
-                    "The candidate owner record is JSON whose root is not an object, so it carries no settings at all. The column would store it, and the next read would refuse it: only an object binds to an owner's record.",
-                    nameof(json));
-            }
-
-            persistedOctets = RootSettingsCommitRules.PersistedOctetsOf(json);
-        }
-        catch (JsonException exception)
-        {
-            throw new ArgumentException(
-                "The candidate owner record is not JSON, so no statement is issued for it. The column would take it no further: its jsonb cast refuses exactly this, and the refusal belongs on the side that composed the document.",
-                nameof(json),
-                exception);
-        }
-
-        if (persistedOctets > OwnerSettingsDocument.MaximumOctets)
-        {
-            throw new ArgumentException(
-                $"The candidate owner record occupies {persistedOctets} octets as the database stores it, past the {OwnerSettingsDocument.MaximumOctets} this build binds an owner's record from, so persisting it would leave a row the next read refuses.",
-                nameof(json));
         }
     }
 }

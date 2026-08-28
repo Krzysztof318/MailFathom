@@ -96,6 +96,60 @@ public sealed class OwnerCommandTests : IDisposable
         Assert.Contains(this.harness.Console.Lines, line => line.Contains("alexandra", StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A start reads a declared owner's label from the file it is declared in, so a rename of one lasts until the next
+    /// restart. Reporting the new label without saying so would report a change the deployment undoes.
+    /// </summary>
+    [Fact]
+    public async Task Rename_AnOwnerAConfigurationSourceDeclares_SaysTheLabelLastsUntilARestart()
+    {
+        // Arrange
+        using var deployment = FakeOwnerRecordDeployment.SupplyingFromConfiguration(Owner);
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "owner",
+            "rename",
+            "--owner",
+            $"{Owner:D}",
+            "--display-name",
+            "alexandra",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(
+            this.harness.Console.Lines.Concat(this.harness.Console.Errors),
+            line => line.Contains("until the deployment is restarted", StringComparison.Ordinal));
+    }
+
+    /// <summary>An owner nothing declares keeps the label a rename writes, so nothing qualifies what the command reported.</summary>
+    [Fact]
+    public async Task Rename_AnOwnerNoConfigurationSourceDeclares_ReportsTheLabelWithNothingQualifyingIt()
+    {
+        // Arrange
+        using var deployment = FakeOwnerRecordDeployment.Holding(Owner);
+
+        // Act
+        await this.RunAsync(
+            deployment,
+            "owner",
+            "rename",
+            "--owner",
+            $"{Owner:D}",
+            "--display-name",
+            "alexandra",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.DoesNotContain(
+            this.harness.Console.Lines.Concat(this.harness.Console.Errors),
+            line => line.Contains("until the deployment is restarted", StringComparison.Ordinal));
+    }
+
     /// <summary>A deployment holding one person is the ordinary shape, so the roster is what settles who a rename acts for.</summary>
     [Fact]
     public async Task Rename_NoOwnerNamedOnADeploymentHoldingOne_ActsForTheSingleOwnerItHolds()

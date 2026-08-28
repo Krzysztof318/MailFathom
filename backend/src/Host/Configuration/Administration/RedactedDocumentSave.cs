@@ -66,24 +66,24 @@ internal static class RedactedDocumentSave
     /// <summary>Names every redaction marker the saved buffer leaves standing that this deployment cannot place.</summary>
     /// <param name="standing">The document the buffer was opened over, with its references as the row holds them.</param>
     /// <param name="saved">The document the person saved, with a marker wherever a reference stood.</param>
-    /// <param name="narrowerChange">The command that changes one setting without rewriting a secret reference, which the refusal sends the reader to.</param>
+    /// <param name="remedy">The clause naming what the reader does instead, which is the caller's because what a surface has to offer differs: a document with a single-setting change names it, and one without names the act that states the secret afresh.</param>
     /// <returns>One sentence per marker the save cannot account for, empty where every one of them is placeable.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="standing" /> or <paramref name="saved" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="narrowerChange" /> is <see langword="null" />, empty, or white space.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="remedy" /> is <see langword="null" />, empty, or white space.</exception>
     internal static IReadOnlyList<string> FindMarkersTheSaveCannotPlace(
         Dictionary<string, string> standing,
         Dictionary<string, string> saved,
-        string narrowerChange)
+        string remedy)
     {
         ArgumentNullException.ThrowIfNull(standing);
         ArgumentNullException.ThrowIfNull(saved);
-        ArgumentException.ThrowIfNullOrWhiteSpace(narrowerChange);
+        ArgumentException.ThrowIfNullOrWhiteSpace(remedy);
 
         return
         [
             .. saved
                 .Where(setting => string.Equals(setting.Value, SettingRedaction.Marker, StringComparison.Ordinal))
-                .Select(setting => WhyItCannotBePlaced(standing, saved, setting.Key, narrowerChange))
+                .Select(setting => WhyItCannotBePlaced(standing, saved, setting.Key, remedy))
                 .OfType<string>()
                 .Order(StringComparer.OrdinalIgnoreCase),
         ];
@@ -126,7 +126,7 @@ internal static class RedactedDocumentSave
         Dictionary<string, string> standing,
         Dictionary<string, string> saved,
         string path,
-        string narrowerChange)
+        string remedy)
     {
         if (!standing.ContainsKey(path))
         {
@@ -140,7 +140,7 @@ internal static class RedactedDocumentSave
 
         return SubtreeUnchanged(standing, saved, element)
             ? null
-            : $"{path} was saved as the redaction marker while '{element}' changed, so this deployment cannot tell which secret the marker stands for — a position moves when an element is added or removed. Save that element as it was opened, and change the settings beneath it with {narrowerChange}, which never rewrites a secret reference.";
+            : $"{path} was saved as the redaction marker while '{element}' changed, so this deployment cannot tell which secret the marker stands for — a position moves when an element is added or removed. Save that element as it was opened, or {remedy}";
     }
 
     /// <summary>Reports whether everything beneath a path is what the buffer was opened over.</summary>

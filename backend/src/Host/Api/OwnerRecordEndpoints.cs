@@ -161,8 +161,13 @@ internal static class OwnerRecordEndpoints
     /// <param name="ownerId">The owner to remove.</param>
     /// <param name="roster">The roster administration.</param>
     /// <param name="cancellationToken">Cancels the erasure before it commits.</param>
-    /// <returns><c>200</c> with what was removed, or <c>400</c> when the request names nobody.</returns>
-    /// <remarks>An owner this deployment does not hold is reported as nothing erased rather than as a refusal, because the caller asked for a state and the deployment is in it — and telling the two apart would report which owner identifiers exist.</remarks>
+    /// <returns><c>200</c> with what was removed, or <c>400</c> when the request names nobody or a configuration source declares the owner.</returns>
+    /// <remarks>
+    /// An owner this deployment does not hold is reported as nothing erased rather than as a refusal, because the
+    /// caller asked for a state and the deployment is in it — and telling the two apart would report which owner
+    /// identifiers exist. An owner a file declares is the one erasure that is refused instead, because a start writes
+    /// them back and the refusal names the declaration to remove first.
+    /// </remarks>
     internal static async Task<Results<Ok<OwnerErasureResponse>, ProblemHttpResult>> EraseAsync(
         Guid ownerId,
         [FromServices] OwnerRosterAdministration roster,
@@ -177,7 +182,9 @@ internal static class OwnerRecordEndpoints
 
         var outcome = await roster.EraseAsync(owner, cancellationToken);
 
-        return TypedResults.Ok(new OwnerErasureResponse(outcome.OwnerErased, outcome.WasServed));
+        return outcome.RefusalMessage is { } refused
+            ? Refusal(refused)
+            : TypedResults.Ok(new OwnerErasureResponse(outcome.OwnerErased, outcome.WasServed));
     }
 
     /// <summary>Replaces the label one owner is told apart by.</summary>
@@ -185,14 +192,15 @@ internal static class OwnerRecordEndpoints
     /// <param name="roster">The roster administration.</param>
     /// <param name="request">The label the owner carries from now on.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
-    /// <returns><c>204</c> when the row carries the label, or <c>400</c> naming what has to change first.</returns>
+    /// <returns><c>204</c> when the row carries the label, <c>404</c> when this deployment holds no such owner, or <c>400</c> naming what has to change first.</returns>
     /// <remarks>
     /// No body comes back, because the label the request carried is the whole of what changed and nothing about the
-    /// owner is decided here. An owner this deployment does not hold is a refusal rather than a <c>404</c>: this route
-    /// names the owner in its own path, so a caller reaching it has read the roster, and the sentence naming the roster
-    /// is what an operator acts on.
+    /// owner is decided here. An owner this deployment does not hold is the same <c>404</c> the record routes beside
+    /// this one answer with: the roster is <see cref="MailFathomPermission.AdminRead" /> and this route is
+    /// <see cref="MailFathomPermission.AdminConfigurationWrite" />, and no permission implies another, so a credential
+    /// holding only the write must not learn from here which owners exist.
     /// </remarks>
-    internal static async Task<Results<NoContent, ProblemHttpResult>> RelabelAsync(
+    internal static async Task<Results<NoContent, NotFound<ProblemDetails>, ProblemHttpResult>> RelabelAsync(
         Guid ownerId,
         [FromServices] OwnerRosterAdministration roster,
         [FromBody] OwnerRelabelRequest request,
@@ -206,11 +214,16 @@ internal static class OwnerRecordEndpoints
             return EmptyOwner();
         }
 
-        var refusal = await roster.RelabelAsync(owner, request.DisplayName, cancellationToken);
+        var outcome = await roster.RelabelAsync(owner, request.DisplayName, cancellationToken);
 
-        return refusal is null
-            ? TypedResults.NoContent()
-            : Refusal(refusal);
+        if (!outcome.OwnerHeld)
+        {
+            return NoSuchOwner();
+        }
+
+        return outcome.RefusalMessage is { } refused
+            ? Refusal(refused)
+            : TypedResults.NoContent();
     }
 
     /// <summary>Hands over one owner's record, as the redacted JSON an editing session opens.</summary>

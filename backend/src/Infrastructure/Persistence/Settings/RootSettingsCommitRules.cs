@@ -125,13 +125,6 @@ public static class RootSettingsCommitRules
         return utf8.Length + separators;
     }
 
-    /// <summary>Refuses a candidate whose root is not an object, which no configuration layer can be composed from.</summary>
-    /// <remarks>
-    /// A configuration source publishes colon-delimited keys, and only an object has any. An array, a number, or a bare
-    /// string is a valid <c>jsonb</c> value the column stores without complaint and the next start then refuses to
-    /// read — a row that commits and stops the deployment, which is the shape of defect this whole type exists to catch
-    /// before a statement is issued rather than after one has been.
-    /// </remarks>
     /// <summary>Gets whether a candidate document's root is the object a configuration layer composes from.</summary>
     /// <param name="json">The candidate document.</param>
     /// <returns><see langword="true" /> when the root is an object; otherwise <see langword="false" />.</returns>
@@ -151,6 +144,13 @@ public static class RootSettingsCommitRules
         return reader.Read() && reader.TokenType == JsonTokenType.StartObject;
     }
 
+    /// <summary>Refuses a candidate whose root is not an object, which no configuration layer can be composed from.</summary>
+    /// <remarks>
+    /// A configuration source publishes colon-delimited keys, and only an object has any. An array, a number, or a bare
+    /// string is a valid <c>jsonb</c> value the column stores without complaint and the next start then refuses to
+    /// read — a row that commits and stops the deployment, which is the shape of defect this whole type exists to catch
+    /// before a statement is issued rather than after one has been.
+    /// </remarks>
     private static void RefuseWhatIsNotAnObject(string json)
     {
         if (RootIsAnObject(json))

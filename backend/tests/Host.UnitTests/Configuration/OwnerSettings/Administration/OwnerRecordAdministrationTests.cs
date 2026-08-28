@@ -339,6 +339,137 @@ public sealed class OwnerRecordAdministrationTests
     }
 
     /// <summary>
+    /// A secret reference is a path into whatever this deployment can read — a mounted file, a credential, an
+    /// environment variable — and the server the account names is the owner's own. So a reference an owner wrote would
+    /// hand them whatever stands behind it, on a mailbox they control, and the only caller who may introduce one is
+    /// whoever administers the deployment.
+    /// </summary>
+    [Fact]
+    public async Task AddOwnMailAccountAsync_AMailboxNamingACredentialTheirRecordDoesNotCarry_IsRefused()
+    {
+        // Arrange
+        var harness = new RecordHarness(
+            MailFathomPermission.MailAccountsWrite,
+            actingFor: SyntheticMailOwner.Deployment);
+        harness.Holding(SyntheticMailOwner.Deployment, Declaring("primary"), version: 1);
+
+        // Act
+        var outcome = await harness.Records.AddOwnMailAccountAsync(
+            Account("archive"),
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Contains(
+            "mfctl owner account add",
+            Assert.Single(outcome.Messages),
+            StringComparison.Ordinal);
+        await harness.Store.DidNotReceiveWithAnyArgs()
+            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// What an owner may name is material this deployment provisioned for them, and the operator says which that is by
+    /// naming it after the person it belongs to. Without this the rule would refuse every mailbox an owner declares,
+    /// which is the whole of what the client's own record surface is for.
+    /// </summary>
+    [Fact]
+    public async Task AddOwnMailAccountAsync_AMailboxNamingMaterialProvisionedForThem_IsAnOrdinaryWrite()
+    {
+        // Arrange
+        var harness = new RecordHarness(
+            MailFathomPermission.MailAccountsWrite,
+            actingFor: SyntheticMailOwner.Deployment);
+        harness.Holding(SyntheticMailOwner.Deployment, EmptyRecord, version: 1);
+
+        // Act
+        var outcome = await harness.Records.AddOwnMailAccountAsync(
+            AccountProvisionedFor(SyntheticMailOwner.Deployment, "archive"),
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsCommitted);
+    }
+
+    /// <summary>
+    /// The bound is the name of the material rather than where it is kept, because that is the part a path written in
+    /// front of it cannot rewrite — so an owner naming another owner's credential is refused however they spell the
+    /// way to it.
+    /// </summary>
+    [Fact]
+    public async Task AddOwnMailAccountAsync_AMailboxNamingAnotherOwnersCredential_IsRefused()
+    {
+        // Arrange
+        var harness = new RecordHarness(
+            MailFathomPermission.MailAccountsWrite,
+            actingFor: SyntheticMailOwner.Deployment);
+        harness.Holding(SyntheticMailOwner.Deployment, EmptyRecord, version: 1);
+
+        // Act
+        var outcome = await harness.Records.AddOwnMailAccountAsync(
+            AccountProvisionedFor(SyntheticMailOwner.Another, "archive"),
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        await harness.Store.DidNotReceiveWithAnyArgs()
+            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// The rule reads which references a record carries rather than which path each sits at, so an owner withdrawing
+    /// the first of two mailboxes is not refused over the credential that moved up an index behind it. Comparing per
+    /// path would refuse every withdrawal but the last one.
+    /// </summary>
+    [Fact]
+    public async Task RemoveOwnMailAccountAsync_TheFirstOfTwoMailboxes_IsNotRefusedOverTheCredentialThatMovedUp()
+    {
+        // Arrange
+        var harness = new RecordHarness(
+            MailFathomPermission.MailAccountsWrite,
+            actingFor: SyntheticMailOwner.Deployment);
+        harness.Holding(SyntheticMailOwner.Deployment, Declaring("primary", "archive"), version: 1);
+
+        // Act
+        var outcome = await harness.Records.RemoveOwnMailAccountAsync(
+            "primary",
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsCommitted);
+    }
+
+    /// <summary>
+    /// The binder proves a record is a record; whether the credentials in it reach anything is a second question, and
+    /// one only the walk every start runs answers. Without it a write is accepted and the mailbox then fails one
+    /// connection at a time, which is the state the identical declaration in a file cannot reach.
+    /// </summary>
+    [Fact]
+    public async Task AddMailAccountAsync_AMailboxWhoseCredentialsThisDeploymentCannotUse_IsRefusedBeforeItIsCommitted()
+    {
+        // Arrange
+        var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
+        harness.Holding(SyntheticMailOwner.Deployment, Declaring("primary"), version: 1);
+
+        // Act
+        var outcome = await harness.Records.AddMailAccountAsync(
+            SyntheticMailOwner.Deployment,
+            AccountNamingTheSecret("archive", "primary-password"),
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.NotEmpty(outcome.Messages);
+        await harness.Store.DidNotReceiveWithAnyArgs()
+            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
     /// The record moved while the candidate was being judged. Which of that and an erasure it was is settled by reading
     /// rather than assumed, because the statement distinguishes neither.
     /// </summary>
@@ -756,6 +887,30 @@ public sealed class OwnerRecordAdministrationTests
           }
           """;
 
+    /// <summary>A mailbox whose credential this deployment provisioned for one owner, which its own name is what says.</summary>
+    private static string AccountProvisionedFor(MailOwnerId owner, string accountId) =>
+        $$"""
+          {
+            "AccountId": "{{accountId}}",
+            "DisplayName": "{{accountId}}",
+            "Host": "imap.example.test",
+            "UserName": "mailfathom@example.test",
+            "Secrets": { "Password": { "Name": "{{accountId}}-password", "SecretReference": "file:/run/secrets/owner-{{owner.Value:D}}-{{accountId}}" } }
+          }
+          """;
+
+    /// <summary>A mail account naming a secret an operator chose, which is how one record comes to declare a name twice.</summary>
+    private static string AccountNamingTheSecret(string accountId, string secretName) =>
+        $$"""
+          {
+            "AccountId": "{{accountId}}",
+            "DisplayName": "{{accountId}}",
+            "Host": "imap.example.test",
+            "UserName": "mailfathom@example.test",
+            "Secrets": { "Password": { "Name": "{{secretName}}", "SecretReference": "file:/run/secrets/{{accountId}}-password" } }
+          }
+          """;
+
     private static string Declaring(params string[] accountIds) =>
         $$"""{ "MailAccounts": [ {{string.Join(",", accountIds.Select(Account))}} ] }""";
 
@@ -804,6 +959,7 @@ public sealed class OwnerRecordAdministrationTests
                 new OwnerAccountDocumentBinder(
                     new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
                     new FakeTimeProvider(Today)),
+                SecretValidation.OverRegisteredSchemes(),
                 this.servedOwners,
                 new ConfiguredOwnerMailAccounts(settings, this.servedOwners));
         }

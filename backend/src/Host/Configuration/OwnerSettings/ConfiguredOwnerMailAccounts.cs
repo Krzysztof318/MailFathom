@@ -63,6 +63,31 @@ internal sealed class ConfiguredOwnerMailAccounts(IConfiguration configuration, 
         };
     }
 
+    /// <summary>Gets whether a configuration source names this owner, whatever their mail accounts are read from.</summary>
+    /// <param name="owner">The owner asked about.</param>
+    /// <returns><see langword="true" /> when a file declares them, or when they are the sole owner of a deployment declaring none.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
+    /// <remarks>
+    /// A different question from <see cref="SectionFor" />, and the two answer apart for an owner who has adopted while
+    /// a file goes on naming them: their mail accounts are their own, their label is still the declaration's, and their
+    /// row is one a start writes again after it is removed. So this is what an act a start would undo asks — the
+    /// relabel and the erasure — while the section is what an adoption moves.
+    /// </remarks>
+    public bool DeclaredByAConfigurationSource(MailOwnerId owner)
+    {
+        if (!owner.IsSpecified)
+        {
+            throw new ArgumentException("A configured declaration is looked up for a named owner.", nameof(owner));
+        }
+
+        var declared = DeclaredOwners.ReadFrom(configuration);
+
+        return declared.Count > 0
+            ? declared.Any(declaration => DeclaredOwners.TryReadIdentifier(declaration.Id) == owner.Value)
+            : servedOwners.Owners.Any(served =>
+                served.Owner == owner && served.Source == MailOwnerAccountSource.DeploymentSection);
+    }
+
     /// <summary>Reads the mail accounts a configuration source declares for one owner.</summary>
     /// <param name="owner">The owner asked about.</param>
     /// <returns>The declarations, empty when no configuration source reaches this owner.</returns>

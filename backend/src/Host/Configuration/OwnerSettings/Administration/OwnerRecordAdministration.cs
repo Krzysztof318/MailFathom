@@ -10,6 +10,8 @@ using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration.Administration;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Infrastructure.Persistence.Owners;
+using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.Infrastructure.Secrets.References;
 
 namespace MailFathom.Host.Configuration.OwnerSettings.Administration;
 
@@ -34,6 +36,14 @@ namespace MailFathom.Host.Configuration.OwnerSettings.Administration;
 /// setting beside it. Every write but the adoption is refused for that owner, and the adoption is what moves them.
 /// </para>
 /// <para>
+/// The one rule that reads which of the two is acting is the secret-bearing settings. A secret reference is a path into
+/// whatever this deployment can read — a mounted file, a credential, an environment variable — and the server a mail
+/// account names is the owner's own, so a reference an owner wrote would hand them whatever stands behind it. What an
+/// owner may name is therefore bounded to material provisioned for them, which an operator declares by naming it after
+/// them; the references their record already carries survive a change that was never about them, and anything else is
+/// declared by whoever administers the deployment.
+/// </para>
+/// <para>
 /// Nothing here composes a configuration layer over the deployment's. A record is bound from the document alone, so no
 /// value in it shadows a setting the deployment made, and the shadowing question the deployment's own writes answer
 /// does not arise.
@@ -48,11 +58,20 @@ internal sealed class OwnerRecordAdministration(
     IOwnerSettingsDocumentReader documents,
     IOwnerSettingsDocumentWriter store,
     OwnerAccountDocumentBinder binder,
+    SecretConfigurationValidator secrets,
     ServedMailOwners servedOwners,
     ConfiguredOwnerMailAccounts configured)
 {
-    /// <summary>The command a refused save is sent to, which changes one mailbox without rewriting a secret reference.</summary>
-    private const string NarrowerChange = "'mfctl owner account add' and 'mfctl owner account remove'";
+    /// <summary>What a refused save is sent to, which is the act that states a mailbox and its credential afresh.</summary>
+    /// <remarks>
+    /// Not a narrower change, because an owner's record has none: every setting of a mail account sits inside that
+    /// account's own element, so a save that changes one while a secret beside it stands redacted is exactly the case
+    /// the marker rule refuses. What the surface does have is the pair that replaces the whole element, and the
+    /// credential is stated again as part of it — which is what the reader is sent to instead of a command that could
+    /// not make the change.
+    /// </remarks>
+    private const string NarrowerChange =
+        "withdraw that mail account with 'mfctl owner account remove' and declare it again with 'mfctl owner account add', which states its credential afresh.";
 
     /// <summary>Reads one owner's record as an administrator sees it.</summary>
     /// <param name="owner">The owner asked about.</param>
@@ -102,7 +121,12 @@ internal sealed class OwnerRecordAdministration(
         ArgumentNullException.ThrowIfNull(documentJson);
         authorization.RequirePermission(MailFathomPermission.AdminConfigurationWrite);
 
-        return this.SaveAsync(owner, documentJson, expectedVersion, cancellationToken);
+        return this.SaveAsync(
+            owner,
+            documentJson,
+            expectedVersion,
+            OwnerRecordAuthority.Administrator,
+            cancellationToken);
     }
 
     /// <summary>Applies a whole edited record to the signed-in owner.</summary>
@@ -120,7 +144,12 @@ internal sealed class OwnerRecordAdministration(
         ArgumentNullException.ThrowIfNull(documentJson);
         authorization.RequirePermission(MailFathomPermission.MailAccountsWrite);
 
-        return this.SaveAsync(authorization.RequireOwner(), documentJson, expectedVersion, cancellationToken);
+        return this.SaveAsync(
+            authorization.RequireOwner(),
+            documentJson,
+            expectedVersion,
+            OwnerRecordAuthority.Owner,
+            cancellationToken);
     }
 
     /// <summary>Declares one more mail account in an owner's record.</summary>
@@ -142,7 +171,12 @@ internal sealed class OwnerRecordAdministration(
         ArgumentNullException.ThrowIfNull(accountJson);
         authorization.RequirePermission(MailFathomPermission.AdminConfigurationWrite);
 
-        return this.AddAsync(owner, accountJson, expectedVersion, cancellationToken);
+        return this.AddAsync(
+            owner,
+            accountJson,
+            expectedVersion,
+            OwnerRecordAuthority.Administrator,
+            cancellationToken);
     }
 
     /// <summary>Declares one more mail account in the signed-in owner's record.</summary>
@@ -160,7 +194,12 @@ internal sealed class OwnerRecordAdministration(
         ArgumentNullException.ThrowIfNull(accountJson);
         authorization.RequirePermission(MailFathomPermission.MailAccountsWrite);
 
-        return this.AddAsync(authorization.RequireOwner(), accountJson, expectedVersion, cancellationToken);
+        return this.AddAsync(
+            authorization.RequireOwner(),
+            accountJson,
+            expectedVersion,
+            OwnerRecordAuthority.Owner,
+            cancellationToken);
     }
 
     /// <summary>Withdraws one mail account from an owner's record.</summary>
@@ -182,7 +221,12 @@ internal sealed class OwnerRecordAdministration(
         ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
         authorization.RequirePermission(MailFathomPermission.AdminConfigurationWrite);
 
-        return this.RemoveAsync(owner, accountId, expectedVersion, cancellationToken);
+        return this.RemoveAsync(
+            owner,
+            accountId,
+            expectedVersion,
+            OwnerRecordAuthority.Administrator,
+            cancellationToken);
     }
 
     /// <summary>Withdraws one mail account from the signed-in owner's record.</summary>
@@ -200,7 +244,12 @@ internal sealed class OwnerRecordAdministration(
         ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
         authorization.RequirePermission(MailFathomPermission.MailAccountsWrite);
 
-        return this.RemoveAsync(authorization.RequireOwner(), accountId, expectedVersion, cancellationToken);
+        return this.RemoveAsync(
+            authorization.RequireOwner(),
+            accountId,
+            expectedVersion,
+            OwnerRecordAuthority.Owner,
+            cancellationToken);
     }
 
     /// <summary>Reports what adopting one owner would move out of this deployment's files into their record.</summary>
@@ -281,6 +330,7 @@ internal sealed class OwnerRecordAdministration(
         MailOwnerId owner,
         string documentJson,
         long expectedVersion,
+        OwnerRecordAuthority authority,
         CancellationToken cancellationToken)
     {
         if (await this.OpenAsync(owner, expectedVersion, permitConfigurationServed: false, cancellationToken)
@@ -338,6 +388,7 @@ internal sealed class OwnerRecordAdministration(
             owner,
             inForce,
             SettingsDocumentPatch.Apply(inForce.Json, edits),
+            authority,
             cancellationToken);
     }
 
@@ -347,6 +398,7 @@ internal sealed class OwnerRecordAdministration(
         MailOwnerId owner,
         string accountJson,
         long expectedVersion,
+        OwnerRecordAuthority authority,
         CancellationToken cancellationToken)
     {
         if (await this.OpenAsync(owner, expectedVersion, permitConfigurationServed: false, cancellationToken)
@@ -374,7 +426,7 @@ internal sealed class OwnerRecordAdministration(
                 [$"The mail account is not a JSON object of that account's settings, so nothing was written: {refused.Message}"]);
         }
 
-        return await this.JudgeAndCommitAsync(owner, opened.Record, candidate, cancellationToken);
+        return await this.JudgeAndCommitAsync(owner, opened.Record, candidate, authority, cancellationToken);
     }
 
     /// <summary>Withdraws one mail account, refusing an identifier the record does not declare.</summary>
@@ -382,6 +434,7 @@ internal sealed class OwnerRecordAdministration(
         MailOwnerId owner,
         string accountId,
         long expectedVersion,
+        OwnerRecordAuthority authority,
         CancellationToken cancellationToken)
     {
         if (await this.OpenAsync(owner, expectedVersion, permitConfigurationServed: false, cancellationToken)
@@ -417,7 +470,7 @@ internal sealed class OwnerRecordAdministration(
                 MailFathomErrorCode.ConfigurationCandidateInvalid,
                 opened.Record.Version,
                 [$"This owner declares no mail account '{accountId}'. Read their record to see the identifiers it holds."])
-            : await this.JudgeAndCommitAsync(owner, opened.Record, candidate, cancellationToken);
+            : await this.JudgeAndCommitAsync(owner, opened.Record, candidate, authority, cancellationToken);
     }
 
     /// <summary>Materializes what a configuration source supplies for an owner into their record.</summary>
@@ -448,6 +501,7 @@ internal sealed class OwnerRecordAdministration(
             owner,
             opened.Record,
             SettingsDocumentPatch.Apply(opened.Record.Json, configured.AdoptionEditsFor(owner)),
+            OwnerRecordAuthority.Administrator,
             cancellationToken);
     }
 
@@ -491,13 +545,16 @@ internal sealed class OwnerRecordAdministration(
     /// <summary>Binds the candidate, judges it against what the deployment already serves, and commits it.</summary>
     /// <remarks>
     /// The binder is the same one a start reads a record with, so what a write accepts is what the next start would
-    /// read. What it cannot answer is the one rule that is about the deployment rather than about the record, which is
-    /// asked beside it.
+    /// read. What it cannot answer is asked beside it: the rule that is about the deployment rather than about the
+    /// record, the rule that is about who is writing, and whether the secrets the record names can actually be
+    /// retrieved — which the binder cannot ask because it resolves nothing, and which a start refuses for the whole
+    /// deployment rather than for the owner whose record carries the reference.
     /// </remarks>
     private async Task<OwnerRecordWriteOutcome?> JudgeAndCommitAsync(
         MailOwnerId owner,
         OwnerSettingsDocument inForce,
         string candidateJson,
+        OwnerRecordAuthority authority,
         CancellationToken cancellationToken)
     {
         var binding = binder.Bind(candidateJson);
@@ -518,6 +575,27 @@ internal sealed class OwnerRecordAdministration(
                 taken);
         }
 
+        if (authority == OwnerRecordAuthority.Owner
+            && FindSecretsTheOwnerMayNotName(owner, inForce.Json, candidateJson) is { Count: > 0 } introduced)
+        {
+            return OwnerRecordWriteOutcome.Refused(
+                MailFathomErrorCode.ConfigurationCandidateInvalid,
+                inForce.Version,
+                introduced);
+        }
+
+        // Resolved here rather than left to the next start, which refuses the whole deployment over it: a reference
+        // that is well formed and names nothing retrievable binds cleanly, commits, and then stops the host for every
+        // owner it serves until somebody corrects the row by hand.
+        if (await secrets.FindOwnerMailAccountErrorsAsync(RecordPath, bound.MailAccounts, cancellationToken)
+            is { Count: > 0 } unusable)
+        {
+            return OwnerRecordWriteOutcome.Refused(
+                MailFathomErrorCode.ConfigurationCandidateInvalid,
+                inForce.Version,
+                unusable);
+        }
+
         if (await store.CommitAsync(owner, candidateJson, inForce.Version, cancellationToken) is { } committed)
         {
             return OwnerRecordWriteOutcome.Committed(committed);
@@ -535,14 +613,88 @@ internal sealed class OwnerRecordAdministration(
             : null;
     }
 
+    /// <summary>Names every secret-bearing value the candidate carries that this owner may not point their record at.</summary>
+    /// <remarks>
+    /// <para>
+    /// A reference is a path into whatever this deployment can read, and the server a mail account names is the
+    /// owner's own — so a reference an owner wrote would present whatever stands behind it to a machine they control.
+    /// Two things make one admissible, and nothing else does. A reference the record already carries is admissible
+    /// whoever put it there, because a change that was never about the credential must not be refused over it. And a
+    /// reference whose material was provisioned for this owner is admissible, which is read from the name the operator
+    /// gave it: the last segment of the target begins with this owner's identifier. Anything else — the database
+    /// password, a private key, another owner's mailbox credential — is named by something that does not, so an owner
+    /// asking for it is refused rather than served.
+    /// </para>
+    /// <para>
+    /// The last segment is what carries the bound, rather than the whole target, because that is the part a traversal
+    /// cannot rewrite: <c>file:/run/secrets/owner-&lt;id&gt;-imap</c> and any <c>../</c> written in front of it still
+    /// name a file the operator called <c>owner-&lt;id&gt;-imap</c>. Nothing here reads the material or the file
+    /// system; what the reference reaches is proven a few lines below, by the same walk a start runs.
+    /// </para>
+    /// <para>
+    /// What the record already holds is compared as values rather than per path, because a withdrawn mail account
+    /// moves every position after it: the reference that stood at <c>MailAccounts:2</c> is at <c>MailAccounts:1</c>
+    /// afterwards, and a per-path reading would report the shift as a reference somebody wrote.
+    /// </para>
+    /// </remarks>
+    private static IReadOnlyList<string> FindSecretsTheOwnerMayNotName(
+        MailOwnerId owner,
+        string standingJson,
+        string candidateJson)
+    {
+        var held = SecretValuesOf(RedactedDocumentSave.Flatten(standingJson));
+
+        return
+        [
+            .. RedactedDocumentSave.Flatten(candidateJson)
+                .Where(setting => NamesASecret(setting.Key)
+                    && !held.Contains(setting.Value)
+                    && !NamesMaterialProvisionedFor(owner, setting.Value))
+                .Select(setting => setting.Key)
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .Select(path =>
+                    $"{path} names a secret that was not provisioned for you: a reference is a path into what this deployment can read, and the mail server it would be presented to is yours. Name material this deployment holds for you — its own name begins with '{CredentialPrefixFor(owner)}' — or ask whoever administers this deployment to declare the mailbox with 'mfctl owner account add'."),
+        ];
+    }
+
+    /// <summary>Reports whether a reference names material an operator provisioned for this owner and nobody else.</summary>
+    private static bool NamesMaterialProvisionedFor(MailOwnerId owner, string configuredValue) =>
+        SecretReference.TryParse(configuredValue, out var reference, out _)
+        && LastSegmentOf(reference.Target)
+            .StartsWith(CredentialPrefixFor(owner), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Names what every credential provisioned for one owner is called, whichever scheme delivers it.</summary>
+    private static string CredentialPrefixFor(MailOwnerId owner) => $"owner-{owner.Value:D}-";
+
+    /// <summary>Reads the part of a reference's target that names the material rather than where it is kept.</summary>
+    private static string LastSegmentOf(string target) => target[(target.LastIndexOfAny(['/', '\\']) + 1)..];
+
+    /// <summary>Reads the values every secret-bearing setting of a flattened record carries.</summary>
+    private static HashSet<string> SecretValuesOf(Dictionary<string, string> document) =>
+    [
+        .. document.Where(setting => NamesASecret(setting.Key)).Select(setting => setting.Value),
+    ];
+
+    /// <summary>Reports whether a configuration path names a secret, which is decided by its last segment alone.</summary>
+    private static bool NamesASecret(string path) => SecretPropertyNaming.NamesASecret(path.Split(':')[^1]);
+
     /// <summary>Names every mail account of the candidate that another owner this deployment serves already answers to.</summary>
     /// <remarks>
+    /// <para>
     /// The deployment-wide rule <c>DeclaredOwners</c> states for a file, asked again of a record so that the two cannot
     /// disagree: a mail account belongs to its owner, but this release resolves an account's settings by its identifier
     /// alone, so a name two owners share would reach whichever of the two the lookup met first. It is asked of the
     /// roster this process settled rather than of every record the deployment holds, because the roster is what those
     /// lookups actually resolve through — and reading everybody's document per write would be a query about other
-    /// people's records on every change to one.
+    /// people's records on every change to one, which is the shape the reader beside this deliberately does not have.
+    /// </para>
+    /// <para>
+    /// What that leaves is a snapshot: two writes into two record-served owners in one process run are each judged
+    /// against a roster the other had not moved, so both can name one account. This is the early refusal rather than
+    /// the guarantee, and <c>ServedMailOwnersStartupGate</c> holds the guarantee — it composes the roster a start would
+    /// serve and refuses a start in which one name reaches two owners, which is the first moment the two records are
+    /// in one place.
+    /// </para>
     /// </remarks>
     private IReadOnlyList<string> FindNamesHeldByAnotherOwner(
         MailOwnerId owner,
@@ -588,6 +740,10 @@ internal sealed class OwnerRecordAdministration(
     private MailOwnerAccountSource SourceOf(MailOwnerId owner) =>
         servedOwners.Owners.FirstOrDefault(served => served.Owner == owner)?.Source
         ?? MailOwnerAccountSource.OwnerDocument;
+
+    /// <summary>The path a refusal about an owner's own record names, which is the record rather than a file.</summary>
+    /// <remarks>The same word the startup gate uses for an adopted owner, because an operator reading either one is being told there is no configuration key to go and correct.</remarks>
+    private const string RecordPath = "document";
 
     private static void RequireNamed(MailOwnerId owner)
     {

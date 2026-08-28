@@ -5,6 +5,7 @@
 using MailFathom.Application.Access;
 using MailFathom.Application.Observability;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Failures;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Http;
@@ -228,6 +229,33 @@ public sealed class RouteAuthorizationTests
         Assert.Equal(
             MailFathomPermission.AdminErase.Name,
             Assert.Contains(RouteAuthorization.PermissionExtension, refusal.ProblemDetails.Extensions));
+    }
+
+    /// <summary>
+    /// A deployment serving several owners is a state a start now admits, and an administrative act reached by a
+    /// credential naming nobody has no single owner to be composed against. What the caller reads is the failure's own
+    /// code and sentence rather than an unclassified fault, because no grant would have made the act answerable and
+    /// the remedy is a credential that names its owner.
+    /// </summary>
+    [Fact]
+    public async Task RefuseUnpermittedAsync_AUseCaseWithNoSoleOwnerToActFor_AnswersWithTheFailuresOwnCode()
+    {
+        // Arrange
+        var authorization = AccessAuthorizations.ForCallerGranted(MailFathomPermission.AdminRead);
+        var context = ContextFor(RoutePermission.Requiring(MailFathomPermission.AdminRead), authorization);
+
+        // Act
+        var answer = await RouteAuthorization.RefuseUnpermittedAsync(
+            context,
+            _ => throw DeploymentMailOwnerUnresolvedException.NoSoleOwnerToActFor(),
+            Surface);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(answer);
+        Assert.Equal(StatusCodes.Status409Conflict, refusal.StatusCode);
+        Assert.Equal(
+            MailFathomErrorCode.DeploymentMailOwnerUnresolved.Value,
+            Assert.Contains(RouteAuthorization.ErrorCodeExtension, refusal.ProblemDetails.Extensions));
     }
 
     /// <summary>

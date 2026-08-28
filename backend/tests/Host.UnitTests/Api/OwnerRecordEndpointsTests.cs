@@ -166,12 +166,13 @@ public sealed class OwnerRecordEndpointsTests
     }
 
     /// <summary>
-    /// An owner this deployment does not hold is a refusal here rather than the <c>404</c> a record read answers with:
-    /// this route names the owner in its own path, so a caller reaching it has read the roster, and the sentence naming
-    /// the roster is what an operator acts on.
+    /// An owner this deployment does not hold is the same answer here as at every other route that names one in its
+    /// own path: the record is not there. Answering a refusal instead would make this the one owner-scoped route where
+    /// an absent owner reads as a request that was wrong, and would leave a caller granted the write but not the read
+    /// able to tell an owner who exists from one who does not.
     /// </summary>
     [Fact]
-    public async Task RelabelAsync_AnOwnerThisDeploymentDoesNotHold_IsRefusedNamingTheRoster()
+    public async Task RelabelAsync_AnOwnerThisDeploymentDoesNotHold_AnswersThatThereIsNoSuchRecord()
     {
         // Arrange
         var deployment = new OwnerRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
@@ -184,7 +185,7 @@ public sealed class OwnerRecordEndpointsTests
             TestContext.Current.CancellationToken);
 
         // Assert
-        AssertRefusal(result.Result, StatusCodes.Status400BadRequest);
+        Assert.IsType<NotFound<ProblemDetails>>(result.Result);
         await deployment.Provisioning.DidNotReceiveWithAnyArgs()
             .RelabelAsync(default, default!, CancellationToken.None);
     }

@@ -50,6 +50,13 @@ internal static class RouteAuthorization
     /// </remarks>
     internal const string PermissionExtension = "permission";
 
+    /// <summary>The member of the problem document that carries the failure's own code, beside the sentence.</summary>
+    /// <remarks>
+    /// Written for the same reason the permission above is: a caller matches a code it can act on, and reading the
+    /// failure back out of a sentence written for a person would make the wording a contract.
+    /// </remarks>
+    internal const string ErrorCodeExtension = "errorCode";
+
     /// <summary>The one name a refusal on an endpoint carrying no route pattern is recorded under.</summary>
     internal const string UnroutedOperationName = "(unrouted)";
 
@@ -147,6 +154,10 @@ internal static class RouteAuthorization
 
             return Refused(refusal.RequiredPermission);
         }
+        catch (DeploymentMailOwnerUnresolvedException refusal)
+        {
+            return Unattributable(refusal);
+        }
     }
 
     /// <summary>Records the refusal beside the answer the caller receives, which is what makes a rate of them readable.</summary>
@@ -198,6 +209,31 @@ internal static class RouteAuthorization
         extensions: required.IsSpecified
             ? new Dictionary<string, object?>(StringComparer.Ordinal) { [PermissionExtension] = required.Name }
             : null);
+
+    /// <summary>Writes the answer an act reached by a credential naming no owner receives where the deployment serves several.</summary>
+    /// <remarks>
+    /// <para>
+    /// Answered here rather than route by route for the reason the permission is: which acts resolve the owner a
+    /// caller acts for is a property of the use cases behind the group rather than of any one mapping, so a route
+    /// added later that resolves one cannot forget to answer this. It is the second failure this filter turns into an
+    /// answer, and both are the same shape of thing — a use case refusing a request the filter admitted, over who the
+    /// caller is rather than over what the request said.
+    /// </para>
+    /// <para>
+    /// The status is a conflict rather than a refusal, because no grant would have helped and nothing about the
+    /// request is wrong: the deployment holds a roster this act has no single answer over. The message is the
+    /// failure's own, which is written to be read by an operator, and the code travels beside it so a caller matches
+    /// the failure rather than parsing the sentence.
+    /// </para>
+    /// </remarks>
+    private static ProblemHttpResult Unattributable(DeploymentMailOwnerUnresolvedException refusal) =>
+        TypedResults.Problem(
+            refusal.Message,
+            statusCode: StatusCodes.Status409Conflict,
+            extensions: new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                [ErrorCodeExtension] = refusal.ErrorCode.Value,
+            });
 
     /// <summary>Writes the answer a route that published no single decision this surface can carry is refused with.</summary>
     /// <remarks>

@@ -4430,6 +4430,9 @@
       },
       "OwnerRosterEntryResponse": {
         "properties": {
+          "declaredInConfiguration": {
+            "type": "boolean"
+          },
           "displayName": {
             "type": "string"
           },
@@ -4448,7 +4451,8 @@
           "id",
           "displayName",
           "recordIsTheirOwn",
-          "served"
+          "served",
+          "declaredInConfiguration"
         ],
         "type": "object"
       },
@@ -6705,6 +6709,16 @@
         "responses": {
           "204": {
             "description": "No Content"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
           }
         },
         "security": [

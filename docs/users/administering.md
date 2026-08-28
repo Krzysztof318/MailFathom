@@ -678,6 +678,18 @@ synchronizing one mailbox and leaves everything already stored for it exactly wh
 the person and every message, folder, attachment, and derived index the deployment holds for them; it shows what it is
 about to do and asks, and nothing puts it back.
 
+It refuses one person: an owner your configuration declares. A start writes every declared owner it no longer holds back
+into the roster, so the erasure would run, the mail would go, and the same person would be recreated at the next restart
+with their mailboxes downloaded again. Remove their entry from the files first — and the refusal names it — then erase
+them once nothing declares them.
+
+**A mailbox somebody declares from the client names a credential you provisioned for them.** A record carries a
+reference rather than a password, and a reference is a path into what the deployment can read, so a person declaring
+their own mailbox may name material provisioned for them and nothing else: its name begins with `owner-<their
+identifier>-`. Provision one that way — a file or a systemd credential called `owner-3f1d…-work-password` — and they
+declare the mailbox themselves; provision it under any other name and `mfctl owner account add` is what declares it, on
+this side. [The client endpoint](../operations/client-endpoint.md#the-record-routes) states the rule in full.
+
 A person served this way maintains their own mailboxes from [the client](../operations/client-endpoint.md) without
 reaching this command at all — and sees only their own. Who else a deployment serves is administrative, and no surface
 a person signs in to publishes it.

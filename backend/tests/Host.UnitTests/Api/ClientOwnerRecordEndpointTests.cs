@@ -131,7 +131,11 @@ public sealed class ClientOwnerRecordEndpointTests
                 TestContext.Current.CancellationToken));
     }
 
-    /// <summary>An owner declares one more mailbox of their own, and the commit is composed over the version they read.</summary>
+    /// <summary>
+    /// An owner declares one more mailbox of their own, and the commit is composed over the version they read. The
+    /// credential it names is material provisioned for this owner — which is what an owner-written record may name,
+    /// and what the operator declares by naming the material after the person it belongs to.
+    /// </summary>
     [Fact]
     public async Task AddMailAccountAsync_ADeclarationTheRecordAccepts_CommitsItToTheSignedInOwnersRecord()
     {
@@ -142,7 +146,7 @@ public sealed class ClientOwnerRecordEndpointTests
         // Act
         var result = await ClientOwnerRecordEndpoint.AddMailAccountAsync(
             deployment.Records,
-            new OwnerMailAccountRequest(4, Account("archive")),
+            new OwnerMailAccountRequest(4, AccountProvisionedFor(SyntheticMailOwner.Deployment, "archive")),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -260,6 +264,18 @@ public sealed class ClientOwnerRecordEndpointTests
 
     private static OwnerRecordDeployment SignedInAs(MailOwnerId owner, MailFathomPermission granted) =>
         new([granted], owner);
+
+    /// <summary>A mailbox whose credential this deployment provisioned for one owner, which its name is what says.</summary>
+    private static string AccountProvisionedFor(MailOwnerId owner, string accountId) =>
+        $$"""
+          {
+            "AccountId": "{{accountId}}",
+            "DisplayName": "{{accountId}}",
+            "Host": "imap.example.test",
+            "UserName": "mailfathom@example.test",
+            "Secrets": { "Password": { "Name": "{{accountId}}-password", "SecretReference": "file:/run/secrets/owner-{{owner.Value:D}}-{{accountId}}" } }
+          }
+          """;
 
     private static string Account(string accountId) =>
         $$"""

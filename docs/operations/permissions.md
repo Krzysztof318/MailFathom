@@ -168,7 +168,27 @@ The four configuration writes read for a reason of their own: what they read car
 over, and a version fetched apart from the values it describes is the lost update the deployment's version guard exists
 to refuse. `mfctl config get` and `mfctl config show` make one request and need `mailfathom.admin.read` alone.
 
-**A command acting for an owner makes one more request when the invocation names none.** Every `mfctl owner` and `mfctl credential` command takes `--owner` and does not need it on a deployment holding one person, which it settles by reading the roster — so the same invocation needs `mailfathom.admin.read` beside the permission the act itself is published under, and needs it only in that case. Passing `--owner` removes the read rather than merely skipping a lookup: a named owner is sent as written, and the deployment refuses one it holds no record for. That is what lets a credential granted `mailfathom.admin.configuration.write` alone declare a mailbox, or one granted `mailfathom.admin.erase` alone erase an owner, without also being able to read who else this deployment serves.
+**A command acting for an owner makes one more request when the invocation names none.** Every `mfctl owner` command
+but `list` and `add` takes `--owner`, and does not need it on a deployment holding one person: without it the command
+reads the roster and acts for the sole owner it finds, which is one `mailfathom.admin.read` request beside the
+permission the act itself is published under. Passing `--owner` skips that lookup and nothing else — the named owner is
+sent as written, and the deployment refuses one it holds no record for.
+
+Skipping the lookup is not the same as making the command need one permission. Six of them read something else
+unconditionally, whether or not `--owner` was passed, so each needs `mailfathom.admin.read` beside its own name in every
+invocation:
+
+| Command | Reads, before the act |
+| --- | --- |
+| `mfctl owner show` | the record it prints |
+| `mfctl owner account add`, `mfctl owner account remove` | the record the change is composed over, and the version it is composed at |
+| `mfctl owner adopt` | what an adoption would move, which is what it asks you to confirm |
+| `mfctl owner remove` | the roster, so the confirmation names the person being erased |
+| `mfctl owner rename` | the roster, so a label a declaration will rewrite at the next start is reported as one that lasts until then |
+
+`mfctl credential delete` reads the credential listing too, to name what it is about to delete, and is the one command
+that goes on without it: a caller refused that read is told which credential it holds no name for and deletes it
+anyway.
 
 **`GET /api/admin/session` sits outside the model and needs no permission.** It reports the credential the caller
 already presented, the version this deployment already publishes, and the permissions that credential holds, all of

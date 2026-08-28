@@ -144,7 +144,7 @@ internal static class FakeOwnerRecordDeployment
 
     private static string Roster(Guid owner, bool readFromConfiguration) => string.Create(
         CultureInfo.InvariantCulture,
-        $$"""{"id":"{{owner:D}}","displayName":"owner-{{owner:D}}","recordIsTheirOwn":{{Flag(!readFromConfiguration)}},"served":true}""");
+        $$"""{"id":"{{owner:D}}","displayName":"owner-{{owner:D}}","recordIsTheirOwn":{{Flag(!readFromConfiguration)}},"declaredInConfiguration":{{Flag(readFromConfiguration)}},"served":true}""");
 
     private static string Record(IReadOnlyList<Guid> owners, bool readFromConfiguration) => string.Create(
         CultureInfo.InvariantCulture,

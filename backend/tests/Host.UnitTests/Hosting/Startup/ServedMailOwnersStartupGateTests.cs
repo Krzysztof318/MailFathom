@@ -8,12 +8,8 @@ using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.OwnerSettings;
-using MailFathom.Host.Configuration.Persistence;
 using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.UnitTests.TestDoubles;
-using MailFathom.Infrastructure;
-using MailFathom.Infrastructure.Certificates;
-using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Persistence.Owners;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Configuration;
@@ -663,6 +659,56 @@ public sealed class ServedMailOwnersStartupGateTests
     }
 
     /// <summary>
+    /// The deployment-wide naming rule a file is already held to, asked of the roster a start would serve — which is
+    /// where a collision two owners wrote into their own records while a process ran first becomes visible. A write is
+    /// judged against the roster this process settled, so two such writes in one run are each judged against a roster
+    /// the other had not moved; this start is the first moment both records are in one place, and an account name
+    /// reaching two owners resolves to whichever of them the lookup met first.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_TwoOwnersWhoseOwnRecordsNameOneMailAccount_FailsStartupNamingTheAccount()
+    {
+        // Arrange
+        var documents = Substitute.For<IOwnerSettingsDocumentReader>();
+
+        DocumentOf(documents, SyntheticMailOwner.Deployment, "work", "alex@example.test");
+        DocumentOf(documents, SyntheticMailOwner.Another, "work", "sam@example.test");
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<DeploymentMailOwnerUnresolvedException>(() =>
+            CreateGate(
+                    [Adopted(SyntheticMailOwner.Deployment, "alex"), Adopted(SyntheticMailOwner.Another, "sam")],
+                    servedOwners: new ServedMailOwners(),
+                    documents: documents)
+                .StartAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Contains("work", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>The same two owners naming their mailboxes apart is the ordinary case, and it starts.</summary>
+    [Fact]
+    public async Task StartAsync_TwoOwnersWhoseOwnRecordsNameTheirMailAccountsApart_ServesBothOfThem()
+    {
+        // Arrange
+        var roster = new ServedMailOwners();
+        var documents = Substitute.For<IOwnerSettingsDocumentReader>();
+
+        DocumentOf(documents, SyntheticMailOwner.Deployment, "alex-work", "alex@example.test");
+        DocumentOf(documents, SyntheticMailOwner.Another, "sam-work", "sam@example.test");
+
+        // Act
+        await CreateGate(
+                [Adopted(SyntheticMailOwner.Deployment, "alex"), Adopted(SyntheticMailOwner.Another, "sam")],
+                servedOwners: roster,
+                documents: documents)
+            .StartAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(2, roster.Owners.Count);
+    }
+
+    /// <summary>
     /// Only an owner still reading the deployment's own section contends for it, so a deployment whose every owner has
     /// adopted has no sole owner to serve — and minting one would record a person nobody asked for on every start.
     /// </summary>
@@ -778,6 +824,32 @@ public sealed class ServedMailOwnersStartupGateTests
         return documents;
     }
 
+    /// <summary>States one owner's own record, holding a single mail account named as the test asks.</summary>
+    private static void DocumentOf(
+        IOwnerSettingsDocumentReader documents,
+        MailOwnerId owner,
+        string accountId,
+        string userName) =>
+        documents.ReadAsync(owner, Arg.Any<CancellationToken>()).Returns(
+            Task.FromResult<OwnerSettingsDocument?>(new OwnerSettingsDocument(
+                owner,
+                $"owner-{owner.Value:D}",
+                $$"""
+                  {
+                    "MailAccounts": [
+                      {
+                        "AccountId": "{{accountId}}",
+                        "DisplayName": "{{accountId}}",
+                        "Host": "imap.example.test",
+                        "UserName": "{{userName}}",
+                        "Secrets": { "Password": { "Name": "imap-password", "SecretReference": "systemd-credential:imap-password" } }
+                      }
+                    ]
+                  }
+                  """,
+                Version: 2,
+                WrittenAtRuntime: true)));
+
     private static IConfiguration Configuration(Dictionary<string, string?> keys) =>
         new ConfigurationBuilder().AddInMemoryCollection(keys).Build();
 
@@ -887,18 +959,6 @@ public sealed class ServedMailOwnersStartupGateTests
     }
 
     /// <summary>Resolves a reference under any scheme a deployment registers, which is what an owner's secrets are proven through here.</summary>
-    private static SecretConfigurationValidator SecretValidator()
-    {
-        var resolver = new RegisteredSchemeSecretReferenceResolver();
-
-        return new SecretConfigurationValidator(
-            resolver,
-            new TrustAnchorLoader(resolver),
-            new DatabaseConnectionSettingsMapper(new ConfigurationBuilder().Build()),
-            new StubDatabaseConnectionSettingsValidator(),
-            PostgresTextSearchConfiguration.Default,
-            new DatabaseCommandTimeout(TimeSpan.FromSeconds(HostApplicationBuilderExtensions.DefaultDatabaseCommandTimeoutSeconds)),
-            new FakeTimeProvider(),
-            new RecordingLogger<SecretConfigurationValidator>());
-    }
+    /// <remarks>Composed where the record administration's tests compose it too, because the same validator judges an owner's mail accounts at a start and at a write.</remarks>
+    private static SecretConfigurationValidator SecretValidator() => SecretValidation.OverRegisteredSchemes();
 }

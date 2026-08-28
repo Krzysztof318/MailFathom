@@ -207,10 +207,10 @@ what it was never granted is what the record exists to make visible.
 | `POST /api/admin/configuration/document` | `mailfathom.admin.configuration.write` | Takes that document back edited and commits it as one change against the version it was opened over. |
 | `GET /api/admin/configuration/adoption` | `mailfathom.admin.read` | Reports what adopting a path would copy out of the deployment's files, naming the file behind each setting, and writes nothing. |
 | `POST /api/admin/configuration/adoption` | `mailfathom.admin.configuration.write` | Copies those values into the persisted document. **This is the one route that moves a decision out of a deployment's files and into its database.** |
-| `GET /api/admin/owners` | `mailfathom.admin.read` | Reads [the owners this deployment holds records for](#owners-and-their-records), each with the label it tells them apart by, whether their mail accounts come from their own record or still from a configuration source, and whether the running process serves them. It is what an owner or credential command reads before it acts, so that a deployment serving one person needs no `--owner`. |
+| `GET /api/admin/owners` | `mailfathom.admin.read` | Reads [the owners this deployment holds records for](#owners-and-their-records), each with the label it tells them apart by, whether their mail accounts come from their own record or still from a configuration source, whether a configuration source declares them at all, and whether the running process serves them. It is what an owner or credential command reads before it acts, so that a deployment serving one person needs no `--owner`. |
 | `POST /api/admin/owners` | `mailfathom.admin.configuration.write` | Records an owner this deployment did not hold, from the display name the body carries, and answers with the identifier they were minted under. It refuses, naming what to change, a second owner while an owner-facing endpoint admits a caller who names nobody, a label another owner already carries, and a roster already at its bound. |
-| `PUT /api/admin/owners/{ownerId}/display-name` | `mailfathom.admin.configuration.write` | Replaces the label the owner is told apart by. It answers with no body — the label the request carried is the whole of what changed — and refuses, naming what to change, a label another owner carries and an owner this deployment does not hold. |
-| `DELETE /api/admin/owners/{ownerId}` | `mailfathom.admin.erase` | Erases the owner and every message, folder, attachment, and derived index this deployment holds for them. **This is the one route here that destroys mail, and it cannot be undone.** An owner this deployment does not hold is reported as nothing erased rather than as a refusal. |
+| `PUT /api/admin/owners/{ownerId}/display-name` | `mailfathom.admin.configuration.write` | Replaces the label the owner is told apart by. It answers with no body — the label the request carried is the whole of what changed — refuses a label another owner carries, naming what to change, and answers `404` for an owner this deployment holds no record for, as every other owner-scoped route does. |
+| `DELETE /api/admin/owners/{ownerId}` | `mailfathom.admin.erase` | Erases the owner and every message, folder, attachment, and derived index this deployment holds for them. **This is the one route here that destroys mail, and it cannot be undone.** An owner this deployment does not hold is reported as nothing erased rather than as a refusal. An owner a configuration source declares is refused instead, naming the declaration to remove first: the next start would write them back and download their mailboxes again. |
 | `GET /api/admin/owners/{ownerId}/record` | `mailfathom.admin.read` | Hands over one owner's record as the redacted JSON an editing session opens, with the version it was read at and where this deployment currently reads that owner's mail accounts from. |
 | `POST /api/admin/owners/{ownerId}/record` | `mailfathom.admin.configuration.write` | Takes that record back edited and commits it as one change against the version it was opened over. |
 | `POST /api/admin/owners/{ownerId}/record/mail-accounts` | `mailfathom.admin.configuration.write` | Declares one more mailbox in the record, from the mail-account block the body carries. |
@@ -1153,8 +1153,26 @@ apart by an identifier alone.
 **The label may change and the identifier may not.** `mfctl owner rename` replaces one, and nothing is keyed by it — no mail
 account, stored message, or job hangs on a label — so the rename moves nothing and asks nothing before it commits.
 An owner a configuration file declares is relabelled by that file at every start, so a rename written here for one of
-them lasts until the next restart: change the declaration instead. The identifier is the opposite case, and
+them lasts until the next restart, and the command says so rather than reporting a change the deployment undoes:
+
+```console
+$ mfctl owner rename --display-name Alexandra
+Owner 3f1d... is now labelled Alexandra.
+Notice: A configuration source declares this owner, and a start reads their label from it, so this one lasts until the
+deployment is restarted. Change the label in the declaration to keep it.
+```
+
+That is why the command reads the roster before it writes, whether or not `--owner` was passed — the roster is where a
+declaration is reported, and [permissions](permissions.md#which-administrative-route-each-name-covers) lists it among
+the commands that therefore need `mailfathom.admin.read` beside their own name. The identifier is the opposite case, and
 [configuration sources](configuration-sources.md#the-identifier-is-yours-to-generate) holds what changing one would cost.
+
+**An owner a configuration source declares cannot be erased.** `mfctl owner remove` refuses one, naming the declaration
+to remove first, because the next start reconciles the file against the roster and writes back every declared owner it
+no longer holds — under the identifier the declaration carries and with the mail accounts it supplies. The erasure would
+run, the mail would go, and the person would be recreated with their mailboxes downloaded again, which is a deletion
+request answered worse than one refused. Remove them from the file — or from `MailSynchronization:Accounts`, where a
+deployment that declares no owners supplies its sole owner's mailboxes — and ask again.
 
 **A second owner is refused while an owner-facing endpoint authenticates nobody.** A deployment serving one person may
 leave the MCP endpoint open, or authenticate it with a key that names no owner, because there is only one answer to
@@ -1163,6 +1181,12 @@ the endpoints to narrow — give each of them a credential that names an owner, 
 the deployment reach a state in which one caller's request would be answered out of another person's mailbox. The
 administrative endpoint is deliberately not part of that check: it is the surface an operator is holding while they
 correct the others, and its credentials never name an owner in the first place.
+
+That leaves a few administrative routes with nobody to act for on such a deployment. The contact book and the mail
+account catalogue are read for one person, and a credential that names no owner leaves the deployment to supply one —
+which it can do only where it holds a single owner. Those routes answer `409` on a deployment serving several, with a
+sentence naming the credential that would have been answered, rather than reporting the deployment as broken. Every
+route that names the owner in its own path is unaffected, which is every route in the table above.
 
 **Adoption is what moves an owner off this deployment's files, and nothing else does.** Until then that owner's mail
 accounts are read from a configuration source on every start, and a write to their record is refused rather than

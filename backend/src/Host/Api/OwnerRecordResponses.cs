@@ -27,12 +27,19 @@ internal sealed record OwnerRosterResponse(IReadOnlyList<OwnerRosterEntryRespons
 /// <param name="DisplayName">The label an administrator tells them apart by, which may change and is never the identity.</param>
 /// <param name="RecordIsTheirOwn">Whether this owner's mail accounts come from their own record rather than from a configuration source.</param>
 /// <param name="Served">Whether the running process is serving them, which is <see langword="false" /> for an owner recorded since it started and for one no source declares.</param>
+/// <param name="DeclaredInConfiguration">Whether a configuration source names this owner, so a start puts their label back and writes their row again after an erasure.</param>
 /// <remarks>
-/// The last two are reported apart because they answer different questions and an operator acts on each differently. An
-/// owner whose record is not yet their own is one an adoption still has something to move; an owner the process is not
-/// serving is one whose mail is neither read nor refreshed until this deployment is restarted.
+/// The last three are reported apart because they answer different questions and an operator acts on each differently.
+/// An owner whose record is not yet their own is one an adoption still has something to move; an owner the process is
+/// not serving is one whose mail is neither read nor refreshed until this deployment is restarted; an owner a
+/// configuration source declares is one whose label a start rewrites and whose erasure a start undoes.
 /// </remarks>
-internal sealed record OwnerRosterEntryResponse(Guid Id, string DisplayName, bool RecordIsTheirOwn, bool Served)
+internal sealed record OwnerRosterEntryResponse(
+    Guid Id,
+    string DisplayName,
+    bool RecordIsTheirOwn,
+    bool Served,
+    bool DeclaredInConfiguration)
 {
     /// <summary>Describes one owner.</summary>
     /// <param name="entry">The owner as the roster reported them.</param>
@@ -42,7 +49,12 @@ internal sealed record OwnerRosterEntryResponse(Guid Id, string DisplayName, boo
     {
         ArgumentNullException.ThrowIfNull(entry);
 
-        return new OwnerRosterEntryResponse(entry.Owner.Value, entry.DisplayName, entry.RecordIsTheirOwn, entry.Served);
+        return new OwnerRosterEntryResponse(
+            entry.Owner.Value,
+            entry.DisplayName,
+            entry.RecordIsTheirOwn,
+            entry.Served,
+            entry.DeclaredInConfiguration);
     }
 }
 

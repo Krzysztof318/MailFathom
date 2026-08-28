@@ -83,6 +83,7 @@ internal sealed class OwnerRecordDeployment
 
         var authorization = new AccessAuthorization(principals);
         var settings = new ConfigurationBuilder().Build();
+        var configured = new ConfiguredOwnerMailAccounts(settings, this.servedOwners);
         var admission = new SeveralOwnerAdmission(
             Options.Create(new McpEndpointOptions()),
             Options.Create(new ClientEndpointOptions()));
@@ -95,6 +96,7 @@ internal sealed class OwnerRecordDeployment
             this.Store,
             this.servedOwners,
             admission,
+            configured,
             NullLogger<OwnerRosterAdministration>.Instance);
 
         this.Records = new OwnerRecordAdministration(
@@ -104,8 +106,9 @@ internal sealed class OwnerRecordDeployment
             new OwnerAccountDocumentBinder(
                 new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
                 new FakeTimeProvider(Today)),
+            SecretValidation.OverRegisteredSchemes(),
             this.servedOwners,
-            new ConfiguredOwnerMailAccounts(settings, this.servedOwners));
+            configured);
     }
 
     /// <summary>Gets the roster administration the deployment-wide routes are published over.</summary>

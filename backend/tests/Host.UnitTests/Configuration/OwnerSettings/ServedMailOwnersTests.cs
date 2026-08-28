@@ -2,8 +2,10 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
+using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.OwnerSettings;
 using MailFathom.TestSupport;
@@ -44,9 +46,14 @@ public sealed class ServedMailOwnersTests
         Assert.Throws<InvalidOperationException>(() => servedOwners.Owner);
     }
 
-    /// <summary>Attributing a caller to whichever owner came first is how one person is handed another person's mail.</summary>
+    /// <summary>
+    /// Attributing a caller to whichever owner came first is how one person is handed another person's mail. The
+    /// failure is a classified one rather than the wiring defect above, because a roster of several is a deployment an
+    /// operator composed and a start admitted: what reaches this is one administrative act by a credential naming
+    /// nobody, and it is answered rather than reported as a fault.
+    /// </summary>
     [Fact]
-    public void Owner_WhenSeveralOwnersAreServed_FailsRatherThanPickingOne()
+    public void Owner_WhenSeveralOwnersAreServed_FailsAsAClassifiedRefusalRatherThanPickingOne()
     {
         // Arrange
         var servedOwners = new ServedMailOwners();
@@ -59,7 +66,9 @@ public sealed class ServedMailOwnersTests
         ]);
 
         // Assert
-        Assert.Throws<InvalidOperationException>(() => servedOwners.Owner);
+        var refusal = Assert.Throws<DeploymentMailOwnerUnresolvedException>(() => servedOwners.Owner);
+
+        Assert.Equal(MailFathomErrorCode.DeploymentMailOwnerUnresolved, refusal.ErrorCode);
     }
 
     /// <summary>The empty roster is what an unresolved holder would look like, and neither is a deployment.</summary>
