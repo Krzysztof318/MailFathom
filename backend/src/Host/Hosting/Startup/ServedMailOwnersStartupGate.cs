@@ -53,6 +53,7 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
     private readonly HostStartupGates startupGates;
     private readonly McpEndpointOptions mcpEndpointSettings;
     private readonly ClientEndpointOptions clientEndpointSettings;
+    private readonly AdminEndpointOptions adminEndpointSettings;
     private readonly ILogger<ServedMailOwnersStartupGate> logger;
 
     /// <summary>Initializes a new served-owner startup gate.</summary>
@@ -62,6 +63,7 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
     /// <param name="startupGates">The tracker this gate reports its completion to, which is what the startup probe reads.</param>
     /// <param name="mcpEndpointSettings">The MCP endpoint settings startup was composed from.</param>
     /// <param name="clientEndpointSettings">The client endpoint settings startup was composed from.</param>
+    /// <param name="adminEndpointSettings">The administrative endpoint settings startup was composed from.</param>
     /// <param name="logger">The startup logger.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public ServedMailOwnersStartupGate(
@@ -71,6 +73,7 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
         HostStartupGates startupGates,
         IOptions<McpEndpointOptions> mcpEndpointSettings,
         IOptions<ClientEndpointOptions> clientEndpointSettings,
+        IOptions<AdminEndpointOptions> adminEndpointSettings,
         ILogger<ServedMailOwnersStartupGate> logger)
     {
         ArgumentNullException.ThrowIfNull(scopeFactory);
@@ -79,6 +82,7 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
         ArgumentNullException.ThrowIfNull(startupGates);
         ArgumentNullException.ThrowIfNull(mcpEndpointSettings);
         ArgumentNullException.ThrowIfNull(clientEndpointSettings);
+        ArgumentNullException.ThrowIfNull(adminEndpointSettings);
 
         this.scopeFactory = scopeFactory;
         this.configuration = configuration;
@@ -86,6 +90,7 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
         this.startupGates = startupGates;
         this.mcpEndpointSettings = mcpEndpointSettings.Value;
         this.clientEndpointSettings = clientEndpointSettings.Value;
+        this.adminEndpointSettings = adminEndpointSettings.Value;
         this.logger = logger;
     }
 
@@ -105,6 +110,21 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
         if (held.Count > DeclaredOwners.MaximumDeclaredOwners)
         {
             throw DeploymentMailOwnerUnresolvedException.TooManyOwners(DeclaredOwners.MaximumDeclaredOwners);
+        }
+
+        // The bound is judged again against the roster this start would leave, because provisioning is what grows the
+        // table: a deployment holding owners the file no longer declares keeps every one of them, so a file within the
+        // bound and a table within the bound can still sum past it. Refusing here rather than after the writes is what
+        // keeps this start from producing a roster every later start refuses over rows this one wrote.
+        var newOwners = declared.Count(declaration =>
+            held.All(record => record.Owner != IdentifierOf(declaration)));
+
+        if (held.Count + newOwners > DeclaredOwners.MaximumDeclaredOwners)
+        {
+            throw DeploymentMailOwnerUnresolvedException.RosterWouldExceedTheBound(
+                DeclaredOwners.MaximumDeclaredOwners,
+                held.Count,
+                newOwners);
         }
 
         var served = declared.Count == 0
@@ -346,24 +366,36 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
         }
     }
 
-    /// <summary>Refuses a deployment whose owner-facing surfaces could not say which owner a caller acts for.</summary>
+    /// <summary>Refuses a deployment whose served surfaces could not say which owner an act is for.</summary>
     /// <remarks>
+    /// <para>
     /// An owner-facing surface answers one person about their own mail, and nothing this release admits a caller with
     /// names the owner they act for: authentication-free operation admits them with no credential at all, and a
     /// configured credential authenticates without carrying an owner. Both leave a deployment serving several owners
     /// with no way to compose a caller, so the surface is refused rather than served against whichever owner a read
     /// happened to find.
+    /// </para>
+    /// <para>
+    /// The administrative surface is in that set for a reason of its own. An administrator's acts are the deployment's
+    /// rather than one person's, so they carry no owner and every act of theirs that needs one resolves it through
+    /// <see cref="IDeploymentMailOwnerSource.Owner" /> — the contact book above all. That read has no answer on a
+    /// roster of several, so serving the surface would answer each such route with an unclassified failure rather than
+    /// with somebody's contacts.
+    /// </para>
     /// </remarks>
     private void RefuseSeveralOwnersOnAnOwnerFacingSurface(IReadOnlyList<ServedMailOwner> served)
     {
-        var ownerFacingSurfaces =
-            (this.mcpEndpointSettings.Enabled, this.clientEndpointSettings.Enabled) is (true, _) or (_, true);
+        var surfacesResolvingASoleOwner =
+            this.mcpEndpointSettings.Enabled
+            || this.clientEndpointSettings.Enabled
+            || this.adminEndpointSettings.Enabled;
 
-        if (served.Count > 1 && ownerFacingSurfaces)
+        if (served.Count > 1 && surfacesResolvingASoleOwner)
         {
             var authenticationDisabled =
                 (this.mcpEndpointSettings.Enabled && !this.mcpEndpointSettings.RequiresAuthentication)
-                || (this.clientEndpointSettings.Enabled && !this.clientEndpointSettings.RequiresAuthentication);
+                || (this.clientEndpointSettings.Enabled && !this.clientEndpointSettings.RequiresAuthentication)
+                || (this.adminEndpointSettings.Enabled && !this.adminEndpointSettings.RequiresAuthentication);
 
             throw DeploymentMailOwnerUnresolvedException.SeveralOwnersOnAnOwnerFacingSurface(authenticationDisabled);
         }

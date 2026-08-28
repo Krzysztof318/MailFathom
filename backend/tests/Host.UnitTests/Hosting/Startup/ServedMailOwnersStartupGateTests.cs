@@ -430,6 +430,56 @@ public sealed class ServedMailOwnersStartupGateTests
         Assert.Contains(reasonNamed, refusal.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// An administrator acts for the deployment rather than for a person, so the acts of theirs that need an owner —
+    /// the contact book above all — resolve the sole one, and a roster of several leaves that with no answer.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_SeveralOwnersServedWithTheAdministrativeEndpointAlone_FailsStartupSayingWhy()
+    {
+        // Arrange
+        var administration = new AdminEndpointOptions { Enabled = true };
+
+        administration.Authentication.Add(new());
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<DeploymentMailOwnerUnresolvedException>(() =>
+            CreateGate([], TwoDeclaredOwners(), adminEndpointSettings: administration)
+                .StartAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Contains("AdminEndpoint", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The owners a deployment holds and no file declares are kept, so a file within the bound and a table within it
+    /// can still sum past it. Refusing before the writes is what keeps this start from leaving a roster every later
+    /// start refuses over rows this one wrote.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_ADeclarationThatWouldTakeTheRosterPastItsBound_FailsStartupWritingNothing()
+    {
+        // Arrange
+        var provisioning = ProvisioningThatRecords();
+
+        var held = Enumerable.Range(0, DeclaredOwners.MaximumDeclaredOwners)
+            .Select(index => Held(MailOwnerId.Create(Guid.NewGuid()), $"held-{index}"))
+            .ToArray();
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<DeploymentMailOwnerUnresolvedException>(() =>
+            CreateGate(held, Declaring(DeclaredIdentifier, "alex"), provisioning)
+                .StartAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Contains(
+            $"past the {DeclaredOwners.MaximumDeclaredOwners} owner records",
+            refusal.Message,
+            StringComparison.Ordinal);
+        await provisioning.DidNotReceive()
+            .ProvisionAsync(Arg.Any<MailOwnerId>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
     /// <summary>A deployment that serves no owner-facing surface synchronizes several owners' mail perfectly well.</summary>
     [Fact]
     public async Task StartAsync_SeveralOwnersServedWithNoOwnerFacingSurface_ServesEveryOneOfThem()
@@ -617,7 +667,8 @@ public sealed class ServedMailOwnersStartupGateTests
         HostStartupGates? startupGates = null,
         McpEndpointOptions? mcpEndpointSettings = null,
         IOwnerSettingsDocumentReader? documents = null,
-        ClientEndpointOptions? clientEndpointSettings = null) =>
+        ClientEndpointOptions? clientEndpointSettings = null,
+        AdminEndpointOptions? adminEndpointSettings = null) =>
         CreateGate(
             DirectoryOf(held),
             declared,
@@ -626,7 +677,8 @@ public sealed class ServedMailOwnersStartupGateTests
             startupGates,
             mcpEndpointSettings,
             documents,
-            clientEndpointSettings);
+            clientEndpointSettings,
+            adminEndpointSettings);
 
     private static ServedMailOwnersStartupGate CreateGate(
         IMailOwnerDirectory directory,
@@ -636,7 +688,8 @@ public sealed class ServedMailOwnersStartupGateTests
         HostStartupGates? startupGates = null,
         McpEndpointOptions? mcpEndpointSettings = null,
         IOwnerSettingsDocumentReader? documents = null,
-        ClientEndpointOptions? clientEndpointSettings = null)
+        ClientEndpointOptions? clientEndpointSettings = null,
+        AdminEndpointOptions? adminEndpointSettings = null)
     {
         var services = new ServiceCollection();
 
@@ -655,6 +708,7 @@ public sealed class ServedMailOwnersStartupGateTests
             startupGates ?? new HostStartupGates(HostStartupGate.ServedMailOwners),
             Options.Create(mcpEndpointSettings ?? new McpEndpointOptions()),
             Options.Create(clientEndpointSettings ?? new ClientEndpointOptions()),
+            Options.Create(adminEndpointSettings ?? new AdminEndpointOptions()),
             NullLogger<ServedMailOwnersStartupGate>.Instance);
     }
 

@@ -369,8 +369,9 @@ so an owner-scoped use case refuses it however broad its grant. That is why no p
 one would be the wrong repair: a grant says what may be done, and whose mail it may be done to is decided by what
 admitted the caller. A deployment may declare several owners and serve each of them the mail accounts they own, but
 nothing this release admits a caller with names the owner they act for, so a deployment serving several refuses to come
-up while either owner-facing surface is enabled. Every deployment those two surfaces are served on therefore has one
-owner and every account belongs to them, which is why the two axes have one visible consequence today — the
+up while either owner-facing surface is enabled — and while the administrative surface is, because an administrator's
+own acts carry no owner and the ones that need one resolve the sole owner. Every deployment those three surfaces are
+served on therefore has one owner and every account belongs to them, which is why the two axes have one visible consequence today — the
 administrative surface cannot read a mailbox. [Who a use case is running for](../architecture/authorized-principal.md) records the whole of it.
 
 **Whether a capability exists.** A grant composes with availability rather than replacing it: a tool may be

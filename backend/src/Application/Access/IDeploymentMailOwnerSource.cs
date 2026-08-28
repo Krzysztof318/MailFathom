@@ -6,19 +6,22 @@ using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.Access;
 
-/// <summary>Names the one owner every mail account this deployment was configured with belongs to.</summary>
+/// <summary>Names the sole owner an act that carries none is for, where this deployment serves exactly one.</summary>
 /// <remarks>
 /// <para>
-/// A configured mail account names no owner, so nothing about a configuration file could say which of several owners a
-/// declared account belongs to. While accounts are declared there, a deployment therefore holds exactly one owner
-/// record, and this is that owner. The invariant is established before the first request rather than assumed: a host
-/// that cannot establish it does not finish starting, so a request is never answered against a deployment where the
-/// question has no answer.
+/// The deployment's own <c>MailSynchronization:Accounts</c> section names no owner, so its accounts belong to whichever
+/// sole owner the deployment holds, and this is that owner. A deployment may instead declare its owners, and then it
+/// serves as many as its file declares and there is no sole one to name: reading this refuses rather than answering,
+/// because attributing an act to whichever owner a read happened to find is how one person is handed another person's
+/// mail. What keeps that refusal off a running deployment is the startup gate, which will not serve a roster of several
+/// owners while any surface that reads this is enabled.
 /// </para>
 /// <para>
 /// It is what makes an admitted caller a caller acting for somebody. A credential is configured today and carries no
 /// owner of its own, so every caller a mail-reading surface admits is acting for this one; when credentials become
-/// records of their own, the owner comes off the credential and this port stops being what answers for a caller.
+/// records of their own, the owner comes off the credential and this port stops being what answers for a caller. An
+/// administrator's acts are the deployment's rather than one person's and carry no owner either, so those resolve here
+/// as well.
 /// </para>
 /// <para>
 /// The answer is a value rather than a read, because it is settled once and consulted per request. Nothing here reaches
@@ -28,5 +31,6 @@ namespace MailFathom.Application.Access;
 public interface IDeploymentMailOwnerSource
 {
     /// <summary>Gets the owner this deployment's configured mail accounts belong to.</summary>
+    /// <exception cref="InvalidOperationException">Thrown when this deployment serves several owners, which leaves no sole owner for an act carrying none to be attributed to, and when the roster has not been established yet.</exception>
     MailOwnerId Owner { get; }
 }

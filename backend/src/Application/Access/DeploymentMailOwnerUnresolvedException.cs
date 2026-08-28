@@ -71,9 +71,10 @@ public sealed class DeploymentMailOwnerUnresolvedException : MailFathomException
 
         return new(
             $"The label '{displayName}' is declared for one owner while another owner this deployment holds still "
-            + "carries it, and a label names one owner. Free the label first — relabel or remove the owner holding it "
-            + "and start once — and declare it for its new owner afterwards; two owners exchanging labels is two "
-            + "starts rather than one.");
+            + "carries it, and a label names one owner. Free the label first — relabel the owner holding it and start "
+            + "once — and declare it for its new owner afterwards; two owners exchanging labels is two starts rather "
+            + "than one. Removing them from the file frees nothing: an owner this deployment holds keeps their record "
+            + "and their label whether or not a file declares them.");
     }
 
     /// <summary>Reports a deployment holding more owner records than it may serve.</summary>
@@ -89,8 +90,34 @@ public sealed class DeploymentMailOwnerUnresolvedException : MailFathomException
             + "long was generated rather than provisioned: check what wrote the settings_accounts table.");
     }
 
-    /// <summary>Reports several owners on a deployment whose owner-facing surfaces cannot say which of them a caller acts for.</summary>
-    /// <param name="authenticationDisabled">Whether an owner-facing surface admits callers without authenticating them at all.</param>
+    /// <summary>Reports a start that would leave the deployment holding more owner records than it may serve.</summary>
+    /// <param name="maximumOwners">The greatest number of owners one deployment serves.</param>
+    /// <param name="heldOwners">The owner records the deployment already holds.</param>
+    /// <param name="newOwners">The declared owners it holds no record for, each of which this start would provision.</param>
+    /// <returns>The failure to raise.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="maximumOwners" /> is not positive.</exception>
+    /// <remarks>
+    /// Separate from <see cref="TooManyOwners" />, which reports a table that was already past the bound before this
+    /// start read it. Here the file and the table are each within it and only their sum is not, which an operator acts
+    /// on by removing owner records rather than by finding what wrote them — and refusing before the writes is what
+    /// keeps this start from producing the roster the next start would refuse permanently.
+    /// </remarks>
+    public static DeploymentMailOwnerUnresolvedException RosterWouldExceedTheBound(
+        int maximumOwners,
+        int heldOwners,
+        int newOwners)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumOwners);
+
+        return new(
+            $"This deployment holds {heldOwners} owner records and declares {newOwners} owners it holds none for, "
+            + $"which would leave it past the {maximumOwners} owner records one deployment serves. Nothing was "
+            + "written: an owner the file no longer declares keeps their record, so remove the records this "
+            + "deployment no longer serves before declaring more owners.");
+    }
+
+    /// <summary>Reports several owners on a deployment whose surfaces cannot say which of them an act is for.</summary>
+    /// <param name="authenticationDisabled">Whether one of those surfaces admits callers without authenticating them at all.</param>
     /// <returns>The failure to raise.</returns>
     /// <remarks>
     /// Both halves are the same fact one step apart: an owner-facing surface acts for exactly one owner, and nothing
@@ -99,13 +126,14 @@ public sealed class DeploymentMailOwnerUnresolvedException : MailFathomException
     /// operator does next, so the message says which.
     /// </remarks>
     public static DeploymentMailOwnerUnresolvedException SeveralOwnersOnAnOwnerFacingSurface(bool authenticationDisabled) => new(
-        "This deployment serves more than one owner while an owner-facing surface — McpEndpoint or ClientEndpoint — is "
-        + "enabled. Such a surface answers one person about their own mail, and "
+        "This deployment serves more than one owner while a surface that resolves a sole owner — McpEndpoint, "
+        + "ClientEndpoint, or AdminEndpoint — is enabled. Such a surface acts for one person's mail, and "
         + (authenticationDisabled
             ? "it admits callers without authenticating them, so there is nothing for it to resolve an owner from. "
             : "a configured credential authenticates a caller without naming the owner they act for, so there is "
             + "nothing for it to resolve an owner from. ")
-        + "Serve one owner while those surfaces are enabled, or disable them on a deployment that serves several.");
+        + "Serve one owner while any of those surfaces is enabled, or disable them on a deployment that serves "
+        + "several.");
 
     /// <summary>Reports an owner whose own mail accounts carry a secret or a trust anchor this deployment cannot use.</summary>
     /// <param name="displayName">The label the owner is declared under.</param>
