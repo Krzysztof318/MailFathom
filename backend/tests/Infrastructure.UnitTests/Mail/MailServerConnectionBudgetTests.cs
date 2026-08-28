@@ -13,7 +13,7 @@ public sealed class MailServerConnectionBudgetTests
     private const string LimitInstrument = "mailfathom.mail.server.connections.limit";
     private const string ActiveInstrument = "mailfathom.mail.server.connections.active";
     private const string QueuedInstrument = "mailfathom.mail.server.connections.queued";
-    private const string HostTag = "mailfathom.mail.server.host";
+    private const string HostTag = "mailfathom.mail.server";
 
     [Fact]
     public async Task AcquireAsync_PushConnectionsAcrossAccountsShareTheHostBoundAndLeaveOneRunSlot()
@@ -73,11 +73,13 @@ public sealed class MailServerConnectionBudgetTests
             MailServerConnectionPurpose.Work,
             TestContext.Current.CancellationToken);
         measurements.ObserveGauges();
+        var hostPseudonym = MailServerConnectionBudget.HostPseudonym(host);
 
         // Assert
-        Assert.Equal(2, MeasurementFor(measurements, LimitInstrument, host).Value);
-        Assert.Equal(2, MeasurementFor(measurements, ActiveInstrument, host).Value);
-        Assert.Equal(1, MeasurementFor(measurements, QueuedInstrument, host).Value);
+        Assert.DoesNotContain(host, hostPseudonym, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(2, MeasurementFor(measurements, LimitInstrument, hostPseudonym).Value);
+        Assert.Equal(2, MeasurementFor(measurements, ActiveInstrument, hostPseudonym).Value);
+        Assert.Equal(1, MeasurementFor(measurements, QueuedInstrument, hostPseudonym).Value);
 
         first.Dispose();
         using var admitted = await queued.WaitAsync(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);

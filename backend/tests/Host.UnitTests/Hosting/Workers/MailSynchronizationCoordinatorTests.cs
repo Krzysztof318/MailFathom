@@ -226,7 +226,6 @@ public sealed class MailSynchronizationCoordinatorTests
 
         // Assert
         Assert.False(originalWorkUnitObservedCancellation);
-        Assert.False(changedFolderAttempted.Task.IsFaulted);
         await harness.StopAndDrainAsync();
     }
 

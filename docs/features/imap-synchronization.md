@@ -49,9 +49,10 @@ the account's outbox there, which is what makes sending correct without anything
 [mail delivery](mail-delivery.md#how-a-written-down-send-reaches-a-server) states why that step can never fail the run.
 
 The account set is a published snapshot rather than a query the coordinator repeats. A validated configuration reload
-or a committed owner document raises its change token, and that signal reconciles supervisors immediately: an added
-account starts, a changed account replaces its supervisor, and a removed account stops scheduling. A rejected reload
-raises no token and leaves the last valid snapshot in force. This costs no database query per account or per tick.
+or a committed owner document raises its change token, and that signal replaces every supervisor together. The account
+set in the new snapshot then decides which accounts start, resume scheduling, or remain stopped; each replacement begins
+with a new schedule and failure backoff. A rejected reload raises no token and leaves the last valid snapshot in force.
+This costs no database query per account or per tick.
 
 Replacing a supervisor cancels its scheduling token and not the work-unit token. A run already writing content and its
 checkpoint therefore finishes against the immutable account snapshot it began with; only work still waiting to start
@@ -106,7 +107,8 @@ so allowing them to take every slot would let a full set of watches prevent the 
 progress. A further push attempt waits and can degrade to polling under the existing bounded establishment behavior,
 while ordinary work retains one route to the server.
 
-Three gauges make the bound readable, each tagged with `mailfathom.mail.server.host`:
+Three gauges make the bound readable, each tagged with the keyed process-local pseudonym
+`mailfathom.mail.server` rather than the configured host name:
 
 - `mailfathom.mail.server.connections.limit` — the configured ceiling;
 - `mailfathom.mail.server.connections.active` — connections holding slots;

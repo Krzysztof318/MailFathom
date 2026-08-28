@@ -4,6 +4,8 @@
 
 using System.Collections.Concurrent;
 using System.Diagnostics.Metrics;
+using System.Security.Cryptography;
+using System.Text;
 using MailFathom.Common.Observability;
 
 namespace MailFathom.Infrastructure.Mail;
@@ -24,7 +26,9 @@ public sealed class MailServerConnectionBudget : IDisposable
     /// <summary>The host ceiling used when the composition root supplies none.</summary>
     public const int DefaultMaximumConnectionsPerHost = 20;
 
-    internal const string HostTagName = "mailfathom.mail.server.host";
+    internal const string HostTagName = "mailfathom.mail.server";
+
+    private static readonly byte[] HostPseudonymKey = RandomNumberGenerator.GetBytes(32);
 
     private readonly ConcurrentDictionary<string, HostBudget> hosts = new(StringComparer.OrdinalIgnoreCase);
     private readonly CancellationTokenSource disposalCancellation = new();
@@ -71,8 +75,20 @@ public sealed class MailServerConnectionBudget : IDisposable
         return this.hosts
             .GetOrAdd(
                 host.Trim(),
-                key => new HostBudget(key, this.maximumConnectionsPerHost, this.disposalCancellation.Token))
+                key => new HostBudget(
+                    HostPseudonym(key),
+                    this.maximumConnectionsPerHost,
+                    this.disposalCancellation.Token))
             .AcquireAsync(purpose, cancellationToken);
+    }
+
+    /// <summary>Produces the stable process-local identity exported for one host without exporting the configured name.</summary>
+    internal static string HostPseudonym(string host)
+    {
+        var normalized = host.Trim().ToUpperInvariant();
+        var digest = HMACSHA256.HashData(HostPseudonymKey, Encoding.UTF8.GetBytes(normalized));
+
+        return $"server-{Convert.ToHexString(digest.AsSpan(0, 8))}";
     }
 
     private IEnumerable<Measurement<long>> ObserveLimits() =>
@@ -99,7 +115,7 @@ public sealed class MailServerConnectionBudget : IDisposable
     /// <summary>One host's total ceiling and the smaller ceiling its long-lived push connections share.</summary>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "The process-wide semaphores never expose AvailableWaitHandle and remain valid until every admitted lease releases after shutdown cancellation.")]
     private sealed class HostBudget(
-        string host,
+        string hostPseudonym,
         int maximumConnections,
         CancellationToken disposalToken)
     {
@@ -135,7 +151,10 @@ public sealed class MailServerConnectionBudget : IDisposable
                 await this.allConnections.WaitAsync(waitCancellation.Token);
                 Interlocked.Increment(ref this.activeConnections);
 
-                return new ConnectionLease(this, pushSlotHeld);
+                var lease = new ConnectionLease(this, pushSlotHeld);
+                pushSlotHeld = false;
+
+                return lease;
             }
             catch (OperationCanceledException) when (
                 disposalToken.IsCancellationRequested
@@ -143,17 +162,13 @@ public sealed class MailServerConnectionBudget : IDisposable
             {
                 throw new ObjectDisposedException(nameof(MailServerConnectionBudget));
             }
-            catch
+            finally
             {
                 if (pushSlotHeld)
                 {
                     this.pushConnections.Release();
                 }
 
-                throw;
-            }
-            finally
-            {
                 Interlocked.Decrement(ref this.queuedConnections);
             }
         }
@@ -171,7 +186,7 @@ public sealed class MailServerConnectionBudget : IDisposable
 
         internal Measurement<long> Measure(long value) => new(
             value,
-            new KeyValuePair<string, object?>(HostTagName, host));
+            new KeyValuePair<string, object?>(HostTagName, hostPseudonym));
 
         private sealed class ConnectionLease(HostBudget budget, bool pushSlotHeld) : IDisposable
         {

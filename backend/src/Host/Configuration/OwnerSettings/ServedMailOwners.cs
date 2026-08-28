@@ -84,29 +84,13 @@ internal sealed class ServedMailOwners : IDeploymentMailOwnerSource
     /// <summary>Lets the next owner-document write validate against the roster this one published.</summary>
     internal void ReleaseDocumentPublication() => this.documentPublication.Release();
 
-    /// <summary>Gets the mail accounts every served owner declares, across the whole roster.</summary>
-    /// <returns>The accounts, empty while the startup gate that establishes the roster has not run.</returns>
-    /// <remarks>
-    /// The one read that answers rather than refusing before the gate, because its callers judge a candidate or a
-    /// reload rather than serve mail: a rule set is judged against the accounts that exist, and none exist yet. What
-    /// keeps that from being a hole is that the same judgement runs again over the composed configuration, where the
-    /// owners are read from the file directly and the roster is not consulted at all.
-    /// </remarks>
-    public IReadOnlyList<MailSynchronizationAccountOptions> MailAccountsOfEveryOwner()
-    {
-        lock (this.mutex)
-        {
-            return [.. (this.resolvedOwners ?? []).SelectMany(owner => owner.MailAccounts)];
-        }
-    }
-
     /// <summary>Gets whether any served owner's mail accounts are their own rather than the deployment's section.</summary>
     /// <returns><see langword="true" /> when at least one owner is served from their own declaration or their own document.</returns>
     /// <remarks>
-    /// It answers rather than refusing before the gate, for the reason <see cref="MailAccountsOfEveryOwner" /> does: its
-    /// caller judges a reloaded candidate, and a deployment whose roster is not settled yet has nothing for a candidate
-    /// to conflict with. The question is about the source rather than about the count, because the deployment's own
-    /// section belongs to whichever sole owner a deployment holds and is legitimately populated for that one.
+    /// It answers rather than refusing before the gate because its caller judges a reloaded candidate, and a deployment
+    /// whose roster is not settled yet has nothing for a candidate to conflict with. The question is about the source
+    /// rather than about the count, because the deployment's own section belongs to whichever sole owner a deployment
+    /// holds and is legitimately populated for that one.
     /// </remarks>
     public bool ServesAnyOwnerFromTheirOwnAccounts()
     {

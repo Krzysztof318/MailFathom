@@ -826,10 +826,10 @@ duration that included the wait would report the accounts in front of it as this
 that bound rather than an idle one, which is a distinction nothing else here makes.
 
 Three further gauges report the process-wide connection budget per IMAP server host. Each carries only
-`mailfathom.mail.server.host`, compared without regard to DNS casing: `mailfathom.mail.server.connections.limit` is the
-configured ceiling, `…connections.active` is the connections and attempts holding it, and `…connections.queued` is the
-attempts waiting for it. They aggregate every owner and account without sharing a protocol session between any two of
-them.
+`mailfathom.mail.server`, whose `server-…` value is a keyed process-local pseudonym rather than the configured host:
+`mailfathom.mail.server.connections.limit` is the configured ceiling, `…connections.active` is the connections and
+attempts holding it, and `…connections.queued` is the attempts waiting for it. They aggregate every owner and account
+without sharing a protocol session between any two of them or exporting the server's name.
 
 Nothing published by any of this is derived from a message. The dimensions are the two configured aliases and closed
 sets of MailFathom's own words, and the values are counts and durations — no UID, no message identifier, no address, no

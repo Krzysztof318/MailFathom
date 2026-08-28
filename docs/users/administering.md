@@ -674,9 +674,9 @@ Move these 2 mail accounts into this owner's record, so the configuration stops 
 ```
 
 Clear `MailSynchronization:Accounts` afterwards. The adoption copies those declarations into the record and leaves the
-file untouched, and an account's settings are still resolved from that section before any record — so a deployment whose
-every owner reads a record of their own would go on synchronizing each mailbox under the file the adoption said had
-stopped being read. The next start refuses rather than doing that, and names the section to clear.
+file untouched. The published owner document takes precedence in the running process immediately; clearing the stale
+section prevents the next start from refusing a deployment whose owner records and deployment section occupy the same
+account naming space.
 
 **Withdrawing a mailbox is not deleting mail, and removing an owner is.** `mfctl owner account remove` stops MailFathom
 synchronizing one mailbox without a restart and leaves everything already stored for it exactly where it is. A run
