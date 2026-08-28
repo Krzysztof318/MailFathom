@@ -36,8 +36,8 @@ one, what a start reports, and what an adoption costs.
 | `Accounts:<n>:MailAccounts:<m>` | object | `[]` | Declared exactly as [one mail account](configuration-mail.md#one-account--mailsynchronizationaccountsn) is, and judged by the same rules | restart |
 
 At most 256 owners may be declared. Declaring any owner refuses a non-empty `MailSynchronization:Accounts`, no two
-owners may name a mail account alike, and only one owner may be served while the MCP or the client endpoint is
-enabled.
+owners may name a mail account alike, and only one owner may be served while the MCP endpoint, the client endpoint, or
+the administrative endpoint is enabled.
 
 ## `Secrets`
 

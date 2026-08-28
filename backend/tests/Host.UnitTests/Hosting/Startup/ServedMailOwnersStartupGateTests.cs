@@ -18,6 +18,7 @@ using MailFathom.Infrastructure.Persistence.Owners;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
@@ -351,21 +352,30 @@ public sealed class ServedMailOwnersStartupGateTests
 
     /// <summary>An owner the deployment holds and no file declares keeps their mail and stops being served, which is a report rather than a refusal.</summary>
     [Fact]
-    public async Task StartAsync_AHeldOwnerNoFileDeclares_LeavesThemOutOfTheRosterWithoutFailing()
+    public async Task StartAsync_AHeldOwnerNoFileDeclares_LeavesThemOutOfTheRosterAndNamesThemInAWarning()
     {
         // Arrange
         var roster = new ServedMailOwners();
+        var startupLog = new RecordingLogger<ServedMailOwnersStartupGate>();
 
         // Act
         await CreateGate(
                 [Held(MailOwnerId.Create(DeclaredIdentifier), "alex"), Held(SyntheticMailOwner.Another, "somebody else")],
                 Declaring(DeclaredIdentifier, "alex"),
-                servedOwners: roster)
+                servedOwners: roster,
+                startupLog: startupLog)
             .StartAsync(CancellationToken.None);
 
         // Assert
         var served = Assert.Single(roster.Owners);
         Assert.Equal(MailOwnerId.Create(DeclaredIdentifier), served.Owner);
+
+        // The warning is the whole of what tells an operator that an owner's mail is kept and no longer synchronized,
+        // so a report that stopped naming them would otherwise leave the state observable nowhere.
+        Assert.Contains(
+            startupLog.Messages,
+            message => message.Contains("somebody else", StringComparison.Ordinal)
+                && message.Contains("declared nowhere, so they are not served", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -668,7 +678,8 @@ public sealed class ServedMailOwnersStartupGateTests
         McpEndpointOptions? mcpEndpointSettings = null,
         IOwnerSettingsDocumentReader? documents = null,
         ClientEndpointOptions? clientEndpointSettings = null,
-        AdminEndpointOptions? adminEndpointSettings = null) =>
+        AdminEndpointOptions? adminEndpointSettings = null,
+        ILogger<ServedMailOwnersStartupGate>? startupLog = null) =>
         CreateGate(
             DirectoryOf(held),
             declared,
@@ -678,7 +689,8 @@ public sealed class ServedMailOwnersStartupGateTests
             mcpEndpointSettings,
             documents,
             clientEndpointSettings,
-            adminEndpointSettings);
+            adminEndpointSettings,
+            startupLog);
 
     private static ServedMailOwnersStartupGate CreateGate(
         IMailOwnerDirectory directory,
@@ -689,7 +701,8 @@ public sealed class ServedMailOwnersStartupGateTests
         McpEndpointOptions? mcpEndpointSettings = null,
         IOwnerSettingsDocumentReader? documents = null,
         ClientEndpointOptions? clientEndpointSettings = null,
-        AdminEndpointOptions? adminEndpointSettings = null)
+        AdminEndpointOptions? adminEndpointSettings = null,
+        ILogger<ServedMailOwnersStartupGate>? startupLog = null)
     {
         var services = new ServiceCollection();
 
@@ -709,7 +722,7 @@ public sealed class ServedMailOwnersStartupGateTests
             Options.Create(mcpEndpointSettings ?? new McpEndpointOptions()),
             Options.Create(clientEndpointSettings ?? new ClientEndpointOptions()),
             Options.Create(adminEndpointSettings ?? new AdminEndpointOptions()),
-            NullLogger<ServedMailOwnersStartupGate>.Instance);
+            startupLog ?? NullLogger<ServedMailOwnersStartupGate>.Instance);
     }
 
     /// <summary>A provisioning that reports the row as recorded, which is what every case but the contested label is.</summary>
