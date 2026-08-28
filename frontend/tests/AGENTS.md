@@ -2,10 +2,11 @@
 
 These instructions apply under `frontend/tests/` in addition to the repository root instructions.
 
-The conventions in `frontend/src/AGENTS.md` apply to test code as well. A test here is C# compiled by the same build
-with the same analyzers, so naming, async shape, the rule about what an `await` captures, and the rest hold exactly as
-they do under `frontend/src/`. The directory cascade does not load that file for a change under `frontend/tests/`,
-which is why this line points at it — the same arrangement `backend/tests/AGENTS.md` has with the server's.
+The conventions in `frontend/src/AGENTS.md` apply to test code as well, as do the C# conventions and the shared
+unit-test rules in the root file. A test here is C# compiled by the same build with the same analyzers, so naming,
+async shape, the rule about what an `await` captures, and the rest hold exactly as they do under `frontend/src/`. The
+directory cascade does not load that file for a change under `frontend/tests/`, which is why this line points at it —
+the same arrangement `backend/tests/AGENTS.md` has with the server's.
 
 What does *not* reach here is `backend/tests/AGENTS.md`. Its subject is a service's suites: the coverage denominator,
 the boundary projects, the substituted mail library, the paid-provider switch, and the integration suite that starts
@@ -17,10 +18,8 @@ The repository's standing rule holds here rather than lapsing into "UI cannot be
 carries tests.** Most of a screen's behaviour lives in its model, and a model is a plain record that needs no visual
 tree, so most of it is reachable by an ordinary unit test.
 
-- **The suite is xUnit.net v3 on Microsoft Testing Platform**, the same framework and runner `backend/tests/` uses, so
-  one `dotnet test` contract covers the repository. Do not adopt the Uno template's NUnit default, and do not add a
-  second assertion library.
-- **Name a test `Member_Scenario_ExpectedBehavior`** and follow Arrange, Act, Assert, as the backend suites do.
+- **Do not adopt the Uno template's NUnit default, and do not add a second assertion library.** The root file states
+  the framework and the runner both suites share; what this stack has to refuse is the template's own default.
 - **Assert a feed by awaiting it** — `var value = await model.SomeFeed;` — or by enumerating its messages where the
   progress and error axes are the subject. Uno documents a `Uno.Extensions.Reactive.Testing` package with a `FeedTests`
   base and a `.Record()` extension for this; **it is not usable here.** The last version published to nuget.org is

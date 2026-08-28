@@ -2,84 +2,15 @@
 
 These instructions apply under `backend/src/` in addition to the repository root instructions.
 
-## .NET and C# conventions
+## Service conventions
 
-These govern every C# file in the repository, not only the ones under `backend/src/`. `backend/tests/AGENTS.md` points here for that reason: a test is C# and is read by the same analyzers, so a rule that held only under `backend/src/` would be a rule the test suite was exempt from.
+The root `AGENTS.md` holds the .NET and C# conventions and the asynchronous return types, and they govern this directory like every other. What follows is what is true of the service alone.
 
-Some of the rules below are enforced by the build rather than by a reader. Those are listed here so nobody re-checks by hand what the compiler already rejects, and so a new rule lands in the mechanism that can enforce it instead of becoming another paragraph:
-
-| Enforced by | Covers |
-|---|---|
-| `.editorconfig` diagnostic severities, with `TreatWarningsAsErrors` | Formatting, unnecessary usings, accessibility modifiers, file-scoped namespaces, sealing internal types, disposal (`CA2000`), and the rest of the configured `CA`/`IDE` set |
-| `.config/BannedSymbols.txt`, through `Microsoft.CodeAnalysis.BannedApiAnalyzers` (`RS0030`) | Ambient clocks (`DateTime.Now`, `DateTimeOffset.UtcNow`, and siblings), `Thread.Sleep`, the `System.Net.Mail` types, and the `HttpContent.ReadFromJsonAsync` overloads that deserialize through reflection |
-| `Microsoft.VisualStudio.Threading.Analyzers` | Blocking on tasks and other async hazards |
-| `Roslynator.*` and `xunit.analyzers` | General C# quality and xUnit usage |
-
-Add a mechanically checkable rule to the mechanism, not to this file: a severity in `.editorconfig` when an analyzer already covers it, a line in `.config/BannedSymbols.txt` when the rule is "never call this". Prose here is for what a tool cannot decide — architecture, naming, and the reasoning behind a constraint. When a rule appears in both places, the tool is authoritative and this file explains why the rule exists.
-
-- Target .NET 10 and use idiomatic modern C# supported by the pinned SDK.
-- Keep the SDK version in `global.json`. Shared compiler and build settings belong in `backend/Directory.Build.props`; shared package versions belong in `backend/Directory.Packages.props`.
-- Enable nullable reference types, implicit usings, deterministic builds, .NET analyzers, and code-style enforcement during builds.
-- Treat compiler and analyzer warnings as errors in repository code. Suppress a diagnostic only at the narrowest scope and document the concrete reason.
-- Maintain one repository `.editorconfig` and let automated formatting define whitespace and layout. Do not hand-format against configured rules.
-- Give every enum member an explicit, unique integral value starting at `0` and increasing contiguously in declaration order. Never reorder, renumber, or reuse an existing value; append new members with the next value. Apply this to every enum, including private and currently non-persisted types, so a future numeric persistence representation cannot silently change meaning after refactoring.
-- A `[Flags]` enum is exempt from contiguity and from nothing else. Its members are powers of two starting at `1`, with `None = 0` for the empty set, and each value is still explicit, never reordered, and never reused — which is what the contiguity rule was protecting. Declare one only where the values genuinely compose: a set an operator writes as one configuration value beats a collection whose elements a binder can drop one at a time, and `McpTransportAuthenticationMethods` is the worked example. A set of alternatives that never combine stays an ordinary enum.
-- Keep a plain `enum` for a set whose members are only names the process reads. When a member has to carry data, expose behavior, or publish an identity that must survive a rename — a SASL name, a five-digit error code — the enum is the wrong shape, and the value becomes a closed enumeration instead: a `readonly record struct` with a private constructor, one static member per value, and its own serialization. Use `$closed-enumeration` for the required shape and the reasoning; `MailAuthenticationMechanism` and `MailFathomErrorCode` are the worked examples.
-- Prefer immutable records or value objects for data that represents values; use entities only when identity and lifecycle matter.
-- Use domain-correct, descriptive names for types, methods, parameters, variables, fields, and files. Avoid abbreviations except established terms such as IMAP, SMTP, MIME, MCP, UID, TLS, and RAG.
-- Prefer a longer name that communicates intent, constraints, or result over a short ambiguous name. Long method names are acceptable when every word adds useful domain meaning.
-- Keep names proportionate and avoid redundant context already supplied by the containing type or namespace. Do not produce sentence-like names when a smaller precise name communicates the same contract.
-- Name methods after observable behavior or the result they produce. Avoid vague verbs such as `Handle`, `Process`, `Manage`, `Do`, or `Execute` unless the surrounding application pattern gives them a precise established meaning.
-- Rename unclear identifiers as part of the code change that exposes them. Do not rely on comments to compensate for misleading or abbreviated names.
+- Qualify `Session` wherever it appears: `IMailboxSession` for an open IMAP folder, `IPersistenceSession` for a local write transaction. It is the name this stack meets most that is ambiguous on its own.
 - Use `Email` for the mail artifact throughout `Domain`, `Application`, and `Infrastructure`: `EmailOccurrenceId`, `RemoteEmailMetadata`, `IEmailContentStore`, `StoredEmailEntity`. Do not name a mail type `Message` or `MailMessage`; the first is ambiguous once AI conversations exist and the second shadows `System.Net.Mail.MailMessage`. Name an AI conversation turn `ChatMessage` or `AgentMessage` after the domain concept, never after the layer.
-- Do not rely on a namespace to disambiguate a type whose name is ambiguous on its own. A reader sees the name at the point of use, not the namespace. `Session` in particular must always be qualified: `IMailboxSession` for an open IMAP folder, `IPersistenceSession` for a local write transaction.
-- Reach every type, enum, attribute, and static class through a `using` directive and write it by its simple name. The import list then states which boundaries the file depends on, in one place a reader can scan, instead of that information being spread across the call sites that happen to mention a namespace. `IDE0001` removes qualification that an existing `using` makes redundant, so the shape this rule addresses is the one the analyzer cannot see: a qualified name written because nobody added the import.
-- Qualify a name only to resolve a collision, where two namespaces the file needs publish the same simple name: `MailKit.Security` and `System.Security.Authentication` both publish `AuthenticationException`, and `TransientFailureClassifier` sorts both. Qualify every side of such a collision rather than importing one of them, because an import leaves one of the two written as a bare name that a reader will read as the other. Keep the file's other types from those same namespaces qualified as well, so a namespace is not half imported and half spelled out.
-- Do not introduce a `using` or `global using` alias. An alias gives a type a second name that exists in one file, so a search for the real name never reaches the code that uses it and a search for the alias finds nothing else. When the type's own name is wrong, rename the type; when it collides, qualify it at the point of use.
-- Keep public APIs small and predictable. Default types and members to `internal`; use `public` only for an intentional cross-project contract or when a framework demonstrably requires public visibility.
-- Declare `InternalsVisibleTo` as an MSBuild `<InternalsVisibleTo Include="..." />` item in the project file that grants the access. Do not add hand-written assembly-attribute source files for it, so the granted friend assemblies stay visible where the project's build contract is defined.
-- Prefer one primary type per file and align namespaces with folders. File names match their primary type.
-- Default concrete implementation classes that are not designed for inheritance to `internal sealed`. DI registration, configuration binding, EF Core mapping, and unit-test access do not by themselves justify a public type. Prefer composition over inheritance and do not use inheritance only to share implementation.
-- Prefer guard clauses over deep nesting. Validate public boundary arguments with the appropriate BCL guard methods or explicit domain validation.
-- Express work over a sequence as a LINQ pipeline rather than as a loop that rebuilds one. `Where`, `Select`, `SelectMany`, `GroupBy`, `OrderBy`, `Any`, `All`, `FirstOrDefault`, `Distinct`, `ToDictionary`, and `Sum` name the operation in the code itself, while a loop around an accumulator forces the reader to recover that name from a mutable variable and a set of branches.
-- Replace a nested loop that exists only to reach an inner sequence with `SelectMany`. Two `foreach` statements wrapped around one body are a flattening or a pairing written by hand; naming it once leaves a single loop whose body is the work itself.
-- Replace a search loop with `FirstOrDefault`, `SingleOrDefault`, `Any`, or `All`, and a loop that copies matching elements into a new collection with a filtered projection materialized through a collection expression, for example `[.. source.Where(predicate).Select(selector)]`.
-- Replace an `if` inside a loop with the operator that names its role: a skipped element is `Where`, a per-element choice is a `switch` expression inside `Select`, and a split into two outcomes is two filtered sequences or a `GroupBy`. An `if`/`continue` pair states a filter without calling it one.
-- Keep the loop when the body does something a query cannot express: mutating an existing collection, awaiting per element where ordering or cancellation matters, carrying a `TryParse`-style `out` parameter across iterations, working with `Span<T>` or `ref` locals, or producing several unrelated results in one pass. A LINQ pipeline describes a result and must never be the place a side effect happens.
-- Stop chaining where the pipeline stops reading as one sentence. Name the intermediate sequence in a local, or move a multi-statement lambda into a named private method, rather than nesting operators until the shape has to be traced.
-- Enumerate a sequence once. Materialize with `ToArray` or a collection expression before a result is filtered, counted, and read again, and never hand a lazily evaluated query to a caller that will iterate it more than once.
-- Materialize at every level of a pipeline whose operators read or write state that outlives one element, such as a recursive walk carrying a visited set. Deferred execution makes the result depend on when the caller enumerates it rather than on the input alone, and a second enumeration observes the state the first one left behind.
-- Do not use `null` to encode several states. Model optionality and failure explicitly when absence has domain meaning.
-- Expose read-only collection abstractions when callers must not mutate state. Avoid returning mutable internal collections.
-- For byte-oriented data, do not model payloads as `byte[]`, `List<byte>`, `IReadOnlyList<byte>`, or other general-purpose byte collections at application/domain boundaries. Prefer `Span<byte>` or `ReadOnlySpan<byte>` for synchronous stack-only operations, and `Memory<byte>` or `ReadOnlyMemory<byte>` when data must cross async, object, or DI boundaries. Keep `byte[]` only where a framework/provider contract requires it, such as EF Core `bytea` persistence models, and convert at that adapter boundary.
-- Prefer pattern matching, switch expressions, collection expressions, and other modern syntax only when they make the intent clearer.
-- Avoid reflection, `dynamic`, source-code generation, and unsafe code unless a measured requirement justifies them. This restricts authoring custom generators and generator-driven designs, not first-party framework generators such as `[LoggerMessage]`, `[GeneratedRegex]`, or `System.Text.Json` source generation, which are the recommended shape of those APIs.
-- Use constructor injection. Avoid service locators, global mutable state, and static dependencies that hide collaborators.
-- When a method, constructor, or primary-constructor parameter list has three or more parameters, put each parameter on its own line. If all involved type and parameter names are genuinely short, this may be deferred until four parameters. Keep the closing parenthesis and base/initializer on their own readable line when wrapping.
-- Make I/O asynchronous end-to-end. Never block on tasks with `.Result`, `.Wait()`, or `GetAwaiter().GetResult()`; the threading analyzers reject these.
-- Suffix task-returning methods with `Async`, except framework-defined signatures where the ecosystem convention differs.
-- Async methods that perform I/O accept and propagate `CancellationToken`. Put it last and do not replace it with `CancellationToken.None` inside a call chain.
-- Use `await using` and `IAsyncDisposable` for asynchronously released resources. Dispose owned resources; never dispose dependencies owned by the DI container.
-- When a type implements disposable ownership, implement the appropriate disposable contract explicitly: use `IDisposable` for synchronous resources, `IAsyncDisposable` for asynchronous resources, and implement both when the type owns both synchronous and asynchronous cleanup paths or can be consumed by both sync and async owners. Document ownership and disposal expectations.
-- Use `Task` by default. Choose `ValueTask` only after measurement shows a meaningful benefit and its consumption constraints are acceptable.
 - Avoid unbounded concurrency. Put explicit limits and backpressure around mailbox synchronization, MIME processing, embedding generation, and SMTP delivery.
 - Do not use blanket `ConfigureAwait(false)` in ASP.NET Core application code. Use it only where a reusable library boundary has a documented reason.
-- Use `DateTimeOffset` for timestamps and inject `TimeProvider` wherever current time affects behavior. `.config/BannedSymbols.txt` bans the ambient clock properties outright, so a test never depends on the wall clock and a delay is always cancellable.
 - Validate options at startup. Fail fast on invalid or unsafe configuration.
-- Use structured logging with named properties. Never log credentials, tokens, message bodies, attachment content, or raw MIME.
-- Do not wrap ordinary log calls in `ILogger.IsEnabled(...)`. The logging infrastructure already skips disabled levels, so the guard only adds noise. Use it exclusively when producing the log arguments themselves is expensive, for example serialization, formatting, LINQ materialization, large allocations, or an extra query. Prefer removing the cost or using compile-time `LoggerMessage` source-generated methods over adding a guard.
-- Catch exceptions only when adding useful context, translating at a boundary, applying a defined retry policy, or completing cleanup. Preserve the original exception as `InnerException`.
-- Use explicit result types for expected application failures; reserve exceptions for exceptional or infrastructure failures.
-- Keep methods focused and classes cohesive. Prefer readable control flow over clever expressions or premature generic abstractions.
-- Keep methods small enough to read as a single sequence of decisions. When a method mixes several responsibilities, nests loops around multi-step work, or needs a comment to announce its next stage, extract a named private method instead. Prefer extraction over longer bodies, and prefer a well-named method over an explanatory comment.
-- Use blank lines to separate the logical blocks inside a method body so structure is visible before the code is read. Separate at minimum: the argument-guard block, each distinct step or stage, a block that builds state from the block that consumes it, and the final `return` from the work that produced it. Do not separate lines that belong to one step, and do not leave a blank line as the first or last line of a block.
-- Use English XML documentation comments to make code contracts useful to developers, IDE tooling, and future agents.
-- Generate XML documentation files for production projects and keep missing public API documentation visible through compiler or analyzer diagnostics.
-- Document every public type and public member. Also document internal interfaces, extension points, domain invariants, protocol boundaries, concurrency rules, security-sensitive behavior, and non-obvious lifecycle or ownership requirements.
-- Use `<summary>`, `<param>`, `<returns>`, `<exception>`, `<remarks>`, and `<example>` where they add concrete contract information. Describe cancellation behavior and side effects for asynchronous or state-changing operations.
-- Keep XML documentation accurate when signatures or behavior change. Missing or stale documentation is part of the implementation and must be fixed in the same change.
-- Add inline comments for non-obvious reasoning, protocol hazards, algorithms, workarounds, security constraints, or decisions that cannot be expressed through naming and types.
-- Explain why the code must behave a certain way; do not narrate what an immediately readable statement already does. Prefer better naming or extraction over explanatory comments for ordinary control flow.
 
 ## API and application design
 
@@ -102,25 +33,6 @@ These rules implement [ADR 0003](../docs/decisions/0003-first-party-exception-hi
 - Write the message for an operator to read. It must never carry a credential, a token, a certificate, a host name, a remote folder path, the mechanisms a server advertised, message content, or any other personal data. An account alias, a folder alias, a rule identity, a size, and a limit are permitted, because they are MailFathom's own configured names for things.
 - Declare only the constructors callers use, and keep every payload non-nullable. `CA1032` and `RCS1194` are both disabled, so nothing mandates a parameterless or message-only overload, and one added anyway would leave the payload degenerate. A property is nullable only where absence has its own domain meaning, which the remarks then state.
 - Prefer a result type when the immediate caller acts on the failure and continues, and raise an exception when the fact must travel through code that cannot decide what it means. `RemoteEmailContentFetchResult` and `PersistenceConcurrencyConflictException` are the two worked examples; a new failure states which one it follows and why.
-
-## Asynchronous return types
-
-- Return `Task` or `Task<TResult>` from every asynchronous method unless a rule below applies. A reference-typed task is a single field, composes directly with `Task.WhenAll` and `Task.WhenAny`, and can be awaited, stored, and awaited again without care.
-- Complete synchronously through `Task.CompletedTask` and `Task.FromResult`, or a cached completed task for a hot repeated result, rather than reaching for `ValueTask` to avoid an allocation.
-- The default covers methods that return a task. An async iterator returns `IAsyncEnumerable<T>` instead, and `IAsyncEnumerable<T>.GetAsyncEnumerator` returns `IAsyncEnumerator<T>` synchronously; neither is subject to it. Choose a stream when a caller consumes results incrementally, and keep the sequence bounded like any other query result.
-- Return `ValueTask` or `ValueTask<TResult>` when a framework contract requires it: `IAsyncDisposable.DisposeAsync`, and `IAsyncEnumerator<T>.MoveNextAsync` should the repository gain an async stream. Only `DisposeAsync` occurs today. A mandated signature is not precedent for choosing `ValueTask` elsewhere.
-- A private or internal helper may return `ValueTask` when it exists to implement one of those mandated signatures, so the dispose path stays free of a wrapping conversion. Keep such a helper unpublished and awaited once by its caller.
-- Choose `ValueTask` over `Task` only when every one of these holds, and record the measurement in the pull request:
-  - the operation completes synchronously on its common path, for example a cache or buffer hit, or the implementation pools an `IValueTaskSource<TResult>` so an asynchronous completion is also allocation-free;
-  - it is called often enough for one task allocation per call to be a measured cost, not a suspected one;
-  - every caller awaits the result directly and none needs to store it, fan it out, or combine it;
-  - a benchmark or profile over a realistic workload shows the improvement.
-- Weigh the costs before deciding. A `ValueTask` holds several fields, so returning one copies more data and enlarges the state machine of every async method that awaits it. A caller forced to call `AsTask()` reintroduces the allocation the choice was meant to remove, and leaves the code harder to read than the `Task` it replaced.
-- Do not introduce `ValueTask` at an application port, domain contract, or MCP boundary. Signatures there are consumed by code paths chosen later and must stay safe to compose; only an adapter with a measured hot path is a candidate.
-- Consume a `ValueTask` exactly once: await it directly, or call `AsTask()` on it, and then treat the instance as spent. Awaiting twice, awaiting concurrently, calling `AsTask()` twice, mixing consumption techniques, or reading `.Result` or `GetAwaiter().GetResult()` before completion is undefined behavior, not a slow path, and can corrupt a pooled backing source.
-- When a caller genuinely needs to hold or re-observe the result, convert once with `AsTask()`, or use `Preserve()` when the value must stay a `ValueTask`. Never store a raw `ValueTask` in a field, collection, or captured local.
-- Never let `ValueTask` reach `Task.WhenAll`, `Task.WhenAny`, or any other combinator without converting. Needing that conversion is evidence the method should have returned `Task`.
-- Write asynchronous methods so cancellation, timeouts, and exceptions behave identically whichever type is returned. Switching from `Task` to `ValueTask` is an allocation decision only; it must never change observable semantics.
 
 ## Dependency injection and configuration
 

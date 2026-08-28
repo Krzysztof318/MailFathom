@@ -2111,7 +2111,7 @@ reached whenever its rule matters.
 | File | Loaded when | Reached because |
 |---|---|---|
 | `AGENTS.md` | Always | `CLAUDE.md` is a single `@AGENTS.md` include |
-| `backend/src/AGENTS.md` | A change under `backend/src/` | The directory cascade. It holds the .NET and C# conventions, which govern test code too, so `backend/tests/AGENTS.md` points at it rather than repeating them |
+| `backend/src/AGENTS.md` | A change under `backend/src/` | The directory cascade. It holds what is true of the service alone; the .NET and C# conventions are in the root file, because they govern the client and both test suites as well |
 | `backend/src/Infrastructure/AGENTS.md` | A change under `backend/src/Infrastructure/` | The directory cascade |
 | `backend/tests/AGENTS.md` | A change under `backend/tests/` | The directory cascade, and root `AGENTS.md` names it wherever tests are owed |
 | `docs/AGENTS.md` | A change under `docs/` | The directory cascade |

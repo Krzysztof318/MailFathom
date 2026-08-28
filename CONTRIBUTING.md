@@ -245,9 +245,9 @@ The files that carry the licensing decision itself are not merely off limits by 
 
 | Document | What it governs |
 |---|---|
-| [`AGENTS.md`](AGENTS.md) | The non-negotiables, the architecture boundaries, the privacy and licensing obligations, the reliability and security rules — and a table naming every file below and when each one is read |
-| [`backend/src/AGENTS.md`](backend/src/AGENTS.md) | The .NET and C# conventions and naming, API and failure design, asynchronous return types, dependency injection and configuration. The conventions govern test code too |
-| [`backend/tests/AGENTS.md`](backend/tests/AGENTS.md) | Unit-test policy, coverage rules, and what belongs in the integration suite |
+| [`AGENTS.md`](AGENTS.md) | The non-negotiables, the architecture boundaries, the .NET and C# conventions every file in both stacks follows — comments and XML documentation among them — the privacy and licensing obligations, the reliability and security rules — and a table naming every file below and when each one is read |
+| [`backend/src/AGENTS.md`](backend/src/AGENTS.md) | What holds for the service alone: API and failure design, dependency injection and configuration, and outbound HTTP client lifetimes |
+| [`backend/tests/AGENTS.md`](backend/tests/AGENTS.md) | The service suite's own policy, coverage rules, and what belongs in the integration suite |
 | [`docs/AGENTS.md`](docs/AGENTS.md) | Documentation rules and the `describes:` marker every page carries |
 | [`docs/operations/issue-tracking.md`](docs/operations/issue-tracking.md) | Which work needs an issue, what its body carries, and how a maintainer triages one that arrives from outside the project |
 | [`docs/operations/agent-workflow.md`](docs/operations/agent-workflow.md) | The verification scripts and the skills at length, and how the automated review behaves |

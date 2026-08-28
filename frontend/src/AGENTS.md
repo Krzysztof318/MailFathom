@@ -4,10 +4,11 @@ These instructions apply under `frontend/src/` in addition to the repository roo
 file states holds here — the English rule, the branch rule, the licensing header, the documentation obligations, and
 the privacy classification of anything that touches mail — and nothing below repeats one of them.
 
-What does *not* reach here is `backend/src/AGENTS.md`. Those are the conventions of a service: API and failure design,
-dependency injection over a generic host, outbound HTTP client lifetimes, asynchronous return types at a use-case
-boundary. A view is none of those things, and the directory cascade never loads that file for a change under
-`frontend/`, so this one carries the client's half in full rather than by reference.
+The **.NET and C# conventions** are in the root file too, and they hold here exactly as they hold in the service:
+naming, LINQ, enums, disposal, asynchronous return types, comments, and the rest are language rules rather than
+stack ones. What does *not* reach here is `backend/src/AGENTS.md`, which carries what is true of a service alone —
+API and failure design, dependency injection over a generic host, outbound HTTP client lifetimes. A view is none of
+those things, and the directory cascade never loads that file for a change under `frontend/`.
 
 The client's own tests are governed by `frontend/tests/AGENTS.md`, which points back here for everything below:
 a test in this stack is C# compiled by the same build with the same analyzers, so the conventions on this page hold
