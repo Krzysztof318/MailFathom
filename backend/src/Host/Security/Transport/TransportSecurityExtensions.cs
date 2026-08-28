@@ -6,6 +6,7 @@ using System.Security.Claims;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Security.ApiKeys;
+using MailFathom.Host.Security.Basic;
 using MailFathom.Host.Security.ClientAssertions;
 using MailFathom.Host.Security.Mcp;
 using MailFathom.Infrastructure.Secrets.Discovery;
@@ -81,10 +82,33 @@ internal static partial class TransportSecurityExtensions
         var apiKeys = TransportAuthenticationConfiguration.ApiKeysIn(methods);
         var publicKeys = TransportAuthenticationConfiguration.PublicKeysIn(methods);
         var oauthMethods = TransportAuthenticationConfiguration.OAuthMethodsIn(methods);
+        var basicMethod = TransportAuthenticationConfiguration.BasicMethodIn(methods);
 
         var authentication = services.AddAuthentication();
 
-        AddRoutingScheme(authentication, surface, apiKeys, publicKeys, oauthMethods, challengeSchemeName);
+        AddRoutingScheme(
+            authentication,
+            surface,
+            apiKeys,
+            publicKeys,
+            oauthMethods,
+            basicMethod is null ? null : surface.BasicSchemeName,
+            challengeSchemeName);
+
+        if (basicMethod?.Basic is { } basic)
+        {
+            // Nothing about the credentials is registered, because there are none to register: what a caller presents is
+            // a row the administrative surface provisioned. What the scheme carries is the entry's grant and the entry's
+            // attempt bound, resolved here so the handler never reads a configuration section of its own.
+            authentication.AddScheme<BasicAuthenticationSchemeOptions, BasicAuthenticationHandler>(
+                surface.BasicSchemeName,
+                schemeOptions =>
+                {
+                    schemeOptions.Surface = surface;
+                    schemeOptions.Grant = basicMethod.GrantedPermissions(surface.GrantedSurface);
+                    schemeOptions.AttemptsPerMinute = basic.AttemptsPerMinute;
+                });
+        }
 
         if (publicKeys.Count > 0)
         {
@@ -246,6 +270,7 @@ internal static partial class TransportSecurityExtensions
         IReadOnlyList<ConfiguredSecret> apiKeys,
         IReadOnlyList<ConfiguredSecret> publicKeys,
         IReadOnlyList<OAuthValidationOptions> oauthMethods,
+        string? basicSchemeName,
         string challengeSchemeName)
     {
         var oauthSchemesByIssuer = oauthMethods
@@ -259,6 +284,7 @@ internal static partial class TransportSecurityExtensions
             oauthSchemesByIssuer,
             apiKeys.Count > 0 ? surface.ApiKeySchemeName : null,
             publicKeys.Count > 0 ? surface.ClientAssertionSchemeName : null,
+            basicSchemeName,
             challengeSchemeName);
 
         authentication.AddPolicyScheme(

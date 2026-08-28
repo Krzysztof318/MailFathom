@@ -723,6 +723,107 @@ public sealed class TransportAuthenticationOptionsTests
         Assert.Empty(entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail));
     }
 
+    /// <summary>A password is a method exactly as a key is, so the block alone selects it and the entry needs nothing beside it.</summary>
+    [Fact]
+    public void StatesAMethod_AnEntryCarryingABasicBlock_SelectsThatMethod()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { Basic = new BasicAuthenticationOptions() };
+
+        // Act, Assert
+        Assert.True(entry.StatesAMethod);
+    }
+
+    /// <summary>A password is judged against a record this deployment provisioned rather than by an authorization server, so it is among the credentials that can carry no scope of their own.</summary>
+    [Fact]
+    public void StatesAConfiguredCredential_AnEntryCarryingOnlyABasicBlock_StatesOne()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { Basic = new BasicAuthenticationOptions() };
+
+        // Act, Assert
+        Assert.True(entry.StatesAConfiguredCredential);
+    }
+
+    /// <summary>Asking a password to bring scopes is asking a credential a question it cannot answer, so the pair is refused rather than accepted and ignored.</summary>
+    [Fact]
+    public void FindConfigurationErrors_ABasicBlockAskedForScopesFromATokensOwnClaims_IsRefused()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions
+        {
+            Basic = new BasicAuthenticationOptions(),
+            PermissionsFromTokenScopes = true,
+        };
+
+        // Act
+        var errors = entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail);
+
+        // Assert
+        Assert.Contains(errors, error => error.Contains(nameof(TransportAuthenticationOptions.PermissionsFromTokenScopes), StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void FindConfigurationErrors_ABasicBlockOnAMailSurface_ReportsNothing()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { Basic = new BasicAuthenticationOptions() };
+
+        // Act, Assert
+        Assert.Empty(entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail));
+    }
+
+    /// <summary>The administrative surface answers for the deployment, so a credential naming one owner has nothing there to act for.</summary>
+    [Fact]
+    public void FindConfigurationErrors_ABasicBlockOnTheAdministrativeSurface_IsRefusedNamingTheMethodsThatBelongThere()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions { Basic = new BasicAuthenticationOptions() };
+
+        // Act
+        var errors = entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Administration);
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains($"{SettingPath}:{nameof(TransportAuthenticationOptions.Basic)}", reported, StringComparison.Ordinal);
+        Assert.Contains(nameof(TransportAuthenticationOptions.ApiKey), reported, StringComparison.Ordinal);
+        Assert.Contains(nameof(TransportAuthenticationOptions.PublicKey), reported, StringComparison.Ordinal);
+        Assert.Contains(nameof(TransportAuthenticationOptions.OAuth), reported, StringComparison.Ordinal);
+    }
+
+    /// <summary>The bound the block carries is the entry's to report, or a faulty one would bind and guard nothing.</summary>
+    [Fact]
+    public void FindConfigurationErrors_ABasicBlockStatingAnUnusableBound_ReportsWhatTheBlockReports()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions
+        {
+            Basic = new BasicAuthenticationOptions { AttemptsPerMinute = 0 },
+        };
+
+        // Act
+        var errors = entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail);
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains(nameof(BasicAuthenticationOptions.AttemptsPerMinute), reported, StringComparison.Ordinal);
+    }
+
+    /// <summary>An entry stating no method has to name the password block too, or the operator who misspelled it is not told it existed.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AnEntryStatingNoMethodOnAMailSurface_NamesTheBasicBlockAmongThem()
+    {
+        // Arrange
+        var entry = new TransportAuthenticationOptions();
+
+        // Act
+        var errors = entry.FindConfigurationErrors(SettingPath, ProtectedSurface.Mail);
+
+        // Assert
+        var reported = Assert.Single(errors);
+        Assert.Contains(nameof(TransportAuthenticationOptions.Basic), reported, StringComparison.Ordinal);
+    }
+
     private static ConfiguredSecret APublicKey(string name = "nightly") =>
         new() { Name = name, SecretReference = "file:/etc/mailfathom/nightly.pub" };
 

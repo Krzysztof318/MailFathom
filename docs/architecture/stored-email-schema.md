@@ -239,6 +239,44 @@ beside the key would narrow nothing.
 
 On a deployment storing payloads in a bucket the erasure reaches that store as well. The locators are read at the start of the same transaction, before any row goes, because the cascade is what takes the content rows and the locator on one is the only thing naming its object; the objects are then removed once the transaction has committed. [An object nothing points at is reclaimed](../features/email-content.md#an-object-nothing-points-at-is-reclaimed) states what happens where the endpoint refuses.
 
+## What an owner signs in with
+
+`owner_password_credentials` holds the usernames and passwords an owner authenticates to
+[the client](../operations/client-endpoint.md) and [the MCP endpoint](../operations/mcp-endpoint.md#passwords) with. It
+is the one credential this deployment holds a record of rather than reads out of an operator's configuration, which is
+why it is a table at all: a key, a public key, and an authorization server are each written in a section and rotated by
+editing one, while a password belongs to a person and is provisioned, rotated, suspended, and removed while the
+deployment runs.
+
+| Column | What it records |
+|---|---|
+| `Id` | The credential's identity, and the primary key. It is what an audit record, a rate-limiting partition, and a diagnostic name — so each of those names a credential without naming a way to sign in |
+| `OwnerId` | The owner this credential authenticates, a `uuid` foreign key onto `settings_accounts` that cascades. It is what an admitted request acts for, which is the whole point of the method: every other credential admits a caller acting for the owner the deployment was configured with |
+| `Username` | The name the owner types, folded to lower case and at most 128 characters. Unique **across the deployment** rather than within the owner, because it is what a presented credential is resolved by and nothing else in the request says whose it is. A colon cannot appear in one, since that is where [RFC 7617](https://www.rfc-editor.org/rfc/rfc7617.html) splits the header |
+| `PasswordHash` | The versioned record a presented password is verified against — the format version, the algorithm, the work parameters, the salt, and the derived key, as one string. The format version is what lets a later release move to another algorithm without rewriting anything: an unreadable record fails verification exactly as a wrong password does |
+| `Enabled` | Whether it still authenticates requests. A disabled credential keeps its username and its password, so the name stays claimed and the decision is one command away from being reversed |
+| `Version` | A counter every write to the row increments. It is what a listing reports so an administrator can see that a credential changed since they last read it; nothing reads it back to decide whether a write may proceed, so it orders the writes to one row rather than excluding any of them |
+| `CreatedAt` | When the credential was provisioned |
+| `PasswordChangedAt` | When the password was last replaced. A rotation moves it; the rehash the deployment performs on its own when a record falls behind the current work parameters does not, because nothing about the password changed |
+
+Two indexes and no more: the unique one on `Username`, which is the read every authentication performs, and one on
+`(OwnerId, CreatedAt)`, which is the listing an administrator reads. That listing is bounded at 100 credentials per
+owner, which is a ceiling rather than a number anybody reaches — and it is the same ceiling provisioning enforces, in
+the insert itself rather than in a count read beforehand. Two administrators provisioning at the same instant cannot
+leave an owner above it either: the insert runs in a transaction that first takes a row lock on the owner's
+`settings_accounts` row, so the second one counts what the first committed rather than what it had read before. A row
+past the bound would authenticate where nothing lists it, and therefore where nothing could be revoked from; the
+hundred-and-first credential is refused with `409` instead.
+
+**A password never appears here or anywhere else.** What is stored is a derivation, the plaintext is read within the
+call that hashes it and retained nowhere, and no answer, log line, metric, audit record, command argument, or refusal
+carries it — a refusal names the rule the password broke rather than the value. Verification is constant-time, and a
+request naming a username this deployment does not hold is verified against a decoy record so that an unknown username
+and a wrong password cost the same and are refused identically.
+
+**Removing an owner removes these with the rest.** The cascade from `settings_accounts` takes them, which is what the
+foreign key is for: a person erased from the deployment leaves nothing behind that could still be signed in as.
+
 ## The derived search document
 
 `email_search_documents` is one-to-one with `stored_emails` and holds what lexical search reads: `subject_text`, `participant_addresses`, `body_text`, `body_text_before_trimming`, `text_source`, `extracted_at`, and the generated `search_vector`. [Body text and the lexical index](../features/imap-synchronization.md#body-text-and-the-lexical-index) describes how each of them is derived. Every stored email has one, including a message whose body was never read: that row carries the envelope's subject alone and records its text source as not extracted, so an oversized or unparseable message is still findable rather than absent from search entirely.

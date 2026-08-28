@@ -127,6 +127,7 @@
     <PackageVersion Include="Polly.Core" Version="8.7.0" />
     <PackageVersion Include="Polly.Extensions" Version="8.7.0" />
     <PackageVersion Include="Polly.RateLimiting" Version="8.7.0" />
+    <PackageVersion Include="System.Threading.RateLimiting" Version="8.0.0" />
     <!-- The API explorer the generated document is read in. It carries no package dependency of its own and serves its
          own script bundle out of the assembly, so a running instance fetches nothing from a content delivery network.
          Referenced by Host alone, and mapped only when the environment is Development — the assembly is redistributed

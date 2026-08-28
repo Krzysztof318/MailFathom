@@ -168,6 +168,11 @@ internal readonly record struct TransportSurface
     /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>
     internal string ApiKeySchemeName => $"MailFathom:{this.Name}:ApiKey";
 
+    /// <summary>Gets the scheme judging an owner's username and password against the credentials this deployment stores.</summary>
+    /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>
+    /// <remarks>Composed from the surface's name like the others, even though the credentials it consults are one set for the deployment rather than one per surface: what the name keeps apart is the attempt bucket and the policy, so a caller spending its guesses on one surface has not spent them on the other.</remarks>
+    internal string BasicSchemeName => $"MailFathom:{this.Name}:Basic";
+
     /// <summary>Gets the scheme verifying a signed assertion against this surface's configured client public keys.</summary>
     /// <exception cref="InvalidOperationException">Thrown when the value is the struct default rather than a surface.</exception>
     internal string ClientAssertionSchemeName => $"MailFathom:{this.Name}:ClientAssertion";

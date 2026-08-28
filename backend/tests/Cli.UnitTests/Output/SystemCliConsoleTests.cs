@@ -149,6 +149,44 @@ public sealed class SystemCliConsoleTests
         Assert.Equal("Erase every stored copy? [y/N]: ", error.ToString());
     }
 
+    /// <summary>Gets whether this run's standard input is a pipe, which is the path <see cref="SystemCliConsole.ReadSecret" /> takes without a terminal to read keys from.</summary>
+    /// <remarks>Public and static because that is what xUnit reads a conditional skip from. A run attached to a terminal would take the key-by-key path instead, which waits for somebody to type — so the tests below are skipped there rather than hanging.</remarks>
+    public static bool InputIsPiped => System.Console.IsInputRedirected;
+
+    /// <summary>A password is stored as what was sent, so a space at either end of one belongs to the credential rather than to the way it was typed.</summary>
+    [Fact(Skip = "Reads a piped credential, which needs this run's standard input to be a pipe.", SkipUnless = nameof(InputIsPiped))]
+    public void ReadSecret_APipedCredentialSurroundedBySpaces_IsReadExactlyAsItWasSent()
+    {
+        // Arrange
+        StringWriter output = new();
+        StringWriter error = new();
+        var console = Console(output, error, answer: "  hunter2  ");
+
+        // Act
+        var secret = console.ReadSecret("Password: ");
+
+        // Assert
+        Assert.Equal("  hunter2  ", secret);
+    }
+
+    /// <summary>Nothing is written where the credential is read from, so a prompt cannot land in the file an operator piped the result into.</summary>
+    [Fact(Skip = "Reads a piped credential, which needs this run's standard input to be a pipe.", SkipUnless = nameof(InputIsPiped))]
+    public void ReadSecret_APipedCredential_IsReadWithoutPromptingOrEchoing()
+    {
+        // Arrange
+        StringWriter output = new();
+        StringWriter error = new();
+        var console = Console(output, error, answer: "hunter2");
+
+        // Act
+        var secret = console.ReadSecret("Password: ");
+
+        // Assert
+        Assert.Equal("hunter2", secret);
+        Assert.Empty(output.ToString());
+        Assert.DoesNotContain("hunter2", error.ToString(), StringComparison.Ordinal);
+    }
+
     /// <summary>What a marked line opens with, and the whole of what a stream permitting no colour must never carry.</summary>
     private const string EscapeSequence = "\u001b";
 

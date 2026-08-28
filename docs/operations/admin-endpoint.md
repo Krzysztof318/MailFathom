@@ -1,6 +1,6 @@
 # Administering a deployment
 
-<!-- describes: backend/src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, backend/src/Host/Api/Admin*.cs, backend/src/Host/Api/Configuration*.cs, backend/src/Host/Api/Contact*.cs, backend/src/Host/Api/Content*.cs, backend/src/Host/Api/Embedding*.cs, backend/src/Host/Api/Job*.cs, backend/src/Host/Api/Mail*.cs, backend/src/Host/Api/Outbox*.cs, backend/src/Host/Api/Spam*.cs, backend/src/Host/Hosting/Startup/SurfaceIsolation.cs, backend/src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, backend/src/Domain/Access/MailFathomPermission.cs, backend/src/Host/Security/Endpoints/RouteAuthorization.cs, backend/src/Host/Security/Endpoints/RoutePermission.cs, backend/src/Host/Security/Endpoints/TransportListenerBinder.cs, backend/src/Host/Security/Transport/TransportRateLimiting.cs, backend/src/Cli/**, scripts/install-mfctl.sh -->
+<!-- describes: backend/src/Host/Configuration/Endpoints/AdminEndpointOptions.cs, backend/src/Host/Api/Admin*.cs, backend/src/Host/Api/Configuration*.cs, backend/src/Host/Api/Contact*.cs, backend/src/Host/Api/Content*.cs, backend/src/Host/Api/Embedding*.cs, backend/src/Host/Api/Job*.cs, backend/src/Host/Api/Mail*.cs, backend/src/Host/Api/Outbox*.cs, backend/src/Host/Api/Owner*.cs, backend/src/Host/Api/Spam*.cs, backend/src/Host/Hosting/Startup/SurfaceIsolation.cs, backend/src/Host/Hosting/Warnings/AdminTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/TransportGrantStartupReport.cs, backend/src/Domain/Access/MailFathomPermission.cs, backend/src/Host/Security/Endpoints/RouteAuthorization.cs, backend/src/Host/Security/Endpoints/RoutePermission.cs, backend/src/Host/Security/Endpoints/TransportListenerBinder.cs, backend/src/Host/Security/Transport/TransportRateLimiting.cs, backend/src/Cli/**, scripts/install-mfctl.sh -->
 
 How the `mfctl` command reaches a running deployment, and what that deployment has to have enabled before it will
 answer.
@@ -45,7 +45,9 @@ policy, and a policy consults only its own schemes.
 
 `Authentication` takes the same entries `McpEndpoint:Authentication` takes — one entry per credential, each carrying an
 `ApiKey` block, a `PublicKey` block, an `OAuth` block, or any combination of them — and every one of them is this
-endpoint's own. A misspelled key fails startup rather than binding a default. Each method is documented once, under
+endpoint's own. The one method the other two surfaces accept and this one refuses is
+[a password](mcp-endpoint.md#passwords): startup names the section rather than starting, because this surface answers
+for the deployment rather than for a person and a credential naming one owner would have nothing here to act for. A misspelled key fails startup rather than binding a default. Each method is documented once, under
 [the MCP endpoint](mcp-endpoint.md#authentication): what a key is, what a
 [key pair](mcp-endpoint.md#key-pairs) is and what a client signs to present one, and what a token must prove. The
 difference here is the audience an assertion names — `urn:mailfathom:admin` rather than `urn:mailfathom:mcp` — which is
@@ -205,11 +207,20 @@ what it was never granted is what the record exists to make visible.
 | `POST /api/admin/configuration/document` | `mailfathom.admin.configuration.write` | Takes that document back edited and commits it as one change against the version it was opened over. |
 | `GET /api/admin/configuration/adoption` | `mailfathom.admin.read` | Reports what adopting a path would copy out of the deployment's files, naming the file behind each setting, and writes nothing. |
 | `POST /api/admin/configuration/adoption` | `mailfathom.admin.configuration.write` | Copies those values into the persisted document. **This is the one route that moves a decision out of a deployment's files and into its database.** |
+| `GET /api/admin/owners` | `mailfathom.admin.read` | Reads the owners this deployment holds records for, by identity alone. It is what a credential command reads before it acts, so that a deployment serving one person needs no `--owner`. |
+| `GET /api/admin/owners/{ownerId}/credentials` | `mailfathom.admin.read` | Reads one owner's [username-and-password credentials](#owner-credentials), each with its username, whether it still authenticates, and when its password was last replaced. It carries nothing derived from a password. |
+| `POST /api/admin/owners/{ownerId}/credentials` | `mailfathom.admin.credentials.write` | Provisions one, from a username and a password the body carries. **This is one of the two routes that mint a way into somebody's mail.** It answers `409` where the username is already taken across the deployment, and where the owner already holds the hundred credentials one owner may. |
+| `PUT /api/admin/owners/{ownerId}/credentials/{credentialId}/password` | `mailfathom.admin.credentials.write` | Replaces one credential's password in a single statement, which stops the previous one working at that instant. **This is the other.** |
+| `PUT /api/admin/owners/{ownerId}/credentials/{credentialId}/enablement` | `mailfathom.admin.credentials.write` | Stops one credential authenticating, or lets it authenticate again, keeping its username and password either way. |
+| `DELETE /api/admin/owners/{ownerId}/credentials/{credentialId}` | `mailfathom.admin.credentials.write` | Removes the record and frees the username. **This cannot be undone**, and it is the reason `mfctl credential delete` shows the credential and asks before sending it. What that command shows comes from the listing and what it reports comes from here, so an identifier the listing does not carry is still sent rather than answered locally. |
 
-The write route's body carries a long-lived credential for a named mailbox owner, which is what makes the clear-text
-warning below matter more here than it does for a session probe. It refuses, with `400` and a sentence naming what was
-wrong, an account this deployment does not configure and a body missing either field; a second grant for the same
-account replaces the first rather than adding to it. It reads at most 16 KB, which is far more than any authorization
+**Three of those routes carry a credential in the body**, which is what makes the clear-text warning below matter more
+here than it does for a session probe: the refresh-token route, and the two owner-credential routes that provision a
+password or replace one.
+
+`POST /api/admin/mailbox/refresh-token` carries a long-lived credential for a named mailbox owner. It refuses, with
+`400` and a sentence naming what was wrong, an account this deployment does not configure and a body missing either
+field; a second grant for the same account replaces the first rather than adding to it. It reads at most 16 KB, which is far more than any authorization
 server's refresh token and far less than the server's own default. It answers with no body at all, so nothing it stores
 can be read back out through it.
 
@@ -1093,6 +1104,62 @@ MailFathom's. So a value an environment provider supplies at a path whose first 
 configuration section reports the marker, with the path and the source still named — the same shape a secret takes,
 because what an operator asks this surface is where a setting is decided. An environment variable that does name a
 MailFathom setting, which is every override written for this deployment on purpose, is reported in full.
+
+### Owner credentials
+
+The one credential in MailFathom that belongs to a person rather than to a deployment is the username and password an
+owner signs in to [the client](client-endpoint.md) or [the MCP endpoint](mcp-endpoint.md#passwords) with, and these are
+the routes that administer one. There is no self-service and no default: whoever administers the deployment provisions
+the credential and tells the owner what it is, which is what keeps an owner from minting a way into anybody's mail,
+their own included.
+
+Reading and writing are separately granted. A listing says which credentials exist and whose they are, which is
+`mailfathom.admin.read`; provisioning, rotating, disabling, and removing decide who can read somebody's mail, which is
+`mailfathom.admin.credentials.write` — so a credential provisioned to read this deployment's state has not thereby been
+given one that can mint a way into a mailbox.
+
+```console
+$ mfctl credential create --username owner
+Password for 'owner':
+Provisioned credential 0198f0c4-... for owner 3f1d.... The owner signs in with 'owner' and the password you typed,
+which nothing here or in the deployment can report back.
+```
+
+**The password is asked for, never passed.** There is no `--password` option and there will not be one: a value written
+on a command line reaches the shell's history, the process table, and the log of whatever supervisor started the
+command. It is read without echo where somebody is at the terminal and as one line where the input is a pipe, so a
+script supplies one without it ever being an argument. Nothing prints it back — not the confirmation, not a listing, and
+not a refusal, which names the rule the password broke rather than the value.
+
+| Command | What it does |
+| --- | --- |
+| `mfctl credential list` | Reads which credentials an owner holds, whether each still authenticates, and how old its password is |
+| `mfctl credential create --username <name>` | Provisions one, asking for the password |
+| `mfctl credential rotate --id <credential>` | Replaces the password, which stops the previous one working at that instant |
+| `mfctl credential disable --id <credential>` | Stops it authenticating, keeping its username and password |
+| `mfctl credential enable --id <credential>` | Lets it authenticate again, with the password it already had |
+| `mfctl credential delete --id <credential>` | Removes the record and frees the username, which cannot be undone |
+
+Every command takes `--owner` and none of them needs it on a deployment holding one owner: the command reads the roster,
+acts on the single owner there is, and refuses rather than guessing where there are several — naming the identifiers to
+choose from, so the refusal is where an operator reads the one to pass.
+
+**Disabling and deleting are different acts.** A disabled credential keeps its username claimed, so nothing else can be
+provisioned under it, and one command undoes the decision — which is what to reach for when a way into somebody's mail
+has to be closed now and the reason may turn out to be nothing. Deleting frees the username and nothing in MailFathom
+puts the record back; the command shows the credential and then asks, and `--yes` is how a scripted removal states the
+agreement instead. What it shows is never what decides the outcome: reading and removing are separately granted, so a
+token holding `mailfathom.admin.credentials.write` and not `mailfathom.admin.read` is refused the listing, and the
+command reports that refusal, asks anyway, and sends the removal — otherwise the credential would be unremovable
+through the tool that exists to remove it.
+
+**A rotation is one statement.** There is no moment at which both passwords work and none at which neither does, so a
+client still presenting the previous one meets a refusal rather than a half-written record. The credential keeps its
+identifier and its username, so nothing an operator wrote down about it goes stale.
+
+Every change to who can reach an owner's mail is written to the audit record: the act, the credential's identifier, the
+owner, the administrator who made it, and when. The username is not among them, and neither is anything derived from the
+password — an audit record names a credential without naming a way to sign in.
 
 ## Rate limiting
 

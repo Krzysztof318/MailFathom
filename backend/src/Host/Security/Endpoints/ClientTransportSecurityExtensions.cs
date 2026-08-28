@@ -76,22 +76,33 @@ internal static class ClientTransportSecurityExtensions
     /// <summary>Names the registered scheme that answers a request presenting no credential at all.</summary>
     /// <remarks>
     /// <para>
-    /// It has to be a scheme this surface actually registered, or the challenge forwards to nothing. The API key scheme
-    /// is the natural answer and produces the bare bearer challenge, which is all this endpoint has to say. RFC 9728
-    /// lets a challenge point at the metadata document, and this one does not need to: a client here reaches the
-    /// document by appending the route prefix it is already calling, which is what the resource identifier is validated
-    /// against at startup, so nothing about authorizing depends on the wording of a refusal.
+    /// It has to be a scheme this surface actually registered, or the challenge forwards to nothing. Three of the four
+    /// challenge identically — a bare bearer challenge is all a client holding a key, an assertion, or a token needs,
+    /// since each of them sets its credential deliberately — so which of those three answers is a matter of which is
+    /// certain to exist rather than of what a client is told. RFC 9728 lets a challenge point at the metadata document,
+    /// and this one does not need to: a client here reaches the document by appending the route prefix it is already
+    /// calling, which is what the resource identifier is validated against at startup, so nothing about authorizing
+    /// depends on the wording of a refusal.
     /// </para>
     /// <para>
-    /// With API keys turned off the client assertion scheme answers, and with both turned off the first authorization
-    /// server's validator does. All three challenge identically, which is what makes the order here a matter of which
-    /// scheme is certain to exist rather than of what a client is told. One of them always does: an endpoint reaching
-    /// this point configured at least one method, and configuration validation refuses OAuth with no authorization
-    /// server behind it.
+    /// Basic is the exception and is therefore answered first where it is configured. A password is typed by a person,
+    /// and a client only asks for one when a <c>WWW-Authenticate: Basic</c> challenge tells it to, so a surface
+    /// accepting passwords whose refusal named no Basic challenge would be a surface nobody could sign in to without
+    /// knowing in advance that they could. Its challenge carries the bare bearer one beside it, so the other three
+    /// methods are told exactly what they would have been told without it.
+    /// </para>
+    /// <para>
+    /// One scheme always exists to name: an endpoint reaching this point configured at least one method, and
+    /// configuration validation refuses OAuth with no authorization server behind it.
     /// </para>
     /// </remarks>
     private static string ChallengeSchemeFor(ClientEndpointOptions endpointSettings)
     {
+        if (endpointSettings.AllowsBasic)
+        {
+            return TransportSurface.Client.BasicSchemeName;
+        }
+
         if (endpointSettings.AllowsApiKey)
         {
             return TransportSurface.Client.ApiKeySchemeName;

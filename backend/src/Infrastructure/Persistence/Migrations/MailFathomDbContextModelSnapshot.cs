@@ -1825,6 +1825,49 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("settings_accounts", (string)null);
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OwnerPasswordCredentialEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("PasswordChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<string>("Username")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Username")
+                        .IsUnique()
+                        .HasDatabaseName("ix_owner_password_credentials_username");
+
+                    b.HasIndex("OwnerId", "CreatedAt")
+                        .HasDatabaseName("ix_owner_password_credentials_owner_created_at");
+
+                    b.ToTable("owner_password_credentials", (string)null);
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OwnerStoredContentEntity", b =>
                 {
                     b.Property<Guid>("OwnerId")
@@ -2689,6 +2732,15 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_outgoing_email_recipients_emails");
 
                     b.Navigation("OutgoingEmail");
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OwnerPasswordCredentialEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.OwnerAccountEntity", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OwnerStoredContentEntity", b =>

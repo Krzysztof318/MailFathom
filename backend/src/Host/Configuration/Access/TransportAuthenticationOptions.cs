@@ -45,6 +45,19 @@ internal sealed class TransportAuthenticationOptions
     /// <remarks><see langword="null" /> when this entry states no API key, because the block's presence is what selects the method.</remarks>
     public ConfiguredSecret? ApiKey { get; set; }
 
+    /// <summary>Gets or sets that this endpoint accepts an owner's own username and password, and how often one may be tried.</summary>
+    /// <remarks>
+    /// <see langword="null" /> when this entry states no Basic, because the block's presence is what selects the method.
+    /// It is the one method whose credentials the deployment does not configure: what a caller presents is a record the
+    /// administrative surface provisioned for one owner, so this block carries a bound and nothing to steal.
+    /// <para>
+    /// It is refused on the administrative endpoint. That surface answers for the deployment rather than for a person,
+    /// and this method authenticates a person — a credential admitted here carries the owner it belongs to, which the
+    /// administrative surface has nowhere to put and no use for.
+    /// </para>
+    /// </remarks>
+    public BasicAuthenticationOptions? Basic { get; set; }
+
     /// <summary>Gets or sets what this deployment is called in OAuth terms and which authorization servers may speak for it.</summary>
     /// <remarks><see langword="null" /> when this entry states no OAuth, because the block's presence is what selects the method.</remarks>
     public OAuthValidationOptions? OAuth { get; set; }
@@ -91,8 +104,9 @@ internal sealed class TransportAuthenticationOptions
     /// <remarks>
     /// With it, a token holds the published names its scopes carry <em>and</em> this entry lists, so the authorization
     /// server decides per subject within a bound the deployment fixed. Available only to an entry whose sole block is
-    /// <see cref="OAuth" />, because neither a key nor a public key can carry anything the deployment did not write, so
-    /// startup refuses it beside either rather than asking a credential a question it cannot answer.
+    /// <see cref="OAuth" />, because none of the other three credentials can carry a claim about what it may do — a key,
+    /// a public key, and an owner's password are each judged against something this deployment holds — so startup
+    /// refuses it beside any of them rather than asking a credential a question it cannot answer.
     /// </remarks>
     public bool PermissionsFromTokenScopes { get; set; }
 
@@ -111,10 +125,19 @@ internal sealed class TransportAuthenticationOptions
     internal string? ConfigurationKey { get; private set; }
 
     /// <summary>Gets whether this entry states any credential at all.</summary>
-    public bool StatesAMethod => this.ApiKey is not null || this.OAuth is not null || this.PublicKey is not null;
+    public bool StatesAMethod =>
+        this.ApiKey is not null || this.OAuth is not null || this.PublicKey is not null || this.Basic is not null;
 
-    /// <summary>Gets whether this entry states a credential the deployment itself configured, which can carry no scope of its own.</summary>
-    public bool StatesAConfiguredCredential => this.ApiKey is not null || this.PublicKey is not null;
+    /// <summary>Gets whether this entry states a credential that can carry no scope of its own.</summary>
+    /// <remarks>
+    /// Three of the four methods are in this group, and for one reason rather than for two: nothing a caller presents
+    /// under any of them carries a claim about what it may do. A key and a public key are material the deployment
+    /// configured, and a username and password are a record the deployment provisioned — none of the three has an
+    /// authorization server behind it to narrow a grant, which is what <see cref="PermissionsFromTokenScopes" /> asks
+    /// for.
+    /// </remarks>
+    public bool StatesAConfiguredCredential =>
+        this.ApiKey is not null || this.PublicKey is not null || this.Basic is not null;
 
     /// <summary>Records that the deployment stated no grant on this entry, which is what leaves it reaching the whole surface.</summary>
     /// <remarks>Called by the endpoint's own read, which is the only place that holds the configuration section this was bound from.</remarks>
@@ -184,9 +207,13 @@ internal sealed class TransportAuthenticationOptions
 
         if (!this.StatesAMethod)
         {
+            var password = surface == ProtectedSurface.Administration
+                ? "."
+                : $", or a '{nameof(this.Basic)}' block accepting an owner's own username and password.";
+
             return
             [
-                $"{settingPath} — this entry states no credential; write an '{nameof(this.ApiKey)}' block naming one key, a '{nameof(this.PublicKey)}' block naming one client's public key, or an '{nameof(this.OAuth)}' block naming the resource and its authorization servers.",
+                $"{settingPath} — this entry states no credential; write an '{nameof(this.ApiKey)}' block naming one key, a '{nameof(this.PublicKey)}' block naming one client's public key, an '{nameof(this.OAuth)}' block naming the resource and its authorization servers{password}",
             ];
         }
 
@@ -197,22 +224,38 @@ internal sealed class TransportAuthenticationOptions
             errors.AddRange(oauth.FindConfigurationErrors().Select(error => $"{settingPath}:{nameof(this.OAuth)}:{error}"));
         }
 
+        if (this.Basic is { } basic)
+        {
+            errors.AddRange(this.FindBasicSurfaceErrors(settingPath, surface));
+            errors.AddRange(basic.FindConfigurationErrors($"{settingPath}:{nameof(this.Basic)}"));
+        }
+
         return errors;
     }
 
-    /// <summary>Reports the grant an operator wrote that says something impossible.</summary>
+    /// <summary>Reports the one surface this method may not guard.</summary>
     /// <remarks>
-    /// An emptied list is deliberately not among them: it is a grant narrowed all the way, which is a posture rather
-    /// than a mistake. What is refused is a value naming nothing this repository publishes, one naming only the other
-    /// surface — which would otherwise sit there granting nothing while an operator believed they had granted
-    /// something — one naming the whole vocabulary, one whose permissions the grant already carries, and asking a
-    /// credential this deployment configured to bring scopes it can never carry.
+    /// The administrative surface answers for the deployment rather than for a person, so every principal admitted there
+    /// acts for no owner and every owner-scoped use case refuses it. A username and password authenticate exactly one
+    /// owner, so admitting one here would either produce a principal carrying an owner the surface has no use for or
+    /// one silently stripped of it — and the second is a credential that reads like a sign-in and grants the
+    /// deployment's own authority. Refusing it at startup is what makes that unreachable rather than merely unintended.
     /// </remarks>
+    private IEnumerable<string> FindBasicSurfaceErrors(string settingPath, ProtectedSurface surface)
+    {
+        if (surface != ProtectedSurface.Administration)
+        {
+            yield break;
+        }
+
+        yield return $"{settingPath}:{nameof(this.Basic)} — the administrative endpoint does not accept an owner's username and password. It answers for the deployment rather than for one person, so a credential naming an owner has nothing to act for here; provision an '{nameof(this.ApiKey)}', a '{nameof(this.PublicKey)}', or an '{nameof(this.OAuth)}' block instead, and write the '{nameof(this.Basic)}' block on the client or MCP endpoint the owner actually signs in to.";
+    }
+
     private IEnumerable<string> FindGrantErrors(string settingPath, ProtectedSurface surface)
     {
         if (this.PermissionsFromTokenScopes && this.StatesAConfiguredCredential)
         {
-            yield return $"{settingPath}:{nameof(this.PermissionsFromTokenScopes)} — a token's scopes can narrow a grant and a credential this deployment configured carries none, so this entry cannot be read both ways. Move the '{nameof(this.OAuth)}' block to an entry of its own, or remove this setting and write the grant in '{nameof(this.Permissions)}'.";
+            yield return $"{settingPath}:{nameof(this.PermissionsFromTokenScopes)} — a token's scopes can narrow a grant and a key, a public key, or an owner's password carries none, so this entry cannot be read both ways. Move the '{nameof(this.OAuth)}' block to an entry of its own, or remove this setting and write the grant in '{nameof(this.Permissions)}'.";
         }
 
         var claimedPermissions = new HashSet<MailFathomPermission>();

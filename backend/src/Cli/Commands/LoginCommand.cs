@@ -296,8 +296,11 @@ internal static class LoginCommand
     /// </remarks>
     private static string ReadPresentedCredential(CliContext context)
     {
+        // Trimmed here rather than in the console, because a token is pasted and a space around one is a slip rather
+        // than part of it. The console reads a password too, where the opposite holds, so the caller decides.
         var token = context.Console.ReadSecret(
-            "Administrative credential (an API key, or an access token from the configured authorization server): ");
+            "Administrative credential (an API key, or an access token from the configured authorization server): ")
+            .Trim();
 
         return token.Length > 0
             ? token

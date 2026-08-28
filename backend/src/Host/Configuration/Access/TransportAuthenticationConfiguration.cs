@@ -41,6 +41,24 @@ internal static class TransportAuthenticationConfiguration
         return [.. methods.Select(method => method.PublicKey).OfType<ConfiguredSecret>()];
     }
 
+    /// <summary>Reports the entry that accepts an owner's username and password, where the endpoint accepts one.</summary>
+    /// <param name="methods">The configured entries, in configuration order.</param>
+    /// <returns>The entry carrying the Basic block, or <see langword="null" /> when the endpoint accepts no password.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="methods" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// One entry rather than a list, unlike every other method here, and the difference is what a caller presents. A key
+    /// selects the entry that configured it and a token selects the entry that trusts its issuer; a password selects a
+    /// credential row, which no entry names — so a second Basic entry would leave which grant an owner holds decided by
+    /// configuration order. <see cref="FindConfigurationErrors" /> refuses that arrangement, so the first entry this
+    /// finds is the only one there is.
+    /// </remarks>
+    internal static TransportAuthenticationOptions? BasicMethodIn(IEnumerable<TransportAuthenticationOptions> methods)
+    {
+        ArgumentNullException.ThrowIfNull(methods);
+
+        return methods.FirstOrDefault(method => method.Basic is not null);
+    }
+
     /// <summary>Maps each configured API key onto the permissions the entry that carries it grants.</summary>
     /// <param name="methods">The configured entries, in configuration order.</param>
     /// <param name="surface">The surface these entries guard, which decides what an entry that wrote no grant reaches.</param>
@@ -192,6 +210,7 @@ internal static class TransportAuthenticationConfiguration
 
         errors.AddRange(FindResourceAgreementErrors(sectionName, methods));
         errors.AddRange(FindAuthorizationServerCollisionErrors(sectionName, methods));
+        errors.AddRange(FindRepeatedBasicErrors(sectionName, methods));
 
         return errors;
     }
@@ -231,6 +250,36 @@ internal static class TransportAuthenticationConfiguration
                 group => group.Key,
                 group => group.First().Method.GrantedPermissions(surface),
                 StringComparer.Ordinal);
+    }
+
+    /// <summary>Reports the second and later entries that accept an owner's username and password.</summary>
+    /// <remarks>
+    /// The other methods are repeatable because a presented credential selects the entry that configured it, and a
+    /// password does not: it selects a credential row the administrative surface provisioned, which names no entry. Two
+    /// Basic entries would therefore leave which grant an owner holds and which attempt bound applies decided by
+    /// configuration order — and rotating a password is a second credential row rather than a second block, so nothing
+    /// is lost by refusing it.
+    /// </remarks>
+    private static IEnumerable<string> FindRepeatedBasicErrors(
+        string sectionName,
+        IReadOnlyList<TransportAuthenticationOptions> methods)
+    {
+        var seenOne = false;
+
+        foreach (var (index, method) in methods.Index())
+        {
+            if (method.Basic is null)
+            {
+                continue;
+            }
+
+            if (seenOne)
+            {
+                yield return $"{SettingPathOf(sectionName, method, index)}:{nameof(TransportAuthenticationOptions.Basic)} — an earlier entry already accepts an owner's username and password, and an endpoint accepts one such block. A password names a credential this deployment provisioned rather than an entry, so two blocks would leave the grant an owner holds decided by configuration order; write one block, and provision a second credential through the administrative surface where a second is wanted.";
+            }
+
+            seenOne = true;
+        }
     }
 
     /// <summary>Reports the OAuth entries that name a different resource from the first one.</summary>

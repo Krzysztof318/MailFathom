@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Net;
+
 namespace MailFathom.Cli;
 
 /// <summary>Something the operator can act on, reported as a message rather than as a stack trace.</summary>
@@ -18,6 +20,23 @@ internal sealed class CliFailure : Exception
         : base(message)
     {
     }
+
+    /// <summary>Initializes a failure the deployment answered with, carrying the status it answered.</summary>
+    /// <param name="message">What went wrong, written for someone who can fix it.</param>
+    /// <param name="status">The status the deployment answered.</param>
+    internal CliFailure(string message, HttpStatusCode status)
+        : base(message)
+    {
+        this.Status = status;
+    }
+
+    /// <summary>Gets the status the deployment answered, or <see langword="null" /> where the failure never reached one.</summary>
+    /// <remarks>
+    /// Carried so a command can tell one refusal from another where the difference changes what it does — a grant the
+    /// token does not hold is not the same fact as a deployment nothing could reach. A command that treats every
+    /// failure alike ignores it, which is the ordinary case.
+    /// </remarks>
+    internal HttpStatusCode? Status { get; }
 
     /// <summary>Initializes a failure that wraps the one that caused it.</summary>
     /// <param name="message">What went wrong, written for someone who can fix it.</param>

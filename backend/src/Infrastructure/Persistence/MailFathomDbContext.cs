@@ -59,6 +59,9 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<OwnerAccountEntity> OwnerAccounts => this.Set<OwnerAccountEntity>();
 
+    internal DbSet<OwnerPasswordCredentialEntity> OwnerPasswordCredentials =>
+        this.Set<OwnerPasswordCredentialEntity>();
+
     internal DbSet<OwnerStoredContentEntity> OwnerStoredContent => this.Set<OwnerStoredContentEntity>();
 
     internal DbSet<MailboxAccountEntity> MailboxAccounts => this.Set<MailboxAccountEntity>();
@@ -167,6 +170,7 @@ internal sealed class MailFathomDbContext : DbContext
 
         modelBuilder.ApplyConfiguration(new RootSettingsConfiguration());
         modelBuilder.ApplyConfiguration(new OwnerAccountConfiguration());
+        modelBuilder.ApplyConfiguration(new OwnerPasswordCredentialConfiguration());
         modelBuilder.ApplyConfiguration(new OwnerStoredContentConfiguration());
         modelBuilder.ApplyConfiguration(new MailboxAccountConfiguration());
         modelBuilder.ApplyConfiguration(new MailFolderConfiguration());

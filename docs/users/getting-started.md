@@ -257,8 +257,9 @@ The endpoint is off by default, and enabling it means stating how it is authenti
 
 An empty `Authentication` list is legal — the reverse-proxy-and-loopback deployment is an ordinary one — but it is
 announced with a startup warning, because an unauthenticated endpoint serves your mailbox to whoever can reach its port. Read
-[the MCP endpoint](../operations/mcp-endpoint.md) before widening anything: it records the OAuth alternative, browser
-origins, serving your own domain over TLS, client certificates, and the rate limits that apply out of the box.
+[the MCP endpoint](../operations/mcp-endpoint.md) before widening anything: it records the other three methods — an
+OAuth entry, a client's public key, and [an owner's own username and password](../operations/mcp-endpoint.md#passwords)
+— browser origins, serving your own domain over TLS, client certificates, and the rate limits that apply out of the box.
 
 **A credential reaches the whole surface until its entry narrows it.** The entry above writes no `Permissions` list, so
 the key it configures may do everything the MCP surface publishes — read the local mailbox copy, ask questions of it, and

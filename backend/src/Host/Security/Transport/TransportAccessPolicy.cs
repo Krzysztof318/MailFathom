@@ -4,6 +4,7 @@
 
 using System.Security.Claims;
 using MailFathom.Host.Security.ApiKeys;
+using MailFathom.Host.Security.Basic;
 using MailFathom.Host.Security.ClientAssertions;
 using MailFathom.Infrastructure.Security.OAuth;
 
@@ -73,7 +74,7 @@ internal static class TransportAccessPolicy
             return false;
         }
 
-        if (AuthenticatedWithAConfiguredCredential(principal))
+        if (AuthenticatedWithACredentialThisDeploymentHolds(principal))
         {
             return true;
         }
@@ -99,10 +100,17 @@ internal static class TransportAccessPolicy
     private static bool NamesAnAuthorizedSubject(ClaimsPrincipal principal, IReadOnlySet<string> authorizedIdentities) =>
         OAuthIdentity.IdentityCarriedBy(principal) is { } identity && authorizedIdentities.Contains(identity);
 
-    /// <summary>Reports whether a credential this deployment's own configuration named produced this principal, judged by what the principal carries rather than by which scheme named it.</summary>
-    /// <remarks>Both claim types are read here rather than one of them standing for the other, because each names a different kind of configured credential and a principal carrying neither has to fall through to the token rules.</remarks>
-    private static bool AuthenticatedWithAConfiguredCredential(ClaimsPrincipal principal) =>
+    /// <summary>Reports whether a credential this deployment holds rather than a token an authorization server issued produced this principal, judged by what the principal carries rather than by which scheme named it.</summary>
+    /// <remarks>
+    /// Each claim type is read rather than one of them standing for the others, because each names a different kind of
+    /// credential and a principal carrying none of them has to fall through to the token rules. The first two name a
+    /// credential this deployment's configuration states; the third names one of its own database rows, which is the
+    /// only difference a password makes here — the identity is still established before this runs, and what is left to
+    /// decide is that it was not an unrecognized subject.
+    /// </remarks>
+    private static bool AuthenticatedWithACredentialThisDeploymentHolds(ClaimsPrincipal principal) =>
         principal.HasClaim(claim =>
             claim.Type == ApiKeyAuthentication.ApiKeyNameClaimType
-            || claim.Type == ClientAssertionAuthentication.KeyNameClaimType);
+            || claim.Type == ClientAssertionAuthentication.KeyNameClaimType
+            || claim.Type == BasicAuthentication.CredentialIdClaimType);
 }

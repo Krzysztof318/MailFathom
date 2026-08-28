@@ -139,6 +139,10 @@ internal sealed class ClientEndpointOptions
     /// <summary>Gets whether a client may authenticate with an assertion signed by one of the configured public keys.</summary>
     public bool AllowsClientAssertion => this.PublicKeys().Count > 0;
 
+    /// <summary>Gets whether a client may authenticate with an owner's own username and password.</summary>
+    /// <remarks>What it reports is that the endpoint accepts the method; which owners can actually use it is the credentials the administrative surface has provisioned, which is a question about the database rather than about this section.</remarks>
+    public bool AllowsBasic => this.BasicMethod() is not null;
+
     /// <summary>Gets whether a request must present a credential naming who is calling.</summary>
     public bool RequiresAuthentication => this.Authentication.Count > 0;
 
@@ -217,6 +221,12 @@ internal sealed class ClientEndpointOptions
     /// <returns>The configured OAuth blocks, empty when the endpoint accepts no token.</returns>
     public IReadOnlyList<OAuthValidationOptions> OAuthMethods() =>
         TransportAuthenticationConfiguration.OAuthMethodsIn(this.Authentication);
+
+    /// <summary>Reports the entry that accepts an owner's username and password, where the endpoint accepts one.</summary>
+    /// <returns>The entry, or <see langword="null" /> when the endpoint accepts no password.</returns>
+    /// <remarks>A method rather than a property, for the reason <see cref="ApiKeys" /> is one.</remarks>
+    public TransportAuthenticationOptions? BasicMethod() =>
+        TransportAuthenticationConfiguration.BasicMethodIn(this.Authentication);
 
     /// <summary>Describes every socket this endpoint asks for.</summary>
     /// <returns>One declaration per socket, empty when the endpoint is not served.</returns>
