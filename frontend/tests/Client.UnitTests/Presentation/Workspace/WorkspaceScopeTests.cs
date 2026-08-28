@@ -25,6 +25,7 @@ public sealed class WorkspaceScopeTests
         Assert.Null(scope.Folder);
         Assert.Null(scope.Role);
         Assert.Empty(scope.Selection);
+        Assert.Equal(string.Empty, scope.BodySelection);
         Assert.False(scope.NarrowsAnything);
     }
 
@@ -41,12 +42,14 @@ public sealed class WorkspaceScopeTests
         var folder = WorkspaceScope.Everything with { Folder = "Inbox" };
         var role = WorkspaceScope.Everything with { Role = "Sent" };
         var selection = WorkspaceScope.Everything with { Selection = ImmutableArray.Create("1") };
+        var bodySelection = WorkspaceScope.Everything with { BodySelection = "the selected passage" };
 
         // Assert
         Assert.True(account.NarrowsAnything);
         Assert.True(folder.NarrowsAnything);
         Assert.True(role.NarrowsAnything);
         Assert.True(selection.NarrowsAnything);
+        Assert.True(bodySelection.NarrowsAnything);
     }
 
     /// <summary>
@@ -78,6 +81,17 @@ public sealed class WorkspaceScopeTests
         // Assert
         Assert.NotEqual(one, reordered);
         Assert.NotEqual(one, shorter);
+    }
+
+    [Fact]
+    public void Equals_TwoDifferentBodySelections_AreDifferentScopes()
+    {
+        // Arrange
+        var one = WorkspaceScope.Everything with { BodySelection = "first passage" };
+        var other = WorkspaceScope.Everything with { BodySelection = "second passage" };
+
+        // Assert
+        Assert.NotEqual(one, other);
     }
 
     /// <summary>A folder is read within its account, so the same folder name under another account is another scope.</summary>

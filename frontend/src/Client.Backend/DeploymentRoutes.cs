@@ -80,6 +80,10 @@ internal static class DeploymentRoutes
         return string.Create(CultureInfo.InvariantCulture, $"{Prefix}/threads/{threadId:D}{query}");
     }
 
+    /// <summary>Where a deployment describes everything a pane draws around one message.</summary>
+    internal static string MailMessagePath(Guid storedEmailId) =>
+        string.Create(CultureInfo.InvariantCulture, $"{Prefix}/messages/{storedEmailId:D}");
+
     /// <summary>Where a deployment serves one message's body, as the two renderings a reading pane draws it from.</summary>
     /// <param name="storedEmailId">The message, as a list row or a conversation published it.</param>
     /// <param name="remoteImages">Whether the reader has asked for this message's remote pictures.</param>
@@ -92,4 +96,8 @@ internal static class DeploymentRoutes
     internal static string MailBodyPath(Guid storedEmailId, bool remoteImages) => string.Create(
         CultureInfo.InvariantCulture,
         $"{Prefix}/messages/{storedEmailId:D}/body{(remoteImages ? "?remoteImages=true" : string.Empty)}");
+
+    /// <summary>Where a deployment streams one attachment of one message.</summary>
+    internal static string MailAttachmentPath(Guid storedEmailId, int position) =>
+        string.Create(CultureInfo.InvariantCulture, $"{Prefix}/messages/{storedEmailId:D}/attachments/{position}");
 }

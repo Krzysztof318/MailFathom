@@ -5,7 +5,9 @@
 using System.Collections.Immutable;
 using System.Net;
 using MailFathom.Client.Backend;
+using MailFathom.Client.Backend.Mail;
 using MailFathom.Client.Presentation.Messages;
+using MailFathom.Client.Presentation.Spaces.Mail.Reading;
 using MailFathom.Client.Presentation.Threads;
 using MailFathom.Client.Session;
 using MailFathom.Client.UnitTests.TestDoubles;
@@ -28,6 +30,43 @@ public sealed class DeploymentMailThreadTests
                          "originalCharacterCount": 45, "truncation": "None" },
           "document": null,
           "remoteImagesRequested": false
+        }
+        """;
+
+    private const string MessageDetail =
+        """
+        {
+          "storedEmailId": "00000000-0000-0000-0000-000000000001",
+          "account": "personal",
+          "folder": "INBOX",
+          "threadId": "10000000-0000-0000-0000-000000000000",
+          "sizeOctets": 1024,
+          "headers": {
+            "subject": "Quarterly review",
+            "sentAt": "2026-08-27T09:14:00+00:00",
+            "receivedAt": "2026-08-27T09:14:06+00:00",
+            "participants": [
+              { "role": "From", "address": "someone@example.test", "displayName": "Someone" }
+            ],
+            "messageId": "one@example.test",
+            "inReplyTo": null,
+            "references": []
+          },
+          "body": { "availability": "Readable", "plainText": true, "html": false },
+          "sender": { "authorAuthentication": "Authenticated", "deploymentTrust": "Unknown" },
+          "attachments": [
+            {
+              "position": 0,
+              "fileName": "quarterly-review.pdf",
+              "wasFileNameNormalized": false,
+              "mediaType": "application/pdf",
+              "sizeOctets": 3
+            }
+          ],
+          "carried": null,
+          "unread": false,
+          "flagged": false,
+          "answered": false
         }
         """;
 
@@ -208,12 +247,17 @@ public sealed class DeploymentMailThreadTests
         // Assert
         var messages = await over.Thread.Messages;
         Assert.True(messages![0].ShowsWholeMessage);
+        Assert.Equal("Quarterly review", messages[0].Message!.Subject);
         Assert.False(messages[1].ShowsWholeMessage);
         Assert.False(messages[2].ShowsWholeMessage);
 
         Assert.Equal(
             $"/api/client/messages/{MailMessages.Identity(1):D}/body",
             over.Harness.Deployment.Requests[^1].RequestUri.AbsolutePath);
+        Assert.Contains(
+            over.Harness.Deployment.Requests,
+            request => request.RequestUri.AbsolutePath
+                == $"/api/client/messages/{MailMessages.Identity(1):D}");
     }
 
     /// <summary>Asking for remote pictures is a second read of that one message, in the terms the reader allowed.</summary>
@@ -236,6 +280,51 @@ public sealed class DeploymentMailThreadTests
         Assert.Contains("remoteImages=true", asked.Query, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task SaveAttachmentAsync_OneFileSomebodySelected_StreamsOnlyThatFileAndMarksItDownloaded()
+    {
+        // Arrange
+        using var over = await ThreadOver.CreateAsync(Answering(MailThreads.Document(2)),
+            TestContext.Current.CancellationToken);
+        await over.Opened();
+        await over.Thread.ShowWholeMessageAsync(MailMessages.Key(1), TestContext.Current.CancellationToken);
+        var request = Assert.Single((await over.Thread.Messages)![0].Message!.Attachments).Request;
+
+        // Act
+        await over.Thread.SaveAttachmentAsync(request, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([1, 2, 3], over.Saver.Saved);
+        Assert.True(Assert.Single((await over.Thread.Messages)![0].Message!.Attachments).Downloaded);
+        Assert.Equal(
+            $"/api/client/messages/{MailMessages.Identity(1):D}/attachments/0",
+            over.Harness.Deployment.Requests[^1].RequestUri.AbsolutePath);
+    }
+
+    [Fact]
+    public async Task CancelAttachment_AFileBeingSaved_CancelsItWithoutReportingAFailure()
+    {
+        // Arrange
+        using var over = await ThreadOver.CreateAsync(Answering(MailThreads.Document(2)),
+            TestContext.Current.CancellationToken);
+        await over.Opened();
+        await over.Thread.ShowWholeMessageAsync(MailMessages.Key(1), TestContext.Current.CancellationToken);
+        var request = Assert.Single((await over.Thread.Messages)![0].Message!.Attachments).Request;
+        over.Saver.Hold = true;
+
+        var saving = over.Thread.SaveAttachmentAsync(request, TestContext.Current.CancellationToken).AsTask();
+        Assert.True(over.Saver.Started.Wait(Patience, TestContext.Current.CancellationToken));
+
+        // Act
+        over.Thread.CancelAttachment(request);
+        await saving;
+
+        // Assert
+        var attachment = Assert.Single((await over.Thread.Messages)![0].Message!.Attachments);
+        Assert.True(attachment.CanDownload);
+        Assert.False(attachment.DownloadFailed);
+    }
+
     /// <summary>
     /// A whole message that did not arrive is said on that message, because the conversation and what the message
     /// added are still on the screen and still true.
@@ -244,9 +333,12 @@ public sealed class DeploymentMailThreadTests
     public async Task ShowWholeMessageAsync_AReadThatFailed_SaysSoOnTheMessageAndLeavesTheConversationDrawn()
     {
         // Arrange
-        using var over = await ThreadOver.CreateAsync(request => IsBody(request)
-            ? Answer("{}", HttpStatusCode.BadGateway)
-            : Answer(MailThreads.Document(2)),
+        using var over = await ThreadOver.CreateAsync(request => request.RequestUri!.AbsolutePath switch
+        {
+            var path when path.EndsWith("/body", StringComparison.Ordinal) => Answer("{}", HttpStatusCode.BadGateway),
+            var path when path.Contains("/messages/", StringComparison.Ordinal) => Answer(MessageDetail),
+            _ => Answer(MailThreads.Document(2)),
+        },
             TestContext.Current.CancellationToken);
 
         await over.Opened();
@@ -279,9 +371,14 @@ public sealed class DeploymentMailThreadTests
 
         using var over = await ThreadOver.CreateAsync(request =>
         {
-            if (!IsBody(request))
+            if (IsThread(request))
             {
                 return Answer(MailThreads.Document(2));
+            }
+
+            if (IsMessage(request))
+            {
+                return Answer(MessageDetail);
             }
 
             reached.Set();
@@ -413,15 +510,32 @@ public sealed class DeploymentMailThreadTests
         Assert.Equal([false, true, false], messages!.Select(message => message.IsExpanded));
     }
 
-    /// <summary>Answers the conversation from one document, and every message's whole body from the same one.</summary>
+    /// <summary>Answers the conversation, a message's details, and its whole body from their own documents.</summary>
     private static Func<HttpRequestMessage, HttpResponseMessage> Answering(string conversation) =>
-        request => IsBody(request) ? Answer(WholeMessage) : Answer(conversation);
+        request => IsBody(request)
+            ? Answer(WholeMessage)
+            : IsAttachment(request)
+                ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent([1, 2, 3]) }
+            : IsMessage(request)
+                ? Answer(MessageDetail)
+                : Answer(conversation);
 
     private static HttpResponseMessage Answer(string document, HttpStatusCode status = HttpStatusCode.OK) =>
         StubTransport.JsonResponse(document, status);
 
     private static bool IsBody(HttpRequestMessage request) =>
         request.RequestUri?.AbsolutePath.EndsWith("/body", StringComparison.Ordinal) is true;
+
+    private static bool IsMessage(HttpRequestMessage request) =>
+        request.RequestUri?.AbsolutePath.Contains("/messages/", StringComparison.Ordinal) is true
+        && !IsBody(request)
+        && !IsAttachment(request);
+
+    private static bool IsAttachment(HttpRequestMessage request) =>
+        request.RequestUri?.AbsolutePath.Contains("/attachments/", StringComparison.Ordinal) is true;
+
+    private static bool IsThread(HttpRequestMessage request) =>
+        request.RequestUri?.AbsolutePath.Contains("/threads/", StringComparison.Ordinal) is true;
 
     /// <summary>Reads the cursor a request carried, which is what tells one page of a script apart from the next.</summary>
     private static string? Cursor(HttpRequestMessage request) =>
@@ -460,7 +574,8 @@ public sealed class DeploymentMailThreadTests
 
             this.List = new StubMessageList();
 
-            this.Thread = new DeploymentMailThread(this.Harness.Client, this.Session, this.List, Words());
+            this.Saver = new StubMailAttachmentSaver();
+            this.Thread = new DeploymentMailThread(this.Harness.Client, this.Session, this.List, this.Saver, Words());
         }
 
         /// <summary>Builds the conversation over a scripted deployment the client is already pointed at.</summary>
@@ -477,6 +592,8 @@ public sealed class DeploymentMailThreadTests
         internal StubClientSession Session { get; }
 
         internal StubMessageList List { get; }
+
+        internal StubMailAttachmentSaver Saver { get; }
 
         internal DeploymentMailThread Thread { get; }
 
@@ -537,6 +654,43 @@ public sealed class DeploymentMailThreadTests
             [ThreadWords.RecipientsKey] = "To {0}",
             [ThreadWords.ParticipantMessagesKey] = "({0})",
             [ThreadWords.ParticipantAnnouncementKey] = "{0} wrote {1}",
+            [MailMessageWords.TrustedSenderKey] = "Trusted {0}",
+            [MailMessageWords.FailedSenderKey] = "Failed {0}",
+            [MailMessageWords.UnrecognizedSenderKey] = "Unrecognized",
+            [MailMessageWords.AttachmentFallbackKey] = "Attachment {0}",
+            [MailMessageWords.NormalizedFileNameKey] = "The sender's file name was made safe.",
+            [MailMessageWords.HeaderRoleKey("From")] = "From",
+            [MailMessageWords.HeaderRoleKey("SentAt")] = "Sent",
+            [MailMessageWords.HeaderRoleKey("ReceivedAt")] = "Received",
+            [MailMessageWords.HeaderRoleKey("MessageId")] = "Message ID",
         });
+    }
+
+    private sealed class StubMailAttachmentSaver : IMailAttachmentSaver
+    {
+        internal ManualResetEventSlim Started { get; } = new(false);
+
+        internal bool Hold { get; set; }
+
+        internal byte[] Saved { get; private set; } = [];
+
+        public async ValueTask<bool> SaveAsync(
+            DeploymentMailAttachment attachment,
+            Func<Stream, CancellationToken, Task> write,
+            CancellationToken cancellationToken)
+        {
+            this.Started.Set();
+
+            if (this.Hold)
+            {
+                await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            }
+
+            await using var destination = new MemoryStream();
+            await write(destination, cancellationToken);
+            this.Saved = destination.ToArray();
+
+            return true;
+        }
     }
 }

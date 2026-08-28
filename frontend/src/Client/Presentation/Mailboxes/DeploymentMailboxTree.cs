@@ -176,6 +176,12 @@ internal sealed class DeploymentMailboxTree : IMailboxTree
         var scope = await this.workspace.Scope.Value(cancellationToken).ConfigureAwait(false)
             ?? WorkspaceScope.Everything;
 
-        this.memory.Write(new RememberedMailboxes(scope with { Selection = ImmutableArray<string>.Empty }, shown));
+        this.memory.Write(new RememberedMailboxes(
+            scope with
+            {
+                Selection = ImmutableArray<string>.Empty,
+                BodySelection = string.Empty,
+            },
+            shown));
     }
 }

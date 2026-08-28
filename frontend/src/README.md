@@ -123,9 +123,11 @@ and is remembered with the place, because a cursor is only honoured against the 
 under.
 
 **What is selected is the application's rather than the control's.** The list mirrors its selection into
-`IWorkspace.Scope`, which is what lets a question in Discover be asked about mail somebody picked in Mail; on a pointer
-head that is the ordinary extended selection with its modifiers and its drag, and on a touch head a press and hold puts
-the list into a selecting mode that is visible and can be left. Loading, a read that failed, a folder holding no mail,
+`IWorkspace.Scope`, which is what lets a question in Discover be asked about mail somebody picked in Mail. Selecting a
+passage inside one opened message can narrow that same scope once more; the passage stays in the run's state, is cleared
+when the message selection changes, and is never written to the mailbox memory. On a pointer head the list itself uses
+ordinary extended selection with its modifiers and its drag, and on a touch head a press and hold puts the list into a
+selecting mode that is visible and can be left. Loading, a read that failed, a folder holding no mail,
 and a folder whose mail this list is keeping out are four rendered states rather than one blank list — the last two are
 told apart in words, and how current the copy is stays the tree's to say.
 
@@ -142,9 +144,12 @@ arrived at the conversation itself, the newest is.
 **What each message added arrived with the conversation, and the whole of one is a request somebody made.** A message
 collapses to a line and opens to what it contributed, which the deployment publishes with the quoted history and the
 signature trimmed off — so an exchange of thirty replies is one request to draw and the eighth reply does not redraw the
-seven above it. The whole message, quoted history and all, is read only for the message somebody asked it of and drawn
-by the same pane a single message is read in, which is what keeps the question asked before a link is followed one piece
-of code rather than two. Collapsing that message drops the whole of it along with the answer about its remote pictures,
+seven above it. The whole message, quoted history and all, is read only for the message somebody asked it of. Its pane
+draws the parsed headers, the deployment's sender verdict, and each attachment's safe name, declared type, and decoded
+size before it draws the body. A file is streamed only after the reader chooses a destination, through a cancellable
+per-attachment action, and the chosen file is replaced only after the stream completes. The same pane draws a single
+message, which is what keeps the question asked before a link is followed one piece of code rather than two. Collapsing
+that message drops the whole of it along with the answer about its remote pictures,
 so no allowance outlives the reason it was given. A page of the conversation that did not arrive, and a whole message
 that did not, are each said beside what is already drawn rather than instead of it.
 

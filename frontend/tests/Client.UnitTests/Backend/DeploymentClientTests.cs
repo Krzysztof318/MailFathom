@@ -286,6 +286,122 @@ public sealed class DeploymentClientTests
         Assert.Equal(DeploymentFailureReason.Unusable, failure.Reason);
     }
 
+    [Fact]
+    public async Task ReadMailMessageAsync_AStoredMessage_ReadsEverythingThePaneDrawsAroundItsBody()
+    {
+        // Arrange
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(
+                """
+                {
+                  "storedEmailId": "8f14e45f-ceea-467a-9f3e-1c3ecdf1e9a1",
+                  "account": "personal",
+                  "folder": "INBOX",
+                  "threadId": "5de1bfc2-e8ca-4388-8e7f-1f304b07d671",
+                  "sizeOctets": 2416381,
+                  "headers": {
+                    "subject": "Release 0.8.0",
+                    "sentAt": "2026-08-27T09:14:00+00:00",
+                    "receivedAt": "2026-08-27T09:14:06+00:00",
+                    "participants": [
+                      { "role": "From", "address": "release@example.test", "displayName": "Release notices" },
+                      { "role": "To", "address": "reader@example.test", "displayName": null }
+                    ],
+                    "messageId": "release-0-8-0@example.test",
+                    "inReplyTo": null,
+                    "references": ["earlier@example.test"]
+                  },
+                  "body": { "availability": "Readable", "plainText": true, "html": true },
+                  "sender": { "authorAuthentication": "Authenticated", "deploymentTrust": "Trusted" },
+                  "attachments": [
+                    {
+                      "position": 0,
+                      "fileName": "release-notes.pdf",
+                      "wasFileNameNormalized": false,
+                      "mediaType": "application/pdf",
+                      "sizeOctets": 2401337
+                    }
+                  ],
+                  "carried": {
+                    "attachmentCount": 1,
+                    "totalSizeOctets": 2401337,
+                    "inlineResourceCount": 2,
+                    "encrypted": false,
+                    "unverifiedSignature": true,
+                    "unexpandedTnefPart": false
+                  },
+                  "unread": true,
+                  "flagged": false,
+                  "answered": true
+                }
+                """),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Act
+        var message = await harness.Client.ReadMailMessageAsync(
+            Guid.Parse("8f14e45f-ceea-467a-9f3e-1c3ecdf1e9a1"),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("Release 0.8.0", message.Headers.Subject);
+        Assert.Equal("release@example.test", message.Headers.Participants[0].Address);
+        Assert.Equal("Authenticated", message.Sender.AuthorAuthentication);
+        Assert.Equal("Trusted", message.Sender.DeploymentTrust);
+        Assert.Equal("release-notes.pdf", Assert.Single(message.Attachments).FileName);
+        Assert.Equal(2, message.Carried!.InlineResourceCount);
+        Assert.True(message.Carried.UnverifiedSignature);
+        Assert.True(message.Unread);
+        Assert.True(message.Answered);
+    }
+
+    [Fact]
+    public async Task DownloadMailAttachmentAsync_AFileSomebodyRequested_StreamsItToTheChosenDestination()
+    {
+        // Arrange
+        byte[] octets = [4, 8, 15, 16, 23, 42];
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(octets) },
+            cancellationToken: TestContext.Current.CancellationToken);
+        await using var destination = new MemoryStream();
+
+        // Act
+        await harness.Client.DownloadMailAttachmentAsync(
+            Guid.Parse("8f14e45f-ceea-467a-9f3e-1c3ecdf1e9a1"),
+            position: 3,
+            expectedSizeOctets: octets.Length,
+            destination,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(octets, destination.ToArray());
+        Assert.Equal(
+            new Uri("https://mail.example/api/client/messages/8f14e45f-ceea-467a-9f3e-1c3ecdf1e9a1/attachments/3"),
+            Assert.Single(harness.Deployment.Requests).RequestUri);
+    }
+
+    [Fact]
+    public async Task DownloadMailAttachmentAsync_AResponseWhoseLengthChanged_RefusesItBeforeWriting()
+    {
+        // Arrange
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent([1, 2, 3]) },
+            cancellationToken: TestContext.Current.CancellationToken);
+        await using var destination = new MemoryStream();
+
+        // Act
+        var failure = await Assert.ThrowsAsync<DeploymentFailure>(
+            () => harness.Client.DownloadMailAttachmentAsync(
+                Guid.Parse("8f14e45f-ceea-467a-9f3e-1c3ecdf1e9a1"),
+                position: 0,
+                expectedSizeOctets: 4,
+                destination,
+                TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(DeploymentFailureReason.Unusable, failure.Reason);
+        Assert.Empty(destination.ToArray());
+    }
+
     private static string ABodyWhosePlainTextIs(string text) =>
         $$"""
         {

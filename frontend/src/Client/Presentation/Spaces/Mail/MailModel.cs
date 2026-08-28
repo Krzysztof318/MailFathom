@@ -5,7 +5,9 @@
 using System.Collections.Immutable;
 using MailFathom.Client.Backend.Timeline;
 using MailFathom.Client.Presentation.Messages;
+using MailFathom.Client.Presentation.Spaces.Mail.Reading;
 using MailFathom.Client.Presentation.Threads;
+using MailFathom.Client.Presentation.Workspace;
 using MailFathom.Client.Session;
 
 namespace MailFathom.Client.Presentation.Spaces.Mail;
@@ -37,20 +39,24 @@ public partial record MailModel
 {
     private readonly IMessageList messages;
     private readonly IMailThread thread;
+    private readonly IWorkspace workspace;
 
     /// <summary>Initializes the space over what decides whether it may be offered, and the list and conversation it is read through.</summary>
     /// <param name="session">What the deployment allows this caller.</param>
     /// <param name="messages">The run's own message list, drawn from wherever the mailbox tree says somebody is.</param>
     /// <param name="thread">The run's own conversation, which is whatever the list has one message selected in.</param>
+    /// <param name="workspace">The scope a selected passage narrows for the intent field.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    public MailModel(IClientSession session, IMessageList messages, IMailThread thread)
+    public MailModel(IClientSession session, IMessageList messages, IMailThread thread, IWorkspace workspace)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(messages);
         ArgumentNullException.ThrowIfNull(thread);
+        ArgumentNullException.ThrowIfNull(workspace);
 
         this.messages = messages;
         this.thread = thread;
+        this.workspace = workspace;
 
         this.WithholdsMail = session.Standing.Select(standing => standing.Withholds(ClientCapability.Mail));
 
@@ -152,6 +158,25 @@ public partial record MailModel
     /// <returns>A task completing once the second read has been asked for.</returns>
     public ValueTask ShowThreadRemoteContent(string key, CancellationToken cancellationToken) =>
         this.thread.ShowRemoteContentAsync(key, cancellationToken);
+
+    /// <summary>Streams one attachment into the destination the reader chooses.</summary>
+    public ValueTask SaveAttachment(
+        MailAttachmentRequest request,
+        CancellationToken cancellationToken) =>
+        this.thread.SaveAttachmentAsync(request, cancellationToken);
+
+    /// <summary>Stops streaming one attachment.</summary>
+    public void CancelAttachment(MailAttachmentRequest request) => this.thread.CancelAttachment(request);
+
+    /// <summary>Makes a passage selected in the body the narrowest part of the shared scope.</summary>
+    public ValueTask UseBodySelection(string selection, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(selection);
+
+        return this.workspace.Scope.UpdateAsync(
+            scope => (scope ?? WorkspaceScope.Everything) with { BodySelection = selection },
+            cancellationToken);
+    }
 
     /// <summary>Takes the next page of the conversation onto the end of what has been read.</summary>
     /// <param name="cancellationToken">Abandons the page.</param>

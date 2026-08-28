@@ -2,8 +2,11 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Collections.Concurrent;
 using System.Collections.Immutable;
+using System.Globalization;
 using MailFathom.Client.Backend;
+using MailFathom.Client.Backend.Mail;
 using MailFathom.Client.Backend.Threads;
 using MailFathom.Client.Presentation.Messages;
 using MailFathom.Client.Presentation.Spaces.Mail.Reading;
@@ -44,32 +47,38 @@ internal sealed class DeploymentMailThread : IMailThread
 
     private readonly DeploymentClient deployment;
     private readonly IClientSession session;
+    private readonly IMailAttachmentSaver attachmentSaver;
     private readonly IStringLocalizer words;
     private readonly IState<ThreadOpening> opened;
     private readonly IState<int> asked;
     private readonly IState<bool> pagingFailed;
     private readonly IState<IImmutableDictionary<string, ThreadMessageDetail>> disclosed;
     private readonly IState<ThreadWindow> loaded;
+    private readonly ConcurrentDictionary<MailAttachmentRequest, CancellationTokenSource> attachmentDownloads = [];
 
     /// <summary>Initializes the conversation over what serves it, what decides it may be read, and what opens one.</summary>
     /// <param name="deployment">Where a page of a conversation is asked for.</param>
     /// <param name="session">What the deployment allows this caller, and whether it can be reached at all.</param>
     /// <param name="messages">The list whose selection is how a conversation is reached in the mail space.</param>
+    /// <param name="attachmentSaver">Lets the reader choose where one requested attachment is written.</param>
     /// <param name="words">Where the sentences a conversation is composed from come from.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public DeploymentMailThread(
         DeploymentClient deployment,
         IClientSession session,
         IMessageList messages,
+        IMailAttachmentSaver attachmentSaver,
         IStringLocalizer words)
     {
         ArgumentNullException.ThrowIfNull(deployment);
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(messages);
+        ArgumentNullException.ThrowIfNull(attachmentSaver);
         ArgumentNullException.ThrowIfNull(words);
 
         this.deployment = deployment;
         this.session = session;
+        this.attachmentSaver = attachmentSaver;
         this.words = words;
 
         // Held as a state rather than read as the session's own feed, for the reason every other reader of it holds
@@ -152,6 +161,94 @@ internal sealed class DeploymentMailThread : IMailThread
     /// <inheritdoc />
     public ValueTask ShowRemoteContentAsync(string key, CancellationToken cancellationToken) =>
         this.ReadWholeAsync(key, remoteImages: true, cancellationToken);
+
+    /// <inheritdoc />
+    public async ValueTask SaveAttachmentAsync(
+        MailAttachmentRequest request,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        var key = request.Message.ToString("D", CultureInfo.InvariantCulture);
+
+        if (await this.DetailOfAsync(key, cancellationToken).ConfigureAwait(false) is not
+            { Expanded: true, Message: { } message } detail)
+        {
+            return;
+        }
+
+        var attachment = message.Attachments.FirstOrDefault(held => held.Position == request.Position);
+
+        if (attachment is null)
+        {
+            return;
+        }
+
+        using var download = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+        if (!this.attachmentDownloads.TryAdd(request, download))
+        {
+            return;
+        }
+
+        await this.WriteAttachmentStandingAsync(
+            key,
+            detail,
+            request.Position,
+            MailAttachmentStanding.Downloading,
+            cancellationToken).ConfigureAwait(false);
+
+        var standing = MailAttachmentStanding.None;
+
+        try
+        {
+            var saved = await this.attachmentSaver.SaveAsync(
+                attachment,
+                (destination, token) => this.deployment.DownloadMailAttachmentAsync(
+                    request.Message,
+                    request.Position,
+                    attachment.SizeOctets,
+                    destination,
+                    token),
+                download.Token).ConfigureAwait(false);
+
+            standing = saved ? MailAttachmentStanding.Downloaded : MailAttachmentStanding.None;
+        }
+        catch (OperationCanceledException) when (download.IsCancellationRequested)
+        {
+            standing = MailAttachmentStanding.None;
+        }
+        catch (Exception failure) when (failure is DeploymentFailure or IOException or UnauthorizedAccessException)
+        {
+            standing = MailAttachmentStanding.Failed;
+        }
+        finally
+        {
+            this.attachmentDownloads.TryRemove(request, out _);
+        }
+
+        if (await this.DetailOfAsync(key, CancellationToken.None).ConfigureAwait(false) is
+            { Expanded: true, Message: not null } current)
+        {
+            await this.WriteAttachmentStandingAsync(
+                key,
+                current,
+                request.Position,
+                standing,
+                CancellationToken.None).ConfigureAwait(false);
+        }
+    }
+
+    /// <inheritdoc />
+    public void CancelAttachment(MailAttachmentRequest request)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (this.attachmentDownloads.TryGetValue(request, out var download))
+        {
+            download.Cancel();
+        }
+    }
 
     /// <inheritdoc />
     public async ValueTask ShowMoreAsync(CancellationToken cancellationToken)
@@ -291,6 +388,32 @@ internal sealed class DeploymentMailThread : IMailThread
             },
             cancellationToken).ConfigureAwait(false);
 
+        if (detail.Message is null)
+        {
+            DeploymentMailMessageDetail messageDetail;
+
+            try
+            {
+                messageDetail = await this.deployment
+                    .ReadMailMessageAsync(message, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (DeploymentFailure)
+            {
+                await this.FailWholeReadAsync(key, window, remoteImages, cancellationToken).ConfigureAwait(false);
+
+                return;
+            }
+
+            if (await this.StillLoadedAsync(window, cancellationToken).ConfigureAwait(false) is null
+                || await this.DetailOfAsync(key, cancellationToken).ConfigureAwait(false) is not { Expanded: true } described)
+            {
+                return;
+            }
+
+            await this.WriteAsync(key, described with { Message = messageDetail }, cancellationToken).ConfigureAwait(false);
+        }
+
         MailBodyReading? whole;
 
         try
@@ -331,6 +454,29 @@ internal sealed class DeploymentMailThread : IMailThread
             cancellationToken).ConfigureAwait(false);
     }
 
+    private async ValueTask FailWholeReadAsync(
+        string key,
+        ThreadWindow window,
+        bool remoteImages,
+        CancellationToken cancellationToken)
+    {
+        if (await this.StillLoadedAsync(window, cancellationToken).ConfigureAwait(false) is null
+            || await this.DetailOfAsync(key, cancellationToken).ConfigureAwait(false) is not { Expanded: true } current)
+        {
+            return;
+        }
+
+        await this.WriteAsync(
+            key,
+            current with
+            {
+                IsReadingWholeMessage = false,
+                WholeMessageFailed = true,
+                RemoteImages = remoteImages,
+            },
+            cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Reads how much of one message is shown, or nothing where the conversation does not hold it.</summary>
     private async ValueTask<ThreadMessageDetail?> DetailOfAsync(string key, CancellationToken cancellationToken)
     {
@@ -354,6 +500,17 @@ internal sealed class DeploymentMailThread : IMailThread
 
     private ValueTask WriteAsync(string key, ThreadMessageDetail detail, CancellationToken cancellationToken) =>
         this.disclosed.UpdateAsync(held => (held ?? Nothing).SetItem(key, detail), cancellationToken);
+
+    private ValueTask WriteAttachmentStandingAsync(
+        string key,
+        ThreadMessageDetail detail,
+        int position,
+        MailAttachmentStanding standing,
+        CancellationToken cancellationToken) =>
+        this.WriteAsync(
+            key,
+            detail with { Attachments = detail.Attachments.SetItem(position, standing) },
+            cancellationToken);
 
     /// <summary>Reads the loaded conversation back, where it is still the one a read was started for.</summary>
     private async ValueTask<ThreadWindow?> StillLoadedAsync(

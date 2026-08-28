@@ -541,11 +541,15 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                       <!-- The whole message, quoted history and all, drawn by the pane that already knows how to draw
                            one and how to ask before anything in it leaves the application. Its height is bounded so a
                            long message stays one message of the conversation rather than the whole column. -->
-                      <reading:MailBodyView MaxHeight="640"
-                                            Reading="{x:Bind WholeMessage, Mode=OneWay}"
-                                            Visibility="{x:Bind ShowsWholeMessage, Converter={StaticResource AffirmedVisibility}}"
-                                            ShowRemoteContentCommand="{utu:ItemsControlBinding Path=DataContext.ShowThreadRemoteContent}"
-                                            ShowRemoteContentCommandParameter="{x:Bind Key}" />
+                      <reading:MailMessageView MaxHeight="640"
+                                               Reading="{x:Bind Message, Mode=OneWay}"
+                                               Body="{x:Bind WholeMessage, Mode=OneWay}"
+                                               Visibility="{x:Bind ShowsMessage, Converter={StaticResource AffirmedVisibility}}"
+                                               ShowRemoteContentCommand="{utu:ItemsControlBinding Path=DataContext.ShowThreadRemoteContent}"
+                                               ShowRemoteContentCommandParameter="{x:Bind Key}"
+                                               SaveAttachmentCommand="{utu:ItemsControlBinding Path=DataContext.SaveAttachment}"
+                                               CancelAttachmentCommand="{utu:ItemsControlBinding Path=DataContext.CancelAttachment}"
+                                               UseSelectionCommand="{utu:ItemsControlBinding Path=DataContext.UseBodySelection}" />
                     </StackPanel>
                   </StackPanel>
                 </DataTemplate>

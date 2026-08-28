@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Client.Presentation.Spaces.Mail.Reading;
+
 namespace MailFathom.Client.Presentation.Threads;
 
 /// <summary>The one conversation a run has open, wherever it was opened from.</summary>
@@ -76,6 +78,12 @@ public interface IMailThread
     /// not written down, not carried to the next message, and not carried to this one the next time it is opened.
     /// </remarks>
     ValueTask ShowRemoteContentAsync(string key, CancellationToken cancellationToken);
+
+    /// <summary>Lets the reader choose where one attachment is streamed.</summary>
+    ValueTask SaveAttachmentAsync(MailAttachmentRequest request, CancellationToken cancellationToken);
+
+    /// <summary>Cancels the attachment currently being saved.</summary>
+    void CancelAttachment(MailAttachmentRequest request);
 
     /// <summary>Takes the next page of the conversation onto the end of what has been read.</summary>
     /// <param name="cancellationToken">Abandons the page.</param>
