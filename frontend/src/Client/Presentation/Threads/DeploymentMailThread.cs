@@ -191,17 +191,17 @@ internal sealed class DeploymentMailThread : IMailThread
             return;
         }
 
-        await this.WriteAttachmentStandingAsync(
-            key,
-            detail,
-            request.Position,
-            MailAttachmentStanding.Downloading,
-            cancellationToken).ConfigureAwait(false);
-
         var standing = MailAttachmentStanding.None;
 
         try
         {
+            await this.WriteAttachmentStandingAsync(
+                key,
+                detail,
+                request.Position,
+                MailAttachmentStanding.Downloading,
+                cancellationToken).ConfigureAwait(false);
+
             var saved = await this.attachmentSaver.SaveAsync(
                 attachment,
                 (destination, token) => this.deployment.DownloadMailAttachmentAsync(

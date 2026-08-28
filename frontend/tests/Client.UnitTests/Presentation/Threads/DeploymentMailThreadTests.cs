@@ -530,13 +530,14 @@ public sealed class DeploymentMailThreadTests
 
     /// <summary>Answers the conversation, a message's details, and its whole body from their own documents.</summary>
     private static Func<HttpRequestMessage, HttpResponseMessage> Answering(string conversation) =>
-        request => IsBody(request)
-            ? Answer(WholeMessage)
-            : IsAttachment(request)
-                ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent([1, 2, 3]) }
-            : IsMessage(request)
-                ? Answer(MessageDetail)
-                : Answer(conversation);
+        request => request switch
+        {
+            _ when IsBody(request) => Answer(WholeMessage),
+            _ when IsAttachment(request) =>
+                new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent([1, 2, 3]) },
+            _ when IsMessage(request) => Answer(MessageDetail),
+            _ => Answer(conversation),
+        };
 
     private static HttpResponseMessage Answer(string document, HttpStatusCode status = HttpStatusCode.OK) =>
         StubTransport.JsonResponse(document, status);

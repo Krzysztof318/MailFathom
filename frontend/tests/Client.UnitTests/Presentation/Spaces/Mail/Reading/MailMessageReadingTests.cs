@@ -114,6 +114,35 @@ public sealed class MailMessageReadingTests
         Assert.False(attachment.CanCancel);
     }
 
+    [Fact]
+    public void Of_AnAttachmentBeingDownloaded_OffersCancellationAlone()
+    {
+        // Arrange
+        var message = Message(
+            authorAuthentication: "Authenticated",
+            deploymentTrust: "Unknown",
+            attachments:
+            [
+                new DeploymentMailAttachment(
+                    Position: 2,
+                    FileName: "release-notes.pdf",
+                    WasFileNameNormalized: false,
+                    MediaType: "application/pdf",
+                    SizeOctets: 2_401_337),
+            ]);
+        IReadOnlyDictionary<int, MailAttachmentStanding> downloads =
+            new Dictionary<int, MailAttachmentStanding> { [2] = MailAttachmentStanding.Downloading };
+
+        // Act
+        var attachment = Assert.Single(MailMessageReading.Of(message, downloads, Words()).Attachments);
+
+        // Assert
+        Assert.True(attachment.CanCancel);
+        Assert.False(attachment.CanDownload);
+        Assert.False(attachment.DownloadFailed);
+        Assert.False(attachment.Downloaded);
+    }
+
     private static DeploymentMailMessageDetail Message(
         string authorAuthentication,
         string deploymentTrust,
