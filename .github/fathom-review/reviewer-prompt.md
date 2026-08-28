@@ -94,11 +94,12 @@ rule is a wrong finding, and so is one these files already reject.
 - `.agents/skills/review-change/SKILL.md`. Its "Recurring findings" section is the
   distilled history of what review has actually caught here. Work through every category
   the change reaches.
-- `backend/src/AGENTS.md`, `backend/src/Infrastructure/AGENTS.md`, `backend/tests/AGENTS.md`, and
-  `docs/AGENTS.md` for the parts of the tree the change touches. A nested file adds
-  rules to the root one rather than replacing them. The .NET and C# conventions live in
-  `backend/src/AGENTS.md` and govern test code as well, so a change under `backend/tests/` is judged
-  against both that file and `backend/tests/AGENTS.md`.
+- `backend/src/AGENTS.md`, `backend/src/Infrastructure/AGENTS.md`, `backend/tests/AGENTS.md`,
+  `frontend/src/AGENTS.md`, `frontend/tests/AGENTS.md`, and `docs/AGENTS.md` for the parts of the
+  tree the change touches. A nested file adds rules to the root one rather than replacing them. The
+  .NET and C# conventions live in the root file and govern both stacks and their test code, so a
+  change under `backend/tests/` is judged against the root file and `backend/tests/AGENTS.md`
+  together.
 - `.agents/skills/check-docs-licenses/SKILL.md` for MailFathom's own Apache-2.0 record
   and the third-party licensing rules, and `docs/operations/issue-tracking.md` for what
   an issue and its board placement have to carry.
