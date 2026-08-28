@@ -30,7 +30,7 @@ Add a mechanically checkable rule to the mechanism, not to this file: a severity
 - Prefer a longer name that communicates intent, constraints, or result over a short ambiguous name. Long method names are acceptable when every word adds useful domain meaning.
 - Keep names proportionate and avoid redundant context already supplied by the containing type or namespace. Do not produce sentence-like names when a smaller precise name communicates the same contract.
 - Name methods after observable behavior or the result they produce. Avoid vague verbs such as `Handle`, `Process`, `Manage`, `Do`, or `Execute` unless the surrounding application pattern gives them a precise established meaning.
-- Rename unclear identifiers as part of the code change that exposes them. Do not rely on comments to compensate for misleading or abbreviated names.
+- Rename unclear identifiers as part of the code change that exposes them.
 - Use `Email` for the mail artifact throughout `Domain`, `Application`, and `Infrastructure`: `EmailOccurrenceId`, `RemoteEmailMetadata`, `IEmailContentStore`, `StoredEmailEntity`. Do not name a mail type `Message` or `MailMessage`; the first is ambiguous once AI conversations exist and the second shadows `System.Net.Mail.MailMessage`. Name an AI conversation turn `ChatMessage` or `AgentMessage` after the domain concept, never after the layer.
 - Do not rely on a namespace to disambiguate a type whose name is ambiguous on its own. A reader sees the name at the point of use, not the namespace. `Session` in particular must always be qualified: `IMailboxSession` for an open IMAP folder, `IPersistenceSession` for a local write transaction.
 - Reach every type, enum, attribute, and static class through a `using` directive and write it by its simple name. The import list then states which boundaries the file depends on, in one place a reader can scan, instead of that information being spread across the call sites that happen to mention a namespace. `IDE0001` removes qualification that an existing `using` makes redundant, so the shape this rule addresses is the one the analyzer cannot see: a qualified name written because nobody added the import.
@@ -71,15 +71,8 @@ Add a mechanically checkable rule to the mechanism, not to this file: a severity
 - Catch exceptions only when adding useful context, translating at a boundary, applying a defined retry policy, or completing cleanup. Preserve the original exception as `InnerException`.
 - Use explicit result types for expected application failures; reserve exceptions for exceptional or infrastructure failures.
 - Keep methods focused and classes cohesive. Prefer readable control flow over clever expressions or premature generic abstractions.
-- Keep methods small enough to read as a single sequence of decisions. When a method mixes several responsibilities, nests loops around multi-step work, or needs a comment to announce its next stage, extract a named private method instead. Prefer extraction over longer bodies, and prefer a well-named method over an explanatory comment.
+- Keep methods small enough to read as a single sequence of decisions. When a method mixes several responsibilities, nests loops around multi-step work, or needs a comment to announce its next stage, extract a named private method instead. Prefer extraction over longer bodies.
 - Use blank lines to separate the logical blocks inside a method body so structure is visible before the code is read. Separate at minimum: the argument-guard block, each distinct step or stage, a block that builds state from the block that consumes it, and the final `return` from the work that produced it. Do not separate lines that belong to one step, and do not leave a blank line as the first or last line of a block.
-- Use English XML documentation comments to make code contracts useful to developers, IDE tooling, and future agents.
-- Generate XML documentation files for production projects and keep missing public API documentation visible through compiler or analyzer diagnostics.
-- Document every public type and public member. Also document internal interfaces, extension points, domain invariants, protocol boundaries, concurrency rules, security-sensitive behavior, and non-obvious lifecycle or ownership requirements.
-- Use `<summary>`, `<param>`, `<returns>`, `<exception>`, `<remarks>`, and `<example>` where they add concrete contract information. Describe cancellation behavior and side effects for asynchronous or state-changing operations.
-- Keep XML documentation accurate when signatures or behavior change. Missing or stale documentation is part of the implementation and must be fixed in the same change.
-- Add inline comments for non-obvious reasoning, protocol hazards, algorithms, workarounds, security constraints, or decisions that cannot be expressed through naming and types.
-- Explain why the code must behave a certain way; do not narrate what an immediately readable statement already does. Prefer better naming or extraction over explanatory comments for ordinary control flow.
 
 ## API and application design
 
