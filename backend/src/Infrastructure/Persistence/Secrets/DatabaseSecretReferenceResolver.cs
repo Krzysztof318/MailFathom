@@ -57,45 +57,51 @@ internal sealed class DatabaseSecretReferenceResolver(
 
         try
         {
-            var dataSource = readDataSource();
-            await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-            await using var command = new NpgsqlCommand(SelectStoredSecret, connection)
-            {
-                CommandTimeout = (int)readCommandTimeout().Value.TotalSeconds,
-            };
-            command.Parameters.AddWithValue("id", databaseReference.Id);
-            command.Parameters.AddWithValue("maximumOctets", StoredSecretEntity.MaximumSealedMaterialByteCount);
+            MailOwnerId owner;
+            SecretName name;
+            SealedValue sealedValue;
 
-            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-            if (!await reader.ReadAsync(cancellationToken))
             {
-                return SecretResolutionResult.Failed(SecretResolutionFailure.MaterialNotFound);
+                var dataSource = readDataSource();
+                await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+                await using var command = new NpgsqlCommand(SelectStoredSecret, connection)
+                {
+                    CommandTimeout = (int)readCommandTimeout().Value.TotalSeconds,
+                };
+                command.Parameters.AddWithValue("id", databaseReference.Id);
+                command.Parameters.AddWithValue("maximumOctets", StoredSecretEntity.MaximumSealedMaterialByteCount);
+
+                await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+                if (!await reader.ReadAsync(cancellationToken))
+                {
+                    return SecretResolutionResult.Failed(SecretResolutionFailure.MaterialNotFound);
+                }
+
+                var sealedLength = reader.GetInt32(3);
+                if (sealedLength < StoredSecretEntity.MinimumSealedMaterialByteCount)
+                {
+                    return SecretResolutionResult.Failed(SecretResolutionFailure.MaterialEmpty);
+                }
+
+                if (sealedLength > StoredSecretEntity.MaximumSealedMaterialByteCount)
+                {
+                    return SecretResolutionResult.Failed(SecretResolutionFailure.MaterialTooLarge);
+                }
+
+                if (!SecretName.TryCreate(reader.GetString(1), out name))
+                {
+                    return SecretResolutionResult.Failed(SecretResolutionFailure.ProtectedMaterialUnavailable);
+                }
+
+                var ownerId = reader.GetGuid(0);
+                if (ownerId == Guid.Empty)
+                {
+                    return SecretResolutionResult.Failed(SecretResolutionFailure.ProtectedMaterialUnavailable);
+                }
+
+                owner = MailOwnerId.Create(ownerId);
+                sealedValue = new SealedValue(reader.GetString(2), reader.GetFieldValue<byte[]>(4));
             }
-
-            var sealedLength = reader.GetInt32(3);
-            if (sealedLength < StoredSecretEntity.MinimumSealedMaterialByteCount)
-            {
-                return SecretResolutionResult.Failed(SecretResolutionFailure.MaterialEmpty);
-            }
-
-            if (sealedLength > StoredSecretEntity.MaximumSealedMaterialByteCount)
-            {
-                return SecretResolutionResult.Failed(SecretResolutionFailure.MaterialTooLarge);
-            }
-
-            if (!SecretName.TryCreate(reader.GetString(1), out var name))
-            {
-                return SecretResolutionResult.Failed(SecretResolutionFailure.ProtectedMaterialUnavailable);
-            }
-
-            var ownerId = reader.GetGuid(0);
-            if (ownerId == Guid.Empty)
-            {
-                return SecretResolutionResult.Failed(SecretResolutionFailure.ProtectedMaterialUnavailable);
-            }
-
-            var owner = MailOwnerId.Create(ownerId);
-            var sealedValue = new SealedValue(reader.GetString(2), reader.GetFieldValue<byte[]>(4));
 
             return await this.OpenAsync(owner, databaseReference, name, sealedValue, cancellationToken);
         }

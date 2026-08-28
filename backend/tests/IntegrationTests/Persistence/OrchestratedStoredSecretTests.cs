@@ -30,6 +30,9 @@ public sealed class OrchestratedStoredSecretTests(MailFathomOrchestrationFixture
     private static readonly DatabaseSecretReference ErasedReference =
         DatabaseSecretReference.Create(new Guid("2a105151-e39f-445e-ad77-a471764bdd36"));
 
+    private static readonly DatabaseSecretReference CrossOwnerReference =
+        DatabaseSecretReference.Create(new Guid("f43f4252-8485-4463-9176-3e415a6510aa"));
+
     [Fact]
     public async Task StoreAsync_AStoredThenRewrittenSecret_ResolvesOnlyTheNewestMaterialUnderTheActiveKey()
     {
@@ -134,6 +137,60 @@ public sealed class OrchestratedStoredSecretTests(MailFathomOrchestrationFixture
         finally
         {
             await OrchestratedForeignOwner.EraseAsync(services, ownerId);
+        }
+    }
+
+    [Fact]
+    public async Task StoreAsync_AReferenceOwnedByAnotherOwner_RefusesWithoutChangingTheRow()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var otherOwnerId = new Guid("89cc409d-da55-472f-b156-bc18c3583c54");
+        var otherOwner = MailOwnerId.Create(otherOwnerId);
+
+        try
+        {
+            Assert.Equal(
+                PersistenceCommitResult.Committed,
+                await OrchestratedForeignOwner.ProvisionAsync(services, otherOwnerId, cancellationToken));
+            Assert.Equal(
+                PersistenceCommitResult.Committed,
+                await StoreAsync(
+                    services,
+                    CrossOwnerReference,
+                    services.ServedOwner,
+                    SecretNamed("cross-owner-original"),
+                    "the-original-material",
+                    cancellationToken));
+
+            // Act
+            var storing = () => StoreAsync(
+                services,
+                CrossOwnerReference,
+                otherOwner,
+                SecretNamed("cross-owner-replacement"),
+                "the-replacement-material",
+                cancellationToken);
+
+            // Assert
+            await Assert.ThrowsAsync<InvalidOperationException>(storing);
+            var storedOwnerId = await services.InScopeAsync(
+                (scope, token) => scope.GetRequiredService<MailFathomDbContext>().StoredSecrets
+                    .Where(secret => secret.Id == CrossOwnerReference.Id)
+                    .Select(secret => secret.OwnerId)
+                    .SingleAsync(token),
+                cancellationToken);
+            Assert.Equal(services.ServedOwner.Value, storedOwnerId);
+        }
+        finally
+        {
+            await services.InScopeAsync(
+                (scope, token) => scope.GetRequiredService<MailFathomDbContext>().StoredSecrets
+                    .Where(secret => secret.Id == CrossOwnerReference.Id)
+                    .ExecuteDeleteAsync(token),
+                cancellationToken);
+            await OrchestratedForeignOwner.EraseAsync(services, otherOwnerId);
         }
     }
 

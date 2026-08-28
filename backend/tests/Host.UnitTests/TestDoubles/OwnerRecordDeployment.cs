@@ -135,7 +135,7 @@ internal sealed class OwnerRecordDeployment
             new OptimisticConcurrencyRetryPolicy(
                 sessions,
                 new PersistenceConcurrencyOptions { MaximumCommitAttempts = 1 },
-                TimeProvider.System));
+                new FakeTimeProvider(Today)));
     }
 
     /// <summary>Gets the roster administration the deployment-wide routes are published over.</summary>

@@ -159,34 +159,6 @@ public sealed class StoredSecretStoreTests
     }
 
     [Fact]
-    public async Task StoreAsync_AReferenceOwnedByAnotherOwner_RefusesWithoutChangingTheRow()
-    {
-        // Arrange
-        using var context = new MailFathomDbContextDesignTimeFactory().CreateDbContext([]);
-        var reference = DatabaseSecretReference.Create(new Guid("019925df-96f4-7c6d-8f91-b9f6cf27f5b2"));
-        var existing = Stored(reference.Id);
-        context.StoredSecrets.Add(existing);
-        var (store, _) = CreateStore(context);
-        await using var session = new TestPersistenceSession(context);
-        using var material = ResolvedSecret.FromText("not-a-real-mailbox-password");
-        Assert.True(SecretName.TryCreate(existing.Name, out var name));
-
-        // Act
-        var storing = async () => await store.StoreAsync(
-            session,
-            reference,
-            OtherOwner,
-            name,
-            material,
-            TestContext.Current.CancellationToken);
-
-        // Assert
-        await Assert.ThrowsAsync<InvalidOperationException>(storing);
-        Assert.Equal(Owner.Value, existing.OwnerId);
-        Assert.Equal("old-key", existing.DataEncryptionKeyId);
-    }
-
-    [Fact]
     public async Task RemoveAsync_AReferenceOwnedByAnotherOwner_LeavesTheRowPending()
     {
         // Arrange

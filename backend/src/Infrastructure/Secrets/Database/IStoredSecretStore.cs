@@ -57,6 +57,12 @@ public interface IStoredSecretStore
         CancellationToken cancellationToken);
 
     /// <summary>Reads a bounded inventory of stored secrets still sealed under one key.</summary>
+    /// <param name="keyId">The configured key identifier stored beside each matching value.</param>
+    /// <param name="limit">The maximum rows to return, from one through <see cref="MaximumKeyReferenceCount" />; values outside that range are rejected rather than clamped.</param>
+    /// <param name="cancellationToken">Cancels the database read.</param>
+    /// <returns>Up to <paramref name="limit" /> references still naming the key, ordered by their stable identifier.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="keyId" /> is <see langword="null" />, empty, or white space.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="limit" /> is outside one through <see cref="MaximumKeyReferenceCount" />.</exception>
     Task<IReadOnlyList<StoredSecretKeyReference>> ReadReferencesSealedByKeyAsync(
         string keyId,
         int limit,

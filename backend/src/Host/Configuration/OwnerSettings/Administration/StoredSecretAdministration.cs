@@ -74,28 +74,3 @@ internal sealed class StoredSecretAdministration(
         return StoredSecretProvisioning.Stored(storedReference);
     }
 }
-
-/// <summary>What an administrative stored-secret write did.</summary>
-internal enum StoredSecretProvisioningOutcome
-{
-    Stored = 0,
-    UnknownOwner = 1,
-    KeyRingUnavailable = 2,
-}
-
-/// <summary>The outcome of an administrative stored-secret write and its reference on success.</summary>
-/// <param name="Outcome">What the write did.</param>
-/// <param name="Reference">The stable reference when the write committed; otherwise the unspecified default.</param>
-internal sealed record StoredSecretProvisioning(
-    StoredSecretProvisioningOutcome Outcome,
-    DatabaseSecretReference Reference)
-{
-    internal static StoredSecretProvisioning Stored(DatabaseSecretReference reference) =>
-        new(StoredSecretProvisioningOutcome.Stored, reference);
-
-    internal static StoredSecretProvisioning UnknownOwner() =>
-        new(StoredSecretProvisioningOutcome.UnknownOwner, default);
-
-    internal static StoredSecretProvisioning KeyRingUnavailable() =>
-        new(StoredSecretProvisioningOutcome.KeyRingUnavailable, default);
-}

@@ -63,6 +63,8 @@ public static class RootSettingsBootstrap
 
         // The registration is reused rather than repeated, so a deployment that gains a managed-store scheme adapter
         // gains it here too instead of resolving one set of schemes at bootstrap and another once the host is running.
+        // The database scheme is the deliberate exception: bootstrap registers its refusing adapter because retrieving
+        // a stored row needs the connection this read is still composing.
         // The clock is what the host's own container would have supplied: the file adapter bounds how long a read of
         // credential material may take, and that bound is not one bootstrap gets to skip.
         await using var secretResolution = new ServiceCollection()
