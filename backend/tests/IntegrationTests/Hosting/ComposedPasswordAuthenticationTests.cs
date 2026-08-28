@@ -29,10 +29,12 @@ namespace MailFathom.IntegrationTests.Hosting;
 /// in order to ask for a password, and that one surface's password handler is never offered another surface's request.
 /// </para>
 /// <para>
-/// Every request carries <c>X-Forwarded-Proto: https</c>, because the shape below is the one the confidentiality
-/// refusal permits — a clear-text socket behind a named proxy — and a password handler judges nothing on a hop the
-/// request itself says was unencrypted. Without the header these claims would all be about a refusal that happens
-/// before the header is read, which is <see cref="ComposedPipelineOrderTests" />'s subject rather than this class's.
+/// Every request carries <c>X-Forwarded-Proto: https</c>, which fixes the shape under test rather than satisfying a
+/// refusal. Nothing refuses a password for its transport any more — the startup refusal and the handler's per-request
+/// one were both withdrawn, and <see cref="Host.Hosting.Warnings.PasswordClearTextTransportWarning" />
+/// reports the hop at startup instead — so these claims would hold without it. The header stays because the shape it
+/// pins is the deployment this class is written about: a clear-text socket behind a proxy the deployment named, where
+/// the scheme a request arrives under is the one the proxy forwarded.
 /// </para>
 /// <para>
 /// The credential store is replaced after the composition and before the container is built, because everything else in
@@ -289,7 +291,7 @@ public sealed class ComposedPasswordAuthenticationTests
         $"Basic {Convert.ToBase64String(Encoding.UTF8.GetBytes($"{userId}:{password}"))}";
 
     /// <summary>Both surfaces an owner signs in to, each accepting a password, behind a proxy the deployment named.</summary>
-    /// <remarks>The proxy is what satisfies the confidentiality refusal without this shape having to carry a certificate: a password may not cross a hop the deployment has not established as encrypted, and naming what stands in front is one of the two arrangements that establishes it.</remarks>
+    /// <remarks>Naming the proxy is what lets this shape carry no certificate and still be a deployment somebody would run: the hop a request arrives over is the one that proxy forwarded. It permits nothing — a password crosses an unnamed clear-text hop just as readily, and is reported at startup rather than refused.</remarks>
     private static IReadOnlyList<KeyValuePair<string, string?>> BothOwnerSurfacesAcceptingAPassword() =>
     [
         new("McpEndpoint:Enabled", "true"),

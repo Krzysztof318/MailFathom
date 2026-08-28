@@ -8,7 +8,6 @@ using System.Net;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using MailFathom.Host.Configuration.Endpoints;
-using MailFathom.Host.Security.ApiKeys;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Infrastructure.Security.Passwords;
 using Microsoft.AspNetCore.Authentication;
@@ -40,26 +39,14 @@ namespace MailFathom.Host.Security.Basic;
 /// credential.
 /// </para>
 /// <para>
-/// <strong>A request this process sees as clear text is refused before the header is read</strong>, exactly as the
-/// token schemes refuse one. Startup already refuses a surface that answers its routes on an unencrypted socket with
-/// no proxy declared in front, but the arrangement it permits instead — a clear-text listener behind a named
-/// TLS-terminating proxy — is one where the socket is still open: a request reaching it from anywhere but that proxy
-/// arrives without the forwarded scheme, so <c>IsHttps</c> stays false and this is the check that catches it. The
-/// startup refusal decides which deployments may accept a password at all, and this decides which requests may carry
-/// one.
-/// </para>
-/// <para>
-/// <c>IsHttps</c> is read after the forwarded-headers middleware, which is deliberate and is the only reading that
-/// answers the question: it is true where this process terminated TLS, and where a proxy this deployment named said
-/// the client's own hop was encrypted. Reading the connection's TLS feature instead would be unspoofable and wrong,
-/// because it is absent by construction in the second arrangement — every request behind a terminating proxy would be
-/// refused. What makes the forwarded reading safe here is which peers it is believed from:
-/// <see cref="TrustedReverseProxyExtensions" /> clears the framework's default trust and repopulates it from
-/// <c>ReverseProxy:TrustedProxies</c> alone, so a scheme forwarded by anything else is discarded before this runs. The
-/// one shape in which that section believes every peer is the one naming no proxy, or naming a range covering every
-/// address — and <see cref="Configuration.Access.PasswordTransportConfidentiality" /> refuses a password on a
-/// clear-text-serving surface in exactly those shapes, so the deployment where a client could forward its own scheme
-/// to this handler is one that does not start.
+/// <strong>The transport a request arrived over decides nothing here.</strong> A password is read, and the challenge
+/// offered, on a clear-text hop exactly as on an encrypted one. This process reads the scheme of its own socket and
+/// nothing beyond it, so the deployment that publishes on loopback for a proxy nobody had to declare and the one
+/// exposing that socket to a network are one reading from here — and refusing on it refused the first as readily as
+/// the second. Whether that hop is encrypted is the administrator's decision about their own deployment;
+/// <see cref="Hosting.Warnings.PasswordClearTextTransportWarning" /> reports it at every startup, which is what an API
+/// key crossing the same hop already gets. It is not what every credential gets: an OAuth bearer token on that hop is
+/// still refused per request, before it is read, and this says nothing against that refusal.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The authentication framework materializes this handler for its registered scheme.")]
@@ -99,12 +86,6 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
     /// <inheritdoc />
     /// <remarks>
     /// <para>
-    /// A request this process sees as clear text is refused first, without the header being read at all, for the reason
-    /// the type's own remarks give. It answers <see cref="AuthenticateResult.NoResult" /> rather than a failure, which
-    /// is what the token schemes answer for the same case: the credential was not judged, so the surface's challenge is
-    /// what the caller meets.
-    /// </para>
-    /// <para>
     /// The header is read through <see cref="object.ToString" /> on the header values, which yields an empty string
     /// when the request carried none and a joined value when it carried several. Both reach the authenticator as
     /// something that is not one Basic credential, which is what they are, and both are refused identically — so a
@@ -113,11 +94,6 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
     /// </remarks>
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
-        if (!this.Request.IsHttps)
-        {
-            return AuthenticateResult.NoResult();
-        }
-
         var result = await this.authenticator.AuthenticateAsync(
             this.Options.Surface.Name,
             this.Request.Headers.Authorization.ToString(),
@@ -188,22 +164,13 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
     /// <inheritdoc />
     /// <remarks>
     /// The bare bearer challenge every method on the surface produces, with the password challenge beside it, written
-    /// where the constants they name live — <strong>except on a request this process sees as clear text</strong>, which
-    /// gets the bearer challenge alone. Inviting a password there would be worse than reading one: the handler above
-    /// refuses to judge the credential, but a browser meeting <c>WWW-Authenticate: Basic</c> prompts for one and sends
-    /// it, so the password crosses the unencrypted hop before anything here can decline it. The refusal and this are
-    /// therefore one decision made twice — do not read a password over that hop, and do not ask for one.
+    /// where the constants they name live. It is the same challenge on every hop: a surface that reads a password over
+    /// clear text and declines to ask for one would be a surface whose browser clients cannot sign in to it at all,
+    /// which is a way of refusing the arrangement rather than of protecting it.
     /// </remarks>
     protected override Task HandleChallengeAsync(AuthenticationProperties properties)
     {
-        if (this.Request.IsHttps)
-        {
-            BasicAuthentication.WriteChallenge(this.Response);
-        }
-        else
-        {
-            ApiKeyAuthentication.WriteBareChallenge(this.Response);
-        }
+        BasicAuthentication.WriteChallenge(this.Response);
 
         return Task.CompletedTask;
     }

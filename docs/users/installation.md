@@ -80,6 +80,12 @@ carries, because a `.container` file has no variable to write two keys through.
 the page. The native shape carries no bundle, because nothing outside the image builds one; a person running that shape
 downloads the desktop client from the release instead.
 
+Signing in to it needs a credential, which no shape provisions on its own: there is no self-service and no default, so a
+username and password are written over [the administrative endpoint](../operations/admin-endpoint.md#owner-credentials)
+or they do not exist. The Compose quick start is the exception — it prepares the client and provisions that credential
+in the same run, and prints both — which is what makes it the shortest path from nothing to reading your own mail in a
+browser.
+
 ## What every shape needs
 
 - **Linux.** It is the only platform this project officially supports, and everything below assumes it: the image is

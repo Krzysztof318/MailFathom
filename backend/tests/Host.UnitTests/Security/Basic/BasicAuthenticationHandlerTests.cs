@@ -24,13 +24,12 @@ using Xunit;
 
 namespace MailFathom.Host.UnitTests.Security.Basic;
 
-/// <summary>Covers the one judgement the handler makes for itself, which is that a password may not arrive over clear text.</summary>
+/// <summary>Covers what the handler decides for itself at the request boundary, and the one thing it deliberately does not.</summary>
 /// <remarks>
-/// Everything else the handler does is <see cref="OwnerPasswordAuthenticator" />'s and is covered there. This is the
-/// part that only exists at the request boundary: startup refuses a deployment whose surface answers its routes on an
-/// unencrypted socket with nothing declared in front, and the arrangement it permits instead leaves that socket open
-/// behind a named proxy — so a request arriving there from anywhere but the proxy carries no forwarded scheme and is
-/// refused here, before the header is read.
+/// Judging the credential is <see cref="OwnerPasswordAuthenticator" />'s and is covered there. What only exists here is
+/// which source an attempt is bounded by, which claims a success carries — and that the transport a request arrived
+/// over decides nothing: a password is read, and the challenge offered, on a clear-text hop exactly as on an encrypted
+/// one, because this process can read the scheme of its own socket and nothing beyond it.
 /// </remarks>
 public sealed class BasicAuthenticationHandlerTests
 {
@@ -47,38 +46,45 @@ public sealed class BasicAuthenticationHandlerTests
     private static readonly MailOwnerId CredentialOwner =
         MailOwnerId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff"));
 
-    /// <summary>The password would already have crossed the wire, so nothing about it is read and nothing is spent judging it.</summary>
+    /// <summary>
+    /// The deployment this endpoint is served in is the administrator's to decide, and a Compose or loopback
+    /// deployment speaking plain HTTP is the one the client's sign-in exists for. A credential arriving there is
+    /// judged and authenticated rather than refused unread; that the hop is unencrypted is reported at startup by
+    /// <c>PasswordClearTextTransportWarning</c> instead.
+    /// </summary>
     [Fact]
-    public async Task AuthenticateAsync_ACredentialArrivingOverClearText_IsNotJudgedAtAll()
+    public async Task AuthenticateAsync_ACredentialArrivingOverClearText_IsAuthenticated()
     {
         // Arrange
         using var harness = new HandlerHarness();
-        var handler = await harness.InitializeAsync(BasicHeader("owner", "correcthorsebattery"), https: false);
+        harness.HoldsTheOwnersCredential();
+        var handler = await harness.InitializeAsync(BasicHeader("owner", Password), https: false);
 
         // Act
         var result = await handler.AuthenticateAsync();
 
         // Assert
-        Assert.True(result.None);
-        Assert.Null(result.Failure);
+        Assert.True(result.Succeeded);
+        Assert.Equal(CredentialOwner, TransportCallerOwner.CarriedBy(result.Principal!));
 
-        await harness.Credentials.DidNotReceiveWithAnyArgs()
+        await harness.Credentials.ReceivedWithAnyArgs(1)
             .FindAsync(default, default, TestContext.Current.CancellationToken);
     }
 
-    /// <summary>The same credential over an encrypted hop is judged, which is what says the refusal above is about the transport rather than about the header.</summary>
+    /// <summary>The same credential over an encrypted hop reaches the store and succeeds exactly as above, which is what says the transport is read for nothing here rather than read and permitted.</summary>
     [Fact]
-    public async Task AuthenticateAsync_TheSameCredentialOverAnEncryptedHop_IsJudged()
+    public async Task AuthenticateAsync_TheSameCredentialOverAnEncryptedHop_ReachesTheStoreAndIsAuthenticatedToo()
     {
         // Arrange
         using var harness = new HandlerHarness();
-        var handler = await harness.InitializeAsync(BasicHeader("owner", "correcthorsebattery"), https: true);
+        harness.HoldsTheOwnersCredential();
+        var handler = await harness.InitializeAsync(BasicHeader("owner", Password), https: true);
 
         // Act
         var result = await handler.AuthenticateAsync();
 
         // Assert
-        Assert.False(result.None);
+        Assert.True(result.Succeeded);
 
         await harness.Credentials.ReceivedWithAnyArgs(1)
             .FindAsync(default, default, TestContext.Current.CancellationToken);
@@ -141,9 +147,9 @@ public sealed class BasicAuthenticationHandlerTests
             result.Principal!.FindFirstValue(BasicAuthentication.CredentialIdClaimType));
     }
 
-    /// <summary>A challenge is an instruction to send the credential again, so a clear-text hop is not offered one it would send a password over.</summary>
+    /// <summary>A surface that read a password over this hop and then declined to ask for one would be a surface no browser client could sign in to, so the challenge is the same one an encrypted hop gets.</summary>
     [Fact]
-    public async Task ChallengeAsync_OverClearText_OffersNoPasswordChallenge()
+    public async Task ChallengeAsync_OverClearText_OffersThePasswordChallenge()
     {
         // Arrange
         using var harness = new HandlerHarness();
@@ -155,7 +161,7 @@ public sealed class BasicAuthenticationHandlerTests
 
         // Assert
         var challenges = context.Response.Headers[HeaderNames.WWWAuthenticate].ToString();
-        Assert.DoesNotContain("Basic", challenges, StringComparison.Ordinal);
+        Assert.Contains("Basic", challenges, StringComparison.Ordinal);
         Assert.Contains("Bearer", challenges, StringComparison.Ordinal);
     }
 

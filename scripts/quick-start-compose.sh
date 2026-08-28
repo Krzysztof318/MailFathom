@@ -7,6 +7,11 @@ set -euo pipefail
 
 ### Prepares a Docker Compose deployment to evaluate MailFathom with, asking for the mailbox it is to synchronize.
 #
+# What it ends with is an address a chat client connects to, an address the MailFathom client answers on, and a user
+# name and password to sign in to it with. The client is served from the same image, so preparing it is two settings and
+# a credential rather than anything to install; the credential has no self-service and no default, so this provisions
+# one over the administrative endpoint and writes the password beside every other credential it generates.
+#
 # Usage:
 #   scripts/quick-start-compose.sh
 #   scripts/quick-start-compose.sh --provider fastmail --user-name you@fastmail.com \
@@ -18,10 +23,15 @@ set -euo pipefail
 # wrong shape for a deployment anybody depends on. docs/users/installation.md is where that decision is made, and the
 # four shapes it routes to are what a real installation is built from; this script decides none of it for you.
 #
-# What it performs is what docs/operations/deployment-compose.md documents by hand, in that order and with nothing
-# added: the three files that have to exist, the directory and file modes the container's own account needs, the
-# database, the schema step, and the two probes. Every value it writes is one the manual path writes too, so what it
-# produces is an ordinary Compose deployment rather than a second shape of one — every setting stays editable, and
+# What it performs is what docs/operations/deployment-compose.md documents by hand, in that order: the three files that
+# have to exist, the directory and file modes the container's own account needs, the database, the schema step, and the
+# two probes. One thing it adds to that path, and the closing report says so: it writes openssl-legacy.cnf beside
+# compose.yaml and names it in OPENSSL_CONF through compose.override.yaml, which lowers the platform's OpenSSL security
+# level to 1 for every TLS session this process makes — the database's and the object store's included, not the mail
+# sessions alone. That is what makes a mailbox on a server offering only a 1024-bit group, a 1024-bit key, or a SHA-1
+# signature reachable from a first run rather than a handshake error naming nothing, and --no-legacy-tls prepares the
+# same deployment under the platform default. Everything else it writes is a value the manual path writes too, so what
+# it produces is an ordinary Compose deployment rather than a second shape of one — every setting stays editable, and
 # what makes it an evaluation is what nobody has configured yet rather than anything it did.
 #
 # Two of those steps are why this exists rather than a shorter page. A mode left at the clone's umask reaches startup
@@ -30,9 +40,9 @@ set -euo pipefail
 # separate on purpose: a deployment that skips it starts and refuses to serve, naming a migration rather than the step
 # that applies it.
 #
-# What it will not do is decide anything the deployment's own defaults decide. It publishes no port on an address other
-# than loopback, enables no scanner, configures no model, and turns no authentication off that was not asked for by
-# name. The one place it writes outside deploy/compose/ is nowhere: every file it creates is under that directory, and
+# Beyond that TLS policy, it decides nothing the deployment's own defaults decide. It publishes no port on an address
+# other than loopback, enables no scanner, configures no model, and turns no authentication off that was not asked for
+# by name. The one place it writes outside deploy/compose/ is nowhere: every file it creates is under that directory, and
 # it creates none of them until every question has been answered.
 #
 # It reads a checkout, so unlike scripts/install-mfctl.sh it is not fetched over HTTP and run — `git clone` comes
@@ -41,6 +51,10 @@ set -euo pipefail
 readonly repository='Krzysztof318/MailFathom'
 readonly release_base="https://github.com/$repository/releases"
 readonly documentation_base='https://krzysztof318.github.io/MailFathom'
+
+# The port compose.yaml publishes, which every surface served on the container's own 8080 answers on: the MCP endpoint,
+# the client's routes, and the page a browser downloads.
+readonly published_port='8080'
 
 # The administrative endpoint's own default port is 8080, which is the socket the MCP endpoint is already served on, and
 # compose.yaml publishes nothing for it. So enabling it here means stating a port of its own and publishing that one —
@@ -64,14 +78,24 @@ prepares has no TLS, no backup, and credentials in files under this checkout.
   --mcp-authentication <api-key|none>
                            Whether the MCP endpoint requires a generated key. Defaults to api-key.
   --admin-endpoint <off|api-key|none>
-                           Whether the administrative endpoint is served, and how. Defaults to off.
+                           Whether the administrative endpoint is served, and how. Served with a
+                           generated key when the client is prepared, which needs it to provision a
+                           credential. Defaults to off, and off with the client is refused.
+  --no-client              Prepare the MCP endpoint alone, without the client or its credential.
+  --client-user-name <name>
+                           What to sign in to the client as. Defaults to 'owner'.
+  --no-legacy-tls          Leave the platform's own TLS policy in force, instead of the relaxation
+                           that reaches a mail server offering only weak parameters.
   --version <version>      The release to deploy, for example 0.6.0. Defaults to the newest.
-  --no-start               Write the files and stop, without starting anything or applying a schema.
-  --non-interactive        Ask nothing. Every answer above has to be given, and the schema is not applied.
+  --no-start               Write the files and stop, without starting anything, applying a schema, or
+                           provisioning the client credential.
+  --non-interactive        Ask nothing. Every answer above has to be given, and neither the schema nor
+                           the client credential is applied.
   --help                   Print this and exit.
 
 The mailbox password is read without echo and written straight to its file, so it reaches neither the
-shell history nor the process list. --password-file is the same thing for an unattended run.
+shell history nor the process list. --password-file is the same thing for an unattended run. The
+client's own password is generated the same way and read from its file when it is provisioned.
 
 Nothing is overwritten. An existing .env, configuration file, or secret stops the run naming the file.
 TEXT
@@ -86,9 +110,13 @@ account_id='primary'
 password_file=''
 mcp_authentication='api-key'
 admin_endpoint='off'
-# Whether the line above is the default or the operator's own answer. An authenticated MCP endpoint needs the
-# administrative endpoint to mint its key, so a default of `off` is corrected and an explicit one is refused.
+# Whether the line above is the default or the operator's own answer. Two of the credentials this script prepares are
+# minted over the administrative endpoint, so a default of `off` is corrected where one of them was asked for and an
+# explicit one is refused.
 admin_endpoint_chosen='no'
+serve_client='yes'
+client_user_name='owner'
+relax_tls_policy='yes'
 requested_version=''
 start_stack='yes'
 interactive='yes'
@@ -96,7 +124,7 @@ interactive='yes'
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --provider | --host | --port | --user-name | --display-name | --account-id | --password-file | \
-      --mcp-authentication | --admin-endpoint | --version)
+      --mcp-authentication | --admin-endpoint | --client-user-name | --version)
       [[ $# -ge 2 ]] || { printf '%s takes a value.\n' "$1" >&2; exit 1; }
       case "$1" in
         --provider) provider="$2" ;;
@@ -108,10 +136,13 @@ while [[ $# -gt 0 ]]; do
         --password-file) password_file="$2" ;;
         --mcp-authentication) mcp_authentication="$2" ;;
         --admin-endpoint) admin_endpoint="$2"; admin_endpoint_chosen='yes' ;;
+        --client-user-name) client_user_name="$2" ;;
         --version) requested_version="$2" ;;
       esac
       shift 2
       ;;
+    --no-client) serve_client='no'; shift ;;
+    --no-legacy-tls) relax_tls_policy='no'; shift ;;
     --no-start) start_stack='no'; shift ;;
     --non-interactive) interactive='no'; shift ;;
     --help | -h) usage; exit 0 ;;
@@ -138,6 +169,15 @@ fi
 readonly compose_directory="$repository_root/deploy/compose"
 if [[ ! -f "$compose_directory/compose.yaml" ]]; then
   printf 'This checkout has no %s, so there is no Compose deployment to prepare.\n' 'deploy/compose/compose.yaml' >&2
+  exit 1
+fi
+
+# Copied rather than written here, so the file this deployment runs under and the one the documentation reviews are one
+# file. docs/operations/platform-tls-policy.md is where what it relaxes, and what that costs, is argued.
+readonly legacy_tls_source="$repository_root/deploy/openssl/legacy-mail-server.cnf.example"
+if [[ "$relax_tls_policy" == 'yes' && ! -f "$legacy_tls_source" ]]; then
+  printf 'This checkout has no %s to prepare the TLS policy from.\n' 'deploy/openssl/legacy-mail-server.cnf.example' >&2
+  printf 'Pass --no-legacy-tls to run under the platform default instead.\n' >&2
   exit 1
 fi
 
@@ -327,6 +367,14 @@ case "$admin_endpoint" in
   *) printf 'The administrative endpoint takes off, api-key, or none, not %s.\n' "$admin_endpoint" >&2; exit 1 ;;
 esac
 
+# A username is what a credential is resolved by, and MailFathom holds it to a form that reads back unambiguously in a
+# refusal, a log line, and a sign-in prompt. Refusing it here rather than at the provisioning call is what keeps a run
+# from preparing a whole deployment before saying the name cannot be used.
+if [[ ! "$client_user_name" =~ ^[A-Za-z0-9._+@-]{1,128}$ ]]; then
+  printf 'A client user name is 1 to 128 letters, digits, or the characters %s: %s\n' \
+    "'.', '-', '_', '+', and '@'" "$client_user_name" >&2
+  exit 1
+fi
 
 if [[ "$interactive" == 'yes' ]]; then
   cat << TEXT
@@ -349,13 +397,16 @@ TEXT
   fi
 fi
 
-# The MCP key is minted over the administrative endpoint rather than written into a file here, so switching that
-# endpoint off while the MCP endpoint requires a credential produces a deployment nothing can be provisioned for.
-# An operator who asked for that combination is told; a default that arrived at it is corrected, since nobody chose it.
-if [[ "$mcp_authentication" == 'api-key' ]] && [[ "$admin_endpoint" == 'off' ]]; then
+# Neither the MCP key nor the credential a person signs in to the client with is written into a file here: each is a
+# record the running deployment mints over the administrative endpoint. So switching that endpoint off while either is
+# asked for produces a deployment nothing can be provisioned for. An operator who asked for that combination is told; a
+# default that arrived at it is corrected, since nobody chose it.
+if [[ "$admin_endpoint" == 'off' ]] \
+  && { [[ "$mcp_authentication" == 'api-key' ]] || [[ "$serve_client" == 'yes' ]]; }; then
   if [[ "$admin_endpoint_chosen" == 'yes' ]]; then
-    printf 'An MCP key is minted with mfctl over the administrative endpoint, so --admin-endpoint off cannot be\n' >&2
-    printf 'combined with --mcp-authentication api-key. Pass --admin-endpoint api-key, or --mcp-authentication none.\n' >&2
+    printf 'An MCP key and the credential a person signs in to the client with are both minted with mfctl\n' >&2
+    printf 'over the administrative endpoint, so --admin-endpoint off cannot be combined with either. Pass\n' >&2
+    printf '%s\n' '--admin-endpoint api-key, or ask for neither with --mcp-authentication none and --no-client.' >&2
     exit 1
   fi
 
@@ -363,6 +414,26 @@ if [[ "$mcp_authentication" == 'api-key' ]] && [[ "$admin_endpoint" == 'off' ]];
 fi
 
 if [[ "$interactive" == 'yes' ]]; then
+  if [[ "$serve_client" == 'yes' ]]; then
+    cat << TEXT
+
+The MailFathom client is the web interface onto the same mailbox, and it travels inside the image —
+so preparing it is two settings rather than anything to install. It is served at
+http://127.0.0.1:$published_port/, on the port above, and it signs a person in with a user name and a
+password.
+
+There is no self-service and no default credential, so this script generates one and provisions it
+once the deployment is up. That takes the administrative endpoint below, which is why it is served
+here whether or not you would otherwise have asked for it. Pass --no-client to prepare the MCP
+endpoint alone.
+
+The password crosses the same plain-HTTP hop everything else here does. On a port published to
+127.0.0.1 that hop is this machine; it is reported at every startup, and it is the first thing to
+fix before anybody else reaches this deployment.
+
+TEXT
+  fi
+
   cat << TEXT
 
 The administrative endpoint is what mfctl talks to: synchronization state, what was changed, what a
@@ -374,11 +445,15 @@ as the mail it can dispose of.
 
 TEXT
 
-  # An authenticated MCP endpoint has nowhere else to get its key from: what a client presents there is a record beside
-  # the owner, minted with `mfctl credential create`, so the endpoint mfctl talks to is a prerequisite rather than an
-  # extra. The validation above has already turned it on; this is where the operator is told why.
-  if [[ "$mcp_authentication" == 'api-key' ]]; then
+  # Neither an authenticated MCP endpoint nor the client has anywhere else to get its credential from: each is a record
+  # beside the owner, minted with `mfctl credential create`, so the endpoint mfctl talks to is a prerequisite rather
+  # than an extra. The validation above has already turned it on; this is where the operator is told why.
+  if [[ "$mcp_authentication" == 'api-key' && "$serve_client" == 'yes' ]]; then
+    printf 'It is on, because the MCP key and the client credential are both minted through it.\n\n' >&2
+  elif [[ "$mcp_authentication" == 'api-key' ]]; then
     printf 'It is on, because the MCP key you chose above is minted through it.\n\n' >&2
+  elif [[ "$serve_client" == 'yes' ]]; then
+    printf 'It is on, because the credential the client signs in with is minted through it.\n\n' >&2
   fi
 
   if [[ "$admin_endpoint" == 'off' ]] && confirm 'Serve the administrative endpoint as well?'; then
@@ -450,7 +525,16 @@ done
 
 readonly imap_password_name="imap-$account_id-password"
 readonly admin_key_name='admin-workstation-key'
+readonly client_password_name="client-$client_user_name-password"
 readonly schema_asset="mailfathom-schema-$version.sql"
+
+# compose.yaml publishes no port for the administrative endpoint and mounts no file that need not exist, and it is a
+# tracked file. An override is what states either without editing it — .gitignore already covers this path.
+writes_override='no'
+if [[ "$admin_endpoint" != 'off' || "$relax_tls_policy" == 'yes' ]]; then
+  writes_override='yes'
+fi
+readonly writes_override
 
 # Written into JSON as a string. Only these two characters can end a string early or start an escape, and a control
 # character is refused rather than encoded, because a name carrying one is a mistake in every case that reaches here.
@@ -477,7 +561,9 @@ write_secret() {
 
 refuse_existing "secrets/mailfathom/$imap_password_name"
 [[ "$admin_endpoint" != 'api-key' ]] || refuse_existing "secrets/mailfathom/$admin_key_name"
-[[ "$admin_endpoint" == 'off' ]] || refuse_existing 'compose.override.yaml'
+[[ "$serve_client" != 'yes' ]] || refuse_existing "secrets/$client_password_name"
+[[ "$relax_tls_policy" != 'yes' ]] || refuse_existing 'openssl-legacy.cnf'
+[[ "$writes_override" != 'yes' ]] || refuse_existing 'compose.override.yaml'
 
 printf '\nPreparing deploy/compose for MailFathom %s.\n' "$version" >&2
 
@@ -504,6 +590,39 @@ if [[ "$mcp_authentication" == 'api-key' ]]; then
 [
       { "Method": "api-key" }
     ]
+JSON
+  )
+fi
+
+# The credential a person signs in to the client with. It is generated like every key above and, unlike them, it is
+# nothing the configuration refers to: what reads it is the person, and what holds it is the database once the
+# provisioning call below has run. So it stays in secrets/ beside the two database passwords rather than in
+# secrets/mailfathom/, which compose.yaml bind-mounts into the container: a file there would be readable by the
+# process a compromised MailFathom is, for no purpose, since nothing in the container ever reads this one.
+if [[ "$serve_client" == 'yes' ]]; then
+  write_secret "secrets/$client_password_name" "$(openssl rand -base64 33 | tr -d '\n')"
+fi
+
+# The client's own surface, which is where the page a browser downloads calls back to. It accepts one method and
+# nothing else: an owner's username and password is the one credential a person can present from a browser without an
+# authorization server behind it, and an evaluation has none. The entry names the method and holds no credential — the
+# record is minted over the administrative endpoint below. No port is stated, because the endpoints share the
+# container's 8080 and that is the socket compose.yaml publishes. The origin list is empty for the same reason the
+# endpoint below states one: the page this deployment serves is same-origin, so an absent list — which is every
+# browser origin — would open the mail-reading surface to sites that have no business calling it.
+client_section=''
+if [[ "$serve_client" == 'yes' ]]; then
+  client_section=$(
+    cat << 'JSON'
+  "ClientEndpoint": {
+    "Enabled": true,
+    "Authentication": [
+      { "Method": "password" }
+    ],
+    "Cors": {
+      "AllowedOrigins": []
+    }
+  },
 JSON
   )
 fi
@@ -577,6 +696,7 @@ cat > config/10-mailfathom.json << JSON
     ]
   },
 $admin_section
+$client_section
   "McpEndpoint": {
     "Enabled": true,
     "Authentication": $mcp_authentication_block,
@@ -599,29 +719,80 @@ MAILFATHOM_IMAGE=ghcr.io/krzysztof318/mailfathom:$version
 MAILFATHOM_PULL_POLICY=missing
 ENV
 
+if [[ "$serve_client" == 'yes' ]]; then
+  cat >> .env << ENV
+
+# Serves the client's browser head from the same listeners its API answers on, and declares that this deployment
+# accepts it over a clear-text socket. The second half is a statement about the shape above: the port is published on
+# 127.0.0.1, so the hop the page and every credential cross is this machine. Put TLS in front before that port reaches
+# a network — MAILFATHOM_HTTP_BIND is what moves it.
+MAILFATHOM_CLIENT=true
+ENV
+fi
+
 chmod 644 .env
 
-if [[ "$admin_endpoint" != 'off' ]]; then
-  # compose.yaml publishes no port for the administrative endpoint, deliberately, and it is a tracked file. An override
-  # is what publishes one without editing it — .gitignore already covers this path for exactly that reason.
-  cat > compose.override.yaml << YAML
+# Copied rather than written, so the file this deployment runs under is the one the repository reviews and documents.
+if [[ "$relax_tls_policy" == 'yes' ]]; then
+  cp -- "$legacy_tls_source" openssl-legacy.cnf
+  chmod 644 openssl-legacy.cnf
+fi
+
+if [[ "$writes_override" == 'yes' ]]; then
+  {
+    cat << 'YAML'
 # Written by scripts/quick-start-compose.sh, and ignored by Git.
 #
-# The administrative endpoint is configured in ./config, and this publishes the port it is served on. Loopback, like
-# every other port this deployment publishes: mfctl reaches it from this machine, and nothing else reaches it at all.
+# What compose.yaml leaves out on purpose, because it is tracked and this is not: a published port for an
+# administrative endpoint it keeps disabled, and a mount for a file that need not exist.
 services:
   mailfathom:
+YAML
+
+    # The whole process reads its TLS parameters from this file, which is what reaches a mail server offering only
+    # parameters the platform's own policy refuses — a 1024-bit Diffie-Hellman group, a 1024-bit RSA key, a SHA-1
+    # signature. It relaxes nothing else: the protocol floor stays where it was, and certificate validation is
+    # untouched. It applies to every TLS session this process makes, the database's included, which is why the closing
+    # report names it and --no-legacy-tls leaves the platform default in force.
+    if [[ "$relax_tls_policy" == 'yes' ]]; then
+      cat << 'YAML'
+    environment:
+      OPENSSL_CONF: /etc/mailfathom/openssl-legacy.cnf
+    volumes:
+      - type: bind
+        source: ./openssl-legacy.cnf
+        target: /etc/mailfathom/openssl-legacy.cnf
+        read_only: true
+YAML
+    fi
+
+    # Loopback, like every other port this deployment publishes: mfctl reaches it from this machine, and nothing else
+    # reaches it at all.
+    if [[ "$admin_endpoint" != 'off' ]]; then
+      cat << YAML
     ports:
       - "127.0.0.1:$admin_port:$admin_port"
 YAML
+    fi
+  } > compose.override.yaml
 
   chmod 644 compose.override.yaml
 fi
 
 printf 'Wrote .env, config/10-mailfathom.json, and the credentials under secrets/.\n' >&2
 
+if [[ "$relax_tls_policy" == 'yes' ]]; then
+  printf 'Wrote openssl-legacy.cnf, which this deployment reads its TLS parameters from.\n' >&2
+fi
+
+# What the closing report may claim about the client. It starts as a credential nobody has provisioned, because that is
+# what is true of every path that stops before the deployment answers — and reporting one that was never created is the
+# way this script would send somebody to a sign-in that refuses them.
+client_credential='pending'
+
 report_connection() {
-  printf '\nThe MCP endpoint answers at http://127.0.0.1:8080/mcp, over the Streamable HTTP transport.\n' >&2
+  printf '\nThe MCP endpoint answers at http://127.0.0.1:%s/mcp, over the Streamable HTTP transport.\n' \
+    "$published_port" >&2
 
   if [[ "$mcp_authentication" == 'api-key' ]]; then
     printf 'It accepts a key, and the deployment mints one for the owner once it is running:\n\n' >&2
@@ -633,6 +804,21 @@ report_connection() {
   fi
 
   printf '\nWhich clients take which of those, by name: %s/users/mcp-clients.html\n' "$documentation_base" >&2
+
+  if [[ "$serve_client" == 'yes' ]]; then
+    printf '\nThe MailFathom client answers at http://127.0.0.1:%s/ — open it in a browser.\n' "$published_port" >&2
+
+    if [[ "$client_credential" == 'provisioned' ]]; then
+      printf '  User name: %s\n' "$client_user_name" >&2
+      printf '  Password:  cat %s/secrets/%s\n' "$compose_directory" "$client_password_name" >&2
+      printf 'That password crosses an unencrypted hop, which the host reports at every startup.\n' >&2
+    else
+      printf 'Nothing signs in to it yet: no credential was provisioned. The password is already generated,\n' >&2
+      printf 'and provisioning it is one administrative call once the deployment answers:\n' >&2
+      printf '  cat %s/secrets/%s\n' "$compose_directory" "$client_password_name" >&2
+      printf '  %s/operations/client-endpoint.html\n' "$documentation_base" >&2
+    fi
+  fi
 
   if [[ "$admin_endpoint" != 'off' ]]; then
     printf '\nThe administrative endpoint answers at http://127.0.0.1:%s/api/admin.\n' "$admin_port" >&2
@@ -654,9 +840,25 @@ report_what_an_evaluation_is_missing() {
 This is a deployment to evaluate MailFathom with. Before it is one anybody depends on:
 
   Transport   Both ports are published on 127.0.0.1 and MailFathom terminates no TLS, so a client on
-              another machine has nothing to connect to and nothing protecting it if it did. Put a
-              TLS-terminating proxy in front, or configure McpEndpoint:Https.
+              another machine has nothing to connect to and nothing protecting it if it did. The
+              client's password crosses that hop readable, which the host says at every startup. Put
+              a TLS-terminating proxy in front, or configure McpEndpoint:Https.
               $documentation_base/operations/mcp-endpoint.html
+TEXT
+
+  if [[ "$relax_tls_policy" == 'yes' ]]; then
+    cat << TEXT >&2
+  TLS policy  This deployment reads its TLS parameters from ./openssl-legacy.cnf, which lowers the
+              platform's security level to 1 — a 1024-bit Diffie-Hellman group, a 1024-bit RSA key,
+              and a SHA-1 signature become acceptable — so that a mail server offering only those can
+              be reached at all. Every TLS session the process makes is covered, the database's
+              included, and nothing here needed it unless your mailbox did. Delete the file and the
+              lines naming it in compose.override.yaml, or prepare with --no-legacy-tls.
+              $documentation_base/operations/platform-tls-policy.html
+TEXT
+  fi
+
+  cat << TEXT >&2
   Credentials They are files under this checkout, protected by the mode on secrets/ and nothing else.
               The Podman Quadlet shape encrypts them as systemd credentials bound to the machine, and
               Kubernetes mounts a Secret you manage.
@@ -738,18 +940,18 @@ if ! confirm "Download that file, verify it against its checksum, and apply it t
   exit 0
 fi
 
-schema_directory="$(mktemp --directory)"
-trap 'rm --recursive --force "$schema_directory"' EXIT
+work_directory="$(mktemp --directory)"
+trap 'rm --recursive --force "$work_directory"' EXIT
 
 for asset in "$schema_asset" "$schema_asset.sha256"; do
-  if ! curl -fsSL --output "$schema_directory/$asset" "$release_base/download/v$version/$asset"; then
+  if ! curl -fsSL --output "$work_directory/$asset" "$release_base/download/v$version/$asset"; then
     printf 'Could not download %s. Check that %s is a release that exists: %s\n' "$asset" "$version" "$release_base" >&2
     exit 1
   fi
 done
 
 # The checksum file names its file as the release built it, so the check runs from the directory it downloaded into.
-if ! (cd "$schema_directory" && sha256sum --check --ignore-missing --quiet "$schema_asset.sha256"); then
+if ! (cd "$work_directory" && sha256sum --check --ignore-missing --quiet "$schema_asset.sha256"); then
   printf '\n%s does not match the checksum %s publishes for it, so nothing was applied.\n' \
     "$schema_asset" "$version" >&2
   exit 1
@@ -759,7 +961,7 @@ printf 'Applying the schema as the role MailFathom connects as.\n' >&2
 
 # As `mailfathom`, never as `postgres`: PostgreSQL makes the role that ran the DDL the owner of what it created, and a
 # schema applied by the superuser leaves MailFathom refusing to start against a schema that plainly exists.
-psql_in_container '' < "$schema_directory/$schema_asset" > /dev/null
+psql_in_container '' < "$work_directory/$schema_asset" > /dev/null
 
 printf 'Starting MailFathom.\n' >&2
 docker compose up -d
@@ -785,6 +987,73 @@ if curl -fsS 'http://127.0.0.1:8081/health' > /dev/null 2>&1; then
   printf '\nMailFathom %s is running and ready.\n' "$version" >&2
 else
   printf '\nMailFathom %s started, and /health is not ready yet — the first synchronization is running.\n' "$version" >&2
+fi
+
+# The credential a person signs in to the client with, provisioned now rather than written into a file: it is the one
+# credential this deployment holds a record of instead of reading out of configuration, so the administrative endpoint
+# is the only thing that can create one. It runs here because both of its preconditions are met at exactly this point —
+# the schema is applied and the deployment answers.
+#
+# Neither the key nor the password reaches an argument. A command line is readable in the process table by anything on
+# this machine, which would undo the mode both files were written with, so each is handed to curl through a file inside
+# the temporary directory above — created by mktemp at 0700, and removed when this script exits.
+provision_client_credential() {
+  local admin_base="http://127.0.0.1:$admin_port/api/admin"
+  local curl_configuration="$work_directory/admin-curl.conf"
+  local owners_answer="$work_directory/owners.json"
+  local provisioning_body="$work_directory/credential.json"
+  local owner_id=''
+
+  : > "$curl_configuration"
+
+  if [[ "$admin_endpoint" == 'api-key' ]]; then
+    printf 'header = "Authorization: Bearer %s"\n' "$(cat "secrets/mailfathom/$admin_key_name")" \
+      > "$curl_configuration"
+  fi
+
+  if ! curl -fsS --config "$curl_configuration" --output "$owners_answer" "$admin_base/owners"; then
+    printf 'The administrative endpoint did not answer, so no credential was provisioned.\n' >&2
+    return 1
+  fi
+
+  # One owner is what this deployment records and therefore all the listing holds. Read with a pattern rather than with
+  # jq, which is not a dependency this script has: the answer carries owner identifiers and nothing else shaped like
+  # one. `grep -m 1` stops grep itself rather than having a pipeline close under it, which `set -o pipefail` would
+  # otherwise report as a failure of the read.
+  owner_id="$(grep -m 1 -oE \
+    '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}' "$owners_answer" || true)"
+
+  if [[ -z "$owner_id" ]]; then
+    printf 'The deployment records no owner yet, so no credential was provisioned.\n' >&2
+    return 1
+  fi
+
+  # The method is named rather than inferred from which fields are present, because the record shape is one for all four
+  # and the route decides what it needs from the name.
+  printf '{"method":"password","username":%s,"password":%s}' \
+    "$(json_string "$client_user_name")" \
+    "$(json_string "$(cat "secrets/$client_password_name")")" > "$provisioning_body"
+
+  if ! curl -fsS --config "$curl_configuration" --request POST \
+    --header 'Content-Type: application/json' --data-binary "@$provisioning_body" \
+    --output /dev/null "$admin_base/owners/$owner_id/credentials"; then
+    printf 'Provisioning the client credential was refused, so nothing signs in to the client yet.\n' >&2
+    return 1
+  fi
+
+  return 0
+}
+
+if [[ "$serve_client" == 'yes' ]]; then
+  printf 'Provisioning the credential to sign in to the client with.\n' >&2
+
+  if provision_client_credential; then
+    client_credential='provisioned'
+  else
+    client_credential='failed'
+    printf 'Everything else is prepared: %s/operations/client-endpoint.html says how to provision one by hand.\n' \
+      "$documentation_base" >&2
+  fi
 fi
 
 report_connection

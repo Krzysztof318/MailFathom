@@ -10,7 +10,8 @@ PostgreSQL and applies the schema on its own.
 
 **Somebody evaluating MailFathom on the Compose shape can have steps 1 to 6 performed for them.**
 `scripts/quick-start-compose.sh` asks the same questions this page does, writes the same values, and ends by printing
-the two a client needs in step 7 — [trying it first, with one
+the two a client needs in step 7 — plus an address the [MailFathom client](../operations/client-endpoint.md) answers on
+and a generated username and password to sign in to it with, which it provisions for you. [Trying it first, with one
 command](../operations/deployment-compose.md#trying-it-first-with-one-command) is that path, including what a deployment
 it prepares is missing before anybody depends on it. Read this page anyway, for what each answer means.
 

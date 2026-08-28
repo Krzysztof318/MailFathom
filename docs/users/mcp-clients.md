@@ -61,8 +61,8 @@ repeated per client below:
   one, and any client able to send a static header can present it. Every credential this endpoint accepts names the
   person whose mail it reaches, so a request admitted with any of them reads that owner's mail rather than whichever
   owner the deployment was configured with. [The MCP endpoint § Passwords](../operations/mcp-endpoint.md#passwords)
-  records how a deployment turns the method on, why the address has to be HTTPS before it will start, and what the
-  refusal looks like; the credential itself is provisioned over
+  records how a deployment turns the method on, what a password crossing a clear-text address costs and what the
+  deployment says about it at every startup, and what the refusal looks like; the credential itself is provisioned over
   [the administrative endpoint](../operations/admin-endpoint.md#owner-credentials), like every other one here.
 - **A browser-based client is also subject to the origin policy.** A client that runs as a web page sends an `Origin`
   header, and a deployment that narrowed `McpEndpoint:Cors:AllowedOrigins` has to list that client's origin;

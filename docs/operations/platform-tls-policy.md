@@ -11,16 +11,28 @@ Almost every mail server meets that. A few, still in service, do not: one offeri
 1024-bit group as its only cipher suite, with no ECDHE suite and no TLS 1.3, is refused by a stock Ubuntu machine
 however MailFathom is configured. This page is what to do about that, and what it costs.
 
-## Everything here is opt-in
+## Where it is on, and where it is not
 
-**Nothing on this page is on by default, and no default in this repository moves because it exists.** A MailFathom
-that names no OpenSSL configuration file negotiates the strongest protocol and cipher suite the two ends agree on —
-TLS 1.3 wherever the server supports it — under the platform's own full-strength policy, and refuses anything that
-policy considers weak. That is what a checkout, a container, and a published artifact all do out of the box.
+**No product default moves because this page exists.** A MailFathom that names no OpenSSL configuration file negotiates
+the strongest protocol and cipher suite the two ends agree on — TLS 1.3 wherever the server supports it — under the
+platform's own full-strength policy, and refuses anything that policy considers weak. That is what a checkout, the
+container image, the chart, and the Quadlet units all do out of the box, and it is what an installation built from any
+of them runs under until an operator says otherwise.
 
-The mechanism below changes that for one process, only when an operator deliberately sets one environment variable,
-and it stays visible while it is set: the host says so at startup, every time it starts. A deployment that never meets
-a legacy mail server never touches any of it, and reading this page is not a step in an ordinary installation.
+The mechanism below changes that for one process, and it stays visible while it is set: the host says so at startup,
+every time it starts.
+
+**One thing here turns it on for you, and only one:
+[`scripts/quick-start-compose.sh`](https://github.com/Krzysztof318/MailFathom/blob/main/scripts/quick-start-compose.sh).**
+It copies the sample beside the Compose deployment it prepares, mounts it, and names it in the environment — so a
+mailbox on a server offering only weak parameters is reachable from a quick start rather than failing it with a
+handshake error that names nothing. The closing report says the file is there and what it relaxes, and
+`--no-legacy-tls` prepares the same deployment under the platform default instead. That script prepares a deployment to
+evaluate MailFathom with rather than one anybody depends on, which is what makes the trade defensible there and
+nowhere else: it is on one machine, it is published on loopback, and every decision it postpones is printed at the end.
+
+Everywhere else this is opt-in, one environment variable at a time. A deployment that never meets a legacy mail server
+never touches any of it, and reading this page is not a step in an ordinary installation.
 
 ## Which OpenSSL
 
@@ -153,8 +165,9 @@ therefore the same act written for a different launcher, and each is equally sup
           read_only: true
   ```
 
-  The repository's `.gitignore` does not cover that source path, so a Compose deployment run out of a clone shows the
-  copied file as untracked.
+  That is exactly what the quick start writes, under the name `openssl-legacy.cnf` beside `compose.yaml` and in the
+  `compose.override.yaml` it already writes for the administrative port. `.gitignore` covers both, so neither shows up
+  as untracked in a clone; a file copied to any other name under `deploy/compose/` does.
 
 - **On Kubernetes.** `config.extraEnvironment` sets the variable, but the chart mounts only the JSON configuration
   directory and the secret directory, and the configuration ConfigMap rejects a file name that does not end in `.json`.
