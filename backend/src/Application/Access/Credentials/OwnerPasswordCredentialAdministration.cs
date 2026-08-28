@@ -91,11 +91,16 @@ public sealed class OwnerPasswordCredentialAdministration
     /// their credentials would otherwise be a way of discovering, and an entrypoint reaching the port directly would be
     /// an entrypoint that never asked.
     /// </remarks>
-    public Task<IReadOnlyList<MailOwnerId>> ReadOwnersAsync(int limit, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<MailOwnerId>> ReadOwnersAsync(int limit, CancellationToken cancellationToken)
     {
         this.authorization.RequirePermission(MailFathomPermission.AdminRead);
 
-        return this.owners.ReadOwnersAsync(limit, cancellationToken);
+        // The directory answers with each owner's whole record, because that is what the startup roster is reconciled
+        // from. What an administrator names every act here by is the identifier alone, so the label is dropped rather
+        // than widening what this publishes.
+        var records = await this.owners.ReadOwnersAsync(limit, cancellationToken);
+
+        return [.. records.Select(record => record.Owner)];
     }
 
     /// <summary>Reads the credentials one owner holds.</summary>
