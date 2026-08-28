@@ -21,6 +21,8 @@ What it asserts today is what a scaffold has to say for itself — that the clie
 build declares, that the MVUX model behind the only screen yields it, and that the languages the model offers are the
 ones the embedded configuration names, and that those cultures are exactly the ones a table under `src/Client/Strings/`
 is authored for and that every table holds the same keys —
+that the service graph the application composes resolves in full and builds every model a screen is drawn from,
+against the configuration the bundle actually ships as well as against one a test states —
 and the whole of what `Client.Backend` does
 against a stubbed transport: the wire contract, the four ways an exchange can fail, and the sign-in end to end with the
 one head-specific step stubbed at its port. `AGENTS.md` beside this file states what belongs here, how a feed is
