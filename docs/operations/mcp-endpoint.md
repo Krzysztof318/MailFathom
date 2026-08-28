@@ -646,21 +646,29 @@ Such a request is refused before its header is read, and the refusal it gets bac
 trying many passwords, and many hosts trying one account's. **Only a wrong password spends any of it.** Basic
 re-presents the credential on every request and this deployment keeps no session, so an allowance a working password
 spent would bound an owner's request rate rather than anybody's guessing — at the default, the eleventh call of a
-working session would be refused with the answer a wrong password gets. Capacity is *taken* before the password is
-verified rather than read beforehand, which is what makes the bound hold against a client opening many connections at
-once; a right password returns it immediately, and a wrong one holds it for a minute and then returns it. So a caller
-that has spent its allowance waits that minute out rather than being locked out — the point is to make guessing
-expensive rather than to give anybody a way to lock an owner out. It is separate from
+working session would be refused with the answer a wrong password gets. What a wrong password spends is returned a
+minute later, so a caller that has spent its allowance waits that minute out rather than being locked out; the point is
+to make guessing expensive rather than to give anybody a way to lock an owner out. It is separate from
 [`RateLimiting`](#rate-limiting), which bounds requests to the surface rather than guesses at a credential. The ceiling
 is 600; a number above it is refused, because a thousand verifications a minute against one username is an offline
 guessing rate rather than a bound.
 
-**Behind a reverse proxy the username is the whole bound.** MailFathom never reads `X-Forwarded-For`, so where
-[`ReverseProxy:TrustedProxies`](configuration-endpoints.md) names something in front, every request this process
-observes arrives from the proxy's own address — a per-source allowance there would be one allowance for the whole
-world, and a single guesser filling it would close password sign-in for every owner at once. The source axis is
-therefore skipped in that arrangement rather than applied to an address that distinguishes nobody, and the per-username
-allowance is what holds. Where nothing is named in front, the peer is the client and both axes apply.
+**What bounds a burst is a second and much larger limit**, on how many password verifications one axis may have in
+flight at once. It is 32, sized for a browser opening several connections to one origin and an agent issuing calls in
+parallel, and deliberately unrelated to the allowance an operator lowers to make guessing expensive: a single limit
+serving both purposes would refuse an owner's eleventh simultaneous call at the default, however right their password
+was. That limit is what stops a client opening five hundred connections from making this process perform five hundred
+concurrent derivations, and it is also what bounds the overshoot in the allowance: the allowance is read before a
+verification and spent only after a wrong one, so a burst arriving together can exceed `AttemptsPerMinute` by at most
+32 attempts in the first minute and by nothing after it.
+
+**A peer this deployment cannot tell apart from the world is bounded by username alone.** MailFathom never reads
+`X-Forwarded-For`, so a request arriving from an address
+[`ReverseProxy:TrustedProxies`](configuration-endpoints.md) names carries that proxy's address and nobody else's — a
+per-source allowance over it would be one allowance for the whole world, and a single guesser filling it would close
+password sign-in for every owner at once. The source axis is therefore skipped for such a peer rather than applied to
+an address that distinguishes nobody, and the per-username allowance is what holds. Every other peer is the client that
+reached this process, whether or not anything is named in front, and both axes apply to it.
 
 **The method is refused on the administrative endpoint**, at startup, naming the section. That surface answers for the
 deployment rather than for a person, so a credential naming an owner has nothing there to act for —

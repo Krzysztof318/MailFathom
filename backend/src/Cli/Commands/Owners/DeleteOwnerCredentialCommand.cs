@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.CommandLine;
+using System.Net;
 using MailFathom.Cli.Administration;
 using MailFathom.Cli.Administration.Owners;
 
@@ -29,11 +30,17 @@ namespace MailFathom.Cli.Commands.Owners;
 /// deployment answered.
 /// </para>
 /// <para>
-/// A listing the deployment refuses is the same case one step further, and it ends the same way. Reading and removing
-/// are separately granted, so a token holding the write grant and not the read one is an ordinary arrangement rather
-/// than a broken one, and letting the refusal end the command would make a credential unremovable through the tool that
-/// exists to remove it. The refusal is therefore shown and stepped over, exactly as an absent credential is, and the
-/// operator is still asked before anything is sent.
+/// A listing the deployment refuses <em>for want of the read grant</em> is the same case one step further, and it ends
+/// the same way. Reading and removing are separately granted, so a token holding the write grant and not the read one is
+/// an ordinary arrangement rather than a broken one, and letting that refusal end the command would make a credential
+/// unremovable through the tool that exists to remove it. It is therefore shown and stepped over, exactly as an absent
+/// credential is, and the operator is still asked before anything is sent.
+/// </para>
+/// <para>
+/// <strong>Every other failure ends the command instead.</strong> A mistyped port, an unreachable deployment, and a
+/// credential the endpoint refused outright all reach this command as the same exception type, and stepping over them
+/// would put an irreversible confirmation in front of an operator on the strength of a deployment nothing had
+/// contacted. Only <c>403</c> is stepped over, because only <c>403</c> says the token may remove what it may not list.
 /// </para>
 /// </remarks>
 internal static class DeleteOwnerCredentialCommand
@@ -122,8 +129,13 @@ internal static class DeleteOwnerCredentialCommand
         return CliExitCode.Success;
     }
 
-    /// <summary>Reads the credential to show, answering with nothing where the deployment would not say.</summary>
-    /// <remarks>The refusal is written where the operator sees it rather than swallowed, because a listing that was refused and one that came back empty look identical afterwards and only one of them says something about the token.</remarks>
+    /// <summary>Reads the credential to show, answering with nothing where the deployment withheld the listing.</summary>
+    /// <remarks>
+    /// Only the read grant's own refusal is caught; anything else is rethrown and ends the command before the
+    /// confirmation is asked for. The one that is caught is written where the operator sees it rather than swallowed,
+    /// because a listing that was refused and one that came back empty look identical afterwards and only one of them
+    /// says something about the token.
+    /// </remarks>
     private static async Task<OwnerCredential?> ReadForTheOperatorAsync(
         CliContext context,
         AdminApiClient deployment,
@@ -138,7 +150,7 @@ internal static class DeleteOwnerCredentialCommand
 
             return listing.Credentials?.FirstOrDefault(credential => credential.Id == credentialId);
         }
-        catch (CliFailure refusal)
+        catch (CliFailure refusal) when (refusal.Status is HttpStatusCode.Forbidden)
         {
             context.Console.WriteError($"The credentials could not be listed: {refusal.Message}");
 

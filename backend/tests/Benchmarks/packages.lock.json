@@ -625,11 +625,6 @@
         "resolved": "10.0.0",
         "contentHash": "UPWqLSygJlFerRi9XNIuM0a1VC8gHUIufyP24xQ0sc+XimqUAEcjpOz9DhKpyDjH+5B/wO3RpC0KpkEeDj/ddg=="
       },
-      "System.Threading.RateLimiting": {
-        "type": "Transitive",
-        "resolved": "8.0.0",
-        "contentHash": "7mu9v0QDv66ar3DpGSZHg9NuNcxDaaAcnMULuZlaTpP9+hwXhrxNGsF5GmLkSHxFdb5bBc1TzeujsRgTrPWi+Q=="
-      },
       "MailFathom.AI": {
         "type": "Project",
         "dependencies": {
@@ -686,7 +681,8 @@
           "Pgvector.EntityFrameworkCore": "[0.3.0, )",
           "Polly.Core": "[8.7.0, )",
           "Polly.Extensions": "[8.7.0, )",
-          "Polly.RateLimiting": "[8.7.0, )"
+          "Polly.RateLimiting": "[8.7.0, )",
+          "System.Threading.RateLimiting": "[8.0.0, )"
         }
       },
       "MailFathom.SyntheticMail": {
@@ -1015,6 +1011,12 @@
         "requested": "[10.0.10, )",
         "resolved": "4.5.0",
         "contentHash": "wLBKzFnDCxP12VL9ANydSYhk59fC4cvOr9ypYQLPnAj48NQIhqnjdD2yhP8yEKyBJEjERWS9DisKL7rX5eU25Q=="
+      },
+      "System.Threading.RateLimiting": {
+        "type": "CentralTransitive",
+        "requested": "[8.0.0, )",
+        "resolved": "8.0.0",
+        "contentHash": "7mu9v0QDv66ar3DpGSZHg9NuNcxDaaAcnMULuZlaTpP9+hwXhrxNGsF5GmLkSHxFdb5bBc1TzeujsRgTrPWi+Q=="
       }
     }
   }

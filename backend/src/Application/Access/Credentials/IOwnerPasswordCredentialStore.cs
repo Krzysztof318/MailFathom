@@ -91,21 +91,34 @@ public interface IOwnerPasswordCredentialStore
     /// <summary>Rewrites the stored record of a password that has not changed.</summary>
     /// <param name="owner">The owner the credential belongs to.</param>
     /// <param name="credentialId">The credential being written.</param>
+    /// <param name="verifiedPasswordHash">The record the request actually verified against, which the write is conditioned on.</param>
     /// <param name="passwordHash">The stronger representation of the password already in use.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
     /// <returns>What the act did, or why it did nothing.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="passwordHash" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="verifiedPasswordHash" /> or <paramref name="passwordHash" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody or <paramref name="credentialId" /> is the empty identifier.</exception>
     /// <remarks>
+    /// <para>
     /// The one operation an authenticated request performs on a credential, and it is separate from
     /// <see cref="ReplacePasswordAsync" /> for one reason: the password did not change, so the instant the credential
     /// reports its password as having changed at must not move. Reporting every owner who signed in after the work
     /// parameters rose as having just chosen a new password would make that column useless for the question it exists
     /// to answer.
+    /// </para>
+    /// <para>
+    /// <strong>It writes only over the record it verified against.</strong> The request that reaches here read the hash,
+    /// spent a deliberately slow derivation verifying it, and spent another producing the replacement, and an
+    /// administrator rotating a leaked credential can commit inside that window — which is the case rotation exists for.
+    /// A rehash that named the credential alone would put the superseded password back and stop the replacement working,
+    /// silently, on a path that never fails the request. Naming <paramref name="verifiedPasswordHash" /> makes the
+    /// write lose that race instead, answering <see cref="OwnerCredentialWriteOutcome.UnknownCredential" /> so the
+    /// rehash is dropped and the rotation stands.
+    /// </para>
     /// </remarks>
     Task<OwnerCredentialWriteOutcome> RewritePasswordHashAsync(
         MailOwnerId owner,
         Guid credentialId,
+        string verifiedPasswordHash,
         string passwordHash,
         CancellationToken cancellationToken);
 

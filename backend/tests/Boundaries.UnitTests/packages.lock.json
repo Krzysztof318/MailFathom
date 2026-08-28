@@ -726,11 +726,6 @@
         "resolved": "10.0.0",
         "contentHash": "UPWqLSygJlFerRi9XNIuM0a1VC8gHUIufyP24xQ0sc+XimqUAEcjpOz9DhKpyDjH+5B/wO3RpC0KpkEeDj/ddg=="
       },
-      "System.Threading.RateLimiting": {
-        "type": "Transitive",
-        "resolved": "8.0.0",
-        "contentHash": "7mu9v0QDv66ar3DpGSZHg9NuNcxDaaAcnMULuZlaTpP9+hwXhrxNGsF5GmLkSHxFdb5bBc1TzeujsRgTrPWi+Q=="
-      },
       "System.ValueTuple": {
         "type": "Transitive",
         "resolved": "4.6.1",
@@ -878,7 +873,8 @@
           "Pgvector.EntityFrameworkCore": "[0.3.0, )",
           "Polly.Core": "[8.7.0, )",
           "Polly.Extensions": "[8.7.0, )",
-          "Polly.RateLimiting": "[8.7.0, )"
+          "Polly.RateLimiting": "[8.7.0, )",
+          "System.Threading.RateLimiting": "[8.0.0, )"
         }
       },
       "MailFathom.Mcp": {
@@ -1324,6 +1320,12 @@
         "requested": "[10.0.10, )",
         "resolved": "10.0.10",
         "contentHash": "BKt0SQgq2lq3ESE68jkeLwv95ypANrPDtkTOIFGcnhg2aRUeUUBDrQlkVDZctrg1WenVcvn5P5XZnuYI7q6rFQ=="
+      },
+      "System.Threading.RateLimiting": {
+        "type": "CentralTransitive",
+        "requested": "[8.0.0, )",
+        "resolved": "8.0.0",
+        "contentHash": "7mu9v0QDv66ar3DpGSZHg9NuNcxDaaAcnMULuZlaTpP9+hwXhrxNGsF5GmLkSHxFdb5bBc1TzeujsRgTrPWi+Q=="
       }
     }
   }

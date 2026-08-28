@@ -53,6 +53,11 @@
     <PackageReference Include="Polly.Core" />
     <PackageReference Include="Polly.Extensions" />
     <PackageReference Include="Polly.RateLimiting" />
+    <!-- Named directly because the password attempt limiter compiles against PartitionedRateLimiter and
+         ConcurrencyLimiter, for the reason MimeKit and AWSSDK.Core are: the version the code compiles against is
+         decided in Directory.Packages.props rather than inherited from Polly.RateLimiting's dependency range. Host
+         resolves the same assembly from the ASP.NET Core shared framework and needs no reference of its own. -->
+    <PackageReference Include="System.Threading.RateLimiting" />
   </ItemGroup>
 
   <ItemGroup>

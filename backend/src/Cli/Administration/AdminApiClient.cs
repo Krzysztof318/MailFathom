@@ -1405,31 +1405,35 @@ internal sealed class AdminApiClient
         {
             if (response.StatusCode is HttpStatusCode.Unauthorized)
             {
-                throw new CliFailure(CredentialRefused);
+                throw new CliFailure(CredentialRefused, response.StatusCode);
             }
 
             if (response.StatusCode is HttpStatusCode.Forbidden)
             {
-                throw new CliFailure(await DescribeForbiddenAsync(response, cancellationToken));
+                throw new CliFailure(await DescribeForbiddenAsync(response, cancellationToken), response.StatusCode);
             }
 
             if (response.StatusCode is HttpStatusCode.NotFound)
             {
                 throw new CliFailure(
                     absenceMessage
-                    ?? $"The address answered, but serves no administrative endpoint at {path}. Check the port: the administrative endpoint binds a listener of its own, and it is disabled unless the deployment enabled it.");
+                    ?? $"The address answered, but serves no administrative endpoint at {path}. Check the port: the administrative endpoint binds a listener of its own, and it is disabled unless the deployment enabled it.",
+                    response.StatusCode);
             }
 
             if (response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Conflict)
             {
                 throw new CliFailure(
                     await ReadRefusalAsync(response, cancellationToken)
-                    ?? "The deployment refused the request without saying why.");
+                    ?? "The deployment refused the request without saying why.",
+                    response.StatusCode);
             }
 
             if (!response.IsSuccessStatusCode)
             {
-                throw new CliFailure($"The deployment answered {(int)response.StatusCode} and said nothing this command could act on.");
+                throw new CliFailure(
+                    $"The deployment answered {(int)response.StatusCode} and said nothing this command could act on.",
+                    response.StatusCode);
             }
 
             return response;

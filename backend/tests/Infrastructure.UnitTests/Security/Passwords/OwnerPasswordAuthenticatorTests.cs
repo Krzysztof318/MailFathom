@@ -246,25 +246,68 @@ public sealed class OwnerPasswordAuthenticatorTests
         Assert.Equal(OwnerPasswordRejection.TooManyAttempts, surplus.Rejection);
     }
 
-    /// <summary>Capacity is taken before the derivation rather than read before it, so a caller cannot get the whole allowance's worth of derivations by issuing its guesses at once.</summary>
+    /// <summary>
+    /// The guessing allowance must never cap an owner's own parallelism. Basic re-presents the credential on every
+    /// request and this deployment keeps no session, so an owner whose client has more calls in flight than the surface
+    /// allows guesses is the ordinary case rather than an unusual one, and every one of them carries a right password.
+    /// </summary>
     [Fact]
-    public async Task AuthenticateAsync_TheAllowancesWorthOfGuessesIssuedAtOnce_AdmitsOnlyTheAllowance()
+    public async Task AuthenticateAsync_MoreWorkingSignInsInFlightAtOnceThanTheSurfaceAllowsAttempts_AreEveryOneServed()
     {
         // Arrange
         using var harness = new AuthenticatorHarness();
+        var reads = harness.HoldsUntilReleased(enabled: true);
         const int Allowed = 1;
-        const int Concurrent = 8;
+        const int Concurrent = 12;
 
         // Act
-        var results = await Task.WhenAll(Enumerable
+        var inFlight = Enumerable
             .Range(0, Concurrent)
-            .Select(_ => harness.AuthenticateAsync(Header("owner", Password), attemptsPerMinute: Allowed)));
+            .Select(_ => harness.AuthenticateAsync(Header("owner", Password), attemptsPerMinute: Allowed))
+            .ToArray();
+
+        await reads.WaitUntilWaitingAsync(Concurrent);
+        reads.Release();
+
+        var results = await Task.WhenAll(inFlight);
 
         // Assert
-        Assert.Equal(Allowed, results.Count(result => result.Rejection == OwnerPasswordRejection.CredentialUnrecognized));
-        Assert.Equal(
-            Concurrent - Allowed,
-            results.Count(result => result.Rejection == OwnerPasswordRejection.TooManyAttempts));
+        Assert.All(results, static result => Assert.True(result.Succeeded));
+    }
+
+    /// <summary>
+    /// What a burst is bounded by is the derivations it may have in flight, which is what stops a caller opening
+    /// hundreds of connections from making this process derive hundreds of times at once — a separate bound from the
+    /// allowance, and a much larger one, because the allowance is about guessing and this is about cost.
+    /// </summary>
+    [Fact]
+    public async Task AuthenticateAsync_MoreGuessesInFlightThanOneAxisAdmitsDerivations_RefusesTheSurplusWithoutVerifyingIt()
+    {
+        // Arrange
+        using var harness = new AuthenticatorHarness();
+        var reads = harness.HoldsUntilReleased(enabled: true);
+        const int Surplus = 3;
+        var admitted = PasswordAttemptLimiter.ConcurrentVerificationsPerPartition;
+
+        // Act
+        var inFlight = Enumerable
+            .Range(0, admitted)
+            .Select(_ => harness.AuthenticateAsync(Header("owner", "wrongpassword")))
+            .ToArray();
+
+        await reads.WaitUntilWaitingAsync(admitted);
+
+        var surplus = await Task.WhenAll(Enumerable
+            .Range(0, Surplus)
+            .Select(_ => harness.AuthenticateAsync(Header("owner", "wrongpassword"))));
+
+        reads.Release();
+        await Task.WhenAll(inFlight);
+
+        // Assert
+        Assert.All(surplus, static result =>
+            Assert.Equal(OwnerPasswordRejection.TooManyAttempts, result.Rejection));
+        Assert.Equal(admitted, harness.PasswordHasher.VerificationCount);
     }
 
     /// <summary>A wrong password holds its capacity for the minute the allowance is stated over, and gives it back then rather than never.</summary>
@@ -362,7 +405,33 @@ public sealed class OwnerPasswordAuthenticatorTests
         await harness.Credentials.Received(1).RewritePasswordHashAsync(
             Owner,
             CredentialId,
+            StoredHash,
             RecordingPasswordHasher.DerivedHash,
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// A rotation can commit inside the two derivations a rehash spends, which is the case rotation exists for. The
+    /// write therefore names the record it verified against, so what an administrator replaced is not put back by a
+    /// request that read the old one.
+    /// </summary>
+    [Fact]
+    public async Task AuthenticateAsync_ARehashOfACredentialSomebodyRotatedMeanwhile_WritesOverTheVerifiedRecordOnly()
+    {
+        // Arrange
+        using var harness = new AuthenticatorHarness();
+        harness.Holds(enabled: true);
+        harness.PasswordHasher.Result = PasswordVerification.SucceededAndShouldBeRehashed;
+
+        // Act
+        await harness.AuthenticateAsync(Header("owner", Password));
+
+        // Assert
+        await harness.Credentials.DidNotReceive().RewritePasswordHashAsync(
+            Arg.Any<MailOwnerId>(),
+            Arg.Any<Guid>(),
+            Arg.Is<string>(static verified => verified != StoredHash),
+            Arg.Any<string>(),
             Arg.Any<CancellationToken>());
     }
 
@@ -377,6 +446,7 @@ public sealed class OwnerPasswordAuthenticatorTests
         harness.Credentials.RewritePasswordHashAsync(
                 Arg.Any<MailOwnerId>(),
                 Arg.Any<Guid>(),
+                Arg.Any<string>(),
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("the write did not commit"));
@@ -401,7 +471,7 @@ public sealed class OwnerPasswordAuthenticatorTests
 
         // Assert
         await harness.Credentials.DidNotReceiveWithAnyArgs()
-            .RewritePasswordHashAsync(default, default, default!, TestContext.Current.CancellationToken);
+            .RewritePasswordHashAsync(default, default, default!, default!, TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -424,19 +494,82 @@ public sealed class OwnerPasswordAuthenticatorTests
     /// and a dynamic proxy cannot carry a by-ref-like argument through its invocation. Counting the comparisons is the
     /// point of the double: what several tests here assert is how much work a refusal cost.
     /// </remarks>
+    /// <summary>Holds every credential read open until it is released, and says how many are waiting.</summary>
+    /// <remarks>Nothing here is a clock: the waiting is what makes the calls overlap, and the test releases them itself rather than timing anything.</remarks>
+    private sealed class CredentialReadGate
+    {
+        private readonly TaskCompletionSource released =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        private int waiting;
+
+        /// <summary>Gets how many credential reads are waiting on this gate right now.</summary>
+        internal int Waiting => Volatile.Read(ref this.waiting);
+
+        /// <summary>Lets every waiting read, and every later one, answer.</summary>
+        internal void Release() => this.released.TrySetResult();
+
+        /// <summary>Waits until at least <paramref name="count" /> reads are in flight.</summary>
+        /// <remarks>The test's own cancellation token is what ends the wait if they never are, so a broken arrangement fails rather than hanging.</remarks>
+        internal async Task WaitUntilWaitingAsync(int count)
+        {
+            while (this.Waiting < count)
+            {
+                TestContext.Current.CancellationToken.ThrowIfCancellationRequested();
+
+                await Task.Yield();
+            }
+        }
+
+        internal async Task<ResolvedOwnerPasswordCredential?> AnswerAsync(ResolvedOwnerPasswordCredential credential)
+        {
+            Interlocked.Increment(ref this.waiting);
+
+            try
+            {
+                await this.released.Task;
+            }
+            finally
+            {
+                Interlocked.Decrement(ref this.waiting);
+            }
+
+            return credential;
+        }
+    }
+
     private sealed class RecordingPasswordHasher : IPasswordHasher
     {
         internal const string DerivedHash = "$mf1$derived$";
 
         internal const string DecoyHash = "$mf1$decoy$";
 
+        private readonly Lock recording = new();
         private readonly List<string> verifiedAgainst = [];
 
         internal PasswordVerification Result { get; set; } = PasswordVerification.Succeeded;
 
-        internal int VerificationCount => this.verifiedAgainst.Count;
+        internal int VerificationCount
+        {
+            get
+            {
+                lock (this.recording)
+                {
+                    return this.verifiedAgainst.Count;
+                }
+            }
+        }
 
-        internal IReadOnlyList<string> VerifiedAgainst => this.verifiedAgainst;
+        internal IReadOnlyList<string> VerifiedAgainst
+        {
+            get
+            {
+                lock (this.recording)
+                {
+                    return [.. this.verifiedAgainst];
+                }
+            }
+        }
 
         public string HashDecoy() => DecoyHash;
 
@@ -444,7 +577,10 @@ public sealed class OwnerPasswordAuthenticatorTests
 
         public PasswordVerification Verify(string storedHash, ReadOnlySpan<char> password)
         {
-            this.verifiedAgainst.Add(storedHash);
+            lock (this.recording)
+            {
+                this.verifiedAgainst.Add(storedHash);
+            }
 
             return string.Equals(storedHash, StoredHash, StringComparison.Ordinal)
                 && password.SequenceEqual(Password)
@@ -493,6 +629,27 @@ public sealed class OwnerPasswordAuthenticatorTests
                     Arg.Is<OwnerCredentialUsername>(username => username.Value == "owner"),
                     Arg.Any<CancellationToken>())
                 .Returns(new ResolvedOwnerPasswordCredential(CredentialId, Owner, enabled, StoredHash));
+
+        /// <summary>Holds every credential read open until the gate is released, so callers are genuinely in flight together.</summary>
+        /// <param name="enabled">Whether the credential the store then answers with still authenticates, as <see cref="Holds" /> decides it.</param>
+        /// <returns>The gate, which reports how many reads are waiting and releases them all.</returns>
+        /// <remarks>
+        /// Without it nothing on this path yields — the substitute answers from an already-completed task and the hasher
+        /// is synchronous — so a set of calls started together would run one after another and a claim about concurrency
+        /// would be proved by nothing.
+        /// </remarks>
+        internal CredentialReadGate HoldsUntilReleased(bool enabled)
+        {
+            var gate = new CredentialReadGate();
+
+            this.Credentials.FindByUsernameAsync(
+                    Arg.Is<OwnerCredentialUsername>(username => username.Value == "owner"),
+                    Arg.Any<CancellationToken>())
+                .Returns(_ => gate.AnswerAsync(
+                    new ResolvedOwnerPasswordCredential(CredentialId, Owner, enabled, StoredHash)));
+
+            return gate;
+        }
 
         internal Task<OwnerPasswordAuthenticationResult> AuthenticateAsync(
             string? authorizationHeaderValue,

@@ -2,7 +2,9 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
 using System.Net;
+using System.Security.Claims;
 using System.Text;
 using System.Text.Encodings.Web;
 using MailFathom.Application.Access.Credentials;
@@ -33,6 +35,17 @@ namespace MailFathom.Host.UnitTests.Security.Basic;
 public sealed class BasicAuthenticationHandlerTests
 {
     private const int AttemptsPerMinute = 10;
+
+    private const string Password = "correcthorsebattery";
+
+    private const string StoredHash = "$mf1$stored$";
+
+    private static readonly Guid CredentialId = new("0197c0de-0000-7000-8000-000000000001");
+
+    /// <summary>The owner the provisioned credential names, deliberately not the one a deployment is configured with.</summary>
+    /// <remarks>A principal that carried the deployment's owner instead would be indistinguishable from one carrying none, which is the widening the success branch exists to prevent.</remarks>
+    private static readonly MailOwnerId CredentialOwner =
+        MailOwnerId.Create(new Guid("0197c0de-0000-7000-8000-00000000ffff"));
 
     /// <summary>The password would already have crossed the wire, so nothing about it is read and nothing is spent judging it.</summary>
     [Fact]
@@ -69,6 +82,45 @@ public sealed class BasicAuthenticationHandlerTests
 
         await harness.Credentials.ReceivedWithAnyArgs(1)
             .FindByUsernameAsync(default, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// The credential named a person, so the principal carries them. Without that claim
+    /// <c>TransportAuthorizedPrincipalSource</c> falls back to the deployment's own owner, and every request a password
+    /// authenticated would act for the wrong person's mail on both mail-serving surfaces.
+    /// </summary>
+    [Fact]
+    public async Task AuthenticateAsync_AProvisionedCredential_CarriesItsOwnersClaimRatherThanTheDeployments()
+    {
+        // Arrange
+        using var harness = new HandlerHarness();
+        harness.HoldsTheOwnersCredential();
+        var handler = await harness.InitializeAsync(BasicHeader("owner", Password), https: true);
+
+        // Act
+        var result = await handler.AuthenticateAsync();
+
+        // Assert
+        Assert.True(result.Succeeded);
+        Assert.Equal(CredentialOwner, TransportCallerOwner.CarriedBy(result.Principal!));
+    }
+
+    /// <summary>The credential's identity is what the surface access policy admits the principal on, so the claim naming it is part of the success rather than a diagnostic.</summary>
+    [Fact]
+    public async Task AuthenticateAsync_AProvisionedCredential_NamesThatCredentialOnThePrincipal()
+    {
+        // Arrange
+        using var harness = new HandlerHarness();
+        harness.HoldsTheOwnersCredential();
+        var handler = await harness.InitializeAsync(BasicHeader("owner", Password), https: true);
+
+        // Act
+        var result = await handler.AuthenticateAsync();
+
+        // Assert
+        Assert.Equal(
+            CredentialId.ToString("D", CultureInfo.InvariantCulture),
+            result.Principal!.FindFirstValue(BasicAuthentication.CredentialIdClaimType));
     }
 
     /// <summary>A challenge is an instruction to send the credential again, so a clear-text hop is not offered one it would send a password over.</summary>
@@ -144,6 +196,27 @@ public sealed class BasicAuthenticationHandlerTests
             .FindByUsernameAsync(default, TestContext.Current.CancellationToken);
     }
 
+    /// <summary>
+    /// <c>ReverseProxy</c> is one section for the whole process while a listener is not, so a deployment declaring a
+    /// proxy for one surface may serve another directly. A peer arriving there is the real client and does tell two
+    /// callers apart, so the source axis it would otherwise lose still applies.
+    /// </summary>
+    [Fact]
+    public async Task AuthenticateAsync_TwoUsernamesFromAPeerThatIsNotTheDeclaredProxy_SpendsThatPeersAllowance()
+    {
+        // Arrange
+        using var harness = new HandlerHarness();
+        var behindAProxy = new ReverseProxyOptions { TrustedProxies = { "10.0.0.1" } };
+
+        // Act
+        await harness.JudgeAsync("owner", peer: "203.0.113.7", behindAProxy);
+        await harness.JudgeAsync("other", peer: "203.0.113.7", behindAProxy);
+
+        // Assert
+        await harness.Credentials.ReceivedWithAnyArgs(1)
+            .FindByUsernameAsync(default, TestContext.Current.CancellationToken);
+    }
+
     private static string BasicHeader(string userId, string password) =>
         "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes($"{userId}:{password}"));
 
@@ -169,6 +242,13 @@ public sealed class BasicAuthenticationHandlerTests
         }
 
         internal IOwnerPasswordCredentialStore Credentials { get; }
+
+        /// <summary>Holds one enabled credential for <see cref="CredentialOwner" />, whose password the hasher recognizes.</summary>
+        internal void HoldsTheOwnersCredential() =>
+            this.Credentials.FindByUsernameAsync(
+                    Arg.Is<OwnerCredentialUsername>(username => username.Value == "owner"),
+                    Arg.Any<CancellationToken>())
+                .Returns(new ResolvedOwnerPasswordCredential(CredentialId, CredentialOwner, Enabled: true, StoredHash));
 
         private OwnerPasswordAuthenticator Authenticator { get; }
 
@@ -233,10 +313,12 @@ public sealed class BasicAuthenticationHandlerTests
     {
         public string HashDecoy() => "$mf1$decoy$";
 
-        public string Hash(ReadOnlySpan<char> password) => "$mf1$derived$";
+        public string Hash(ReadOnlySpan<char> password) => StoredHash;
 
         public PasswordVerification Verify(string storedHash, ReadOnlySpan<char> password) =>
-            PasswordVerification.Failed;
+            string.Equals(storedHash, StoredHash, StringComparison.Ordinal) && password.SequenceEqual(Password)
+                ? PasswordVerification.Succeeded
+                : PasswordVerification.Failed;
     }
 
     /// <summary>Hands the handler the one options instance it is built with, which is all the framework's monitor does for a scheme nothing reconfigures.</summary>

@@ -38,11 +38,24 @@ internal sealed class BasicAuthenticationOptions
 
     /// <summary>Gets or sets how many password attempts one source and one username each get per minute.</summary>
     /// <remarks>
+    /// <para>
     /// Ten, which is a person mistyping a password several times and correcting it, and is nowhere near a rate at which
-    /// guessing a password of the length this deployment requires becomes feasible. Both buckets replenish
-    /// continuously, so a client that has spent its capacity gets some back within seconds rather than being locked out
-    /// for a period — the point is to make guessing expensive rather than to give anybody a way to lock an owner out by
-    /// spending their bucket.
+    /// guessing a password of the length this deployment requires becomes feasible.
+    /// </para>
+    /// <para>
+    /// <strong>It counts wrong passwords rather than requests.</strong> A right password costs the allowance nothing
+    /// however often it is presented, which is what Basic makes a client do, having no session — and nothing here caps
+    /// how many requests an owner may have in flight, which is a separate bound the limiter states for itself.
+    /// </para>
+    /// <para>
+    /// <strong>A wrong password holds its share for a minute and then gives it back.</strong> So an axis that has spent
+    /// its allowance waits the window out rather than being locked out until an operator lifts something. That window is
+    /// the cost of the per-username axis being shared with the owner it protects: somebody who knows a username can
+    /// spend it on wrong passwords and have that owner's correct password refused until the minute elapses. Nothing can
+    /// avoid that while the answer is unknowable before the derivation — what a lower number here buys in guessing cost
+    /// it pays for in how cheaply a stranger can hold one owner out, and what the per-source axis buys is catching the
+    /// caller doing it wherever this deployment can tell one caller from another.
+    /// </para>
     /// </remarks>
     public int AttemptsPerMinute { get; set; } = 10;
 

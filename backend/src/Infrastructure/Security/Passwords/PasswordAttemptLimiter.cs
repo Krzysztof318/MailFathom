@@ -26,24 +26,28 @@ namespace MailFathom.Infrastructure.Security.Passwords;
 /// same reason, a remote address being personal data in its own right.
 /// </para>
 /// <para>
-/// <strong>Capacity is taken before a password is verified and given back where the password was right.</strong> Both
-/// halves of that are load-bearing. Taking it first is what makes the bound hold under concurrency: a caller opening
-/// five hundred connections at once would otherwise have every one of them read a non-empty allowance and go on to a
-/// deliberately expensive derivation, because nothing between a read and a later write excludes the other four hundred
-/// and ninety-nine. Giving it back on success is what keeps the bound about guessing rather than about an owner's
-/// request rate: HTTP Basic re-presents the credential on every request and this deployment keeps no session, so an
-/// allowance every verification spent would refuse the eleventh call of a working session with the answer a wrong
-/// password gets.
+/// <strong>Two different things are bounded here, and conflating them refuses an owner.</strong> One is how many wrong
+/// passwords a minute an axis admits, which is what <c>AttemptsPerMinute</c> states. The other is how many derivations
+/// may be in flight for one axis at once, which is what stops a caller opening five hundred connections from making
+/// this process perform five hundred concurrent PBKDF2 derivations. They are separate limiters because a permit held
+/// across a derivation is also a cap on simultaneous requests, and HTTP Basic re-presents the credential on every
+/// request with no session — so a single limit serving both would refuse an owner's eleventh parallel call with the
+/// answer a wrong password gets, however right their password was.
 /// </para>
 /// <para>
-/// That pairing is why each axis is a <see cref="ConcurrencyLimiter" /> holding one permit per attempt rather than a
-/// token bucket. A token bucket cannot express the second half — a spent token comes back on a schedule and nothing
-/// returns one — while releasing a lease is exactly what giving the permit back means. A wrong password therefore does
-/// not release its permits: <see cref="PasswordAttemptReservation.Spend" /> holds them for
-/// <see cref="SpentAttemptWindow" /> and releases them then, which is what makes the allowance a rate rather than a
-/// ceiling the process never recovers from. The window is a whole minute per failure rather than a continuous trickle,
-/// and a caller that has spent its allowance waits it out; that is a cost only a caller presenting wrong passwords
-/// pays, since a right one is refunded at once.
+/// So a verification permit is taken before the derivation and returned whatever the answer was, while a failure permit
+/// is taken <em>only</em> by <see cref="PasswordAttemptReservation.Spend" /> and held for
+/// <see cref="SpentAttemptWindow" />, which is what turns <c>AttemptsPerMinute</c> into an allowance per minute rather
+/// than a ceiling the process never recovers from. <see cref="Reserve" /> reads the failure axis before it takes a
+/// verification permit, so an axis that has spent its allowance is refused before anything expensive happens.
+/// </para>
+/// <para>
+/// Reading the failure axis rather than taking from it leaves a window between the reading and the spending, and
+/// <see cref="ConcurrentVerificationsPerPartition" /> is what bounds it: at most that many derivations for one axis are
+/// ever in flight, so a burst arriving together can overshoot the stated allowance by at most one such window's worth
+/// before the axis closes, rather than by as many connections as an attacker cares to open. That is the honest bound —
+/// <c>AttemptsPerMinute</c> plus at most <see cref="ConcurrentVerificationsPerPartition" /> derivations in the first
+/// minute of a burst, and <c>AttemptsPerMinute</c> a minute after it.
 /// </para>
 /// <para>
 /// Nothing queues: a request that is out of capacity is refused immediately rather than held, because a queue in front
@@ -58,21 +62,39 @@ namespace MailFathom.Infrastructure.Security.Passwords;
 /// once. <see cref="PasswordAttempt.Source" /> is therefore null in that arrangement, and the source axis is skipped
 /// rather than applied to a value that distinguishes nobody.
 /// </para>
+/// <para>
+/// <strong>The per-username failure axis is shared with the owner it protects, deliberately.</strong> Somebody who
+/// knows a username can spend its allowance on wrong passwords and have that owner's correct password refused until the
+/// window elapses. Nothing can avoid it while the answer is unknowable before the derivation, which is what the axis
+/// exists to bound; what the design chooses is the cost of it being one minute rather than a lockout an operator has to
+/// lift. The source axis is what catches the caller doing it, wherever this deployment can tell one caller from another.
+/// </para>
 /// </remarks>
 public sealed class PasswordAttemptLimiter : IDisposable
 {
-    /// <summary>How long a wrong password holds the permits it took.</summary>
+    /// <summary>How long a wrong password holds the failure permits it took.</summary>
     /// <remarks>One minute, because the allowance the surface configures is stated per minute: holding one permit for that long is what makes a permit limit of ten mean ten wrong passwords a minute.</remarks>
     internal static readonly TimeSpan SpentAttemptWindow = TimeSpan.FromMinutes(1);
+
+    /// <summary>How many password verifications may be in flight for one axis at once.</summary>
+    /// <remarks>
+    /// Sized for the traffic a surface actually carries rather than for the guessing allowance: a browser opens several
+    /// connections to one origin and an agent may issue calls in parallel, and every one of them re-presents the
+    /// credential. It is deliberately unrelated to <c>AttemptsPerMinute</c>, which an operator lowers to make guessing
+    /// expensive and which must not become a cap on an owner's own parallelism.
+    /// </remarks>
+    internal const int ConcurrentVerificationsPerPartition = 32;
 
     private const int DigestLength = 32;
 
     private readonly TimeProvider timeProvider;
     private readonly byte[] partitionKey = RandomNumberGenerator.GetBytes(DigestLength);
-    private readonly PartitionedRateLimiter<PasswordAttempt> perSource;
-    private readonly PartitionedRateLimiter<PasswordAttempt> perUsername;
+    private readonly PartitionedRateLimiter<PasswordAttempt> perSourceVerifications;
+    private readonly PartitionedRateLimiter<PasswordAttempt> perUsernameVerifications;
+    private readonly PartitionedRateLimiter<PasswordAttempt> perSourceFailures;
+    private readonly PartitionedRateLimiter<PasswordAttempt> perUsernameFailures;
 
-    /// <summary>Initializes the two axes every attempt is counted on.</summary>
+    /// <summary>Initializes the two axes every attempt is counted on, each bounding derivations in flight and wrong passwords a minute separately.</summary>
     /// <param name="timeProvider">What schedules the release of a wrong password's permits.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="timeProvider" /> is <see langword="null" />.</exception>
     public PasswordAttemptLimiter(TimeProvider timeProvider)
@@ -81,32 +103,32 @@ public sealed class PasswordAttemptLimiter : IDisposable
 
         this.timeProvider = timeProvider;
 
-        this.perSource = PartitionedRateLimiter.Create<PasswordAttempt, string>(attempt =>
-            RateLimitPartition.GetConcurrencyLimiter(
-                this.PartitionFor(attempt.SurfaceName, "source", attempt.Source ?? string.Empty),
-                _ => AxisOptions(attempt.AttemptsPerMinute)));
-
-        this.perUsername = PartitionedRateLimiter.Create<PasswordAttempt, string>(attempt =>
-            RateLimitPartition.GetConcurrencyLimiter(
-                this.PartitionFor(attempt.SurfaceName, "username", attempt.Username),
-                _ => AxisOptions(attempt.AttemptsPerMinute)));
+        this.perSourceVerifications = this.Axis("source", Source, static _ => ConcurrentVerificationsPerPartition);
+        this.perUsernameVerifications = this.Axis("username", Username, static _ => ConcurrentVerificationsPerPartition);
+        this.perSourceFailures = this.Axis("source-failures", Source, static attempt => attempt.AttemptsPerMinute);
+        this.perUsernameFailures = this.Axis("username-failures", Username, static attempt => attempt.AttemptsPerMinute);
     }
 
-    /// <summary>Takes one attempt's capacity on every axis that applies, before the password is verified.</summary>
+    /// <summary>Takes one attempt's verification capacity on every axis that applies, before the password is verified.</summary>
     /// <param name="attempt">What is being attempted, and the bound the surface it arrived on runs under.</param>
-    /// <returns>The reservation, which reports whether it was granted and decides afterwards whether the capacity is returned or spent.</returns>
+    /// <returns>The reservation, which reports whether it was granted and decides afterwards whether the attempt cost the allowance anything.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="attempt" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// Either axis refusing refuses the attempt, and a refusal releases whatever the other axis had already granted, so
-    /// an attempt that never reached a derivation costs nothing. The caller disposes what it gets back on every path:
-    /// disposing returns the capacity, and <see cref="PasswordAttemptReservation.Spend" /> is what a wrong password
-    /// calls instead.
+    /// An axis whose failure allowance is spent refuses the attempt before any permit is taken, and either axis refusing
+    /// releases whatever the other had already granted, so an attempt that never reached a derivation costs nothing. The
+    /// caller disposes what it gets back on every path: disposing returns the verification capacity, and
+    /// <see cref="PasswordAttemptReservation.Spend" /> is what a wrong password calls before that.
     /// </remarks>
     public PasswordAttemptReservation Reserve(PasswordAttempt attempt)
     {
         ArgumentNullException.ThrowIfNull(attempt);
 
-        var sourceLease = attempt.Source is null ? null : this.perSource.AttemptAcquire(attempt);
+        if (!this.HasFailureAllowance(attempt))
+        {
+            return PasswordAttemptReservation.Refused;
+        }
+
+        var sourceLease = attempt.Source is null ? null : this.perSourceVerifications.AttemptAcquire(attempt);
 
         if (sourceLease is { IsAcquired: false })
         {
@@ -115,7 +137,7 @@ public sealed class PasswordAttemptLimiter : IDisposable
             return PasswordAttemptReservation.Refused;
         }
 
-        var usernameLease = this.perUsername.AttemptAcquire(attempt);
+        var usernameLease = this.perUsernameVerifications.AttemptAcquire(attempt);
 
         if (!usernameLease.IsAcquired)
         {
@@ -125,25 +147,100 @@ public sealed class PasswordAttemptLimiter : IDisposable
             return PasswordAttemptReservation.Refused;
         }
 
-        return new PasswordAttemptReservation(this.timeProvider, sourceLease, usernameLease);
+        return new PasswordAttemptReservation(this, attempt, sourceLease, usernameLease);
     }
 
     /// <inheritdoc />
     public void Dispose()
     {
-        this.perSource.Dispose();
-        this.perUsername.Dispose();
+        this.perSourceVerifications.Dispose();
+        this.perUsernameVerifications.Dispose();
+        this.perSourceFailures.Dispose();
+        this.perUsernameFailures.Dispose();
         CryptographicOperations.ZeroMemory(this.partitionKey);
     }
 
-    /// <summary>What one axis of one surface admits at once.</summary>
-    /// <remarks>The permit limit is the surface's configured allowance, and nothing queues, so a caller past the allowance is refused rather than held in front of a derivation it may not be entitled to.</remarks>
-    private static ConcurrencyLimiterOptions AxisOptions(int attemptsPerMinute) => new()
+    /// <summary>Counts one wrong password against every axis that applies, for the window the allowance is stated over.</summary>
+    /// <remarks>An axis already at its limit acquires nothing, which needs no handling: its allowance is spent either way, and the next attempt reads it as such.</remarks>
+    internal void HoldAFailureAgainst(PasswordAttempt attempt)
     {
-        PermitLimit = attemptsPerMinute,
-        QueueLimit = 0,
-        QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-    };
+        var sourceLease = attempt.Source is null ? null : this.perSourceFailures.AttemptAcquire(attempt);
+        var usernameLease = this.perUsernameFailures.AttemptAcquire(attempt);
+
+        this.ReleaseAfterTheWindow(sourceLease, usernameLease);
+    }
+
+    /// <summary>Reports whether every axis that applies still admits a wrong password, without taking anything.</summary>
+    /// <remarks>A permit count of zero is how a concurrency limiter is asked its state rather than drawn on, so a caller whose password turns out to be right has read nothing away from itself.</remarks>
+    private bool HasFailureAllowance(PasswordAttempt attempt)
+    {
+        if (attempt.Source is not null)
+        {
+            using var sourceAllowance = this.perSourceFailures.AttemptAcquire(attempt, permitCount: 0);
+
+            if (!sourceAllowance.IsAcquired)
+            {
+                return false;
+            }
+        }
+
+        using var usernameAllowance = this.perUsernameFailures.AttemptAcquire(attempt, permitCount: 0);
+
+        return usernameAllowance.IsAcquired;
+    }
+
+    /// <summary>Holds a wrong password's permits for the window and gives them back at the end of it.</summary>
+    /// <remarks>The timer is created stopped and started afterwards, so the callback cannot run before the local it disposes has been assigned; the closure is what keeps the timer alive until it fires, nothing else referencing it.</remarks>
+    private void ReleaseAfterTheWindow(RateLimitLease? sourceLease, RateLimitLease? usernameLease)
+    {
+        ITimer? release = null;
+        release = this.timeProvider.CreateTimer(
+            _ =>
+            {
+                ReleasePermits(sourceLease, usernameLease);
+                release?.Dispose();
+            },
+            state: null,
+            Timeout.InfiniteTimeSpan,
+            Timeout.InfiniteTimeSpan);
+
+        release.Change(SpentAttemptWindow, Timeout.InfiniteTimeSpan);
+    }
+
+    /// <summary>Returns whatever two leases hold, tolerating a limiter this process has already torn down.</summary>
+    /// <remarks>The limiter is a singleton disposed as the process ends and a scheduled release can fire after that, which is the end of a process rather than a fault to report.</remarks>
+    internal static void ReleasePermits(RateLimitLease? first, RateLimitLease? second)
+    {
+        try
+        {
+            first?.Dispose();
+            second?.Dispose();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+    }
+
+    /// <summary>Reads what a source axis partitions by, an attempt carrying none never reaching one.</summary>
+    private static string Source(PasswordAttempt attempt) => attempt.Source ?? string.Empty;
+
+    /// <summary>Reads what a username axis partitions by.</summary>
+    private static string Username(PasswordAttempt attempt) => attempt.Username;
+
+    /// <summary>Builds one axis, partitioned by the value it counts and limited by what that axis bounds.</summary>
+    private PartitionedRateLimiter<PasswordAttempt> Axis(
+        string axis,
+        Func<PasswordAttempt, string> partitionedBy,
+        Func<PasswordAttempt, int> permitLimit) =>
+        PartitionedRateLimiter.Create<PasswordAttempt, string>(attempt =>
+            RateLimitPartition.GetConcurrencyLimiter(
+                this.PartitionFor(attempt.SurfaceName, axis, partitionedBy(attempt)),
+                _ => new ConcurrencyLimiterOptions
+                {
+                    PermitLimit = permitLimit(attempt),
+                    QueueLimit = 0,
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                }));
 
     /// <summary>Names one partition, without the value it is a partition for being recoverable from the name.</summary>
     /// <remarks>The surface and the axis are written in clear because neither is personal and both are needed for two surfaces' partitions not to merge; only the value itself is digested.</remarks>
@@ -169,29 +266,33 @@ public sealed class PasswordAttemptLimiter : IDisposable
     }
 }
 
-/// <summary>One attempt's capacity, taken before the password was verified and returned or spent afterwards.</summary>
+/// <summary>One attempt's verification capacity, taken before the password was verified and returned afterwards.</summary>
 /// <remarks>
-/// Disposing returns the capacity, which is what a verification that succeeded, threw, or was cancelled leaves behind —
-/// none of those is a guess. <see cref="Spend" /> is the one path that costs anything, and after it the reservation owns
-/// nothing: the release is scheduled and disposing is a no-op, so <c>using</c> is safe beside it.
+/// Disposing returns the capacity, which is what every answer leaves behind — a right password, a throw, and a
+/// cancellation alike. <see cref="Spend" /> is the one path that costs the allowance anything: it counts the wrong
+/// password against the failure axes for a minute and returns the verification capacity immediately, so
+/// <c>using</c> is safe beside it.
 /// </remarks>
 public sealed class PasswordAttemptReservation : IDisposable
 {
-    private readonly TimeProvider? timeProvider;
+    private readonly PasswordAttemptLimiter? limiter;
+    private readonly PasswordAttempt? attempt;
     private readonly RateLimitLease? sourceLease;
     private readonly RateLimitLease? usernameLease;
-    private bool spent;
+    private bool released;
 
     private PasswordAttemptReservation()
     {
     }
 
     internal PasswordAttemptReservation(
-        TimeProvider timeProvider,
+        PasswordAttemptLimiter limiter,
+        PasswordAttempt attempt,
         RateLimitLease? sourceLease,
         RateLimitLease usernameLease)
     {
-        this.timeProvider = timeProvider;
+        this.limiter = limiter;
+        this.attempt = attempt;
         this.sourceLease = sourceLease;
         this.usernameLease = usernameLease;
     }
@@ -202,60 +303,37 @@ public sealed class PasswordAttemptReservation : IDisposable
     /// <summary>Gets a value indicating whether every axis that applies had capacity for this attempt.</summary>
     public bool IsGranted => this.usernameLease is not null;
 
-    /// <summary>Keeps the capacity this attempt took, because the password it carried was wrong.</summary>
+    /// <summary>Counts this attempt against the allowance, because the password it carried was wrong.</summary>
     /// <remarks>
-    /// The permits are released after <see cref="PasswordAttemptLimiter.SpentAttemptWindow" /> rather than never, which
-    /// is what turns a permit limit into an allowance per minute. Calling it twice, or on a refused reservation, does
-    /// nothing.
+    /// The failure permits are held for <see cref="PasswordAttemptLimiter.SpentAttemptWindow" /> and released then,
+    /// while the verification capacity is returned at once — it bounds derivations in flight rather than guesses.
+    /// Calling it twice, or on a refused reservation, does nothing.
     /// </remarks>
     public void Spend()
     {
-        if (!this.IsGranted || this.spent || this.timeProvider is not { } clock)
+        if (!this.IsGranted || this.released || this.limiter is not { } bound)
         {
             return;
         }
 
-        this.spent = true;
+        bound.HoldAFailureAgainst(this.attempt!);
 
-        // Created stopped and started afterwards, so the callback cannot run before the local it disposes has been
-        // assigned. The closure is what keeps the timer alive until it fires; nothing else references it.
-        ITimer? release = null;
-        release = clock.CreateTimer(
-            _ =>
-            {
-                this.ReleasePermits();
-                release?.Dispose();
-            },
-            state: null,
-            Timeout.InfiniteTimeSpan,
-            Timeout.InfiniteTimeSpan);
-
-        release.Change(PasswordAttemptLimiter.SpentAttemptWindow, Timeout.InfiniteTimeSpan);
+        this.Release();
     }
 
     /// <inheritdoc />
-    public void Dispose()
+    public void Dispose() => this.Release();
+
+    private void Release()
     {
-        if (this.spent)
+        if (this.released)
         {
             return;
         }
 
-        this.ReleasePermits();
-    }
+        this.released = true;
 
-    private void ReleasePermits()
-    {
-        // The limiter this capacity was taken from is a singleton disposed as the process ends, and a scheduled release
-        // can fire after that. Releasing into a disposed limiter is the end of a process rather than a fault to report.
-        try
-        {
-            this.usernameLease?.Dispose();
-            this.sourceLease?.Dispose();
-        }
-        catch (ObjectDisposedException)
-        {
-        }
+        PasswordAttemptLimiter.ReleasePermits(this.usernameLease, this.sourceLease);
     }
 }
 

@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Net;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using MailFathom.Host.Configuration.Endpoints;
@@ -64,7 +65,8 @@ namespace MailFathom.Host.Security.Basic;
 internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAuthenticationSchemeOptions>
 {
     private readonly OwnerPasswordAuthenticator authenticator;
-    private readonly bool boundsBySource;
+    private readonly IReadOnlyList<IPAddress> declaredProxyAddresses;
+    private readonly IReadOnlyList<IPNetwork> declaredProxyNetworks;
 
     /// <summary>Initializes a new Basic authentication handler.</summary>
     /// <param name="schemeOptions">What this surface's registration granted and how often it lets a password be tried.</param>
@@ -86,8 +88,11 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
 
         this.authenticator = authenticator;
 
-        // Read once rather than per request, the section being restart-scoped like every other listener setting.
-        this.boundsBySource = !reverseProxySettings.Value.NamesAProxy;
+        // Read once rather than per request, the section being restart-scoped like every other listener setting. A
+        // deployment naming no proxy yields no addresses here, which leaves every peer a caller this bound applies to.
+        var reverseProxy = reverseProxySettings.Value;
+        this.declaredProxyAddresses = reverseProxy.NamesAProxy ? reverseProxy.ToTrustedProxyAddresses() : [];
+        this.declaredProxyNetworks = reverseProxy.NamesAProxy ? reverseProxy.ToTrustedProxyNetworks() : [];
     }
 
     /// <inheritdoc />
@@ -139,17 +144,34 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
             new AuthenticationTicket(new ClaimsPrincipal(identity), this.Scheme.Name));
     }
 
-    /// <summary>Reports the address to bound this attempt by, or nothing where no address here tells two callers apart.</summary>
+    /// <summary>Reports the address to bound this attempt by, or nothing where this peer tells two callers apart.</summary>
     /// <remarks>
-    /// The peer is the client only when nothing was declared in front of this process. Where a proxy was declared,
-    /// every request arrives from it — <c>X-Forwarded-For</c> is deliberately never read, so the peer this process
-    /// observes stays the one that opened the connection — and a per-source partition would be one partition for the
-    /// whole world, which a single guesser could empty and so close password sign-in for every owner at once. The
-    /// username bound is what holds there, and it holds per owner rather than across all of them.
+    /// The peer is the client except when the peer is itself a proxy this deployment declared. Every request through
+    /// such a proxy arrives from its address — <c>X-Forwarded-For</c> is deliberately never read, so the peer this
+    /// process observes stays the one that opened the connection — and a per-source partition on it would be one
+    /// partition for the whole world, which a single guesser could empty and so close password sign-in for every owner
+    /// at once. The username bound is what holds there, and it holds per owner rather than across all of them.
+    /// <para>
+    /// The question is asked of the peer rather than of the deployment, because <c>ReverseProxy</c> is one section for
+    /// the whole process while a listener is not: a deployment declaring a proxy for one surface may serve another
+    /// directly, and the peer arriving there is the real client and does tell two callers apart. Answering per process
+    /// would drop the source axis on that listener too.
+    /// </para>
     /// </remarks>
-    private string? SourceToBoundBy() => this.boundsBySource
-        ? this.Context.Connection.RemoteIpAddress?.ToString()
-        : null;
+    private string? SourceToBoundBy()
+    {
+        if (this.Context.Connection.RemoteIpAddress is not { } peer)
+        {
+            return null;
+        }
+
+        return this.DeclaredAsAProxy(peer) ? null : peer.ToString();
+    }
+
+    /// <summary>Reports whether the operator named this address, or a range holding it, as something standing in front of this process.</summary>
+    private bool DeclaredAsAProxy(IPAddress peer) =>
+        this.declaredProxyAddresses.Any(declared => declared.Equals(peer))
+        || this.declaredProxyNetworks.Any(declared => declared.Contains(peer));
 
     /// <inheritdoc />
     /// <remarks>

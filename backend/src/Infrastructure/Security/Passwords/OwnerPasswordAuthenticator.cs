@@ -196,6 +196,7 @@ public sealed partial class OwnerPasswordAuthenticator
             await this.credentials.RewritePasswordHashAsync(
                 credential.Owner,
                 credential.Id,
+                credential.PasswordHash,
                 rewritten,
                 cancellationToken);
         }

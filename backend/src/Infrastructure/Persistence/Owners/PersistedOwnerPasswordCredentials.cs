@@ -215,20 +215,30 @@ internal sealed class PersistedOwnerPasswordCredentials(MailFathomDbContext dbCo
     }
 
     /// <inheritdoc />
-    /// <remarks>The instant the password changed at is deliberately left where it is, which is the whole difference between this and <see cref="ReplacePasswordAsync" />.</remarks>
+    /// <remarks>
+    /// The instant the password changed at is deliberately left where it is, which is the whole difference between this
+    /// and <see cref="ReplacePasswordAsync" />. The verified record is named in the predicate as well as the credential,
+    /// so a rotation that committed while this request was deriving leaves nothing here to write over: the update
+    /// matches no row, answers <see cref="OwnerCredentialWriteOutcome.UnknownCredential" />, and the caller drops the
+    /// rehash rather than putting the superseded password back.
+    /// </remarks>
     public async Task<OwnerCredentialWriteOutcome> RewritePasswordHashAsync(
         MailOwnerId owner,
         Guid credentialId,
+        string verifiedPasswordHash,
         string passwordHash,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(verifiedPasswordHash);
         ArgumentNullException.ThrowIfNull(passwordHash);
 
         var storedOwnerId = RequireOwner(owner);
         var storedCredentialId = RequireCredential(credentialId);
 
         var written = await dbContext.OwnerPasswordCredentials
-            .Where(credential => credential.Id == storedCredentialId && credential.OwnerId == storedOwnerId)
+            .Where(credential => credential.Id == storedCredentialId
+                && credential.OwnerId == storedOwnerId
+                && credential.PasswordHash == verifiedPasswordHash)
             .ExecuteUpdateAsync(
                 setters => setters
                     .SetProperty(credential => credential.PasswordHash, passwordHash)
