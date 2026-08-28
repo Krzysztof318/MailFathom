@@ -45,6 +45,30 @@ public sealed class DeploymentMailOwnerUnresolvedException : MailFathomException
         + "record declares one. Declare the mailbox this deployment exists to synchronize — with "
         + "'mfctl owner account add', or in the files — or switch synchronization off.");
 
+    /// <summary>Reports mail accounts left in the deployment's own section that no owner this start serves reads.</summary>
+    /// <param name="accountCount">How many accounts the section still declares.</param>
+    /// <returns>The failure to raise.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="accountCount" /> is not positive.</exception>
+    /// <remarks>
+    /// The state an adoption leaves behind: the accounts are copied into the owner's record and the section they were
+    /// copied from is still there, so the deployment holds two declarations of one mailbox. It is not an ambiguity a
+    /// reader resolves, because the per-account lookup searches that section first and the record second and answers
+    /// from the file — which is the opposite of what the adoption told the operator it had done. Refused rather than
+    /// ignored for that reason: the settings a mailbox is synchronized under would silently be the ones the operator
+    /// believes they have stopped editing.
+    /// </remarks>
+    public static DeploymentMailOwnerUnresolvedException DeploymentSectionServesNobody(int accountCount)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(accountCount);
+
+        return new(
+            $"MailSynchronization:Accounts declares {accountCount} mail accounts and no owner this deployment serves "
+            + "reads that section: every owner it holds reads a record of their own. An account's settings are "
+            + "resolved from that section before any record, so those declarations would be what each mailbox is "
+            + "synchronized under while the records they were adopted into were ignored. Clear "
+            + "MailSynchronization:Accounts, which the adoption copied into the owner's record.");
+    }
+
     /// <summary>Reports a deployment holding several owners while its mail accounts are declared in the section that names none.</summary>
     /// <returns>The failure to raise.</returns>
     public static DeploymentMailOwnerUnresolvedException SeveralOwners() => new(

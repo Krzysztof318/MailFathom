@@ -128,15 +128,6 @@ internal sealed class TransportAuthenticationOptions
     public bool StatesAMethod =>
         this.ApiKey is not null || this.OAuth is not null || this.PublicKey is not null || this.Basic is not null;
 
-    /// <summary>Gets whether this entry states a credential that names nobody, so the deployment has to supply the owner.</summary>
-    /// <remarks>
-    /// Three of the four methods are, and it is the presence of one of them rather than the absence of
-    /// <see cref="Basic" /> that answers it: an entry may carry several blocks, so an entry writing a key beside a
-    /// password admits the key as well and every request under it arrives naming nobody.
-    /// </remarks>
-    public bool StatesACredentialNamingNoOwner =>
-        this.ApiKey is not null || this.OAuth is not null || this.PublicKey is not null;
-
     /// <summary>Gets whether this entry states a credential that can carry no scope of its own.</summary>
     /// <remarks>
     /// Three of the four methods are in this group, and for one reason rather than for two: nothing a caller presents

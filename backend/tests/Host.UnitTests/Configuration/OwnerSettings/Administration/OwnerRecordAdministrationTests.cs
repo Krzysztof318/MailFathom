@@ -12,6 +12,7 @@ using MailFathom.Host.Configuration.OwnerSettings;
 using MailFathom.Host.Configuration.OwnerSettings.Administration;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Owners;
+using MailFathom.Infrastructure.Secrets.Resolution;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Time.Testing;
@@ -458,13 +459,45 @@ public sealed class OwnerRecordAdministrationTests
         // Act
         var outcome = await harness.Records.AddMailAccountAsync(
             SyntheticMailOwner.Deployment,
+            AccountWhoseSecretReachesNothing("archive"),
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Contains(
+            outcome.Messages,
+            message => message.Contains(
+                nameof(SecretResolutionFailure.MaterialNotFound),
+                StringComparison.Ordinal));
+        await harness.Store.DidNotReceiveWithAnyArgs()
+            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+    }
+
+    /// <summary>
+    /// A secret name is what a record's own settings address material by, so two accounts declaring one name leave the
+    /// second unaddressable. It is a separate rule from whether a reference resolves, and this is the test that proves
+    /// it rather than reaching the same refusal by a different route.
+    /// </summary>
+    [Fact]
+    public async Task AddMailAccountAsync_AMailboxNamingASecretTheRecordAlreadyDeclares_IsRefusedBeforeItIsCommitted()
+    {
+        // Arrange
+        var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
+        harness.Holding(SyntheticMailOwner.Deployment, Declaring("primary"), version: 1);
+
+        // Act
+        var outcome = await harness.Records.AddMailAccountAsync(
+            SyntheticMailOwner.Deployment,
             AccountNamingTheSecret("archive", "primary-password"),
             expectedVersion: 1,
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
-        Assert.NotEmpty(outcome.Messages);
+        Assert.Contains(
+            outcome.Messages,
+            message => message.Contains("already carries this name", StringComparison.Ordinal));
         await harness.Store.DidNotReceiveWithAnyArgs()
             .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
     }
@@ -927,6 +960,23 @@ public sealed class OwnerRecordAdministrationTests
             "Host": "imap.example.test",
             "UserName": "mailfathom@example.test",
             "Secrets": { "Password": { "Name": "{{accountId}}-password", "SecretReference": "file:/run/secrets/owner-{{owner.Value:D}}-{{accountId}}" } }
+          }
+          """;
+
+    /// <summary>A mailbox whose credential is a well-formed reference this deployment resolves to nothing.</summary>
+    /// <remarks>
+    /// The record binds, the scheme is one the deployment registers, the secret name is the account's own, and every
+    /// other rule the write applies passes, so the walk that resolves the reference is the only thing left that can
+    /// refuse it.
+    /// </remarks>
+    private static string AccountWhoseSecretReachesNothing(string accountId) =>
+        $$"""
+          {
+            "AccountId": "{{accountId}}",
+            "DisplayName": "{{accountId}}",
+            "Host": "imap.example.test",
+            "UserName": "mailfathom@example.test",
+            "Secrets": { "Password": { "Name": "{{accountId}}-password", "SecretReference": "file:{{RegisteredSchemeSecretReferenceResolver.UnreadableTarget}}/{{accountId}}-password" } }
           }
           """;
 

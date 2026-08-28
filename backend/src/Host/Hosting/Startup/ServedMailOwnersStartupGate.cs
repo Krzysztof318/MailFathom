@@ -130,6 +130,8 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
 
         this.RefuseMailAccountNamesTwoOwnersShare(served);
 
+        this.RefuseADeploymentSectionNobodyReads(served);
+
         this.RefuseNothingToSynchronize(served);
 
         await this.RefuseUnusableMailAccountSecretsAsync(scope, served, cancellationToken);
@@ -478,6 +480,38 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
         if (shared.Length > 0)
         {
             throw DeploymentMailOwnerUnresolvedException.MailAccountNameSharedByOwners(shared);
+        }
+    }
+
+    /// <summary>Refuses mail accounts left in the deployment's own section that no served owner reads.</summary>
+    /// <remarks>
+    /// <para>
+    /// Adopting the sole owner of a deployment that declares none copies <c>MailSynchronization:Accounts</c> into their
+    /// record and leaves the section where it was. Their entry then reads that record rather than the section, so the
+    /// section belongs to nobody — and it is still bound, still searched first by the per-account lookup, and still the
+    /// answer every read gets. What the operator was told is the opposite: that editing the configuration those
+    /// accounts came from no longer changes what the deployment reads for them.
+    /// </para>
+    /// <para>
+    /// The file's own reading cannot see this. <c>DeclaredOwners</c> refuses that section beside declared owners, and
+    /// here there are none: the owners are records, which only the roster holds. So this is the reading that closes
+    /// the invariant <c>MailSynchronizationOptions.FindConfiguredAccount</c> states about itself — the section and the
+    /// roster never both answer — and it holds whether or not synchronization is switched on, because the lookup in
+    /// front of every per-account read does not ask.
+    /// </para>
+    /// </remarks>
+    private void RefuseADeploymentSectionNobodyReads(IReadOnlyList<ServedMailOwner> served)
+    {
+        if (served.Any(owner => owner.Source == MailOwnerAccountSource.DeploymentSection))
+        {
+            return;
+        }
+
+        var deploymentAccounts = DeclaredOwners.DeploymentMailAccountsIn(this.configuration);
+
+        if (deploymentAccounts.Count > 0)
+        {
+            throw DeploymentMailOwnerUnresolvedException.DeploymentSectionServesNobody(deploymentAccounts.Count);
         }
     }
 

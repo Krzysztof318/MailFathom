@@ -127,7 +127,9 @@ internal static class AdoptOwnerCommand
         context.Console.WriteNotice(
             "Once adopted, these mail accounts are decided by this owner's record. Editing the configuration they came "
             + "from will no longer change what the deployment reads for them; 'mfctl owner account' is what changes "
-            + "them afterwards. Every other owner goes on being read from the files.");
+            + "them afterwards. Every other owner goes on being read from the files. Remove the declarations this "
+            + "adoption copied: a section no served owner reads is still resolved before any record, and the next "
+            + "start refuses rather than reading it.");
     }
 
     private static bool Agreed(CliContext context, OwnerAdoptionPreview preview, bool confirmedUpFront)

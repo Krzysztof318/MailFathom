@@ -673,6 +673,11 @@ Adopting Alex (3f1d...) would move 2 mail accounts into their own record:
 Move these 2 mail accounts into this owner's record, so the configuration stops deciding them? [y/N]
 ```
 
+Clear `MailSynchronization:Accounts` afterwards. The adoption copies those declarations into the record and leaves the
+file untouched, and an account's settings are still resolved from that section before any record — so a deployment whose
+every owner reads a record of their own would go on synchronizing each mailbox under the file the adoption said had
+stopped being read. The next start refuses rather than doing that, and names the section to clear.
+
 **Withdrawing a mailbox is not deleting mail, and removing an owner is.** `mfctl owner account remove` stops MailFathom
 synchronizing one mailbox and leaves everything already stored for it exactly where it is. `mfctl owner remove` erases
 the person and every message, folder, attachment, and derived index the deployment holds for them; it shows what it is

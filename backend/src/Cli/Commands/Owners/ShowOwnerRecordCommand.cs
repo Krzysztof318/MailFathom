@@ -11,9 +11,11 @@ namespace MailFathom.Cli.Commands.Owners;
 /// <summary>Reads one owner's record as the deployment holds it.</summary>
 /// <remarks>
 /// What an administrator answers "which mailboxes does this deployment read for this person, and where is that decided"
-/// from. The document arrives with every secret-bearing value replaced by the deployment's redaction marker, so the
-/// output is safe to print, capture, and paste into a ticket — and the marker is what an editing session saves back
-/// unchanged to leave the reference beneath it alone.
+/// from. The document arrives with every secret-bearing value replaced by the deployment's redaction marker, which is
+/// what an editing session saves back unchanged to leave the reference beneath it alone. Redaction is about secrets and
+/// nothing else: the mail server, the mailbox user name, the secret's declared name, and the folder aliases are printed
+/// as the record holds them, and a mailbox user name is ordinarily the person's own address, so this output is one
+/// person's mailbox identity rather than something to paste where the record itself would not go.
 /// </remarks>
 internal static class ShowOwnerRecordCommand
 {

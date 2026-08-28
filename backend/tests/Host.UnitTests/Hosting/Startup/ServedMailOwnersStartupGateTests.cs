@@ -789,6 +789,62 @@ public sealed class ServedMailOwnersStartupGateTests
         Assert.Equal(2, roster.Owners.Count);
     }
 
+    /// <summary>
+    /// What an adoption leaves on a deployment that declares no owners: the accounts are copied into the record and
+    /// the section they were copied from is still bound. Nothing serves it any more, and the per-account lookup still
+    /// searches it before any record — so a start that accepted this would synchronize each mailbox under the file the
+    /// operator was told had stopped being read.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_ADeploymentSectionNoServedOwnerReads_FailsStartupNamingTheSectionToClear()
+    {
+        // Arrange
+        var documents = Substitute.For<IOwnerSettingsDocumentReader>();
+
+        DocumentOf(documents, SyntheticMailOwner.Deployment, "work", "alex@example.test");
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<DeploymentMailOwnerUnresolvedException>(() =>
+            CreateGate(
+                    [Adopted(SyntheticMailOwner.Deployment, "alex")],
+                    declared: DeploymentSectionDeclaring("work"),
+                    servedOwners: new ServedMailOwners(),
+                    documents: documents)
+                .StartAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Contains("MailSynchronization:Accounts", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("no owner this deployment serves reads that section", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The refusal above is about which declaration a mailbox's settings are read from, and every per-account read
+    /// resolves that whether or not a synchronization run is what asked. Switching synchronization off therefore
+    /// changes nothing about it, which is what keeps the abandoned section from being a rule only a worker enforces.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_ADeploymentSectionNoServedOwnerReadsWithSynchronizationOff_IsRefusedJustTheSame()
+    {
+        // Arrange
+        var documents = Substitute.For<IOwnerSettingsDocumentReader>();
+        var keys = DeploymentSectionKeys("work");
+
+        DocumentOf(documents, SyntheticMailOwner.Deployment, "work", "alex@example.test");
+        keys[$"{MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.Enabled)}"] = "false";
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<DeploymentMailOwnerUnresolvedException>(() =>
+            CreateGate(
+                    [Adopted(SyntheticMailOwner.Deployment, "alex")],
+                    declared: Configuration(keys),
+                    servedOwners: new ServedMailOwners(),
+                    documents: documents)
+                .StartAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Contains("MailSynchronization:Accounts", refusal.Message, StringComparison.Ordinal);
+    }
+
     /// <summary>The same two owners naming their mailboxes apart is the ordinary case, and it starts.</summary>
     [Fact]
     public async Task StartAsync_TwoOwnersWhoseOwnRecordsNameTheirMailAccountsApart_ServesBothOfThem()
@@ -958,7 +1014,11 @@ public sealed class ServedMailOwnersStartupGateTests
 
     /// <summary>The deployment's own mail section, declaring one account under the identifier a test names.</summary>
     private static IConfiguration DeploymentSectionDeclaring(string accountId) =>
-        Configuration(new Dictionary<string, string?>(StringComparer.Ordinal)
+        Configuration(DeploymentSectionKeys(accountId));
+
+    /// <summary>The same section as keys, for a test that states one more setting beside it.</summary>
+    private static Dictionary<string, string?> DeploymentSectionKeys(string accountId) =>
+        new(StringComparer.Ordinal)
         {
             [$"{MailSynchronizationOptions.SectionName}:Accounts:0:AccountId"] = accountId,
             [$"{MailSynchronizationOptions.SectionName}:Accounts:0:DisplayName"] = accountId,
@@ -966,7 +1026,7 @@ public sealed class ServedMailOwnersStartupGateTests
             [$"{MailSynchronizationOptions.SectionName}:Accounts:0:UserName"] = "alex@example.test",
             [$"{MailSynchronizationOptions.SectionName}:Accounts:0:Secrets:Password:Name"] = "imap-password",
             [$"{MailSynchronizationOptions.SectionName}:Accounts:0:Secrets:Password:SecretReference"] = "systemd-credential:imap-password",
-        });
+        };
 
     private static IConfiguration Declaring(Guid identifier, string displayName) =>
         new ConfigurationBuilder()
