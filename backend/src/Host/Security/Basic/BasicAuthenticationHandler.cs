@@ -44,6 +44,19 @@ namespace MailFathom.Host.Security.Basic;
 /// startup refusal decides which deployments may accept a password at all, and this decides which requests may carry
 /// one.
 /// </para>
+/// <para>
+/// <c>IsHttps</c> is read after the forwarded-headers middleware, which is deliberate and is the only reading that
+/// answers the question: it is true where this process terminated TLS, and where a proxy this deployment named said
+/// the client's own hop was encrypted. Reading the connection's TLS feature instead would be unspoofable and wrong,
+/// because it is absent by construction in the second arrangement — every request behind a terminating proxy would be
+/// refused. What makes the forwarded reading safe here is which peers it is believed from:
+/// <see cref="TrustedReverseProxyExtensions" /> clears the framework's default trust and repopulates it from
+/// <c>ReverseProxy:TrustedProxies</c> alone, so a scheme forwarded by anything else is discarded before this runs. The
+/// one shape in which that section believes every peer is the one naming no proxy, or naming a range covering every
+/// address — and <see cref="Configuration.Access.PasswordTransportConfidentiality" /> refuses a password on a
+/// clear-text-serving surface in exactly those shapes, so the deployment where a client could forward its own scheme
+/// to this handler is one that does not start.
+/// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The authentication framework materializes this handler for its registered scheme.")]
 internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAuthenticationSchemeOptions>
