@@ -30,6 +30,13 @@
           TargetPath="Build/Client.csproj"
           CopyToOutputDirectory="PreserveNewest" />
 
+    <!-- The browser head's web manifest, on the same terms and for the same reason: the colour a browser paints
+         behind the bundle is written there and the colour the splash screen sits on is written in the project file,
+         and only reading both can say the two still agree. It is a document the bootstrapper copies to the head's own
+         output rather than anything this host loads, so the suite reads the authored file. -->
+    <None Include="..\..\src\Client\Platforms\WebAssembly\manifest.webmanifest"
+          Link="Platforms/manifest.webmanifest"
+          TargetPath="Platforms/manifest.webmanifest"
     <!-- The configuration the application ships, on the same terms and for the same reason: it travels into the bundle
          embedded, so a value edited out of it composes a head that fails while starting and no build reports it. What
          the suite does with it is compose the real service graph against it, which is the one reading that says the

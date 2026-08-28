@@ -57,6 +57,12 @@ restore and the publish state it. The pre-compressed `.br` and `.gz` copies the 
 before the bundle is copied into the runtime image: the static-file middleware serving it negotiates no content
 encoding, so they would be a second copy of the whole bundle that no request can reach.
 
+The stage carries two files from outside `frontend/` as well, and the allow-list above names them for that reason:
+`assets/icon-1254.png` and `assets/icon-900.png`, which are the product mark the client's build renders its favicon,
+its web manifest icons, and its splash screen from. They are build inputs rather than anything the bundle carries — the
+artwork lives once, under `assets/`, and `frontend/src/Client/Client.csproj` stages it for the Uno resizetizer instead
+of keeping a second copy beside the sources.
+
 **This couples the two stacks at build time and nowhere else.** No project under `backend/` references one under
 `frontend/`, neither solution names a project in the other, and the service assembly's reference list is asserted by a
 unit test. What the image carries is a directory of files copied in beside the application, and the composition root's
