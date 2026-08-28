@@ -5,8 +5,8 @@
 using System.Collections.Immutable;
 using MailFathom.Client.Backend.Timeline;
 using MailFathom.Client.Presentation.Messages;
-using MailFathom.Client.Presentation.Spaces.Mail.Reading;
 using MailFathom.Client.Presentation.Search;
+using MailFathom.Client.Presentation.Spaces.Mail.Reading;
 using MailFathom.Client.Presentation.Threads;
 using MailFathom.Client.Presentation.Workspace;
 using MailFathom.Client.Session;

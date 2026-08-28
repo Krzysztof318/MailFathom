@@ -46,8 +46,10 @@ public sealed class DeploymentMailSearchTests
         Assert.Contains("query=quarter", asked.Query, StringComparison.Ordinal);
         Assert.Contains("account=work", asked.Query, StringComparison.Ordinal);
         Assert.Contains("folder=role%3AInbox", asked.Query, StringComparison.Ordinal);
+        Assert.Contains("includeJunk=true", asked.Query, StringComparison.Ordinal);
         Assert.Contains("sender=someone%40example.test", asked.Query, StringComparison.Ordinal);
         Assert.Contains("unread=true", asked.Query, StringComparison.Ordinal);
+        Assert.Contains("receivedOnOrAfter=2026-01-01", asked.Query, StringComparison.Ordinal);
         Assert.DoesNotContain("receivedBefore=", asked.Query, StringComparison.Ordinal);
         Assert.DoesNotContain("flagged=", asked.Query, StringComparison.Ordinal);
         Assert.DoesNotContain("hasAttachments=", asked.Query, StringComparison.Ordinal);

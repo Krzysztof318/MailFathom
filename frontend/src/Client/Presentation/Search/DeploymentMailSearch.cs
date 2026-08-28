@@ -300,20 +300,26 @@ public sealed class DeploymentMailSearch : IMailSearch
         await this.SearchAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private async ValueTask<MailSearchQuery> ComposeAsync(CancellationToken cancellationToken) => new()
+    private async ValueTask<MailSearchQuery> ComposeAsync(CancellationToken cancellationToken)
     {
-        Query = (await this.Query.Value(cancellationToken).ConfigureAwait(false) ?? string.Empty).Trim(),
-        Account = Named(await this.Account.Value(cancellationToken).ConfigureAwait(false)),
-        Folder = await this.FolderForQueryAsync(cancellationToken).ConfigureAwait(false),
-        Sender = Named(await this.Sender.Value(cancellationToken).ConfigureAwait(false)),
-        Recipient = Named(await this.Recipient.Value(cancellationToken).ConfigureAwait(false)),
-        ReceivedOnOrAfter = await Optional(this.ReceivedOnOrAfter, cancellationToken).ConfigureAwait(false),
-        ReceivedBefore = await Optional(this.ReceivedBefore, cancellationToken).ConfigureAwait(false),
-        Unread = await Optional(this.Unread, cancellationToken).ConfigureAwait(false),
-        Flagged = await Optional(this.Flagged, cancellationToken).ConfigureAwait(false),
-        HasAttachments = await Optional(this.HasAttachments, cancellationToken).ConfigureAwait(false),
-        PageSize = PageSize,
-    };
+        var folder = await this.FolderForQueryAsync(cancellationToken).ConfigureAwait(false);
+
+        return new MailSearchQuery
+        {
+            Query = (await this.Query.Value(cancellationToken).ConfigureAwait(false) ?? string.Empty).Trim(),
+            Account = Named(await this.Account.Value(cancellationToken).ConfigureAwait(false)),
+            Folder = folder,
+            IncludeJunk = folder is not null,
+            Sender = Named(await this.Sender.Value(cancellationToken).ConfigureAwait(false)),
+            Recipient = Named(await this.Recipient.Value(cancellationToken).ConfigureAwait(false)),
+            ReceivedOnOrAfter = await Optional(this.ReceivedOnOrAfter, cancellationToken).ConfigureAwait(false),
+            ReceivedBefore = await Optional(this.ReceivedBefore, cancellationToken).ConfigureAwait(false),
+            Unread = await Optional(this.Unread, cancellationToken).ConfigureAwait(false),
+            Flagged = await Optional(this.Flagged, cancellationToken).ConfigureAwait(false),
+            HasAttachments = await Optional(this.HasAttachments, cancellationToken).ConfigureAwait(false),
+            PageSize = PageSize,
+        };
+    }
 
     private async ValueTask<MailSearchWindow> ReadAsync(
         (long Revision, MailSearchRun Run) trigger,
