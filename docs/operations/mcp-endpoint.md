@@ -331,6 +331,12 @@ fingerprint nothing resolves, a credential somebody disabled, a signature the re
 audience, an absent or too distant expiry, a missing identifier, and one already spent. Nothing in the response
 distinguishes them, and nothing logged carries the presented assertion or key material.
 
+**What reaches the log is the half an operator can act on.** A refusal against a credential this deployment holds — one
+somebody disabled, an expiry further ahead than the endpoint accepts, a missing or over-long identifier, and one already
+served — is recorded as a warning naming the credential's identifier, which is what the listing shows it under. A
+refusal before a fingerprint resolves a record is not recorded at all: those are what an open endpoint answers to
+anything on the network path, so a line each would let whoever sends them fill the log.
+
 **Rotating a key.** `mfctl credential rotate --method public-key --id <credential> --public-key-file <new>` replaces the
 registered half and reports the new fingerprint; the client changes its private key and its `kid` together. Where an
 overlap is wanted, register the new key as a second credential, move the client, and delete the first — nothing is

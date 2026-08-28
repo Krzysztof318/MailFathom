@@ -261,7 +261,9 @@ public sealed class McpEndpointOptionsBindingTests
 
     /// <summary>
     /// The refusal is composed before the strict bind, so it is the retired setting an operator reads about rather than
-    /// the binder's own message about a property this type no longer declares.
+    /// the binder's own message about a property this type no longer declares. Nothing else the section states is read,
+    /// with one exception: the endpoint goes on reporting that it is enabled, because whether the process serves any
+    /// surface at all is judged before this section answers for itself.
     /// </summary>
     [Fact]
     public void ReadFrom_ARetiredSetting_IsRefusedRatherThanRaisingWhileTheSectionIsBound()
@@ -278,6 +280,8 @@ public sealed class McpEndpointOptionsBindingTests
 
         // Assert
         Assert.NotEmpty(options.FindConfigurationErrors());
+        Assert.True(options.Enabled);
+        Assert.Empty(options.Authentication);
     }
 
     /// <summary>

@@ -9,6 +9,7 @@ using MailFathom.Application.Access.Credentials;
 using MailFathom.Common.ClientAssertions;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Security.ClientAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -267,7 +268,11 @@ public sealed class OwnerClientAssertionAuthenticatorTests
         var clock = new FakeTimeProvider(VerifiedAt);
 
         return new Harness(
-            new OwnerClientAssertionAuthenticator(credentials, new ClientAssertionReplayStore(clock), clock),
+            new OwnerClientAssertionAuthenticator(
+                credentials,
+                new ClientAssertionReplayStore(clock),
+                clock,
+                NullLogger<OwnerClientAssertionAuthenticator>.Instance),
             credentials);
     }
 

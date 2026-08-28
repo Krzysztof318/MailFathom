@@ -39,7 +39,7 @@ internal static class ProtectedResourceMetadataEndpoint
     /// <returns>The mapped route, so a surface can attach what only its own document needs.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoints" /> or <paramref name="methods" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when no entry states OAuth, which is a surface accepting no token at all.</exception>
-    /// <remarks>Two surfaces map one of these — the administrative endpoint and the client endpoint — and the surface is a parameter rather than a constant so neither can publish the other's advertised scopes.</remarks>
+    /// <remarks>The administrative endpoint maps this one; a mail-serving surface maps <see cref="MapOwnerFacingProtectedResourceMetadata" /> beside it, because a token admitted there resolves an owner's credential rather than a configured entry. The surface stays a parameter rather than a constant so neither can publish the other's advertised scopes.</remarks>
     internal static RouteHandlerBuilder MapProtectedResourceMetadata(
         this IEndpointRouteBuilder endpoints,
         IReadOnlyList<TransportAuthenticationOptions> methods,

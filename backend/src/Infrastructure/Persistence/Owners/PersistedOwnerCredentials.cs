@@ -200,14 +200,17 @@ internal sealed class PersistedOwnerCredentials(MailFathomDbContext dbContext, T
     /// <remarks>
     /// The method is in the predicate as well as the credential, so a rotation aimed at the wrong kind of credential
     /// answers that no such credential exists rather than writing a password's record into a row a key is resolved by.
-    /// The lookup moves with the material for the two methods whose lookup is derived from it, which is why the unique
-    /// index can be violated here and is answered as the taken lookup it is.
+    /// The lookup moves with the material for the two methods whose material it follows — a key this deployment mints
+    /// and a client's public key — which is why the unique index can be violated here and is answered as the taken
+    /// lookup it is.
     /// <para>
-    /// Where the lookup is <em>not</em> derived from the secret it is in the predicate too, because there the caller
-    /// states a value the row is meant to already carry. A username the credential does not hold then matches no row
-    /// and answers <see cref="OwnerCredentialWriteOutcome.UnknownCredential" />, rather than renaming somebody's
-    /// sign-in to whatever was typed — which the update below would otherwise do, since it sets the lookup
-    /// unconditionally.
+    /// Where it does <em>not</em> move it is in the predicate too, because there the caller states a value the row is
+    /// meant to already carry. A username the credential does not hold then matches no row and answers
+    /// <see cref="OwnerCredentialWriteOutcome.UnknownCredential" />, rather than renaming somebody's sign-in to
+    /// whatever was typed — which the update below would otherwise do, since it sets the lookup unconditionally. It is
+    /// <see cref="OwnerCredentialMethod.LookupMovesWithTheMaterial" /> that decides, rather than whether the lookup is
+    /// derived from the secret: a client's fingerprint is published and still moves, so matching on it would demand the
+    /// row already carry the value the rotation is there to write.
     /// </para>
     /// </remarks>
     public async Task<OwnerCredentialWriteOutcome> ReplaceMaterialAsync(
@@ -223,7 +226,7 @@ internal sealed class PersistedOwnerCredentials(MailFathomDbContext dbContext, T
         var storedMethod = RequireMethod(method);
         var storedLookup = RequireLookup(lookup);
         var storedMaterial = RequireMaterialAgreesWithMethod(method, material);
-        var statedLookup = method.LookupIsDerivedFromTheSecret ? null : storedLookup;
+        var statedLookup = method.LookupMovesWithTheMaterial ? null : storedLookup;
         var changedAt = timeProvider.GetUtcNow();
 
         try

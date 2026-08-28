@@ -25,10 +25,12 @@ namespace MailFathom.Application.Access.Credentials;
 /// than about the secret.
 /// </para>
 /// <para>
-/// <see cref="Lookup" /> is published because it is not material for any of the four methods: two of them hold a value
-/// somebody wrote — a username, an issuer and subject — and two hold a digest of a public value or of one that was
-/// reported once and never stored. It is what lets an operator tell two credentials apart without the identifier being
-/// the only handle they have.
+/// <see cref="Lookup" /> is published for three of the four methods, which is what lets an operator tell two credentials
+/// apart without the identifier being the only handle they have: a username is what an owner types, a public key's
+/// fingerprint is what that client's assertions have to name, and an issuer and subject are what an administrator wrote.
+/// A minted key's is withheld and answered as absent, for the reason
+/// <see cref="OwnerCredentialMethod.LookupIsDerivedFromTheSecret" /> gives — the digest verifies a presented key, so
+/// serving it to whoever may read a listing would be serving a verifier for material this deployment never stored.
 /// </para>
 /// <para>
 /// <see cref="MaterialChangedAt" /> is carried rather than derived from the row's general update instant, because the

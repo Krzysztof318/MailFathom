@@ -40,20 +40,6 @@ namespace MailFathom.Host.Configuration.Access;
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The options framework materializes this type during configuration binding.")]
 internal sealed class OwnerFacingAuthenticationOptions
 {
-    /// <summary>The keys an entry used to carry, which this endpoint no longer reads.</summary>
-    /// <remarks>
-    /// Named so an upgrade refuses rather than starts: the binder ignores a key it does not know, so a deployment whose
-    /// entries still carry a key, a public key, a subject list, or a grant would come up admitting nobody it used to
-    /// admit and saying nothing about it. What replaces each of them is a credential record, which is what the refusal
-    /// tells the operator to provision.
-    /// </remarks>
-    internal static readonly IReadOnlyList<string> RetiredSettingNames =
-    [
-        "ApiKey",
-        "PublicKey",
-        "Permissions",
-    ];
-
     /// <summary>Gets or sets which method this entry accepts, as one of the published method names.</summary>
     /// <remarks><see langword="null" /> when the entry states none, which is refused: an entry that names no method is an entry an operator meant to write something in.</remarks>
     public string? Method { get; set; }

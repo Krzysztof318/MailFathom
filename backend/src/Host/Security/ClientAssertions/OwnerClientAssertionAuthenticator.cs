@@ -34,30 +34,43 @@ namespace MailFathom.Host.Security.ClientAssertions;
 /// Every refusal is one outcome. Nothing this produces carries the presented assertion or the key it named; what a
 /// record names is the credential's identifier, which is MailFathom's own name for the row.
 /// </para>
+/// <para>
+/// Three of the refusals are recorded, and they are the three that happened to a credential this deployment holds: one
+/// an administrator disabled, one whose assertion claims something the surface does not accept, and one whose
+/// identifier had already been served. Each names an operator's own act or a client of theirs misbehaving, which is
+/// what a log line is for. The rest are not recorded, for the reason the configured verification beside this one does
+/// not record them either: a refusal before a credential is resolved is what an open endpoint answers to anything on
+/// the network path, so writing a line per such request would hand whoever sends them the deployment's log.
+/// </para>
 /// </remarks>
-internal sealed class OwnerClientAssertionAuthenticator
+internal sealed partial class OwnerClientAssertionAuthenticator
 {
     private readonly IOwnerCredentialStore credentials;
     private readonly ClientAssertionReplayStore replayStore;
     private readonly TimeProvider timeProvider;
+    private readonly ILogger<OwnerClientAssertionAuthenticator> logger;
 
     /// <summary>Initializes a new owner client assertion authenticator.</summary>
     /// <param name="credentials">Where the owners' credentials are kept.</param>
     /// <param name="replayStore">Where an assertion's identifier is spent, so none is served twice.</param>
     /// <param name="timeProvider">The clock an assertion's permitted window is judged against.</param>
+    /// <param name="logger">Where a refusal against a credential this deployment holds is recorded.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public OwnerClientAssertionAuthenticator(
         IOwnerCredentialStore credentials,
         ClientAssertionReplayStore replayStore,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        ILogger<OwnerClientAssertionAuthenticator> logger)
     {
         ArgumentNullException.ThrowIfNull(credentials);
         ArgumentNullException.ThrowIfNull(replayStore);
         ArgumentNullException.ThrowIfNull(timeProvider);
+        ArgumentNullException.ThrowIfNull(logger);
 
         this.credentials = credentials;
         this.replayStore = replayStore;
         this.timeProvider = timeProvider;
+        this.logger = logger;
     }
 
     /// <summary>Judges the assertion an <c>Authorization</c> header carried.</summary>
@@ -102,6 +115,13 @@ internal sealed class OwnerClientAssertionAuthenticator
 
         if (credential is not { Enabled: true, Material: { } material })
         {
+            // A row that exists and cannot be used is the one refusal here an operator took deliberately, so it is
+            // named rather than left indistinguishable from a fingerprint nobody registered.
+            if (credential is not null)
+            {
+                this.LogDisabledCredentialPresented(credential.Id);
+            }
+
             return OwnerClientAssertionAuthenticationResult.Rejected(ClientAssertionRejection.SignatureUnrecognized);
         }
 
@@ -138,18 +158,54 @@ internal sealed class OwnerClientAssertionAuthenticator
 
         if (expiresAt > this.timeProvider.GetUtcNow() + ClientAssertionValidation.FurthestPermittedExpiry)
         {
+            this.LogOverlongAssertionPresented(credential.Id);
+
             return OwnerClientAssertionAuthenticationResult.Rejected(ClientAssertionRejection.ClaimsUnacceptable);
         }
 
         if (assertion.Id is not { Length: > 0 } identifier || identifier.Length > ClientAssertion.IdentifierLengthLimit)
         {
+            this.LogUnusableIdentifierPresented(credential.Id);
+
             return OwnerClientAssertionAuthenticationResult.Rejected(ClientAssertionRejection.ClaimsUnacceptable);
         }
 
-        return this.replayStore.TrySpend(fingerprint.Value, identifier, expiresAt)
-            ? OwnerClientAssertionAuthenticationResult.Authenticated(AdmittedOwnerCredential.For(credential))
-            : OwnerClientAssertionAuthenticationResult.Rejected(ClientAssertionRejection.IdentifierAlreadySpent);
+        if (this.replayStore.TrySpend(fingerprint.Value, identifier, expiresAt))
+        {
+            return OwnerClientAssertionAuthenticationResult.Authenticated(AdmittedOwnerCredential.For(credential));
+        }
+
+        this.LogReplayedAssertionPresented(credential.Id);
+
+        return OwnerClientAssertionAuthenticationResult.Rejected(ClientAssertionRejection.IdentifierAlreadySpent);
     }
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "A request presented an assertion signed by the key of credential {CredentialId}, which this "
+            + "deployment holds and does not accept. The request was refused with the same response as any other "
+            + "refusal; enable the credential, or provision the client a new one.")]
+    private partial void LogDisabledCredentialPresented(Guid credentialId);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "A request presented an assertion for credential {CredentialId} that claims a longer life than this "
+            + "endpoint accepts. The request was refused; the client is minting assertions with too distant an expiry.")]
+    private partial void LogOverlongAssertionPresented(Guid credentialId);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "A request presented an assertion for credential {CredentialId} carrying no replay identifier this "
+            + "endpoint can spend. The request was refused; the client is minting assertions without a usable "
+            + "identifier.")]
+    private partial void LogUnusableIdentifierPresented(Guid credentialId);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "A request presented an assertion for credential {CredentialId} whose identifier this process has "
+            + "already served. The request was refused; either the client reused an identifier or an assertion was "
+            + "captured and replayed.")]
+    private partial void LogReplayedAssertionPresented(Guid credentialId);
 
     /// <summary>Wraps the resolved public key as something the validator can verify against.</summary>
     /// <remarks>
@@ -192,7 +248,7 @@ internal sealed record OwnerClientAssertionAuthenticationResult
     public AdmittedOwnerCredential? Admitted { get; }
 
     /// <summary>Gets why the assertion was refused, or <see langword="null" /> when it authenticated.</summary>
-    /// <remarks>It reaches the server log only. Every value produces one indistinguishable response.</remarks>
+    /// <remarks>Nothing serves it to a caller: every value produces one indistinguishable response, and what a refusal an operator can act on records is written where the refusal was decided rather than carried out to whoever asks.</remarks>
     public ClientAssertionRejection? Rejection { get; }
 
     /// <summary>Creates a successful result naming what the request was admitted as.</summary>

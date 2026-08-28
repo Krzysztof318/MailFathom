@@ -183,7 +183,7 @@ internal sealed class ClientEndpointOptions
 
         if (retiredSettings.Count > 0)
         {
-            return RefusingRetiredSettings(retiredSettings);
+            return RefusingRetiredSettings(section, retiredSettings);
         }
 
         var settings = section.Get<ClientEndpointOptions>(binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
@@ -212,11 +212,18 @@ internal sealed class ClientEndpointOptions
         return settings;
     }
 
-    /// <summary>Composes the settings a section carrying a retired key reads as, which is a refusal and nothing else.</summary>
-    /// <remarks>The section was never bound, so nothing else it states was read; reporting anything beside the retired keys would be reporting defaults the operator did not write.</remarks>
-    private static ClientEndpointOptions RefusingRetiredSettings(IReadOnlyList<string> retiredSettings)
+    /// <summary>Composes the settings a section carrying a retired key reads as, which is a refusal and one fact beside it.</summary>
+    /// <remarks>
+    /// The section was never bound, so nothing else it states was read; reporting anything beside the retired keys would
+    /// be reporting defaults the operator did not write. <see cref="Enabled" /> is the exception, and it is read from
+    /// configuration rather than left at its default: whether any surface is served at all is judged before any section
+    /// answers for itself, so an endpoint the operator turned on that reported itself off would be refused for a process
+    /// serving nothing — a statement about their configuration that is false — instead of for the retired key that is
+    /// the whole of what an upgrade has to be told.
+    /// </remarks>
+    private static ClientEndpointOptions RefusingRetiredSettings(IConfigurationSection section, IReadOnlyList<string> retiredSettings)
     {
-        var refused = new ClientEndpointOptions();
+        var refused = new ClientEndpointOptions { Enabled = section.GetValue<bool>(nameof(Enabled)) };
         refused.retiredSettings = retiredSettings;
 
         return refused;

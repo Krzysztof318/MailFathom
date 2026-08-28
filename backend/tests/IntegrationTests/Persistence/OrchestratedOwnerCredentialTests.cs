@@ -273,6 +273,51 @@ public sealed class OrchestratedOwnerCredentialTests(MailFathomOrchestrationFixt
     }
 
     /// <summary>
+    /// The other half of the predicate above: a client sending a new public key is resolved by that key's fingerprint
+    /// from then on, so the stated lookup is the new value rather than one the row already carries. Matching on it
+    /// would demand the row hold what the rotation exists to write, and the compromised key an operator is replacing
+    /// would go on authenticating while the command reported that no such credential exists.
+    /// </summary>
+    [Fact]
+    public async Task ReplaceMaterialAsync_APublicKeyRotatedToANewFingerprint_MovesTheLookupWithTheMaterial()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var retired = OwnerCredentialLookup.ForDigest("orchestrated-rotation-retired-fingerprint");
+        var replacement = OwnerCredentialLookup.ForDigest("orchestrated-rotation-replacement-fingerprint");
+        var credentialId = await ProvisionAsync(services, OwnerCredentialMethod.PublicKey, retired, cancellationToken);
+        const string ReplacementKey = "-----BEGIN PUBLIC KEY-----replacement-----END PUBLIC KEY-----";
+
+        // Act
+        var rotation = await services.InScopeAsync(
+            (scope, token) => Store(scope).ReplaceMaterialAsync(
+                SyntheticMailAccount.Owner,
+                credentialId,
+                OwnerCredentialMethod.PublicKey,
+                replacement,
+                ReplacementKey,
+                token),
+            cancellationToken);
+
+        // Assert
+        Assert.Equal(OwnerCredentialWriteOutcome.Written, rotation);
+
+        var resolvedByTheNewFingerprint = await services.InScopeAsync(
+            (scope, token) => Store(scope).FindAsync(OwnerCredentialMethod.PublicKey, replacement, token),
+            cancellationToken);
+
+        var resolvedByTheRetiredOne = await services.InScopeAsync(
+            (scope, token) => Store(scope).FindAsync(OwnerCredentialMethod.PublicKey, retired, token),
+            cancellationToken);
+
+        Assert.NotNull(resolvedByTheNewFingerprint);
+        Assert.Equal(credentialId, resolvedByTheNewFingerprint.Id);
+        Assert.Equal(ReplacementKey, resolvedByTheNewFingerprint.Material);
+        Assert.Null(resolvedByTheRetiredOne);
+    }
+
+    /// <summary>
     /// A rehash spends two deliberately slow derivations, and an administrator rotating a leaked credential can commit
     /// inside that window — which is the case rotation exists for. The rehash therefore names the record it verified
     /// against, so what the rotation wrote is not overwritten by a request that read the record it replaced.

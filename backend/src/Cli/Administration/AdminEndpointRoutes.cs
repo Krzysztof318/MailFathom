@@ -217,7 +217,7 @@ internal static class AdminEndpointRoutes
     /// </remarks>
     internal const string OwnersPath = $"{Prefix}/owners";
 
-    /// <summary>Where one owner's username-and-password credentials are listed and provisioned.</summary>
+    /// <summary>Where one owner's credentials are listed and provisioned, whichever method each is presented by.</summary>
     /// <param name="ownerId">The owner the path names.</param>
     /// <returns>The path, with the identity written the way a deployment's route constraint reads one.</returns>
     internal static string OwnerCredentialsPath(Guid ownerId) => $"{OwnersPath}/{ownerId:D}/credentials";

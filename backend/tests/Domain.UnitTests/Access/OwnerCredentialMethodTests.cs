@@ -24,17 +24,23 @@ public sealed class OwnerCredentialMethodTests
         Assert.Equal(["password", "api-key", "public-key", "oauth-subject"], names);
     }
 
-    /// <summary>The three flags decide what a rotation may do and what a listing may publish, so each is asserted rather than inferred from the name.</summary>
+    /// <summary>
+    /// The four flags decide what a rotation may do and what a listing may publish, so each is asserted rather than
+    /// inferred from the name. The last two are asserted together because they read alike and answer differently for a
+    /// key pair: its fingerprint is published rather than derived from a secret, and it still moves when the client
+    /// sends a new key — which is the distinction the rotation predicate is written against.
+    /// </summary>
     [Theory]
-    [InlineData("password", true, true, false)]
-    [InlineData("api-key", false, true, true)]
-    [InlineData("public-key", true, true, false)]
-    [InlineData("oauth-subject", false, false, false)]
+    [InlineData("password", true, true, false, false)]
+    [InlineData("api-key", false, true, true, true)]
+    [InlineData("public-key", true, true, false, true)]
+    [InlineData("oauth-subject", false, false, false, false)]
     public void Members_EachPublishedMethod_StatesWhatItKeepsAndWhatMayBeReplaced(
         string name,
         bool storesMaterial,
         bool materialIsReplaceable,
-        bool lookupIsDerivedFromTheSecret)
+        bool lookupIsDerivedFromTheSecret,
+        bool lookupMovesWithTheMaterial)
     {
         // Act
         var parsed = OwnerCredentialMethod.TryParse(name, out var method);
@@ -44,6 +50,18 @@ public sealed class OwnerCredentialMethodTests
         Assert.Equal(storesMaterial, method.StoresMaterial);
         Assert.Equal(materialIsReplaceable, method.MaterialIsReplaceable);
         Assert.Equal(lookupIsDerivedFromTheSecret, method.LookupIsDerivedFromTheSecret);
+        Assert.Equal(lookupMovesWithTheMaterial, method.LookupMovesWithTheMaterial);
+    }
+
+    /// <summary>A method whose material cannot be replaced has no rotation to move a lookup with, so the two flags cannot disagree that way round.</summary>
+    [Fact]
+    public void Members_AMethodWhoseLookupMoves_AlsoPublishesReplaceableMaterial()
+    {
+        // Act
+        var moving = OwnerCredentialMethod.All.Where(method => method.LookupMovesWithTheMaterial).ToArray();
+
+        // Assert
+        Assert.All(moving, method => Assert.True(method.MaterialIsReplaceable));
     }
 
     /// <summary>The name is written by hand in a configuration file and on a command line, which is why the comparison ignores case.</summary>

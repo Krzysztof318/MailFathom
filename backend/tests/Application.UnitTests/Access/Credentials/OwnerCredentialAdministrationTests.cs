@@ -301,7 +301,8 @@ public sealed class OwnerCredentialAdministrationTests
         await harness.Administration.ProvisionApiKeyAsync(Owner, [], TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Empty(harness.WrittenGrant ?? []);
+        Assert.NotNull(harness.WrittenGrant);
+        Assert.Empty(harness.WrittenGrant);
     }
 
     /// <summary>

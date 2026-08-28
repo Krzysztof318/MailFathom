@@ -41,18 +41,20 @@ public readonly record struct OwnerCredentialMethod
         string name,
         bool storesMaterial,
         bool materialIsReplaceable,
-        bool lookupIsDerivedFromTheSecret)
+        bool lookupIsDerivedFromTheSecret,
+        bool lookupMovesWithTheMaterial)
     {
         this.name = name;
         this.StoresMaterial = storesMaterial;
         this.MaterialIsReplaceable = materialIsReplaceable;
         this.LookupIsDerivedFromTheSecret = lookupIsDerivedFromTheSecret;
+        this.LookupMovesWithTheMaterial = lookupMovesWithTheMaterial;
     }
 
     /// <summary>Gets the method by which an owner presents a username and a password over HTTP Basic.</summary>
     /// <remarks>The lookup is the canonical username, and the stored material is the password's own record — never the password.</remarks>
     public static OwnerCredentialMethod Password { get; } =
-        new("password", storesMaterial: true, materialIsReplaceable: true, lookupIsDerivedFromTheSecret: false);
+        new("password", storesMaterial: true, materialIsReplaceable: true, lookupIsDerivedFromTheSecret: false, lookupMovesWithTheMaterial: false);
 
     /// <summary>Gets the method by which a client presents an opaque key this deployment minted.</summary>
     /// <remarks>
@@ -61,12 +63,12 @@ public readonly record struct OwnerCredentialMethod
     /// and nowhere else.
     /// </remarks>
     public static OwnerCredentialMethod ApiKey { get; } =
-        new("api-key", storesMaterial: false, materialIsReplaceable: true, lookupIsDerivedFromTheSecret: true);
+        new("api-key", storesMaterial: false, materialIsReplaceable: true, lookupIsDerivedFromTheSecret: true, lookupMovesWithTheMaterial: true);
 
     /// <summary>Gets the method by which a client presents an assertion signed by a key pair it holds.</summary>
     /// <remarks>The lookup is the fingerprint of the client's public key, which the assertion names in its own <c>kid</c> header, and the stored material is that public key. Nothing secret is stored, which is the point of the method.</remarks>
     public static OwnerCredentialMethod PublicKey { get; } =
-        new("public-key", storesMaterial: true, materialIsReplaceable: true, lookupIsDerivedFromTheSecret: false);
+        new("public-key", storesMaterial: true, materialIsReplaceable: true, lookupIsDerivedFromTheSecret: false, lookupMovesWithTheMaterial: true);
 
     /// <summary>Gets the method by which an authorization server's validated subject names the owner it stands for.</summary>
     /// <remarks>
@@ -75,7 +77,7 @@ public readonly record struct OwnerCredentialMethod
     /// which owner the subject acts for.
     /// </remarks>
     public static OwnerCredentialMethod OAuthSubject { get; } =
-        new("oauth-subject", storesMaterial: false, materialIsReplaceable: false, lookupIsDerivedFromTheSecret: false);
+        new("oauth-subject", storesMaterial: false, materialIsReplaceable: false, lookupIsDerivedFromTheSecret: false, lookupMovesWithTheMaterial: false);
 
     /// <summary>Gets every method this repository publishes.</summary>
     /// <remarks>Declared last so the members it lists are already initialized when this initializer runs.</remarks>
@@ -108,6 +110,21 @@ public readonly record struct OwnerCredentialMethod
     /// a subject is what an administrator wrote.
     /// </remarks>
     public bool LookupIsDerivedFromTheSecret { get; }
+
+    /// <summary>Gets whether replacing a credential's material also replaces the value it is resolved by.</summary>
+    /// <remarks>
+    /// A separate question from <see cref="LookupIsDerivedFromTheSecret" />, and the two answer differently for a
+    /// client's key pair: its fingerprint is published rather than derived from anything secret, and it still moves,
+    /// because a client that sends a new public key is resolved by that key's fingerprint from then on. A key this
+    /// deployment minted moves for the same reason. A username and a validated subject do not — replacing a password
+    /// leaves the username where it was, and a subject has no material to replace at all.
+    /// <para>
+    /// What reads it is the store's rotation predicate. Where the lookup moves, the stated value is the new one and the
+    /// row is matched by identity alone; where it does not, the stated value is the one the row must already carry, so
+    /// a mistyped username matches no row instead of renaming somebody's sign-in.
+    /// </para>
+    /// </remarks>
+    public bool LookupMovesWithTheMaterial { get; }
 
     /// <summary>Gets whether this value names a published method rather than the unusable struct default.</summary>
     public bool IsSpecified => this.name is not null;
