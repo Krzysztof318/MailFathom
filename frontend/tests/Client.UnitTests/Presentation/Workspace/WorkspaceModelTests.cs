@@ -134,6 +134,28 @@ public sealed class WorkspaceModelTests : IDisposable
         Assert.Equal("work@example.test · Inbox · 2 selected", await model.ScopeDescription);
     }
 
+    [Fact]
+    public async Task ScopeDescription_APassageWithinOneMessage_SaysTheScopeIsTheSelectedPassage()
+    {
+        // Arrange
+        var workspace = new SharedWorkspace(new StubMailboxTreeMemory());
+        await using var model = this.ModelOver(workspace);
+
+        // Act
+        await workspace.Scope.UpdateAsync(
+            _ => new WorkspaceScope
+            {
+                Account = "work@example.test",
+                Folder = "Inbox",
+                Selection = ImmutableArray.Create("117"),
+                BodySelection = "the selected passage",
+            },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("work@example.test · Inbox · selected passage", await model.ScopeDescription);
+    }
+
     /// <summary>
     /// A frame built again over the same workspace — which is what a reload of the client's route is — reads the scope
     /// a space narrowed to rather than starting over at everything.
@@ -462,6 +484,7 @@ public sealed class WorkspaceModelTests : IDisposable
         ["WorkspaceScope.AccountFolder"] = "{0} · {1}",
         ["WorkspaceScope.Role"] = "{0}, every mailbox",
         ["WorkspaceScope.Selected"] = "{0} · {1} selected",
+        ["WorkspaceScope.BodySelection"] = "{0} · selected passage",
         ["Mailboxes.Role.Sent"] = "Sent",
         ["Workspace.Connection.Attempt"] = "Attempt {0} of {1}",
     });

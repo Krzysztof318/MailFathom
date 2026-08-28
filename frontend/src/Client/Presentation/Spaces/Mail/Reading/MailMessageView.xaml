@@ -1,0 +1,116 @@
+<!--
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+-->
+<UserControl x:Class="MailFathom.Client.Presentation.Spaces.Mail.Reading.MailMessageView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:utu="using:Uno.Toolkit.UI"
+             xmlns:reading="using:MailFathom.Client.Presentation.Spaces.Mail.Reading">
+  <StackPanel Spacing="12">
+    <TextBlock Text="{x:Bind Reading.Subject, Mode=OneWay}"
+               TextWrapping="Wrap"
+               Style="{StaticResource SubtitleTextBlockStyle}" />
+
+    <InfoBar x:Uid="MailMessage.InfoBar.TrustedSender"
+             IsOpen="{x:Bind Reading.ShowsTrustedSender, Mode=OneWay}"
+             IsClosable="False"
+             Severity="Success"
+             Message="{x:Bind Reading.SenderNotice, Mode=OneWay}" />
+
+    <InfoBar x:Uid="MailMessage.InfoBar.SenderWarning"
+             IsOpen="{x:Bind Reading.ShowsSenderWarning, Mode=OneWay}"
+             IsClosable="False"
+             Severity="Warning"
+             Message="{x:Bind Reading.SenderNotice, Mode=OneWay}" />
+
+    <ItemsControl ItemsSource="{x:Bind Reading.Headers, Mode=OneWay}">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="reading:MailMessageHeaderRow">
+          <Grid ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition />
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="{x:Bind Role}"
+                       Style="{StaticResource CaptionTextBlockStyle}"
+                       Foreground="{ThemeResource OnSurfaceVariantBrush}" />
+            <TextBlock Grid.Column="1"
+                       Text="{x:Bind Value}"
+                       TextWrapping="Wrap"
+                       IsTextSelectionEnabled="True"
+                       Style="{StaticResource BodyTextBlockStyle}" />
+          </Grid>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+    <StackPanel Spacing="8"
+                Visibility="{x:Bind Reading.HasAttachments, Mode=OneWay, Converter={StaticResource AffirmedVisibility}}">
+      <TextBlock x:Uid="MailMessage.TextBlock.Attachments"
+                 Style="{StaticResource BodyStrongTextBlockStyle}" />
+
+      <ItemsControl ItemsSource="{x:Bind Reading.Attachments, Mode=OneWay}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="reading:MailAttachmentRow">
+            <Border Padding="12"
+                    BorderThickness="1"
+                    BorderBrush="{ThemeResource OutlineVariantBrush}"
+                    CornerRadius="8">
+              <StackPanel Spacing="6">
+                <TextBlock Text="{x:Bind FileName}"
+                           TextWrapping="Wrap"
+                           Style="{StaticResource BodyStrongTextBlockStyle}" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock Text="{x:Bind MediaType}"
+                             Style="{StaticResource CaptionTextBlockStyle}"
+                             Foreground="{ThemeResource OnSurfaceVariantBrush}" />
+                  <TextBlock Text="{x:Bind Size}"
+                             Style="{StaticResource CaptionTextBlockStyle}"
+                             Foreground="{ThemeResource OnSurfaceVariantBrush}" />
+                </StackPanel>
+                <InfoBar IsOpen="{x:Bind WasFileNameNormalized}"
+                         IsClosable="False"
+                         Severity="Informational"
+                         Message="{x:Bind NormalizedFileNameNotice}" />
+                <Button x:Uid="MailMessage.Button.DownloadAttachment"
+                        HorizontalAlignment="Left"
+                        Command="{utu:AncestorBinding AncestorType=UserControl, Path=SaveAttachmentCommand}"
+                        CommandParameter="{x:Bind Request}"
+                        Visibility="{x:Bind CanDownload, Converter={StaticResource AffirmedVisibility}}" />
+                <StackPanel Orientation="Horizontal"
+                            Spacing="8"
+                            Visibility="{x:Bind CanCancel, Converter={StaticResource AffirmedVisibility}}">
+                  <ProgressRing IsActive="True" />
+                  <Button x:Uid="MailMessage.Button.CancelAttachment"
+                          Command="{utu:AncestorBinding AncestorType=UserControl, Path=CancelAttachmentCommand}"
+                          CommandParameter="{x:Bind Request}" />
+                </StackPanel>
+                <InfoBar x:Uid="MailMessage.InfoBar.AttachmentUnavailable"
+                         IsOpen="{x:Bind DownloadFailed}"
+                         IsClosable="False"
+                         Severity="Error">
+                  <InfoBar.ActionButton>
+                    <Button x:Uid="MailMessage.Button.RetryAttachment"
+                            Command="{utu:AncestorBinding AncestorType=UserControl, Path=SaveAttachmentCommand}"
+                            CommandParameter="{x:Bind Request}" />
+                  </InfoBar.ActionButton>
+                </InfoBar>
+                <InfoBar x:Uid="MailMessage.InfoBar.AttachmentSaved"
+                         IsOpen="{x:Bind Downloaded}"
+                         IsClosable="False"
+                         Severity="Success" />
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+
+    <reading:MailBodyView Reading="{x:Bind Body, Mode=OneWay}"
+                          ShowRemoteContentCommand="{x:Bind ShowRemoteContentCommand, Mode=OneWay}"
+                          ShowRemoteContentCommandParameter="{x:Bind ShowRemoteContentCommandParameter, Mode=OneWay}"
+                          UseSelectionCommand="{x:Bind UseSelectionCommand, Mode=OneWay}" />
+  </StackPanel>
+</UserControl>

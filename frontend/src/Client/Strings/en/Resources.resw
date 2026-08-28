@@ -337,6 +337,10 @@
     <value>{0} · {1} selected</value>
     <comment>What is in scope, and how many things are selected within it. {0} is the scope as the two entries above phrase it and {1} is a count.</comment>
   </data>
+  <data name="WorkspaceScope.BodySelection" xml:space="preserve">
+    <value>{0} · selected passage</value>
+    <comment>Says that the scope is one passage selected inside the one message in {0}, without repeating mail content in the frame.</comment>
+  </data>
   <data name="DiscoverPage.Answer.Heading" xml:space="preserve">
     <value>Discover</value>
     <comment>Names the primary column of the Discover space while that space is being built.</comment>
@@ -937,4 +941,33 @@
     <value>Message body as text</value>
     <comment>What a screen reader announces the message as where it is read as words rather than drawn.</comment>
   </data>
+  <data name="MailBody.Button.UseSelection.Content" xml:space="preserve">
+    <value>Use selection as scope</value>
+    <comment>Makes the passage the reader selected the narrowest part of the scope beside the intent field.</comment>
+  </data>
+  <data name="MailMessage.Sender.Trusted" xml:space="preserve"><value>Authenticated author {0} is trusted by this deployment.</value><comment>Shown only for an author both authenticated and named by the deployment. {0} is the authenticated author domain, not the raw From value.</comment></data>
+  <data name="MailMessage.Sender.Failed" xml:space="preserve"><value>The displayed sender {0} did not authenticate.</value><comment>Warns about the displayed author the receiving server checked and rejected. {0} is explicitly the displayed claim, not an authenticated identity.</comment></data>
+  <data name="MailMessage.Sender.Unrecognized" xml:space="preserve"><value>This deployment reported a sender verdict this version of MailFathom does not understand.</value><comment>Safe reading of a verdict added after this client, rather than treating an unknown value as ordinary.</comment></data>
+  <data name="MailMessage.Attachment.Fallback" xml:space="preserve"><value>Attachment {0}</value><comment>Names an attachment whose MIME part carried no usable file name. {0} is its one-based position.</comment></data>
+  <data name="MailMessage.Attachment.Normalized" xml:space="preserve"><value>The sender's file name was made safe before it was shown.</value><comment>States that a sender-written path or control character was removed from the displayed and suggested file name.</comment></data>
+  <data name="MailMessage.Attachment.FileType" xml:space="preserve"><value>Attachment</value><comment>Describes the file type choice handed to the platform save picker.</comment></data>
+  <data name="MailMessage.Header.From" xml:space="preserve"><value>From</value><comment>Labels the From participant of an opened message.</comment></data>
+  <data name="MailMessage.Header.To" xml:space="preserve"><value>To</value><comment>Labels a To participant of an opened message.</comment></data>
+  <data name="MailMessage.Header.Cc" xml:space="preserve"><value>Cc</value><comment>Labels a Cc participant of an opened message.</comment></data>
+  <data name="MailMessage.Header.Bcc" xml:space="preserve"><value>Bcc</value><comment>Labels a Bcc participant of an opened message.</comment></data>
+  <data name="MailMessage.Header.SentAt" xml:space="preserve"><value>Sent</value><comment>Labels when the sender dated an opened message.</comment></data>
+  <data name="MailMessage.Header.ReceivedAt" xml:space="preserve"><value>Received</value><comment>Labels when the receiving hop dated an opened message.</comment></data>
+  <data name="MailMessage.Header.MessageId" xml:space="preserve"><value>Message ID</value><comment>Labels the message's own threading identifier.</comment></data>
+  <data name="MailMessage.Header.InReplyTo" xml:space="preserve"><value>In reply to</value><comment>Labels the identifier this message says it answers.</comment></data>
+  <data name="MailMessage.Header.References" xml:space="preserve"><value>References</value><comment>Labels the message identifiers placing this message in a conversation.</comment></data>
+  <data name="MailMessage.InfoBar.TrustedSender.Title" xml:space="preserve"><value>Trusted sender</value><comment>Heads the uncommon positive sender verdict.</comment></data>
+  <data name="MailMessage.InfoBar.SenderWarning.Title" xml:space="preserve"><value>Check who sent this</value><comment>Heads a sender verdict that is not safe to treat as ordinary.</comment></data>
+  <data name="MailMessage.TextBlock.Attachments.Text" xml:space="preserve"><value>Attachments</value><comment>Heads the files listed before any is fetched.</comment></data>
+  <data name="MailMessage.Button.DownloadAttachment.Content" xml:space="preserve"><value>Download</value><comment>Opens the platform picker and streams this attachment.</comment></data>
+  <data name="MailMessage.Button.CancelAttachment.Content" xml:space="preserve"><value>Cancel</value><comment>Stops the attachment currently being streamed.</comment></data>
+  <data name="MailMessage.InfoBar.AttachmentUnavailable.Title" xml:space="preserve"><value>Download failed</value><comment>Heads the failure of one attachment while leaving the message readable.</comment></data>
+  <data name="MailMessage.InfoBar.AttachmentUnavailable.Message" xml:space="preserve"><value>This attachment could not be saved.</value><comment>States the bounded outcome without repeating server or file content.</comment></data>
+  <data name="MailMessage.Button.RetryAttachment.Content" xml:space="preserve"><value>Try again</value><comment>Repeats the save choice and stream for one attachment.</comment></data>
+  <data name="MailMessage.InfoBar.AttachmentSaved.Title" xml:space="preserve"><value>Saved</value><comment>Heads the completed save of one attachment.</comment></data>
+  <data name="MailMessage.InfoBar.AttachmentSaved.Message" xml:space="preserve"><value>The attachment was saved.</value><comment>Confirms the platform completed the chosen file update.</comment></data>
 </root>

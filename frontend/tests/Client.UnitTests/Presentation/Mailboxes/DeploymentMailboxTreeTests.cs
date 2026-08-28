@@ -247,7 +247,11 @@ public sealed class DeploymentMailboxTreeTests
         await over.Tree.SelectAsync(mailbox, TestContext.Current.CancellationToken);
 
         await over.Workspace.Scope.UpdateAsync(
-            scope => scope! with { Selection = ImmutableArray.Create("117") },
+            scope => scope! with
+            {
+                Selection = ImmutableArray.Create("117"),
+                BodySelection = "the selected passage",
+            },
             TestContext.Current.CancellationToken);
 
         // Act
@@ -255,6 +259,7 @@ public sealed class DeploymentMailboxTreeTests
 
         // Assert
         Assert.Empty(over.Memory.Remembered.Scope.Selection);
+        Assert.Empty(over.Memory.Remembered.Scope.BodySelection);
         Assert.Equal("work", over.Memory.Remembered.Scope.Account);
     }
 

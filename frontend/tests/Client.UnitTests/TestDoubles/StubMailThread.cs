@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Collections.Immutable;
+using MailFathom.Client.Presentation.Spaces.Mail.Reading;
 using MailFathom.Client.Presentation.Threads;
 
 namespace MailFathom.Client.UnitTests.TestDoubles;
@@ -41,6 +42,12 @@ internal sealed class StubMailThread : IMailThread
 
     /// <summary>Gets every message the stub was asked to read again with its remote pictures, in order.</summary>
     internal List<string> Remote { get; } = [];
+
+    /// <summary>Gets every attachment the stub was asked to save, in order.</summary>
+    internal List<MailAttachmentRequest> Saved { get; } = [];
+
+    /// <summary>Gets every attachment the stub was asked to stop saving, in order.</summary>
+    internal List<MailAttachmentRequest> Cancelled { get; } = [];
 
     /// <summary>Gets how many times the stub was asked for another page of the conversation.</summary>
     internal int Pages { get; private set; }
@@ -91,6 +98,17 @@ internal sealed class StubMailThread : IMailThread
 
         return ValueTask.CompletedTask;
     }
+
+    /// <inheritdoc />
+    public ValueTask SaveAttachmentAsync(MailAttachmentRequest request, CancellationToken cancellationToken)
+    {
+        this.Saved.Add(request);
+
+        return ValueTask.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public void CancelAttachment(MailAttachmentRequest request) => this.Cancelled.Add(request);
 
     /// <inheritdoc />
     public ValueTask ShowMoreAsync(CancellationToken cancellationToken)

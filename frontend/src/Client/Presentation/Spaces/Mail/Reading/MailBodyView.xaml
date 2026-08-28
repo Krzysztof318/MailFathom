@@ -78,11 +78,21 @@ Project repository: https://github.com/Krzysztof318/MailFathom
 
         <!-- The message as words, which is a rendering in its own right rather than a broken one. -->
         <TextBlock x:Uid="MailBody.Words"
+                   x:Name="PlainText"
                    Text="{x:Bind Reading.PlainText, Mode=OneWay}"
                    TextWrapping="Wrap"
                    IsTextSelectionEnabled="True"
+                   PointerReleased="OnPlainTextSelectionFinished"
+                   KeyUp="OnPlainTextSelectionFinished"
                    Style="{StaticResource MailBodyParagraphStyle}"
                    Visibility="{x:Bind Reading.ShowsPlainText, Mode=OneWay, Converter={StaticResource AffirmedVisibility}}" />
+
+        <Button x:Uid="MailBody.Button.UseSelection"
+                HorizontalAlignment="Left"
+                Command="{x:Bind UseSelectionCommand, Mode=OneWay}"
+                CommandParameter="{x:Bind SelectedText, Mode=OneWay}"
+                Style="{StaticResource TextBlockButtonStyle}"
+                Visibility="{x:Bind HasSelection, Mode=OneWay, Converter={StaticResource AffirmedVisibility}}" />
 
       </StackPanel>
     </ScrollViewer>

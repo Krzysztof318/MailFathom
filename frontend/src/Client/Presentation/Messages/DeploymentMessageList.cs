@@ -347,7 +347,11 @@ internal sealed class DeploymentMessageList : IMessageList
         IImmutableList<string> selected = [.. (chosen ?? []).Select(static row => row.Key)];
 
         await this.workspace.Scope.UpdateAsync(
-            scope => (scope ?? WorkspaceScope.Everything) with { Selection = selected },
+            scope => (scope ?? WorkspaceScope.Everything) with
+            {
+                Selection = selected,
+                BodySelection = string.Empty,
+            },
             cancellationToken).ConfigureAwait(false);
     }
 

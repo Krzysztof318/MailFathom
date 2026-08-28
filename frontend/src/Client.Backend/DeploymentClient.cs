@@ -146,6 +146,16 @@ public sealed class DeploymentClient
             DeploymentJsonContext.Default.DeploymentMailThreadPage,
             cancellationToken);
 
+    /// <summary>Asks the deployment for everything a reading pane draws around one message.</summary>
+    public Task<DeploymentMailMessageDetail> ReadMailMessageAsync(
+        Guid storedEmailId,
+        CancellationToken cancellationToken = default) =>
+        DeploymentExchange.ReadAsync(
+            this.Transport(),
+            new HttpRequestMessage(HttpMethod.Get, DeploymentRoutes.MailMessagePath(storedEmailId)),
+            DeploymentJsonContext.Default.DeploymentMailMessageDetail,
+            cancellationToken);
+
     /// <summary>Asks the deployment for one message's body, in both the renderings a reading pane draws it from.</summary>
     /// <param name="storedEmailId">The message to read, as a list row or a conversation published it.</param>
     /// <param name="remoteImages">Whether the reader has asked for this message's remote pictures, having been told what that reveals.</param>
@@ -169,6 +179,31 @@ public sealed class DeploymentClient
             DeploymentJsonContext.Default.DeploymentMailBody,
             cancellationToken,
             DeploymentExchange.MaxMailBodyBytes);
+
+    /// <summary>Streams one attachment into the destination a reader chose.</summary>
+    public Task DownloadMailAttachmentAsync(
+        Guid storedEmailId,
+        int position,
+        long expectedSizeOctets,
+        Stream destination,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(position);
+        ArgumentOutOfRangeException.ThrowIfNegative(expectedSizeOctets);
+        ArgumentNullException.ThrowIfNull(destination);
+
+        if (!destination.CanWrite)
+        {
+            throw new ArgumentException("The attachment destination must be writable.", nameof(destination));
+        }
+
+        return DeploymentExchange.CopyAsync(
+            this.Transport(),
+            new HttpRequestMessage(HttpMethod.Get, DeploymentRoutes.MailAttachmentPath(storedEmailId, position)),
+            expectedSizeOctets,
+            destination,
+            cancellationToken);
+    }
 
     /// <summary>Takes a transport aimed at wherever the client is pointed right now.</summary>
     /// <remarks>

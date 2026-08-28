@@ -26,6 +26,7 @@ public partial record WorkspaceModel
     private const string AccountFolderKey = "WorkspaceScope.AccountFolder";
     private const string RoleKey = "WorkspaceScope.Role";
     private const string SelectedKey = "WorkspaceScope.Selected";
+    private const string BodySelectionKey = "WorkspaceScope.BodySelection";
     private const string ConnectionAttemptKey = "Workspace.Connection.Attempt";
 
     private readonly IWorkspace workspace;
@@ -194,10 +195,10 @@ public partial record WorkspaceModel
     /// <remarks>
     /// A scope is described by composing words rather than by a <c>x:Uid</c> on a control, so these keys are asked
     /// for from code — which makes a typo in one of them the single way a reader would meet the key itself instead of
-    /// a sentence. The unit suite holds every authored table to naming all four.
+    /// a sentence. The unit suite holds every authored table to naming all five.
     /// </remarks>
     internal static IReadOnlyList<string> ScopeResourceKeys { get; } =
-        [EverythingKey, AccountFolderKey, RoleKey, SelectedKey];
+        [EverythingKey, AccountFolderKey, RoleKey, SelectedKey, BodySelectionKey];
 
     /// <summary>The keys the connection notice's own words are resolved by, on the same terms as the scope's.</summary>
     internal static IReadOnlyList<string> ConnectionResourceKeys { get; } = [ConnectionAttemptKey];
@@ -261,8 +262,11 @@ public partial record WorkspaceModel
             _ => this.localizer[EverythingKey].Value,
         };
 
-        return scope.Selection.Count is 0
-            ? where
-            : this.localizer[SelectedKey, where, scope.Selection.Count].Value;
+        if (scope.BodySelection.Length > 0)
+        {
+            return this.localizer[BodySelectionKey, where].Value;
+        }
+
+        return scope.Selection.Count is 0 ? where : this.localizer[SelectedKey, where, scope.Selection.Count].Value;
     }
 }

@@ -31,6 +31,7 @@ namespace MailFathom.Client.Backend;
 [JsonSerializable(typeof(DeploymentMailFolders))]
 [JsonSerializable(typeof(DeploymentMailTimelinePage))]
 [JsonSerializable(typeof(DeploymentMailThreadPage))]
+[JsonSerializable(typeof(DeploymentMailMessageDetail))]
 [JsonSerializable(typeof(DeploymentMailBody))]
 // One entry per block the reduction publishes, because the reader that dispatches on a block's identity resolves each
 // of them by its own generated type info rather than by reflection over the hierarchy.

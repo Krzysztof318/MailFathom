@@ -7,6 +7,7 @@ using System.Globalization;
 using MailFathom.Client.Backend.Threads;
 using MailFathom.Client.Backend.Timeline;
 using MailFathom.Client.Presentation.Messages;
+using MailFathom.Client.Presentation.Spaces.Mail.Reading;
 using Microsoft.Extensions.Localization;
 
 namespace MailFathom.Client.Presentation.Threads;
@@ -207,6 +208,9 @@ internal static class ThreadShape
             email.Answered,
             email.HasAttachments,
             email.AttachmentCount,
+            detail.Message is { } describedMessage
+                ? MailMessageReading.Of(describedMessage, detail.Attachments, words)
+                : null,
             detail.WholeMessage,
             detail.IsReadingWholeMessage,
             detail.WholeMessageFailed);

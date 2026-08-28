@@ -73,6 +73,7 @@ internal sealed class MailBodyDrawing
 
     private readonly MailBodyWords words;
     private readonly Action<MailBodyLink, string> follow;
+    private readonly Action<string>? selected;
     private readonly List<PendingPicture> pictures = [];
 
     /// <summary>What the words being drawn actually sit on, where a cell painted something other than the surface.</summary>
@@ -87,14 +88,19 @@ internal sealed class MailBodyDrawing
     /// <summary>Initializes a drawing over the sentences it composes and what it hands a followed link to.</summary>
     /// <param name="words">The sentences the drawing itself needs.</param>
     /// <param name="follow">What a link and the words the message put on it are handed to when it is chosen.</param>
+    /// <param name="selected">What receives a passage selected in one of the drawing's text blocks.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="words" /> or <paramref name="follow" /> is <see langword="null" />.</exception>
-    internal MailBodyDrawing(MailBodyWords words, Action<MailBodyLink, string> follow)
+    internal MailBodyDrawing(
+        MailBodyWords words,
+        Action<MailBodyLink, string> follow,
+        Action<string>? selected = null)
     {
         ArgumentNullException.ThrowIfNull(words);
         ArgumentNullException.ThrowIfNull(follow);
 
         this.words = words;
         this.follow = follow;
+        this.selected = selected;
     }
 
     /// <summary>Draws the blocks, leaving each picture a place to arrive in.</summary>
@@ -398,7 +404,7 @@ internal sealed class MailBodyDrawing
         MailBodyQuoteBlock quote => this.Quote(quote, depth),
         MailBodyTableBlock table => this.Table(table, depth),
         MailBodyImageBlock picture => this.Picture(picture),
-        MailBodyPreformattedBlock preformatted => Preformatted(preformatted),
+        MailBodyPreformattedBlock preformatted => this.Preformatted(preformatted),
         MailBodySeparatorBlock => Separator(),
         _ => this.Unsupported(),
     };
@@ -428,6 +434,7 @@ internal sealed class MailBodyDrawing
     private TextBlock Text(IReadOnlyList<MailBodyRun> content)
     {
         var text = new TextBlock { TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true };
+        this.WatchSelection(text);
 
         foreach (var run in content)
         {
@@ -671,7 +678,7 @@ internal sealed class MailBodyDrawing
         return text;
     }
 
-    private static ScrollViewer Preformatted(MailBodyPreformattedBlock preformatted)
+    private ScrollViewer Preformatted(MailBodyPreformattedBlock preformatted)
     {
         var text = new TextBlock
         {
@@ -679,6 +686,7 @@ internal sealed class MailBodyDrawing
             TextWrapping = TextWrapping.NoWrap,
             IsTextSelectionEnabled = true,
         };
+        this.WatchSelection(text);
         Apply(text, PreformattedStyleKey);
 
         // Scrolled rather than wrapped: re-wrapping a code sample or a diff would change what the message says, which
@@ -692,6 +700,21 @@ internal sealed class MailBodyDrawing
             VerticalScrollMode = ScrollMode.Disabled,
         };
     }
+
+    private void WatchSelection(TextBlock text)
+    {
+        if (this.selected is null)
+        {
+            return;
+        }
+
+        text.PointerReleased += (_, _) => this.ReportSelection(text);
+        text.KeyUp += (_, _) => this.ReportSelection(text);
+    }
+
+#pragma warning disable Uno0001 // Implemented by the pinned Uno Skia renderer used by both published heads.
+    private void ReportSelection(TextBlock text) => this.selected!(text.SelectedText);
+#pragma warning restore Uno0001
 
     private static Border Separator()
     {

@@ -45,6 +45,27 @@ public sealed partial class MailBodyView : UserControl
             typeof(MailBodyView),
             new PropertyMetadata(null));
 
+    /// <summary>Identifies the <see cref="UseSelectionCommand"/> property.</summary>
+    public static readonly DependencyProperty UseSelectionCommandProperty = DependencyProperty.Register(
+        nameof(UseSelectionCommand),
+        typeof(ICommand),
+        typeof(MailBodyView),
+        new PropertyMetadata(null));
+
+    /// <summary>Identifies the <see cref="SelectedText"/> property.</summary>
+    public static readonly DependencyProperty SelectedTextProperty = DependencyProperty.Register(
+        nameof(SelectedText),
+        typeof(string),
+        typeof(MailBodyView),
+        new PropertyMetadata(string.Empty, OnSelectedTextChanged));
+
+    /// <summary>Identifies the <see cref="HasSelection"/> property.</summary>
+    public static readonly DependencyProperty HasSelectionProperty = DependencyProperty.Register(
+        nameof(HasSelection),
+        typeof(bool),
+        typeof(MailBodyView),
+        new PropertyMetadata(false));
+
     /// <summary>Identifies the <see cref="Nothing"/> property.</summary>
     public static readonly DependencyProperty NothingProperty = DependencyProperty.Register(
         nameof(Nothing),
@@ -90,6 +111,27 @@ public sealed partial class MailBodyView : UserControl
         set => this.SetValue(ShowRemoteContentCommandParameterProperty, value);
     }
 
+    /// <summary>Gets or sets what makes the selected passage the workspace scope.</summary>
+    public ICommand? UseSelectionCommand
+    {
+        get => (ICommand?)this.GetValue(UseSelectionCommandProperty);
+        set => this.SetValue(UseSelectionCommandProperty, value);
+    }
+
+    /// <summary>Gets or sets the passage selected in the body.</summary>
+    public string SelectedText
+    {
+        get => (string)this.GetValue(SelectedTextProperty);
+        set => this.SetValue(SelectedTextProperty, value);
+    }
+
+    /// <summary>Gets or sets whether a selected passage can be made the scope.</summary>
+    public bool HasSelection
+    {
+        get => (bool)this.GetValue(HasSelectionProperty);
+        set => this.SetValue(HasSelectionProperty, value);
+    }
+
     /// <summary>Gets or sets whether the pane has nothing open in it.</summary>
     /// <remarks>
     /// Stated as its own affirmative rather than read as the absence of a reading, so the state a binding carries
@@ -104,9 +146,13 @@ public sealed partial class MailBodyView : UserControl
     private static void OnReadingChanged(DependencyObject subject, DependencyPropertyChangedEventArgs change) =>
         ((MailBodyView)subject).Redraw();
 
+    private static void OnSelectedTextChanged(DependencyObject subject, DependencyPropertyChangedEventArgs change) =>
+        ((MailBodyView)subject).HasSelection = change.NewValue is string { Length: > 0 };
+
     private void Redraw()
     {
         this.Nothing = this.Reading is not { IsOpen: true };
+        this.SelectedText = string.Empty;
         this.Document.Child = null;
 
         if (this.Reading is { DrawsDocument: true } reading)
@@ -125,7 +171,8 @@ public sealed partial class MailBodyView : UserControl
     {
         var drawing = new MailBodyDrawing(
             reading.Words,
-            (link, displayed) => _ = this.AskAsync(link, displayed, reading.Words));
+            (link, displayed) => _ = this.AskAsync(link, displayed, reading.Words),
+            selected => this.SelectedText = selected);
 
         // The tree is attached before a picture is resolved, so the message is on the screen while its pictures are
         // being decided. A remote one the reader consented to is a request to somebody else's server, and waiting for
@@ -136,6 +183,16 @@ public sealed partial class MailBodyView : UserControl
         // so nothing can have arrived by this line, and the pictures are awaited one at a time — which is the stretch a
         // reader can leave the message in.
         await drawing.FillPicturesAsync(() => ReferenceEquals(this.Reading, reading));
+    }
+
+    private void OnPlainTextSelectionFinished(object sender, RoutedEventArgs args)
+    {
+        if (sender is TextBlock text)
+        {
+#pragma warning disable Uno0001 // Implemented by the pinned Uno Skia renderer used by both published heads.
+            this.SelectedText = text.SelectedText;
+#pragma warning restore Uno0001
+        }
     }
 
     /// <summary>Shows where a link actually goes, and opens it only if the reader says so.</summary>

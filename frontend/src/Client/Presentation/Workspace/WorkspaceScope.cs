@@ -8,7 +8,7 @@ namespace MailFathom.Client.Presentation.Workspace;
 
 /// <summary>
 /// What the next question would be asked against: an account, a folder within it or a role across all of them, and
-/// whatever is selected there.
+/// whatever is selected there, down to a passage somebody selected in one message.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -17,9 +17,9 @@ namespace MailFathom.Client.Presentation.Workspace;
 /// asking about, and a scope each space kept for itself would say they had.
 /// </para>
 /// <para>
-/// Nothing here identifies a person or carries mail content. An account, a folder, and a role are names the deployment
-/// already told this client, and a selection is a list of the identifiers it handed over with them — the classification
-/// the root instructions put on mail metadata follows all four, so none of them is put in a log or in telemetry.
+/// A body selection is mail content and every other member is sensitive mail metadata. They live only in this run's
+/// state, are never persisted, logged, or recorded in telemetry, and leave the process only when a later act explicitly
+/// asks something against this scope.
 /// </para>
 /// </remarks>
 public sealed record WorkspaceScope
@@ -46,14 +46,21 @@ public sealed record WorkspaceScope
     /// <summary>What is selected within the scope above, in the order it was selected.</summary>
     public IImmutableList<string> Selection { get; init; } = ImmutableArray<string>.Empty;
 
+    /// <summary>The passage selected inside the one message in scope, or empty where none is selected.</summary>
+    public string BodySelection { get; init; } = string.Empty;
+
     /// <summary>Whether this scope narrows to anything at all.</summary>
     /// <remarks>
-    /// Each of the four is asked about rather than only the account, because nothing here refuses a folder named
+    /// Each of the five is asked about rather than only the account, because nothing here refuses a folder named
     /// without one: the properties above say what a well-formed scope looks like, and a reader that assumed the type
     /// enforced it would answer <see langword="false" /> for a scope that plainly narrows.
     /// </remarks>
     public bool NarrowsAnything =>
-        this.Account is not null || this.Folder is not null || this.Role is not null || this.Selection.Count > 0;
+        this.Account is not null
+        || this.Folder is not null
+        || this.Role is not null
+        || this.Selection.Count > 0
+        || this.BodySelection.Length > 0;
 
     /// <summary>Whether this scope and another name the same place, whatever either has selected inside it.</summary>
     /// <param name="other">The scope to compare against.</param>
@@ -81,9 +88,10 @@ public sealed record WorkspaceScope
     /// </remarks>
     public bool Equals(WorkspaceScope? other) =>
         this.NamesSamePlaceAs(other)
-        && this.Selection.SequenceEqual(other!.Selection, StringComparer.Ordinal);
+        && this.Selection.SequenceEqual(other!.Selection, StringComparer.Ordinal)
+        && string.Equals(this.BodySelection, other.BodySelection, StringComparison.Ordinal);
 
     /// <inheritdoc />
     public override int GetHashCode() =>
-        HashCode.Combine(this.Account, this.Folder, this.Role, this.Selection.Count);
+        HashCode.Combine(this.Account, this.Folder, this.Role, this.Selection.Count, this.BodySelection);
 }

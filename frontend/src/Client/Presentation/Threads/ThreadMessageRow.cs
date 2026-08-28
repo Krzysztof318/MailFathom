@@ -22,6 +22,7 @@ namespace MailFathom.Client.Presentation.Threads;
 /// <param name="IsAnswered">Whether it last reported it with <c>\Answered</c>.</param>
 /// <param name="HasAttachments">Whether the message carries anything besides its body and its inline resources.</param>
 /// <param name="AttachmentCount">How many of those there are.</param>
+/// <param name="Message">Everything the pane draws around the whole message, or <see langword="null" /> where nobody has asked for it.</param>
 /// <param name="WholeMessage">The whole message as a reading pane draws it, or <see langword="null" /> where nobody has asked for it.</param>
 /// <param name="IsReadingWholeMessage">Whether the whole message is on its way.</param>
 /// <param name="WholeMessageFailed">Whether the last attempt to read the whole message did not arrive.</param>
@@ -57,6 +58,7 @@ public sealed partial record ThreadMessageRow(
     bool IsAnswered,
     bool HasAttachments,
     int AttachmentCount,
+    MailMessageReading? Message,
     MailBodyReading? WholeMessage,
     bool IsReadingWholeMessage,
     bool WholeMessageFailed)
@@ -78,6 +80,9 @@ public sealed partial record ThreadMessageRow(
     /// which is what a row of a list already does with a preview nothing has extracted.
     /// </remarks>
     public bool HasRecipients => this.Recipients.Length > 0;
+
+    /// <summary>Gets whether the message's headers and attachments are drawn.</summary>
+    public bool ShowsMessage => this.IsExpanded && this.Message is not null;
 
     /// <summary>Gets whether the whole message is drawn under what it added.</summary>
     public bool ShowsWholeMessage => this.IsExpanded && this.WholeMessage is not null;

@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Buffers;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -45,6 +46,14 @@ internal static class DeploymentExchange
     /// </remarks>
     internal const int MaxMailBodyBytes = 8 * 1024 * 1024;
 
+    /// <summary>The largest attachment this client will write, independently of what a deployment declares.</summary>
+    /// <remarks>
+    /// One attachment cannot exceed the largest raw message the service admits, whose public configuration contract
+    /// tops out at 100 MiB. Stating the same ceiling here means a compromised deployment cannot turn its own claimed
+    /// length into an unbounded write on the reader's device.
+    /// </remarks>
+    internal const long MaxMailAttachmentBytes = 100L * 1024 * 1024;
+
     /// <summary>Sends one request and reads the document it answers with.</summary>
     /// <typeparam name="TDocument">The contract the body is read against.</typeparam>
     /// <param name="transport">The client the request is sent on.</param>
@@ -76,16 +85,18 @@ internal static class DeploymentExchange
     /// <param name="transport">The client the request is sent on.</param>
     /// <param name="request">The request.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
+    /// <param name="completion">Whether the send completes after the headers or after the body has been buffered.</param>
     /// <returns>The answer, whatever its status.</returns>
     /// <exception cref="DeploymentFailure">Thrown when nothing answered.</exception>
     internal static async Task<HttpResponseMessage> SendAsync(
         HttpClient transport,
         HttpRequestMessage request,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        HttpCompletionOption completion = HttpCompletionOption.ResponseContentRead)
     {
         try
         {
-            return await transport.SendAsync(request, cancellationToken).ConfigureAwait(false);
+            return await transport.SendAsync(request, completion, cancellationToken).ConfigureAwait(false);
         }
         catch (TaskCanceledException failure) when (!cancellationToken.IsCancellationRequested)
         {
@@ -113,6 +124,96 @@ internal static class DeploymentExchange
                 DeploymentFailureReason.Unreachable,
                 "MailFathom could not be reached. Check that the address is right and that this device is online.",
                 failure);
+        }
+    }
+
+    /// <summary>Streams an answer into a destination, accepting exactly the number of octets its description promised.</summary>
+    internal static async Task CopyAsync(
+        HttpClient transport,
+        HttpRequestMessage request,
+        long expectedSizeOctets,
+        Stream destination,
+        CancellationToken cancellationToken)
+    {
+        using (request)
+        {
+            if (expectedSizeOctets > MaxMailAttachmentBytes)
+            {
+                throw new DeploymentFailure(
+                    DeploymentFailureReason.Unusable,
+                    "MailFathom described a file larger than this client will save, so it was not requested.");
+            }
+
+            try
+            {
+                using var response = await SendAsync(
+                    transport,
+                    request,
+                    cancellationToken,
+                    HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+
+                RefuseUnusableStatus(response);
+
+                if (response.Content.Headers.ContentLength != expectedSizeOctets)
+                {
+                    throw new DeploymentFailure(
+                        DeploymentFailureReason.Unusable,
+                        "MailFathom answered with a file whose size differs from its description, so it was not used.");
+                }
+
+                var source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+                await using var sourceLifetime = source.ConfigureAwait(false);
+                using var inactivity = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                var buffer = ArrayPool<byte>.Shared.Rent(81920);
+
+                try
+                {
+                    long written = 0;
+                    int read;
+
+                    while (true)
+                    {
+                        inactivity.CancelAfter(transport.Timeout);
+                        read = await source.ReadAsync(buffer.AsMemory(), inactivity.Token).ConfigureAwait(false);
+                        inactivity.CancelAfter(Timeout.InfiniteTimeSpan);
+
+                        if (read is 0)
+                        {
+                            break;
+                        }
+
+                        if (read > expectedSizeOctets - written)
+                        {
+                            throw new DeploymentFailure(
+                                DeploymentFailureReason.Unusable,
+                                "MailFathom sent more of a file than its description promised, so it was not used.");
+                        }
+
+                        inactivity.CancelAfter(transport.Timeout);
+                        await destination.WriteAsync(buffer.AsMemory(0, read), inactivity.Token).ConfigureAwait(false);
+                        inactivity.CancelAfter(Timeout.InfiniteTimeSpan);
+                        written += read;
+                    }
+
+                    if (written != expectedSizeOctets)
+                    {
+                        throw new DeploymentFailure(
+                            DeploymentFailureReason.Unusable,
+                            "MailFathom sent less of a file than its description promised, so it was not used.");
+                    }
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(buffer);
+                }
+            }
+            catch (OperationCanceledException failure) when (!cancellationToken.IsCancellationRequested)
+            {
+                throw new DeploymentFailure(
+                    DeploymentFailureReason.TimedOut,
+                    "MailFathom did not finish sending the file in time.",
+                    failure);
+            }
         }
     }
 
