@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.EmailContent.Rendering.Document;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 
@@ -37,4 +38,21 @@ public sealed record EmailContentRendering(
     EmailBodyRepresentation? SanitizedHtmlBody,
     bool BodyIsEncrypted,
     EmailAttachmentSummary AttachmentSummary,
-    IReadOnlyList<ExtractedEmailAttachment> Attachments);
+    IReadOnlyList<ExtractedEmailAttachment> Attachments)
+{
+    /// <summary>Gets the body reduced to the document tree a reading pane draws, or <see langword="null" /> when none was asked for.</summary>
+    /// <remarks>
+    /// <para>
+    /// It is reduced from the message's own HTML parts rather than from the markup <see cref="SanitizedHtmlBody" />
+    /// produced, which is the property that matters: neither representation is a reading of the other's string, so
+    /// there is no pass where one parser's output becomes another parser's input. The two are cut from the same
+    /// character allowance, so they reduce the same prefix of the same body.
+    /// </para>
+    /// <para>
+    /// They are two parses of that prefix rather than one, because the sanitized representation reparses while it
+    /// shrinks its source to fit the bound. Nothing reconciles the two: a reading pane is handed this document and no
+    /// markup at all, and a caller reading the markup is handed no tree, so no client draws one thing from both.
+    /// </para>
+    /// </remarks>
+    public MailDocument? Document { get; init; }
+}

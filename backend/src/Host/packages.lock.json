@@ -149,11 +149,6 @@
         "resolved": "2.17.1",
         "contentHash": "7np19IKEqPi+Isbo5Ka1wdMsQedv5jUECPHq223NgKEL7eGd+z98ncZRmpYfKotU/BD07kJSpnPaXp6X0TzRKw=="
       },
-      "AngleSharp": {
-        "type": "Transitive",
-        "resolved": "1.6.0",
-        "contentHash": "kVnhnZlM4Yww2KWqW3uSL8isvhYsrTTBMSPAgoF8ZhMrLSoay6783AP6dQxAj1J9gvWKi3OIM4ZezdE2Y4ufCQ=="
-      },
       "AngleSharp.Css": {
         "type": "Transitive",
         "resolved": "1.0.0",
@@ -678,6 +673,7 @@
         "dependencies": {
           "AWSSDK.Core": "[4.0.102, )",
           "AWSSDK.S3": "[4.0.102.3, )",
+          "AngleSharp": "[1.6.0, )",
           "Aspire.Npgsql.EntityFrameworkCore.PostgreSQL": "[13.4.6, )",
           "BouncyCastle.Cryptography": "[2.6.2, )",
           "DnsClient": "[1.8.0, )",
@@ -707,6 +703,12 @@
           "MailFathom.Domain": "[0.8.0, )",
           "ModelContextProtocol.AspNetCore": "[2.0.0, )"
         }
+      },
+      "AngleSharp": {
+        "type": "CentralTransitive",
+        "requested": "[1.6.0, )",
+        "resolved": "1.6.0",
+        "contentHash": "kVnhnZlM4Yww2KWqW3uSL8isvhYsrTTBMSPAgoF8ZhMrLSoay6783AP6dQxAj1J9gvWKi3OIM4ZezdE2Y4ufCQ=="
       },
       "Aspire.Npgsql.EntityFrameworkCore.PostgreSQL": {
         "type": "CentralTransitive",

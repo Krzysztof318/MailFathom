@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
+
 namespace MailFathom.Client.Backend;
 
 /// <summary>Where a deployment answers, relative to the address the composing host supplied.</summary>
@@ -45,6 +47,19 @@ internal static class DeploymentRoutes
     /// list is a filter over the same walk rather than a different resource.
     /// </remarks>
     internal const string MailTimelinePath = $"{Prefix}/emails";
+
+    /// <summary>Where a deployment serves one message's body, as the two renderings a reading pane draws it from.</summary>
+    /// <param name="storedEmailId">The message, as a list row or a conversation published it.</param>
+    /// <param name="remoteImages">Whether the reader has asked for this message's remote pictures.</param>
+    /// <returns>The path, relative to the address the composing host supplied.</returns>
+    /// <remarks>
+    /// The override is a query rather than anything either end keeps, which is the whole of how it is not remembered:
+    /// the request carries it, the answer is drawn, and opening the message again asks again. The parameter is written
+    /// only when it is true, so an ordinary read is the plain path.
+    /// </remarks>
+    internal static string MailBodyPath(Guid storedEmailId, bool remoteImages) => string.Create(
+        CultureInfo.InvariantCulture,
+        $"{Prefix}/messages/{storedEmailId:D}/body{(remoteImages ? "?remoteImages=true" : string.Empty)}");
 
     /// <summary>Where a deployment publishes what a client must obtain before it holds any credential.</summary>
     internal const string ProtectedResourceMetadataPath = $"/.well-known/oauth-protected-resource{Prefix}";

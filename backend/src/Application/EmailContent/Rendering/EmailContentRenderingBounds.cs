@@ -28,4 +28,45 @@ namespace MailFathom.Application.EmailContent.Rendering;
 public sealed record EmailContentRenderingBounds(
     bool IncludeSanitizedHtml,
     int MaxCharactersPerRepresentation,
-    int RemainingCharactersForRead);
+    int RemainingCharactersForRead)
+{
+    /// <summary>Gets whether to also reduce the body to the document tree a reading pane draws.</summary>
+    /// <remarks>
+    /// Opt-in like the markup, and for a sharper reason: the reduction is what a person reading a message needs and it
+    /// is not what a model reading one needs, so a tool call pays for neither the walk nor the inlined pictures it
+    /// resolves. It is an init property rather than a constructor parameter so the callers that ask for neither say
+    /// nothing about it.
+    /// </remarks>
+    public bool IncludeMailDocument { get; init; }
+
+    /// <summary>Gets whether the reduced document may carry the message's remote picture references.</summary>
+    /// <remarks>
+    /// <para>
+    /// False by every default, which is what defeats a tracking pixel by construction rather than by a renderer
+    /// honouring a setting: the addresses are dropped while the document is built, so there is nothing for a rendering
+    /// defect to fetch. True only where the reader asked for this message's remote content, having been told what that
+    /// reveals to whoever wrote it.
+    /// </para>
+    /// <para>
+    /// It widens exactly one thing — <c>http</c> and <c>https</c> on a picture's source, and nowhere else. A link's
+    /// target is unaffected because it was never fetched, and no other reference exists in the tree to widen.
+    /// </para>
+    /// </remarks>
+    public bool RetainRemoteImageReferences { get; init; }
+
+    /// <summary>Gets how many octets of its own pictures the whole read may still inline when this email is reached.</summary>
+    /// <remarks>
+    /// <para>
+    /// The octet counterpart of <see cref="RemainingCharactersForRead" />, and it exists for the same reason: a read
+    /// may name several emails, each of which would otherwise inline a whole document's worth of pictures. The words
+    /// are bounded across the call and the pictures were not, so the response size was the sender's decision rather
+    /// than the deployment's.
+    /// </para>
+    /// <para>
+    /// It narrows what one document may carry rather than replacing it — the per-document bound still applies, so the
+    /// first email of a call is answered exactly as a call naming it alone would be. <see cref="int.MaxValue" /> is the
+    /// default because it means the caller stated nothing, which leaves the document's own bound the only one.
+    /// </para>
+    /// </remarks>
+    public int RemainingInlineImageOctetsForRead { get; init; } = int.MaxValue;
+}

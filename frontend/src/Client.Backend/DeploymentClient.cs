@@ -4,6 +4,7 @@
 
 using MailFathom.Client.Backend.Accounts;
 using MailFathom.Client.Backend.Folders;
+using MailFathom.Client.Backend.Mail;
 using MailFathom.Client.Backend.Timeline;
 
 namespace MailFathom.Client.Backend;
@@ -116,6 +117,30 @@ public sealed class DeploymentClient
             DeploymentJsonContext.Default.DeploymentMailTimelinePage,
             cancellationToken);
     }
+
+    /// <summary>Asks the deployment for one message's body, in both the renderings a reading pane draws it from.</summary>
+    /// <param name="storedEmailId">The message to read, as a list row or a conversation published it.</param>
+    /// <param name="remoteImages">Whether the reader has asked for this message's remote pictures, having been told what that reveals.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The message's body.</returns>
+    /// <exception cref="DeploymentFailure">Thrown when the deployment refused, was unreachable, did not answer in time, or answered with something else.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when nothing has pointed this client at a deployment yet.</exception>
+    /// <remarks>
+    /// Asking for remote pictures is a second call rather than a setting, and neither end keeps the answer: the
+    /// deployment reads it off the query and this client writes it from what the reader has just done. Opening the
+    /// message again therefore asks again, which is the point — a remembered allowance is a standing consent that
+    /// outlives the reason it was given.
+    /// </remarks>
+    public Task<DeploymentMailBody> ReadMailBodyAsync(
+        Guid storedEmailId,
+        bool remoteImages = false,
+        CancellationToken cancellationToken = default) =>
+        DeploymentExchange.ReadAsync(
+            this.Transport(),
+            new HttpRequestMessage(HttpMethod.Get, DeploymentRoutes.MailBodyPath(storedEmailId, remoteImages)),
+            DeploymentJsonContext.Default.DeploymentMailBody,
+            cancellationToken,
+            DeploymentExchange.MaxMailBodyBytes);
 
     /// <summary>Takes a transport aimed at wherever the client is pointed right now.</summary>
     /// <remarks>

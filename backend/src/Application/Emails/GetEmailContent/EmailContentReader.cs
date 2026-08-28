@@ -7,6 +7,7 @@ using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Rendering;
+using MailFathom.Application.EmailContent.Rendering.Document;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
@@ -70,6 +71,15 @@ public sealed class EmailContentReader
     /// cheaper one is losing a display name past the fortieth participant of one message.
     /// </remarks>
     private const int MaximumScannedDisplayNames = 40;
+
+    /// <summary>How many of a reduced document's texts one read scans before the rest are withheld.</summary>
+    /// <remarks>
+    /// Set where a message stops and a generated layout begins: a reduction emits one text per run of body words, per
+    /// preformatted block, and per picture's description, and an ordinary message — newsletters included — reduces to
+    /// a few hundred. Past that the body is one a template composed a span at a time, and the cheaper side of the
+    /// bound is losing its tail rather than spending thousands of scanner round trips on one reading pane.
+    /// </remarks>
+    private const int MaximumScannedDocumentTexts = 500;
 
     private readonly IStoredEmailSummaryReader summaryReader;
     private readonly IEmailThreadReader threadReader;
@@ -174,6 +184,11 @@ public sealed class EmailContentReader
         var outcomes = new List<EmailContentReadOutcome>(selection.StoredEmailIds.Count);
         var remainingCharacters = this.readOptions.MaxCharactersPerRead;
 
+        // One document's worth of pictures for the whole call rather than for each email in it. The words already have
+        // a budget spent across the call, and the octets had none, so a read naming ten emails composed ten documents'
+        // worth of pictures — a size the senders chose rather than this deployment.
+        var remainingImageOctets = MailDocumentBounds.Default.MaximumInlineImageOctetsPerDocument;
+
         foreach (var storedEmailId in selection.StoredEmailIds)
         {
             var outcome = await this.ReadOneAsync(
@@ -181,9 +196,11 @@ public sealed class EmailContentReader
                 request,
                 threads,
                 remainingCharacters,
+                remainingImageOctets,
                 cancellationToken);
 
             remainingCharacters -= CharactersReturnedBy(outcome);
+            remainingImageOctets -= ImageOctetsReturnedBy(outcome);
             outcomes.Add(outcome);
         }
 
@@ -234,6 +251,7 @@ public sealed class EmailContentReader
         GetEmailContentRequest request,
         EmailThreadContexts threads,
         int remainingCharacters,
+        int remainingImageOctets,
         CancellationToken cancellationToken)
     {
         var summary = await this.summaryReader.FindAsync(storedEmailId, cancellationToken);
@@ -278,7 +296,12 @@ public sealed class EmailContentReader
             new EmailContentRenderingBounds(
                 request.IncludeSanitizedHtml,
                 this.readOptions.MaxBodyCharacters,
-                remainingCharacters),
+                remainingCharacters)
+            {
+                IncludeMailDocument = request.IncludeMailDocument,
+                RetainRemoteImageReferences = request.RetainRemoteImageReferences,
+                RemainingInlineImageOctetsForRead = Math.Max(remainingImageOctets, 0),
+            },
             cancellationToken);
 
         if (rendering.Rendering is not { } rendered)
@@ -450,7 +473,57 @@ public sealed class EmailContentReader
             await this.GuardedAsync(body.PlainText, cancellationToken),
             body.SanitizedHtml is { } sanitizedHtml
                 ? await this.GuardedAsync(sanitizedHtml, cancellationToken)
+                : null,
+            body.Document is { } document
+                ? await this.GuardedAsync(document, cancellationToken)
                 : null);
+    }
+
+    /// <summary>Scans every text the reduced document holds, and writes the document back with what came out.</summary>
+    /// <remarks>
+    /// <para>
+    /// The document is a representation of the same body as the other two, so a read that redacted the plain text and
+    /// published the tree unscanned would hand a reader through one representation exactly what it withheld through the
+    /// other. It is guarded here rather than while it is built, because building it is an adapter's work and deciding
+    /// what may leave the deployment is the use case's.
+    /// </para>
+    /// <para>
+    /// The texts are guarded as a flat list and put back positionally rather than joined into one pass, for the reason
+    /// every value here is scanned on its own: a finding straddling the join between two runs would redact across words
+    /// that have nothing to do with each other.
+    /// </para>
+    /// <para>
+    /// The count is bounded for the same reason the display names above are, and the bound bites harder here: a scan is
+    /// a round trip on the deployment running the personal-data analyzer in a container, a body of short styled spans
+    /// reduces to thousands of runs, and this projection is now asked for on every opening of a reading pane. Past
+    /// <see cref="MaximumScannedDocumentTexts" /> a text is withheld rather than published unscanned, and the document
+    /// says it was truncated — which is the statement the pane already draws.
+    /// </para>
+    /// </remarks>
+    private async Task<MailDocument> GuardedAsync(MailDocument document, CancellationToken cancellationToken)
+    {
+        var texts = MailDocumentTexts.Collect(document);
+        if (texts.Count == 0)
+        {
+            return document;
+        }
+
+        var scanned = texts.Count <= MaximumScannedDocumentTexts
+            ? texts
+            : [.. texts.Take(MaximumScannedDocumentTexts)];
+
+        var guarded = await this.egressGuard.GuardAllAsync(
+            SensitiveContentEgressPoint.McpEmailContent,
+            scanned,
+            cancellationToken);
+
+        var rewritten = MailDocumentTexts.Rewrite(
+            document,
+            texts.Count == scanned.Count
+                ? guarded
+                : [.. guarded, .. Enumerable.Repeat(string.Empty, texts.Count - scanned.Count)]);
+
+        return texts.Count == scanned.Count ? rewritten : rewritten with { Truncated = true };
     }
 
     /// <summary>Scans one representation and states the analyzed ceiling as the bound it is.</summary>
@@ -544,15 +617,31 @@ public sealed class EmailContentReader
         ];
     }
 
-    /// <summary>Counts what one outcome drew from the read's character budget.</summary>
+    /// <summary>Counts the octets of its own pictures one email inlined, which the call's octet budget is spent in.</summary>
     /// <remarks>
-    /// Both representations count, because both are message content a caller received. What is counted is the text as
-    /// returned rather than the length the message held, so a body the per-representation bound already cut spends only
-    /// what it actually published.
+    /// Counted apart from the characters because the bound governing it is stated in octets: a <c>data:</c> URI is a
+    /// third longer than the picture behind it, and a text budget written for words would have to be read as a size
+    /// before it could bound one.
+    /// </remarks>
+    private static int ImageOctetsReturnedBy(EmailContentReadOutcome outcome) =>
+        outcome.Content?.Body.Document is { } document
+            ? (int)Math.Min(MailDocumentImages.OctetsIn(document), int.MaxValue)
+            : 0;
+
+    /// <summary>Counts what one email spent of the call's budget, which is every representation it returned.</summary>
+    /// <remarks>
+    /// The document is counted as the words it holds rather than as the JSON it serializes to. What the budget governs
+    /// is how much mail one call draws out of a mailbox, and a picture the message carried is bounded by
+    /// <see cref="MailDocumentBounds" /> in octets rather than in characters, so counting its encoding here would
+    /// spend a text budget on something no text bound was written for.
     /// </remarks>
     private static int CharactersReturnedBy(EmailContentReadOutcome outcome) =>
         outcome.Content is { } content
-            ? content.Body.PlainText.Text.Length + (content.Body.SanitizedHtml?.Text.Length ?? 0)
+            ? content.Body.PlainText.Text.Length
+                + (content.Body.SanitizedHtml?.Text.Length ?? 0)
+                + (content.Body.Document is { } document
+                    ? MailDocumentTexts.Collect(document).Sum(text => text.Length)
+                    : 0)
             : 0;
 
     /// <summary>Records the defect durably and produces the outcome to report for it.</summary>
@@ -598,7 +687,10 @@ public sealed class EmailContentReader
             Headers = rendering.Headers,
             Body = rendering.BodyIsEncrypted
                 ? EmailContentBody.EncryptedNotReadableLocally
-                : EmailContentBody.Readable(rendering.PlainTextBody, rendering.SanitizedHtmlBody),
+                : EmailContentBody.Readable(
+                    rendering.PlainTextBody,
+                    rendering.SanitizedHtmlBody,
+                    rendering.Document),
             AttachmentSummary = SummaryOf(rendering.AttachmentSummary),
             Attachments = attachments,
             RemoteFlags = summary.RemoteFlags,

@@ -11,6 +11,12 @@
          compiles against is decided in Directory.Packages.props rather than inherited from a dependency range. -->
     <PackageReference Include="AWSSDK.S3" />
     <PackageReference Include="AWSSDK.Core" />
+    <!-- The HTML parser the reading pane's document projection walks. It arrived here transitively behind
+         HtmlSanitizer and is named directly now that this project holds a parsed document of its own: the reduction to
+         MailDocument is a walk over AngleSharp's DOM rather than a second pass over somebody's markup, which is what
+         keeps a second parser out of the client. Referenced by this project alone, so the type stays inside the
+         adapter that owns parsing and reaches no other boundary. -->
+    <PackageReference Include="AngleSharp" />
     <!-- The HTML sanitizer for message bodies. It is referenced by this project alone, so the AngleSharp stack it
          carries stays inside the adapter that owns sanitization and reaches no other boundary. -->
     <PackageReference Include="HtmlSanitizer" />

@@ -8,6 +8,7 @@ using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Domain.Emails;
+using MailFathom.Infrastructure.Mail.Mime.Rendering;
 using MimeKit;
 
 namespace MailFathom.Infrastructure.Mail.Mime;
@@ -131,19 +132,40 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
         // read locally" to a message that reads fine when named on its own.
         var bodyIsUnreadable = classification.BodyIsEncrypted && plainTextBody.OriginalCharacterCount == 0;
 
+        var sanitizedHtmlBody = bounds.IncludeSanitizedHtml && !bodyIsUnreadable
+            ? this.ReadSanitizedHtmlBody(
+                classification,
+                EmailBodyCharacterAllowance.Of(
+                    bounds.MaxCharactersPerRepresentation,
+                    bounds.RemainingCharactersForRead - plainTextBody.Text.Length))
+            : null;
+
         return new EmailContentRendering(
             MimeMessageHeaderReader.Read(message),
             bodyIsUnreadable ? EmailBodyRepresentation.Empty : plainTextBody,
-            bounds.IncludeSanitizedHtml && !bodyIsUnreadable
-                ? this.ReadSanitizedHtmlBody(
-                    classification,
-                    EmailBodyCharacterAllowance.Of(
-                        bounds.MaxCharactersPerRepresentation,
-                        bounds.RemainingCharactersForRead - plainTextBody.Text.Length))
-                : null,
+            sanitizedHtmlBody,
             bodyIsUnreadable,
             classification.Summary,
-            classification.Attachments);
+            classification.Attachments)
+        {
+            // The document is a representation of the same body and spends the same budget, so what the two before it
+            // returned is subtracted from what it may reduce. A read naming several emails would otherwise return a
+            // full document for each of them however much of the call's budget was already spent, which would make the
+            // size of the answer the senders' decision rather than the deployment's.
+            Document = bounds.IncludeMailDocument && !bodyIsUnreadable
+                ? await MailBodyProjection.ProduceAsync(
+                    message,
+                    [.. classification.BodyTextParts.Where(part => part.IsHtml).Select(part => part.Text)],
+                    bounds.RetainRemoteImageReferences,
+                    EmailBodyCharacterAllowance.Of(
+                        bounds.MaxCharactersPerRepresentation,
+                        bounds.RemainingCharactersForRead
+                            - plainTextBody.Text.Length
+                            - (sanitizedHtmlBody?.Text.Length ?? 0)).MaxCharacters,
+                    bounds.RemainingInlineImageOctetsForRead,
+                    cancellationToken)
+                : null,
+        };
     }
 
     /// <summary>Reads the body as words, preferring what the sender wrote to a reading of how it was displayed.</summary>

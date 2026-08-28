@@ -420,11 +420,13 @@ what keeps that from being a rule somebody has to enforce by reading.
   reporting the running version and the grant the caller's credential carries and nothing that identifies that
   credential; `GET /api/client/accounts`, reporting the signed-in owner's own mailboxes and how current the copy of
   each one is; `GET /api/client/folders`, reporting the folder hierarchy beneath each of those mailboxes with the
-  role the service gave each folder and how much mail it holds; and `GET /api/client/emails`, serving one page of the
-  message list by cursor, which is the route the mail screen then spends its time in. The surface publishes more than
-  the client has reached yet, so [the client endpoint](../../docs/operations/client-endpoint.md) rather than this file
-  is what says what is there. No route reaches a mail server, so no screen here can wait on IMAP or set the remote
-  `\Seen` flag.
+  role the service gave each folder and how much mail it holds; `GET /api/client/emails`, serving one page of the
+  message list by cursor, which is the route the mail screen then spends its time in; and
+  `GET /api/client/messages/{storedEmailId}/body`, reporting one message as the closed document tree a reading pane
+  draws and as the words it falls back to, carrying no remote reference unless that one read asked for them. The
+  surface publishes more than the client has reached yet, so
+  [the client endpoint](../../docs/operations/client-endpoint.md) rather than this file is what says what is there. No
+  route reaches a mail server, so no screen here can wait on IMAP or set the remote `\Seen` flag.
 - **Signing in is authorization code with PKCE**, which is the grant `mfctl` performs against the administrative
   surface and for the same reason: a desktop binary and a WebAssembly bundle are both readable by whoever runs them, so
   this is a public client and holds no secret. Where to sign in is discovered rather than configured — the deployment's

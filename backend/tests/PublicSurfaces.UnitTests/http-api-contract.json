@@ -76,6 +76,65 @@
         ],
         "type": "object"
       },
+      "ClientMailBodyResponse": {
+        "properties": {
+          "availability": {
+            "type": "string"
+          },
+          "document": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MailDocument"
+              }
+            ]
+          },
+          "plainText": {
+            "$ref": "#/components/schemas/ClientMailBodyTextResponse"
+          },
+          "remoteImagesRequested": {
+            "type": "boolean"
+          },
+          "storedEmailId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "storedEmailId",
+          "availability",
+          "plainText",
+          "document",
+          "remoteImagesRequested"
+        ],
+        "type": "object"
+      },
+      "ClientMailBodyTextResponse": {
+        "properties": {
+          "originalCharacterCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "text": {
+            "type": "string"
+          },
+          "truncation": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "originalCharacterCount",
+          "truncation"
+        ],
+        "type": "object"
+      },
       "ClientMailFolderAccountResponse": {
         "properties": {
           "account": {
@@ -1818,6 +1877,414 @@
         ],
         "type": "object"
       },
+      "MailBlockAlignment": {
+        "enum": [
+          "Inherited",
+          "Start",
+          "Center",
+          "End",
+          "Justify"
+        ]
+      },
+      "MailDocument": {
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/MailDocumentBlock"
+            },
+            "type": "array"
+          },
+          "inlineImageCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "refusal": {
+            "$ref": "#/components/schemas/MailDocumentRefusal"
+          },
+          "removedRemoteReferenceCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "retainedRemoteImageCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "schemaVersion": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "undrawnInlineImageCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "blocks",
+          "refusal",
+          "removedRemoteReferenceCount",
+          "retainedRemoteImageCount",
+          "inlineImageCount",
+          "undrawnInlineImageCount",
+          "truncated"
+        ],
+        "type": "object"
+      },
+      "MailDocumentBlock": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/MailDocumentBlockMailParagraphBlock"
+          },
+          {
+            "$ref": "#/components/schemas/MailDocumentBlockMailHeadingBlock"
+          },
+          {
+            "$ref": "#/components/schemas/MailDocumentBlockMailListBlock"
+          },
+          {
+            "$ref": "#/components/schemas/MailDocumentBlockMailTableBlock"
+          },
+          {
+            "$ref": "#/components/schemas/MailDocumentBlockMailQuoteBlock"
+          },
+          {
+            "$ref": "#/components/schemas/MailDocumentBlockMailImageBlock"
+          },
+          {
+            "$ref": "#/components/schemas/MailDocumentBlockMailSeparatorBlock"
+          },
+          {
+            "$ref": "#/components/schemas/MailDocumentBlockMailPreformattedBlock"
+          }
+        ],
+        "discriminator": {
+          "mapping": {
+            "heading": "#/components/schemas/MailDocumentBlockMailHeadingBlock",
+            "image": "#/components/schemas/MailDocumentBlockMailImageBlock",
+            "list": "#/components/schemas/MailDocumentBlockMailListBlock",
+            "paragraph": "#/components/schemas/MailDocumentBlockMailParagraphBlock",
+            "preformatted": "#/components/schemas/MailDocumentBlockMailPreformattedBlock",
+            "quote": "#/components/schemas/MailDocumentBlockMailQuoteBlock",
+            "separator": "#/components/schemas/MailDocumentBlockMailSeparatorBlock",
+            "table": "#/components/schemas/MailDocumentBlockMailTableBlock"
+          },
+          "propertyName": "type"
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "MailDocumentBlockMailHeadingBlock": {
+        "properties": {
+          "alignment": {
+            "$ref": "#/components/schemas/MailBlockAlignment"
+          },
+          "content": {
+            "items": {
+              "$ref": "#/components/schemas/MailInlineRun"
+            },
+            "type": "array"
+          },
+          "level": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "type": {
+            "enum": [
+              "heading"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "level",
+          "content",
+          "alignment"
+        ]
+      },
+      "MailDocumentBlockMailImageBlock": {
+        "properties": {
+          "alignment": {
+            "$ref": "#/components/schemas/MailBlockAlignment"
+          },
+          "image": {
+            "$ref": "#/components/schemas/MailInlineImage"
+          },
+          "link": {
+            "$ref": "#/components/schemas/MailDocumentLink"
+          },
+          "type": {
+            "enum": [
+              "image"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "image",
+          "link",
+          "alignment"
+        ]
+      },
+      "MailDocumentBlockMailListBlock": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MailListItem"
+            },
+            "type": "array"
+          },
+          "ordered": {
+            "type": "boolean"
+          },
+          "type": {
+            "enum": [
+              "list"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "ordered",
+          "items"
+        ]
+      },
+      "MailDocumentBlockMailParagraphBlock": {
+        "properties": {
+          "alignment": {
+            "$ref": "#/components/schemas/MailBlockAlignment"
+          },
+          "content": {
+            "items": {
+              "$ref": "#/components/schemas/MailInlineRun"
+            },
+            "type": "array"
+          },
+          "type": {
+            "enum": [
+              "paragraph"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "content",
+          "alignment"
+        ]
+      },
+      "MailDocumentBlockMailPreformattedBlock": {
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "preformatted"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "MailDocumentBlockMailQuoteBlock": {
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/MailDocumentBlock"
+            },
+            "type": "array"
+          },
+          "depth": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "type": {
+            "enum": [
+              "quote"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "depth",
+          "blocks"
+        ]
+      },
+      "MailDocumentBlockMailSeparatorBlock": {
+        "properties": {
+          "type": {
+            "enum": [
+              "separator"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        }
+      },
+      "MailDocumentBlockMailTableBlock": {
+        "properties": {
+          "columns": {
+            "items": {
+              "$ref": "#/components/schemas/MailTableColumn"
+            },
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/MailTableRow"
+            },
+            "type": "array"
+          },
+          "type": {
+            "enum": [
+              "table"
+            ],
+            "type": "string"
+          },
+          "version": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "columns",
+          "rows"
+        ]
+      },
+      "MailDocumentColour": {},
+      "MailDocumentLink": {
+        "properties": {
+          "asciiHost": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "deception": {
+            "$ref": "#/components/schemas/MailLinkDeception"
+          },
+          "host": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isWorthWarningAbout": {
+            "type": "boolean"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "host",
+          "asciiHost",
+          "deception"
+        ],
+        "type": "object"
+      },
+      "MailDocumentRefusal": {
+        "enum": [
+          "None",
+          "NoHtmlPart",
+          "ReductionFailed",
+          "NothingRenderable"
+        ]
+      },
       "MailFolderErasureRequest": {
         "properties": {
           "account": {
@@ -1965,6 +2432,102 @@
           "lastSeenUid",
           "progressAdvancedAt",
           "lastRun"
+        ],
+        "type": "object"
+      },
+      "MailInlineImage": {
+        "properties": {
+          "alternativeText": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "height": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "width": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "source",
+          "alternativeText",
+          "width",
+          "height"
+        ],
+        "type": "object"
+      },
+      "MailInlineRun": {
+        "properties": {
+          "emphasis": {
+            "$ref": "#/components/schemas/MailTextEmphasis"
+          },
+          "foreground": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MailDocumentColour"
+              }
+            ]
+          },
+          "link": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MailDocumentLink"
+              }
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "emphasis",
+          "foreground",
+          "link"
+        ],
+        "type": "object"
+      },
+      "MailLinkDeception": {
+        "enum": [
+          "NotApplicable",
+          "None",
+          "DisplayedHostDiffers"
+        ]
+      },
+      "MailListItem": {
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/MailDocumentBlock"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "blocks"
         ],
         "type": "object"
       },
@@ -2362,6 +2925,91 @@
           "accounts"
         ],
         "type": "object"
+      },
+      "MailTableCell": {
+        "properties": {
+          "alignment": {
+            "$ref": "#/components/schemas/MailBlockAlignment"
+          },
+          "background": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MailDocumentColour"
+              }
+            ]
+          },
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/MailDocumentBlock"
+            },
+            "type": "array"
+          },
+          "columnSpan": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "rowSpan": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "columnSpan",
+          "rowSpan",
+          "alignment",
+          "background",
+          "blocks"
+        ],
+        "type": "object"
+      },
+      "MailTableColumn": {
+        "properties": {
+          "widthShare": {
+            "format": "double",
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "widthShare"
+        ],
+        "type": "object"
+      },
+      "MailTableRow": {
+        "properties": {
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/MailTableCell"
+            },
+            "type": "array"
+          },
+          "isHeader": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "isHeader",
+          "cells"
+        ],
+        "type": "object"
+      },
+      "MailTextEmphasis": {
+        "type": "string"
       },
       "MailboxMaintenanceRequest": {
         "properties": {
@@ -5869,6 +6517,51 @@
               }
             },
             "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/messages/{storedEmailId}/body": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "storedEmailId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "remoteImages",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientMailBodyResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
           }
         },
         "security": [

@@ -10,6 +10,8 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.EmailContent;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Rendering;
+using MailFathom.Application.EmailContent.Rendering.Document;
+using MailFathom.Application.EmailContent.Rendering.Document.Blocks;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
@@ -510,6 +512,49 @@ public sealed class EmailContentReaderTests
         Assert.Equal(string.Empty, starved.Text);
         Assert.Equal(200, starved.OriginalCharacterCount);
         Assert.Equal(EmailBodyTruncation.ReadCharacterBudget, starved.Truncation);
+    }
+
+    /// <summary>The pictures one call may return are spent across its emails rather than handed to each of them in full.</summary>
+    /// <remarks>
+    /// A read naming ten emails would otherwise return ten documents' worth of inlined octets, which is the response
+    /// size this budget exists to bound. A reading pane refuses an answer past its own limit whole, so what that costs
+    /// the reader is every message in the read, words included, rather than one photograph.
+    /// </remarks>
+    [Fact]
+    public async Task ReadContentAsync_DocumentsInliningPictures_SpendTheOctetBudgetAcrossTheEmailsOfOneRead()
+    {
+        // Arrange
+        var summaries = SummariesOf(3);
+        var renderer = new BoundedBodyEmailContentRenderer("Body", inlineImageOctets: 300);
+        var reader = ReaderOver(summaries, renderer);
+
+        // Act
+        await reader.ReadContentAsync(
+            RequestFor(IdentitiesOf(summaries)) with { IncludeMailDocument = true },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var whole = MailDocumentBounds.Default.MaximumInlineImageOctetsPerDocument;
+        Assert.Equal([whole, whole - 300, whole - 600], renderer.ObservedRemainingImageOctets);
+    }
+
+    /// <summary>A read that asked for no document spends none of the octet budget, whatever a message carries.</summary>
+    [Fact]
+    public async Task ReadContentAsync_NoDocumentRequested_LeavesTheOctetBudgetWholeForEveryEmail()
+    {
+        // Arrange
+        var summaries = SummariesOf(2);
+        var renderer = new BoundedBodyEmailContentRenderer("Body", inlineImageOctets: 300);
+        var reader = ReaderOver(summaries, renderer);
+
+        // Act
+        await reader.ReadContentAsync(
+            RequestFor(IdentitiesOf(summaries)),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var whole = MailDocumentBounds.Default.MaximumInlineImageOctetsPerDocument;
+        Assert.Equal([whole, whole], renderer.ObservedRemainingImageOctets);
     }
 
     /// <summary>Markup is content too, so what it returned is taken off the budget the next email is measured against.</summary>
@@ -1092,6 +1137,121 @@ public sealed class EmailContentReaderTests
         var content = ContentOf(Assert.Single(result.Emails));
         Assert.Equal("the key is [redacted:CloudKey]", content.Body.PlainText.Text);
         Assert.Equal("<p>the key is [redacted:CloudKey]</p>", content.Body.SanitizedHtml?.Text);
+    }
+
+    /// <summary>
+    /// The document is a third rendering of the same body, so it passes the same guard: a credential the markup carried
+    /// would otherwise reach a reading pane by the one representation nobody had put under a scanner.
+    /// </summary>
+    [Fact]
+    public async Task ReadContentAsync_ACredentialInTheDocument_ReturnsTheWordsOfEveryBlockRedacted()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var summary = SyntheticEmailSummaries.Create();
+        var reader = ReaderOver(
+            summary,
+            RendererReturning(RenderingOf(plainText: "Body") with { Document = DocumentSaying($"the key is {Marker}") }),
+            egressGuard: egress.Guard);
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId]) with { IncludeMailDocument = true },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var document = ContentOf(Assert.Single(result.Emails)).Body.Document;
+        Assert.NotNull(document);
+        Assert.Equal(
+            ["the key is [redacted:CloudKey]", "the key is [redacted:CloudKey]"],
+            MailDocumentTexts.Collect(document));
+    }
+
+    /// <summary>What the reader consented to is what the rendering is asked for, since nothing downstream can re-derive it.</summary>
+    /// <remarks>
+    /// The one privacy decision this whole path exists to hold. Dropping or inverting the assignment onto the bounds
+    /// would render a message's remote references for a reader who never asked, and every other assertion in this file
+    /// would still pass — the renderer is substituted, so it answers whatever it was told to whatever it was handed.
+    /// </remarks>
+    [Fact]
+    public async Task ReadContentAsync_ADocumentWithTheReadersConsent_AsksTheRendererForBoth()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create();
+        var renderer = RendererReturning(RenderingOf(plainText: "Body") with { Document = DocumentSaying("Words") });
+        var reader = ReaderOver(summary, renderer);
+
+        // Act
+        await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId]) with
+            {
+                IncludeMailDocument = true,
+                RetainRemoteImageReferences = true,
+            },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        await renderer.Received(1).RenderAsync(
+            Arg.Any<StoredEmailContent>(),
+            Arg.Is<EmailContentRenderingBounds>(bounds =>
+                bounds != null && bounds.IncludeMailDocument && bounds.RetainRemoteImageReferences),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A read nobody consented for asks for neither, which is what makes the assertion above able to fail.</summary>
+    [Fact]
+    public async Task ReadContentAsync_ADocumentWithoutTheReadersConsent_AsksForNeitherRemoteReferences()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create();
+        var renderer = RendererReturning(RenderingOf(plainText: "Body") with { Document = DocumentSaying("Words") });
+        var reader = ReaderOver(summary, renderer);
+
+        // Act
+        await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId]) with { IncludeMailDocument = true },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        await renderer.Received(1).RenderAsync(
+            Arg.Any<StoredEmailContent>(),
+            Arg.Is<EmailContentRenderingBounds>(bounds =>
+                bounds != null && bounds.IncludeMailDocument && !bounds.RetainRemoteImageReferences),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A document of more texts than one read scans is cut at the bound rather than published unscanned.</summary>
+    /// <remarks>
+    /// The scan is per value, so the count of values is what a sender chooses: a body written as one span per word
+    /// reduces to thousands of texts out of a kilobyte of markup. Withholding what was not scanned is the answer,
+    /// because publishing it would put words past a scanner that the read promised had seen every character.
+    /// </remarks>
+    [Fact]
+    public async Task ReadContentAsync_ADocumentOfMoreTextsThanOneReadScans_WithholdsTheRestAndSaysItWasCut()
+    {
+        // Arrange
+        const int Texts = 600;
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var summary = SyntheticEmailSummaries.Create();
+        var reader = ReaderOver(
+            summary,
+            RendererReturning(RenderingOf(plainText: "Body") with { Document = DocumentOfParagraphs(Texts) }),
+            egressGuard: egress.Guard);
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId]) with { IncludeMailDocument = true },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var document = ContentOf(Assert.Single(result.Emails)).Body.Document;
+        Assert.NotNull(document);
+        Assert.True(document.Truncated);
+
+        var texts = MailDocumentTexts.Collect(document);
+        Assert.Equal(Texts, texts.Count);
+        Assert.Equal(500, texts.Count(text => text.Length > 0));
+        Assert.DoesNotContain(Marker, string.Concat(texts), StringComparison.Ordinal);
     }
 
     /// <summary>The message is the unit a caller waits for, so its guarding is reported once rather than once per field.</summary>
@@ -1796,6 +1956,45 @@ public sealed class EmailContentReaderTests
             carriesUnverifiedSignature: false,
             containsUnexpandedTnefPart: false),
         attachments ?? []);
+
+    /// <summary>A document written as one paragraph per text, which is how a sender chooses how many values a read scans.</summary>
+    private static MailDocument DocumentOfParagraphs(int count) => MailDocument.Reduced(
+        [
+            .. Enumerable.Range(0, count).Select(index => new MailParagraphBlock(
+                [
+                    new MailInlineRun(
+                        $"line {index} holds {Marker}",
+                        MailTextEmphasis.None,
+                        Foreground: null,
+                        Link: null),
+                ],
+                MailBlockAlignment.Inherited)),
+        ],
+        removedRemoteReferenceCount: 0,
+        retainedRemoteImageCount: 0,
+        inlineImageCount: 0,
+        undrawnInlineImageCount: 0,
+        truncated: false);
+
+    /// <summary>A document saying the same thing twice, so a rewrite that lost a place would report the wrong words.</summary>
+    private static MailDocument DocumentSaying(string text) => MailDocument.Reduced(
+        [
+            new MailParagraphBlock(
+                [new MailInlineRun(text, MailTextEmphasis.None, Foreground: null, Link: null)],
+                MailBlockAlignment.Inherited),
+            new MailQuoteBlock(
+                1,
+                [
+                    new MailParagraphBlock(
+                        [new MailInlineRun(text, MailTextEmphasis.None, Foreground: null, Link: null)],
+                        MailBlockAlignment.Inherited),
+                ]),
+        ],
+        removedRemoteReferenceCount: 0,
+        retainedRemoteImageCount: 0,
+        inlineImageCount: 0,
+        undrawnInlineImageCount: 0,
+        truncated: false);
 
     /// <summary>The extraction the derived path performs over one body, which is the reading the index is built from.</summary>
     private static IEmailMimeReader MimeReaderYielding(string body)
