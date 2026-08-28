@@ -86,7 +86,7 @@ public sealed class ComposedSettingsPasswordConfidentialityTests
     /// places has to report the proxy's own refusal instead of failing while reading it.
     /// </summary>
     [Fact]
-    public void FindSurfaceRefusals_APasswordBesideAProxySectionThatIsItselfWrong_ReportsTheProxysOwnRefusal()
+    public void FindSurfaceRefusals_APasswordBesideAProxySectionThatIsItselfWrong_ReportsThatSectionsOwnRefusal()
     {
         // Arrange
         var configuration = Settings(

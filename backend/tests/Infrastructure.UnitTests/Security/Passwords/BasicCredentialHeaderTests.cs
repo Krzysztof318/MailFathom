@@ -33,7 +33,7 @@ public sealed class BasicCredentialHeaderTests
     [InlineData("Basic")]
     [InlineData("basic")]
     [InlineData("BASIC")]
-    [InlineData("BaSiC")]
+    [InlineData("bAsIc")]
     public void TryRead_TheSchemeInAnyCase_ReadsTheCredential(string scheme)
     {
         // Arrange
