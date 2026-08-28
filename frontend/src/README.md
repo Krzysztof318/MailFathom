@@ -131,6 +131,15 @@ selecting mode that is visible and can be left. Loading, a read that failed, a f
 and a folder whose mail this list is keeping out are four rendered states rather than one blank list — the last two are
 told apart in words, and how current the copy is stays the tree's to say.
 
+**Search is the other list in Mail, and it is the run's own as well.** It starts at the account and folder the mailbox
+tree put in force, then keeps every constraint in front of the reader: account, folder, sender, recipient, both ends of
+the received range, attachment presence, read state, and flag state. Each can be changed or removed on its own, so an
+empty result can be widened without reconstructing the query. The deployment ranks words and meaning together where
+it can; every row says which ranking found it, and a deployment with no active embedding profile or an unavailable
+embedding provider says that the page was lexical instead of silently returning a narrower answer. Results walk
+forward by keyset cursor and stay in place when one opens its conversation. Recent searches are kept only in this
+run's state — query text reaches neither `ApplicationData.LocalSettings`, a log, nor telemetry.
+
 **The conversation that selection is in is the other half of the space.** `Client/Presentation/Threads/` holds it, and
 `IMailThread` is registered once for the run beside the list — not because a screen keeps it, but because a conversation
 is reached by naming one message inside it, which a search result and a citation do as readily as a row of the list

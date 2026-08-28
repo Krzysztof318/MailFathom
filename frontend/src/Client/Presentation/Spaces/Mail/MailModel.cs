@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using MailFathom.Client.Backend.Timeline;
 using MailFathom.Client.Presentation.Messages;
 using MailFathom.Client.Presentation.Spaces.Mail.Reading;
+using MailFathom.Client.Presentation.Search;
 using MailFathom.Client.Presentation.Threads;
 using MailFathom.Client.Presentation.Workspace;
 using MailFathom.Client.Session;
@@ -40,23 +41,32 @@ public partial record MailModel
     private readonly IMessageList messages;
     private readonly IMailThread thread;
     private readonly IWorkspace workspace;
+    private readonly IMailSearch search;
 
     /// <summary>Initializes the space over what decides whether it may be offered, and the list and conversation it is read through.</summary>
     /// <param name="session">What the deployment allows this caller.</param>
     /// <param name="messages">The run's own message list, drawn from wherever the mailbox tree says somebody is.</param>
     /// <param name="thread">The run's own conversation, which is whatever the list has one message selected in.</param>
     /// <param name="workspace">The scope a selected passage narrows for the intent field.</param>
+    /// <param name="search">The run's own ranked list, which opens the same conversation without replacing itself.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    public MailModel(IClientSession session, IMessageList messages, IMailThread thread, IWorkspace workspace)
+    public MailModel(
+        IClientSession session,
+        IMessageList messages,
+        IMailThread thread,
+        IWorkspace workspace,
+        IMailSearch search)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(messages);
         ArgumentNullException.ThrowIfNull(thread);
         ArgumentNullException.ThrowIfNull(workspace);
+        ArgumentNullException.ThrowIfNull(search);
 
         this.messages = messages;
         this.thread = thread;
         this.workspace = workspace;
+        this.search = search;
 
         this.WithholdsMail = session.Standing.Select(standing => standing.Withholds(ClientCapability.Mail));
 
@@ -70,6 +80,7 @@ public partial record MailModel
             messages.Arrangement.Select(static arrangement => arrangement.KeepsLessThanEverything);
         this.KeepsEverything =
             messages.Arrangement.Select(static arrangement => !arrangement.KeepsLessThanEverything);
+        this.ShowsTimeline = search.IsOpen.Select(static isOpen => !isOpen);
     }
 
     /// <summary>Whether this session keeps the space correspondence is read in from being put in front of this caller.</summary>
@@ -95,6 +106,54 @@ public partial record MailModel
 
     /// <summary>Whether the last attempt to take another page did not arrive.</summary>
     public IFeed<bool> PagingFailed => this.messages.PagingFailed;
+
+    /// <summary>Whether the ranked list is shown instead of the timeline.</summary>
+    public IState<bool> IsSearchOpen => this.search.IsOpen;
+
+    /// <summary>Whether the ordinary timeline is shown instead of search.</summary>
+    public IFeed<bool> ShowsTimeline { get; }
+
+    /// <summary>The query text being edited.</summary>
+    public IState<string> SearchQuery => this.search.Query;
+
+    /// <summary>The account constraint being edited.</summary>
+    public IState<string> SearchAccount => this.search.Account;
+
+    /// <summary>The folder constraint being edited.</summary>
+    public IState<string> SearchFolder => this.search.Folder;
+
+    /// <summary>The sender constraint being edited.</summary>
+    public IState<string> SearchSender => this.search.Sender;
+
+    /// <summary>The recipient constraint being edited.</summary>
+    public IState<string> SearchRecipient => this.search.Recipient;
+
+    /// <summary>The inclusive received-date constraint being edited.</summary>
+    public IState<DateTimeOffset> SearchReceivedOnOrAfter => this.search.ReceivedOnOrAfter;
+
+    /// <summary>The exclusive received-date constraint being edited.</summary>
+    public IState<DateTimeOffset> SearchReceivedBefore => this.search.ReceivedBefore;
+
+    /// <summary>The read-state constraint being edited.</summary>
+    public IState<bool> SearchUnread => this.search.Unread;
+
+    /// <summary>The flag-state constraint being edited.</summary>
+    public IState<bool> SearchFlagged => this.search.Flagged;
+
+    /// <summary>The attachment constraint being edited.</summary>
+    public IState<bool> SearchHasAttachments => this.search.HasAttachments;
+
+    /// <summary>The ranked rows loaded for the current search.</summary>
+    public IListFeed<MessageRow> SearchResults => this.search.Results;
+
+    /// <summary>The searches kept for this run.</summary>
+    public IListFeed<RecentMailSearch> RecentSearches => this.search.Recent;
+
+    /// <summary>What the current result list says about its scope and semantic capability.</summary>
+    public IFeed<MailSearchReading> SearchReading => this.search.Reading;
+
+    /// <summary>Whether the last attempt to read another result page failed.</summary>
+    public IFeed<bool> SearchPagingFailed => this.search.PagingFailed;
 
     /// <summary>Whether the list is read oldest first.</summary>
     public IFeed<bool> ReadsOldestFirst { get; }
@@ -189,6 +248,62 @@ public partial record MailModel
     /// <returns>A task completing once the ask has been made.</returns>
     public ValueTask RetryThread(CancellationToken cancellationToken) =>
         this.thread.AskAgainAsync(cancellationToken);
+
+    /// <summary>Shows search, taking the current mailbox scope when this run has not searched yet.</summary>
+    public ValueTask OpenSearch(CancellationToken cancellationToken) =>
+        this.search.OpenAsync(cancellationToken);
+
+    /// <summary>Returns to the timeline without discarding the ranked list.</summary>
+    public ValueTask CloseSearch(CancellationToken cancellationToken) =>
+        this.search.CloseAsync(cancellationToken);
+
+    /// <summary>Replaces the account and folder constraints with the mailbox tree's current place.</summary>
+    public ValueTask UseCurrentSearchScope(CancellationToken cancellationToken) =>
+        this.search.UseCurrentScopeAsync(cancellationToken);
+
+    /// <summary>Runs the query and visible constraints from their leading page.</summary>
+    public ValueTask SearchMail(CancellationToken cancellationToken) =>
+        this.search.SearchAsync(cancellationToken);
+
+    /// <summary>Takes the next result page onto the ranked list.</summary>
+    public ValueTask ShowMoreSearchResults(CancellationToken cancellationToken) =>
+        this.search.ShowMoreAsync(cancellationToken);
+
+    /// <summary>Removes the place constraints and immediately searches all mail.</summary>
+    public ValueTask WidenSearch(CancellationToken cancellationToken) =>
+        this.search.WidenAsync(cancellationToken);
+
+    /// <summary>Opens one result's conversation at that message without replacing the ranked list.</summary>
+    public ValueTask OpenSearchResult(MessageRow result, CancellationToken cancellationToken) =>
+        this.search.OpenResultAsync(result, cancellationToken);
+
+    /// <summary>Runs one recent search again.</summary>
+    public ValueTask RepeatSearch(RecentMailSearch recent, CancellationToken cancellationToken) =>
+        this.search.RepeatAsync(recent, cancellationToken);
+
+    /// <summary>Removes the account constraint alone.</summary>
+    public ValueTask ClearSearchAccount(CancellationToken cancellationToken) =>
+        this.search.ClearFilterAsync(MailSearchFilter.Account, cancellationToken);
+
+    /// <summary>Removes the folder constraint alone.</summary>
+    public ValueTask ClearSearchFolder(CancellationToken cancellationToken) =>
+        this.search.ClearFilterAsync(MailSearchFilter.Folder, cancellationToken);
+
+    /// <summary>Removes the sender constraint alone.</summary>
+    public ValueTask ClearSearchSender(CancellationToken cancellationToken) =>
+        this.search.ClearFilterAsync(MailSearchFilter.Sender, cancellationToken);
+
+    /// <summary>Removes the recipient constraint alone.</summary>
+    public ValueTask ClearSearchRecipient(CancellationToken cancellationToken) =>
+        this.search.ClearFilterAsync(MailSearchFilter.Recipient, cancellationToken);
+
+    /// <summary>Removes the beginning of the date range alone.</summary>
+    public ValueTask ClearSearchReceivedOnOrAfter(CancellationToken cancellationToken) =>
+        this.search.ClearFilterAsync(MailSearchFilter.ReceivedOnOrAfter, cancellationToken);
+
+    /// <summary>Removes the end of the date range alone.</summary>
+    public ValueTask ClearSearchReceivedBefore(CancellationToken cancellationToken) =>
+        this.search.ClearFilterAsync(MailSearchFilter.ReceivedBefore, cancellationToken);
 
     /// <summary>Takes the next page onto the end of the list.</summary>
     /// <param name="cancellationToken">Abandons the page.</param>

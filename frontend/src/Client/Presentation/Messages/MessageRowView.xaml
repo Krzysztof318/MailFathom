@@ -1,0 +1,101 @@
+<!--
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+-->
+<UserControl x:Class="MailFathom.Client.Presentation.Messages.MessageRowView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Name="Root">
+  <Grid Padding="4,8"
+        ColumnSpacing="8"
+        AutomationProperties.Name="{x:Bind Row.Announcement}">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="Auto" />
+      <ColumnDefinition />
+      <ColumnDefinition Width="Auto" />
+    </Grid.ColumnDefinitions>
+
+    <Border Width="8"
+            Height="8"
+            CornerRadius="4"
+            VerticalAlignment="Top"
+            Margin="0,6,0,0"
+            AutomationProperties.AccessibilityView="Raw"
+            Background="{ThemeResource PrimaryBrush}"
+            Visibility="{x:Bind Row.IsUnread, Converter={StaticResource AffirmedVisibility}}" />
+
+    <StackPanel Grid.Column="1"
+                Spacing="2">
+      <TextBlock Text="{x:Bind Row.Correspondent}"
+                 Style="{StaticResource BodyStrongTextBlockStyle}"
+                 Foreground="{ThemeResource OnSurfaceBrush}"
+                 AutomationProperties.AccessibilityView="Raw"
+                 TextTrimming="CharacterEllipsis" />
+
+      <TextBlock Text="{x:Bind Row.Subject}"
+                 Style="{StaticResource BodyTextBlockStyle}"
+                 Foreground="{ThemeResource OnSurfaceBrush}"
+                 AutomationProperties.AccessibilityView="Raw"
+                 TextTrimming="CharacterEllipsis" />
+
+      <TextBlock Text="{x:Bind Row.Preview}"
+                 Style="{StaticResource CaptionTextBlockStyle}"
+                 Foreground="{ThemeResource OnSurfaceVariantBrush}"
+                 AutomationProperties.AccessibilityView="Raw"
+                 TextTrimming="CharacterEllipsis"
+                 Visibility="{x:Bind Row.HasPreview, Converter={StaticResource AffirmedVisibility}}" />
+
+      <TextBlock Text="{x:Bind Row.MatchReason}"
+                 Style="{StaticResource CaptionTextBlockStyle}"
+                 Foreground="{ThemeResource TertiaryBrush}"
+                 AutomationProperties.AccessibilityView="Raw"
+                 Visibility="{x:Bind Row.HasMatchReason, Converter={StaticResource AffirmedVisibility}}" />
+
+      <TextBlock Text="{x:Bind Row.MatchExtract}"
+                 Style="{StaticResource CaptionTextBlockStyle}"
+                 Foreground="{ThemeResource OnSurfaceVariantBrush}"
+                 TextWrapping="Wrap"
+                 AutomationProperties.AccessibilityView="Raw"
+                 Visibility="{x:Bind Row.HasMatchExtract, Converter={StaticResource AffirmedVisibility}}" />
+    </StackPanel>
+
+    <StackPanel Grid.Column="2"
+                Spacing="2"
+                HorizontalAlignment="Right">
+      <TextBlock Text="{x:Bind Row.Received}"
+                 HorizontalAlignment="Right"
+                 Style="{StaticResource CaptionTextBlockStyle}"
+                 Foreground="{ThemeResource OnSurfaceVariantBrush}"
+                 AutomationProperties.AccessibilityView="Raw" />
+
+      <StackPanel Orientation="Horizontal"
+                  HorizontalAlignment="Right"
+                  Spacing="4">
+        <FontIcon Glyph="&#xE172;"
+                  FontSize="12"
+                  AutomationProperties.AccessibilityView="Raw"
+                  Foreground="{ThemeResource OnSurfaceVariantBrush}"
+                  Visibility="{x:Bind Row.IsAnswered, Converter={StaticResource AffirmedVisibility}}" />
+
+        <FontIcon Glyph="&#xE7C1;"
+                  FontSize="12"
+                  AutomationProperties.AccessibilityView="Raw"
+                  Foreground="{ThemeResource TertiaryBrush}"
+                  Visibility="{x:Bind Row.IsFlagged, Converter={StaticResource AffirmedVisibility}}" />
+
+        <FontIcon Glyph="&#xE723;"
+                  FontSize="12"
+                  AutomationProperties.AccessibilityView="Raw"
+                  Foreground="{ThemeResource OnSurfaceVariantBrush}"
+                  Visibility="{x:Bind Row.HasAttachments, Converter={StaticResource AffirmedVisibility}}" />
+
+        <TextBlock Text="{x:Bind Row.AttachmentCountText}"
+                   Style="{StaticResource CaptionTextBlockStyle}"
+                   AutomationProperties.AccessibilityView="Raw"
+                   Foreground="{ThemeResource OnSurfaceVariantBrush}"
+                   Visibility="{x:Bind Row.ShowsAttachmentCount, Converter={StaticResource AffirmedVisibility}}" />
+      </StackPanel>
+    </StackPanel>
+  </Grid>
+</UserControl>

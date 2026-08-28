@@ -48,6 +48,9 @@ internal static class DeploymentRoutes
     /// </remarks>
     internal const string MailTimelinePath = $"{Prefix}/emails";
 
+    /// <summary>Where a deployment serves one forward page of mail ranked by words and meaning.</summary>
+    internal const string MailSearchPath = $"{Prefix}/emails/search";
+
     /// <summary>Where a deployment serves one page of one conversation, across every folder and account it spans.</summary>
     /// <param name="threadId">The conversation, as a message row published it.</param>
     /// <param name="pageSize">How many messages the page may hold, or <see langword="null" /> for the deployment's own default.</param>

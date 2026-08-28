@@ -25,10 +25,20 @@ public sealed class MailModelTests
     {
         // Arrange
         using var withheld = SessionOffering("mailfathom.mail.ask");
-        await using var withheldModel = new MailModel(withheld, new StubMessageList(), new StubMailThread(), new StubWorkspace());
+        await using var withheldModel = new MailModel(
+            withheld,
+            new StubMessageList(),
+            new StubMailThread(),
+            new StubWorkspace(),
+            new StubMailSearch());
 
         using var offered = SessionOffering("mailfathom.mail.read");
-        await using var offeredModel = new MailModel(offered, new StubMessageList(), new StubMailThread(), new StubWorkspace());
+        await using var offeredModel = new MailModel(
+            offered,
+            new StubMessageList(),
+            new StubMailThread(),
+            new StubWorkspace(),
+            new StubMailSearch());
 
         // Act, Assert
         Assert.True(await withheldModel.WithholdsMail);
@@ -45,7 +55,12 @@ public sealed class MailModelTests
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
         var list = new StubMessageList(Row(1), Row(2));
-        await using var model = new MailModel(session, list, new StubMailThread(), new StubWorkspace());
+        await using var model = new MailModel(
+            session,
+            list,
+            new StubMailThread(),
+            new StubWorkspace(),
+            new StubMailSearch());
 
         // Act
         var rows = await model.Messages;
@@ -66,7 +81,12 @@ public sealed class MailModelTests
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
         var thread = new StubMailThread();
-        await using var model = new MailModel(session, new StubMessageList(), thread, new StubWorkspace());
+        await using var model = new MailModel(
+            session,
+            new StubMessageList(),
+            thread,
+            new StubWorkspace(),
+            new StubMailSearch());
 
         // Act, Assert
         Assert.Same(thread.Reading, model.Thread);
@@ -86,7 +106,12 @@ public sealed class MailModelTests
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
         var thread = new StubMailThread();
-        await using var model = new MailModel(session, new StubMessageList(), thread, new StubWorkspace());
+        await using var model = new MailModel(
+            session,
+            new StubMessageList(),
+            thread,
+            new StubWorkspace(),
+            new StubMailSearch());
 
         var attachment = new MailAttachmentRequest(MailMessages.Identity(4), Position: 2);
 
@@ -116,7 +141,12 @@ public sealed class MailModelTests
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
         var list = new StubMessageList(Row(1)) { More = true, Earlier = false };
-        await using var model = new MailModel(session, list, new StubMailThread(), new StubWorkspace());
+        await using var model = new MailModel(
+            session,
+            list,
+            new StubMailThread(),
+            new StubWorkspace(),
+            new StubMailSearch());
 
         // Act, Assert
         Assert.True(await model.HasMoreAfter);
@@ -130,7 +160,12 @@ public sealed class MailModelTests
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
         var list = new StubMessageList();
-        await using var model = new MailModel(session, list, new StubMailThread(), new StubWorkspace());
+        await using var model = new MailModel(
+            session,
+            list,
+            new StubMailThread(),
+            new StubWorkspace(),
+            new StubMailSearch());
 
         await list.ArrangeAsync(
             new MessageListArrangement
@@ -162,7 +197,12 @@ public sealed class MailModelTests
     {
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
-        await using var model = new MailModel(session, new StubMessageList(), new StubMailThread(), new StubWorkspace());
+        await using var model = new MailModel(
+            session,
+            new StubMessageList(),
+            new StubMailThread(),
+            new StubWorkspace(),
+            new StubMailSearch());
 
         // Act, Assert
         Assert.True(await model.KeepsEverything);
@@ -176,7 +216,12 @@ public sealed class MailModelTests
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
         var list = new StubMessageList();
-        await using var model = new MailModel(session, list, new StubMailThread(), new StubWorkspace());
+        await using var model = new MailModel(
+            session,
+            list,
+            new StubMailThread(),
+            new StubWorkspace(),
+            new StubMailSearch());
 
         // Act
         await model.ShowMore(TestContext.Current.CancellationToken);
@@ -196,7 +241,12 @@ public sealed class MailModelTests
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
         var list = new StubMessageList();
-        await using var model = new MailModel(session, list, new StubMailThread(), new StubWorkspace());
+        await using var model = new MailModel(
+            session,
+            list,
+            new StubMailThread(),
+            new StubWorkspace(),
+            new StubMailSearch());
 
         // Act
         await model.ReverseOrder(TestContext.Current.CancellationToken);
@@ -218,7 +268,12 @@ public sealed class MailModelTests
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
         var list = new StubMessageList();
-        await using var model = new MailModel(session, list, new StubMailThread(), new StubWorkspace());
+        await using var model = new MailModel(
+            session,
+            list,
+            new StubMailThread(),
+            new StubWorkspace(),
+            new StubMailSearch());
 
         // Act
         await model.ToggleUnreadOnly(TestContext.Current.CancellationToken);
@@ -245,7 +300,12 @@ public sealed class MailModelTests
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
         var list = new StubMessageList();
-        await using var model = new MailModel(session, list, new StubMailThread(), new StubWorkspace());
+        await using var model = new MailModel(
+            session,
+            list,
+            new StubMailThread(),
+            new StubWorkspace(),
+            new StubMailSearch());
 
         // Act
         await model.ToggleUnreadOnly(TestContext.Current.CancellationToken);
@@ -262,7 +322,12 @@ public sealed class MailModelTests
         using var session = SessionOffering("mailfathom.mail.read");
         var workspace = new StubWorkspace(
             WorkspaceScope.Everything with { Selection = [MailMessages.Key(1)] });
-        await using var model = new MailModel(session, new StubMessageList(), new StubMailThread(), workspace);
+        await using var model = new MailModel(
+            session,
+            new StubMessageList(),
+            new StubMailThread(),
+            workspace,
+            new StubMailSearch());
 
         // Act
         await model.UseBodySelection("the selected passage", TestContext.Current.CancellationToken);
@@ -271,6 +336,34 @@ public sealed class MailModelTests
         var scope = await workspace.Scope;
         Assert.Equal([MailMessages.Key(1)], scope!.Selection);
         Assert.Equal("the selected passage", scope.BodySelection);
+    }
+
+    /// <summary>The search is the run's own list, and every search gesture reaches that same object.</summary>
+    [Fact]
+    public async Task Search_TheRunsOwnRankedList_IsReadAndActedThroughRatherThanCopied()
+    {
+        // Arrange
+        using var session = SessionOffering("mailfathom.mail.read");
+        var search = new StubMailSearch(Row(1));
+        await using var model = new MailModel(
+            session,
+            new StubMessageList(),
+            new StubMailThread(),
+            new StubWorkspace(),
+            search);
+
+        // Act
+        await model.OpenSearch(TestContext.Current.CancellationToken);
+        await model.SearchMail(TestContext.Current.CancellationToken);
+        await model.ShowMoreSearchResults(TestContext.Current.CancellationToken);
+        await model.OpenSearchResult(Row(1), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([MailMessages.Key(1)], (await model.SearchResults)!.Select(row => row.Key));
+        Assert.Equal(1, search.Opens);
+        Assert.Equal(1, search.Searches);
+        Assert.Equal(1, search.Pages);
+        Assert.Equal([MailMessages.Key(1)], search.Opened.Select(row => row.Key));
     }
 
     /// <summary>A space that could be built without either of these would be one that can say neither what it shows nor whether it may.</summary>
@@ -282,11 +375,21 @@ public sealed class MailModelTests
 
         // Act, Assert
         Assert.Throws<ArgumentNullException>(
-            () => new MailModel(null!, new StubMessageList(), new StubMailThread(), new StubWorkspace()));
+            () => new MailModel(
+                null!,
+                new StubMessageList(),
+                new StubMailThread(),
+                new StubWorkspace(),
+                new StubMailSearch()));
 
-        Assert.Throws<ArgumentNullException>(() => new MailModel(session, null!, new StubMailThread(), new StubWorkspace()));
-        Assert.Throws<ArgumentNullException>(() => new MailModel(session, new StubMessageList(), null!, new StubWorkspace()));
-        Assert.Throws<ArgumentNullException>(() => new MailModel(session, new StubMessageList(), new StubMailThread(), null!));
+        Assert.Throws<ArgumentNullException>(
+            () => new MailModel(session, null!, new StubMailThread(), new StubWorkspace(), new StubMailSearch()));
+        Assert.Throws<ArgumentNullException>(
+            () => new MailModel(session, new StubMessageList(), null!, new StubWorkspace(), new StubMailSearch()));
+        Assert.Throws<ArgumentNullException>(
+            () => new MailModel(session, new StubMessageList(), new StubMailThread(), null!, new StubMailSearch()));
+        Assert.Throws<ArgumentNullException>(
+            () => new MailModel(session, new StubMessageList(), new StubMailThread(), new StubWorkspace(), null!));
     }
 
     private static MessageRow Row(int number) => new(
