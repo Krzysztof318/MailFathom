@@ -1,6 +1,6 @@
 # Email content
 
-<!-- describes: backend/src/Application/EmailContent/**, backend/src/Application/Emails/GetEmailContent/**, backend/src/Application/Emails/DownloadAttachment/**, backend/src/Infrastructure/Mail/Mime/**, backend/src/Infrastructure/Mail/Attachments/**, backend/src/Infrastructure/Persistence/Emails/**, backend/src/Infrastructure/ObjectStorage/**, backend/src/Host/Api/EmailAttachmentDownloadEndpoint.cs, backend/src/Host/Configuration/Persistence/AttachmentDownloadOptions.cs -->
+<!-- describes: backend/src/Application/EmailContent/**, backend/src/Application/Emails/GetEmailContent/**, backend/src/Application/Emails/DownloadAttachment/**, backend/src/Infrastructure/Mail/Mime/**, backend/src/Infrastructure/Mail/Attachments/**, backend/src/Infrastructure/Persistence/Emails/**, backend/src/Infrastructure/ObjectStorage/**, backend/src/Host/Api/EmailAttachmentDownloadEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Configuration/Persistence/AttachmentDownloadOptions.cs -->
 
 MailFathom serves the content of the emails one call names, from its local copy. `EmailContentReader` is the second read
 use case: it takes the stable local identifiers a listing returned and answers for each of them with normalized headers,
