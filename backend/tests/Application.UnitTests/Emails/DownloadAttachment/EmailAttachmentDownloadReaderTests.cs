@@ -27,11 +27,19 @@ using Xunit;
 
 namespace MailFathom.Application.UnitTests.Emails.DownloadAttachment;
 
-/// <summary>Covers what a redeemed attachment capability is served with, and everything it is refused for.</summary>
+/// <summary>Covers what an attachment is served with on both entrypoints, and everything either of them is refused for.</summary>
 /// <remarks>
-/// The signature is verified before this use case is reached, so every test here is about what a signature cannot
-/// establish: that the message still exists, that its account is still served, that the stored copy is intact, and that
-/// the part the capability names is still there.
+/// <para>
+/// Whoever asked, the authorization is decided before this use case is reached — a signature verified by the download
+/// route, or a credential the client surface authenticated — so most of what is asserted here is what neither of them
+/// can establish: that the message still exists, that its account is still one this caller reaches, that the stored copy
+/// is intact, and that the part being asked for is still there.
+/// </para>
+/// <para>
+/// What is asserted twice is the authorization itself, in both directions. The two entrypoints admit disjoint principals
+/// and each refuses the other's, so a caller cannot reach a file by holding a grant on the signed route and a leaked URL
+/// cannot reach one on the client's.
+/// </para>
 /// </remarks>
 public sealed class EmailAttachmentDownloadReaderTests
 {
@@ -45,6 +53,10 @@ public sealed class EmailAttachmentDownloadReaderTests
     /// <summary>The principal the download route states once it has verified a link, which is what this use case admits.</summary>
     private static readonly AuthorizedPrincipal RedeemedCapability =
         AuthorizedPrincipal.SignedCapability(SyntheticMailOwner.Deployment, AuthorizedObject);
+
+    /// <summary>The principal the client surface establishes, which is a credential holding the mailbox read grant.</summary>
+    private static readonly AuthorizedPrincipal SignedInReader =
+        AuthorizedPrincipal.Caller("client-key", [MailFathomPermission.MailRead]);
 
     [Fact]
     public async Task OpenAsync_AttachmentOfAServedEmail_OpensItThroughTheStoredCopy()
@@ -342,6 +354,137 @@ public sealed class EmailAttachmentDownloadReaderTests
             await reader.OpenAsync(
                 new AttachmentDownloadTicket(summary.StoredEmailId, AttachmentPosition: 0),
                 TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// The client surface has no capability to present and needs none: its reader authenticated, and the grant reading
+    /// the message is published under is the grant its files are served under.
+    /// </summary>
+    [Fact]
+    public async Task OpenForReaderAsync_CallerGrantedMailRead_OpensTheAttachmentThroughTheStoredCopy()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create(attachmentCount: 2);
+        var reader = ReaderOver(
+            summary,
+            contentReader: ContentReaderOpening("invoice.pdf"),
+            authorization: AuthorizationOver(SignedInReader));
+
+        // Act
+        await using var attachment = await reader.OpenForReaderAsync(
+            summary.StoredEmailId,
+            attachmentPosition: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(attachment);
+        Assert.Equal("invoice.pdf", attachment.Description.FileName?.Value);
+    }
+
+    /// <summary>
+    /// The position arrives from the caller rather than from anything this deployment signed, and it is passed through
+    /// untouched: a reader following the second file's link must be served the second file.
+    /// </summary>
+    [Fact]
+    public async Task OpenForReaderAsync_AttachmentPosition_IsThePositionThePartIsOpenedAt()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create(attachmentCount: 3);
+        var contentReader = Substitute.For<IEmailAttachmentContentReader>();
+        contentReader
+            .OpenAsync(Arg.Any<StoredEmailContent>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(call => Task.FromResult(
+                OpenedEmailAttachmentResult.Opened(new StubOpenedEmailAttachment($"file-{call.Arg<int>()}.pdf"))));
+        var reader = ReaderOver(
+            summary,
+            contentReader: contentReader,
+            authorization: AuthorizationOver(SignedInReader));
+
+        // Act
+        await using var attachment = await reader.OpenForReaderAsync(
+            summary.StoredEmailId,
+            attachmentPosition: 2,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("file-2.pdf", attachment?.Description.FileName?.Value);
+    }
+
+    /// <summary>
+    /// The grant is asked for here rather than only at the transport, so a route mapped without a permission filter
+    /// cannot reach a file by forgetting one.
+    /// </summary>
+    [Fact]
+    public async Task OpenForReaderAsync_CallerGrantedNothing_RefusesWithoutReadingStoredContent()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create(attachmentCount: 1);
+        var contentStore = ContentStoreReturning(IntactContent());
+        var reader = ReaderOver(
+            summary,
+            contentStore,
+            authorization: AuthorizationOver(AuthorizedPrincipal.Caller("client-key", [])));
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(async () =>
+            await reader.OpenForReaderAsync(
+                summary.StoredEmailId,
+                attachmentPosition: 0,
+                TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(MailFathomPermission.MailRead, refusal.RequiredPermission);
+        await contentStore
+            .DidNotReceive()
+            .FindStoredContentAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The two entrypoints admit disjoint principals, in both directions. A redeemed capability names one attachment and
+    /// is not a caller, so it reaches the route that verifies signatures rather than the one published under a grant.
+    /// </summary>
+    [Fact]
+    public async Task OpenForReaderAsync_ReachedByARedeemedCapability_Refuses()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create(attachmentCount: 1);
+        var reader = ReaderOver(summary, authorization: AuthorizationOver(RedeemedCapability));
+
+        // Act & Assert
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(async () =>
+            await reader.OpenForReaderAsync(
+                summary.StoredEmailId,
+                attachmentPosition: 0,
+                TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>
+    /// Both values a reader sends are its own, so neither is trusted: an email outside the accounts the caller's owner
+    /// owns is refused exactly as a deleted one is, and nothing of it is read.
+    /// </summary>
+    [Fact]
+    public async Task OpenForReaderAsync_EmailOfAnAccountThisCallerDoesNotReach_RefusesWithoutReadingAnyContent()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create(attachmentCount: 1);
+        var contentStore = ContentStores.Substituted();
+        var reader = ReaderOver(
+            summary,
+            contentStore,
+            accountCatalog: CatalogServing(MailAccountId.Create("somebody-else")),
+            authorization: AuthorizationOver(SignedInReader));
+
+        // Act
+        await using var attachment = await reader.OpenForReaderAsync(
+            summary.StoredEmailId,
+            attachmentPosition: 0,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(attachment);
+        await contentStore.DidNotReceive().FindStoredContentAsync(
+            Arg.Any<StoredEmailId>(),
+            Arg.Any<CancellationToken>());
     }
 
     /// <summary>

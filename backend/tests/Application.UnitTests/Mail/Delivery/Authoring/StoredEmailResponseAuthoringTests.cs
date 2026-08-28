@@ -1030,6 +1030,7 @@ public sealed class StoredEmailResponseAuthoringTests
                 references ?? EmailThreadReferences.Create("parent@example.test", inReplyTo: null, references: null)),
             new EmailBodyRepresentation(plainText, plainText.Length, EmailBodyTruncation.None),
             html is null ? null : new EmailBodyRepresentation(html, html.Length, EmailBodyTruncation.None),
+            new EmailBodyForms(PlainText: true, Html: html is not null),
             encrypted,
             EmailAttachmentSummary.Create(
                 carried,

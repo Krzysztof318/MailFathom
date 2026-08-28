@@ -6,11 +6,9 @@ using System.Globalization;
 using MailFathom.Application.Access;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.Emails.DownloadAttachment;
-using MailFathom.Application.Emails.Extraction;
 using MailFathom.Host.Security.Transport;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Net.Http.Headers;
 
 namespace MailFathom.Host.Api;
 
@@ -44,10 +42,6 @@ internal static class EmailAttachmentDownloadEndpoint
 
     /// <summary>The one thing a refused request is told, whatever the reason was.</summary>
     internal const string RefusalDetail = "This attachment link is not valid.";
-
-    /// <summary>What a download declares itself to be when the message's own media type is unusable.</summary>
-    /// <remarks>The sender chose the media type, so it is parsed rather than trusted; a value that is not a media type at all is served as opaque bytes instead of being repaired into something plausible.</remarks>
-    private const string FallbackMediaType = "application/octet-stream";
 
     /// <summary>Maps the download route.</summary>
     /// <param name="endpoints">The application's route builder.</param>
@@ -110,53 +104,11 @@ internal static class EmailAttachmentDownloadEndpoint
             return Refused();
         }
 
-        Describe(context.Response, attachment.Description);
+        AttachmentContentResponse.Describe(context.Response, attachment.Description);
 
         await attachment.WriteContentToAsync(context.Response.Body, cancellationToken);
 
         return TypedResults.Empty;
-    }
-
-    /// <summary>States what the response carries, in the encoding each header defines for it.</summary>
-    /// <remarks>
-    /// <para>
-    /// Both values come from the message and are therefore attacker-controlled. The media type is parsed before it is
-    /// echoed, so a header value the sender wrote cannot introduce a parameter or a second header, and the file name is
-    /// written through the header type that applies RFC 5987 encoding rather than being concatenated into a header.
-    /// </para>
-    /// <para>
-    /// The disposition is always <c>attachment</c> and the sniffing opt-out is always set, because this route serves
-    /// sender-controlled bytes from the deployment's own origin: rendered inline, a message carrying HTML would be a
-    /// scripted page on the address the operator publishes MailFathom at.
-    /// </para>
-    /// <para>
-    /// The length is the size the same parse measured, so a reader knows what to expect and a truncated transfer is
-    /// visible as one rather than as a shorter file.
-    /// </para>
-    /// <para>
-    /// <c>no-store</c> is what keeps the window meaningful. This is an ordinary cacheable <c>GET</c> whose response is
-    /// mail content, and the deployments this route is documented for put a reverse proxy in front of it: an
-    /// intermediary applying a default freshness lifetime would keep serving the file for that URL after the capability
-    /// expired, which would put the octets somewhere MailFathom does not control and take the expiry out of the
-    /// revocation model it is the whole of.
-    /// </para>
-    /// </remarks>
-    private static void Describe(HttpResponse response, ExtractedEmailAttachment description)
-    {
-        response.ContentType = MediaTypeHeaderValue.TryParse(description.MediaType, out var mediaType)
-            ? mediaType.ToString()
-            : FallbackMediaType;
-        response.ContentLength = description.DecodedSizeOctets;
-
-        var disposition = new ContentDispositionHeaderValue("attachment");
-        if (description.FileName is { } fileName)
-        {
-            disposition.SetHttpFileName(fileName.Value);
-        }
-
-        response.Headers.ContentDisposition = disposition.ToString();
-        response.Headers.XContentTypeOptions = "nosniff";
-        response.Headers.CacheControl = "no-store";
     }
 
     /// <summary>Names the one object the signature was bounded to, in MailFathom's own identifiers.</summary>

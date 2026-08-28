@@ -1,6 +1,6 @@
 # Email content
 
-<!-- describes: backend/src/Application/EmailContent/**, backend/src/Application/Emails/GetEmailContent/**, backend/src/Application/Emails/DownloadAttachment/**, backend/src/Infrastructure/Mail/Mime/**, backend/src/Infrastructure/Mail/Attachments/**, backend/src/Infrastructure/Persistence/Emails/**, backend/src/Infrastructure/ObjectStorage/**, backend/src/Host/Api/EmailAttachmentDownloadEndpoint.cs, backend/src/Host/Configuration/Persistence/AttachmentDownloadOptions.cs -->
+<!-- describes: backend/src/Application/EmailContent/**, backend/src/Application/Emails/GetEmailContent/**, backend/src/Application/Emails/DownloadAttachment/**, backend/src/Infrastructure/Mail/Mime/**, backend/src/Infrastructure/Mail/Attachments/**, backend/src/Infrastructure/Persistence/Emails/**, backend/src/Infrastructure/ObjectStorage/**, backend/src/Host/Api/EmailAttachmentDownloadEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Configuration/Persistence/AttachmentDownloadOptions.cs -->
 
 MailFathom serves the content of the emails one call names, from its local copy. `EmailContentReader` is the second read
 use case: it takes the stable local identifiers a listing returned and answers for each of them with normalized headers,
@@ -53,7 +53,7 @@ endpoint a person's reading pane reads — and every other entrypoint would have
 The HTML representation is opt-in because it costs a sanitization pass over untrusted markup and because plain text is
 what most callers want: a model reading mail is better served by the words than by the layout around them. The links
 are opt-in for a different reason, recorded under
-[Attachments](#attachments-are-described-always-and-fetched-through-a-link).
+[Attachments](#attachments-are-described-always-and-fetched-by-themselves).
 
 ### Reading several emails, and what bounds it
 
@@ -168,7 +168,7 @@ prefix of a message identifier is an identifier another message may legitimately
 same values more narrowly, deliberately — one bound is about what a parse publishes to a reader and the other about
 what a column stores.
 
-### Attachments are described always, and fetched through a link
+### Attachments are described always, and fetched by themselves
 
 Every read answers what a message carries: how many attachments, what each is called, what it declares itself to be, and
 how large it is. **No response carries a file's octets, in any encoding and at any size.** What
@@ -197,6 +197,13 @@ zero times. The entry says which case it was.
 
 Inline resources and cryptographic parts carry no link here for the same reason they carry no description — they never
 enter the list at all.
+
+**A link is one of the two ways an attachment is fetched, and it is the one for a caller that holds no credential.** The
+client surface serves its own reader's files on
+[a route of its own](../operations/client-endpoint.md#the-attachment-route), naming the message and the position rather
+than carrying a signature, because that reader has already authenticated and holds `mailfathom.mail.read` — so nothing
+is minted for them and nothing expires. Both entrypoints resolve through the one use case below and are refused by the
+same rules; what differs is only what admitted the caller, and each admits the other's principal not at all.
 
 ### What a download link is, and what bounds it
 
@@ -321,7 +328,7 @@ Neither of the two unstored states is a defect and neither schedules a repair: s
 and deliberately stored no content for it, so asking for repair would ask a later run to store what it already decided
 not to. Everything answerable is still answered — the headers from the stored row — and everything about the message's
 parts is absent, because nothing local can derive it: the attachment list is empty and the counts beside it are `null`
-rather than zero, for the reason [Attachments](#attachments-are-described-always-and-fetched-through-a-link) gives. The
+rather than zero, for the reason [Attachments](#attachments-are-described-always-and-fetched-by-themselves) gives. The
 empty list is about the parts never having been read rather than about the message carrying no files, and the absent
 counts are what say which of the two it is.
 
@@ -335,7 +342,14 @@ Plain text is the default representation and is always present, empty in each of
 read. The other two are absent unless they were asked for, and both are absent in every state but `Readable`, there
 having been no body to sanitize or to reduce.
 A genuine `text/plain` part wins over every HTML alternative; HTML is read only when the message offered no plain-text
-one. Unlike the text the lexical index covers, nothing is trimmed: quoted history and a signature block are part of the
+one.
+
+Beside the representations, `Forms` says which of them the *message* wrote — a `text/plain` part of its own, an HTML
+part, or both — counting only parts the walk resolved as the body branch, so a text file attached to a message is not
+one of its body's forms. It describes the mail rather than the answer, which is the part a caller cannot recover from
+what it received: the words come back for every readable message, derived from the markup where the sender wrote none,
+so a reader choosing between them and a richer rendering would otherwise be reading a representation for a fact it does
+not carry. Both are `false` wherever nothing parsed the body, which the availability beside them explains. Unlike the text the lexical index covers, nothing is trimmed: quoted history and a signature block are part of the
 message a person asked to read.
 
 ### Truncation is always explicit, and names the bound that cut

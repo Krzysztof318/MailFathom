@@ -1446,6 +1446,7 @@ public sealed class GetEmailContentToolTests
             ? EmailBodyRepresentation.Empty
             : new EmailBodyRepresentation("Body", 4, EmailBodyTruncation.None)),
         sanitizedHtml,
+        new EmailBodyForms(PlainText: !bodyIsEncrypted, Html: sanitizedHtml is not null),
         bodyIsEncrypted,
         EmailAttachmentSummary.Create(
             attachments ?? [],

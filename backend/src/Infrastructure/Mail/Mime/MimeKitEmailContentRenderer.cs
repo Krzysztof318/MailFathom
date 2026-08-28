@@ -144,6 +144,7 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
             MimeMessageHeaderReader.Read(message),
             bodyIsUnreadable ? EmailBodyRepresentation.Empty : plainTextBody,
             sanitizedHtmlBody,
+            FormsOf(classification),
             bodyIsUnreadable,
             classification.Summary,
             classification.Attachments)
@@ -167,6 +168,16 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
                 : null,
         };
     }
+
+    /// <summary>Names which forms of its own body the message wrote, out of the branch the walk settled on.</summary>
+    /// <remarks>
+    /// The body branch rather than the message's parts, which is the same source the two representations are produced
+    /// from: a text file attached to a message is not a form of its body, and reporting it as one would tell a reader
+    /// there are words to draw where there are none.
+    /// </remarks>
+    private static EmailBodyForms FormsOf(MimeContentClassification classification) => new(
+        classification.BodyTextParts.Any(static part => !part.IsHtml),
+        classification.BodyTextParts.Any(static part => part.IsHtml));
 
     /// <summary>Reads the body as words, preferring what the sender wrote to a reading of how it was displayed.</summary>
     /// <remarks>
