@@ -20,6 +20,27 @@ public sealed class PersistedMailOwnerProvisioningTests
     private static readonly Guid Owner = new("11111111-1111-1111-1111-111111111111");
 
     /// <summary>
+    /// The statement selects the one row the relabel is about, which is the assertion the two below cannot make: an
+    /// inequality against either column is contributed by the guard and by the no-op predicate, so a selector deleted
+    /// from the query would leave both passing while <c>ExecuteUpdateAsync</c> relabelled every owner in the deployment
+    /// whose label differed.
+    /// </summary>
+    [Fact]
+    public void RowsToRelabel_AnOwner_SelectsTheirOwnRowAlone()
+    {
+        // Arrange
+        using var context = DesignTimeContext();
+
+        // Act
+        var sql = PersistedMailOwnerProvisioning
+            .RowsToRelabel(context.OwnerAccounts, Owner, "alex")
+            .ToQueryString();
+
+        // Assert
+        Assert.Contains("\"Id\" = ", sql, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// The label is unique across the deployment, so the write is conditional on nobody else carrying it. A statement
     /// without that guard would meet the column's index instead, and PostgreSQL's own unique-violation sentence would
     /// reach the operator in place of the refusal the roster composes.

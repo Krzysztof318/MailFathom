@@ -87,8 +87,26 @@ internal static class DeclaredOwners
             .. FindDeploymentSectionConflict(owners, deploymentAccounts),
             .. owners.Index().SelectMany(entry => FindMailAccountErrors(entry.Item, entry.Index, today)),
             .. FindCrossOwnerAccountNameCollisions(owners),
-            .. FindNothingToSynchronizeErrors(configuration, owners, deploymentAccounts),
         ];
+    }
+
+    /// <summary>Reports whether this deployment asked for its mailboxes to be refreshed at all.</summary>
+    /// <param name="configuration">The configuration to read.</param>
+    /// <returns><see langword="true" /> when the synchronization switch is on.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="configuration" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// Read beside the declarations because the two used to be judged together here: a deployment with the switch on
+    /// and nothing to synchronize is a worker with no work. Which deployment that is stopped being decidable from
+    /// configuration when an owner's mailboxes became a record rather than a section, so the rule itself is held by
+    /// the startup gate over the roster a start would serve, and this is the half a file still answers.
+    /// </remarks>
+    public static bool SynchronizationIsOn(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        return configuration.GetValue(
+            $"{MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.Enabled)}",
+            defaultValue: false);
     }
 
     /// <summary>Reads the identifier a declaration states, or nothing when it is not a UUID at all.</summary>
@@ -239,28 +257,6 @@ internal static class DeclaredOwners
             [
                 $"More than one declared owner names a mail account {string.Join(", ", shared)}. A mail account belongs to its owner, but this release resolves an account's settings by its identifier alone, so a name two owners share would reach whichever of the two the lookup met first. Give each of them a name no other owner uses.",
             ];
-    }
-
-    /// <summary>Refuses a deployment that switched synchronization on with nothing at all to synchronize.</summary>
-    /// <remarks>
-    /// The rule is the deployment's own and is stated here because this is the only place the effective set is
-    /// visible: an operator who declared their mailboxes under owners has an empty <c>MailSynchronization:Accounts</c>
-    /// and has not misconfigured anything, and one who declared neither has switched on a worker with no work.
-    /// </remarks>
-    private static IEnumerable<string> FindNothingToSynchronizeErrors(
-        IConfiguration configuration,
-        IReadOnlyList<DeclaredOwnerOptions> owners,
-        List<MailSynchronizationAccountOptions> deploymentAccounts)
-    {
-        var enabled = configuration.GetValue(
-            $"{MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.Enabled)}",
-            defaultValue: false);
-
-        var declaredAccounts = deploymentAccounts.Count + owners.Sum(owner => owner.MailAccounts?.Count ?? 0);
-
-        return enabled && declaredAccounts == 0
-            ? [$"{MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.Enabled)} is on and no mail account is declared anywhere: neither in {MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.Accounts)} nor under any owner of {DeclaredOwnerOptions.SectionName}. Declare the mailbox this deployment exists to synchronize, or switch synchronization off."]
-            : [];
     }
 
     /// <summary>Names an owner in a refusal by the label they were declared under, which is what an operator reads their file by.</summary>

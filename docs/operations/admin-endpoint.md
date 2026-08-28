@@ -1093,7 +1093,10 @@ back to its file.
 
 Secret-bearing values never leave this endpoint. `get`, `show`, and the editing buffer all report the redaction marker,
 and a marker saved back leaves the setting exactly as it was — so an editing session over a document carrying a
-credential reference is safe, and no reading of this surface discloses where material is kept.
+credential reference is safe, and no reading of this surface discloses where material is kept. What such a session may
+not do is change the block the credential sits in while leaving the marker standing, because the marker would then
+stand for a reference paired with something else; that save is refused naming the block, and
+[the marker rule](configuration-sources.md#reading-and-changing-settings-from-mfctl) states what it covers and what to use instead.
 
 **The redaction covers the settings a write refuses as well as the ones a name announces**, which is what makes that
 last sentence true rather than nearly true. A reading enumerates every key the deployment composed rather than only the

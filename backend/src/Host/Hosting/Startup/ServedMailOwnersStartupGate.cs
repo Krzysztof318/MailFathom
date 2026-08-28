@@ -130,6 +130,8 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
 
         this.RefuseMailAccountNamesTwoOwnersShare(served);
 
+        this.RefuseNothingToSynchronize(served);
+
         await this.RefuseUnusableMailAccountSecretsAsync(scope, served, cancellationToken);
 
         this.servedOwners.Resolved(served);
@@ -476,6 +478,29 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
         if (shared.Length > 0)
         {
             throw DeploymentMailOwnerUnresolvedException.MailAccountNameSharedByOwners(shared);
+        }
+    }
+
+    /// <summary>Refuses a deployment that switched synchronization on with nothing at all to synchronize.</summary>
+    /// <remarks>
+    /// The deployment's own rule, held here rather than against the files because an owner's mailboxes are a record as
+    /// well as a section: a deployment whose only mailbox was declared through <c>mfctl owner account add</c> or by the
+    /// owner themselves has an empty <c>MailSynchronization:Accounts</c> and an empty top-level collection, and reading
+    /// the files alone would refuse to start it. The roster is the first place every source is in one place, which is
+    /// what makes this the only reading that can tell a worker with no work from one whose work is in the database.
+    /// </remarks>
+    private void RefuseNothingToSynchronize(IReadOnlyList<ServedMailOwner> served)
+    {
+        if (!DeclaredOwners.SynchronizationIsOn(this.configuration))
+        {
+            return;
+        }
+
+        var deploymentAccounts = DeclaredOwners.DeploymentMailAccountsIn(this.configuration);
+
+        if (served.All(owner => AccountsOf(owner, deploymentAccounts).Count == 0))
+        {
+            throw DeploymentMailOwnerUnresolvedException.NothingToSynchronize();
         }
     }
 

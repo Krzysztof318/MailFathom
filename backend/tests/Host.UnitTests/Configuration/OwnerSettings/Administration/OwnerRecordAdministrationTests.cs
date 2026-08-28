@@ -766,6 +766,37 @@ public sealed class OwnerRecordAdministrationTests
             Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// The one composition here whose input nobody in the request authored: the row is what the patch is applied to, so
+    /// a row that is not a document of settings is reported as a refusal naming what could not be read rather than left
+    /// to fault. What an operator needs either way is the same — which document, and that nothing was written.
+    /// </summary>
+    [Fact]
+    public async Task AdoptAsync_ARowThatIsNotADocumentOfSettings_IsRefusedWithoutCommitting()
+    {
+        // Arrange
+        var harness = new RecordHarness(
+            MailFathomPermission.AdminConfigurationWrite,
+            DeploymentSectionDeclaring("configured"));
+        harness.Holding(SyntheticMailOwner.Deployment, "[]", version: 1);
+        harness.Roster(Serving(SyntheticMailOwner.Deployment, MailOwnerAccountSource.DeploymentSection));
+
+        // Act
+        var outcome = await harness.Records.AdoptAsync(
+            SyntheticMailOwner.Deployment,
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Contains(
+            "not a document of settings this deployment can read",
+            Assert.Single(outcome.Messages),
+            StringComparison.Ordinal);
+        await harness.Store.DidNotReceiveWithAnyArgs()
+            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+    }
+
     /// <summary>Adoption is the one act permitted to open the record of an owner a configuration source supplies, which is what makes it the way out of that state.</summary>
     [Fact]
     public async Task AdoptAsync_AnOwnerServedFromTheirOwnDeclaration_IsNotRefusedTheWayAnOrdinaryWriteIs()

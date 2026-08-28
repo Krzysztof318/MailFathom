@@ -293,9 +293,13 @@ public sealed class DeclaredOwnersTests
         Assert.Contains(errors, error => error.StartsWith("More than one declared owner names a mail account", StringComparison.Ordinal));
     }
 
-    /// <summary>Switching a worker on with no work is the deployment's own defect, and this is the one place the effective set is visible.</summary>
+    /// <summary>
+    /// Switching a worker on with no work is the deployment's own defect, and the files no longer decide whether that
+    /// is what happened: an owner's mailboxes are a record as well as a section. So this reads the switch and the
+    /// startup gate judges the roster, which is why a declaration naming no mailbox is not an error here.
+    /// </summary>
     [Fact]
-    public void FindConfigurationErrors_SynchronizationOnWithNoMailboxAnywhere_IsRefused()
+    public void FindConfigurationErrors_SynchronizationOnWithNoMailboxInAnyFile_IsLeftToTheStartupGate()
     {
         // Arrange
         var configuration = Configuration(new Dictionary<string, string?>
@@ -309,7 +313,26 @@ public sealed class DeclaredOwnersTests
         var errors = DeclaredOwners.FindConfigurationErrors(configuration, Today);
 
         // Assert
-        Assert.Contains(errors, error => error.StartsWith("MailSynchronization:Enabled is on", StringComparison.Ordinal));
+        Assert.Empty(errors);
+        Assert.True(DeclaredOwners.SynchronizationIsOn(configuration));
+    }
+
+    /// <summary>A deployment that asked for nothing to be refreshed is what the switch reads as off, including where no section names it at all.</summary>
+    [Fact]
+    public void SynchronizationIsOn_ADeploymentThatNamedNoSwitch_ReadsAsOff()
+    {
+        // Arrange
+        var configuration = Configuration(new Dictionary<string, string?>
+        {
+            ["Accounts:0:Id"] = Alex,
+            ["Accounts:0:DisplayName"] = "alex",
+        });
+
+        // Act
+        var enabled = DeclaredOwners.SynchronizationIsOn(configuration);
+
+        // Assert
+        Assert.False(enabled);
     }
 
     /// <summary>A list this long was generated rather than written, which is worth stopping for on its own.</summary>

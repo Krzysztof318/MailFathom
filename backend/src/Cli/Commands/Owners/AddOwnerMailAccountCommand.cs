@@ -78,7 +78,7 @@ internal static class AddOwnerMailAccountCommand
                 $"There is no file at {file?.FullName ?? "the path given"} to read the mail account from.");
         }
 
-        var declaration = await File.ReadAllTextAsync(file.FullName, cancellationToken);
+        var declaration = await ReadAsync(file, cancellationToken);
 
         if (string.IsNullOrWhiteSpace(declaration))
         {
@@ -105,5 +105,24 @@ internal static class AddOwnerMailAccountCommand
             cancellationToken);
 
         return OwnerOutput.ReportWrite(context, answer);
+    }
+
+    /// <summary>Reads the declaration the invocation named.</summary>
+    /// <exception cref="CliFailure">Thrown when the path exists and its contents cannot be read.</exception>
+    /// <remarks>
+    /// A path the operator gave that is a directory, is not readable by this account, or is on a filesystem that failed
+    /// mid-read is something they can act on, so it is reported as a sentence naming the path rather than reaching
+    /// <c>CliRunner</c> as a stack trace — the same answer the editing buffer gives for the same situation.
+    /// </remarks>
+    private static async Task<string> ReadAsync(FileInfo file, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await File.ReadAllTextAsync(file.FullName, cancellationToken);
+        }
+        catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
+        {
+            throw new CliFailure($"{file.FullName} could not be read, so nothing was written.", failure);
+        }
     }
 }

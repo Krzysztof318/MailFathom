@@ -536,6 +536,76 @@ public sealed class ServedMailOwnersStartupGateTests
             .ProvisionAsync(Arg.Any<MailOwnerId>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// A worker switched on with no work is the deployment's own defect, and the roster is the first place every source
+    /// of a mailbox is in one place: the deployment's section, an owner's declaration, and an owner's own record.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_SynchronizationOnAndNoServedOwnerHoldingAMailbox_FailsStartupNamingWhereToDeclareOne()
+    {
+        // Arrange
+        var declared = Configuration(new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            [$"{MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.Enabled)}"] = "true",
+            [$"{DeclaredOwnerOptions.SectionName}:0:{nameof(DeclaredOwnerOptions.Id)}"] = DeclaredIdentifier.ToString(),
+            [$"{DeclaredOwnerOptions.SectionName}:0:{nameof(DeclaredOwnerOptions.DisplayName)}"] = "alex",
+        });
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<DeploymentMailOwnerUnresolvedException>(() =>
+            CreateGate([], declared, servedOwners: new ServedMailOwners()).StartAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Contains("no owner this deployment serves has a mail account", refusal.Message, StringComparison.Ordinal);
+        Assert.Contains("mfctl owner account add", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The case reading the files alone would refuse: both collections are empty and the mailbox this deployment exists
+    /// to synchronize is in the one place a file never carries, which is the owner's own record.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_SynchronizationOnAndTheOnlyMailboxDeclaredInAnOwnersRecord_ServesThem()
+    {
+        // Arrange
+        var owner = MailOwnerId.Create(DeclaredIdentifier);
+        var roster = new ServedMailOwners();
+        var documents = Substitute.For<IOwnerSettingsDocumentReader>();
+
+        DocumentOf(documents, owner, "adopted", "alex@example.test");
+
+        var declared = Configuration(new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            [$"{MailSynchronizationOptions.SectionName}:{nameof(MailSynchronizationOptions.Enabled)}"] = "true",
+            [$"{DeclaredOwnerOptions.SectionName}:0:{nameof(DeclaredOwnerOptions.Id)}"] = DeclaredIdentifier.ToString(),
+            [$"{DeclaredOwnerOptions.SectionName}:0:{nameof(DeclaredOwnerOptions.DisplayName)}"] = "alex",
+        });
+
+        // Act
+        await CreateGate([Adopted(owner, "alex")], declared, servedOwners: roster, documents: documents)
+            .StartAsync(CancellationToken.None);
+
+        // Assert
+        var served = Assert.Single(roster.Owners);
+
+        Assert.Equal(["adopted"], served.MailAccounts.Select(account => account.AccountId));
+    }
+
+    /// <summary>A deployment that asked for nothing to be refreshed is served whatever its owners declare, including nothing.</summary>
+    [Fact]
+    public async Task StartAsync_SynchronizationOffAndNoMailboxAnywhere_ServesTheOwnerAnyway()
+    {
+        // Arrange
+        var roster = new ServedMailOwners();
+
+        // Act
+        await CreateGate([], Declaring(DeclaredIdentifier, "alex"), servedOwners: roster)
+            .StartAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Single(roster.Owners);
+    }
+
     /// <summary>A deployment that serves no owner-facing surface synchronizes several owners' mail perfectly well.</summary>
     [Fact]
     public async Task StartAsync_SeveralOwnersServedWithNoOwnerFacingSurface_ServesEveryOneOfThem()

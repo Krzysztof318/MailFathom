@@ -290,7 +290,9 @@ public sealed class ClientOwnerRecordEndpointTests
 
     /// <summary>
     /// A refusal about the record itself arrives as an outcome with a success status, because it is something the owner
-    /// acts on and continues from — and it carries the version they compose the next attempt over.
+    /// acts on and continues from — and it carries the version they compose the next attempt over. The declaration is
+    /// one this owner may name, so the version is the only rule left that can refuse it: a reference the secret bound
+    /// rejects would answer the same two values from a rule this test does not name.
     /// </summary>
     [Fact]
     public async Task AddMailAccountAsync_AVersionSomebodyElseHasMovedPast_AnswersWithTheOutcomeRatherThanAnError()
@@ -302,7 +304,7 @@ public sealed class ClientOwnerRecordEndpointTests
         // Act
         var result = await ClientOwnerRecordEndpoint.AddMailAccountAsync(
             deployment.Records,
-            new OwnerMailAccountRequest(3, Account("archive")),
+            new OwnerMailAccountRequest(3, AccountProvisionedFor(SyntheticMailOwner.Deployment, "archive")),
             TestContext.Current.CancellationToken);
 
         // Assert

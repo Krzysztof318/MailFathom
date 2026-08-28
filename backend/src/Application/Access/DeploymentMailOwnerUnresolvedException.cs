@@ -31,6 +31,20 @@ public sealed class DeploymentMailOwnerUnresolvedException : MailFathomException
     /// <inheritdoc />
     public override MailFathomErrorCode ErrorCode => MailFathomErrorCode.DeploymentMailOwnerUnresolved;
 
+    /// <summary>Reports a deployment that switched synchronization on with no mailbox for any owner it serves.</summary>
+    /// <returns>The failure to raise.</returns>
+    /// <remarks>
+    /// The rule is about mailboxes rather than about owners, and it is here because this is where a start's refusals
+    /// about the roster live: an owner's mailboxes are a record now as well as a section, so the effective set is first
+    /// visible once the roster is settled, and a reading of the files alone would refuse a deployment whose owner
+    /// declared their mailbox through the client.
+    /// </remarks>
+    public static DeploymentMailOwnerUnresolvedException NothingToSynchronize() => new(
+        "MailSynchronization:Enabled is on and no owner this deployment serves has a mail account: neither "
+        + "MailSynchronization:Accounts, nor any owner of the top-level Accounts collection, nor any owner's own "
+        + "record declares one. Declare the mailbox this deployment exists to synchronize — with "
+        + "'mfctl owner account add', or in the files — or switch synchronization off.");
+
     /// <summary>Reports a deployment holding several owners while its mail accounts are declared in the section that names none.</summary>
     /// <returns>The failure to raise.</returns>
     public static DeploymentMailOwnerUnresolvedException SeveralOwners() => new(

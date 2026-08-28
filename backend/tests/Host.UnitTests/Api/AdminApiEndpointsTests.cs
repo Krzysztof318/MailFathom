@@ -361,6 +361,41 @@ public sealed class AdminApiEndpointsTests
     }
 
     /// <summary>
+    /// The bound on each owner-route body, which the routes carry as metadata the routing pipeline reads. Without it
+    /// the server's own default applies, and a saved record is a body an authenticated client states the whole of. The
+    /// verb is named beside the path because three of these paths carry a read as well, and reading the bound off
+    /// whichever endpoint the pattern matched first would pass with the write's metadata deleted.
+    /// </summary>
+    /// <param name="method">The verb the write is made with.</param>
+    /// <param name="route">The route it is made on.</param>
+    [Theory]
+    [InlineData("POST", OwnerRecordEndpoints.OwnersRoute)]
+    [InlineData("PUT", OwnerRecordEndpoints.OwnerDisplayNameRoute)]
+    [InlineData("POST", OwnerRecordEndpoints.OwnerRecordRoute)]
+    [InlineData("POST", OwnerRecordEndpoints.OwnerMailAccountsRoute)]
+    [InlineData("POST", OwnerRecordEndpoints.OwnerMailAccountRemovalRoute)]
+    [InlineData("POST", OwnerRecordEndpoints.OwnerAdoptionRoute)]
+    public void MapAdminApi_AnOwnerRouteThatReadsABody_CarriesTheRequestBodyBound(string method, string route)
+    {
+        // Arrange
+        var endpoints = BuildRouteBuilder();
+
+        // Act
+        endpoints.MapAdminApi();
+
+        // Assert
+        var write = endpoints.Materialize()
+            .OfType<RouteEndpoint>()
+            .Single(endpoint =>
+                $"/{endpoint.RoutePattern.RawText?.TrimStart('/')}" == $"{AdminEndpointOptions.RoutePrefix}{route}"
+                && endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Contains(method));
+
+        Assert.Equal(
+            OwnerRecordEndpoints.MaxWriteRequestBytes,
+            write.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata>()!.MaxRequestBodySize);
+    }
+
+    /// <summary>
     /// The other half of the arrangement, and the one no metadata records: a route publishing its permission decides
     /// nothing unless the group carries the filter that reads it. Deleting that one line leaves every assertion above
     /// green while serving all 31 routes to any admitted credential, so this exercises the endpoint the mapping built —

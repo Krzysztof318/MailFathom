@@ -176,8 +176,10 @@ differently — and a use case that raised either shape directly would have deci
 
 A use case that acts on one owner's mail and is reached by a principal acting for no owner is refused the same way and
 with the same code, because from the use case's side it is the same fact: what reached it cannot say whose mail it is
-about. A deployment that cannot resolve its own owner never reaches a use case at all — it fails to start, with
-`14002 DeploymentMailOwnerUnresolved`.
+about. A deployment that cannot resolve its own owner never reaches a use case at all, and answers
+`14002 DeploymentMailOwnerUnresolved` in the two places that reading is taken. A roster the start cannot settle at all
+is a refusal to start, so nothing serves. A roster of several is a start that succeeds, and the code is then answered
+per request, as `409` on the handful of acts above that resolve the sole owner and name none themselves.
 
 A use case reached under no principal at all is refused the same way. That is the case an entrypoint produces by
 omission — it never said what admitted the work — and refusing it is what "fails rather than defaulting to permitted"

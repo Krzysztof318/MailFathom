@@ -4,6 +4,7 @@
 
 using System.Text;
 using MailFathom.Application.Configuration;
+using MailFathom.Infrastructure.Secrets.Discovery;
 
 namespace MailFathom.Host.Configuration.Administration;
 
@@ -26,12 +27,21 @@ namespace MailFathom.Host.Configuration.Administration;
 /// so nothing else in this system would notice.
 /// </para>
 /// <para>
-/// So a marker whose path passes through an array position is placeable only where the whole element it sits in is
-/// what the buffer was opened over, compared against the buffer rather than against the row, since the buffer is what
-/// the person was shown. The refusal that follows costs them the ability to change a neighbouring setting of a
-/// secret-bearing element inside an editing session, and names the narrower change that does it without touching the
-/// reference. That is the trade this makes deliberately: a save nobody can place is refused rather than committed on
-/// the strength of a position.
+/// So a marker is placeable only where the whole element it sits in is what the buffer was opened over, compared
+/// against the buffer rather than against the row, since the buffer is what the person was shown. The refusal that
+/// follows costs them the ability to change a neighbouring setting of a secret-bearing element inside an editing
+/// session, and names the narrower change that does it without touching the reference. That is the trade this makes
+/// deliberately: a save nobody can place is refused rather than committed on the strength of a position.
+/// </para>
+/// <para>
+/// Which path is that element is decided without a schema, because neither document hands one to this. A collection
+/// keyed by position is visible in the path — a segment of digits — and a collection keyed by name is not: the binder
+/// builds a list from whatever child keys it finds, so <c>MailAccounts:work</c> and <c>MailAccounts:0</c> are the same
+/// thing to it and only the first is invisible here. What is visible in both is the secret itself, which announces
+/// itself by name; so the element is read as the path above the run of secret-named segments the marker ends in, and
+/// the outermost position where the path also passes through one. Taking the broader of the two keeps the renumbering
+/// rule and closes the case a name-keyed element would otherwise slip through — a saved record repointing an account's
+/// host while leaving its credential at the marker, which is the whole of what this guard exists to refuse.
 /// </para>
 /// </remarks>
 internal static class RedactedDocumentSave
@@ -133,14 +143,11 @@ internal static class RedactedDocumentSave
             return $"{path} was saved as the redaction marker, and the document carried no setting there for it to stand for. Write the value the setting takes, or leave the setting out of the document.";
         }
 
-        if (FirstIndexedAncestorOf(path) is not { } element)
-        {
-            return null;
-        }
+        var element = ElementContaining(path);
 
         return SubtreeUnchanged(standing, saved, element)
             ? null
-            : $"{path} was saved as the redaction marker while '{element}' changed, so this deployment cannot tell which secret the marker stands for — a position moves when an element is added or removed. Save that element as it was opened, or {remedy}";
+            : $"{path} was saved as the redaction marker while '{element}' changed, so this deployment cannot tell which secret the marker stands for — a marker stands for whatever the document held at that path, and an element edited or renumbered around it is no longer the one it was read from. Save that element as it was opened, or {remedy}";
     }
 
     /// <summary>Reports whether everything beneath a path is what the buffer was opened over.</summary>
@@ -173,19 +180,34 @@ internal static class RedactedDocumentSave
         document.Where(setting => setting.Key.Equals(prefix, StringComparison.OrdinalIgnoreCase)
             || setting.Key.StartsWith($"{prefix}:", StringComparison.OrdinalIgnoreCase));
 
-    /// <summary>Names the element a path sits in, up to and including its outermost array position, or nothing where it passes through none.</summary>
+    /// <summary>Names the element a marker's path sits in, which is what has to be unchanged for the marker to be placeable.</summary>
     /// <remarks>
-    /// The outermost rather than the innermost, because a path may pass through several and every one of them can move:
-    /// a rule at <c>Mail:Accounts:0:Rules:2</c> is re-paired by a change to the accounts as readily as by a change to
-    /// the rules, and the account is what contains both.
+    /// The broader of two readings, because either alone leaves a case out. The outermost array position covers a path
+    /// that passes through several — a rule at <c>Mail:Accounts:0:Rules:2</c> is re-paired by a change to the accounts
+    /// as readily as by one to the rules, and the account contains both. The block the secret belongs to covers a
+    /// collection an operator keyed by name, which the path does not distinguish from an object: everything from the
+    /// marker up to the first segment that does not announce a secret is the secret's own block, so
+    /// <c>MailAccounts:work:Secrets:Password:SecretReference</c> yields <c>MailAccounts:work</c> exactly as the indexed
+    /// spelling yields <c>MailAccounts:0</c>. A path passing through neither is its own element, which is unchanged by
+    /// construction and therefore placeable — a single top-level setting standing at the marker.
     /// </remarks>
-    private static string? FirstIndexedAncestorOf(string path)
+    private static string ElementContaining(string path)
     {
         var segments = path.Split(':');
-        var position = Array.FindIndex(
+
+        var indexed = Array.FindIndex(
             segments,
             segment => segment.Length > 0 && segment.All(char.IsAsciiDigit));
 
-        return position < 0 ? null : string.Join(':', segments[..(position + 1)]);
+        var block = segments.Length - 1;
+
+        while (block > 0 && SecretPropertyNaming.NamesASecret(segments[block]))
+        {
+            block--;
+        }
+
+        var outermost = indexed < 0 ? block : Math.Min(indexed, block);
+
+        return string.Join(':', segments[..(outermost + 1)]);
     }
 }

@@ -225,8 +225,14 @@ internal static class RouteAuthorization
     /// failure's own, which is written to be read by an operator, and the code travels beside it so a caller matches
     /// the failure rather than parsing the sentence.
     /// </para>
+    /// <para>
+    /// It is reachable from outside this filter for the one route mapped outside every group — the attachment
+    /// download, whose capability is a signed ticket rather than a credential and which therefore resolves the owner
+    /// itself. Composing that answer here rather than there is what keeps the two the same status, the same message,
+    /// and the same code.
+    /// </para>
     /// </remarks>
-    private static ProblemHttpResult Unattributable(DeploymentMailOwnerUnresolvedException refusal) =>
+    internal static ProblemHttpResult Unattributable(DeploymentMailOwnerUnresolvedException refusal) =>
         TypedResults.Problem(
             refusal.Message,
             statusCode: StatusCodes.Status409Conflict,

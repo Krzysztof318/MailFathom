@@ -497,10 +497,28 @@ internal sealed class OwnerRecordAdministration(
                 $"This owner's mail accounts already come from their own record, so there is nothing to adopt and version {opened.Record.Version} stays in force.");
         }
 
+        string candidate;
+
+        try
+        {
+            candidate = SettingsDocumentPatch.Apply(opened.Record.Json, configured.AdoptionEditsFor(owner));
+        }
+        catch (Exception refused) when (refused is FormatException or System.Text.Json.JsonException)
+        {
+            // The record being patched is a row rather than a buffer somebody just typed, so this is the one
+            // composition here whose input nobody in the request authored. It is still refused rather than left to
+            // fault, because the answer an operator needs is the same either way: which document could not be read,
+            // and that nothing was written.
+            return OwnerRecordWriteOutcome.Refused(
+                MailFathomErrorCode.ConfigurationCandidateInvalid,
+                opened.Record.Version,
+                [$"The owner's record is not a document of settings this deployment can read, so the accounts a configuration source declares were not moved into it: {refused.Message}"]);
+        }
+
         return await this.JudgeAndCommitAsync(
             owner,
             opened.Record,
-            SettingsDocumentPatch.Apply(opened.Record.Json, configured.AdoptionEditsFor(owner)),
+            candidate,
             OwnerRecordAuthority.Administrator,
             cancellationToken);
     }

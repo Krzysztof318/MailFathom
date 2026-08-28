@@ -258,6 +258,36 @@ public sealed class ClientApiEndpointsTests
             .Any(published => published.Permission == MailFathomPermission.MailAccountsWrite);
 
     /// <summary>
+    /// The bound on each record-route body, which the routes carry as metadata the routing pipeline reads. This surface
+    /// is reached by a person's own password rather than by an operator's key, so the default the server would apply
+    /// instead is the one bound nobody here decided on.
+    /// </summary>
+    /// <param name="route">The route the write is made on.</param>
+    [Theory]
+    [InlineData(ClientOwnerRecordEndpoint.RecordRoute)]
+    [InlineData(ClientOwnerRecordEndpoint.MailAccountsRoute)]
+    [InlineData(ClientOwnerRecordEndpoint.MailAccountRemovalRoute)]
+    public void MapClientApi_ARecordRouteThatReadsABody_CarriesTheRequestBodyBound(string route)
+    {
+        // Arrange
+        var endpoints = BuildRouteBuilder();
+
+        // Act
+        endpoints.MapClientApi();
+
+        // Assert
+        var write = endpoints.Materialize()
+            .OfType<RouteEndpoint>()
+            .Single(endpoint =>
+                $"/{endpoint.RoutePattern.RawText?.TrimStart('/')}" == $"{ClientEndpointOptions.RoutePrefix}{route}"
+                && endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Contains("POST"));
+
+        Assert.Equal(
+            OwnerRecordEndpoints.MaxWriteRequestBytes,
+            write.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata>()!.MaxRequestBodySize);
+    }
+
+    /// <summary>
     /// The decision published on a route is worth nothing unless something reads it, and only a request establishes
     /// that the group's filter does. This is the one test here that makes one.
     /// </summary>

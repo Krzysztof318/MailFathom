@@ -166,9 +166,10 @@ internal static class OwnerRecordEndpoints
     /// An owner this deployment does not hold is reported as nothing erased rather than as a refusal, because the
     /// caller asked for a state and the deployment is in it. That is a claim about the status code and not about the
     /// body: the answer carries whether a row was there, so a caller granted the erasure learns which identifiers this
-    /// deployment holds — which the sibling relabel withholds because nothing about a rename needs it. An owner a file
-    /// declares is the one erasure that is refused instead, because a start writes them back and the refusal names the
-    /// declaration to remove first.
+    /// deployment holds. Nothing here withholds that — the sibling relabel reports the same fact through its own status
+    /// code — and nothing needs to, the erasure being the one permission that could act on the answer anyway. An owner
+    /// a file declares is the one erasure that is refused instead, because a start writes them back and the refusal
+    /// names the declaration to remove first.
     /// </remarks>
     internal static async Task<Results<Ok<OwnerErasureResponse>, ProblemHttpResult>> EraseAsync(
         Guid ownerId,
@@ -198,9 +199,11 @@ internal static class OwnerRecordEndpoints
     /// <remarks>
     /// No body comes back, because the label the request carried is the whole of what changed and nothing about the
     /// owner is decided here. An owner this deployment does not hold is the same <c>404</c> the record routes beside
-    /// this one answer with: the roster is <see cref="MailFathomPermission.AdminRead" /> and this route is
-    /// <see cref="MailFathomPermission.AdminConfigurationWrite" />, and no permission implies another, so a credential
-    /// holding only the write must not learn from here which owners exist.
+    /// this one answer with, which is why it is that rather than a refusal naming what went wrong: one shape for
+    /// "no such owner" across every route addressing one is what makes a client's handling of it one branch. The
+    /// status code does report whether this deployment holds the owner, and is not written to withhold it — a
+    /// credential holding the configuration write can learn an identifier it already had to name, one identifier per
+    /// request, which is the roster's own read only in the sense that guessing a UUID is.
     /// </remarks>
     internal static async Task<Results<NoContent, NotFound<ProblemDetails>, ProblemHttpResult>> RelabelAsync(
         Guid ownerId,
