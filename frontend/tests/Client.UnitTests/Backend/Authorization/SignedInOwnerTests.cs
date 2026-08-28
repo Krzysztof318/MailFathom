@@ -41,6 +41,35 @@ public sealed class SignedInOwnerTests
         Assert.Equal("ada", owner.Username);
     }
 
+    /// <summary>
+    /// The session is announced before the write completes, so a subscriber that ends it on hearing about it — which
+    /// is what a deployment refusing the credential leads to — runs first. The write that follows belongs to a session
+    /// that is over, and performing it would leave the store holding a credential nobody is signed in under and the
+    /// next start signing it back in.
+    /// </summary>
+    [Fact]
+    public async Task AcceptAsync_ASubscriberEndedTheSessionOnTheAnnouncement_KeepsNothing()
+    {
+        // Arrange
+        var store = new StubOwnerCredentialStore();
+        var owner = new SignedInOwner(store);
+        var ended = ValueTask.CompletedTask;
+
+        owner.SignedInChanged += (_, _) => ended = owner.ForgetAsync(TestContext.Current.CancellationToken);
+
+        // Act
+        await owner.AcceptAsync(
+            Deployment,
+            new OwnerCredential("ada", "a-long-password"),
+            TestContext.Current.CancellationToken);
+
+        await ended;
+
+        // Assert
+        Assert.Null(store.Held);
+        Assert.False(owner.IsSignedIn);
+    }
+
     /// <summary>Everything derived from what the deployment answered is stale the moment the identity changes.</summary>
     [Fact]
     public async Task AcceptAsync_ACredential_AnnouncesThatTheSessionChanged()

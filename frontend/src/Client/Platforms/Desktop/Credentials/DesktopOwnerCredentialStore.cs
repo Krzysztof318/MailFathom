@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using MailFathom.Client.Backend;
@@ -30,14 +31,21 @@ namespace MailFathom.Client.Platforms.Desktop.Credentials;
 /// address and no secret: the credential stays in memory for the run, and the sign-in screen says so.
 /// </para>
 /// <para>
-/// Synchronous underneath, because every one of the three platform calls is. They are wrapped in a
-/// <see cref="ValueTask" /> for the port's sake rather than dispatched to a thread pool — a keyring answers in
-/// milliseconds when it answers at all, and the one case that can take a person's time, an unlock prompt, is bounded by
-/// the deadline the Linux store carries.
+/// Every one of the three platform calls is synchronous, and one of them can take a person's time: a locked keychain or
+/// keyring raises an unlock prompt and blocks until somebody answers it. So the call is made on the thread pool rather
+/// than on whichever thread asked — at a start that is the thread the window is drawn on — and the wait on it is
+/// bounded. Secret Service withdraws its own call after thirty seconds and reports what happened; Keychain Services and
+/// the Credential Manager offer no cancellation at all, so what expires here is this head's willingness to wait rather
+/// than the call itself, and it is deliberately the longer of the two so the store that can say why answers first. A
+/// wait that ran out is the answer an unreachable store already gives: the credential stays in memory for the run, and
+/// the sign-in screen says so.
 /// </para>
 /// </remarks>
 internal sealed class DesktopOwnerCredentialStore : IOwnerCredentialStore
 {
+    /// <summary>How long any one platform store is waited on before this head stops waiting for it.</summary>
+    private static readonly TimeSpan StoreDeadline = TimeSpan.FromSeconds(60);
+
     private readonly IDesktopSecretStore store;
 
     /// <summary>Initializes the store over one platform's own.</summary>
@@ -75,52 +83,55 @@ internal sealed class DesktopOwnerCredentialStore : IOwnerCredentialStore
     }
 
     /// <inheritdoc />
-    public ValueTask<KeptOwnerCredential?> ReadAsync(CancellationToken cancellationToken = default)
+    public async ValueTask<KeptOwnerCredential?> ReadAsync(CancellationToken cancellationToken = default)
     {
         try
         {
-            return ValueTask.FromResult(Read(this.store.Read()));
+            return Read(await this.WithinTheDeadlineAsync(this.store.Read, cancellationToken).ConfigureAwait(false));
         }
         catch (DesktopSecretStoreUnavailable)
         {
             // No store to read from is the same answer as a store holding nothing: the person signs in again. It is
             // not reported as a failure, because there is nothing they could do about it at the moment of reading.
-            return ValueTask.FromResult<KeptOwnerCredential?>(null);
+            return null;
         }
     }
 
     /// <inheritdoc />
-    public ValueTask<CredentialPersistence> WriteAsync(
+    public async ValueTask<CredentialPersistence> WriteAsync(
         KeptOwnerCredential credential,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(credential);
 
+        var stored = new StoredSignIn(
+            credential.Deployment.AbsoluteUri,
+            credential.Credential.Username,
+            credential.Credential.Password);
+
+        var document = JsonSerializer.Serialize(stored, DesktopCredentialJsonContext.Default.StoredSignIn);
+
         try
         {
-            var stored = new StoredSignIn(
-                credential.Deployment.AbsoluteUri,
-                credential.Credential.Username,
-                credential.Credential.Password);
+            await this.WithinTheDeadlineAsync(() => this.store.Write(document), cancellationToken)
+                .ConfigureAwait(false);
 
-            this.store.Write(JsonSerializer.Serialize(stored, DesktopCredentialJsonContext.Default.StoredSignIn));
-
-            return ValueTask.FromResult(CredentialPersistence.Kept);
+            return CredentialPersistence.Kept;
         }
         catch (DesktopSecretStoreUnavailable)
         {
             // Reported rather than thrown: the sign-in itself succeeded, and what is left to say is that the next start
             // will ask again. Nothing weaker is written instead.
-            return ValueTask.FromResult(CredentialPersistence.StoreUnavailable);
+            return CredentialPersistence.StoreUnavailable;
         }
     }
 
     /// <inheritdoc />
-    public ValueTask ClearAsync(CancellationToken cancellationToken = default)
+    public async ValueTask ClearAsync(CancellationToken cancellationToken = default)
     {
         try
         {
-            this.store.Clear();
+            await this.WithinTheDeadlineAsync(this.store.Clear, cancellationToken).ConfigureAwait(false);
         }
         catch (DesktopSecretStoreUnavailable)
         {
@@ -128,9 +139,49 @@ internal sealed class DesktopOwnerCredentialStore : IOwnerCredentialStore
             // here whatever the store did. Reporting it would put a storage failure in front of somebody who has just
             // signed out and is no longer looking.
         }
-
-        return ValueTask.CompletedTask;
     }
+
+    /// <summary>Makes one platform call away from the thread that asked, and stops waiting for it after the deadline.</summary>
+    /// <typeparam name="T">What the call reports.</typeparam>
+    /// <param name="call">The platform call, which blocks its thread for as long as the operating system takes.</param>
+    /// <param name="cancellationToken">Abandons the wait, which does not abandon the call.</param>
+    /// <returns>What the call reported.</returns>
+    /// <exception cref="DesktopSecretStoreUnavailable">Thrown when the deadline ran out before the store answered.</exception>
+    /// <remarks>
+    /// The call itself cannot be withdrawn from here — none of the three platform APIs takes a deadline, and the one
+    /// that can cancel does it from inside. What ends is this side's wait, so the pool thread stays in the prompt until
+    /// the operating system is done with it while the client goes on drawing and the person is told their next start
+    /// will ask again.
+    /// </remarks>
+    private async ValueTask<T> WithinTheDeadlineAsync<T>(Func<T> call, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await Task.Run(call).WaitAsync(StoreDeadline, cancellationToken).ConfigureAwait(false);
+        }
+        catch (TimeoutException expired)
+        {
+            throw new DesktopSecretStoreUnavailable(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"this machine's secret store did not answer within {StoreDeadline.TotalSeconds:F0} seconds"),
+                expired);
+        }
+    }
+
+    /// <summary>Makes one platform call that reports nothing away from the thread that asked.</summary>
+    /// <param name="call">The platform call, which blocks its thread for as long as the operating system takes.</param>
+    /// <param name="cancellationToken">Abandons the wait, which does not abandon the call.</param>
+    /// <returns>A task completing once the call has, or once the deadline ran out.</returns>
+    private ValueTask WithinTheDeadlineAsync(Action call, CancellationToken cancellationToken) =>
+        new(this.WithinTheDeadlineAsync(
+            () =>
+            {
+                call();
+
+                return true;
+            },
+            cancellationToken).AsTask());
 
     /// <summary>Reads one entry back, treating anything unreadable as nothing held.</summary>
     /// <remarks>

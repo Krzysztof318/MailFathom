@@ -25,12 +25,21 @@ namespace MailFathom.Client.Backend.Authorization;
 /// that resolved no address at all forgets whatever was held. All three are the same reason — a credential for a
 /// deployment nothing will ever present it to is a password kept for nothing.
 /// </para>
+/// <para>
+/// Those rules are what the store is asked to hold, so no two of them may reach it at once. Accepting a credential
+/// announces the new session before the write completes — deliberately, so a head whose store is slow to answer does
+/// not hold the sign-in up — and a subscriber acting on that announcement can end the session while the write is still
+/// in flight. Every operation against the store therefore runs alone, and a write whose session ended while it waited
+/// is dropped rather than performed: without both, a credential could be persisted after it had been forgotten and
+/// signed back in on the next start.
+/// </para>
 /// </remarks>
 public sealed class SignedInOwner
 {
     private readonly IOwnerCredentialStore store;
     private readonly Lock guard = new();
     private OwnerCredential? current;
+    private Task storeSettled = Task.CompletedTask;
 
     /// <summary>Initializes the session over the place this head keeps a credential, if it keeps one.</summary>
     /// <param name="store">Where the credential outlives the process, or the store that keeps nothing.</param>
@@ -114,9 +123,20 @@ public sealed class SignedInOwner
 
         this.SignedInChanged?.Invoke(this, EventArgs.Empty);
 
-        return await this.store
-            .WriteAsync(new KeptOwnerCredential(deployment, credential), cancellationToken)
-            .ConfigureAwait(false);
+        return await this.OnlyOnTheStoreAsync(async () =>
+        {
+            // A session that ended while this write waited belongs to nobody, and performing it would put back the
+            // credential that ending has just cleared. What is reported instead is what this head does with a
+            // credential at all: nothing renders it, because the sign-in it answered is already over.
+            if (!ReferenceEquals(this.Current, credential))
+            {
+                return this.store.Persistence;
+            }
+
+            return await this.store
+                .WriteAsync(new KeptOwnerCredential(deployment, credential), cancellationToken)
+                .ConfigureAwait(false);
+        }).ConfigureAwait(false);
     }
 
     /// <summary>Ends the session: drops what is held and clears what was kept.</summary>
@@ -140,7 +160,7 @@ public sealed class SignedInOwner
 
         // Cleared whether or not anything was held in memory, because a start that restored nothing may still be
         // sitting on an item written by a previous run.
-        await this.store.ClearAsync(cancellationToken).ConfigureAwait(false);
+        await this.OnlyOnTheStoreAsync(() => this.store.ClearAsync(cancellationToken)).ConfigureAwait(false);
 
         if (held)
         {
@@ -159,27 +179,83 @@ public sealed class SignedInOwner
     /// </remarks>
     internal async ValueTask<bool> RestoreAsync(Uri? pointedAt, CancellationToken cancellationToken = default)
     {
-        var kept = await this.store.ReadAsync(cancellationToken).ConfigureAwait(false);
-
-        if (kept is null)
+        // Reading and clearing are one operation rather than two, because a credential this start is about to
+        // discard must not be read back by anything that reached the store between them.
+        var restored = await this.OnlyOnTheStoreAsync(async () =>
         {
-            return false;
-        }
+            var kept = await this.store.ReadAsync(cancellationToken).ConfigureAwait(false);
 
-        if (pointedAt is null || kept.Deployment != pointedAt)
+            if (kept is null)
+            {
+                return null;
+            }
+
+            if (pointedAt is null || kept.Deployment != pointedAt)
+            {
+                await this.store.ClearAsync(cancellationToken).ConfigureAwait(false);
+
+                return null;
+            }
+
+            return kept;
+        }).ConfigureAwait(false);
+
+        if (restored is null)
         {
-            await this.store.ClearAsync(cancellationToken).ConfigureAwait(false);
-
             return false;
         }
 
         lock (this.guard)
         {
-            this.current = kept.Credential;
+            this.current = restored.Credential;
         }
 
         this.SignedInChanged?.Invoke(this, EventArgs.Empty);
 
         return true;
     }
+
+    /// <summary>Runs one operation against the store with no other one in flight.</summary>
+    /// <typeparam name="T">What the operation reports.</typeparam>
+    /// <param name="operation">What to do to the store once whatever preceded it has settled.</param>
+    /// <returns>What the operation reported.</returns>
+    /// <remarks>
+    /// A queue rather than a mutual-exclusion primitive, so this type owns nothing that has to be disposed and nothing
+    /// has to remember to release anything. Each operation publishes the completion its successor waits on and
+    /// completes it on the way out whatever it did, so an operation that failed hands the store on rather than closing
+    /// it and the task waited on can never be a faulted one carrying somebody else's exception.
+    /// </remarks>
+    private async ValueTask<T> OnlyOnTheStoreAsync<T>(Func<ValueTask<T>> operation)
+    {
+        TaskCompletionSource settled = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        Task inFlight;
+
+        lock (this.guard)
+        {
+            inFlight = this.storeSettled;
+            this.storeSettled = settled.Task;
+        }
+
+        await inFlight.ConfigureAwait(false);
+
+        try
+        {
+            return await operation().ConfigureAwait(false);
+        }
+        finally
+        {
+            settled.SetResult();
+        }
+    }
+
+    /// <summary>Runs one operation against the store with no other one in flight, where it reports nothing.</summary>
+    /// <param name="operation">What to do to the store once whatever preceded it has settled.</param>
+    /// <returns>A task completing once the operation has.</returns>
+    private async ValueTask OnlyOnTheStoreAsync(Func<ValueTask> operation) =>
+        await this.OnlyOnTheStoreAsync(async () =>
+        {
+            await operation().ConfigureAwait(false);
+
+            return true;
+        }).ConfigureAwait(false);
 }
