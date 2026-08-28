@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
 using MailFathom.Host.Configuration.OwnerSettings;
 using Microsoft.Extensions.Configuration;
 using Xunit;
@@ -132,6 +133,35 @@ public sealed class DeclaredOwnersTests
 
         // Assert
         Assert.Contains(errors, error => error.StartsWith("Accounts:0:MailAccounts — alex:", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A window opening after today excludes every email the mailbox holds, which a running deployment reports as a
+    /// mailbox that synchronizes nothing rather than as a setting nobody could have meant.
+    /// </summary>
+    [Fact]
+    public void FindConfigurationErrors_AnOwnersMailboxWhoseWindowOpensAfterToday_IsRefusedUnderTheirLabel()
+    {
+        // Arrange
+        var configuration = Configuration(new Dictionary<string, string?>
+        {
+            ["Accounts:0:Id"] = Alex,
+            ["Accounts:0:DisplayName"] = "alex",
+            ["Accounts:0:MailAccounts:0:AccountId"] = "alex-work",
+            ["Accounts:0:MailAccounts:0:DisplayName"] = "Alex at work",
+            ["Accounts:0:MailAccounts:0:Host"] = "imap.example.test",
+            ["Accounts:0:MailAccounts:0:UserName"] = "alex@example.test",
+            ["Accounts:0:MailAccounts:0:EarliestEmailReceivedDate"] = Today.AddDays(1).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        });
+
+        // Act
+        var errors = DeclaredOwners.FindConfigurationErrors(configuration, Today);
+
+        // Assert
+        Assert.Contains(
+            errors,
+            error => error.StartsWith("Accounts:0:MailAccounts — alex:", StringComparison.Ordinal)
+                && error.Contains("earliest email received date", StringComparison.Ordinal));
     }
 
     /// <summary>An owner is declared with the label an administrator tells them apart by, and with the identity their mail hangs on.</summary>
