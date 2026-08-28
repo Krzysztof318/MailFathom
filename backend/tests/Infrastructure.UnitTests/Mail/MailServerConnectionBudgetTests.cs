@@ -83,6 +83,32 @@ public sealed class MailServerConnectionBudgetTests
         using var admitted = await queued.WaitAsync(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
     }
 
+    /// <summary>Disposal is shutdown for a queued attempt, so it completes with a classified failure rather than waiting forever.</summary>
+    [Fact]
+    public async Task Dispose_AHostAtItsBound_UnblocksTheQueuedAttempt()
+    {
+        // Arrange
+        var budget = new MailServerConnectionBudget(maximumConnectionsPerHost: 2);
+        using var first = await budget.AcquireAsync(
+            "imap.example.test",
+            MailServerConnectionPurpose.Work,
+            TestContext.Current.CancellationToken);
+        using var second = await budget.AcquireAsync(
+            "imap.example.test",
+            MailServerConnectionPurpose.Work,
+            TestContext.Current.CancellationToken);
+        var queued = budget.AcquireAsync(
+            "imap.example.test",
+            MailServerConnectionPurpose.Work,
+            TestContext.Current.CancellationToken);
+
+        // Act
+        budget.Dispose();
+
+        // Assert
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => queued);
+    }
+
     private static RecordedMeasurement MeasurementFor(
         RecordedMailFathomMeasurements measurements,
         string instrument,

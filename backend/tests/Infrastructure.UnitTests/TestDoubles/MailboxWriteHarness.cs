@@ -5,6 +5,7 @@
 using MailFathom.Application.Folders;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Domain.Folders;
+using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.MailKit.Writes;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.TestSupport;
@@ -21,13 +22,17 @@ namespace MailFathom.Infrastructure.UnitTests.TestDoubles;
 /// </remarks>
 internal sealed class MailboxWriteHarness : IAsyncDisposable
 {
+    private readonly MailServerConnectionBudget connectionBudget;
+
     internal MailboxWriteHarness(
         MailboxWriteConnectionPool pool,
+        MailServerConnectionBudget connectionBudget,
         MailboxMutationTelemetry telemetry,
         RecordingLoggerProvider recordedLogs,
         MailKitImapWriteSessionTestContext.ScopeDisposalCounter scopeDisposals)
     {
         this.Pool = pool;
+        this.connectionBudget = connectionBudget;
         this.RecordedLogs = recordedLogs;
         this.ScopeDisposals = scopeDisposals;
         this.Factory = new MailKitImapWriteSessionFactory(pool, telemetry);
@@ -72,5 +77,9 @@ internal sealed class MailboxWriteHarness : IAsyncDisposable
             CancellationToken.None);
 
     /// <inheritdoc />
-    public ValueTask DisposeAsync() => this.Pool.DisposeAsync();
+    public async ValueTask DisposeAsync()
+    {
+        await this.Pool.DisposeAsync();
+        this.connectionBudget.Dispose();
+    }
 }

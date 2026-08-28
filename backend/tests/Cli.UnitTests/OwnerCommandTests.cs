@@ -536,6 +536,9 @@ public sealed class OwnerCommandTests : IDisposable
         Assert.DoesNotContain(
             this.harness.Console.Lines.Concat(this.harness.Console.Errors),
             line => line.Contains("Restart it", StringComparison.Ordinal));
+        Assert.Contains(
+            this.harness.Console.Lines.Concat(this.harness.Console.Errors),
+            line => line.Contains("has stopped serving this owner", StringComparison.Ordinal));
     }
 
     /// <summary>An owner the deployment does not hold is nothing to erase rather than a failure, and the confirmation is never reached.</summary>

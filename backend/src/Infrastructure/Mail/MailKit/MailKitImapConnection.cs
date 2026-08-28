@@ -548,9 +548,12 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
                 settings.Host,
                 this.connectionPurpose,
                 cancellationToken);
-            var attemptClient = this.clientFactory();
+            IImapClient? attemptClient = null;
+
             try
             {
+                attemptClient = this.clientFactory();
+
                 MailKitClientLifetime.TrustConfiguredCertificateAuthority(
                     attemptClient,
                     settings.Material.TrustedCertificateAuthority);
@@ -577,7 +580,11 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
             {
                 // A half-established connection is unusable by definition, and this cleanup runs inside an attempt the
                 // pipeline may abandon, so it closes the socket rather than waiting on a logout the server owes it.
-                MailKitClientLifetime.Abandon(attemptClient);
+                if (attemptClient is not null)
+                {
+                    MailKitClientLifetime.Abandon(attemptClient);
+                }
+
                 throw;
             }
             finally

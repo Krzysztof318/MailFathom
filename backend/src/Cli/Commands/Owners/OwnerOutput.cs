@@ -53,7 +53,7 @@ internal static class OwnerOutput
             context.Console.WriteLine(
                 $"Committed owner record version {answer.Version.ToString(CultureInfo.InvariantCulture)}.");
             context.Console.WriteNotice(
-                "The running deployment has adopted this account set. A synchronization run already in flight finishes "
+                "The running deployment is using this account set now. A synchronization run already in flight finishes "
                 + "against the previous version; the next run uses this one.");
 
             return CliExitCode.Success;

@@ -164,7 +164,7 @@ public sealed class MailSynchronizationCoordinatorTests
             enabled: true,
             SynchronizationTestHost.CreateAccount("original", "INBOX"),
             SynchronizationTestHost.CreateAccount("added", "INBOX"));
-        await addedAccountAttempted.Task.WaitAsync(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
+        await addedAccountAttempted.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
 
         // Assert
         // Drained first, because the awaited signal is raised from inside the supervisor and the coordinator writes
@@ -222,7 +222,7 @@ public sealed class MailSynchronizationCoordinatorTests
         harness.Settings.Current = SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "ARCHIVE");
         Assert.False(changedFolderAttempted.Task.IsCompleted);
         releaseOriginalWorkUnit.SetResult();
-        await changedFolderAttempted.Task.WaitAsync(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
+        await changedFolderAttempted.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(originalWorkUnitObservedCancellation);

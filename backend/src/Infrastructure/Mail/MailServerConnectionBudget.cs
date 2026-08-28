@@ -27,8 +27,9 @@ public sealed class MailServerConnectionBudget : IDisposable
     internal const string HostTagName = "mailfathom.mail.server.host";
 
     private readonly ConcurrentDictionary<string, HostBudget> hosts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly CancellationTokenSource disposalCancellation = new();
     private readonly int maximumConnectionsPerHost;
-    private bool disposed;
+    private int disposed;
 
     /// <summary>Initializes the process-wide host budgets.</summary>
     /// <param name="maximumConnectionsPerHost">The greatest number of IMAP connections one host may hold.</param>
@@ -65,10 +66,12 @@ public sealed class MailServerConnectionBudget : IDisposable
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(host);
-        ObjectDisposedException.ThrowIf(this.disposed, this);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref this.disposed) != 0, this);
 
         return this.hosts
-            .GetOrAdd(host.Trim(), key => new HostBudget(key, this.maximumConnectionsPerHost))
+            .GetOrAdd(
+                host.Trim(),
+                key => new HostBudget(key, this.maximumConnectionsPerHost, this.disposalCancellation.Token))
             .AcquireAsync(purpose, cancellationToken);
     }
 
@@ -84,21 +87,21 @@ public sealed class MailServerConnectionBudget : IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
-        if (this.disposed)
+        if (Interlocked.Exchange(ref this.disposed, 1) != 0)
         {
             return;
         }
 
-        this.disposed = true;
-
-        foreach (var host in this.hosts.Values)
-        {
-            host.Dispose();
-        }
+        this.disposalCancellation.Cancel();
+        this.disposalCancellation.Dispose();
     }
 
     /// <summary>One host's total ceiling and the smaller ceiling its long-lived push connections share.</summary>
-    private sealed class HostBudget(string host, int maximumConnections) : IDisposable
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "The process-wide semaphores never expose AvailableWaitHandle and remain valid until every admitted lease releases after shutdown cancellation.")]
+    private sealed class HostBudget(
+        string host,
+        int maximumConnections,
+        CancellationToken disposalToken)
     {
         private readonly SemaphoreSlim allConnections = new(maximumConnections, maximumConnections);
         private readonly SemaphoreSlim pushConnections = new(maximumConnections - 1, maximumConnections - 1);
@@ -117,19 +120,28 @@ public sealed class MailServerConnectionBudget : IDisposable
         {
             var pushSlotHeld = false;
             Interlocked.Increment(ref this.queuedConnections);
+            using var waitCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken,
+                disposalToken);
 
             try
             {
                 if (purpose == MailServerConnectionPurpose.PushNotification)
                 {
-                    await this.pushConnections.WaitAsync(cancellationToken);
+                    await this.pushConnections.WaitAsync(waitCancellation.Token);
                     pushSlotHeld = true;
                 }
 
-                await this.allConnections.WaitAsync(cancellationToken);
+                await this.allConnections.WaitAsync(waitCancellation.Token);
                 Interlocked.Increment(ref this.activeConnections);
 
                 return new ConnectionLease(this, pushSlotHeld);
+            }
+            catch (OperationCanceledException) when (
+                disposalToken.IsCancellationRequested
+                && !cancellationToken.IsCancellationRequested)
+            {
+                throw new ObjectDisposedException(nameof(MailServerConnectionBudget));
             }
             catch
             {
@@ -160,12 +172,6 @@ public sealed class MailServerConnectionBudget : IDisposable
         internal Measurement<long> Measure(long value) => new(
             value,
             new KeyValuePair<string, object?>(HostTagName, host));
-
-        public void Dispose()
-        {
-            this.allConnections.Dispose();
-            this.pushConnections.Dispose();
-        }
 
         private sealed class ConnectionLease(HostBudget budget, bool pushSlotHeld) : IDisposable
         {

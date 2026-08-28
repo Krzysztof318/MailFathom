@@ -153,12 +153,13 @@ internal static class MailKitImapWriteSessionTestContext
     {
         var recordedLogs = new RecordingLoggerProvider();
         var scopeDisposals = new ScopeDisposalCounter();
+        var connectionBudget = CreateConnectionBudget();
         var pool = new MailboxWriteConnectionPool(
             clientFactory,
             CreateScopeFactory(scopeDisposals),
             resilience.Executor,
             resilience.TransientFailureClassifier,
-            MailKitImapSessionTestContext.ConnectionBudget,
+            connectionBudget,
             options,
             timeProvider,
             new RecordingCategoryLogger<MailboxWriteConnectionPool>(recordedLogs));
@@ -166,7 +167,7 @@ internal static class MailKitImapWriteSessionTestContext
             new RecordingCategoryLogger<MailboxMutationTelemetry>(recordedLogs),
             new FakeTimeProvider(ObservedAt));
 
-        return new MailboxWriteHarness(pool, telemetry, recordedLogs, scopeDisposals);
+        return new MailboxWriteHarness(pool, connectionBudget, telemetry, recordedLogs, scopeDisposals);
     }
 
     /// <summary>Prepares one scripted connection to answer a selection with the folder and a destination lookup by path.</summary>

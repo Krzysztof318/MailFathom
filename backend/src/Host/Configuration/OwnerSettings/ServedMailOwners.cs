@@ -184,6 +184,9 @@ internal sealed class ServedMailOwners : IDeploymentMailOwnerSource
     /// <param name="displayName">The label the owner record carries.</param>
     /// <param name="mailAccounts">The validated account declarations the committed document contains.</param>
     /// <param name="version">The committed document version.</param>
+    /// <exception cref="ArgumentException">Thrown when the owner is unspecified, the display name is blank, or the version is not positive.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when the mail accounts are <see langword="null" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the startup gate has not established the roster.</exception>
     internal void OwnerDocumentPublished(
         MailOwnerId owner,
         string displayName,
@@ -230,6 +233,9 @@ internal sealed class ServedMailOwners : IDeploymentMailOwnerSource
     }
 
     /// <summary>Removes an erased owner from the runtime roster and publishes the resulting account set.</summary>
+    /// <param name="owner">The owner whose record was erased.</param>
+    /// <exception cref="ArgumentException">Thrown when the owner is unspecified.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the startup gate has not established the roster.</exception>
     internal void OwnerErased(MailOwnerId owner)
     {
         if (!owner.IsSpecified)
