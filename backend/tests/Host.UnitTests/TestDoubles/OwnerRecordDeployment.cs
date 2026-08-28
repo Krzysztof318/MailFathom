@@ -3,12 +3,16 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Access;
+using MailFathom.Application.Persistence;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.OwnerSettings;
 using MailFathom.Host.Configuration.OwnerSettings.Administration;
 using MailFathom.Infrastructure.Persistence.Owners;
+using MailFathom.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Secrets.Database;
+using MailFathom.Infrastructure.Secrets.Resolution;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -109,6 +113,29 @@ internal sealed class OwnerRecordDeployment
             SecretValidation.OverRegisteredSchemes(),
             this.servedOwners,
             configured);
+
+        this.StoredSecrets = Substitute.For<IStoredSecretStore>();
+        this.StoredSecrets.CanStore.Returns(true);
+        this.StoredSecrets.StoreAsync(
+                Arg.Any<IPersistenceSession>(),
+                Arg.Any<DatabaseSecretReference>(),
+                Arg.Any<MailOwnerId>(),
+                Arg.Any<SecretName>(),
+                Arg.Any<ResolvedSecret>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.ArgAt<DatabaseSecretReference>(1));
+        var session = Substitute.For<IPersistenceSession>();
+        session.CommitAsync(Arg.Any<CancellationToken>()).Returns(PersistenceCommitResult.Committed);
+        var sessions = Substitute.For<IPersistenceSessionFactory>();
+        sessions.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(session);
+        this.Secrets = new StoredSecretAdministration(
+            authorization,
+            this.Documents,
+            this.StoredSecrets,
+            new OptimisticConcurrencyRetryPolicy(
+                sessions,
+                new PersistenceConcurrencyOptions { MaximumCommitAttempts = 1 },
+                TimeProvider.System));
     }
 
     /// <summary>Gets the roster administration the deployment-wide routes are published over.</summary>
@@ -116,6 +143,12 @@ internal sealed class OwnerRecordDeployment
 
     /// <summary>Gets the record administration both owner-record surfaces are published over.</summary>
     internal OwnerRecordAdministration Records { get; }
+
+    /// <summary>Gets the stored-secret administration exposed by the owner routes.</summary>
+    internal StoredSecretAdministration Secrets { get; }
+
+    /// <summary>Gets the substituted sealed-material store.</summary>
+    internal IStoredSecretStore StoredSecrets { get; }
 
     /// <summary>Gets the substituted reader one owner's row is stated through.</summary>
     internal IOwnerSettingsDocumentReader Documents { get; }

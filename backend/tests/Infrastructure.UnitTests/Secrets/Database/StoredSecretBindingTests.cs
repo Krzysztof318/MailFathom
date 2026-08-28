@@ -27,6 +27,25 @@ public sealed class StoredSecretBindingTests
     private static readonly byte[] Plaintext = Encoding.UTF8.GetBytes("not-a-real-mailbox-password");
 
     [Fact]
+    public async Task OpenAsync_AStoredSecretUnderItsMatchingBinding_ReturnsTheMaterial()
+    {
+        // Arrange
+        var encryptor = CreateEncryptor();
+        var binding = StoredSecretBinding.Create(Owner, Reference, Name);
+        var sealedValue = await encryptor.SealAsync(
+            binding,
+            Plaintext,
+            TestContext.Current.CancellationToken);
+
+        // Act
+        var opened = await encryptor.OpenAsync(binding, sealedValue, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(Plaintext, opened);
+        CryptographicOperations.ZeroMemory(opened);
+    }
+
+    [Fact]
     public async Task OpenAsync_AStoredSecretMovedToAnotherOwner_DoesNotOpen()
     {
         // Arrange

@@ -26,7 +26,10 @@ internal sealed class StoredSecretStore(
     TimeProvider timeProvider) : IStoredSecretStore
 {
     /// <inheritdoc />
-    public async Task StoreAsync(
+    public bool CanStore => keyRing.IsConfigured;
+
+    /// <inheritdoc />
+    public async Task<DatabaseSecretReference> StoreAsync(
         IPersistenceSession session,
         DatabaseSecretReference reference,
         MailOwnerId owner,
@@ -37,7 +40,7 @@ internal sealed class StoredSecretStore(
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(material);
 
-        if (!keyRing.IsConfigured)
+        if (!this.CanStore)
         {
             throw new InvalidOperationException(
                 "DataEncryption configures no key ring, so MailFathom cannot store secret material in the database.");
@@ -54,12 +57,32 @@ internal sealed class StoredSecretStore(
             throw new ArgumentException("Stored secret material exceeds the configured material bound.", nameof(material));
         }
 
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
+        var stored = await TrackedEntityLookup.SinglePendingOrPersistedAsync(
+            writeContext.StoredSecrets,
+            writeContext.StoredSecrets,
+            secret => secret.OwnerId == owner.Value && secret.Name == name.Value,
+            cancellationToken);
+        if (stored is null)
+        {
+            stored = await writeContext.StoredSecrets.FindAsync([reference.Id], cancellationToken);
+        }
+
+        if (stored is not null && stored.OwnerId != owner.Value)
+        {
+            throw new InvalidOperationException(
+                "The database secret reference already belongs to another owner and cannot be moved.");
+        }
+
+        var effectiveReference = stored is null
+            ? reference
+            : DatabaseSecretReference.Create(stored.Id);
         var plaintext = material.RevealBytes().ToArray();
         SealedValue sealedValue;
         try
         {
             sealedValue = await fieldEncryptor.SealAsync(
-                StoredSecretBinding.Create(owner, reference, name),
+                StoredSecretBinding.Create(owner, effectiveReference, name),
                 plaintext,
                 cancellationToken);
         }
@@ -68,8 +91,6 @@ internal sealed class StoredSecretStore(
             CryptographicOperations.ZeroMemory(plaintext);
         }
 
-        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
-        var stored = await writeContext.StoredSecrets.FindAsync([reference.Id], cancellationToken);
         var now = timeProvider.GetUtcNow();
 
         if (stored is null)
@@ -86,19 +107,15 @@ internal sealed class StoredSecretStore(
             };
             writeContext.StoredSecrets.Add(stored);
 
-            return;
-        }
-
-        if (stored.OwnerId != owner.Value)
-        {
-            throw new InvalidOperationException(
-                "The database secret reference already belongs to another owner and cannot be moved.");
+            return effectiveReference;
         }
 
         stored.Name = name.Value!;
         stored.SealedMaterial = sealedValue.Ciphertext.ToArray();
         stored.DataEncryptionKeyId = sealedValue.KeyId;
         stored.UpdatedAt = now;
+
+        return effectiveReference;
     }
 
     /// <inheritdoc />
@@ -121,10 +138,15 @@ internal sealed class StoredSecretStore(
         }
 
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
+        var stored = await writeContext.StoredSecrets.FindAsync([reference.Id], cancellationToken);
+        if (stored is null || stored.OwnerId != owner.Value)
+        {
+            return false;
+        }
 
-        return await writeContext.StoredSecrets
-            .Where(secret => secret.Id == reference.Id && secret.OwnerId == owner.Value)
-            .ExecuteDeleteAsync(cancellationToken) > 0;
+        writeContext.StoredSecrets.Remove(stored);
+
+        return true;
     }
 
     /// <inheritdoc />

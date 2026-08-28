@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Infrastructure.Secrets.Database;
 using MailFathom.Infrastructure.Secrets.References;
 using MailFathom.Infrastructure.Secrets.Resolution;
 
@@ -22,6 +23,7 @@ internal sealed class DeclaredSecretScheme(SecretReferenceScheme scheme) : ISecr
         new DeclaredSecretScheme(SecretReferenceScheme.SystemdCredential),
         new DeclaredSecretScheme(SecretReferenceScheme.File),
         new DeclaredSecretScheme(SecretReferenceScheme.EnvironmentVariable),
+        new DeclaredSecretScheme(DatabaseSecretReference.Scheme),
         new DeclaredSecretScheme(SecretReferenceScheme.Plaintext),
     ];
 

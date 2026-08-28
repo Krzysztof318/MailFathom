@@ -129,8 +129,8 @@ public sealed class AdminApiEndpointsTests
         // credential are separate acts an operator audits separately.
         // The owners appear twice at the roster path, which is the listing and the recording, once at the owner's own
         // path for the erasure, once at the label's path for the rename, twice at their record's path for the reading
-        // and the saving, and twice at the adoption path for the preview and the act — the same reason the
-        // configuration adoption has both.
+        // and the saving, twice at the adoption path for the preview and the act, and once at the secret path for a
+        // sealed write — the same reason the configuration adoption has both.
         Assert.Equal(
             [
                 $"{AdminEndpointOptions.RoutePrefix}{MailAnsweringAuditEndpoint.Route}",
@@ -184,6 +184,7 @@ public sealed class AdminApiEndpointsTests
                 $"{AdminEndpointOptions.RoutePrefix}{OwnerRecordEndpoints.OwnerAdoptionRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{OwnerRecordEndpoints.OwnerMailAccountsRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{OwnerRecordEndpoints.OwnerMailAccountRemovalRoute}",
+                $"{AdminEndpointOptions.RoutePrefix}{OwnerRecordEndpoints.OwnerSecretsRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailRuleEndpoints.RulesRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailRuleEndpoints.HistoryRoute}",
                 $"{AdminEndpointOptions.RoutePrefix}{MailRuleEndpoints.RunsRoute}",
@@ -287,6 +288,7 @@ public sealed class AdminApiEndpointsTests
                 $"POST {prefix}{OwnerRecordEndpoints.OwnerMailAccountRemovalRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
                 $"GET {prefix}{OwnerRecordEndpoints.OwnerAdoptionRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"POST {prefix}{OwnerRecordEndpoints.OwnerAdoptionRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
+                $"POST {prefix}{OwnerRecordEndpoints.OwnerSecretsRoute} -> {MailFathomPermission.AdminConfigurationWrite.Name}",
                 $"GET {prefix}{OwnerCredentialEndpoints.OwnerCredentialsRoute} -> {MailFathomPermission.AdminRead.Name}",
                 $"POST {prefix}{OwnerCredentialEndpoints.OwnerCredentialsRoute} -> {MailFathomPermission.AdminCredentialsWrite.Name}",
                 $"PUT {prefix}{OwnerCredentialEndpoints.OwnerCredentialMaterialRoute} -> {MailFathomPermission.AdminCredentialsWrite.Name}",

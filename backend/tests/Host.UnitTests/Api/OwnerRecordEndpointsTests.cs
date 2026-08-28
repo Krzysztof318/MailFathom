@@ -428,6 +428,50 @@ public sealed class OwnerRecordEndpointsTests
         Assert.IsType<NotFound<ProblemDetails>>(result.Result);
     }
 
+    [Fact]
+    public async Task StoreSecretAsync_AnExistingOwner_ReturnsOnlyTheDatabaseReference()
+    {
+        // Arrange
+        var deployment = new OwnerRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
+        deployment.Holding(SyntheticMailOwner.Deployment, EmptyRecord, version: 1);
+
+        // Act
+        var result = await OwnerRecordEndpoints.StoreSecretAsync(
+            SyntheticMailOwner.Deployment.Value,
+            new StoredSecretWriteRequest("primary-password", "not-a-real-mailbox-password"),
+            deployment.Secrets,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var provisioned = Assert.IsType<Ok<StoredSecretProvisionedResponse>>(result.Result).Value!;
+        Assert.StartsWith("database:", provisioned.SecretReference, StringComparison.Ordinal);
+        Assert.DoesNotContain("mailbox-password", provisioned.SecretReference, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StoreSecretAsync_ARequestCarryingEmptyMaterial_RefusesWithoutReachingTheStore()
+    {
+        // Arrange
+        var deployment = new OwnerRecordDeployment([MailFathomPermission.AdminConfigurationWrite]);
+
+        // Act
+        var result = await OwnerRecordEndpoints.StoreSecretAsync(
+            SyntheticMailOwner.Deployment.Value,
+            new StoredSecretWriteRequest("primary-password", string.Empty),
+            deployment.Secrets,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        AssertRefusal(result.Result, StatusCodes.Status400BadRequest);
+        await deployment.StoredSecrets.DidNotReceiveWithAnyArgs().StoreAsync(
+            default!,
+            default,
+            default,
+            default,
+            default!,
+            TestContext.Current.CancellationToken);
+    }
+
     /// <summary>The preview names what stops deciding this owner's mailboxes once the adoption commits, which is the part an operator weighs.</summary>
     [Fact]
     public async Task ReadAdoptableAsync_AnOwnerThisDeploymentHolds_ReportsWhetherThereIsAnAdoptionToPerform()

@@ -20,15 +20,23 @@ public interface IStoredSecretStore
     /// <summary>The largest key-retirement inventory one read returns.</summary>
     const int MaximumKeyReferenceCount = 1000;
 
-    /// <summary>Seals and stages one stored secret, creating or replacing the row its reference identifies.</summary>
+    /// <summary>Gets whether the deployment configures the key ring required to seal material.</summary>
+    bool CanStore { get; }
+
+    /// <summary>Seals and stages one stored secret, creating its owner-and-name identity or replacing its material.</summary>
     /// <param name="session">The transaction the referencing document joins.</param>
     /// <param name="reference">The stable reference the document carries.</param>
     /// <param name="owner">The subject whose deletion removes the secret.</param>
     /// <param name="name">The safe declared name used for binding, rotation, and audit.</param>
     /// <param name="material">The caller-owned material, left usable and never retained.</param>
     /// <param name="cancellationToken">Cancels sealing or joining the transaction.</param>
-    /// <returns>A task that completes once the write is staged.</returns>
-    Task StoreAsync(
+    /// <returns>The stable reference for the owner-and-name identity once the write is staged.</returns>
+    /// <remarks>
+    /// The supplied reference is used only when no row exists for <paramref name="owner" /> and <paramref name="name" />.
+    /// A retry after a concurrent insert returns the winner's reference and replaces its material, so submitting the same
+    /// owner and name twice rotates one secret rather than creating two.
+    /// </remarks>
+    Task<DatabaseSecretReference> StoreAsync(
         IPersistenceSession session,
         DatabaseSecretReference reference,
         MailOwnerId owner,
@@ -37,6 +45,7 @@ public interface IStoredSecretStore
         CancellationToken cancellationToken);
 
     /// <summary>Stages removal of one stored secret only when it belongs to the stated owner.</summary>
+    /// <returns><see langword="true" /> when the session held the matching row; <see langword="false" /> when the reference was absent or belonged to another owner.</returns>
     Task<bool> RemoveAsync(
         IPersistenceSession session,
         DatabaseSecretReference reference,

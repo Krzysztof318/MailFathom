@@ -23,4 +23,17 @@ public sealed class DatabaseSecretReferenceResolverTests
         // Assert
         Assert.Equal(SecretResolutionFailure.RetrievalTimedOut, failure);
     }
+
+    [Fact]
+    public void ClassifyProviderFailure_AProviderTransportFailure_ReportsProviderUnavailable()
+    {
+        // Arrange
+        var exception = new NpgsqlException("The connection failed.", new IOException());
+
+        // Act
+        var failure = DatabaseSecretReferenceResolver.ClassifyProviderFailure(exception);
+
+        // Assert
+        Assert.Equal(SecretResolutionFailure.ProviderUnavailable, failure);
+    }
 }
