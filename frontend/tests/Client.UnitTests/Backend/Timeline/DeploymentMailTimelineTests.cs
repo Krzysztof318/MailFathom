@@ -47,7 +47,7 @@ public sealed class DeploymentMailTimelineTests
     public async Task ReadMailTimelineAsync_ADeploymentAnswering_ReadsEveryFieldOfTheContract()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(OnePage));
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(OnePage));
 
         // Act
         var page = await harness.Client.ReadMailTimelineAsync(
@@ -84,7 +84,7 @@ public sealed class DeploymentMailTimelineTests
     public async Task ReadMailTimelineAsync_ARequestNarrowingSomewhere_GoesToTheClientSurfaceCarryingIt()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(OnePage));
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(OnePage));
 
         // Act
         await harness.Client.ReadMailTimelineAsync(
@@ -103,7 +103,7 @@ public sealed class DeploymentMailTimelineTests
     public async Task ReadMailTimelineAsync_ADocumentNamingNoRow_ReadsAsEmptyRatherThanFailing()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse("""{"pageSize":25}"""));
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse("""{"pageSize":25}"""));
 
         // Act
         var page = await harness.Client.ReadMailTimelineAsync(
@@ -125,7 +125,7 @@ public sealed class DeploymentMailTimelineTests
     public async Task ReadMailTimelineAsync_ACursorTheDeploymentRefuses_ReachesTheCallerAsARefusedRequest()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
+        using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse("{}", HttpStatusCode.BadRequest));
 
         // Act
@@ -143,7 +143,7 @@ public sealed class DeploymentMailTimelineTests
     public async Task ReadMailTimelineAsync_ACredentialWithoutTheGrant_IsRefusedRatherThanAnsweredWithNothing()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
+        using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse("{}", HttpStatusCode.Forbidden));
 
         // Act
@@ -161,7 +161,7 @@ public sealed class DeploymentMailTimelineTests
     public async Task ReadMailTimelineAsync_NoQuery_IsRefused()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(OnePage));
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(OnePage));
 
         // Act, Assert
         await Assert.ThrowsAsync<ArgumentNullException>(

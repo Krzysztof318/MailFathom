@@ -41,7 +41,7 @@ public sealed class DeploymentSignInTests
     public async Task SignInAsync_WithACredentialTheDeploymentAccepts_SignsIn()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
+        using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse(SessionDocument),
             store: new StubOwnerCredentialStore());
 
@@ -61,7 +61,7 @@ public sealed class DeploymentSignInTests
     public async Task SignInAsync_PresentsTheCredentialAsAnRfc7617BasicHeader()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(SessionDocument));
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(SessionDocument));
 
         // Act
         await harness.SignIn.SignInAsync(
@@ -81,7 +81,7 @@ public sealed class DeploymentSignInTests
     public async Task SignInAsync_OffersTheCredentialToTheSessionRouteOfTheDeploymentItIsPointedAt()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(SessionDocument));
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(SessionDocument));
 
         // Act
         await harness.SignIn.SignInAsync(
@@ -99,7 +99,7 @@ public sealed class DeploymentSignInTests
     public async Task SignInAsync_WithACredentialTheDeploymentRefuses_LeavesNobodySignedIn()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
+        using var harness = await DeploymentHarness.CreateAsync(
             _ => RefusedWithAPasswordChallenge(),
             store: new StubOwnerCredentialStore());
 
@@ -121,7 +121,7 @@ public sealed class DeploymentSignInTests
     public async Task SignInAsync_WithARefusalThatInvitesNoPassword_ReportsThatTheDeploymentOffersNone()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => RefusedWithoutOne());
+        using var harness = await DeploymentHarness.CreateAsync(_ => RefusedWithoutOne());
 
         // Act
         var attempt = await harness.SignIn.SignInAsync(
@@ -137,7 +137,7 @@ public sealed class DeploymentSignInTests
     public async Task SignInAsync_WithSomethingThatIsNotMailFathomAnswering_RefusesTheAnswer()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
+        using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse("""{"service":"Something Else","version":"1","permissions":[]}"""));
 
         // Act
@@ -156,7 +156,7 @@ public sealed class DeploymentSignInTests
     public async Task SignInAsync_WithNothingPointedAt_Refuses()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
+        using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse(SessionDocument),
             pointed: false);
 
@@ -174,7 +174,7 @@ public sealed class DeploymentSignInTests
         // Arrange
         var store = new StubOwnerCredentialStore();
 
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(SessionDocument), store: store);
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(SessionDocument), store: store);
 
         // Act
         var attempt = await harness.SignIn.SignInAsync(
@@ -194,7 +194,7 @@ public sealed class DeploymentSignInTests
         // Arrange
         var store = new StubOwnerCredentialStore(CredentialPersistence.StoreUnavailable);
 
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(SessionDocument), store: store);
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(SessionDocument), store: store);
 
         // Act
         var attempt = await harness.SignIn.SignInAsync(
@@ -215,7 +215,7 @@ public sealed class DeploymentSignInTests
         // Arrange
         var store = new StubOwnerCredentialStore();
 
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(SessionDocument), store: store);
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(SessionDocument), store: store);
 
         await harness.SignIn.SignInAsync(
             new OwnerCredential("ada", "a-long-password"),
@@ -242,7 +242,7 @@ public sealed class DeploymentSignInTests
                 DeploymentHarness.DeploymentAddress,
                 new OwnerCredential("ada", "a-long-password")));
 
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(SessionDocument), store: store);
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(SessionDocument), store: store);
 
         // Act
         var restored = await harness.SignIn.RestoreAsync(TestContext.Current.CancellationToken);
@@ -263,7 +263,7 @@ public sealed class DeploymentSignInTests
                 new Uri("https://elsewhere.example/"),
                 new OwnerCredential("ada", "a-long-password")));
 
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(SessionDocument), store: store);
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(SessionDocument), store: store);
 
         // Act
         var restored = await harness.SignIn.RestoreAsync(TestContext.Current.CancellationToken);
@@ -284,7 +284,7 @@ public sealed class DeploymentSignInTests
                 DeploymentHarness.DeploymentAddress,
                 new OwnerCredential("ada", "a-long-password")));
 
-        using var harness = new DeploymentHarness(
+        using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse(SessionDocument),
             store: store,
             pointed: false);

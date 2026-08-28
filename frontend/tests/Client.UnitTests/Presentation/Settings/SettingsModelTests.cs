@@ -13,22 +13,29 @@ using MailFathom.Client.UnitTests.TestDoubles;
 
 namespace MailFathom.Client.UnitTests.Presentation.Settings;
 
-public sealed class SettingsModelTests : IDisposable
+public sealed class SettingsModelTests : IAsyncLifetime
 {
     /// <summary>A deployment answering, for the tests whose subject is not what it answered.</summary>
     private readonly StubClientSession running = SessionRunning("0.8.0");
 
     /// <summary>The deployment the sign-out reaches, which is nothing over the wire and everything held here.</summary>
-    private readonly DeploymentHarness deployment = new(
-        _ => StubTransport.JsonResponse(
-            """{"service":"MailFathom","version":"0.8.0","permissions":[]}"""),
-        store: new StubOwnerCredentialStore());
+    /// <remarks>Built in <see cref="InitializeAsync" /> rather than in a field initializer, because pointing a client at a deployment is asynchronous and a field initializer could only block on it.</remarks>
+    private DeploymentHarness deployment = null!;
 
     /// <inheritdoc />
-    public void Dispose()
+    public async ValueTask InitializeAsync() =>
+        this.deployment = await DeploymentHarness.CreateAsync(
+            _ => StubTransport.JsonResponse(
+                """{"service":"MailFathom","version":"0.8.0","permissions":[]}"""),
+            store: new StubOwnerCredentialStore());
+
+    /// <inheritdoc />
+    public ValueTask DisposeAsync()
     {
         this.running.Dispose();
         this.deployment.Dispose();
+
+        return ValueTask.CompletedTask;
     }
 
     /// <summary>Awaiting a feed is how a model's state is asserted in this stack, and this one proves the MVUX path behind the settings screen reaches the running build.</summary>

@@ -4,7 +4,6 @@
 
 using MailFathom.Client.Backend;
 using MailFathom.Client.Backend.Authorization;
-using PointedDeployment = MailFathom.Client.Backend.DeploymentAddress;
 
 namespace MailFathom.Client.UnitTests.TestDoubles;
 
@@ -35,17 +34,15 @@ internal sealed class DeploymentHarness : IDisposable
     /// <param name="signIn">How the deployment answers a credential offered to it, where that differs from the above.</param>
     /// <param name="store">Where a completed sign-in is kept, which defaults to a head that keeps nothing.</param>
     /// <param name="throughCredentialHandler">Whether requests to the deployment go through the handler that presents the credential, which is how the registration composes them.</param>
-    /// <param name="pointed">Whether the client starts pointed at the deployment, which every caller but the probe needs.</param>
-    internal DeploymentHarness(
+    private DeploymentHarness(
         Func<HttpRequestMessage, HttpResponseMessage> deployment,
         Func<HttpRequestMessage, HttpResponseMessage>? signIn = null,
         IOwnerCredentialStore? store = null,
-        bool throughCredentialHandler = false,
-        bool pointed = true)
+        bool throughCredentialHandler = false)
     {
         this.Store = store ?? UnkeptOwnerCredentialStore.Instance;
         this.Owner = new SignedInOwner(this.Store);
-        this.Address = new PointedDeployment(this.Owner);
+        this.Address = new DeploymentAddress(this.Owner);
 
         this.Deployment = new StubTransport(deployment);
         this.SignedInAt = new StubTransport(signIn ?? deployment);
@@ -77,11 +74,6 @@ internal sealed class DeploymentHarness : IDisposable
         this.Client = new DeploymentClient(this.Transports);
         this.Probe = new DeploymentProbe(this.Transports);
         this.SignIn = new DeploymentSignIn(this.Transports, this.Address, this.Owner);
-
-        if (pointed)
-        {
-            this.Address.PointAtAsync(DeploymentAddress).AsTask().GetAwaiter().GetResult();
-        }
     }
 
     /// <summary>Gets what the deployment was asked, in order.</summary>
@@ -105,7 +97,7 @@ internal sealed class DeploymentHarness : IDisposable
     internal SignedInOwner Owner { get; }
 
     /// <summary>Gets which deployment the client is pointed at.</summary>
-    internal PointedDeployment Address { get; }
+    internal DeploymentAddress Address { get; }
 
     /// <summary>Gets the probe under test.</summary>
     internal DeploymentProbe Probe { get; }
@@ -115,6 +107,36 @@ internal sealed class DeploymentHarness : IDisposable
 
     /// <summary>Gets the sign-in under test.</summary>
     internal DeploymentSignIn SignIn { get; }
+
+    /// <summary>Builds the harness and points the client at the deployment.</summary>
+    /// <param name="deployment">How the deployment answers.</param>
+    /// <param name="signIn">How the deployment answers a credential offered to it, where that differs from the above.</param>
+    /// <param name="store">Where a completed sign-in is kept, which defaults to a head that keeps nothing.</param>
+    /// <param name="throughCredentialHandler">Whether requests to the deployment go through the handler that presents the credential, which is how the registration composes them.</param>
+    /// <param name="pointed">Whether the client starts pointed at the deployment, which every caller but the probe needs.</param>
+    /// <returns>The harness, ready for the test that owns it.</returns>
+    /// <remarks>
+    /// A factory rather than a constructor because pointing the client somewhere is asynchronous, and the alternative
+    /// is a constructor that blocks on it. That it happens to complete without yielding on a client pointed nowhere yet
+    /// is an implementation detail of <see cref="DeploymentAddress.PointAtAsync" />, and a
+    /// test double may not be the thing that depends on it.
+    /// </remarks>
+    internal static async ValueTask<DeploymentHarness> CreateAsync(
+        Func<HttpRequestMessage, HttpResponseMessage> deployment,
+        Func<HttpRequestMessage, HttpResponseMessage>? signIn = null,
+        IOwnerCredentialStore? store = null,
+        bool throughCredentialHandler = false,
+        bool pointed = true)
+    {
+        var harness = new DeploymentHarness(deployment, signIn, store, throughCredentialHandler);
+
+        if (pointed)
+        {
+            await harness.Address.PointAtAsync(DeploymentAddress);
+        }
+
+        return harness;
+    }
 
     /// <inheritdoc />
     public void Dispose()

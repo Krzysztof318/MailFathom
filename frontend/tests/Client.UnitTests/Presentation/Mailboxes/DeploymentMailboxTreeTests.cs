@@ -51,7 +51,7 @@ public sealed class DeploymentMailboxTreeTests
     public async Task Rows_ADeploymentAnswering_DrawsEveryMailboxAndEachOfThem()
     {
         // Arrange
-        using var over = new TreeOver(TwoMailboxes);
+        using var over = await TreeOver.CreateAsync(TwoMailboxes);
 
         // Act
         var rows = await over.Tree.Rows;
@@ -69,7 +69,7 @@ public sealed class DeploymentMailboxTreeTests
     public async Task Rows_ReadBesideTheNoticeAboutThem_AsksTheDeploymentOnce()
     {
         // Arrange
-        using var over = new TreeOver(TwoMailboxes);
+        using var over = await TreeOver.CreateAsync(TwoMailboxes);
 
         // Act
         await over.Tree.Rows;
@@ -86,7 +86,7 @@ public sealed class DeploymentMailboxTreeTests
     public async Task ToggleAsync_AMailboxSomebodyOpened_ShowsItsFoldersWithoutAskingAgain()
     {
         // Arrange
-        using var over = new TreeOver(TwoMailboxes);
+        using var over = await TreeOver.CreateAsync(TwoMailboxes);
         await over.Tree.Rows;
 
         // Act
@@ -104,7 +104,7 @@ public sealed class DeploymentMailboxTreeTests
     public async Task ToggleAsync_ARowOpenedTwice_IsClosedAgain()
     {
         // Arrange
-        using var over = new TreeOver(TwoMailboxes);
+        using var over = await TreeOver.CreateAsync(TwoMailboxes);
         var key = MailboxTreeShape.AccountKey("work");
 
         // Act
@@ -123,7 +123,7 @@ public sealed class DeploymentMailboxTreeTests
     public async Task SelectAsync_AFolderSomebodyChose_NarrowsTheWorkspaceToIt()
     {
         // Arrange
-        using var over = new TreeOver(TwoMailboxes);
+        using var over = await TreeOver.CreateAsync(TwoMailboxes);
         await over.Tree.ToggleAsync(MailboxTreeShape.AccountKey("work"), TestContext.Current.CancellationToken);
         var rows = await over.Tree.Rows;
         var folder = rows!.First(row => row.Kind is MailboxRowKind.Folder);
@@ -145,7 +145,7 @@ public sealed class DeploymentMailboxTreeTests
     public async Task SelectAsync_ARoleAcrossMailboxes_NarrowsTheWorkspaceToTheRole()
     {
         // Arrange
-        using var over = new TreeOver(TwoMailboxes);
+        using var over = await TreeOver.CreateAsync(TwoMailboxes);
         var rows = await over.Tree.Rows;
         var unified = rows!.Single(row => row.Kind is MailboxRowKind.UnifiedRole);
 
@@ -164,7 +164,7 @@ public sealed class DeploymentMailboxTreeTests
     public async Task SelectAsync_AFolderChosenWhileSomethingWasSelected_LeavesTheOldSelectionBehind()
     {
         // Arrange
-        using var over = new TreeOver(TwoMailboxes);
+        using var over = await TreeOver.CreateAsync(TwoMailboxes);
         await over.Workspace.Scope.UpdateAsync(
             _ => new WorkspaceScope { Account = "home", Selection = ImmutableArray.Create("117") },
             TestContext.Current.CancellationToken);
@@ -184,7 +184,7 @@ public sealed class DeploymentMailboxTreeTests
     public async Task SelectAsync_ALevelNothingIsBoundTo_NarrowsNothing()
     {
         // Arrange
-        using var over = new TreeOver(TwoMailboxes);
+        using var over = await TreeOver.CreateAsync(TwoMailboxes);
         await over.Tree.ToggleAsync(MailboxTreeShape.AccountKey("work"), TestContext.Current.CancellationToken);
         var rows = await over.Tree.Rows;
         var group = rows!.Single(row => row.Kind is MailboxRowKind.Group);
@@ -201,7 +201,7 @@ public sealed class DeploymentMailboxTreeTests
     public async Task SelectAsync_AFolderSomebodyChose_IsKeptForTheNextRun()
     {
         // Arrange
-        using var over = new TreeOver(TwoMailboxes);
+        using var over = await TreeOver.CreateAsync(TwoMailboxes);
         await over.Tree.ToggleAsync(MailboxTreeShape.AccountKey("work"), TestContext.Current.CancellationToken);
         var rows = await over.Tree.Rows;
         var folder = rows!.First(row => row.Kind is MailboxRowKind.Folder);
@@ -221,7 +221,7 @@ public sealed class DeploymentMailboxTreeTests
     public async Task SelectAsync_AScopeWithSomethingSelectedInside_KeepsThePlaceRatherThanTheSelection()
     {
         // Arrange
-        using var over = new TreeOver(TwoMailboxes);
+        using var over = await TreeOver.CreateAsync(TwoMailboxes);
         var rows = await over.Tree.Rows;
         var mailbox = rows!.First(row => row.Kind is MailboxRowKind.Account);
         await over.Tree.SelectAsync(mailbox, TestContext.Current.CancellationToken);
@@ -247,7 +247,7 @@ public sealed class DeploymentMailboxTreeTests
             new WorkspaceScope { Account = "work", Folder = "INBOX" },
             ImmutableHashSet.Create(MailboxTreeShape.AccountKey("work")));
 
-        using var over = new TreeOver(TwoMailboxes, remembered);
+        using var over = await TreeOver.CreateAsync(TwoMailboxes, remembered);
 
         // Act
         var rows = await over.Tree.Rows;
@@ -263,8 +263,8 @@ public sealed class DeploymentMailboxTreeTests
     public async Task SynchronizationPaused_ADeploymentThatStoppedRefreshing_SaysSoBesideTheTree()
     {
         // Arrange
-        using var paused = new TreeOver("""{"synchronizationEnabled":false,"accounts":[]}""");
-        using var refreshing = new TreeOver(TwoMailboxes);
+        using var paused = await TreeOver.CreateAsync("""{"synchronizationEnabled":false,"accounts":[]}""");
+        using var refreshing = await TreeOver.CreateAsync(TwoMailboxes);
 
         // Act, Assert
         Assert.True(await paused.Tree.SynchronizationPaused);
@@ -276,7 +276,7 @@ public sealed class DeploymentMailboxTreeTests
     public async Task Rows_AnOwnerWhoOwnsNoMailbox_IsEmptyRatherThanAFailure()
     {
         // Arrange
-        using var over = new TreeOver("""{"synchronizationEnabled":true,"accounts":[]}""");
+        using var over = await TreeOver.CreateAsync("""{"synchronizationEnabled":true,"accounts":[]}""");
 
         // Act
         var rows = await over.Tree.Rows;
@@ -290,7 +290,7 @@ public sealed class DeploymentMailboxTreeTests
     public async Task Rows_ADeploymentThatDidNotAnswer_ReachesTheScreenAsAFailure()
     {
         // Arrange
-        using var over = new TreeOver(_ => throw new HttpRequestException("nothing is answering"));
+        using var over = await TreeOver.CreateAsync(_ => throw new HttpRequestException("nothing is answering"));
 
         // Act
         var failure = await Assert.ThrowsAsync<DeploymentFailure>(async () => await over.Tree.Rows);
@@ -307,7 +307,7 @@ public sealed class DeploymentMailboxTreeTests
     public async Task AskAgainAsync_PressedOnAFailedRead_AsksTheSessionAgainAndReadsTheFoldersWithIt()
     {
         // Arrange
-        using var over = new TreeOver(TwoMailboxes);
+        using var over = await TreeOver.CreateAsync(TwoMailboxes);
         await over.Tree.Rows;
 
         // Act
@@ -324,7 +324,7 @@ public sealed class DeploymentMailboxTreeTests
     public async Task ToggleAsync_ARowWithNoKey_IsRefused()
     {
         // Arrange
-        using var over = new TreeOver(TwoMailboxes);
+        using var over = await TreeOver.CreateAsync(TwoMailboxes);
 
         // Act, Assert
         await Assert.ThrowsAsync<ArgumentException>(async () =>
@@ -333,10 +333,10 @@ public sealed class DeploymentMailboxTreeTests
 
     /// <summary>A tree that could be built without one of its collaborators would be one describing nowhere.</summary>
     [Fact]
-    public void Constructor_AMissingService_IsRefused()
+    public async Task Constructor_AMissingService_IsRefused()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(TwoMailboxes));
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(TwoMailboxes));
         using var session = Session();
         var memory = new StubMailboxTreeMemory();
         var workspace = new SharedWorkspace(memory);
@@ -381,16 +381,9 @@ public sealed class DeploymentMailboxTreeTests
     /// <summary>One tree and everything it is composed over, owned together so a test states its arrangement once.</summary>
     private sealed class TreeOver : IDisposable
     {
-        internal TreeOver(string answered, RememberedMailboxes? remembered = null)
-            : this(_ => StubTransport.JsonResponse(answered), remembered)
+        private TreeOver(DeploymentHarness harness, RememberedMailboxes? remembered)
         {
-        }
-
-        internal TreeOver(
-            Func<HttpRequestMessage, HttpResponseMessage> deployment,
-            RememberedMailboxes? remembered = null)
-        {
-            this.Harness = new DeploymentHarness(deployment);
+            this.Harness = harness;
             this.Session = DeploymentMailboxTreeTests.Session();
             this.Memory = new StubMailboxTreeMemory(remembered);
             this.Workspace = new SharedWorkspace(this.Memory);
@@ -403,6 +396,14 @@ public sealed class DeploymentMailboxTreeTests
                 new StubClock(Now),
                 Words());
         }
+
+        internal static ValueTask<TreeOver> CreateAsync(string answered, RememberedMailboxes? remembered = null) =>
+            CreateAsync(_ => StubTransport.JsonResponse(answered), remembered);
+
+        internal static async ValueTask<TreeOver> CreateAsync(
+            Func<HttpRequestMessage, HttpResponseMessage> deployment,
+            RememberedMailboxes? remembered = null) =>
+            new(await DeploymentHarness.CreateAsync(deployment), remembered);
 
         internal DeploymentHarness Harness { get; }
 

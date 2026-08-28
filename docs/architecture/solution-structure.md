@@ -226,7 +226,7 @@ project here and neither build reads the other's files.
   them and says what a lock file there would have recorded instead.
 
 The client reaches MailFathom over the endpoints `Host` exposes and shares no type with it — its wire records and its
-OAuth code are its own, stated again at this end rather than referenced across the boundary. Which deployment it
+password sign-in are its own, stated again at this end rather than referenced across the boundary. Which deployment it
 reaches is the composing head's to supply, through `IDeploymentAddressSource`: an installed head reads the `Deployment`
 section out of an embedded `appsettings.json`, and the browser head reads the origin it was served from, because the
 container image serves the bundle from the same origin as the surface it calls. One source belongs to neither head and

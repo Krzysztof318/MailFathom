@@ -14,7 +14,7 @@ namespace MailFathom.Client.Presentation.Settings;
 /// which language it is read in, and which theme it is shown in — beside the build it is running, the deployment it is
 /// pointed at, and the version that deployment is running, which are what somebody reporting a problem is asked for.
 /// </summary>
-public partial record SettingsModel
+internal sealed partial record SettingsModel
 {
     private readonly ILocalizationService localization;
     private readonly IThemeService themes;

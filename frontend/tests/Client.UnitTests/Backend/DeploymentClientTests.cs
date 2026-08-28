@@ -27,7 +27,7 @@ public sealed class DeploymentClientTests
     public async Task ReadSessionAsync_ADeploymentAnswering_ReadsEveryFieldOfTheContract()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(AnAnsweringDeployment));
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(AnAnsweringDeployment));
 
         // Act
         var session = await harness.Client.ReadSessionAsync(TestContext.Current.CancellationToken);
@@ -42,7 +42,7 @@ public sealed class DeploymentClientTests
     public async Task ReadSessionAsync_AnyRequest_GoesToTheClientSurfaceRatherThanTheAdministrativeOne()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(ACallerGrantedNothing));
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(ACallerGrantedNothing));
 
         // Act
         await harness.Client.ReadSessionAsync(TestContext.Current.CancellationToken);
@@ -57,7 +57,7 @@ public sealed class DeploymentClientTests
     public async Task ReadSessionAsync_ACallerGrantedNothing_ReadsTheEmptyGrantRatherThanFailing()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(ACallerGrantedNothing));
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(ACallerGrantedNothing));
 
         // Act
         var session = await harness.Client.ReadSessionAsync(TestContext.Current.CancellationToken);
@@ -72,7 +72,7 @@ public sealed class DeploymentClientTests
     public async Task ReadSessionAsync_ARefusedCredential_ReportsTheOneCaseThePersonCanActOn(HttpStatusCode refusal)
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse("{}", refusal));
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse("{}", refusal));
 
         // Act
         var failure = await Assert.ThrowsAsync<DeploymentFailure>(
@@ -87,7 +87,7 @@ public sealed class DeploymentClientTests
     {
         // Arrange
         // What HttpClient raises when its own timeout elapses: a cancellation nobody asked for.
-        using var harness = new DeploymentHarness(_ => throw new TaskCanceledException("The request timed out."));
+        using var harness = await DeploymentHarness.CreateAsync(_ => throw new TaskCanceledException("The request timed out."));
 
         // Act
         var failure = await Assert.ThrowsAsync<DeploymentFailure>(
@@ -102,7 +102,7 @@ public sealed class DeploymentClientTests
     {
         // Arrange
         using var cancellation = new CancellationTokenSource();
-        using var harness = new DeploymentHarness(_ => throw new TaskCanceledException("Cancelled."));
+        using var harness = await DeploymentHarness.CreateAsync(_ => throw new TaskCanceledException("Cancelled."));
 
         await cancellation.CancelAsync();
 
@@ -115,7 +115,7 @@ public sealed class DeploymentClientTests
     public async Task ReadSessionAsync_AnUnreachableDeployment_IsDistinguishedFromOneThatRefused()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => throw new HttpRequestException("Name or service not known."));
+        using var harness = await DeploymentHarness.CreateAsync(_ => throw new HttpRequestException("Name or service not known."));
 
         // Act
         var failure = await Assert.ThrowsAsync<DeploymentFailure>(
@@ -130,7 +130,7 @@ public sealed class DeploymentClientTests
     {
         // Arrange
         // A captive portal, a proxy, or a login page — the shape a mistyped address actually produces.
-        using var harness = new DeploymentHarness(
+        using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse("<!DOCTYPE html><html><body>Sign in</body></html>"));
 
         // Act
@@ -145,7 +145,7 @@ public sealed class DeploymentClientTests
     public async Task ReadSessionAsync_AnAnswerLargerThanThisClientWillRead_IsRefusedOnTheDeclaredLength()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
+        using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse(
                 $$"""{"service":"MailFathom","version":"{{new string('0', DeploymentExchange.MaxDocumentBytes)}}"}"""));
 
@@ -163,7 +163,7 @@ public sealed class DeploymentClientTests
         // Arrange
         // What the transport raises when MaxResponseContentBufferSize is passed while the body is buffered, which is
         // the only signal an answer that declared no length ever gives.
-        using var harness = new DeploymentHarness(
+        using var harness = await DeploymentHarness.CreateAsync(
             _ => throw new HttpRequestException(
                 HttpRequestError.ConfigurationLimitExceeded,
                 "Cannot write more bytes to the buffer than the configured maximum buffer size."));
@@ -180,7 +180,7 @@ public sealed class DeploymentClientTests
     public async Task ReadSessionAsync_NobodySignedIn_PresentsNoCredentialRatherThanRefusingToAsk()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
+        using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse(ACallerGrantedNothing),
             throughCredentialHandler: true);
 
@@ -197,7 +197,7 @@ public sealed class DeploymentClientTests
     public async Task ReadSessionAsync_AfterSigningIn_PresentsTheCredentialInTheHeaderAndNowhereElse()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
+        using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse(AnAnsweringDeployment),
             throughCredentialHandler: true);
 
@@ -229,7 +229,7 @@ public sealed class DeploymentClientTests
     public async Task ReadMailBodyAsync_AnAnswerPastTheOrdinaryDocumentBound_IsStillRead()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
+        using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse(
                 ABodyWhosePlainTextIs(new string('a', DeploymentExchange.MaxDocumentBytes))));
 
@@ -247,7 +247,7 @@ public sealed class DeploymentClientTests
     public async Task ReadMailBodyAsync_AnAnswerLargerThanABodyMayBe_IsRefusedOnTheDeclaredLength()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ =>
+        using var harness = await DeploymentHarness.CreateAsync(_ =>
         {
             var response = StubTransport.JsonResponse(ABodyWhosePlainTextIs("Words"));
             response.Content.Headers.ContentLength = DeploymentExchange.MaxMailBodyBytes + 1;

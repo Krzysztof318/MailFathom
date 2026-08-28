@@ -58,7 +58,7 @@ public sealed class MailBodyBlockJsonConverterTests
     public async Task ReadMailBodyAsync_ADocumentHoldingEveryBlock_ReadsEachOneAsItsOwnType()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(EveryBlock));
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(EveryBlock));
 
         // Act
         var body = await harness.Client.ReadMailBodyAsync(
@@ -87,7 +87,7 @@ public sealed class MailBodyBlockJsonConverterTests
     public async Task ReadMailBodyAsync_AParagraph_ReadsItsRunsEmphasisColourAndLink()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(EveryBlock));
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(EveryBlock));
 
         // Act
         var body = await harness.Client.ReadMailBodyAsync(
@@ -125,7 +125,7 @@ public sealed class MailBodyBlockJsonConverterTests
             + "\"content\": [ { \"text\": \"Still readable\", \"emphasis\": \"None\", "
             + "\"foreground\": null, \"link\": null } ] }");
 
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(document));
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(document));
 
         // Act
         var body = await harness.Client.ReadMailBodyAsync(
@@ -148,7 +148,7 @@ public sealed class MailBodyBlockJsonConverterTests
     {
         // Arrange
         var document = BodyHolding("{ \"type\": \"timeline\", \"version\": 3 }");
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(document));
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(document));
 
         // Act
         var body = await harness.Client.ReadMailBodyAsync(
@@ -183,7 +183,7 @@ public sealed class MailBodyBlockJsonConverterTests
             }
             """;
 
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(document));
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(document));
 
         // Act
         var body = await harness.Client.ReadMailBodyAsync(
@@ -207,7 +207,7 @@ public sealed class MailBodyBlockJsonConverterTests
         string expected)
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(EveryBlock));
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(EveryBlock));
 
         // Act
         await harness.Client.ReadMailBodyAsync(
@@ -224,7 +224,7 @@ public sealed class MailBodyBlockJsonConverterTests
     public async Task ReadMailBodyAsync_ADeploymentAnsweringNotFound_Fails()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
+        using var harness = await DeploymentHarness.CreateAsync(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
 
         // Act, Assert
         await Assert.ThrowsAsync<DeploymentFailure>(

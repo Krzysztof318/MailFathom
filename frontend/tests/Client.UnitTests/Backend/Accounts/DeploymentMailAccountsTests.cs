@@ -40,7 +40,7 @@ public sealed class DeploymentMailAccountsTests
     public async Task ReadMailAccountsAsync_ADeploymentAnswering_ReadsEveryFieldOfTheContract()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(TwoAccounts));
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(TwoAccounts));
 
         // Act
         var answered = await harness.Client.ReadMailAccountsAsync(TestContext.Current.CancellationToken);
@@ -67,7 +67,7 @@ public sealed class DeploymentMailAccountsTests
     public async Task ReadMailAccountsAsync_AnyRequest_GoesToTheClientSurface()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(TwoAccounts));
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(TwoAccounts));
 
         // Act
         await harness.Client.ReadMailAccountsAsync(TestContext.Current.CancellationToken);
@@ -83,7 +83,7 @@ public sealed class DeploymentMailAccountsTests
     public async Task ReadMailAccountsAsync_AnOwnerWhoOwnsNoAccount_ReadsAnEmptyListRatherThanFailing()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
+        using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse("""{"synchronizationEnabled":true,"accounts":[]}"""));
 
         // Act
@@ -101,7 +101,7 @@ public sealed class DeploymentMailAccountsTests
     public async Task Owned_ADocumentNamingNoAccounts_ReadsAsAnOwnerWhoOwnsNone()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
+        using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse("""{"synchronizationEnabled":false}"""));
 
         // Act
@@ -120,7 +120,7 @@ public sealed class DeploymentMailAccountsTests
     public async Task ReadMailAccountsAsync_ACredentialWithoutTheGrant_IsRefusedRatherThanAnsweredWithNothing()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
+        using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse("{}", HttpStatusCode.Forbidden));
 
         // Act

@@ -27,7 +27,7 @@ public sealed class DeploymentMessageListTests
     public async Task Rows_ADeploymentAnswering_DrawsThePageItServed()
     {
         // Arrange
-        using var over = new ListOver(_ => Answer(Page(1, 3, next: "after-3", previous: null)));
+        using var over = await ListOver.CreateAsync(_ => Answer(Page(1, 3, next: "after-3", previous: null)));
 
         // Act
         var rows = await over.List.Rows;
@@ -47,7 +47,7 @@ public sealed class DeploymentMessageListTests
     public async Task Rows_AScopeNarrowedToAFolder_AsksTheDeploymentAboutThatFolder()
     {
         // Arrange
-        using var over = new ListOver(_ => Answer(Page(1, 1, next: null, previous: null)));
+        using var over = await ListOver.CreateAsync(_ => Answer(Page(1, 1, next: null, previous: null)));
         await over.List.Rows;
 
         // Act
@@ -74,7 +74,7 @@ public sealed class DeploymentMessageListTests
     public async Task Rows_AScopeWhoseSelectionChanged_DoesNotReadTheFolderAgain()
     {
         // Arrange
-        using var over = new ListOver(_ => Answer(Page(1, 3, next: null, previous: null)));
+        using var over = await ListOver.CreateAsync(_ => Answer(Page(1, 3, next: null, previous: null)));
         var rows = await over.List.Rows;
 
         // Act
@@ -96,7 +96,7 @@ public sealed class DeploymentMessageListTests
     public async Task Chosen_RowsSomebodySelected_ReachTheWorkspaceAsWhatIsInScope()
     {
         // Arrange
-        using var over = new ListOver(_ => Answer(Page(1, 3, next: null, previous: null)));
+        using var over = await ListOver.CreateAsync(_ => Answer(Page(1, 3, next: null, previous: null)));
         var rows = await over.List.Rows;
 
         // Act
@@ -116,7 +116,7 @@ public sealed class DeploymentMessageListTests
     public async Task ShowMoreAsync_MoreMailAfterWhatIsLoaded_TakesThePageOntoTheList()
     {
         // Arrange
-        using var over = new ListOver(request => Answer(
+        using var over = await ListOver.CreateAsync(request => Answer(
             Cursor(request) is null
                 ? Page(1, 2, next: "after-2", previous: null)
                 : Page(3, 2, next: null, previous: "before-3")));
@@ -140,7 +140,7 @@ public sealed class DeploymentMessageListTests
     public async Task ShowEarlierAsync_MoreMailBeforeWhatIsLoaded_AsksForItTheOtherWay()
     {
         // Arrange
-        using var over = new ListOver(request => Answer(
+        using var over = await ListOver.CreateAsync(request => Answer(
             Cursor(request) is null
                 ? Page(3, 2, next: null, previous: "before-3")
                 : Page(1, 2, next: "after-2", previous: null)));
@@ -164,7 +164,7 @@ public sealed class DeploymentMessageListTests
     public async Task ShowMoreAsync_AtTheEndOfTheList_AsksTheDeploymentForNothing()
     {
         // Arrange
-        using var over = new ListOver(_ => Answer(Page(1, 2, next: null, previous: null)));
+        using var over = await ListOver.CreateAsync(_ => Answer(Page(1, 2, next: null, previous: null)));
         await over.List.Rows;
 
         // Act
@@ -186,7 +186,7 @@ public sealed class DeploymentMessageListTests
     public async Task ShowMoreAsync_APageThatDidNotArrive_IsReportedBesideTheListRatherThanAsIt()
     {
         // Arrange
-        using var over = new ListOver(request => Cursor(request) is null
+        using var over = await ListOver.CreateAsync(request => Cursor(request) is null
             ? Answer(Page(1, 2, next: "after-2", previous: null))
             : StubTransport.JsonResponse("{}", HttpStatusCode.InternalServerError));
 
@@ -215,7 +215,7 @@ public sealed class DeploymentMessageListTests
         using var reached = new ManualResetEventSlim(false);
         using var released = new ManualResetEventSlim(false);
 
-        using var over = new ListOver(request =>
+        using var over = await ListOver.CreateAsync(request =>
         {
             if (Cursor(request) is not null)
             {
@@ -271,7 +271,7 @@ public sealed class DeploymentMessageListTests
 
         // The second opening answers with other mail, so the reopened list is the one the assertion can see rather than
         // one the test has to infer from a request count.
-        using var over = new ListOver(request =>
+        using var over = await ListOver.CreateAsync(request =>
         {
             if (Cursor(request) is null)
             {
@@ -312,7 +312,7 @@ public sealed class DeploymentMessageListTests
     public async Task Rows_APlaceSomebodyHasBeenInBefore_ReopensWhereItWasLeft()
     {
         // Arrange
-        using var over = new ListOver(
+        using var over = await ListOver.CreateAsync(
             _ => Answer(Page(9, 2, next: "after-10", previous: "before-9")),
             new RememberedMessageList(
                 MessagePlace.Everything.RememberedAs,
@@ -336,7 +336,7 @@ public sealed class DeploymentMessageListTests
     public async Task Rows_ACursorTheDeploymentRefuses_OpensAtTheLeadingEndInstead()
     {
         // Arrange
-        using var over = new ListOver(
+        using var over = await ListOver.CreateAsync(
             request => Cursor(request) is null
                 ? Answer(Page(1, 2, next: "after-2", previous: null))
                 : StubTransport.JsonResponse("{}", HttpStatusCode.BadRequest),
@@ -364,7 +364,7 @@ public sealed class DeploymentMessageListTests
     public async Task Rows_ARememberedPositionNamingNoCursor_IsReadForwardWhateverWasWrittenBesideIt()
     {
         // Arrange
-        using var over = new ListOver(
+        using var over = await ListOver.CreateAsync(
             request => Answer(Page(1, 2, next: null, previous: null)),
             new RememberedMessageList(
                 MessagePlace.Everything.RememberedAs,
@@ -388,7 +388,7 @@ public sealed class DeploymentMessageListTests
     public async Task Rows_APlaceLeftUnderAnArrangement_ReopensUnderTheSameOne()
     {
         // Arrange
-        using var over = new ListOver(
+        using var over = await ListOver.CreateAsync(
             _ => Answer(Page(1, 2, next: null, previous: null)),
             new RememberedMessageList(
                 MessagePlace.Everything.RememberedAs,
@@ -416,7 +416,7 @@ public sealed class DeploymentMessageListTests
     public async Task ArrangeAsync_AListArrangedDifferently_ReadsItAgainUnderTheNewArrangement()
     {
         // Arrange
-        using var over = new ListOver(_ => Answer(Page(1, 2, next: null, previous: null)));
+        using var over = await ListOver.CreateAsync(_ => Answer(Page(1, 2, next: null, previous: null)));
         await over.List.Rows;
 
         // Act
@@ -436,7 +436,7 @@ public sealed class DeploymentMessageListTests
     public async Task Rows_AListThatHasBeenPaged_WritesDownTheRequestThatReopensIt()
     {
         // Arrange
-        using var over = new ListOver(request => Answer(
+        using var over = await ListOver.CreateAsync(request => Answer(
             Cursor(request) is null
                 ? Page(1, 2, next: "after-2", previous: null)
                 : Page(3, 2, next: null, previous: "before-3")));
@@ -458,7 +458,7 @@ public sealed class DeploymentMessageListTests
     public async Task AskAgainAsync_AReadSomebodyAskedForAgain_ReachesTheSessionAndTheDeployment()
     {
         // Arrange
-        using var over = new ListOver(_ => Answer(Page(1, 2, next: null, previous: null)));
+        using var over = await ListOver.CreateAsync(_ => Answer(Page(1, 2, next: null, previous: null)));
         await over.List.Rows;
 
         // Act
@@ -472,10 +472,10 @@ public sealed class DeploymentMessageListTests
 
     /// <summary>A list built over nothing would be one that could not say what it reads or where it draws it from.</summary>
     [Fact]
-    public void Construction_AMissingCollaborator_IsRefused()
+    public async Task Construction_AMissingCollaborator_IsRefused()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => Answer(Page(1, 1, next: null, previous: null)));
+        using var harness = await DeploymentHarness.CreateAsync(_ => Answer(Page(1, 1, next: null, previous: null)));
         using var session = Session();
         var memory = new StubMessageListMemory();
         var workspace = new SharedWorkspace(new StubMailboxTreeMemory());
@@ -567,11 +567,9 @@ public sealed class DeploymentMessageListTests
     /// <summary>One list and everything it is composed over, owned together so a test states its arrangement once.</summary>
     private sealed class ListOver : IDisposable
     {
-        internal ListOver(
-            Func<HttpRequestMessage, HttpResponseMessage> deployment,
-            params RememberedMessageList[] remembered)
+        private ListOver(DeploymentHarness harness, RememberedMessageList[] remembered)
         {
-            this.Harness = new DeploymentHarness(deployment);
+            this.Harness = harness;
             this.Session = DeploymentMessageListTests.Session();
             this.Memory = new StubMessageListMemory(remembered);
             this.Workspace = new SharedWorkspace(new StubMailboxTreeMemory());
@@ -584,6 +582,11 @@ public sealed class DeploymentMessageListTests
                 new StubClock(Now),
                 Words());
         }
+
+        internal static async ValueTask<ListOver> CreateAsync(
+            Func<HttpRequestMessage, HttpResponseMessage> deployment,
+            params RememberedMessageList[] remembered) =>
+            new(await DeploymentHarness.CreateAsync(deployment), remembered);
 
         internal DeploymentHarness Harness { get; }
 

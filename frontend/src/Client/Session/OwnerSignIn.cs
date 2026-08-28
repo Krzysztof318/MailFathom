@@ -16,7 +16,7 @@ namespace MailFathom.Client.Session;
 /// message composed at the point of failure. It is <see cref="Deployment.DeploymentChoiceOutcome" />'s shape, for the
 /// screen beside it, for the same reason.
 /// </remarks>
-public enum SignInOutcome
+internal enum SignInOutcome
 {
     /// <summary>The deployment accepted the credential, and the client is signed in.</summary>
     Accepted = 0,
@@ -44,7 +44,7 @@ public enum SignInOutcome
 /// <summary>What one attempt produced: what became of the credential, and what became of keeping it.</summary>
 /// <param name="Outcome">What the deployment, or this client, made of what was typed.</param>
 /// <param name="Persistence">Whether the next start opens already signed in, and where it does not, why.</param>
-public sealed record SignInAttemptOutcome(SignInOutcome Outcome, CredentialPersistence Persistence);
+internal sealed record SignInAttemptOutcome(SignInOutcome Outcome, CredentialPersistence Persistence);
 
 /// <summary>Signing in and out, as the screens above <c>Client.Backend</c> reach it.</summary>
 /// <remarks>
@@ -60,7 +60,7 @@ public sealed record SignInAttemptOutcome(SignInOutcome Outcome, CredentialPersi
 /// could ever produce.
 /// </para>
 /// </remarks>
-public sealed class OwnerSignIn
+internal sealed class OwnerSignIn
 {
     private readonly DeploymentSignIn signIn;
     private readonly SignedInOwner owner;

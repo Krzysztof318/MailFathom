@@ -29,7 +29,7 @@ public sealed class OwnerSignInTests
     public async Task SignInAsync_ACredentialTheDeploymentAccepts_IsAccepted()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
+        using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse(SessionDocument),
             store: new StubOwnerCredentialStore());
 
@@ -60,7 +60,7 @@ public sealed class OwnerSignInTests
         string? password)
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(SessionDocument));
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(SessionDocument));
 
         var signIn = new OwnerSignIn(harness.SignIn, harness.Owner);
 
@@ -80,7 +80,7 @@ public sealed class OwnerSignInTests
     public async Task SignInAsync_ACredentialTheDeploymentRefuses_SaysOneThingAboutBothHalves()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => RefusedWithAPasswordChallenge());
+        using var harness = await DeploymentHarness.CreateAsync(_ => RefusedWithAPasswordChallenge());
 
         var signIn = new OwnerSignIn(harness.SignIn, harness.Owner);
 
@@ -96,7 +96,7 @@ public sealed class OwnerSignInTests
     public async Task SignInAsync_ADeploymentOfferingNoPassword_IsNotAWrongCredential()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
+        using var harness = await DeploymentHarness.CreateAsync(
             _ => new HttpResponseMessage(HttpStatusCode.Unauthorized));
 
         var signIn = new OwnerSignIn(harness.SignIn, harness.Owner);
@@ -112,7 +112,7 @@ public sealed class OwnerSignInTests
     public async Task SignInAsync_ADeploymentNothingAnswersAt_SaysItWasNotReached()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => throw new HttpRequestException("no route to host"));
+        using var harness = await DeploymentHarness.CreateAsync(_ => throw new HttpRequestException("no route to host"));
 
         var signIn = new OwnerSignIn(harness.SignIn, harness.Owner);
 
@@ -127,7 +127,7 @@ public sealed class OwnerSignInTests
     public async Task SignInAsync_SomethingThatIsNotAMailFathom_SaysSoRatherThanBlamingTheCredential()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
+        using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse("""{"service":"SomebodyElse","version":"3.1","permissions":[]}"""));
 
         var signIn = new OwnerSignIn(harness.SignIn, harness.Owner);
@@ -144,7 +144,7 @@ public sealed class OwnerSignInTests
     public async Task SignInAsync_ARefusedCredential_ReportsNeitherHalfOfWhatWasTyped()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => RefusedWithAPasswordChallenge());
+        using var harness = await DeploymentHarness.CreateAsync(_ => RefusedWithAPasswordChallenge());
 
         var signIn = new OwnerSignIn(harness.SignIn, harness.Owner);
 
@@ -164,7 +164,7 @@ public sealed class OwnerSignInTests
         // Arrange
         var store = new StubOwnerCredentialStore();
 
-        using var harness = new DeploymentHarness(
+        using var harness = await DeploymentHarness.CreateAsync(
             _ => StubTransport.JsonResponse(SessionDocument),
             store: store);
 
@@ -181,10 +181,10 @@ public sealed class OwnerSignInTests
     }
 
     [Fact]
-    public void Constructor_AMissingService_IsRefused()
+    public async Task Constructor_AMissingService_IsRefused()
     {
         // Arrange
-        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(SessionDocument));
+        using var harness = await DeploymentHarness.CreateAsync(_ => StubTransport.JsonResponse(SessionDocument));
 
         // Act, Assert
         Assert.Throws<ArgumentNullException>(() => new OwnerSignIn(null!, harness.Owner));
