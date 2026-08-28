@@ -197,7 +197,6 @@ internal sealed class DeploymentMailThread : IMailThread
         {
             await this.WriteAttachmentStandingAsync(
                 key,
-                detail,
                 request.Position,
                 MailAttachmentStanding.Downloading,
                 cancellationToken).ConfigureAwait(false);
@@ -230,11 +229,10 @@ internal sealed class DeploymentMailThread : IMailThread
         }
 
         if (await this.DetailOfAsync(key, CancellationToken.None).ConfigureAwait(false) is
-            { Expanded: true, Message: not null } current)
+            { Expanded: true, Message: not null })
         {
             await this.WriteAttachmentStandingAsync(
                 key,
-                current,
                 request.Position,
                 standing,
                 CancellationToken.None).ConfigureAwait(false);
@@ -505,13 +503,21 @@ internal sealed class DeploymentMailThread : IMailThread
 
     private ValueTask WriteAttachmentStandingAsync(
         string key,
-        ThreadMessageDetail detail,
         int position,
         MailAttachmentStanding standing,
         CancellationToken cancellationToken) =>
-        this.WriteAsync(
-            key,
-            detail with { Attachments = detail.Attachments.SetItem(position, standing) },
+        this.disclosed.UpdateAsync(
+            held =>
+            {
+                var details = held ?? Nothing;
+
+                return details.TryGetValue(key, out var current)
+                    && current is { Expanded: true, Message: not null }
+                        ? details.SetItem(
+                            key,
+                            current with { Attachments = current.Attachments.SetItem(position, standing) })
+                        : details;
+            },
             cancellationToken);
 
     /// <summary>Reads the loaded conversation back, where it is still the one a read was started for.</summary>

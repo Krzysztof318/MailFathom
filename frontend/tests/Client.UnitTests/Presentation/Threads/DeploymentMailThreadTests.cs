@@ -61,6 +61,13 @@ public sealed class DeploymentMailThreadTests
               "wasFileNameNormalized": false,
               "mediaType": "application/pdf",
               "sizeOctets": 3
+            },
+            {
+              "position": 1,
+              "fileName": "review-data.csv",
+              "wasFileNameNormalized": false,
+              "mediaType": "text/csv",
+              "sizeOctets": 3
             }
           ],
           "carried": null,
@@ -288,14 +295,14 @@ public sealed class DeploymentMailThreadTests
             TestContext.Current.CancellationToken);
         await over.Opened();
         await over.Thread.ShowWholeMessageAsync(MailMessages.Key(1), TestContext.Current.CancellationToken);
-        var request = Assert.Single((await over.Thread.Messages)![0].Message!.Attachments).Request;
+        var request = (await over.Thread.Messages)![0].Message!.Attachments[0].Request;
 
         // Act
         await over.Thread.SaveAttachmentAsync(request, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal([1, 2, 3], over.Saver.Saved);
-        Assert.True(Assert.Single((await over.Thread.Messages)![0].Message!.Attachments).Downloaded);
+        Assert.True((await over.Thread.Messages)![0].Message!.Attachments[0].Downloaded);
         Assert.Equal(
             $"/api/client/messages/{MailMessages.Identity(1):D}/attachments/0",
             over.Harness.Deployment.Requests[^1].RequestUri.AbsolutePath);
@@ -309,7 +316,7 @@ public sealed class DeploymentMailThreadTests
             TestContext.Current.CancellationToken);
         await over.Opened();
         await over.Thread.ShowWholeMessageAsync(MailMessages.Key(1), TestContext.Current.CancellationToken);
-        var request = Assert.Single((await over.Thread.Messages)![0].Message!.Attachments).Request;
+        var request = (await over.Thread.Messages)![0].Message!.Attachments[0].Request;
         over.Saver.Hold = true;
 
         var saving = over.Thread.SaveAttachmentAsync(request, TestContext.Current.CancellationToken).AsTask();
@@ -320,9 +327,40 @@ public sealed class DeploymentMailThreadTests
         await saving;
 
         // Assert
-        var attachment = Assert.Single((await over.Thread.Messages)![0].Message!.Attachments);
+        var attachment = (await over.Thread.Messages)![0].Message!.Attachments[0];
         Assert.True(attachment.CanDownload);
         Assert.False(attachment.DownloadFailed);
+    }
+
+    [Fact]
+    public async Task SaveAttachmentAsync_TwoFilesOfOneMessage_KeepIndependentStandings()
+    {
+        // Arrange
+        using var over = await ThreadOver.CreateAsync(Answering(MailThreads.Document(2)),
+            TestContext.Current.CancellationToken);
+        await over.Opened();
+        await over.Thread.ShowWholeMessageAsync(MailMessages.Key(1), TestContext.Current.CancellationToken);
+        var requests = (await over.Thread.Messages)![0].Message!.Attachments
+            .Select(attachment => attachment.Request)
+            .ToArray();
+        over.Saver.Hold = true;
+
+        // Act
+        var savings = requests
+            .Select(request => over.Thread.SaveAttachmentAsync(request, TestContext.Current.CancellationToken).AsTask())
+            .ToArray();
+        await over.Until(async () => (await over.Thread.Messages)![0].Message!.Attachments.All(row => row.CanCancel));
+
+        // Assert
+        Assert.All((await over.Thread.Messages)![0].Message!.Attachments, row => Assert.True(row.CanCancel));
+
+        foreach (var request in requests)
+        {
+            over.Thread.CancelAttachment(request);
+        }
+
+        await Task.WhenAll(savings);
+        Assert.All((await over.Thread.Messages)![0].Message!.Attachments, row => Assert.True(row.CanDownload));
     }
 
     [Fact]
@@ -333,14 +371,14 @@ public sealed class DeploymentMailThreadTests
             TestContext.Current.CancellationToken);
         await over.Opened();
         await over.Thread.ShowWholeMessageAsync(MailMessages.Key(1), TestContext.Current.CancellationToken);
-        var request = Assert.Single((await over.Thread.Messages)![0].Message!.Attachments).Request;
+        var request = (await over.Thread.Messages)![0].Message!.Attachments[0].Request;
         over.Saver.Failure = new InvalidOperationException("The platform save surface failed.");
 
         // Act
         await over.Thread.SaveAttachmentAsync(request, TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.True(Assert.Single((await over.Thread.Messages)![0].Message!.Attachments).DownloadFailed);
+        Assert.True((await over.Thread.Messages)![0].Message!.Attachments[0].DownloadFailed);
     }
 
     /// <summary>
