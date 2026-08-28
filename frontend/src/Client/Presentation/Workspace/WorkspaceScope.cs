@@ -51,7 +51,7 @@ public sealed record WorkspaceScope
 
     /// <summary>Whether this scope narrows to anything at all.</summary>
     /// <remarks>
-    /// Each of the four is asked about rather than only the account, because nothing here refuses a folder named
+    /// Each of the five is asked about rather than only the account, because nothing here refuses a folder named
     /// without one: the properties above say what a well-formed scope looks like, and a reader that assumed the type
     /// enforced it would answer <see langword="false" /> for a scope that plainly narrows.
     /// </remarks>

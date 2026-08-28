@@ -27,6 +27,20 @@ public sealed class MailMessageReadingTests
     }
 
     [Fact]
+    public void Of_AnAuthorWhoseAuthenticationWasNotEstablished_LeavesTheOrdinaryCaseQuiet()
+    {
+        // Arrange
+        var message = Message(authorAuthentication: "NotEstablished", deploymentTrust: "Unknown");
+
+        // Act
+        var reading = MailMessageReading.Of(message, NoDownloads, Words());
+
+        // Assert
+        Assert.False(reading.ShowsSenderNotice);
+        Assert.False(reading.WarnsAboutSender);
+    }
+
+    [Fact]
     public void Of_AnAuthenticatedAuthorTheDeploymentTrusts_NamesTheAuthenticatedDomain()
     {
         // Arrange

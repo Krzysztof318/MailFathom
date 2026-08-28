@@ -45,16 +45,19 @@ internal sealed class PickedMailAttachmentSaver : IMailAttachmentSaver
             this.words[MailMessageWords.AttachmentFileTypeKey],
             [extension]);
 
-        var chosen = await picker.PickSaveFileAsync();
+        var chosen = await picker.PickSaveFileAsync().AsTask(cancellationToken).ConfigureAwait(false);
 
         if (chosen is null)
         {
             return false;
         }
 
-        var temporary = await ApplicationData.Current.TemporaryFolder.CreateFileAsync(
-            $"mailfathom-{Guid.NewGuid():N}",
-            CreationCollisionOption.GenerateUniqueName);
+        var temporary = await ApplicationData.Current.TemporaryFolder
+            .CreateFileAsync(
+                $"mailfathom-{Guid.NewGuid():N}",
+                CreationCollisionOption.GenerateUniqueName)
+            .AsTask(cancellationToken)
+            .ConfigureAwait(false);
 
         try
         {
@@ -64,9 +67,11 @@ internal sealed class PickedMailAttachmentSaver : IMailAttachmentSaver
             }
 
             CachedFileManager.DeferUpdates(chosen);
-            await temporary.CopyAndReplaceAsync(chosen);
+            await temporary.CopyAndReplaceAsync(chosen).AsTask(cancellationToken).ConfigureAwait(false);
 
-            if (await CachedFileManager.CompleteUpdatesAsync(chosen) is not FileUpdateStatus.Complete)
+            if (await CachedFileManager.CompleteUpdatesAsync(chosen)
+                    .AsTask(cancellationToken)
+                    .ConfigureAwait(false) is not FileUpdateStatus.Complete)
             {
                 throw new IOException("The platform did not complete the attachment save.");
             }
@@ -75,7 +80,7 @@ internal sealed class PickedMailAttachmentSaver : IMailAttachmentSaver
         }
         finally
         {
-            await temporary.DeleteAsync();
+            await temporary.DeleteAsync().AsTask().ConfigureAwait(false);
         }
     }
 }

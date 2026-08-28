@@ -46,6 +46,14 @@ internal static class DeploymentExchange
     /// </remarks>
     internal const int MaxMailBodyBytes = 8 * 1024 * 1024;
 
+    /// <summary>The largest attachment this client will write, independently of what a deployment declares.</summary>
+    /// <remarks>
+    /// One attachment cannot exceed the largest raw message the service admits, whose public configuration contract
+    /// tops out at 100 MiB. Stating the same ceiling here means a compromised deployment cannot turn its own claimed
+    /// length into an unbounded write on the reader's device.
+    /// </remarks>
+    internal const long MaxMailAttachmentBytes = 100L * 1024 * 1024;
+
     /// <summary>Sends one request and reads the document it answers with.</summary>
     /// <typeparam name="TDocument">The contract the body is read against.</typeparam>
     /// <param name="transport">The client the request is sent on.</param>
@@ -128,16 +136,20 @@ internal static class DeploymentExchange
         CancellationToken cancellationToken)
     {
         using (request)
-        using (var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
         {
-            timeout.CancelAfter(transport.Timeout);
+            if (expectedSizeOctets > MaxMailAttachmentBytes)
+            {
+                throw new DeploymentFailure(
+                    DeploymentFailureReason.Unusable,
+                    "MailFathom described a file larger than this client will save, so it was not requested.");
+            }
 
             try
             {
                 using var response = await SendAsync(
                     transport,
                     request,
-                    timeout.Token,
+                    cancellationToken,
                     HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
 
                 RefuseUnusableStatus(response);
@@ -149,8 +161,9 @@ internal static class DeploymentExchange
                         "MailFathom answered with a file whose size differs from its description, so it was not used.");
                 }
 
-                var source = await response.Content.ReadAsStreamAsync(timeout.Token).ConfigureAwait(false);
+                var source = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
                 await using var sourceLifetime = source.ConfigureAwait(false);
+                using var inactivity = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 var buffer = ArrayPool<byte>.Shared.Rent(81920);
 
                 try
@@ -158,16 +171,27 @@ internal static class DeploymentExchange
                     long written = 0;
                     int read;
 
-                    while ((read = await source.ReadAsync(buffer.AsMemory(), timeout.Token).ConfigureAwait(false)) > 0)
+                    while (true)
                     {
-                        if (written + read > expectedSizeOctets)
+                        inactivity.CancelAfter(transport.Timeout);
+                        read = await source.ReadAsync(buffer.AsMemory(), inactivity.Token).ConfigureAwait(false);
+                        inactivity.CancelAfter(Timeout.InfiniteTimeSpan);
+
+                        if (read is 0)
+                        {
+                            break;
+                        }
+
+                        if (read > expectedSizeOctets - written)
                         {
                             throw new DeploymentFailure(
                                 DeploymentFailureReason.Unusable,
                                 "MailFathom sent more of a file than its description promised, so it was not used.");
                         }
 
-                        await destination.WriteAsync(buffer.AsMemory(0, read), timeout.Token).ConfigureAwait(false);
+                        inactivity.CancelAfter(transport.Timeout);
+                        await destination.WriteAsync(buffer.AsMemory(0, read), inactivity.Token).ConfigureAwait(false);
+                        inactivity.CancelAfter(Timeout.InfiniteTimeSpan);
                         written += read;
                     }
 

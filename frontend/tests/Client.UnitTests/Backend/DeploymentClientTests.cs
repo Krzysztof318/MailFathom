@@ -402,6 +402,84 @@ public sealed class DeploymentClientTests
         Assert.Empty(destination.ToArray());
     }
 
+    [Fact]
+    public async Task DownloadMailAttachmentAsync_AFileAboveTheClientCeiling_RefusesItWithoutARequest()
+    {
+        // Arrange
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => throw new InvalidOperationException("No request should be sent."),
+            cancellationToken: TestContext.Current.CancellationToken);
+        await using var destination = new MemoryStream();
+
+        // Act
+        var failure = await Assert.ThrowsAsync<DeploymentFailure>(
+            () => harness.Client.DownloadMailAttachmentAsync(
+                Guid.Parse("8f14e45f-ceea-467a-9f3e-1c3ecdf1e9a1"),
+                position: 0,
+                expectedSizeOctets: DeploymentExchange.MaxMailAttachmentBytes + 1,
+                destination,
+                TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(DeploymentFailureReason.Unusable, failure.Reason);
+        Assert.Empty(harness.Deployment.Requests);
+        Assert.Empty(destination.ToArray());
+    }
+
+    [Fact]
+    public async Task DownloadMailAttachmentAsync_AStreamLongerThanItsMatchingHeader_RefusesItBeforeWritingTheOverrun()
+    {
+        // Arrange
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => AttachmentResponse([1, 2, 3, 4], declaredLength: 3),
+            cancellationToken: TestContext.Current.CancellationToken);
+        await using var destination = new MemoryStream();
+
+        // Act
+        var failure = await Assert.ThrowsAsync<DeploymentFailure>(
+            () => harness.Client.DownloadMailAttachmentAsync(
+                Guid.Parse("8f14e45f-ceea-467a-9f3e-1c3ecdf1e9a1"),
+                position: 0,
+                expectedSizeOctets: 3,
+                destination,
+                TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(DeploymentFailureReason.Unusable, failure.Reason);
+        Assert.Empty(destination.ToArray());
+    }
+
+    [Fact]
+    public async Task DownloadMailAttachmentAsync_AStreamShorterThanItsMatchingHeader_RefusesItAfterTheStagingWrite()
+    {
+        // Arrange
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => AttachmentResponse([1, 2, 3], declaredLength: 4),
+            cancellationToken: TestContext.Current.CancellationToken);
+        await using var destination = new MemoryStream();
+
+        // Act
+        var failure = await Assert.ThrowsAsync<DeploymentFailure>(
+            () => harness.Client.DownloadMailAttachmentAsync(
+                Guid.Parse("8f14e45f-ceea-467a-9f3e-1c3ecdf1e9a1"),
+                position: 0,
+                expectedSizeOctets: 4,
+                destination,
+                TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Equal(DeploymentFailureReason.Unusable, failure.Reason);
+        Assert.Equal([1, 2, 3], destination.ToArray());
+    }
+
+    private static HttpResponseMessage AttachmentResponse(byte[] octets, long declaredLength)
+    {
+        var content = new StreamContent(new MemoryStream(octets));
+        content.Headers.ContentLength = declaredLength;
+
+        return new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
+    }
+
     private static string ABodyWhosePlainTextIs(string text) =>
         $$"""
         {

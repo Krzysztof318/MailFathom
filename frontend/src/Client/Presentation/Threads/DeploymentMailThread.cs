@@ -218,7 +218,9 @@ internal sealed class DeploymentMailThread : IMailThread
         {
             standing = MailAttachmentStanding.None;
         }
-        catch (Exception failure) when (failure is DeploymentFailure or IOException or UnauthorizedAccessException)
+#pragma warning disable CA1031 // Every platform adapter failure must leave this per-item command in a rendered state.
+        catch (Exception)
+#pragma warning restore CA1031
         {
             standing = MailAttachmentStanding.Failed;
         }

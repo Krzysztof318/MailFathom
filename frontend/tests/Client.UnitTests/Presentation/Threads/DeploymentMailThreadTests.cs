@@ -325,6 +325,24 @@ public sealed class DeploymentMailThreadTests
         Assert.False(attachment.DownloadFailed);
     }
 
+    [Fact]
+    public async Task SaveAttachmentAsync_APlatformFailure_MarksTheAttachmentAsFailed()
+    {
+        // Arrange
+        using var over = await ThreadOver.CreateAsync(Answering(MailThreads.Document(2)),
+            TestContext.Current.CancellationToken);
+        await over.Opened();
+        await over.Thread.ShowWholeMessageAsync(MailMessages.Key(1), TestContext.Current.CancellationToken);
+        var request = Assert.Single((await over.Thread.Messages)![0].Message!.Attachments).Request;
+        over.Saver.Failure = new InvalidOperationException("The platform save surface failed.");
+
+        // Act
+        await over.Thread.SaveAttachmentAsync(request, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(Assert.Single((await over.Thread.Messages)![0].Message!.Attachments).DownloadFailed);
+    }
+
     /// <summary>
     /// A whole message that did not arrive is said on that message, because the conversation and what the message
     /// added are still on the screen and still true.
@@ -672,6 +690,8 @@ public sealed class DeploymentMailThreadTests
 
         internal bool Hold { get; set; }
 
+        internal Exception? Failure { get; set; }
+
         internal byte[] Saved { get; private set; } = [];
 
         public async ValueTask<bool> SaveAsync(
@@ -680,6 +700,11 @@ public sealed class DeploymentMailThreadTests
             CancellationToken cancellationToken)
         {
             this.Started.Set();
+
+            if (this.Failure is { } failure)
+            {
+                throw failure;
+            }
 
             if (this.Hold)
             {
