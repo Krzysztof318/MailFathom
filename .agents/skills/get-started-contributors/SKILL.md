@@ -444,8 +444,8 @@ offer to go deeper on any one of them instead of expanding all six.
      the probe's answer rather than this default. Either way, say it out loud and make sure that file carries it,
      because an agent that does not know it will spend a turn on a permission error and then report a gate it never
      needed to pass. Board access is never repository access: every label, the milestone, and the push stay the
-     maintainer's under every grant — including `agent:claimed`, which a maintainer's session applies to an issue it
-     is starting work on and which is therefore never a step missing from yours;
+     maintainer's under every grant — including `agent:claude` or `agent:codex`, which a maintainer's session applies
+     to an issue it is starting work on and which is therefore never a step missing from yours;
    - **no workflow starts by itself.** A run triggered by a fork's pull request waits for somebody with write access to
      approve it, on the first push and on every one after, so the checks sit unstarted rather than red and nothing about
      the branch can be read from them. That is why the local gates are the ones to trust, and why an agent left watching

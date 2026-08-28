@@ -603,7 +603,7 @@ The canonical skills are:
 - `start-task` requires a clean workspace or an explicitly approved inventory
   and preservation plan, identifies or creates the GitHub issue that governs the
   task, refuses it while another open issue blocks it, places it on the board and
-  claims it with `agent:claimed`, then loads the applicable documentation and ADR
+  claims it with `agent:claude` or `agent:codex`, then loads the applicable documentation and ADR
   context before edits. The refusal reads the issue's own `blocked by` list, so
   what stops the session is the order the tracker records rather than a judgement
   the session makes; an issue it opens carries that order out to the tracker in
@@ -654,7 +654,7 @@ The canonical skills are:
 [Issue tracking and the roadmap board](issue-tracking.md) holds the issue rules
 themselves: which work needs an issue, what an issue body contains, the `type:*`
 label it carries, the `backend` or `frontend` label saying which stack the work
-lands in and the case that takes neither, the `agent:claimed` marker a session
+lands in and the case that takes neither, the `agent:claude` or `agent:codex` marker a session
 applies when it takes one, the `Area`, `Queue` and `Size` fields that place it on
 the board, the milestone that scopes it to a release, the dependency relation
 that records which issue has to land before which — distinct from both the
