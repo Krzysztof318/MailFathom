@@ -7,6 +7,7 @@ using MailFathom.Application.Access.Credentials;
 using MailFathom.Domain.Access;
 using MailFathom.Infrastructure.Security.Passwords;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Xunit;
@@ -245,6 +246,83 @@ public sealed class OwnerPasswordAuthenticatorTests
         Assert.Equal(OwnerPasswordRejection.TooManyAttempts, surplus.Rejection);
     }
 
+    /// <summary>Capacity is taken before the derivation rather than read before it, so a caller cannot get the whole allowance's worth of derivations by issuing its guesses at once.</summary>
+    [Fact]
+    public async Task AuthenticateAsync_TheAllowancesWorthOfGuessesIssuedAtOnce_AdmitsOnlyTheAllowance()
+    {
+        // Arrange
+        using var harness = new AuthenticatorHarness();
+        const int Allowed = 1;
+        const int Concurrent = 8;
+
+        // Act
+        var results = await Task.WhenAll(Enumerable
+            .Range(0, Concurrent)
+            .Select(_ => harness.AuthenticateAsync(Header("owner", Password), attemptsPerMinute: Allowed)));
+
+        // Assert
+        Assert.Equal(Allowed, results.Count(result => result.Rejection == OwnerPasswordRejection.CredentialUnrecognized));
+        Assert.Equal(
+            Concurrent - Allowed,
+            results.Count(result => result.Rejection == OwnerPasswordRejection.TooManyAttempts));
+    }
+
+    /// <summary>A wrong password holds its capacity for the minute the allowance is stated over, and gives it back then rather than never.</summary>
+    [Fact]
+    public async Task AuthenticateAsync_AGuessAndThenTheWindow_AdmitsAnAttemptAgain()
+    {
+        // Arrange
+        using var harness = new AuthenticatorHarness();
+        const int Allowed = 1;
+
+        // Act
+        var spent = await harness.AuthenticateAsync(Header("owner", Password), attemptsPerMinute: Allowed);
+        var whileHeld = await harness.AuthenticateAsync(Header("owner", Password), attemptsPerMinute: Allowed);
+        harness.Clock.Advance(PasswordAttemptLimiter.SpentAttemptWindow);
+        var afterTheWindow = await harness.AuthenticateAsync(Header("owner", Password), attemptsPerMinute: Allowed);
+
+        // Assert
+        Assert.Equal(OwnerPasswordRejection.CredentialUnrecognized, spent.Rejection);
+        Assert.Equal(OwnerPasswordRejection.TooManyAttempts, whileHeld.Rejection);
+        Assert.Equal(OwnerPasswordRejection.CredentialUnrecognized, afterTheWindow.Rejection);
+    }
+
+    /// <summary>An address every caller shares is not a source, so where the caller supplies none the username is the whole bound and one guesser closes nobody else's sign-in.</summary>
+    [Fact]
+    public async Task AuthenticateAsync_GuessesAtTwoUsernamesWithNoSourceToTellCallersApart_BoundsEachUsernameOnItsOwn()
+    {
+        // Arrange
+        using var harness = new AuthenticatorHarness();
+        const int Allowed = 1;
+
+        // Act
+        var firstOwner = await harness.AuthenticateAsync(Header("owner", Password), attemptsPerMinute: Allowed, source: null);
+        var secondOwner = await harness.AuthenticateAsync(Header("other", Password), attemptsPerMinute: Allowed, source: null);
+        var firstOwnerAgain = await harness.AuthenticateAsync(Header("owner", Password), attemptsPerMinute: Allowed, source: null);
+
+        // Assert
+        Assert.Equal(OwnerPasswordRejection.CredentialUnrecognized, firstOwner.Rejection);
+        Assert.Equal(OwnerPasswordRejection.CredentialUnrecognized, secondOwner.Rejection);
+        Assert.Equal(OwnerPasswordRejection.TooManyAttempts, firstOwnerAgain.Rejection);
+    }
+
+    /// <summary>Where an address does tell callers apart it is a bound of its own, which is what catches one host spreading its guesses across many usernames.</summary>
+    [Fact]
+    public async Task AuthenticateAsync_GuessesAtTwoUsernamesFromOneSource_SpendsThatSourcesAllowance()
+    {
+        // Arrange
+        using var harness = new AuthenticatorHarness();
+        const int Allowed = 1;
+
+        // Act
+        var firstOwner = await harness.AuthenticateAsync(Header("owner", Password), attemptsPerMinute: Allowed);
+        var secondOwner = await harness.AuthenticateAsync(Header("other", Password), attemptsPerMinute: Allowed);
+
+        // Assert
+        Assert.Equal(OwnerPasswordRejection.CredentialUnrecognized, firstOwner.Rejection);
+        Assert.Equal(OwnerPasswordRejection.TooManyAttempts, secondOwner.Rejection);
+    }
+
     /// <summary>Two surfaces keep separate buckets, so a client that spent one endpoint's attempts has not spent the other's.</summary>
     [Fact]
     public async Task AuthenticateAsync_TheSameCallerOnASecondSurface_IsNotRefusedForTheFirstSurfacesSpentAttempts()
@@ -379,10 +457,13 @@ public sealed class OwnerPasswordAuthenticatorTests
     /// <remarks>The limiter is real because what it decides is part of the behaviour under test; the store is the boundary whose interaction is the contract.</remarks>
     private sealed class AuthenticatorHarness : IDisposable
     {
-        private readonly PasswordAttemptLimiter attemptLimiter = new();
+        private readonly PasswordAttemptLimiter attemptLimiter;
 
         internal AuthenticatorHarness()
         {
+            this.Clock = new FakeTimeProvider();
+            this.attemptLimiter = new PasswordAttemptLimiter(this.Clock);
+
             this.Credentials = Substitute.For<IOwnerPasswordCredentialStore>();
             this.Credentials.FindByUsernameAsync(Arg.Any<OwnerCredentialUsername>(), Arg.Any<CancellationToken>())
                 .Returns((ResolvedOwnerPasswordCredential?)null);
@@ -403,6 +484,8 @@ public sealed class OwnerPasswordAuthenticatorTests
 
         internal RecordingPasswordHasher PasswordHasher { get; }
 
+        internal FakeTimeProvider Clock { get; }
+
         public void Dispose() => this.attemptLimiter.Dispose();
 
         internal void Holds(bool enabled) =>
@@ -414,11 +497,12 @@ public sealed class OwnerPasswordAuthenticatorTests
         internal Task<OwnerPasswordAuthenticationResult> AuthenticateAsync(
             string? authorizationHeaderValue,
             int attemptsPerMinute = AttemptsPerMinute,
-            string surfaceName = SurfaceName) =>
+            string surfaceName = SurfaceName,
+            string? source = "203.0.113.7") =>
             this.Authenticator.AuthenticateAsync(
                 surfaceName,
                 authorizationHeaderValue,
-                source: "203.0.113.7",
+                source,
                 attemptsPerMinute,
                 TestContext.Current.CancellationToken);
     }

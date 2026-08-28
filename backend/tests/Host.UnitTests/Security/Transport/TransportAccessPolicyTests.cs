@@ -4,6 +4,7 @@
 
 using System.Security.Claims;
 using MailFathom.Host.Security.ApiKeys;
+using MailFathom.Host.Security.Basic;
 using MailFathom.Host.Security.ClientAssertions;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Infrastructure.Security.OAuth;
@@ -139,6 +140,22 @@ public sealed class TransportAccessPolicyTests
         Assert.True(TransportAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ScopesRequiredOfTheIssuer("mailfathom.read")));
     }
 
+    /// <summary>
+    /// A password is a configured credential in the same sense a key is — an administrator provisioned it against an
+    /// owner this deployment serves — so it is admitted on that provisioning rather than sent back to a subject list it
+    /// names nothing in. Nothing else would admit it: a password names no issuer and carries no scope, so a principal
+    /// this method authenticated would be refused on every route of both surfaces.
+    /// </summary>
+    [Fact]
+    public void IsAuthorized_AnOwnerPasswordWhereScopesAndSubjectsAreRequired_IsAllowed()
+    {
+        // Arrange
+        var caller = OwnerPasswordPrincipal();
+
+        // Act, Assert
+        Assert.True(TransportAccessPolicy.IsAuthorized(caller, AuthorizedOwner, ScopesRequiredOfTheIssuer("mailfathom.read")));
+    }
+
     /// <summary>The bypass follows what the principal carries rather than which scheme named it, so a token cannot claim it by naming a scheme.</summary>
     [Fact]
     public void IsAuthorized_ATokenAuthenticatedUnderTheApiKeySchemeName_StillHasItsScopesChecked()
@@ -184,6 +201,13 @@ public sealed class TransportAccessPolicyTests
             TransportSurface.Mcp.ApiKeySchemeName,
             ApiKeyAuthentication.ApiKeyNameClaimType,
             roleType: string.Empty));
+
+    private static ClaimsPrincipal OwnerPasswordPrincipal() => new(
+        new ClaimsIdentity(
+            [new Claim(BasicAuthentication.CredentialIdClaimType, "0197c0de-0000-7000-8000-000000000001")],
+            TransportSurface.Client.BasicSchemeName,
+            BasicAuthentication.CredentialIdClaimType,
+            BasicAuthentication.RoleClaimType));
 
     private static ClaimsPrincipal ClientAssertionPrincipal(string publicKeyName) => new(
         new ClaimsIdentity(

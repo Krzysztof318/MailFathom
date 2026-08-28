@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Application.Access;
 using MailFathom.Application.Access.Credentials;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Security.Endpoints;
@@ -104,17 +103,17 @@ internal static class OwnerCredentialEndpoints
     }
 
     /// <summary>Lists the owners this deployment holds records for.</summary>
-    /// <param name="owners">Reads the roster.</param>
+    /// <param name="credentials">Reads the roster, for a caller the use case's own grant admits.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the owner identifiers.</returns>
     /// <remarks>An administrator selects an owner before administering a credential, and this is where the identifier to select comes from; a deployment serving one person answers with one entry, which is what lets a client act without asking.</remarks>
     internal static async Task<Ok<MailOwnerListResponse>> ListOwnersAsync(
-        [FromServices] IMailOwnerDirectory owners,
+        [FromServices] OwnerPasswordCredentialAdministration credentials,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(owners);
+        ArgumentNullException.ThrowIfNull(credentials);
 
-        var roster = await owners.ReadOwnersAsync(MaximumListedOwners, cancellationToken);
+        var roster = await credentials.ReadOwnersAsync(MaximumListedOwners, cancellationToken);
 
         return TypedResults.Ok(MailOwnerListResponse.For(roster));
     }

@@ -382,8 +382,13 @@ public sealed class OwnerPasswordCredentialAdministrationTests
 
             this.Auditor = Substitute.For<IOwnerCredentialAuditor>();
 
+            this.Owners = Substitute.For<IMailOwnerDirectory>();
+            this.Owners.ReadOwnersAsync(Arg.Any<int>(), Arg.Any<CancellationToken>())
+                .Returns([Owner]);
+
             this.Administration = new OwnerPasswordCredentialAdministration(
                 new AccessAuthorization(principals),
+                this.Owners,
                 this.Credentials,
                 this.PasswordHasher,
                 this.Auditor,
@@ -391,6 +396,8 @@ public sealed class OwnerPasswordCredentialAdministrationTests
         }
 
         internal OwnerPasswordCredentialAdministration Administration { get; }
+
+        internal IMailOwnerDirectory Owners { get; }
 
         internal IOwnerPasswordCredentialStore Credentials { get; }
 

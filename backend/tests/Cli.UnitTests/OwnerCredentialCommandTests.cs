@@ -406,6 +406,36 @@ public sealed class OwnerCredentialCommandTests : IDisposable
             AdminEndpointRoutes.OwnerCredentialPath(Owner, CredentialId)));
     }
 
+    /// <summary>
+    /// The listing is shown for the operator to read and never decides the outcome, so a token that may remove a
+    /// credential and may not list one still removes it — the refusal is reported and stepped over.
+    /// </summary>
+    [Fact]
+    public async Task Delete_AListingTheDeploymentRefuses_ReportsThatAndStillSendsTheRemoval()
+    {
+        // Arrange
+        const string Refusal = "The token does not carry the administrative read grant.";
+        using var deployment = FakeOwnerCredentialDeployment.RefusingTheListing([Owner], Refusal);
+        this.harness.Console.AnswerToGive = true;
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "credential",
+            "delete",
+            "--id",
+            $"{CredentialId:D}",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains(Refusal, StringComparison.Ordinal));
+        Assert.Single(deployment.RequestsTo(
+            HttpMethod.Delete,
+            AdminEndpointRoutes.OwnerCredentialPath(Owner, CredentialId)));
+    }
+
     /// <summary>What the operator is told is what the deployment answered, so an identifier it holds nothing for is reported as a failure carrying that sentence rather than as a removal that happened.</summary>
     [Fact]
     public async Task Delete_ACredentialTheDeploymentHoldsNothingFor_ReportsThatRefusalRatherThanSuccess()

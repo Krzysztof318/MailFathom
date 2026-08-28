@@ -4,6 +4,7 @@
 
 using System.CommandLine;
 using MailFathom.Cli.Administration;
+using MailFathom.Cli.Administration.Owners;
 
 namespace MailFathom.Cli.Commands.Owners;
 
@@ -26,6 +27,13 @@ namespace MailFathom.Cli.Commands.Owners;
 /// credential past that bound is absent from it while remaining in the deployment and going on authenticating — so
 /// deciding from the listing would report a removal that never happened. What the operator is told is what the
 /// deployment answered.
+/// </para>
+/// <para>
+/// A listing the deployment refuses is the same case one step further, and it ends the same way. Reading and removing
+/// are separately granted, so a token holding the write grant and not the read one is an ordinary arrangement rather
+/// than a broken one, and letting the refusal end the command would make a credential unremovable through the tool that
+/// exists to remove it. The refusal is therefore shown and stepped over, exactly as an absent credential is, and the
+/// operator is still asked before anything is sent.
 /// </para>
 /// </remarks>
 internal static class DeleteOwnerCredentialCommand
@@ -81,8 +89,7 @@ internal static class DeleteOwnerCredentialCommand
             requestedOwner,
             cancellationToken);
 
-        var listing = await deployment.ReadOwnerCredentialsAsync(profile.Token, owner, cancellationToken);
-        var held = listing.Credentials?.FirstOrDefault(credential => credential.Id == credentialId);
+        var held = await ReadForTheOperatorAsync(context, deployment, profile.Token, owner, credentialId, cancellationToken);
 
         if (held is null)
         {
@@ -113,5 +120,29 @@ internal static class DeleteOwnerCredentialCommand
             + "record back.");
 
         return CliExitCode.Success;
+    }
+
+    /// <summary>Reads the credential to show, answering with nothing where the deployment would not say.</summary>
+    /// <remarks>The refusal is written where the operator sees it rather than swallowed, because a listing that was refused and one that came back empty look identical afterwards and only one of them says something about the token.</remarks>
+    private static async Task<OwnerCredential?> ReadForTheOperatorAsync(
+        CliContext context,
+        AdminApiClient deployment,
+        string token,
+        Guid owner,
+        Guid credentialId,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var listing = await deployment.ReadOwnerCredentialsAsync(token, owner, cancellationToken);
+
+            return listing.Credentials?.FirstOrDefault(credential => credential.Id == credentialId);
+        }
+        catch (CliFailure refusal)
+        {
+            context.Console.WriteError($"The credentials could not be listed: {refusal.Message}");
+
+            return null;
+        }
     }
 }

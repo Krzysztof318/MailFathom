@@ -36,12 +36,14 @@ public sealed class OwnerCredentialEndpointsTests
     public async Task ListOwnersAsync_ADeploymentHoldingSeveralOwners_ReportsEachIdentifier()
     {
         // Arrange
-        var owners = Substitute.For<IMailOwnerDirectory>();
-        owners.ReadOwnersAsync(OwnerCredentialEndpoints.MaximumListedOwners, Arg.Any<CancellationToken>())
+        var harness = new EndpointHarness(MailFathomPermission.AdminRead);
+        harness.Owners.ReadOwnersAsync(OwnerCredentialEndpoints.MaximumListedOwners, Arg.Any<CancellationToken>())
             .Returns([SyntheticMailOwner.Deployment, SyntheticMailOwner.Another]);
 
         // Act
-        var result = await OwnerCredentialEndpoints.ListOwnersAsync(owners, TestContext.Current.CancellationToken);
+        var result = await OwnerCredentialEndpoints.ListOwnersAsync(
+            harness.Administration,
+            TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(
@@ -54,16 +56,37 @@ public sealed class OwnerCredentialEndpointsTests
     public async Task ListOwnersAsync_Always_ReadsNoMoreOwnersThanTheRouteBounds()
     {
         // Arrange
-        var owners = Substitute.For<IMailOwnerDirectory>();
-        owners.ReadOwnersAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
+        var harness = new EndpointHarness(MailFathomPermission.AdminRead);
 
         // Act
-        await OwnerCredentialEndpoints.ListOwnersAsync(owners, TestContext.Current.CancellationToken);
+        await OwnerCredentialEndpoints.ListOwnersAsync(
+            harness.Administration,
+            TestContext.Current.CancellationToken);
 
         // Assert
-        await owners.Received(1).ReadOwnersAsync(
+        await harness.Owners.Received(1).ReadOwnersAsync(
             OwnerCredentialEndpoints.MaximumListedOwners,
             Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The roster is where an administrator learns which owner identifiers exist, so it is admitted by the use case's
+    /// own grant rather than by the route's alone — a second entrypoint reaching the port directly would be one that
+    /// never asked.
+    /// </summary>
+    [Fact]
+    public async Task ListOwnersAsync_ACallerHoldingNoAdministrativeRead_IsRefusedBeneathTheRoute()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.MailRead);
+
+        // Act, Assert
+        await Assert.ThrowsAsync<PrincipalNotAuthorizedException>(() => OwnerCredentialEndpoints.ListOwnersAsync(
+            harness.Administration,
+            TestContext.Current.CancellationToken));
+
+        await harness.Owners.DidNotReceiveWithAnyArgs()
+            .ReadOwnersAsync(default, TestContext.Current.CancellationToken);
     }
 
     /// <summary>A listing says what exists and whose it is; a record of what the password was is not part of that.</summary>
@@ -533,8 +556,12 @@ public sealed class OwnerCredentialEndpointsTests
 
             this.PasswordHasher = new RecordingPasswordHasher();
 
+            this.Owners = Substitute.For<IMailOwnerDirectory>();
+            this.Owners.ReadOwnersAsync(Arg.Any<int>(), Arg.Any<CancellationToken>()).Returns([]);
+
             this.Administration = new OwnerPasswordCredentialAdministration(
                 new AccessAuthorization(principals),
+                this.Owners,
                 this.Credentials,
                 this.PasswordHasher,
                 Substitute.For<IOwnerCredentialAuditor>(),
@@ -542,6 +569,8 @@ public sealed class OwnerCredentialEndpointsTests
         }
 
         internal OwnerPasswordCredentialAdministration Administration { get; }
+
+        internal IMailOwnerDirectory Owners { get; }
 
         internal IOwnerPasswordCredentialStore Credentials { get; }
 

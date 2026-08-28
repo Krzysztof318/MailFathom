@@ -30,9 +30,11 @@ namespace MailFathom.Infrastructure.Security.Passwords;
 /// <strong>Cheap refusals first.</strong> The header is read, bounded, and folded into a canonical username before the
 /// bound is consulted, and the bound is consulted before any password is verified. An unauthenticated caller therefore
 /// cannot make this process perform a deliberately expensive derivation by writing a malformed header, and cannot make
-/// it perform an unbounded number of them by writing well-formed ones. The token itself is spent afterwards and only
-/// where the verification failed, because the credential travels on every request and a bound that a correct password
-/// paid into would bound the owner's own traffic rather than anybody's guessing.
+/// it perform an unbounded number of them by writing well-formed ones — the capacity is <em>taken</em> before the
+/// derivation rather than read before it, so five hundred requests issued at once cannot all observe the same free
+/// allowance. What a right password costs is nothing: the reservation is returned unspent, because the credential
+/// travels on every request and a bound a correct password paid into would bound the owner's own traffic rather than
+/// anybody's guessing.
 /// </para>
 /// <para>
 /// <strong>Nothing written down is the credential.</strong> Neither the returned result nor anything logged on the way
@@ -42,10 +44,6 @@ namespace MailFathom.Infrastructure.Security.Passwords;
 /// </remarks>
 public sealed partial class OwnerPasswordAuthenticator
 {
-    /// <summary>What a request with no remote address is counted under, which is a local or in-process caller.</summary>
-    /// <remarks>A word rather than an empty key, so a bucket that stands for "no address" is visibly that rather than looking like a partition somebody forgot to fill.</remarks>
-    internal const string UnknownSource = "unknown";
-
     private readonly IOwnerPasswordCredentialStore credentials;
     private readonly IPasswordHasher passwordHasher;
     private readonly PasswordAttemptLimiter attemptLimiter;
@@ -82,7 +80,7 @@ public sealed partial class OwnerPasswordAuthenticator
     /// <summary>Judges the credential an <c>Authorization</c> header carried.</summary>
     /// <param name="surfaceName">The transport surface the request arrived on, which keeps two surfaces' attempt buckets apart.</param>
     /// <param name="authorizationHeaderValue">The raw header value, or <see langword="null" /> when the request carried none.</param>
-    /// <param name="source">The remote address the request came from, or <see langword="null" /> when it carried none.</param>
+    /// <param name="source">The address to bound this attempt by, or <see langword="null" /> where the caller cannot supply one that tells two callers apart — behind a reverse proxy above all, where every request reports the proxy. The username is then the whole bound, which is deliberate: a partition every caller shares is one a single guesser could empty for everybody.</param>
     /// <param name="attemptsPerMinute">How many attempts the surface allows one source and one username each minute.</param>
     /// <param name="cancellationToken">Cancels the credential read and the rehash that may follow a success.</param>
     /// <returns>The credential and owner that matched, or the reason the credential was refused.</returns>
@@ -118,11 +116,15 @@ public sealed partial class OwnerPasswordAuthenticator
 
             var attempt = new PasswordAttempt(
                 surfaceName,
-                string.IsNullOrWhiteSpace(source) ? UnknownSource : source,
+                string.IsNullOrWhiteSpace(source) ? null : source,
                 username.Value,
                 attemptsPerMinute);
 
-            if (!this.attemptLimiter.HasCapacity(attempt))
+            // Disposed on every path out, which returns the capacity; a wrong password keeps it instead by spending the
+            // reservation below, and disposing a spent one does nothing.
+            using var reservation = this.attemptLimiter.Reserve(attempt);
+
+            if (!reservation.IsGranted)
             {
                 this.LogAttemptsExhausted(surfaceName);
 
@@ -131,11 +133,11 @@ public sealed partial class OwnerPasswordAuthenticator
 
             var judgement = await this.JudgeAsync(username, presented, cancellationToken);
 
-            // Spent on the answer rather than on the attempt, so a caller presenting a password that works costs its
-            // buckets nothing however often it presents it — which is what Basic makes it do, having no session.
+            // Spent on the answer rather than on the attempt, so a caller presenting a password that works costs the
+            // bound nothing however often it presents it — which is what Basic makes it do, having no session.
             if (!judgement.Succeeded)
             {
-                this.attemptLimiter.RecordFailedAttempt(attempt);
+                reservation.Spend();
             }
 
             return judgement;

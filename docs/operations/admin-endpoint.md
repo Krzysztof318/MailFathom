@@ -1148,7 +1148,10 @@ choose from, so the refusal is where an operator reads the one to pass.
 provisioned under it, and one command undoes the decision — which is what to reach for when a way into somebody's mail
 has to be closed now and the reason may turn out to be nothing. Deleting frees the username and nothing in MailFathom
 puts the record back; the command shows the credential and then asks, and `--yes` is how a scripted removal states the
-agreement instead.
+agreement instead. What it shows is never what decides the outcome: reading and removing are separately granted, so a
+token holding `mailfathom.admin.credentials.write` and not `mailfathom.admin.read` is refused the listing, and the
+command reports that refusal, asks anyway, and sends the removal — otherwise the credential would be unremovable
+through the tool that exists to remove it.
 
 **A rotation is one statement.** There is no moment at which both passwords work and none at which neither does, so a
 client still presenting the previous one meets a refusal rather than a half-written record. The credential keeps its

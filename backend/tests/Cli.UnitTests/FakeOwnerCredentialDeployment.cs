@@ -42,6 +42,18 @@ internal static class FakeOwnerCredentialDeployment
         string detail) =>
         new((request, _) => Task.FromResult(Answer(request, owners, [], status, detail)));
 
+    /// <summary>Answers every credential listing with a refusal while every write is accepted.</summary>
+    /// <param name="owners">The owners the deployment holds records for.</param>
+    /// <param name="detail">What the refusal says, as the problem document carries it.</param>
+    /// <returns>The deployment.</returns>
+    /// <remarks>Reading and removing are separately granted, so a token holding the write grant and not the read one is an ordinary arrangement rather than a broken deployment.</remarks>
+    internal static FakeHttpMessageHandler RefusingTheListing(IReadOnlyList<Guid> owners, string detail) =>
+        new((request, _) => Task.FromResult(
+            request.Method == HttpMethod.Get
+            && (request.RequestUri?.AbsolutePath ?? string.Empty).EndsWith("/credentials", StringComparison.Ordinal)
+                ? FakeAdminEndpoint.Json(HttpStatusCode.Forbidden, $$"""{"detail":"{{detail}}"}""")
+                : Answer(request, owners, [], HttpStatusCode.OK, string.Empty)));
+
     /// <summary>Writes one credential as a listing carries it.</summary>
     /// <param name="id">The identifier the deployment gave the credential.</param>
     /// <param name="username">The name the owner signs in with.</param>

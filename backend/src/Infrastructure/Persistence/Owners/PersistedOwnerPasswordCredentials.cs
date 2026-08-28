@@ -110,11 +110,23 @@ internal sealed class PersistedOwnerPasswordCredentials(MailFathomDbContext dbCo
 
     /// <inheritdoc />
     /// <remarks>
+    /// <para>
     /// The insert states the owner and the ceiling as subqueries and lets the unique index answer for the username, so
-    /// all three refusals are decided by the database in one statement rather than by reads this method took a moment
-    /// earlier. What the reads below decide is only which of the three happened, on the path where nothing was written
-    /// — so a concurrent owner deletion, a concurrent provisioning, and two administrators racing at the ceiling are
-    /// each answered rather than raised, and the ceiling the bounded listing assumes is one this statement enforces.
+    /// all three refusals are decided by the database rather than by reads this method took a moment earlier. What the
+    /// reads below decide is only which of the three happened, on the path where nothing was written — so a concurrent
+    /// owner deletion, a concurrent provisioning, and two administrators racing at the ceiling are each answered rather
+    /// than raised.
+    /// </para>
+    /// <para>
+    /// The owner's row is locked in a statement of its own before that insert, which is what makes the ceiling hold
+    /// against a second administrator provisioning at the same instant. A lock taken inside the insert would not: under
+    /// <c>READ COMMITTED</c> a statement that waits on a row lock re-reads the locked row and leaves every other table
+    /// on the snapshot it started with, so the count would still be the one taken before the winner committed and both
+    /// callers would write the hundredth credential. Locking first is what gives the insert a snapshot taken after that
+    /// commit. It is the one write here that opens a transaction, because a ceiling cannot be made idempotent — a
+    /// second attempt from a fresh read is a second credential rather than the same one — so the retry policy has
+    /// nothing to converge on and the decision has to hold the row it was taken against.
+    /// </para>
     /// </remarks>
     public async Task<OwnerCredentialWriteOutcome> CreateAsync(
         Guid credentialId,
@@ -136,6 +148,13 @@ internal sealed class PersistedOwnerPasswordCredentials(MailFathomDbContext dbCo
         var canonicalUsername = username.Value;
         var provisionedAt = timeProvider.GetUtcNow();
 
+        await using var provisioning = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        // Locks nothing when the owner is gone, which the insert below then answers as an unknown owner.
+        await dbContext.Database.ExecuteSqlAsync(
+            $"""SELECT 1 FROM settings_accounts WHERE "Id" = {storedOwnerId} FOR UPDATE""",
+            cancellationToken);
+
         // The identifiers are quoted because EF Core names the columns after the properties, which PostgreSQL would
         // otherwise fold to lower case and fail to find.
         var written = await dbContext.Database.ExecuteSqlAsync(
@@ -148,6 +167,8 @@ internal sealed class PersistedOwnerPasswordCredentials(MailFathomDbContext dbCo
              ON CONFLICT ("Username") DO NOTHING
              """,
             cancellationToken);
+
+        await provisioning.CommitAsync(cancellationToken);
 
         if (written == 1)
         {

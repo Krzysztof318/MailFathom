@@ -635,17 +635,32 @@ Both challenges are offered, which is what lets an OAuth client's discovery keep
 accepts a password. The `charset` parameter is the only one RFC 7617 permits and is what makes a password outside
 US-ASCII survive the round trip.
 
+**A request the deployment cannot establish as encrypted is offered the bearer challenge alone.** A challenge is an
+instruction to send the credential again, so offering the password half over a hop that says it was clear text would be
+this deployment asking for a password in the open. That is reachable on the one arrangement clear text is permitted in
+— a socket behind a named proxy, reached by something that is not the proxy and therefore carries no forwarded scheme.
+Such a request is refused before its header is read, and the refusal it gets back names only `Bearer`.
+
 `AttemptsPerMinute` bounds guessing and defaults to 10, which is a person correcting a mistyped password. It is applied
 **per source and per username** rather than per endpoint, because those are the two shapes an attack takes: one host
 trying many passwords, and many hosts trying one account's. **Only a wrong password spends any of it.** Basic
-re-presents the credential on every request and this deployment keeps no session, so a bucket a working password spent
-would bound an owner's request rate rather than anybody's guessing — at the default, the eleventh call of a working
-session would be refused with the answer a wrong password gets. Both buckets replenish continuously, so a client that
-has spent its capacity gets some back within seconds rather than being locked out — the point is to make guessing
+re-presents the credential on every request and this deployment keeps no session, so an allowance a working password
+spent would bound an owner's request rate rather than anybody's guessing — at the default, the eleventh call of a
+working session would be refused with the answer a wrong password gets. Capacity is *taken* before the password is
+verified rather than read beforehand, which is what makes the bound hold against a client opening many connections at
+once; a right password returns it immediately, and a wrong one holds it for a minute and then returns it. So a caller
+that has spent its allowance waits that minute out rather than being locked out — the point is to make guessing
 expensive rather than to give anybody a way to lock an owner out. It is separate from
 [`RateLimiting`](#rate-limiting), which bounds requests to the surface rather than guesses at a credential. The ceiling
 is 600; a number above it is refused, because a thousand verifications a minute against one username is an offline
 guessing rate rather than a bound.
+
+**Behind a reverse proxy the username is the whole bound.** MailFathom never reads `X-Forwarded-For`, so where
+[`ReverseProxy:TrustedProxies`](configuration-endpoints.md) names something in front, every request this process
+observes arrives from the proxy's own address — a per-source allowance there would be one allowance for the whole
+world, and a single guesser filling it would close password sign-in for every owner at once. The source axis is
+therefore skipped in that arrangement rather than applied to an address that distinguishes nobody, and the per-username
+allowance is what holds. Where nothing is named in front, the peer is the client and both axes apply.
 
 **The method is refused on the administrative endpoint**, at startup, naming the section. That surface answers for the
 deployment rather than for a person, so a credential naming an owner has nothing there to act for —

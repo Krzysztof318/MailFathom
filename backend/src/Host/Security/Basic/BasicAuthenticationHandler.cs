@@ -6,6 +6,8 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Security.Claims;
 using System.Text.Encodings.Web;
+using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Security.ApiKeys;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Infrastructure.Security.Passwords;
 using Microsoft.AspNetCore.Authentication;
@@ -62,19 +64,30 @@ namespace MailFathom.Host.Security.Basic;
 internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAuthenticationSchemeOptions>
 {
     private readonly OwnerPasswordAuthenticator authenticator;
+    private readonly bool boundsBySource;
 
     /// <summary>Initializes a new Basic authentication handler.</summary>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="authenticator" /> is <see langword="null" />.</exception>
+    /// <param name="schemeOptions">What this surface's registration granted and how often it lets a password be tried.</param>
+    /// <param name="loggerFactory">The framework's own logging, which records the reason a refusal carried.</param>
+    /// <param name="urlEncoder">The framework's own encoder, unused here and required by the base class.</param>
+    /// <param name="authenticator">What judges the credential, below the request boundary.</param>
+    /// <param name="reverseProxySettings">Whether the operator declared something in front, which decides whether the peer address distinguishes one caller from another.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="authenticator" /> or <paramref name="reverseProxySettings" /> is <see langword="null" />.</exception>
     public BasicAuthenticationHandler(
         IOptionsMonitor<BasicAuthenticationSchemeOptions> schemeOptions,
         ILoggerFactory loggerFactory,
         UrlEncoder urlEncoder,
-        OwnerPasswordAuthenticator authenticator)
+        OwnerPasswordAuthenticator authenticator,
+        IOptions<ReverseProxyOptions> reverseProxySettings)
         : base(schemeOptions, loggerFactory, urlEncoder)
     {
         ArgumentNullException.ThrowIfNull(authenticator);
+        ArgumentNullException.ThrowIfNull(reverseProxySettings);
 
         this.authenticator = authenticator;
+
+        // Read once rather than per request, the section being restart-scoped like every other listener setting.
+        this.boundsBySource = !reverseProxySettings.Value.NamesAProxy;
     }
 
     /// <inheritdoc />
@@ -102,7 +115,7 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
         var result = await this.authenticator.AuthenticateAsync(
             this.Options.Surface.Name,
             this.Request.Headers.Authorization.ToString(),
-            this.Context.Connection.RemoteIpAddress?.ToString(),
+            this.SourceToBoundBy(),
             this.Options.AttemptsPerMinute,
             this.Context.RequestAborted);
 
@@ -126,11 +139,37 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
             new AuthenticationTicket(new ClaimsPrincipal(identity), this.Scheme.Name));
     }
 
+    /// <summary>Reports the address to bound this attempt by, or nothing where no address here tells two callers apart.</summary>
+    /// <remarks>
+    /// The peer is the client only when nothing was declared in front of this process. Where a proxy was declared,
+    /// every request arrives from it — <c>X-Forwarded-For</c> is deliberately never read, so the peer this process
+    /// observes stays the one that opened the connection — and a per-source partition would be one partition for the
+    /// whole world, which a single guesser could empty and so close password sign-in for every owner at once. The
+    /// username bound is what holds there, and it holds per owner rather than across all of them.
+    /// </remarks>
+    private string? SourceToBoundBy() => this.boundsBySource
+        ? this.Context.Connection.RemoteIpAddress?.ToString()
+        : null;
+
     /// <inheritdoc />
-    /// <remarks>The bare bearer challenge every method on the surface produces, with the password challenge beside it, written where the constants they name live.</remarks>
+    /// <remarks>
+    /// The bare bearer challenge every method on the surface produces, with the password challenge beside it, written
+    /// where the constants they name live — <strong>except on a request this process sees as clear text</strong>, which
+    /// gets the bearer challenge alone. Inviting a password there would be worse than reading one: the handler above
+    /// refuses to judge the credential, but a browser meeting <c>WWW-Authenticate: Basic</c> prompts for one and sends
+    /// it, so the password crosses the unencrypted hop before anything here can decline it. The refusal and this are
+    /// therefore one decision made twice — do not read a password over that hop, and do not ask for one.
+    /// </remarks>
     protected override Task HandleChallengeAsync(AuthenticationProperties properties)
     {
-        BasicAuthentication.WriteChallenge(this.Response);
+        if (this.Request.IsHttps)
+        {
+            BasicAuthentication.WriteChallenge(this.Response);
+        }
+        else
+        {
+            ApiKeyAuthentication.WriteBareChallenge(this.Response);
+        }
 
         return Task.CompletedTask;
     }

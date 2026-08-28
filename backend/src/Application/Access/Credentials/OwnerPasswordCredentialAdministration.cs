@@ -42,6 +42,7 @@ namespace MailFathom.Application.Access.Credentials;
 public sealed class OwnerPasswordCredentialAdministration
 {
     private readonly AccessAuthorization authorization;
+    private readonly IMailOwnerDirectory owners;
     private readonly IOwnerPasswordCredentialStore credentials;
     private readonly IPasswordHasher passwordHasher;
     private readonly IOwnerCredentialAuditor auditor;
@@ -49,6 +50,7 @@ public sealed class OwnerPasswordCredentialAdministration
 
     /// <summary>Initializes the administration over one deployment's credential records.</summary>
     /// <param name="authorization">What each act is admitted by.</param>
+    /// <param name="owners">Where the roster an administrator selects an owner from is read.</param>
     /// <param name="credentials">Where the credentials are kept.</param>
     /// <param name="passwordHasher">What turns a password into the record that is stored.</param>
     /// <param name="auditor">Where a change to who can reach an owner's mail is written down.</param>
@@ -56,22 +58,44 @@ public sealed class OwnerPasswordCredentialAdministration
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public OwnerPasswordCredentialAdministration(
         AccessAuthorization authorization,
+        IMailOwnerDirectory owners,
         IOwnerPasswordCredentialStore credentials,
         IPasswordHasher passwordHasher,
         IOwnerCredentialAuditor auditor,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(authorization);
+        ArgumentNullException.ThrowIfNull(owners);
         ArgumentNullException.ThrowIfNull(credentials);
         ArgumentNullException.ThrowIfNull(passwordHasher);
         ArgumentNullException.ThrowIfNull(auditor);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
         this.authorization = authorization;
+        this.owners = owners;
         this.credentials = credentials;
         this.passwordHasher = passwordHasher;
         this.auditor = auditor;
         this.timeProvider = timeProvider;
+    }
+
+    /// <summary>Reads the owners this deployment holds records for.</summary>
+    /// <param name="limit">The greatest number of owners to read.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The owners, in a stable order, and no more than <paramref name="limit" /> of them.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="limit" /> is not positive.</exception>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminRead" />.</exception>
+    /// <remarks>
+    /// The roster is where an administrator gets the identifier every other act here names, so it is published beside
+    /// them and under the same grant rather than left to the port. Which owners a deployment holds is what a listing of
+    /// their credentials would otherwise be a way of discovering, and an entrypoint reaching the port directly would be
+    /// an entrypoint that never asked.
+    /// </remarks>
+    public Task<IReadOnlyList<MailOwnerId>> ReadOwnersAsync(int limit, CancellationToken cancellationToken)
+    {
+        this.authorization.RequirePermission(MailFathomPermission.AdminRead);
+
+        return this.owners.ReadOwnersAsync(limit, cancellationToken);
     }
 
     /// <summary>Reads the credentials one owner holds.</summary>
@@ -98,7 +122,13 @@ public sealed class OwnerPasswordCredentialAdministration
     /// <returns>What the act did, or why it did nothing.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody, <paramref name="username" /> is the unspecified struct default, or the password breaks <see cref="OwnerPasswordPolicy" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold <see cref="MailFathomPermission.AdminCredentialsWrite" />.</exception>
-    /// <remarks>The identifier is minted here rather than supplied, so nothing outside this deployment decides what a credential is called, and it is reported back because every later act on the credential names it.</remarks>
+    /// <remarks>
+    /// The identifier is minted here rather than supplied, so nothing outside this deployment decides what a credential
+    /// is called, and it is reported back because every later act on the credential names it. It is minted from the
+    /// injected clock rather than from the ambient one: a version-7 identifier embeds the instant it was made, and a
+    /// listing orders by the stamped instant and then by the identifier, so two clocks would order a credential against
+    /// itself.
+    /// </remarks>
     public async Task<OwnerCredentialProvisioning> ProvisionAsync(
         MailOwnerId owner,
         OwnerCredentialUsername username,
@@ -108,7 +138,8 @@ public sealed class OwnerPasswordCredentialAdministration
         this.authorization.RequirePermission(MailFathomPermission.AdminCredentialsWrite);
 
         var passwordHash = this.HashOrThrow(password.Span);
-        var credentialId = Guid.CreateVersion7();
+        var provisionedAt = this.timeProvider.GetUtcNow();
+        var credentialId = Guid.CreateVersion7(provisionedAt);
 
         var outcome = await this.credentials.CreateAsync(
             credentialId,

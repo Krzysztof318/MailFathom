@@ -10,6 +10,7 @@ using MailFathom.Host.Security.Transport;
 using MailFathom.IntegrationTests.Orchestration;
 using MailFathom.Mcp;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Net.Http.Headers;
@@ -26,6 +27,12 @@ namespace MailFathom.IntegrationTests.Hosting;
 /// that a surface configuring a Basic block registers a scheme of its own, that a request naming the scheme reaches
 /// that surface's handler rather than the key comparison, that a refusal is answered with the challenge a browser needs
 /// in order to ask for a password, and that one surface's password handler is never offered another surface's request.
+/// </para>
+/// <para>
+/// Every request carries <c>X-Forwarded-Proto: https</c>, because the shape below is the one the confidentiality
+/// refusal permits — a clear-text socket behind a named proxy — and a password handler judges nothing on a hop the
+/// request itself says was unencrypted. Without the header these claims would all be about a refusal that happens
+/// before the header is read, which is <see cref="ComposedPipelineOrderTests" />'s subject rather than this class's.
 /// </para>
 /// <para>
 /// The credential store is replaced after the composition and before the container is built, because everything else in
@@ -79,6 +86,7 @@ public sealed class ComposedPasswordAuthenticationTests
             HttpMethods.Get,
             ClientSessionRoute,
             ClientPort,
+            (ForwardedHeadersDefaults.XForwardedProtoHeaderName, "https"),
             (HeaderNames.Authorization, Credential(Username, Password)));
 
         // Assert
@@ -97,6 +105,7 @@ public sealed class ComposedPasswordAuthenticationTests
             HttpMethods.Get,
             ClientSessionRoute,
             ClientPort,
+            (ForwardedHeadersDefaults.XForwardedProtoHeaderName, "https"),
             (HeaderNames.Authorization, Credential(Username, Password)));
 
         // Assert
@@ -115,6 +124,7 @@ public sealed class ComposedPasswordAuthenticationTests
             HttpMethods.Get,
             ClientSessionRoute,
             ClientPort,
+            (ForwardedHeadersDefaults.XForwardedProtoHeaderName, "https"),
             (HeaderNames.Authorization, Credential(Username, Password)));
 
         // Assert
@@ -133,6 +143,7 @@ public sealed class ComposedPasswordAuthenticationTests
             HttpMethods.Post,
             McpEndpointRoute.Path,
             McpPort,
+            (ForwardedHeadersDefaults.XForwardedProtoHeaderName, "https"),
             (HeaderNames.Authorization, Credential(Username, Password)));
 
         // Assert
@@ -156,6 +167,7 @@ public sealed class ComposedPasswordAuthenticationTests
             HttpMethods.Get,
             ClientSessionRoute,
             ClientPort,
+            (ForwardedHeadersDefaults.XForwardedProtoHeaderName, "https"),
             (HeaderNames.Authorization, Credential(Username, "not-the-password")));
 
         // Assert
@@ -177,12 +189,14 @@ public sealed class ComposedPasswordAuthenticationTests
             HttpMethods.Get,
             ClientSessionRoute,
             ClientPort,
+            (ForwardedHeadersDefaults.XForwardedProtoHeaderName, "https"),
             (HeaderNames.Authorization, Credential("nobody", Password)));
 
         var wrong = await host.SendAsync(
             HttpMethods.Get,
             ClientSessionRoute,
             ClientPort,
+            (ForwardedHeadersDefaults.XForwardedProtoHeaderName, "https"),
             (HeaderNames.Authorization, Credential(Username, "not-the-password")));
 
         // Assert
@@ -225,6 +239,7 @@ public sealed class ComposedPasswordAuthenticationTests
             HttpMethods.Get,
             AdminSessionRoute,
             AdminPort,
+            (ForwardedHeadersDefaults.XForwardedProtoHeaderName, "https"),
             (HeaderNames.Authorization, Credential(Username, Password)));
 
         // Assert

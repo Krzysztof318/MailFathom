@@ -255,16 +255,18 @@ deployment runs.
 | `Username` | The name the owner types, folded to lower case and at most 128 characters. Unique **across the deployment** rather than within the owner, because it is what a presented credential is resolved by and nothing else in the request says whose it is. A colon cannot appear in one, since that is where [RFC 7617](https://www.rfc-editor.org/rfc/rfc7617.html) splits the header |
 | `PasswordHash` | The versioned record a presented password is verified against — the format version, the algorithm, the work parameters, the salt, and the derived key, as one string. The format version is what lets a later release move to another algorithm without rewriting anything: an unreadable record fails verification exactly as a wrong password does |
 | `Enabled` | Whether it still authenticates requests. A disabled credential keeps its username and its password, so the name stays claimed and the decision is one command away from being reversed |
-| `Version` | The concurrency token every write increments, so two administrators acting at once cannot interleave a rotation with a suspension |
+| `Version` | A counter every write to the row increments. It is what a listing reports so an administrator can see that a credential changed since they last read it; nothing reads it back to decide whether a write may proceed, so it orders the writes to one row rather than excluding any of them |
 | `CreatedAt` | When the credential was provisioned |
 | `PasswordChangedAt` | When the password was last replaced. A rotation moves it; the rehash the deployment performs on its own when a record falls behind the current work parameters does not, because nothing about the password changed |
 
 Two indexes and no more: the unique one on `Username`, which is the read every authentication performs, and one on
 `(OwnerId, CreatedAt)`, which is the listing an administrator reads. That listing is bounded at 100 credentials per
 owner, which is a ceiling rather than a number anybody reaches — and it is the same ceiling provisioning enforces, in
-the insert itself rather than in a count read beforehand, so two administrators provisioning at once cannot leave an
-owner above it. A row past the bound would authenticate where nothing lists it, and therefore where nothing could be
-revoked from; the hundred-and-first credential is refused with `409` instead.
+the insert itself rather than in a count read beforehand. Two administrators provisioning at the same instant cannot
+leave an owner above it either: the insert runs in a transaction that first takes a row lock on the owner's
+`settings_accounts` row, so the second one counts what the first committed rather than what it had read before. A row
+past the bound would authenticate where nothing lists it, and therefore where nothing could be revoked from; the
+hundred-and-first credential is refused with `409` instead.
 
 **A password never appears here or anywhere else.** What is stored is a derivation, the plaintext is read within the
 call that hashes it and retained nowhere, and no answer, log line, metric, audit record, command argument, or refusal
