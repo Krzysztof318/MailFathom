@@ -22,7 +22,8 @@ public sealed class OwnerCredentialTests
 
     /// <summary>
     /// RFC 7617 splits the decoded field at the first colon, so a username carrying one would be presented as a
-    /// shorter name with a longer password — a silent mis-authentication rather than a refusal anybody could read.
+    /// shorter name with a longer password — silently authenticating somebody else rather than being refused where
+    /// anybody could read it.
     /// </summary>
     [Fact]
     public void Constructor_AUsernameCarryingAColon_IsRefused()

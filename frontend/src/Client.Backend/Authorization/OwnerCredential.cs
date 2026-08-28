@@ -34,8 +34,8 @@ public sealed record OwnerCredential
     /// <remarks>
     /// The colon is refused here rather than encoded around, because RFC 7617 splits the decoded field at the first one
     /// and a username containing one would authenticate a shorter name with a longer password. The deployment refuses
-    /// such a credential too; refusing it at the point it is typed is what turns a silent mis-authentication into a
-    /// sentence on the screen.
+    /// such a credential too; refusing it at the point it is typed is what turns silently authenticating a different
+    /// name into a sentence on the screen.
     /// </remarks>
     public OwnerCredential(string username, string password)
     {
