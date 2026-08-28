@@ -9,7 +9,7 @@ namespace MailFathom.Client.Backend.Threads;
 /// <summary>One message of a conversation, and where it sits in that conversation.</summary>
 /// <param name="Position">The zero-based place the message holds in the conversation's own order, which continues across pages.</param>
 /// <param name="AnsweredId">The message this one answers among the ones served, or <see langword="null" /> where it is a root of what is served.</param>
-/// <param name="Email">The message itself, in the same shape a list row carries.</param>
+/// <param name="Email">The message itself, in the same shape a list row carries, or <see langword="null" /> where the answer placed a message in the conversation without describing one.</param>
 /// <remarks>
 /// <para>
 /// The message is the list route's own row rather than a second shape, so this client parses one message across the
