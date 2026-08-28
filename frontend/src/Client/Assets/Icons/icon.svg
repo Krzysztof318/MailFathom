@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!--
-  The application icon's background layer: MailFathom's navy ground, sampled from assets/icon-900.png. Android's
-  adaptive icon crops this layer to whatever shape the launcher asks for, so it is a full-bleed fill and nothing else;
-  the mark itself is in icon_foreground.svg, which is drawn over it.
--->
-<svg width="456" height="456" viewBox="0 0 456 456" version="1.1" xmlns="http://www.w3.org/2000/svg">
-  <rect x="0" y="0" width="456" height="456" fill="#010D33" />
-</svg>

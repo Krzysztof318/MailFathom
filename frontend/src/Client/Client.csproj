@@ -21,14 +21,6 @@
     <ApplicationPublisher>Krzysztof Kasprowicz</ApplicationPublisher>
     <Description>The MailFathom client: a mail application with the model in the middle of it.</Description>
 
-    <!-- The two grounds the Uno resizetizer paints behind the assets under Assets/, both the navy the product mark
-         sits on. They are properties rather than anything drawn in an SVG because the resizetizer composes the icon's
-         background layer and the splash's ground itself, and a colour painted in the file would be cropped or scaled
-         with the drawing instead of filling what is behind it. The splash therefore looks the same whichever theme
-         the application starts in: it is decided before a theme is applied and unchanged by a later one. -->
-    <UnoIconBackgroundColor>#010D33</UnoIconBackgroundColor>
-    <UnoSplashScreenColor>#010D33</UnoSplashScreenColor>
-
     <!-- The language a head falls back to when the operating system asks for one this application does not carry, and
          the one a resource lookup resolves against when nothing else answers. English rather than Polish because the
          person who has configured nothing is the one this decides for, and a first run has to be readable before any
@@ -58,6 +50,64 @@
       SkiaRenderer;
     </UnoFeatures>
   </PropertyGroup>
+
+  <!-- The product mark, taken from the repository's own artwork rather than drawn a second time here. `assets/` holds
+       the illustration MailFathom is identified by everywhere else — the README heading, the Helm chart's `icon`, the
+       container image's logo label, and the documentation site's logo and favicon — and pointing the Uno resizetizer
+       at those same files is what stops the application's icon and splash from becoming a second mark that drifts
+       from it. Both are build inputs: the resizetizer reads them and writes the sizes each head asks for, and neither
+       source file is carried into an artifact.
+
+       They are items rather than the `UnoIconBackgroundFile` and `UnoSplashScreenFile` properties because the default
+       item the Uno SDK composes from those properties needs a background layer and a foreground layer both, which is
+       Android's adaptive-icon shape. This artwork is one drawing carrying its own ground, so there is no foreground
+       to name. The resizetizer also refuses an icon and a splash that are the same file, which is what the two sizes
+       answer: the icon takes the full-resolution artwork because a desktop head asks for renderings above 512 pixels,
+       and the splash takes the downsample of it, which is far above every scale asked of a 300-point base size.
+
+       The icon carries no `Color`, which leaves the artwork's own transparency. It is drawn as a rounded square with
+       a glow around it, and a ground painted behind that would square off the shape every other surface shows. The
+       splash is the opposite case, since it fills a window rather than a launcher tile, so it keeps the navy the mark
+       sits on — the same value `Platforms/WebAssembly/manifest.webmanifest` names as the browser head's background.
+       It is decided before a theme is applied and unchanged by a later one, so the splash reads the same whichever
+       theme the application starts in.
+
+       Adding a mobile head means revisiting this: Android crops a background layer to the launcher's own mask and
+       scales a foreground inside it, so an adaptive icon wants the two layers this pair deliberately does not have.
+
+       Neither item names a file under `assets/` directly, and the target below is why. The resizetizer turns a source
+       file name into the resource name every head addresses the generated rendering by, so it refuses one that is not
+       already a valid identifier — `icon-1254` fails on the hyphen and on ending in a digit, and the build stops
+       naming both files. The names in `assets/` say what each rendering is and are pointed at from a published Helm
+       chart and a published image label, so renaming them there would break an icon on artifacts already released.
+       Copying the artwork into this project instead would put a second copy of the mark in the repository, which is
+       the thing this change exists to remove. So the build stages each file into the intermediate output under the
+       names a head addresses the renderings by — `appicon` and `splash_screen`, the two an Uno single project uses —
+       and nothing in the tree is duplicated. They sit at the root of that directory rather than in a folder of their
+       own, because the generated Windows tile set carries the source's own subdirectory into the package layout.
+
+       The two items are declared inside the target rather than beside it, because `IntermediateOutputPath` is one of
+       the properties the .NET SDK computes in the targets it imports below this file: an item group in the project
+       body would read it as empty, stage both files into the project directory, and leave the browser head refusing
+       the two copies of `splash_screen.png` it then found. A target body is evaluated when it runs, by which point
+       the path is the one this head is actually building into. That is also why the target carries no `Inputs` and
+       `Outputs` of its own — an up-to-date check that skipped it would skip the item group with it, and the
+       resizetizer would find nothing to render. What keeps a rebuild from copying two megabytes it already has is
+       `SkipUnchangedFiles`. -->
+  <Target Name="StageTheProductMark"
+          BeforeTargets="UnoResizetizeCollectItems;UnoResizetizeImages;GenerateUnoSplashScreens;ProcessUnoSplashScreens">
+    <Copy SourceFiles="$(RepositoryRoot)assets/icon-1254.png"
+          DestinationFiles="$(IntermediateOutputPath)appicon.png"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(RepositoryRoot)assets/icon-900.png"
+          DestinationFiles="$(IntermediateOutputPath)splash_screen.png"
+          SkipUnchangedFiles="true" />
+
+    <ItemGroup>
+      <UnoIcon Include="$(IntermediateOutputPath)appicon.png" />
+      <UnoSplashScreen Include="$(IntermediateOutputPath)splash_screen.png" BaseSize="300,300" Color="#010D33" />
+    </ItemGroup>
+  </Target>
 
   <!-- The browser head alone, and for one generator rather than for any code written here. `[JSImport]` marshals its
        arguments through pointers, so the interop source generator emits unsafe code and refuses to run without this —

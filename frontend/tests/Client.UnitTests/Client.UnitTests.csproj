@@ -30,6 +30,15 @@
           TargetPath="Build/Client.csproj"
           CopyToOutputDirectory="PreserveNewest" />
 
+    <!-- The browser head's web manifest, on the same terms and for the same reason: the colour a browser paints
+         behind the bundle is written there and the colour the splash screen sits on is written in the project file,
+         and only reading both can say the two still agree. It is a document the bootstrapper copies to the head's own
+         output rather than anything this host loads, so the suite reads the authored file. -->
+    <None Include="..\..\src\Client\Platforms\WebAssembly\manifest.webmanifest"
+          Link="Platforms/manifest.webmanifest"
+          TargetPath="Platforms/manifest.webmanifest"
+          CopyToOutputDirectory="PreserveNewest" />
+
     <!-- The string tables, on the same terms and for the same reason: they are compiled into a resource map a running
          head resolves and this host has none, so the suite reads the authored files instead. What it asserts of them
          is which languages are authored at all and whether every table says the same things, neither of which a build

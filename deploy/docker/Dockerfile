@@ -146,6 +146,11 @@ COPY .config/BannedSymbols.txt .config/
 COPY frontend/Directory.Build.props frontend/Directory.Packages.props frontend/
 COPY frontend/src/ frontend/src/
 
+# The product mark the application icon, the favicon, the web manifest's icons, and the splash screen are all
+# generated from. `Client.csproj` stages these two out of assets/ for the Uno resizetizer rather than carrying a copy
+# of the artwork beside the sources, so a context without them fails this copy before the publish reaches them.
+COPY assets/icon-1254.png assets/icon-900.png assets/
+
 # Locked, like every other restore in this repository. What it fixes here is `Client.Backend`'s closure: the
 # application project deliberately carries no lock file, because a WebAssembly target's restore graph is partly the
 # SDK's own, and locked mode passes over a project without one rather than failing on it.

@@ -20,7 +20,6 @@ What is inside the two projects:
 | `Client/Presentation/` | The shell, the frame the three spaces are shown inside, the spaces themselves, and the MVUX models behind them |
 | `Client/Styles/` | The Material palette every brush resolves from — the one place a colour value is written |
 | `Client/Platforms/` | What belongs to one head only: the two entry points, the browser head's web manifest, linker configuration, and font stylesheet, and its half of the sign-in redirect |
-| `Client/Assets/` | The application icon and the splash screen, from one SVG per head |
 | `Client/Strings/` | One string table per language the application is readable in, keyed by the neutral culture |
 | `Client.Backend/` | The typed client, the wire records, and the source-generated readers for them |
 | `Client.Backend/Authorization/` | Signing in: discovery, the proof key, the exchange, and the token held in memory for the run |
@@ -154,11 +153,18 @@ operating system is a value of that enum rather than a mechanism beside it, so a
 it, a choice is written to the platform's own settings store and survives a restart on both heads, and `System` tracks
 the operating system flipping while the application is running.
 
-The application icon and the splash screen carry that mark rather than the template's, drawn in the sampled colours
-rather than in palette keys — an icon is not themed, and the palette was derived from those colours rather than the
-other way round. Both grounds are the navy, named by `UnoIconBackgroundColor` and `UnoSplashScreenColor` in
-`Client/Client.csproj` rather than painted in an SVG, because the Uno resizetizer composes the ground itself. The
-splash therefore reads the same whichever theme the application starts in.
+The application icon and the splash screen are that artwork itself rather than a drawing of it. `Client/Client.csproj`
+points the Uno resizetizer at [`assets/`](../../assets/) and the resizetizer writes the sizes each head asks for, so
+the icon a window carries, the favicon a browser shows, and the splash a head opens on are all the artwork every other
+surface shows — the README heading, the Helm chart, the container image's logo label, and the documentation site.
+Neither source file is carried into an artifact, and the client carries no mark of its own: what used to be here was a
+pair of SVGs redrawn from the artwork, which is a second mark to keep in step with the first.
+
+The icon keeps the artwork's own transparency, since it is drawn as a rounded square and a ground painted behind it
+would square off the shape. The splash fills a window instead, so it sits on the navy — the same value
+`Client/Platforms/WebAssembly/manifest.webmanifest` gives the browser to paint behind the bundle, which the unit suite
+holds the two files to. It is decided before a theme is applied and unchanged by a later one, so the splash reads the
+same whichever theme the application starts in.
 
 ## What it reads in
 
