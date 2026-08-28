@@ -22,8 +22,22 @@ public sealed class DecoyPasswordHashTests
         var decoy = new DecoyPasswordHash(passwordHasher);
 
         // Assert
-        Assert.Equal(1, passwordHasher.HashCount);
-        Assert.Equal(CountingPasswordHasher.WrittenRecord, decoy.Value);
+        Assert.Equal(1, passwordHasher.DecoyCount);
+        Assert.Equal(CountingPasswordHasher.DecoyRecord, decoy.Value);
+    }
+
+    /// <summary>The decoy is the hasher's own, so nothing here composes one out of a password this type invented and pinned to today's work parameters.</summary>
+    [Fact]
+    public void Value_ADeployedHasher_DerivesNoPasswordOfItsOwn()
+    {
+        // Arrange
+        var passwordHasher = new CountingPasswordHasher();
+
+        // Act
+        _ = new DecoyPasswordHash(passwordHasher);
+
+        // Assert
+        Assert.Equal(0, passwordHasher.HashCount);
     }
 
     /// <summary>The password behind it is random and never leaves the constructor, so nothing can present the credential it would accept.</summary>
@@ -64,15 +78,24 @@ public sealed class DecoyPasswordHashTests
     /// <remarks>Hand-written rather than substituted, because the members take the password as a <see cref="ReadOnlySpan{T}" /> and a dynamic proxy cannot carry a by-ref-like argument through its invocation.</remarks>
     private sealed class CountingPasswordHasher : IPasswordHasher
     {
-        internal const string WrittenRecord = "$mf1$derived$";
+        internal const string DecoyRecord = "$mf1$decoy$";
+
+        internal int DecoyCount { get; private set; }
 
         internal int HashCount { get; private set; }
+
+        public string HashDecoy()
+        {
+            this.DecoyCount++;
+
+            return DecoyRecord;
+        }
 
         public string Hash(ReadOnlySpan<char> password)
         {
             this.HashCount++;
 
-            return WrittenRecord;
+            return "$mf1$derived$";
         }
 
         public PasswordVerification Verify(string storedHash, ReadOnlySpan<char> password) =>

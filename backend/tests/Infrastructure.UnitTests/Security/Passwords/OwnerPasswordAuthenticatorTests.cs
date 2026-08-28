@@ -207,6 +207,44 @@ public sealed class OwnerPasswordAuthenticatorTests
         Assert.Equal(Allowed, harness.PasswordHasher.VerificationCount);
     }
 
+    /// <summary>Basic re-presents the credential on every request and this deployment keeps no session, so a bucket a working password spent would bound an owner's request rate rather than anybody's guessing.</summary>
+    [Fact]
+    public async Task AuthenticateAsync_MoreWorkingSignInsThanTheSurfaceAllowsAttempts_AreEveryOneServed()
+    {
+        // Arrange
+        using var harness = new AuthenticatorHarness();
+        harness.Holds(enabled: true);
+        const int Allowed = 2;
+
+        // Act
+        var results = await Task.WhenAll(Enumerable
+            .Range(0, Allowed + 3)
+            .Select(_ => harness.AuthenticateAsync(Header("owner", Password), attemptsPerMinute: Allowed)));
+
+        // Assert
+        Assert.All(results, result => Assert.True(result.Succeeded));
+    }
+
+    /// <summary>A wrong password spends the capacity a right one does not, which is what leaves the bound on the guessing intact.</summary>
+    [Fact]
+    public async Task AuthenticateAsync_AWorkingSignInBeforeTheGuessing_LeavesTheGuessersCapacityWhereItWas()
+    {
+        // Arrange
+        using var harness = new AuthenticatorHarness();
+        harness.Holds(enabled: true);
+        const int Allowed = 1;
+
+        // Act
+        var accepted = await harness.AuthenticateAsync(Header("owner", Password), attemptsPerMinute: Allowed);
+        var guessed = await harness.AuthenticateAsync(Header("owner", "wrongpassword"), attemptsPerMinute: Allowed);
+        var surplus = await harness.AuthenticateAsync(Header("owner", "wrongpassword"), attemptsPerMinute: Allowed);
+
+        // Assert
+        Assert.True(accepted.Succeeded);
+        Assert.Equal(OwnerPasswordRejection.CredentialUnrecognized, guessed.Rejection);
+        Assert.Equal(OwnerPasswordRejection.TooManyAttempts, surplus.Rejection);
+    }
+
     /// <summary>Two surfaces keep separate buckets, so a client that spent one endpoint's attempts has not spent the other's.</summary>
     [Fact]
     public async Task AuthenticateAsync_TheSameCallerOnASecondSurface_IsNotRefusedForTheFirstSurfacesSpentAttempts()
@@ -312,6 +350,8 @@ public sealed class OwnerPasswordAuthenticatorTests
     {
         internal const string DerivedHash = "$mf1$derived$";
 
+        internal const string DecoyHash = "$mf1$decoy$";
+
         private readonly List<string> verifiedAgainst = [];
 
         internal PasswordVerification Result { get; set; } = PasswordVerification.Succeeded;
@@ -319,6 +359,8 @@ public sealed class OwnerPasswordAuthenticatorTests
         internal int VerificationCount => this.verifiedAgainst.Count;
 
         internal IReadOnlyList<string> VerifiedAgainst => this.verifiedAgainst;
+
+        public string HashDecoy() => DecoyHash;
 
         public string Hash(ReadOnlySpan<char> password) => DerivedHash;
 

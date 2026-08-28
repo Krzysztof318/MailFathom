@@ -605,6 +605,18 @@ you have named what stands in front in
 [`ReverseProxy:TrustedProxies`](#behind-a-tls-terminating-reverse-proxy). A range covering every address is not naming
 one: it trusts whatever can open a connection, which is what a section naming nothing already does.
 
+What the rule reads is what the endpoint **serves**, not whether a certificate is configured. `HttpsOnly` satisfies it.
+`HttpAndHttps` satisfies it too, but only while [`Https:Redirect:Enabled`](#redirecting-a-client-still-pointed-at-http)
+is left on: with the redirect off, that mode's clear-text socket answers the routes rather than pointing away from them,
+which is the same unencrypted hop as no certificate at all. A `Basic` block beside that arrangement is refused at
+startup, with a sentence naming both ways out.
+
+**A request that reaches this process as clear text is refused before its header is read**, even on a deployment the
+rule above admits. The arrangement it admits behind a proxy leaves a clear-text socket open, and a request arriving
+there from anywhere but the named proxy carries no forwarded scheme — so it is answered with the challenge below rather
+than having its password compared. The startup rule decides which deployments may accept a password; this decides which
+requests may carry one.
+
 An endpoint carries **at most one** `Basic` block and startup refuses a second. Rotation is a second credential row
 rather than a second block, because a presented credential names a username rather than an entry — two blocks would
 leave the grant an owner holds decided by configuration order.
@@ -625,9 +637,12 @@ US-ASCII survive the round trip.
 
 `AttemptsPerMinute` bounds guessing and defaults to 10, which is a person correcting a mistyped password. It is applied
 **per source and per username** rather than per endpoint, because those are the two shapes an attack takes: one host
-trying many passwords, and many hosts trying one account's. Both buckets replenish continuously, so a client that has
-spent its capacity gets some back within seconds rather than being locked out — the point is to make guessing expensive
-rather than to give anybody a way to lock an owner out. It is separate from
+trying many passwords, and many hosts trying one account's. **Only a wrong password spends any of it.** Basic
+re-presents the credential on every request and this deployment keeps no session, so a bucket a working password spent
+would bound an owner's request rate rather than anybody's guessing — at the default, the eleventh call of a working
+session would be refused with the answer a wrong password gets. Both buckets replenish continuously, so a client that
+has spent its capacity gets some back within seconds rather than being locked out — the point is to make guessing
+expensive rather than to give anybody a way to lock an owner out. It is separate from
 [`RateLimiting`](#rate-limiting), which bounds requests to the surface rather than guesses at a credential. The ceiling
 is 600; a number above it is refused, because a thousand verifications a minute against one username is an offline
 guessing rate rather than a bound.

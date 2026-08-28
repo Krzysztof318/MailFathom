@@ -64,6 +64,32 @@ public sealed class ComposedSettingsPasswordConfidentialityTests
         Assert.Empty(refusals);
     }
 
+    /// <summary>Binding both sockets terminates TLS and still answers the routes in the clear, so the redirect is what decides whether the password can cross an unencrypted hop.</summary>
+    [Theory]
+    [InlineData("true", 0)]
+    [InlineData("false", 1)]
+    public void FindSurfaceRefusals_APasswordOnASurfaceBindingBothSockets_IsDecidedByTheRedirect(
+        string redirectEnabled,
+        int expectedRefusals)
+    {
+        // Arrange
+        var configuration = Settings(
+            new("ClientEndpoint:Enabled", "true"),
+            new("ClientEndpoint:Transport", "HttpAndHttps"),
+            new("ClientEndpoint:Https:Redirect:Enabled", redirectEnabled),
+            new("ClientEndpoint:Https:Endpoints:0:Name", "client"),
+            new("ClientEndpoint:Https:Endpoints:0:Domain", "mail.example.test"),
+            new("ClientEndpoint:Https:Endpoints:0:ServerCertificate:Bundle:Name", "client-certificate"),
+            new("ClientEndpoint:Https:Endpoints:0:ServerCertificate:Bundle:SecretReference", "file:/etc/mailfathom/mail.pfx"),
+            new("ClientEndpoint:Authentication:0:Basic:AttemptsPerMinute", "10"));
+
+        // Act
+        var refusals = ComposedSettings.FindSurfaceRefusals(configuration);
+
+        // Assert
+        Assert.Equal(expectedRefusals, refusals.Count);
+    }
+
     /// <summary>Naming the proxy that terminates TLS is the existing contract by which a forwarded scheme is believed at all.</summary>
     [Fact]
     public void FindSurfaceRefusals_APasswordBehindANamedProxy_IsAccepted()

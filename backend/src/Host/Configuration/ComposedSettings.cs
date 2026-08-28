@@ -204,7 +204,7 @@ internal static class ComposedSettings
                     McpEndpointOptions.SectionName,
                     mcp.Enabled,
                     mcp.AllowsBasic,
-                    mcp.TerminatesTls,
+                    mcp.ServesClearText,
                     reverseProxy)),
             .. Refusal<ClientEndpointOptions>(
                 ClientEndpointOptions.SectionName,
@@ -212,7 +212,7 @@ internal static class ComposedSettings
                     ClientEndpointOptions.SectionName,
                     client.Enabled,
                     client.AllowsBasic,
-                    client.TerminatesTls,
+                    client.ServesClearText,
                     reverseProxy)),
         ];
     }

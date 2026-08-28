@@ -31,4 +31,13 @@ public enum OwnerCredentialWriteOutcome
 
     /// <summary>The named owner holds no credential with that identifier.</summary>
     UnknownCredential = 3,
+
+    /// <summary>The owner already holds as many credentials as one owner may.</summary>
+    /// <remarks>
+    /// The ceiling is <see cref="OwnerPasswordCredential.MaximumListedPerOwner" />, and it is refused at the store
+    /// rather than checked before the write, so two administrators provisioning at once cannot both pass a count and
+    /// leave the owner above it. Reaching it is a deployment provisioning credentials it never removes rather than an
+    /// operator's ordinary mistake, so what the refusal asks for is a look at what the owner already holds.
+    /// </remarks>
+    OwnerAtCredentialCeiling = 4,
 }

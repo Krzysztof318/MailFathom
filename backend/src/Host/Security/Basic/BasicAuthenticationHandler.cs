@@ -36,10 +36,13 @@ namespace MailFathom.Host.Security.Basic;
 /// credential.
 /// </para>
 /// <para>
-/// The request is not refused for arriving over clear text here, which is deliberate and is not a gap: a deployment
-/// cannot enable this method on a clear-text endpoint at all, because startup refuses that arrangement before a
-/// listener binds. Refusing per request as the token schemes do would be a second, weaker check on a case the process
-/// has already made unreachable.
+/// <strong>A request this process sees as clear text is refused before the header is read</strong>, exactly as the
+/// token schemes refuse one. Startup already refuses a surface that answers its routes on an unencrypted socket with
+/// no proxy declared in front, but the arrangement it permits instead — a clear-text listener behind a named
+/// TLS-terminating proxy — is one where the socket is still open: a request reaching it from anywhere but that proxy
+/// arrives without the forwarded scheme, so <c>IsHttps</c> stays false and this is the check that catches it. The
+/// startup refusal decides which deployments may accept a password at all, and this decides which requests may carry
+/// one.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The authentication framework materializes this handler for its registered scheme.")]
@@ -63,13 +66,26 @@ internal sealed class BasicAuthenticationHandler : AuthenticationHandler<BasicAu
 
     /// <inheritdoc />
     /// <remarks>
+    /// <para>
+    /// A request this process sees as clear text is refused first, without the header being read at all, for the reason
+    /// the type's own remarks give. It answers <see cref="AuthenticateResult.NoResult" /> rather than a failure, which
+    /// is what the token schemes answer for the same case: the credential was not judged, so the surface's challenge is
+    /// what the caller meets.
+    /// </para>
+    /// <para>
     /// The header is read through <see cref="object.ToString" /> on the header values, which yields an empty string
     /// when the request carried none and a joined value when it carried several. Both reach the authenticator as
     /// something that is not one Basic credential, which is what they are, and both are refused identically — so a
     /// request that supplies the header twice is refused rather than having one of the two picked for it.
+    /// </para>
     /// </remarks>
     protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
     {
+        if (!this.Request.IsHttps)
+        {
+            return AuthenticateResult.NoResult();
+        }
+
         var result = await this.authenticator.AuthenticateAsync(
             this.Options.Surface.Name,
             this.Request.Headers.Authorization.ToString(),

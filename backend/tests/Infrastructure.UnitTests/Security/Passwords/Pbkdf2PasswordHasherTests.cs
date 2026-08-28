@@ -140,6 +140,37 @@ public sealed class Pbkdf2PasswordHasherTests
         Assert.Throws<ArgumentNullException>(() => hasher.Verify(null!, Password));
     }
 
+    /// <summary>The decoy exists to cost what the cheapest record a deployment may still hold costs, so it is written at the oldest accepted count rather than at today's.</summary>
+    [Fact]
+    public void HashDecoy_ADeployedHasher_WritesTheRecordAtTheOldestAcceptedIterationCount()
+    {
+        // Arrange
+        var hasher = new Pbkdf2PasswordHasher();
+
+        // Act
+        var decoy = hasher.HashDecoy();
+
+        // Assert
+        Assert.True(PasswordHashRecord.TryParse(decoy, out var record));
+        Assert.Equal(Pbkdf2PasswordHasher.OldestAcceptedIterations, record.Iterations);
+    }
+
+    /// <summary>Its password is random and never leaves the call, so nothing can present the credential it would accept.</summary>
+    [Fact]
+    public void HashDecoy_TwoRecords_MatchNoPasswordAndDifferFromEachOther()
+    {
+        // Arrange
+        var hasher = new Pbkdf2PasswordHasher();
+
+        // Act
+        var first = hasher.HashDecoy();
+        var second = hasher.HashDecoy();
+
+        // Assert
+        Assert.NotEqual(first, second);
+        Assert.Equal(PasswordVerification.Failed, hasher.Verify(first, Password));
+    }
+
     /// <summary>Writes the same password under other work parameters, which is what a record from another release looks like.</summary>
     private static string RecordUnder(int iterations)
     {

@@ -149,7 +149,7 @@ internal static class OwnerCredentialEndpoints
     /// <param name="request">The username and password, as the client sent them.</param>
     /// <param name="credentials">Performs the write, for a caller the use case's own grant admits.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
-    /// <returns><c>200</c> with the new credential's identifier, <c>409</c> when the username is taken, or <c>400</c> naming what was wrong with the request.</returns>
+    /// <returns><c>200</c> with the new credential's identifier, <c>409</c> when the username is taken or the owner already holds as many credentials as one owner may, or <c>400</c> naming what was wrong with the request.</returns>
     /// <remarks>
     /// The password reaches this handler as a string, because that is what a JSON body deserializes to and nothing can
     /// wipe one. It is the last place in this process where that is true: from here it travels as a span into the
@@ -193,7 +193,14 @@ internal static class OwnerCredentialEndpoints
                 $"Another credential already signs in as '{username.Value}'. A username names one credential across this "
                 + "deployment, so choose another or remove the credential holding it.",
                 statusCode: StatusCodes.Status409Conflict),
-            _ => UnknownOwner(ownerId),
+            OwnerCredentialWriteOutcome.OwnerAtCredentialCeiling => TypedResults.Problem(
+                $"Owner '{ownerId}' already holds the {OwnerPasswordCredential.MaximumListedPerOwner} credentials one "
+                + "owner may hold. Remove one that is no longer used before provisioning another.",
+                statusCode: StatusCodes.Status409Conflict),
+            OwnerCredentialWriteOutcome.UnknownOwner => UnknownOwner(ownerId),
+            _ => Refused(
+                $"Provisioning a credential for owner '{ownerId}' was refused for a reason this deployment cannot "
+                + "describe. List the owner's credentials to read what it holds."),
         };
     }
 

@@ -261,7 +261,10 @@ deployment runs.
 
 Two indexes and no more: the unique one on `Username`, which is the read every authentication performs, and one on
 `(OwnerId, CreatedAt)`, which is the listing an administrator reads. That listing is bounded at 100 credentials per
-owner, which is a ceiling rather than a number anybody reaches.
+owner, which is a ceiling rather than a number anybody reaches — and it is the same ceiling provisioning enforces, in
+the insert itself rather than in a count read beforehand, so two administrators provisioning at once cannot leave an
+owner above it. A row past the bound would authenticate where nothing lists it, and therefore where nothing could be
+revoked from; the hundred-and-first credential is refused with `409` instead.
 
 **A password never appears here or anywhere else.** What is stored is a derivation, the plaintext is read within the
 call that hashes it and retained nowhere, and no answer, log line, metric, audit record, command argument, or refusal

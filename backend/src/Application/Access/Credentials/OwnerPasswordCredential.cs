@@ -37,12 +37,15 @@ public sealed record OwnerPasswordCredential(
     DateTimeOffset CreatedAt,
     DateTimeOffset PasswordChangedAt)
 {
-    /// <summary>The most credentials one owner's listing returns.</summary>
+    /// <summary>The most credentials one owner may hold, which is therefore the most a listing returns.</summary>
     /// <remarks>
     /// A listing is bounded like every other query this system publishes, and this is where that bound is stated rather
     /// than in the store that applies it. The number is far above what a deployment has any use for — one credential
     /// per device an owner signs in from, plus whatever a rotation left standing — so an owner reaching it has a
-    /// provisioning mistake to find rather than a page to turn, which is why the listing carries no cursor.
+    /// provisioning mistake to find rather than a page to turn, which is why the listing carries no cursor. That is
+    /// only sound because provisioning refuses the credential past this count rather than writing a row the listing
+    /// would then never show: a credential nothing lists is one nothing can be revoked from the listing either, and it
+    /// would go on authenticating unseen.
     /// </remarks>
     public const int MaximumListedPerOwner = 100;
 }

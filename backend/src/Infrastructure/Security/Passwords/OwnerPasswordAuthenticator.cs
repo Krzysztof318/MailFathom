@@ -27,10 +27,12 @@ namespace MailFathom.Infrastructure.Security.Passwords;
 /// modelled as something that could be reported.
 /// </para>
 /// <para>
-/// <strong>Cheap refusals first.</strong> The header is read, bounded, and folded into a canonical username before any
-/// capacity is spent, and capacity is spent before any password is verified. An unauthenticated caller therefore
+/// <strong>Cheap refusals first.</strong> The header is read, bounded, and folded into a canonical username before the
+/// bound is consulted, and the bound is consulted before any password is verified. An unauthenticated caller therefore
 /// cannot make this process perform a deliberately expensive derivation by writing a malformed header, and cannot make
-/// it perform an unbounded number of them by writing well-formed ones.
+/// it perform an unbounded number of them by writing well-formed ones. The token itself is spent afterwards and only
+/// where the verification failed, because the credential travels on every request and a bound that a correct password
+/// paid into would bound the owner's own traffic rather than anybody's guessing.
 /// </para>
 /// <para>
 /// <strong>Nothing written down is the credential.</strong> Neither the returned result nor anything logged on the way
@@ -120,14 +122,23 @@ public sealed partial class OwnerPasswordAuthenticator
                 username.Value,
                 attemptsPerMinute);
 
-            if (!this.attemptLimiter.TryBeginAttempt(attempt))
+            if (!this.attemptLimiter.HasCapacity(attempt))
             {
                 this.LogAttemptsExhausted(surfaceName);
 
                 return OwnerPasswordAuthenticationResult.Rejected(OwnerPasswordRejection.TooManyAttempts);
             }
 
-            return await this.JudgeAsync(username, presented, cancellationToken);
+            var judgement = await this.JudgeAsync(username, presented, cancellationToken);
+
+            // Spent on the answer rather than on the attempt, so a caller presenting a password that works costs its
+            // buckets nothing however often it presents it — which is what Basic makes it do, having no session.
+            if (!judgement.Succeeded)
+            {
+                this.attemptLimiter.RecordFailedAttempt(attempt);
+            }
+
+            return judgement;
         }
         finally
         {

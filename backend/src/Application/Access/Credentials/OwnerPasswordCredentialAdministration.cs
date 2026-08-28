@@ -24,9 +24,13 @@ namespace MailFathom.Application.Access.Credentials;
 /// </para>
 /// <para>
 /// Plaintext reaches this type as a span and leaves it as a hash. It is read once, inside the synchronous call that
-/// hashes it, and nothing awaited afterwards has it: the buffer belongs to the boundary that read it from a request or
-/// a terminal, and that boundary erases it. Nothing here logs it, returns it, or puts it in a refusal — a password
-/// this deployment refused is described by the rule it broke and never by what was written.
+/// hashes it, and nothing awaited afterwards has it, so nothing this type holds outlives the call that was handed the
+/// span. What it does not do is erase the buffer behind that span, and neither boundary that supplies one can: a
+/// password arrives at the HTTP boundary as a deserialized <see langword="string" /> and at the terminal boundary as
+/// one too, and a <see langword="string" /> cannot be wiped. The bound worth stating is therefore the reading rather
+/// than the memory — the plaintext is read inside one synchronous call and is never copied, retained, awaited over, or
+/// written down here. Nothing here logs it, returns it, or puts it in a refusal — a password this deployment refused is
+/// described by the rule it broke and never by what was written.
 /// </para>
 /// <para>
 /// The policy is checked here as well as at the boundary, which is the second enforcement the layering rule asks for.

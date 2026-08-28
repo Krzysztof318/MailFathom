@@ -14,9 +14,11 @@ namespace MailFathom.Application.Access.Credentials;
 /// </para>
 /// <para>
 /// Both members are synchronous and take a span, which is the shape the material has to be handled in. A password is
-/// held for the bounded duration of one hash or one verification and is erased by whoever owns the buffer; a
-/// task-returning signature would put it behind an await, where the caller can no longer say when the buffer stops
-/// being read. Hashing is deliberately expensive — that is the point of an adaptive construction — so a caller on a
+/// read for the bounded duration of one hash or one verification and is never copied or retained by an implementation;
+/// a task-returning signature would put it behind an await, where the caller can no longer say when the buffer stops
+/// being read. What the span points at is the caller's, and on both of MailFathom's paths it is a
+/// <see langword="string" /> that nothing can wipe — so what a span buys here is a bounded reading rather than an
+/// erasure, and no implementation may promise the second. Hashing is deliberately expensive — that is the point of an adaptive construction — so a caller on a
 /// request path spends that cost knowingly rather than being offered a way to hide it.
 /// </para>
 /// <para>
@@ -27,6 +29,17 @@ namespace MailFathom.Application.Access.Credentials;
 /// </remarks>
 public interface IPasswordHasher
 {
+    /// <summary>Produces a record no password matches, for comparing against a username this deployment holds nothing for.</summary>
+    /// <returns>The stored representation of a password nothing retained.</returns>
+    /// <remarks>
+    /// The point is the cost rather than the value, which is why this belongs to the hasher rather than to its caller:
+    /// what makes an unresolved username indistinguishable from a resolved one is that verifying against this costs
+    /// what verifying against a real record costs, and only the adapter knows the weakest work parameters any record it
+    /// would still accept may carry. A caller that derived its own decoy would pin it to today's parameters and reopen
+    /// the difference the first time they are raised.
+    /// </remarks>
+    string HashDecoy();
+
     /// <summary>Produces the record to store for one password.</summary>
     /// <param name="password">The plaintext, which is read within the call and never retained.</param>
     /// <returns>The stored representation, carrying its algorithm, version, work parameters, and salt.</returns>

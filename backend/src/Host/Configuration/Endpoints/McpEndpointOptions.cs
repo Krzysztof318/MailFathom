@@ -149,6 +149,11 @@ internal sealed class McpEndpointOptions
     public bool RedirectsClearText =>
         TransportListenerConfiguration.RedirectsClearText(this.Transport, this.Https.Redirect);
 
+    /// <summary>Gets whether this surface answers its routes on a socket nothing encrypts.</summary>
+    /// <remarks>Narrower than the negation of <see cref="TerminatesTls" />, and wider than it in the other direction: a mode that binds both sockets terminates TLS and still answers the routes in the clear unless the clear-text one redirects, and a clear-text socket that answers every request with the address of the TLS one carries no route at all.</remarks>
+    public bool ServesClearText =>
+        TransportListenerConfiguration.OpensClearTextListener(this.Transport) && !this.RedirectsClearText;
+
     /// <summary>Gets the ports this endpoint's listeners bind, which no other listener in the process may claim.</summary>
     /// <remarks>Empty when the endpoint is not served at all. The clear-text port is one of them under every mode that opens that socket, whether it serves the routes or redirects away from them, so a deployment cannot give it to the probes or to the administrative surface and discover the conflict as an address-in-use error naming a socket rather than a section.</remarks>
     public IReadOnlySet<int> ListenerPorts => this.Enabled

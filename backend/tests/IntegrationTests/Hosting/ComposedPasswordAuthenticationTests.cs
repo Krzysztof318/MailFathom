@@ -287,6 +287,8 @@ public sealed class ComposedPasswordAuthenticationTests
     /// </remarks>
     private sealed class OneKnownPasswordHasher : IPasswordHasher
     {
+        public string HashDecoy() => "$mf1$decoy$";
+
         public string Hash(ReadOnlySpan<char> password) => StoredHash;
 
         public PasswordVerification Verify(string storedHash, ReadOnlySpan<char> password) =>

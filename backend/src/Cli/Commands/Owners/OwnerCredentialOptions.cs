@@ -59,7 +59,9 @@ internal static class OwnerCredentialOptions
     /// <remarks>
     /// A named owner is used as written and never checked against the roster first: the deployment refuses an owner it
     /// holds no record for and says so, and a lookup here would only decide the same thing one request earlier while
-    /// telling the operator which identifiers exist.
+    /// telling the operator which identifiers exist. The empty identifier is a stated owner like any other — an unset
+    /// script variable expands to one, and reading it as "no owner was named" would act on the single owner a
+    /// deployment happens to hold instead of refusing an invocation that named nobody.
     /// </remarks>
     internal static async Task<Guid> ResolveOwnerAsync(
         AdminApiClient deployment,
@@ -70,7 +72,7 @@ internal static class OwnerCredentialOptions
         ArgumentNullException.ThrowIfNull(deployment);
         ArgumentNullException.ThrowIfNull(token);
 
-        if (requestedOwner is { } named && named != Guid.Empty)
+        if (requestedOwner is { } named)
         {
             return named;
         }

@@ -40,11 +40,49 @@ internal sealed class Pbkdf2PasswordHasher : IPasswordHasher
     /// <remarks>Sixteen, which is the width at which two records colliding by chance is not a thing that happens; a salt is not a secret and gains nothing from being longer.</remarks>
     internal const int SaltLength = 16;
 
+    /// <summary>The alphabet the decoy's own password is drawn from, which nothing outside this call ever sees.</summary>
+    private const string DecoyPasswordAlphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+
+    /// <summary>How long that password is, which is the policy's own floor because nothing shorter would ever be stored.</summary>
+    private const int DecoyPasswordLength = 12;
+
     /// <summary>The number of octets each derivation produces.</summary>
     /// <remarks>Thirty-two, so the stored value carries a full 256 bits of the derived key. Deriving the algorithm's whole 64-octet output would double what a row holds without making a guess any more expensive, because the cost is the iteration count rather than the width.</remarks>
     internal const int DerivedKeyLength = 32;
 
+    /// <summary>The weakest iteration count a record this release still verifies may carry.</summary>
+    /// <remarks>
+    /// Equal to <see cref="CurrentIterations" /> today, because this release is the first to write a record at all, and
+    /// deliberately a constant of its own rather than a second name for it. Raising <see cref="CurrentIterations" />
+    /// does not raise this one: rows are caught up one successful sign-in at a time, so until every stored record has
+    /// been rewritten there are still records at the older count, and a decoy derived at the newer one would answer
+    /// measurably slower than they do — which is the enumeration channel the decoy exists to close. It moves only when
+    /// a release can say no record below it survives.
+    /// </remarks>
+    internal const int OldestAcceptedIterations = 210_000;
+
     private static readonly HashAlgorithmName Digest = HashAlgorithmName.SHA512;
+
+    /// <inheritdoc />
+    /// <remarks>The password is random, is held only inside this call, and is derived at <see cref="OldestAcceptedIterations" /> rather than at <see cref="CurrentIterations" />, so the decoy costs what the cheapest record a deployment may still hold costs.</remarks>
+    public string HashDecoy()
+    {
+        var decoyPassword = GC.AllocateArray<char>(DecoyPasswordLength, pinned: true);
+
+        try
+        {
+            RandomNumberGenerator.GetItems(DecoyPasswordAlphabet, decoyPassword);
+
+            var salt = RandomNumberGenerator.GetBytes(SaltLength);
+            var derivedKey = Derive(decoyPassword, salt, OldestAcceptedIterations);
+
+            return new PasswordHashRecord(OldestAcceptedIterations, salt, derivedKey).ToString();
+        }
+        finally
+        {
+            decoyPassword.AsSpan().Clear();
+        }
+    }
 
     /// <inheritdoc />
     public string Hash(ReadOnlySpan<char> password)

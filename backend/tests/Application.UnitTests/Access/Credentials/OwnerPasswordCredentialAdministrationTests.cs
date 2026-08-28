@@ -328,6 +328,8 @@ public sealed class OwnerPasswordCredentialAdministrationTests
     {
         internal int HashCount { get; private set; }
 
+        public string HashDecoy() => AdministrationHarness.StoredHash;
+
         public string Hash(ReadOnlySpan<char> password)
         {
             this.HashCount++;
@@ -347,7 +349,9 @@ public sealed class OwnerPasswordCredentialAdministrationTests
         internal AdministrationHarness(MailFathomPermission granted)
         {
             var principals = Substitute.For<IAuthorizedPrincipalSource>();
-            principals.Current.Returns(AuthorizedPrincipal.CallerActingFor(Owner, AdministratorIdentity, [granted]));
+            // A caller acting for nobody's mail, which is the only shape the administrative surface produces: the owner
+            // every act here names comes from its own argument rather than from whoever was admitted.
+            principals.Current.Returns(AuthorizedPrincipal.Caller(AdministratorIdentity, [granted]));
 
             this.Credentials = Substitute.For<IOwnerPasswordCredentialStore>();
             this.Credentials.CreateAsync(

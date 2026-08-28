@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Security.Cryptography;
 using MailFathom.Application.Access.Credentials;
 
 namespace MailFathom.Infrastructure.Security.Passwords;
@@ -23,33 +22,23 @@ namespace MailFathom.Infrastructure.Security.Passwords;
 /// it.
 /// </para>
 /// <para>
-/// The password behind it is random and is cleared before this object exists, so nothing can present the credential it
-/// would accept.
+/// What the record is made of belongs to <see cref="IPasswordHasher.HashDecoy" /> rather than to this type, because the
+/// work parameters are what the cost is: only the adapter knows the weakest parameters any record it would still accept
+/// may carry, and a decoy derived at today's parameters would answer slower than an older stored record the first time
+/// they are raised. The password behind it is random and never leaves that call, so nothing can present the credential
+/// it would accept.
 /// </para>
 /// </remarks>
 public sealed class DecoyPasswordHash
 {
-    private const string PasswordAlphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
-
     /// <summary>Derives the record, once.</summary>
-    /// <param name="passwordHasher">What the decoy password is derived with, so the decoy costs what a real record costs.</param>
+    /// <param name="passwordHasher">What derives it, and what decides the work parameters it carries.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="passwordHasher" /> is <see langword="null" />.</exception>
     public DecoyPasswordHash(IPasswordHasher passwordHasher)
     {
         ArgumentNullException.ThrowIfNull(passwordHasher);
 
-        var decoyPassword = GC.AllocateArray<char>(OwnerPasswordPolicy.MinimumLength, pinned: true);
-
-        try
-        {
-            RandomNumberGenerator.GetItems(PasswordAlphabet, decoyPassword);
-
-            this.Value = passwordHasher.Hash(decoyPassword);
-        }
-        finally
-        {
-            decoyPassword.AsSpan().Clear();
-        }
+        this.Value = passwordHasher.HashDecoy();
     }
 
     /// <summary>The stored representation, in the same form a provisioned credential holds.</summary>

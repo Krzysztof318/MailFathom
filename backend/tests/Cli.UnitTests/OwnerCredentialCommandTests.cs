@@ -380,12 +380,13 @@ public sealed class OwnerCredentialCommandTests : IDisposable
         Assert.Contains(this.harness.Console.Errors, line => line.Contains("--yes", StringComparison.Ordinal));
     }
 
-    /// <summary>An identifier out of the wrong listing removes nothing, and the command says so before anything is agreed to.</summary>
+    /// <summary>The listing is bounded, so a credential past that bound is absent from it while remaining in the deployment and going on authenticating — which is why the removal is sent rather than decided from what was listed.</summary>
     [Fact]
-    public async Task Delete_ACredentialTheOwnerDoesNotHold_AsksNothingAndRemovesNothing()
+    public async Task Delete_ACredentialTheListingDoesNotCarry_StillSendsTheRemoval()
     {
         // Arrange
         using var deployment = FakeOwnerCredentialDeployment.Holding([Owner]);
+        this.harness.Console.AnswerToGive = true;
 
         // Act
         var exitCode = await this.RunAsync(
@@ -399,10 +400,34 @@ public sealed class OwnerCredentialCommandTests : IDisposable
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
-        Assert.Empty(this.harness.Console.Questions);
-        Assert.Empty(deployment.RequestsTo(
+        Assert.Single(this.harness.Console.Questions);
+        Assert.Single(deployment.RequestsTo(
             HttpMethod.Delete,
             AdminEndpointRoutes.OwnerCredentialPath(Owner, CredentialId)));
+    }
+
+    /// <summary>What the operator is told is what the deployment answered, so an identifier it holds nothing for is reported as a failure carrying that sentence rather than as a removal that happened.</summary>
+    [Fact]
+    public async Task Delete_ACredentialTheDeploymentHoldsNothingFor_ReportsThatRefusalRatherThanSuccess()
+    {
+        // Arrange
+        const string Refusal = "Owner holds no such credential. List the owner's credentials to read what it holds.";
+        using var deployment = FakeOwnerCredentialDeployment.Refusing([Owner], HttpStatusCode.BadRequest, Refusal);
+        this.harness.Console.AnswerToGive = true;
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "credential",
+            "delete",
+            "--id",
+            $"{CredentialId:D}",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains(Refusal, StringComparison.Ordinal));
     }
 
     /// <summary>Nothing about an invocation may carry the password, which is what keeps it out of a shell history and a process table.</summary>

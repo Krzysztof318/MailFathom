@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
 using MailFathom.Application.Access;
 using MailFathom.Application.Access.Credentials;
 using MailFathom.Domain.Access;
@@ -172,6 +173,36 @@ public sealed class OwnerCredentialEndpointsTests
 
         // Assert
         AssertRefusal(result.Result, StatusCodes.Status409Conflict);
+    }
+
+    /// <summary>The listing an operator revokes from is bounded, so a credential written past that bound would authenticate where nothing lists it — which is why the ceiling is a refusal rather than a row.</summary>
+    [Fact]
+    public async Task ProvisionAsync_AnOwnerAlreadyHoldingAsManyCredentialsAsOneMay_IsAnsweredAsAConflict()
+    {
+        // Arrange
+        var harness = new EndpointHarness(MailFathomPermission.AdminCredentialsWrite);
+        harness.Credentials.CreateAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<MailOwnerId>(),
+                Arg.Any<OwnerCredentialUsername>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>())
+            .Returns(OwnerCredentialWriteOutcome.OwnerAtCredentialCeiling);
+
+        // Act
+        var result = await OwnerCredentialEndpoints.ProvisionAsync(
+            SyntheticMailOwner.Deployment.Value,
+            new OwnerCredentialProvisioningRequest("owner", Password),
+            harness.Administration,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = AssertRefusal(result.Result, StatusCodes.Status409Conflict);
+
+        Assert.Contains(
+            OwnerPasswordCredential.MaximumListedPerOwner.ToString(CultureInfo.InvariantCulture),
+            refusal,
+            StringComparison.Ordinal);
     }
 
     /// <summary>An owner identifier copied out of the wrong place is a correction an administrator can act on rather than a write that silently did nothing.</summary>
@@ -452,6 +483,8 @@ public sealed class OwnerCredentialEndpointsTests
 
         internal int HashCount { get; private set; }
 
+        public string HashDecoy() => StoredHash;
+
         public string Hash(ReadOnlySpan<char> password)
         {
             this.HashCount++;
@@ -469,10 +502,9 @@ public sealed class OwnerCredentialEndpointsTests
         internal EndpointHarness(MailFathomPermission granted)
         {
             var principals = Substitute.For<IAuthorizedPrincipalSource>();
-            principals.Current.Returns(AuthorizedPrincipal.CallerActingFor(
-                SyntheticMailOwner.Deployment,
-                AdministratorIdentity,
-                [granted]));
+            // A caller acting for nobody's mail, which is the only shape the administrative surface produces: the owner
+            // every act here names comes from the request rather than from whoever was admitted.
+            principals.Current.Returns(AuthorizedPrincipal.Caller(AdministratorIdentity, [granted]));
 
             this.Credentials = Substitute.For<IOwnerPasswordCredentialStore>();
             this.Credentials.CreateAsync(

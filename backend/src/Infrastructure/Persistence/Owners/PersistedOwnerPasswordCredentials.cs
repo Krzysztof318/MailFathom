@@ -34,6 +34,10 @@ namespace MailFathom.Infrastructure.Persistence.Owners;
 internal sealed class PersistedOwnerPasswordCredentials(MailFathomDbContext dbContext, TimeProvider timeProvider)
     : IOwnerPasswordCredentialStore
 {
+    /// <summary>How many credentials one owner may hold, which is the bound the listing reads under.</summary>
+    /// <remarks>Named here as well as on the listing so the statement that enforces it and the query that assumes it cannot come to disagree.</remarks>
+    private const int Ceiling = OwnerPasswordCredential.MaximumListedPerOwner;
+
     /// <inheritdoc />
     public async Task<ResolvedOwnerPasswordCredential?> FindByUsernameAsync(
         OwnerCredentialUsername username,
@@ -106,10 +110,11 @@ internal sealed class PersistedOwnerPasswordCredentials(MailFathomDbContext dbCo
 
     /// <inheritdoc />
     /// <remarks>
-    /// The insert states the owner as a subquery and lets the unique index answer for the username, so both refusals
-    /// are decided by the database in one statement rather than by a read this method took a moment earlier. What the
-    /// second read below decides is only which of the two happened, on the path where nothing was written — so a
-    /// concurrent owner deletion or a concurrent provisioning is answered rather than raised.
+    /// The insert states the owner and the ceiling as subqueries and lets the unique index answer for the username, so
+    /// all three refusals are decided by the database in one statement rather than by reads this method took a moment
+    /// earlier. What the reads below decide is only which of the three happened, on the path where nothing was written
+    /// — so a concurrent owner deletion, a concurrent provisioning, and two administrators racing at the ceiling are
+    /// each answered rather than raised, and the ceiling the bounded listing assumes is one this statement enforces.
     /// </remarks>
     public async Task<OwnerCredentialWriteOutcome> CreateAsync(
         Guid credentialId,
@@ -139,6 +144,7 @@ internal sealed class PersistedOwnerPasswordCredentials(MailFathomDbContext dbCo
                  ("Id", "OwnerId", "Username", "PasswordHash", "Enabled", "Version", "CreatedAt", "PasswordChangedAt")
              SELECT {storedCredentialId}, {storedOwnerId}, {canonicalUsername}, {passwordHash}, TRUE, 1, {provisionedAt}, {provisionedAt}
              WHERE EXISTS (SELECT 1 FROM settings_accounts WHERE "Id" = {storedOwnerId})
+               AND (SELECT COUNT(*) FROM owner_password_credentials WHERE "OwnerId" = {storedOwnerId}) < {Ceiling}
              ON CONFLICT ("Username") DO NOTHING
              """,
             cancellationToken);
@@ -148,11 +154,18 @@ internal sealed class PersistedOwnerPasswordCredentials(MailFathomDbContext dbCo
             return OwnerCredentialWriteOutcome.Written;
         }
 
-        return await dbContext.OwnerAccounts
+        if (!await dbContext.OwnerAccounts
+                .AsNoTracking()
+                .AnyAsync(ownerAccount => ownerAccount.Id == storedOwnerId, cancellationToken))
+        {
+            return OwnerCredentialWriteOutcome.UnknownOwner;
+        }
+
+        return await dbContext.OwnerPasswordCredentials
             .AsNoTracking()
-            .AnyAsync(ownerAccount => ownerAccount.Id == storedOwnerId, cancellationToken)
-            ? OwnerCredentialWriteOutcome.UsernameTaken
-            : OwnerCredentialWriteOutcome.UnknownOwner;
+            .CountAsync(credential => credential.OwnerId == storedOwnerId, cancellationToken) >= Ceiling
+            ? OwnerCredentialWriteOutcome.OwnerAtCredentialCeiling
+            : OwnerCredentialWriteOutcome.UsernameTaken;
     }
 
     /// <inheritdoc />

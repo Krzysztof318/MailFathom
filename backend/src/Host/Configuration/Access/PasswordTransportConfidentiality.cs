@@ -32,10 +32,17 @@ namespace MailFathom.Host.Configuration.Access;
 /// cross it.
 /// </para>
 /// <para>
-/// This is why <see cref="Security.Basic.BasicAuthenticationHandler" /> performs no per-request encryption check of its
-/// own, unlike the token schemes. The arrangement a per-request check would catch cannot be configured, so the second
-/// check would be a weaker restatement of one the process already made unreachable — and a request refused there would
-/// be refused after the password had already crossed the wire.
+/// What this decides is which deployments may accept a password at all, and it is read from what the endpoint's
+/// transport mode actually serves rather than from whether TLS is configured: the mode that binds both sockets serves
+/// its routes on the clear-text one too, unless that socket redirects away from them, so a certificate present beside
+/// a redirect left off is exactly the arrangement this refuses.
+/// </para>
+/// <para>
+/// <see cref="Security.Basic.BasicAuthenticationHandler" /> then refuses per request as well, and the two are not one
+/// check written twice. This one cannot see a request; the second arrangement it permits — a clear-text listener behind
+/// a named proxy — leaves that socket open to anything that can route to it, and a request arriving there from
+/// anywhere but the proxy carries no forwarded scheme. That is the request the handler refuses, before the header is
+/// read.
 /// </para>
 /// </remarks>
 internal static class PasswordTransportConfidentiality
@@ -44,7 +51,7 @@ internal static class PasswordTransportConfidentiality
     /// <param name="sectionName">The endpoint's configuration section, which every message names its settings under.</param>
     /// <param name="enabled">Whether the endpoint is served at all.</param>
     /// <param name="allowsBasic">Whether one of the endpoint's configured methods is a password.</param>
-    /// <param name="terminatesTls">Whether the endpoint's own listener carries TLS.</param>
+    /// <param name="servesClearText">Whether the endpoint answers its routes on a socket nothing encrypts, which the mode that binds both sockets does too unless the clear-text one redirects.</param>
     /// <param name="reverseProxy">The reverse-proxy settings, which say whether the operator has named what stands in front.</param>
     /// <returns>One message when the arrangement is refused, empty when it is not.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="sectionName" /> or <paramref name="reverseProxy" /> is <see langword="null" />.</exception>
@@ -53,13 +60,13 @@ internal static class PasswordTransportConfidentiality
         string sectionName,
         bool enabled,
         bool allowsBasic,
-        bool terminatesTls,
+        bool servesClearText,
         ReverseProxyOptions reverseProxy)
     {
         ArgumentNullException.ThrowIfNull(sectionName);
         ArgumentNullException.ThrowIfNull(reverseProxy);
 
-        if (!enabled || !allowsBasic || terminatesTls || EstablishesATrustedProxyContract(reverseProxy))
+        if (!enabled || !allowsBasic || !servesClearText || EstablishesATrustedProxyContract(reverseProxy))
         {
             return [];
         }
@@ -67,10 +74,12 @@ internal static class PasswordTransportConfidentiality
         return
         [
             $"{sectionName}:{nameof(McpEndpointOptions.Authentication)} — a '{nameof(TransportAuthenticationOptions.Basic)}' method "
-            + "accepts a password typed by a person, and this endpoint neither terminates TLS itself nor is declared to sit "
-            + "behind a proxy that does, so the password would cross a hop anything on the network path can read. Either set "
-            + $"'{sectionName}:Transport' to an HTTPS mode and configure '{sectionName}:Https:Endpoints' so this process "
-            + $"presents your domain's certificate, or name the proxy that terminates TLS in "
+            + "accepts a password typed by a person, and this endpoint answers its routes on a socket nothing encrypts and "
+            + "is not declared to sit behind a proxy that terminates TLS, so the password would cross a hop anything on the "
+            + $"network path can read. Either set '{sectionName}:Transport' to 'HttpsOnly' and configure "
+            + $"'{sectionName}:Https:Endpoints' so this process presents your domain's certificate — 'HttpAndHttps' does "
+            + $"too, but only with '{sectionName}:Https:Redirect:Enabled' left on, because the clear-text socket answers "
+            + "the routes rather than redirecting away from them otherwise — or name the proxy that terminates TLS in "
             + $"'{ReverseProxyOptions.SectionName}:{nameof(ReverseProxyOptions.TrustedProxies)}' — an address such as "
             + "'10.0.0.5' or a network such as '10.0.0.0/24', never a range covering every address, which trusts whatever "
             + "can connect and therefore states nothing about what stands in front.",

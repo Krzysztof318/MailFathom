@@ -47,7 +47,13 @@ internal interface ICliConsole
 
     /// <summary>Reads a credential without echoing it.</summary>
     /// <param name="prompt">What to ask for, written only when a person is there to read it.</param>
-    /// <returns>The credential, empty when none was supplied.</returns>
+    /// <returns>The credential exactly as it was supplied, empty when none was.</returns>
+    /// <remarks>
+    /// Nothing is trimmed, because for one of the callers the surrounding whitespace is part of the value: a password
+    /// is stored as what was sent, so a terminal that kept it and a pipe that dropped it would provision a credential
+    /// nobody can present. A caller whose credential cannot meaningfully carry whitespace — an authorization code, a
+    /// client secret — trims what it reads and says so there.
+    /// </remarks>
     string ReadSecret(string prompt);
 
     /// <summary>Gets a value indicating whether a person is at the terminal to answer a question.</summary>
@@ -164,7 +170,9 @@ internal sealed class SystemCliConsole : ICliConsole
     /// <remarks>
     /// <para>
     /// A piped credential is read as a line, which is what lets a script supply one without a terminal. A typed one is
-    /// read key by key with no echo, so it does not stay on the screen or in a scrollback buffer.
+    /// read key by key with no echo, so it does not stay on the screen or in a scrollback buffer. Neither path rewrites
+    /// what it read, so the two agree about a value carrying leading or trailing spaces rather than one of them
+    /// silently supplying a different credential than the operator sent.
     /// </para>
     /// <para>
     /// The prompt is written only when there is a person to read it. Writing it into a pipeline would put it in
@@ -175,7 +183,7 @@ internal sealed class SystemCliConsole : ICliConsole
     {
         if (Console.IsInputRedirected)
         {
-            return this.answers.ReadLine()?.Trim() ?? string.Empty;
+            return this.answers.ReadLine() ?? string.Empty;
         }
 
         this.questions.Write(prompt);

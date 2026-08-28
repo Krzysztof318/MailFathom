@@ -101,7 +101,7 @@ public sealed class OwnerPasswordPolicyTests
     public void FindRefusal_ARefusedPassword_IsDescribedWithoutRepeatingAnyPartOfIt()
     {
         // Arrange
-        const string Password = "hunter2xyz";
+        const string Password = "hunter2\axyz";
 
         // Act
         var refusal = OwnerPasswordPolicy.FindRefusal(Password);

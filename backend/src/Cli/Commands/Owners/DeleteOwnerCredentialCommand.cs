@@ -20,6 +20,13 @@ namespace MailFathom.Cli.Commands.Owners;
 /// exception, exactly as it is for the other irreversible commands here, and an invocation with nobody at the terminal
 /// is told to pass the flag rather than having an agreement read out of whatever was piped in.
 /// </para>
+/// <para>
+/// The listing it shows first is for the operator to read, and it is never what decides the outcome. A credential the
+/// listing does not carry is still one this command sends the removal for, because the listing is bounded and a
+/// credential past that bound is absent from it while remaining in the deployment and going on authenticating — so
+/// deciding from the listing would report a removal that never happened. What the operator is told is what the
+/// deployment answered.
+/// </para>
 /// </remarks>
 internal static class DeleteOwnerCredentialCommand
 {
@@ -80,12 +87,13 @@ internal static class DeleteOwnerCredentialCommand
         if (held is null)
         {
             context.Console.WriteLine(
-                $"Owner {owner:D} holds no credential {credentialId:D}, so nothing was removed.");
-
-            return CliExitCode.Success;
+                $"Owner {owner:D} lists no credential {credentialId:D}. The removal is sent anyway, and the deployment "
+                + "answers for what it actually holds.");
         }
-
-        OwnerCredentialOutput.WriteListing(context.Console, [held]);
+        else
+        {
+            OwnerCredentialOutput.WriteListing(context.Console, [held]);
+        }
 
         if (!CliConfirmation.Agreed(
                 context,

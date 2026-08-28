@@ -174,7 +174,7 @@ internal static class AuthorizeMailboxCommand
 
         var clientSecret = isPublicClient
             ? null
-            : context.Console.ReadSecret("Client secret (leave empty for a public client): ");
+            : context.Console.ReadSecret("Client secret (leave empty for a public client): ").Trim();
 
         var request = new MailboxAuthorizationRequest(
             preset.AuthorizationEndpoint,
@@ -334,18 +334,18 @@ internal static class AuthorizeMailboxCommand
         context.Console.WriteNotice("parameter out of the address bar and paste it below.");
         context.Console.WriteNotice(string.Empty);
 
-        var returnedState = context.Console.ReadSecret("The 'state' parameter from the same address: ");
+        var returnedState = context.Console.ReadSecret("The 'state' parameter from the same address: ").Trim();
         if (!pending.MatchesReturnedState(returnedState))
         {
             throw new MailboxAuthorizationFailedException("state_mismatch");
         }
 
-        var authorizationCode = context.Console.ReadSecret("Authorization code: ");
+        var authorizationCode = context.Console.ReadSecret("Authorization code: ").Trim();
 
         return await authorizer.RedeemAuthorizationCodeAsync(
             request,
             pending,
-            authorizationCode.Trim(),
+            authorizationCode,
             cancellationToken);
     }
 

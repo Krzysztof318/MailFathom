@@ -28,7 +28,7 @@ public sealed class PasswordTransportConfidentialityTests
             SectionName,
             enabled: true,
             allowsBasic: true,
-            terminatesTls: true,
+            servesClearText: false,
             new ReverseProxyOptions());
 
         // Assert
@@ -51,7 +51,7 @@ public sealed class PasswordTransportConfidentialityTests
             SectionName,
             enabled: true,
             allowsBasic: true,
-            terminatesTls: false,
+            servesClearText: true,
             reverseProxy);
 
         // Assert
@@ -66,7 +66,7 @@ public sealed class PasswordTransportConfidentialityTests
             SectionName,
             enabled: true,
             allowsBasic: true,
-            terminatesTls: false,
+            servesClearText: true,
             new ReverseProxyOptions());
 
         // Assert
@@ -91,7 +91,7 @@ public sealed class PasswordTransportConfidentialityTests
             SectionName,
             enabled: true,
             allowsBasic: true,
-            terminatesTls: false,
+            servesClearText: true,
             reverseProxy);
 
         // Assert
@@ -112,7 +112,7 @@ public sealed class PasswordTransportConfidentialityTests
             SectionName,
             enabled: true,
             allowsBasic: true,
-            terminatesTls: false,
+            servesClearText: true,
             reverseProxy);
 
         // Assert
@@ -131,7 +131,7 @@ public sealed class PasswordTransportConfidentialityTests
             SectionName,
             enabled,
             allowsBasic,
-            terminatesTls: false,
+            servesClearText: true,
             new ReverseProxyOptions());
 
         // Assert
