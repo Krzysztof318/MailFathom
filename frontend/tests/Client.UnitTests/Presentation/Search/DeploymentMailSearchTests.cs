@@ -270,7 +270,7 @@ public sealed class DeploymentMailSearchTests
         Assert.Single((await search.Recent)!);
 
         // Act
-        session.Refresh();
+        session.ChangeSession();
         await Until(async () =>
             (await search.Results)?.Count is 0
             && (await search.Recent)?.Count is 0);

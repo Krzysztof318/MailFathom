@@ -72,6 +72,7 @@ public sealed class DeploymentClientSessionTests
             cancellationToken: TestContext.Current.CancellationToken);
         using var session = SessionOver(harness);
         await session.Standing;
+        var before = await session.Revision;
 
         // Act
         await harness.Owner.AcceptAsync(
@@ -79,9 +80,12 @@ public sealed class DeploymentClientSessionTests
             new OwnerCredential("ada", "a-long-password"),
             TestContext.Current.CancellationToken);
         await session.Standing;
+        var after = await RevisionOfAsync(session, expected: 1);
 
         // Assert
         Assert.Equal(2, harness.Deployment.Requests.Count);
+        Assert.Equal(0, before);
+        Assert.Equal(1, after);
     }
 
     /// <summary>An answer describes the deployment it came from, so pointing the client at another one ends it.</summary>
@@ -121,12 +125,12 @@ public sealed class DeploymentClientSessionTests
         // Act
         session.Refresh();
         await session.Standing;
-        var after = await RevisionOfAsync(session, expected: 1);
+        var after = await session.Revision;
 
         // Assert
         Assert.Equal(2, harness.Deployment.Requests.Count);
         Assert.Equal(0, before);
-        Assert.Equal(1, after);
+        Assert.Equal(0, after);
     }
 
     private static async Task<long> RevisionOfAsync(DeploymentClientSession session, long expected)

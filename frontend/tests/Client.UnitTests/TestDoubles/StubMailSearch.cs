@@ -22,11 +22,21 @@ internal sealed class StubMailSearch : IMailSearch
 
     internal int Opens { get; private set; }
 
+    internal int Closes { get; private set; }
+
+    internal int ScopeUses { get; private set; }
+
     internal int Searches { get; private set; }
 
     internal int Pages { get; private set; }
 
+    internal int Widens { get; private set; }
+
     internal List<MessageRow> Opened { get; } = [];
+
+    internal List<RecentMailSearch> Repeated { get; } = [];
+
+    internal List<MailSearchFilter> Cleared { get; } = [];
 
     public IState<bool> IsOpen { get; } = State.Value(new object(), () => false);
 
@@ -64,9 +74,17 @@ internal sealed class StubMailSearch : IMailSearch
         return ValueTask.CompletedTask;
     }
 
-    public ValueTask CloseAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
+    public ValueTask CloseAsync(CancellationToken cancellationToken)
+    {
+        this.Closes++;
+        return ValueTask.CompletedTask;
+    }
 
-    public ValueTask UseCurrentScopeAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
+    public ValueTask UseCurrentScopeAsync(CancellationToken cancellationToken)
+    {
+        this.ScopeUses++;
+        return ValueTask.CompletedTask;
+    }
 
     public ValueTask SearchAsync(CancellationToken cancellationToken)
     {
@@ -80,7 +98,11 @@ internal sealed class StubMailSearch : IMailSearch
         return ValueTask.CompletedTask;
     }
 
-    public ValueTask WidenAsync(CancellationToken cancellationToken) => ValueTask.CompletedTask;
+    public ValueTask WidenAsync(CancellationToken cancellationToken)
+    {
+        this.Widens++;
+        return ValueTask.CompletedTask;
+    }
 
     public ValueTask OpenResultAsync(MessageRow result, CancellationToken cancellationToken)
     {
@@ -94,7 +116,15 @@ internal sealed class StubMailSearch : IMailSearch
 
     public ValueTask SetHasAttachmentsAsync(bool? value, CancellationToken cancellationToken) => ValueTask.CompletedTask;
 
-    public ValueTask ClearFilterAsync(MailSearchFilter filter, CancellationToken cancellationToken) => ValueTask.CompletedTask;
+    public ValueTask ClearFilterAsync(MailSearchFilter filter, CancellationToken cancellationToken)
+    {
+        this.Cleared.Add(filter);
+        return ValueTask.CompletedTask;
+    }
 
-    public ValueTask RepeatAsync(RecentMailSearch recent, CancellationToken cancellationToken) => ValueTask.CompletedTask;
+    public ValueTask RepeatAsync(RecentMailSearch recent, CancellationToken cancellationToken)
+    {
+        this.Repeated.Add(recent);
+        return ValueTask.CompletedTask;
+    }
 }

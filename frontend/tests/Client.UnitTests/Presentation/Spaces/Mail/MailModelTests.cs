@@ -3,8 +3,10 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Client.Backend;
+using MailFathom.Client.Backend.Search;
 using MailFathom.Client.Backend.Timeline;
 using MailFathom.Client.Presentation.Messages;
+using MailFathom.Client.Presentation.Search;
 using MailFathom.Client.Presentation.Spaces.Mail;
 using MailFathom.Client.Presentation.Spaces.Mail.Reading;
 using MailFathom.Client.Presentation.Workspace;
@@ -345,6 +347,7 @@ public sealed class MailModelTests
         // Arrange
         using var session = SessionOffering("mailfathom.mail.read");
         var search = new StubMailSearch(Row(1));
+        var recent = new RecentMailSearch("quarter", new MailSearchQuery { Query = "quarter" });
         await using var model = new MailModel(
             session,
             new StubMessageList(),
@@ -354,16 +357,40 @@ public sealed class MailModelTests
 
         // Act
         await model.OpenSearch(TestContext.Current.CancellationToken);
+        await model.CloseSearch(TestContext.Current.CancellationToken);
+        await model.UseCurrentSearchScope(TestContext.Current.CancellationToken);
         await model.SearchMail(TestContext.Current.CancellationToken);
         await model.ShowMoreSearchResults(TestContext.Current.CancellationToken);
+        await model.WidenSearch(TestContext.Current.CancellationToken);
         await model.OpenSearchResult(Row(1), TestContext.Current.CancellationToken);
+        await model.RepeatSearch(recent, TestContext.Current.CancellationToken);
+        await model.ClearSearchAccount(TestContext.Current.CancellationToken);
+        await model.ClearSearchFolder(TestContext.Current.CancellationToken);
+        await model.ClearSearchSender(TestContext.Current.CancellationToken);
+        await model.ClearSearchRecipient(TestContext.Current.CancellationToken);
+        await model.ClearSearchReceivedOnOrAfter(TestContext.Current.CancellationToken);
+        await model.ClearSearchReceivedBefore(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal([MailMessages.Key(1)], (await model.SearchResults)!.Select(row => row.Key));
         Assert.Equal(1, search.Opens);
+        Assert.Equal(1, search.Closes);
+        Assert.Equal(1, search.ScopeUses);
         Assert.Equal(1, search.Searches);
         Assert.Equal(1, search.Pages);
+        Assert.Equal(1, search.Widens);
         Assert.Equal([MailMessages.Key(1)], search.Opened.Select(row => row.Key));
+        Assert.Equal([recent], search.Repeated);
+        Assert.Equal(
+            [
+                MailSearchFilter.Account,
+                MailSearchFilter.Folder,
+                MailSearchFilter.Sender,
+                MailSearchFilter.Recipient,
+                MailSearchFilter.ReceivedOnOrAfter,
+                MailSearchFilter.ReceivedBefore,
+            ],
+            search.Cleared);
     }
 
     /// <summary>A space that could be built without either of these would be one that can say neither what it shows nor whether it may.</summary>

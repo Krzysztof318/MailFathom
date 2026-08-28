@@ -55,6 +55,12 @@ internal sealed class StubClientSession : IClientSession, IDisposable
     public void Refresh()
     {
         this.Refreshes++;
+        this.signal.Raise();
+    }
+
+    /// <summary>Announces that the signed-in identity or deployment changed without modelling either value.</summary>
+    internal void ChangeSession()
+    {
         Interlocked.Increment(ref this.revision);
         this.signal.Raise();
     }

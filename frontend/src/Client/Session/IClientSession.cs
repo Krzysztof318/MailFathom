@@ -22,8 +22,8 @@ public interface IClientSession
     /// <summary>Gets what may be offered here, and the version of the deployment that said so.</summary>
     IFeed<SessionStanding> Standing { get; }
 
-    /// <summary>Gets a revision that changes whenever the current session answer is invalidated.</summary>
-    /// <remarks>The value identifies no owner or credential; it only separates state read before and after a refresh.</remarks>
+    /// <summary>Gets a revision that changes when the signed-in identity or deployment address changes.</summary>
+    /// <remarks>The value identifies no owner or credential; it only separates state belonging to different sessions.</remarks>
     IFeed<long> Revision { get; }
 
     /// <summary>Gets whether the deployment can be reached at all, and what the client is doing about it when it cannot.</summary>

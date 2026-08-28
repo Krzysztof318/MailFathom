@@ -106,11 +106,7 @@ internal sealed class DeploymentClientSession : IClientSession, IDisposable
     public IFeed<DeploymentConnection> Connection => this.connection;
 
     /// <inheritdoc />
-    public void Refresh()
-    {
-        Interlocked.Increment(ref this.revision);
-        this.refresh.Raise();
-    }
+    public void Refresh() => this.refresh.Raise();
 
     /// <inheritdoc />
     public void Dispose()
@@ -216,5 +212,9 @@ internal sealed class DeploymentClientSession : IClientSession, IDisposable
     private ValueTask<long> ReadRevisionAsync(CancellationToken cancellationToken) =>
         ValueTask.FromResult(Interlocked.Read(ref this.revision));
 
-    private void AskAgain(object? sender, EventArgs e) => this.Refresh();
+    private void AskAgain(object? sender, EventArgs e)
+    {
+        Interlocked.Increment(ref this.revision);
+        this.refresh.Raise();
+    }
 }
