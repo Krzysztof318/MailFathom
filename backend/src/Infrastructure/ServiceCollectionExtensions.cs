@@ -121,6 +121,8 @@ using MailFathom.Infrastructure.Resilience;
 using MailFathom.Infrastructure.Secrets.References;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using MailFathom.Infrastructure.Secrets.Sources;
+using MailFathom.Infrastructure.Security.ApiKeys;
+using MailFathom.Infrastructure.Security.ClientAssertions;
 using MailFathom.Infrastructure.Security.OAuth;
 using MailFathom.Infrastructure.Security.Passwords;
 using MailFathom.Infrastructure.SensitiveContent.PersonalData;
@@ -449,10 +451,10 @@ public static class ServiceCollectionExtensions
         // same reason and used from the same startup step: a declaration reaches this exactly once per start, and never
         // while a request is being served.
         services.AddScoped<IMailOwnerProvisioning, PersistedMailOwnerProvisioning>();
-        // The passwords an owner signs in with. Scoped because it reads and writes through the request's own context,
-        // and separate from the directory above because that answers which owners exist and this answers what one of
-        // them may present.
-        services.AddScoped<IOwnerPasswordCredentialStore, PersistedOwnerPasswordCredentials>();
+        // The credentials an owner is admitted by, of every method. Scoped because it reads and writes through the
+        // request's own context, and separate from the directory above because that answers which owners exist and this
+        // answers what one of them may present.
+        services.AddScoped<IOwnerCredentialStore, PersistedOwnerCredentials>();
         // What a password becomes when it is stored and what a presented one is judged against. A singleton because it
         // holds no state at all: every parameter a verification needs travels inside the record it is verifying.
         services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
@@ -468,11 +470,21 @@ public static class ServiceCollectionExtensions
         // because it reads the credential store through the request's own context; everything it holds that is
         // expensive to build is one of the singletons above.
         services.AddScoped<OwnerPasswordAuthenticator>();
+        // What draws a key an owner's client presents and reduces a presented one to the digest a row is resolved by. A
+        // singleton because it holds nothing: the entropy is drawn per call and the digest is a pure function of what
+        // was presented.
+        services.AddSingleton<IOwnerApiKeyMinter, OwnerApiKeyMinter>();
+        // Reading a client's public key into what a row stores and what resolves it. A singleton for the same reason.
+        services.AddSingleton<IClientPublicKeyReader, ClientPublicKeyReader>();
+        // Judging a presented key, and resolving a validated subject to the owner it stands for. Both scoped, because
+        // both read the credential store through the request's own context.
+        services.AddScoped<OwnerApiKeyAuthenticator>();
+        services.AddScoped<OwnerOAuthSubjectResolver>();
         // Where a change to who can reach an owner's mail is written down.
         services.AddScoped<IOwnerCredentialAuditor, LoggedOwnerCredentialAuditor>();
-        // What an administrator does to those credentials, registered beside them because the whole of what it
-        // composes is the four services above.
-        services.AddScoped<OwnerPasswordCredentialAdministration>();
+        // What an administrator does to those credentials, registered beside the ports it composes so a port added to
+        // it and a port registered here stay in one place.
+        services.AddScoped<OwnerCredentialAdministration>();
         // One owner's own record, read by key and bounded in the statement rather than in the process. A singleton
         // over the pool for the reason the persisted configuration layer's reader is one — the command holds no state
         // between calls — and separate from the directory above because that answers for the deployment and this for

@@ -67,13 +67,30 @@ internal sealed class ClientAssertionReplayStore
     /// its own expiry is already refused for the expiry, and one repeating it inside its lifetime is the replay.
     /// </para>
     /// </remarks>
-    public bool TrySpend(SecretName keyName, string identifier, DateTimeOffset expiresAt)
+    public bool TrySpend(SecretName keyName, string identifier, DateTimeOffset expiresAt) =>
+        this.TrySpend(keyName.Value ?? string.Empty, identifier, expiresAt);
+
+    /// <summary>Spends one assertion identifier against the credential that verified it.</summary>
+    /// <param name="credentialKey">What identifies the verifying credential, which scopes the identifier to it.</param>
+    /// <param name="identifier">The assertion's own identifier.</param>
+    /// <param name="expiresAt">When the assertion stops being accepted, which is when this entry stops being needed.</param>
+    /// <returns><see langword="true" /> when the assertion may be served; <see langword="false" /> when it has been served before.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when either string is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The overload taking a configured name delegates here, because the scoping is the same question whichever kind of
+    /// credential verified the assertion: an owner's registered public key is identified by its fingerprint and a
+    /// configured one by the name an operator gave it, and neither may spend the other's identifiers. The two
+    /// vocabularies cannot collide — a fingerprint is 43 base64url characters and a configured name is not — and if one
+    /// ever did, what it would cost is one client refusing another's identifier rather than admitting it.
+    /// </remarks>
+    public bool TrySpend(string credentialKey, string identifier, DateTimeOffset expiresAt)
     {
+        ArgumentNullException.ThrowIfNull(credentialKey);
         ArgumentNullException.ThrowIfNull(identifier);
 
         this.SweepExpiredEntries();
 
-        return this.spentIdentifiers.TryAdd($"{keyName.Value}\0{identifier}", expiresAt);
+        return this.spentIdentifiers.TryAdd($"{credentialKey}\0{identifier}", expiresAt);
     }
 
     /// <summary>Removes the entries whose assertions have expired, at most once per permitted lifetime.</summary>

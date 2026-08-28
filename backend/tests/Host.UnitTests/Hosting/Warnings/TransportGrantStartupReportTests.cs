@@ -6,6 +6,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Hosting.Warnings;
+using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Logging;
@@ -58,13 +59,62 @@ public sealed class TransportGrantStartupReportTests
         Assert.Equal("McpEndpoint:Authentication", Assert.Contains("AuthenticationSettingPath", record.Properties));
     }
 
+    /// <summary>
+    /// The line an operator meets on a first run for a mail-serving endpoint: they wrote which method is accepted, and
+    /// what each credential of it may do is a fact about the credential rather than about the entry — so the line says
+    /// where to read it instead of stating a grant the entry does not carry.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_AnOwnerFacingEntry_NamesTheMethodAndWhereItsGrantIsRecorded()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        var report = ReportFor(
+            McpEndpointWith(Accepting(OwnerCredentialMethod.ApiKey)),
+            new AdminEndpointOptions(),
+            logs);
+
+        // Act
+        await report.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var record = Assert.Single(logs.Records);
+        Assert.Equal("McpEndpoint:Authentication:0", Assert.Contains("EntrySettingPath", record.Properties));
+        Assert.Equal("api-key", Assert.Contains("AcceptedMethod", record.Properties));
+        Assert.Contains("mfctl credential list", record.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("GrantedPermissions", record.Properties.Select(property => property.Key));
+    }
+
+    /// <summary>
+    /// A token narrows what its own credential grants rather than what the entry states, so the line has to say the
+    /// recorded permissions are a ceiling. Reading the two lines the same way would over-read every token's grant.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_AnOwnerFacingEntryNarrowedByTokenScopes_SaysTheRecordedGrantIsACeiling()
+    {
+        // Arrange
+        using var logs = new RecordingLoggerProvider();
+        var entry = ConfiguredAuthentication.AcceptingSubjectsFrom("https://mail.example.test/mcp");
+        entry.PermissionsFromTokenScopes = true;
+
+        var report = ReportFor(McpEndpointWith(entry), new AdminEndpointOptions(), logs);
+
+        // Act
+        await report.StartAsync(TestContext.Current.CancellationToken);
+
+        // Assert
+        var record = Assert.Single(logs.Records);
+        Assert.Contains("its own scopes carry", record.Message, StringComparison.Ordinal);
+        Assert.Equal("oauth-subject", Assert.Contains("AcceptedMethod", record.Properties));
+    }
+
     /// <summary>The line an operator meets on a first run: they wrote a credential and no grant, and this is what it turned out to hold.</summary>
     [Fact]
     public async Task StartAsync_AnEntryThatWroteNoGrant_NamesItAndWhatItThereforeHolds()
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
-        var report = ReportFor(McpEndpointWith(AnEntryThatStatedNoGrant()), new AdminEndpointOptions(), logs);
+        var report = ReportFor(new McpEndpointOptions(), AdminEndpointWith(AnEntryThatStatedNoGrant()), logs);
 
         // Act
         await report.StartAsync(TestContext.Current.CancellationToken);
@@ -72,9 +122,9 @@ public sealed class TransportGrantStartupReportTests
         // Assert
         var record = Assert.Single(logs.Records);
         Assert.Contains("writes down no grant", record.Message, StringComparison.Ordinal);
-        Assert.Equal("McpEndpoint:Authentication:0", Assert.Contains("EntrySettingPath", record.Properties));
+        Assert.Equal("AdminEndpoint:Authentication:0", Assert.Contains("EntrySettingPath", record.Properties));
         Assert.Equal(
-            WholeMailSurface,
+            WholeAdministrativeSurface,
             Assert.Contains("GrantedPermissions", record.Properties));
     }
 
@@ -84,16 +134,16 @@ public sealed class TransportGrantStartupReportTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var entry = AnApiKeyEntry();
-        entry.Permissions.Add(MailFathomPermission.MailRead.Name);
+        entry.Permissions.Add(MailFathomPermission.AdminRead.Name);
 
-        var report = ReportFor(McpEndpointWith(entry), new AdminEndpointOptions(), logs);
+        var report = ReportFor(new McpEndpointOptions(), AdminEndpointWith(entry), logs);
 
         // Act
         await report.StartAsync(TestContext.Current.CancellationToken);
 
         // Assert
         var record = Assert.Single(logs.Records);
-        Assert.Equal("mailfathom.mail.read", Assert.Contains("GrantedPermissions", record.Properties));
+        Assert.Equal("mailfathom.admin.read", Assert.Contains("GrantedPermissions", record.Properties));
         Assert.DoesNotContain("writes down no grant", record.Message, StringComparison.Ordinal);
     }
 
@@ -104,9 +154,9 @@ public sealed class TransportGrantStartupReportTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var entry = AnApiKeyEntry();
-        entry.Permissions.Add("mailfathom.mail.contacts.*");
+        entry.Permissions.Add("mailfathom.admin.audit.*");
 
-        var report = ReportFor(McpEndpointWith(entry), new AdminEndpointOptions(), logs);
+        var report = ReportFor(new McpEndpointOptions(), AdminEndpointWith(entry), logs);
 
         // Act
         await report.StartAsync(TestContext.Current.CancellationToken);
@@ -114,7 +164,7 @@ public sealed class TransportGrantStartupReportTests
         // Assert
         var record = Assert.Single(logs.Records);
         Assert.Equal(
-            "mailfathom.mail.contacts.read, mailfathom.mail.contacts.write",
+            "mailfathom.admin.audit.read",
             Assert.Contains("GrantedPermissions", record.Properties));
     }
 
@@ -124,9 +174,8 @@ public sealed class TransportGrantStartupReportTests
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
-        var entry = AnApiKeyEntry();
 
-        var report = ReportFor(McpEndpointWith(entry), new AdminEndpointOptions(), logs);
+        var report = ReportFor(new McpEndpointOptions(), AdminEndpointWith(AnApiKeyEntry()), logs);
 
         // Act
         await report.StartAsync(TestContext.Current.CancellationToken);
@@ -144,13 +193,13 @@ public sealed class TransportGrantStartupReportTests
         using var logs = new RecordingLoggerProvider();
         var entry = new TransportAuthenticationOptions
         {
-            OAuth = new OAuthValidationOptions { Resource = "https://mail.example.test/mcp" },
+            OAuth = new OAuthValidationOptions { Resource = "https://mail.example.test/admin" },
             PermissionsFromTokenScopes = true,
         };
 
-        entry.Permissions.Add(MailFathomPermission.MailAsk.Name);
+        entry.Permissions.Add(MailFathomPermission.AdminRead.Name);
 
-        var report = ReportFor(McpEndpointWith(entry), new AdminEndpointOptions(), logs);
+        var report = ReportFor(new McpEndpointOptions(), AdminEndpointWith(entry), logs);
 
         // Act
         await report.StartAsync(TestContext.Current.CancellationToken);
@@ -158,7 +207,7 @@ public sealed class TransportGrantStartupReportTests
         // Assert
         var record = Assert.Single(logs.Records);
         Assert.Contains("at most", record.Message, StringComparison.Ordinal);
-        Assert.Equal("mailfathom.mail.ask", Assert.Contains("GrantedPermissions", record.Properties));
+        Assert.Equal("mailfathom.admin.read", Assert.Contains("GrantedPermissions", record.Properties));
     }
 
     /// <summary>Such an entry states no ceiling and is still narrowed per token, so reporting it as the entry that wrote nothing down would tell an operator every token holds the whole surface.</summary>
@@ -169,13 +218,13 @@ public sealed class TransportGrantStartupReportTests
         using var logs = new RecordingLoggerProvider();
         var entry = new TransportAuthenticationOptions
         {
-            OAuth = new OAuthValidationOptions { Resource = "https://mail.example.test/mcp" },
+            OAuth = new OAuthValidationOptions { Resource = "https://mail.example.test/admin" },
             PermissionsFromTokenScopes = true,
         };
 
         entry.GrantTheWholeSurface();
 
-        var report = ReportFor(McpEndpointWith(entry), new AdminEndpointOptions(), logs);
+        var report = ReportFor(new McpEndpointOptions(), AdminEndpointWith(entry), logs);
 
         // Act
         await report.StartAsync(TestContext.Current.CancellationToken);
@@ -185,7 +234,7 @@ public sealed class TransportGrantStartupReportTests
         Assert.Contains("at most", record.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("writes down no grant", record.Message, StringComparison.Ordinal);
         Assert.Equal(
-            WholeMailSurface,
+            WholeAdministrativeSurface,
             Assert.Contains("GrantedPermissions", record.Properties));
     }
 
@@ -199,7 +248,7 @@ public sealed class TransportGrantStartupReportTests
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
-        var entry = AnEntryThatStatedNoGrant();
+        var entry = Accepting(OwnerCredentialMethod.ApiKey);
         entry.RecordConfigurationKey("2");
 
         var report = ReportFor(McpEndpointWith(entry), new AdminEndpointOptions(), logs);
@@ -218,10 +267,11 @@ public sealed class TransportGrantStartupReportTests
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
-        var entry = AnApiKeyEntry();
-        entry.Permissions.Add(MailFathomPermission.MailRead.Name);
 
-        var report = ReportFor(McpEndpointWith(entry), new AdminEndpointOptions(), logs);
+        var report = ReportFor(
+            McpEndpointWith(Accepting(OwnerCredentialMethod.ApiKey)),
+            new AdminEndpointOptions(),
+            logs);
 
         // Act
         await report.StartAsync(TestContext.Current.CancellationToken);
@@ -243,10 +293,7 @@ public sealed class TransportGrantStartupReportTests
         var entry = AnApiKeyEntry();
         entry.Permissions.Add(MailFathomPermission.AdminRead.Name);
 
-        var adminEndpoint = new AdminEndpointOptions { Enabled = true };
-        adminEndpoint.Authentication.Add(entry);
-
-        var report = ReportFor(new McpEndpointOptions { Enabled = false }, adminEndpoint, logs);
+        var report = ReportFor(new McpEndpointOptions { Enabled = false }, AdminEndpointWith(entry), logs);
 
         // Act
         await report.StartAsync(TestContext.Current.CancellationToken);
@@ -291,15 +338,12 @@ public sealed class TransportGrantStartupReportTests
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
-        var adminEndpoint = new AdminEndpointOptions { Enabled = true };
-        adminEndpoint.Authentication.Add(AnEntryThatStatedNoGrant());
-
         var clientEndpoint = new ClientEndpointOptions { Enabled = true };
-        clientEndpoint.Authentication.Add(AnEntryThatStatedNoGrant());
+        clientEndpoint.Authentication.Add(Accepting(OwnerCredentialMethod.Password));
 
         var report = ReportFor(
-            McpEndpointWith(AnEntryThatStatedNoGrant()),
-            adminEndpoint,
+            McpEndpointWith(Accepting(OwnerCredentialMethod.ApiKey)),
+            AdminEndpointWith(AnEntryThatStatedNoGrant()),
             logs,
             clientEndpoint);
 
@@ -314,14 +358,13 @@ public sealed class TransportGrantStartupReportTests
             ["McpEndpoint:Authentication:0", "AdminEndpoint:Authentication:0", "ClientEndpoint:Authentication:0"],
             logs.Records.Select(record => Assert.Contains("EntrySettingPath", record.Properties)));
         Assert.Equal(
-            [
-                WholeMailSurface,
-                string.Join(
-                    ", ",
-                    MailFathomPermission.PublishedFor(ProtectedSurface.Administration).Select(permission => permission.Name)),
-                WholeMailSurface,
-            ],
-            logs.Records.Select(record => Assert.Contains("GrantedPermissions", record.Properties)));
+            ["api-key", "password"],
+            logs.Records
+                .Where(record => record.Properties.Any(property => property.Key == "AcceptedMethod"))
+                .Select(record => Assert.Contains("AcceptedMethod", record.Properties)));
+        Assert.Equal(
+            WholeAdministrativeSurface,
+            Assert.Contains("GrantedPermissions", logs.Records.ElementAt(1).Properties));
     }
 
     /// <summary>The mail and administrative surfaces refuse differently, so an operator has to be able to read back that they narrowed the one they meant.</summary>
@@ -330,10 +373,10 @@ public sealed class TransportGrantStartupReportTests
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
-        var adminEndpoint = new AdminEndpointOptions { Enabled = true };
-        adminEndpoint.Authentication.Add(AnEntryThatStatedNoGrant());
-
-        var report = ReportFor(McpEndpointWith(AnEntryThatStatedNoGrant()), adminEndpoint, logs);
+        var report = ReportFor(
+            McpEndpointWith(Accepting(OwnerCredentialMethod.ApiKey)),
+            AdminEndpointWith(AnEntryThatStatedNoGrant()),
+            logs);
 
         // Act
         await report.StartAsync(TestContext.Current.CancellationToken);
@@ -342,14 +385,13 @@ public sealed class TransportGrantStartupReportTests
         Assert.Equal(
             ["MCP", "administrative"],
             logs.Records.Select(record => Assert.Contains("EndpointName", record.Properties)));
+        Assert.Contains(
+            "served only the tools its grant permits",
+            Assert.Contains("GrantEnforcement", logs.Records.ElementAt(0).Properties)?.ToString(),
+            StringComparison.Ordinal);
         Assert.Equal(
-            [
-                WholeMailSurface,
-                string.Join(
-                    ", ",
-                    MailFathomPermission.PublishedFor(ProtectedSurface.Administration).Select(permission => permission.Name)),
-            ],
-            logs.Records.Select(record => Assert.Contains("GrantedPermissions", record.Properties)));
+            WholeAdministrativeSurface,
+            Assert.Contains("GrantedPermissions", logs.Records.ElementAt(1).Properties));
     }
 
     /// <summary>Every line names a configuration position and a published capability, and never the credential that sits there.</summary>
@@ -358,7 +400,7 @@ public sealed class TransportGrantStartupReportTests
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
-        var report = ReportFor(McpEndpointWith(AnApiKeyEntry()), new AdminEndpointOptions(), logs);
+        var report = ReportFor(new McpEndpointOptions(), AdminEndpointWith(AnApiKeyEntry()), logs);
 
         // Act
         await report.StartAsync(TestContext.Current.CancellationToken);
@@ -374,7 +416,10 @@ public sealed class TransportGrantStartupReportTests
     {
         // Arrange
         using var logs = new RecordingLoggerProvider();
-        var report = ReportFor(McpEndpointWith(AnApiKeyEntry()), new AdminEndpointOptions(), logs);
+        var report = ReportFor(
+            McpEndpointWith(Accepting(OwnerCredentialMethod.ApiKey)),
+            new AdminEndpointOptions(),
+            logs);
 
         // Act
         await report.StartAsync(TestContext.Current.CancellationToken);
@@ -395,6 +440,11 @@ public sealed class TransportGrantStartupReportTests
         ", ",
         MailFathomPermission.PublishedFor(ProtectedSurface.Mail).Select(permission => permission.Name));
 
+    /// <summary>Every permission the administrative surface publishes, written as the report writes a grant.</summary>
+    private static string WholeAdministrativeSurface => string.Join(
+        ", ",
+        MailFathomPermission.PublishedFor(ProtectedSurface.Administration).Select(permission => permission.Name));
+
     private static TransportAuthenticationOptions AnApiKeyEntry() => new()
     {
         ApiKey = new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:a-key" },
@@ -409,9 +459,20 @@ public sealed class TransportGrantStartupReportTests
         return entry;
     }
 
-    private static McpEndpointOptions McpEndpointWith(TransportAuthenticationOptions entry)
+    private static OwnerFacingAuthenticationOptions Accepting(OwnerCredentialMethod method) =>
+        ConfiguredAuthentication.Accepting(method);
+
+    private static McpEndpointOptions McpEndpointWith(OwnerFacingAuthenticationOptions entry)
     {
         var endpointSettings = new McpEndpointOptions { Enabled = true };
+        endpointSettings.Authentication.Add(entry);
+
+        return endpointSettings;
+    }
+
+    private static AdminEndpointOptions AdminEndpointWith(TransportAuthenticationOptions entry)
+    {
+        var endpointSettings = new AdminEndpointOptions { Enabled = true };
         endpointSettings.Authentication.Add(entry);
 
         return endpointSettings;

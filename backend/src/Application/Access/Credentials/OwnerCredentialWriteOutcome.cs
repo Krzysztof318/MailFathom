@@ -4,11 +4,11 @@
 
 namespace MailFathom.Application.Access.Credentials;
 
-/// <summary>What an administrative act on an owner's password credential did, or why it did nothing.</summary>
+/// <summary>What an administrative act on one of an owner's credentials did, or why it did nothing.</summary>
 /// <remarks>
 /// <para>
 /// A result rather than an exception, because every value but the first is an operator's mistake in the request they
-/// wrote — a mistyped owner, a username somebody already took, a credential deleted between reading a listing and
+/// wrote — a mistyped owner, a lookup somebody already took, a credential deleted between reading a listing and
 /// acting on it. The boundary answers each with a sentence naming what to write instead, which is not an exceptional
 /// state and not something to unwind a call stack for.
 /// </para>
@@ -26,15 +26,16 @@ public enum OwnerCredentialWriteOutcome
     /// <summary>This deployment holds no owner record with the named identity.</summary>
     UnknownOwner = 1,
 
-    /// <summary>Another credential already carries the canonical username, which resolves one owner and cannot resolve two.</summary>
-    UsernameTaken = 2,
+    /// <summary>Another credential of the same method already carries the lookup, which resolves one owner and cannot resolve two.</summary>
+    /// <remarks>A username somebody already provisioned, a public key already registered for another owner, or a subject another mapping already claims. It cannot arise for a minted key, whose lookup is a digest of material this deployment drew at random.</remarks>
+    LookupTaken = 2,
 
     /// <summary>The named owner holds no credential with that identifier.</summary>
     UnknownCredential = 3,
 
     /// <summary>The owner already holds as many credentials as one owner may.</summary>
     /// <remarks>
-    /// The ceiling is <see cref="OwnerPasswordCredential.MaximumListedPerOwner" />, and it is refused at the store
+    /// The ceiling is <see cref="OwnerCredential.MaximumListedPerOwner" />, and it is refused at the store
     /// rather than checked before the write, so two administrators provisioning at once cannot both pass a count and
     /// leave the owner above it. Reaching it is a deployment provisioning credentials it never removes rather than an
     /// operator's ordinary mistake, so what the refusal asks for is a look at what the owner already holds.

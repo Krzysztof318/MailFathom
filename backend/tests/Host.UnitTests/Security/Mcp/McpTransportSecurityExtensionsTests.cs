@@ -4,12 +4,12 @@
 
 using System.Buffers.Text;
 using System.Text;
+using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Mcp;
 using MailFathom.Host.Security.Transport;
-using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Mcp.Tools.Categories;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Cors.Infrastructure;
@@ -94,10 +94,8 @@ public sealed class McpTransportSecurityExtensionsTests
         services.AddLogging();
 
         var endpointSettings = new McpEndpointOptions { Enabled = true };
-        endpointSettings.Authentication.Add(new TransportAuthenticationOptions
-        {
-            PublicKey = new ConfiguredSecret { Name = "reporting-job", SecretReference = "plaintext:a-public-key" },
-        });
+        endpointSettings.Authentication.Add(
+            new OwnerFacingAuthenticationOptions { Method = OwnerCredentialMethod.PublicKey.Name });
 
         // Act
         services.AddMcpTransportSecurity(endpointSettings);
@@ -203,7 +201,7 @@ public sealed class McpTransportSecurityExtensionsTests
         oauthSettings.AdvertisedScopes.Add("offline_access");
 
         var endpointSettings = new McpEndpointOptions { Enabled = true };
-        endpointSettings.Authentication.Add(new TransportAuthenticationOptions { OAuth = oauthSettings });
+        endpointSettings.Authentication.Add(OwnerFacingOAuth(oauthSettings));
 
         var services = new ServiceCollection();
         services.AddLogging();
@@ -222,8 +220,9 @@ public sealed class McpTransportSecurityExtensionsTests
         Assert.Equal(["mailfathom.read", "offline_access"], published.ScopesSupported);
         Assert.Equal(
             ProtectedResourceMetadataDocument.For(
-                [new TransportAuthenticationOptions { OAuth = oauthSettings }],
-                McpEndpointOptions.GrantedSurface).ScopesSupported,
+                PublishedOAuthMetadata.ForOwnerFacing(
+                    [OwnerFacingOAuth(oauthSettings)],
+                    McpEndpointOptions.GrantedSurface)).ScopesSupported,
             published.ScopesSupported);
     }
 
@@ -234,15 +233,16 @@ public sealed class McpTransportSecurityExtensionsTests
 
         var endpointSettings = new McpEndpointOptions { Enabled = true };
 
-        endpointSettings.Authentication.Add(new TransportAuthenticationOptions
-        {
-            OAuth = OAuthEntryFor("workforce", "https://sso.example.test"),
-        });
+        endpointSettings.Authentication.Add(
+            OwnerFacingOAuth(OAuthEntryFor("workforce", "https://sso.example.test")));
 
         services.AddMcpTransportSecurity(endpointSettings);
 
         return services.BuildServiceProvider();
     }
+
+    private static OwnerFacingAuthenticationOptions OwnerFacingOAuth(OAuthValidationOptions oauthSettings) =>
+        new() { Method = OwnerCredentialMethod.OAuthSubject.Name, OAuth = oauthSettings };
 
     private static OAuthValidationOptions OAuthEntryFor(string name, string issuer)
     {

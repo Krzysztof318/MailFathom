@@ -82,8 +82,11 @@ internal static class HttpApiContractSurface
     [
         new("ConnectionStrings:mailfathom", "Host=localhost;Database=mailfathom;Username=mailfathom"),
         new("McpEndpoint:Enabled", "true"),
-        new("McpEndpoint:Authentication:0:ApiKey:Name", "workstation"),
-        new("McpEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-key"),
+        new("McpEndpoint:Authentication:0:Method", "api-key"),
+        new("McpEndpoint:Authentication:1:Method", "oauth-subject"),
+        new("McpEndpoint:Authentication:1:OAuth:Resource", $"https://mailfathom.example.test{McpEndpointRoute.Path}"),
+        new("McpEndpoint:Authentication:1:OAuth:AuthorizationServers:0:Name", "example-issuer"),
+        new("McpEndpoint:Authentication:1:OAuth:AuthorizationServers:0:Issuer", "https://issuer.example.test"),
         new("AdminEndpoint:Enabled", "true"),
         new("AdminEndpoint:Port", "8082"),
         new("AdminEndpoint:Authentication:0:ApiKey:Name", "operator"),
@@ -94,12 +97,11 @@ internal static class HttpApiContractSurface
         new("AdminEndpoint:Authentication:1:OAuth:AuthorizationServers:0:AuthorizedSubjects:0", "not-a-real-subject"),
         new("ClientEndpoint:Enabled", "true"),
         new("ClientEndpoint:Port", "8084"),
-        new("ClientEndpoint:Authentication:0:ApiKey:Name", "desktop-client"),
-        new("ClientEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-client-key"),
+        new("ClientEndpoint:Authentication:0:Method", "api-key"),
+        new("ClientEndpoint:Authentication:1:Method", "oauth-subject"),
         new("ClientEndpoint:Authentication:1:OAuth:Resource", $"https://mailfathom.example.test{ClientEndpointOptions.RoutePrefix}"),
         new("ClientEndpoint:Authentication:1:OAuth:AuthorizationServers:0:Name", "example-issuer"),
         new("ClientEndpoint:Authentication:1:OAuth:AuthorizationServers:0:Issuer", "https://issuer.example.test"),
-        new("ClientEndpoint:Authentication:1:OAuth:AuthorizationServers:0:AuthorizedSubjects:0", "not-a-real-subject"),
     ];
 
     /// <summary>Maps the routes one rendering describes.</summary>

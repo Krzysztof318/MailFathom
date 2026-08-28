@@ -217,7 +217,7 @@ internal static class AdminEndpointRoutes
     /// </remarks>
     internal const string OwnersPath = $"{Prefix}/owners";
 
-    /// <summary>Where one owner's username-and-password credentials are listed and provisioned.</summary>
+    /// <summary>Where one owner's credentials are listed and provisioned, whichever method each is presented by.</summary>
     /// <param name="ownerId">The owner the path names.</param>
     /// <returns>The path, with the identity written the way a deployment's route constraint reads one.</returns>
     internal static string OwnerCredentialsPath(Guid ownerId) => $"{OwnersPath}/{ownerId:D}/credentials";
@@ -230,13 +230,13 @@ internal static class AdminEndpointRoutes
     internal static string OwnerCredentialPath(Guid ownerId, Guid credentialId) =>
         $"{OwnerCredentialsPath(ownerId)}/{credentialId:D}";
 
-    /// <summary>Where one credential's password is replaced.</summary>
+    /// <summary>Where what one credential is presented as is replaced.</summary>
     /// <param name="ownerId">The owner the credential belongs to.</param>
     /// <param name="credentialId">The credential the path names.</param>
     /// <returns>The path.</returns>
-    /// <remarks>A path of its own rather than a field on the credential, because rotating a password and suspending a credential are opposite decisions and a body carrying which was meant would make a mistyped value the difference between them.</remarks>
-    internal static string OwnerCredentialPasswordPath(Guid ownerId, Guid credentialId) =>
-        $"{OwnerCredentialPath(ownerId, credentialId)}/password";
+    /// <remarks>A path of its own rather than a field on the credential, because replacing what a credential is presented as and suspending it are opposite decisions and a body carrying which was meant would make a mistyped value the difference between them.</remarks>
+    internal static string OwnerCredentialMaterialPath(Guid ownerId, Guid credentialId) =>
+        $"{OwnerCredentialPath(ownerId, credentialId)}/material";
 
     /// <summary>Where one credential is turned on or off.</summary>
     /// <param name="ownerId">The owner the credential belongs to.</param>

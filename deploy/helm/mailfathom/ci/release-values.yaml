@@ -33,12 +33,7 @@ config:
         "McpEndpoint": {
           "Enabled": true,
           "Authentication": [
-            {
-              "ApiKey": {
-                "Name": "workstation",
-                "SecretReference": "file:/etc/mailfathom/secrets/mcp-workstation-key"
-              }
-            }
+            { "Method": "api-key" }
           ]
         },
         "ClientEndpoint": {
@@ -48,13 +43,13 @@ config:
           },
           "Authentication": [
             {
+              "Method": "oauth-subject",
               "OAuth": {
                 "Resource": "https://mailfathom.example.test/api/client",
                 "AuthorizationServers": [
                   {
                     "Name": "workforce",
-                    "Issuer": "https://sso.example.test/realms/mailfathom",
-                    "AuthorizedSubjects": [ "11111111-2222-3333-4444-555555555555" ]
+                    "Issuer": "https://sso.example.test/realms/mailfathom"
                   }
                 ]
               }

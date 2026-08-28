@@ -3973,35 +3973,21 @@
         ],
         "type": "object"
       },
-      "OwnerCredentialPasswordRequest": {
+      "OwnerCredentialMaterialRequest": {
         "properties": {
+          "method": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "password": {
             "type": [
               "null",
               "string"
             ]
-          }
-        },
-        "required": [
-          "password"
-        ],
-        "type": "object"
-      },
-      "OwnerCredentialProvisionedResponse": {
-        "properties": {
-          "credentialId": {
-            "format": "uuid",
-            "type": "string"
-          }
-        },
-        "required": [
-          "credentialId"
-        ],
-        "type": "object"
-      },
-      "OwnerCredentialProvisioningRequest": {
-        "properties": {
-          "password": {
+          },
+          "publicKey": {
             "type": [
               "null",
               "string"
@@ -4015,8 +4001,95 @@
           }
         },
         "required": [
+          "method",
           "username",
-          "password"
+          "password",
+          "publicKey"
+        ],
+        "type": "object"
+      },
+      "OwnerCredentialProvisionedResponse": {
+        "properties": {
+          "credentialId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "key": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lookup": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "credentialId",
+          "lookup",
+          "key"
+        ],
+        "type": "object"
+      },
+      "OwnerCredentialProvisioningRequest": {
+        "properties": {
+          "issuer": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "method": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "password": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "publicKey": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "subject": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "username": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "method",
+          "username",
+          "password",
+          "publicKey",
+          "issuer",
+          "subject",
+          "permissions"
         ],
         "type": "object"
       },
@@ -4033,12 +4106,24 @@
             "format": "uuid",
             "type": "string"
           },
-          "passwordChangedAt": {
+          "lookup": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "materialChangedAt": {
             "format": "date-time",
             "type": "string"
           },
-          "username": {
+          "method": {
             "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           },
           "version": {
             "format": "int64",
@@ -4051,11 +4136,34 @@
         },
         "required": [
           "id",
-          "username",
+          "method",
+          "lookup",
+          "permissions",
           "enabled",
           "version",
           "createdAt",
-          "passwordChangedAt"
+          "materialChangedAt"
+        ],
+        "type": "object"
+      },
+      "OwnerCredentialRotatedResponse": {
+        "properties": {
+          "key": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lookup": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "lookup",
+          "key"
         ],
         "type": "object"
       },
@@ -6107,7 +6215,7 @@
         ]
       }
     },
-    "/api/admin/owners/{ownerId}/credentials/{credentialId}/password": {
+    "/api/admin/owners/{ownerId}/credentials/{credentialId}/material": {
       "put": {
         "parameters": [
           {
@@ -6138,7 +6246,7 @@
                     "type": "null"
                   },
                   {
-                    "$ref": "#/components/schemas/OwnerCredentialPasswordRequest"
+                    "$ref": "#/components/schemas/OwnerCredentialMaterialRequest"
                   }
                 ]
               }
@@ -6146,8 +6254,15 @@
           }
         },
         "responses": {
-          "204": {
-            "description": "No Content"
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnerCredentialRotatedResponse"
+                }
+              }
+            },
+            "description": "OK"
           }
         },
         "security": [

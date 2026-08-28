@@ -27,14 +27,11 @@ mailbox. Enabling it opens a listener of its own:
     "Cors": { "AllowedOrigins": [ "https://mail.example.test" ] },
     "Authentication": [
       {
+        "Method": "oauth-subject",
         "OAuth": {
           "Resource": "https://mail.example.test/api/client",
           "AuthorizationServers": [
-            {
-              "Name": "workforce",
-              "Issuer": "https://sso.example.test/realms/mailfathom",
-              "AuthorizedSubjects": [ "11111111-2222-3333-4444-555555555555" ]
-            }
+            { "Name": "workforce", "Issuer": "https://sso.example.test/realms/mailfathom" }
           ]
         }
       }
@@ -95,7 +92,7 @@ response echoing a deployment's configured identity for a credential would be a 
 the service from a browser.
 
 A caller granted nothing reads an empty `permissions` list rather than a refusal, because "nothing" is the accurate
-answer to what such a caller may do, and because a credential retired by narrowing its entry to nothing should be
+answer to what such a caller may do, and because a credential retired by narrowing its grant to nothing should be
 distinguishable from one that no longer works.
 
 It is the one route on this surface published under no permission, for the reason the administrative session route is:
@@ -917,34 +914,34 @@ and cannot set the remote `\Seen` flag.
 
 ## Credentials do not cross surfaces
 
-A key configured under `McpEndpoint` or `AdminEndpoint` authenticates nothing here, and one configured here
-authenticates nothing there. The separation is mechanical rather than conventional: each surface registers its own
-authentication schemes and its own authorization policy, and a policy consults only its own schemes.
+A key admitted under `McpEndpoint` or `AdminEndpoint` authenticates nothing here, and one admitted here authenticates
+nothing there. The separation is mechanical rather than conventional: each surface registers its own authentication
+schemes and its own authorization policy, and a policy consults only its own schemes.
 
-`Authentication` takes the same entries the other two sections take — one entry per credential, each carrying an
-`ApiKey` block, a `PublicKey` block, an `OAuth` block, a `Basic` block, or any combination of them — and every one of
-them is this endpoint's own. Each method is documented once, under
-[the MCP endpoint](mcp-endpoint.md#authentication). What differs here is the audience a signed assertion names,
-`urn:mailfathom:client`, which is what keeps a credential minted to read a mailbox as an agent from signing in as
-somebody's mail client even where one client is registered on both.
+`Authentication` takes the same entries the MCP section takes — one entry per accepted method, each naming a `Method` of
+`password`, `api-key`, `public-key`, or `oauth-subject` — and every method is documented once, under
+[the MCP endpoint](mcp-endpoint.md#authentication). The credentials themselves are rows beside the owner rather than
+settings here, and one credential is presented on whichever surface accepts its method; what keeps the two apart for a
+signed assertion is the audience it names, `urn:mailfathom:client`, so an assertion minted to read a mailbox as an agent
+cannot sign in as somebody's mail client.
 
-A grant written on an entry draws from the mailbox half of the published set, so a name or a pattern reaching only the
-administrative half fails startup naming the entry's index. [Writing a grant](permissions.md#writing-a-grant) is the
-whole of that rule; nothing about it is particular to this surface.
+A grant is recorded on the credential rather than on the entry, and it draws from the mailbox half of the published set
+— a name reaching only the administrative half is refused where the credential is provisioned.
+[Writing a grant](permissions.md#writing-a-grant) is the whole of that rule; nothing about it is particular to this
+surface.
 
 ## Signing a person in
 
 Two of the four methods sign a person in rather than a client, and which of them a deployment offers is what it
 configures.
 
-**A username and password** is the one MailFathom holds the record for, and it is what the client's own sign-in screen
-asks for. A deployment that runs no authorization server reaches for it; the block turns the method on and carries
-nothing else, and the credentials are provisioned over
+**A username and password** is what the client's own sign-in screen asks for. A deployment that runs no authorization
+server reaches for it; the entry names the method and the credentials are provisioned over
 [the administrative endpoint](admin-endpoint.md#owner-credentials):
 
 ```json
 {
-  "ClientEndpoint": { "Enabled": true, "Authentication": [ { "Basic": {} } ] }
+  "ClientEndpoint": { "Enabled": true, "Authentication": [ { "Method": "password" } ] }
 }
 ```
 
@@ -953,13 +950,14 @@ the indistinguishable refusal, and the rule that matters most here: **a surface 
 itself or be declared to sit behind a proxy that does, and startup refuses it otherwise.** That is the one place this
 surface's transport stops being a warning and becomes a refusal.
 
-A caller admitted this way acts for **the owner the credential belongs to**, rather than for whichever owner the
-deployment was configured with. That is the difference between this method and every other one here, and it is what
-lets one deployment serve more than one person's mail over one address.
+A caller admitted this way acts for **the owner the credential belongs to**, and so does every other method here: each
+of the four resolves a record beside one owner. That is what lets one deployment serve more than one person's mail over
+one address.
 
 **An access token** is the other, and it is what a deployment that already runs an authorization server uses.
 MailFathom is a protected resource only — it signs nobody in, holds no user, and issues no token — so what a deployment
-configures here is which authorization server's tokens are believed and which subjects they may be issued to.
+configures here is which authorization server's tokens are believed, and each person's subject is mapped onto their
+owner record with `mfctl credential create --method oauth-subject`.
 
 **Every `OAuth` entry must name a `Resource` ending in `/api/client`.** Startup refuses anything else, naming the
 setting. The reason is discovery rather than OAuth: the client is configured with an address and finds the

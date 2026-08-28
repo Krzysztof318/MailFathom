@@ -1,6 +1,6 @@
 # What a credential may do
 
-<!-- describes: backend/src/Domain/Access/**, backend/src/Application/Access/**, backend/src/Host/Configuration/Access/TransportAuthenticationOptions.cs, backend/src/Host/Api/Client*.cs, backend/src/Host/Security/Endpoints/**, backend/src/Host/Security/Transport/**, backend/src/Mcp/Tools/PublishedTools.cs -->
+<!-- describes: backend/src/Domain/Access/**, backend/src/Application/Access/**, backend/src/Host/Configuration/Access/TransportAuthenticationOptions.cs, backend/src/Host/Configuration/Access/OwnerFacingAuthenticationOptions.cs, backend/src/Host/Api/Client*.cs, backend/src/Host/Security/Endpoints/**, backend/src/Host/Security/Transport/**, backend/src/Mcp/Tools/PublishedTools.cs -->
 
 Authentication decides whether a caller reaches a surface at all. What it may then do is a **permission**: a named
 capability MailFathom publishes, written on the `Authentication` entry that admitted the caller, checked by the use
@@ -204,112 +204,140 @@ inferred, and an export answers a data-subject request.
 
 ## Writing a grant
 
-An `Authentication` entry states what it grants, as `Permissions` — a list of published names, on either endpoint.
-[Endpoint configuration](configuration-endpoints.md#the-accepted-credentials--mcpendpointauthenticationn) is where that
-key and the entry's other keys are specified.
+**Where a grant is written follows from what the credential names.** An owner's credential reaches that owner's mail, so
+what it may do is a fact about the credential and is recorded beside it; the deployment's own credential answers for the
+deployment, so what it may do is configured with it. The two halves of the published set are therefore written in two
+places, and neither surface accepts the other's shape.
+
+### On an owner's credential
+
+The grant is named where the credential is provisioned, once per permission:
+
+```console
+$ mfctl credential create --method api-key --owner 6f1c… \
+    --permission mailfathom.mail.read \
+    --permission mailfathom.mail.contacts.read
+```
+
+[Owner credentials](admin-endpoint.md#owner-credentials) is where the command and its other options are specified.
+`mfctl credential list` reads back what each credential holds.
+
+**Naming no permission grants everything the mail surface publishes**, which is what makes a first deployment work
+before it is governed. That means *this surface* rather than the names published the day the credential was provisioned,
+so a permission added in a later release reaches an ungoverned credential on its own — the contact tools are the worked
+example, since a credential that named nothing gained `mailfathom.mail.contacts.read` and `mailfathom.mail.contacts.write`
+on upgrade alone, and with the second of those the ability to record, amend, and irreversibly erase what this deployment
+holds about identified third parties. `mailfathom.mail.send` is the same shape and the sharpest case of it: a credential
+that named nothing gains it on upgrade, and with it the ability to send mail from the owner's address to anybody.
+`mailfathom.mail.drafts.write` arrived the same way and is milder for the reason it exists: what it adds is the ability to
+put a message in the owner's own Drafts folder, which the owner sees and can delete.
+
+**`--no-permissions` grants nothing**, which is how a credential is retired without deleting it: it still authenticates,
+and it is served an empty tool list. `mfctl credential disable` is the other way to close one, and it is the one to reach
+for when the reason may turn out to be nothing.
+
+**There is no pattern here, deliberately.** A grant on a credential is written once, by somebody deciding what one client
+of one owner may do, and read back from a listing that states names — so a shorthand that quietly widens on the next
+release would be answering a question nobody asked at the moment they provisioned. Where the whole surface is meant,
+name no permission; where part of it is, write the part out.
+
+**Provisioning refuses a grant that says something impossible**, naming what was written: a name nothing publishes, and a
+name belonging to the administrative half — which grants nothing to a credential that reaches one owner's mail, and is
+refused with the mail half's own names written back.
+
+**A surface accepting a method it has no provisioned credential for admits nobody**, which is not the same as an
+unauthenticated one. A surface with no `Authentication` entry at all grants the whole of the mail half to every caller it
+serves, because there is no credential for a grant to be recorded on; that is the unauthenticated posture the startup
+warning already reports.
+
+**`PermissionsFromTokenScopes` makes the recorded grant a ceiling rather than a grant.** Written on an entry accepting
+`oauth-subject`, a token then holds the published names its scopes carry *and* its credential records, so the
+authorization server decides per session within a bound the provisioning fixed. A scope naming anything else — `openid`,
+`offline_access`, another resource's scope — is ignored, and a scope naming a permission the credential does not hold
+grants nothing. It is written only on that entry, since no other method carries a token to read a scope from. What the
+metadata document advertises there is the surface's whole published vocabulary rather than a configured ceiling, because
+there is no ceiling in the section to read — those are the scope names to create in the authorization server, and
+advertising them widens nothing, since a token holds only the intersection with its own credential's grant.
+[Connecting an MCP client through your identity provider](mcp-client-oauth.md) walks that setup.
+
+### On the deployment's own credential
+
+`AdminEndpoint:Authentication` states each credential and what it grants, as `Permissions` — a list of published names
+from the administrative half. [Endpoint configuration](configuration-endpoints.md#adminendpoint) is where that key and
+the entry's other keys are specified.
 
 **The grant belongs to the entry, not to the block inside it.** An entry may carry an `ApiKey`, a `PublicKey`, and an
 `OAuth` block at once, and `Permissions` applies to every credential it admits — so two credentials to be granted
 differently are two entries, which is what turns grouping from a matter of tidiness into a decision.
 
 **An absent `Permissions` key and an empty list are opposites.** Writing no key at all leaves the entry holding
-everything its surface publishes, which is what makes a first deployment work before it is governed. The key's absence
-means *this surface* rather than the names published the day the file was written, so a permission added in a later
-release reaches an unrestricted entry on its own — the contact tools are the worked example, since an entry that wrote
-no key gained `mailfathom.mail.contacts.read` and `mailfathom.mail.contacts.write` on upgrade alone, and with the
-second of those a credential that can record, amend, and irreversibly erase what this deployment holds about identified
-third parties. `mailfathom.mail.send` is the same shape and the sharpest case of it: an entry that wrote no key gains it on upgrade,
-and with it a credential that can send mail from the deployment's mailboxes to anybody. `mailfathom.mail.drafts.write`
-arrived the same way and is milder for the reason it exists: what an entry gains with it is the ability to put a
-message in the owner's own Drafts folder, which the owner sees and can delete.
-`mailfathom.admin.configuration.write` is the administrative surface's case of it and the sharpest one there: an
-administrative entry that wrote no key gains it on upgrade, and with it a credential that can change what the
+everything this surface publishes. `mailfathom.admin.configuration.write` is the sharpest case of what that costs on an
+upgrade: an administrative entry that wrote no key gains it, and with it a credential that can change what the
 deployment *is* rather than what it does next — widen another credential's grant, repoint a model provider, or turn a
 surface off. An entry that wrote `mailfathom.admin.*` gains it on the same upgrade and for the same reason, since a
 pattern is resolved against the published set on every start; that is the shape to check first, because it reads as a
-deliberate grant rather than as an omission. An operator who granted an administrative credential the operating work
-and meant to withhold the power to redefine the deployment narrows that entry to the names it actually needs, because
-neither the absent key nor the covering pattern withholds it.
-Writing `Permissions: []` grants nothing, which is how a credential is retired without deleting its
-entry: it still authenticates, and on the administrative surface it still reads `GET /api/admin/session`, which is
-where an operator reads that the credential now holds nothing.
+deliberate grant rather than as an omission. An operator who granted an administrative credential the operating work and
+meant to withhold the power to redefine the deployment narrows that entry to the names it actually needs, because
+neither the absent key nor the covering pattern withholds it. Writing `Permissions: []` grants nothing, which is how a
+credential is retired without deleting its entry: it still authenticates, and it still reads
+`GET /api/admin/session`, which is where an operator reads that the credential now holds nothing.
 
 **A value writing `*` as a whole segment grants every published name the pattern reaches.** `mailfathom.admin.*` grants
-every administrative permission and `mailfathom.mail.contacts.*` grants both contact permissions, so a grant states the
-boundary you mean rather than a list to revisit whenever a name is added. The wildcard stands for **one or more whole
-segments**, at whatever position it is written and more than once if you like: `mailfathom.admin.*` reaches
-`mailfathom.admin.credentials.write` a level deeper than itself, and `mailfathom.*.read` reaches both depths of the
-reading half — `mailfathom.mail.read` and `mailfathom.mail.contacts.read` on the MCP endpoint,
-`mailfathom.admin.read` and `mailfathom.admin.audit.read` on the administrative one. It stands for at least one segment,
-so a pattern never reaches the name it was written around and `mailfathom.mail.read.*` reaches nothing. A `*` inside a
-segment is no wildcard and no pattern: `mailfathom.mail.c*` fails startup as the name nothing publishes that it is,
-which is the refusal that tells you a pattern was never written from one that matched nothing. A pattern is resolved
-against the published set on every start rather than frozen at the version it was written under, **which carries the
-same upgrade consequence the absent key does**: a permission added where a written pattern reaches, in a later release,
-comes to the entry on upgrade alone, with nobody editing the grant. A wildcard before the last segment widens that:
-`mailfathom.*.read` reaches a reading name published at any depth rather than only beneath one prefix.
-Where that would be wrong, write the names out. `mailfathom.mail.flags.write` is the first case of it and the one to
-check a written grant against: an entry reading `mailfathom.mail.*` used to reach nothing that leaves this deployment,
-and on upgrade it reaches the tool that writes to the owner's mail server. `mailfathom.mail.send` is the second and the
-sharper one, since the same pattern now also carries the grant to send from the owner's address to anybody, through
-`send_email`, through the two tools that answer stored mail, and through `send_draft`. `mailfathom.mail.drafts.write`
-is the third and the case that shows why the two names are worth writing out rather than patterned over: an operator
-who narrowed an entry to drafting by writing `mailfathom.mail.*` narrowed it to nothing, because that pattern carries
-the sending grant beside the drafting one and the whole separation is gone. `mailfathom.admin.configuration.write` is
-the fourth and the administrative half's own case: an entry reading `mailfathom.admin.*` reaches it on upgrade, so a
-credential granted the operating work by a pattern becomes one that can change what the deployment is — including what
-every other credential may do. Everything that reads a grant back states
-what a pattern resolved to and never the pattern — the startup line, `GET /api/admin/session`, and `scopes_supported` —
-so no reader has to expand one by hand.
+every administrative permission, so a grant states the boundary you mean rather than a list to revisit whenever a name is
+added. The wildcard stands for **one or more whole segments**, at whatever position it is written and more than once if
+you like: `mailfathom.admin.*` reaches `mailfathom.admin.credentials.write` a level deeper than itself, and
+`mailfathom.*.read` reaches both depths of the reading half — `mailfathom.admin.read` and `mailfathom.admin.audit.read`.
+It stands for at least one segment, so a pattern never reaches the name it was written around and
+`mailfathom.admin.read.*` reaches nothing. A `*` inside a segment is no wildcard and no pattern:
+`mailfathom.admin.c*` fails startup as the name nothing publishes that it is, which is the refusal that tells you a
+pattern was never written from one that matched nothing. A pattern is resolved against the published set on every start
+rather than frozen at the version it was written under, **which carries the same upgrade consequence the absent key
+does**: a permission added where a written pattern reaches, in a later release, comes to the entry on upgrade alone, with
+nobody editing the grant. A wildcard before the last segment widens that: `mailfathom.*.read` reaches a reading name
+published at any depth rather than only beneath one prefix. Where that would be wrong, write the names out.
+Everything that reads a grant back states what a pattern resolved to and never the pattern — the startup line and
+`GET /api/admin/session` — so no reader has to expand one by hand.
 
-**A pattern grants the half it is written on, and only that.** `mailfathom.*.read` names two permissions in each
-half, and an entry guards one — so written on the MCP endpoint or the client endpoint it grants `mailfathom.mail.read`
-and `mailfathom.mail.contacts.read`, and written on the administrative endpoint it grants `mailfathom.admin.read` and
-`mailfathom.admin.audit.read`. The other half is dropped rather than granted, because no check on the endpoint you wrote
-it on reads a name of the other surface, and what the startup line and `GET /api/admin/session` report is what the entry
-actually holds. A pattern reaching *only* the other surface is a different thing and still fails startup, since an
-operator who wrote one meant something the entry cannot do.
-
-**A surface with no `Authentication` entry at all grants the whole of the half it draws on** to every caller it serves, because
-there is no entry for a grant to be written on. That is the unauthenticated posture the startup warning already
-reports.
-
-**`PermissionsFromTokenScopes` makes the list a ceiling rather than a grant.** With it, a token holds the published
-names its scopes carry *and* the entry lists, so the authorization server decides per subject within a bound the
-deployment fixed. A scope naming anything else — `openid`, `offline_access`, another resource's scope — is ignored, and
-a scope naming a permission the entry never listed grants nothing. It is available only where the entry's sole block is
-`OAuth`: neither a key nor a public key can carry a scope, so startup refuses the combination rather than asking a
-credential a question it cannot answer. Every such entry's ceiling is published in `scopes_supported`, which is what an
-operator creates in their authorization server;
-[connecting an MCP client through your identity provider](mcp-client-oauth.md) walks that setup, and an entry granting
-from configuration publishes none of its permissions, because no client can ask for one.
+**A pattern grants the administrative half, and only that.** `mailfathom.*.read` names two permissions in each half, and
+this entry guards one — so it grants `mailfathom.admin.read` and `mailfathom.admin.audit.read`. The mail half is dropped
+rather than granted, because no check on this endpoint reads a name of the other surface, and what the startup line and
+`GET /api/admin/session` report is what the entry actually holds. A pattern reaching *only* the mail surface is a
+different thing and still fails startup, since an operator who wrote one meant something the entry cannot do.
 
 **Startup refuses a grant that says something impossible**, naming the entry and quoting what was written: a name
 nothing publishes, a name belonging to the other surface, a name the same grant already carries, a pattern matching
-nothing this repository publishes, a pattern matching only the other surface's half, a pattern covering a name the
-grant already carries explicitly or through another pattern, and a bare `*` or `mailfathom.*` — which reach both
-surfaces *entirely*, so they are no shorthand for a part of either and grant exactly what leaving the key out grants;
-they are refused rather than accepted as a second spelling of it. A pattern reaching part of the other surface beside
-part of this one is not among them: it grants what it reaches here, as the paragraph above says. A permission name or a pattern written into `RequiredScopes` or
-`AdvertisedScopes` is refused as well: requiring a permission at the door would close it on a caller the deployment
-meant to serve less, the grant that reads one advertises it already, and a scope is compared byte for byte at an
-authorization server, which can mint no pattern.
+nothing this repository publishes, a pattern matching only the other surface's half, a pattern covering a name the grant
+already carries explicitly or through another pattern, and a bare `*` or `mailfathom.*` — which reach both surfaces
+*entirely*, so they are no shorthand for a part of either and grant exactly what leaving the key out grants; they are
+refused rather than accepted as a second spelling of it. A pattern reaching part of the mail surface beside part of this
+one is not among them: it grants what it reaches here, as the paragraph above says. A permission name or a pattern
+written into `RequiredScopes` or `AdvertisedScopes` is refused as well: requiring a permission at the door would close it
+on a caller the deployment meant to serve less, the grant that reads one advertises it already, and a scope is compared
+byte for byte at an authorization server, which can mint no pattern.
 
 **That last refusal is the other half of what publishing a name costs an upgrade**, and it is the one that stops a
 deployment rather than widening it. A name nothing publishes is an ordinary scope token, so an operator who minted a
 scope of their own with that spelling could write it in `RequiredScopes` or `AdvertisedScopes` and start; the release
-that publishes the name turns the same value into a permission, and startup refuses it by name. The action is the one
-the refusal states: take the value out of `RequiredScopes` or
-`AdvertisedScopes` and write it in `Permissions` on the entry — with `PermissionsFromTokenScopes` where the point was
-for the token's own scope to decide.
+that publishes the name turns the same value into a permission, and startup refuses it by name. The action is the one the
+refusal states: take the value out of `RequiredScopes` or `AdvertisedScopes` and write it in `Permissions` on the entry.
 
-**Startup records what every entry resolved to**, one line per entry, so the posture is read on the first run rather
-than inferred later. An entry that wrote no grant says so rather than being reported as though somebody had chosen what
-it holds, an entry with `PermissionsFromTokenScopes` is reported as what it grants *at most*, and an entry granted
-nothing as `nothing`. Nothing in the report names a key, a public key, a token, an authorization server, or a subject: a
-grant is what the deployment wrote, never who presented something.
+### What startup records
+
+**Startup records what every entry resolved to**, one line per entry, so the posture is read on the first run rather than
+inferred later. An administrative entry that wrote no grant says so rather than being reported as though somebody had
+chosen what it holds, and one granted nothing as `nothing`. A mail-serving entry reports the method it accepts and says
+where the grants behind it are read — `mfctl credential list` — because there is none in that section to report. Nothing
+in the report names a key, a public key, a token, an authorization server, or a subject: what it states is what the
+deployment configured, never who presented something.
 [The MCP endpoint](mcp-endpoint.md#what-a-credential-may-do) and
 [the administrative endpoint](admin-endpoint.md#what-a-credential-may-do) each carry the lines their surface produces.
+
+### Which names are published where
+
+A grant on an owner's credential draws from the mail half, and a grant on the administrative endpoint from the
+administrative half. `mailfathom.mail.flags.write` and `mailfathom.mail.send` are the two worth naming rather than
+leaving to the ungoverned default: the first writes to the owner's real mail server, and the second is the only name in
+either half whose effect leaves the deployment and cannot be recalled.
 
 ## What a refused caller is told
 
@@ -357,22 +385,22 @@ an attachment download link carries.
 
 ## What a permission does not decide
 
-**Which mailboxes a caller reaches.** Every tool call resolves the accounts the configured owner controls and refuses
-anything outside them, whichever credential got the caller in, and no setting narrows that. Two admitted callers see
-the same mailboxes — which is exactly why a token has to name an authorized subject, since admitting a colleague of the
-same tenant would admit them to the owner's mail rather than to their own.
+**Which mailboxes a caller reaches.** Every tool call resolves the accounts the credential's own owner controls and
+refuses anything outside them, whichever method got the caller in, and no permission narrows or widens that. Which owner
+it is follows from the credential rather than from the grant — which is exactly why a token has to resolve a mapped
+subject, since admitting a colleague of the same tenant on the strength of a valid signature would admit them to
+somebody else's mail.
 
 **Whose mail a caller is acting on.** That is a second axis, and no name in the table above is on it. A caller admitted on the MCP
 surface or the client surface is admitted to act for one owner, and every mailbox read is resolved against the accounts
 that owner owns before any grant is consulted; a caller admitted on the administrative surface acts for no owner at all,
 so an owner-scoped use case refuses it however broad its grant. That is why no permission names an account and adding
 one would be the wrong repair: a grant says what may be done, and whose mail it may be done to is decided by what
-admitted the caller. A deployment may declare several owners and serve each of them the mail accounts they own, but
-nothing this release admits a caller with names the owner they act for, so a deployment serving several refuses to come
-up while either owner-facing surface is enabled — and while the administrative surface is, because an administrator's
-own acts carry no owner and the ones that need one resolve the sole owner. Every deployment those three surfaces are
-served on therefore has one owner and every account belongs to them, which is why the two axes have one visible consequence today — the
-administrative surface cannot read a mailbox. [Who a use case is running for](../architecture/authorized-principal.md) records the whole of it.
+admitted the caller. A deployment may declare several owners and serve each of them the mail accounts they own, and
+every credential a mail-serving surface accepts now names the owner it admits — but a deployment serving several still
+refuses to come up while any of the three surfaces is enabled, because the reads that resolve an owner from the
+deployment rather than from the caller have not moved yet.
+[Who a use case is running for](../architecture/authorized-principal.md) records the whole of it.
 
 **Whether a capability exists.** A grant composes with availability rather than replacing it: a tool may be
 unavailable, unauthorized, or both, and no grant makes a capability this deployment does not have appear. An endpoint

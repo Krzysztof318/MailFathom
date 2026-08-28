@@ -173,9 +173,11 @@ internal static class CliRootCommand
         };
 
         // The one group whose credentials belong to a person rather than to this deployment, which is why every command
-        // in it reads its password from a prompt or a pipe and none of them takes one as an argument. "disable" and
-        // "delete" are the two halves of revoking, kept apart because one is reversible and the other frees the name.
-        Command credentialCommand = new("credential", "Administer the usernames and passwords an owner signs in with.")
+        // in it reads a password from a prompt or a pipe and none of them takes one as an argument. One group for four
+        // methods, because what an administrator does with them is identical whatever is presented. "disable" and
+        // "delete" are the two halves of revoking, kept apart because one is reversible and the other frees the value
+        // the credential was resolved by.
+        Command credentialCommand = new("credential", "Administer the credentials an owner's clients present.")
         {
             CreateOwnerCredentialCommand.Create(context),
             ListOwnerCredentialsCommand.Create(context),

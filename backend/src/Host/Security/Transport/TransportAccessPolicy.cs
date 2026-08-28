@@ -26,17 +26,26 @@ namespace MailFathom.Host.Security.Transport;
 /// definitions of what an authorized caller is.
 /// </para>
 /// <para>
-/// Neither an authorized subject nor a required scope is ever asked of a credential the operator configured — an API
-/// key, or a client public key an assertion was verified against. Such a credential exists because somebody wrote it
-/// into this deployment's configuration, so the authorization it carries is that decision; a token is issued by a server
-/// that decides for itself who receives one, which is what makes both worth checking. Asking either of a configured
-/// credential would mean asking it for something nothing can ever put in it.
+/// Neither an authorized subject nor a required scope is ever asked of a credential this deployment holds — an API key,
+/// a client public key an assertion was verified against, or an owner's password. Such a credential exists because
+/// somebody provisioned it here, so the authorization it carries is that decision; a token is issued by a server that
+/// decides for itself who receives one, which is what makes both worth checking. Asking either of a held credential
+/// would mean asking it for something nothing can ever put in it.
 /// </para>
 /// <para>
-/// What an admitted caller may then <em>do</em> is a separate question and is not asked here. The permissions its
-/// credential's configuration entry granted travel on the principal this judges, written by whichever scheme
-/// authenticated it, so that admission stays one shared judgement while each surface comes to enforce the grant in the
-/// terms its own callers are answered in. <see cref="TransportGrant" /> is how one is read back, through the caller the
+/// There are two judgements rather than one, and the difference is what a subject decides. On the administrative
+/// surface a configured list of subjects is who may sign in, so <see cref="IsAuthorized" /> compares against it. On a
+/// mail-serving surface a subject resolves one owner's credential record, so <see cref="IsOwnerAuthorized" /> asks that
+/// the credential named an owner at all. Everything else — the scopes, the held-credential shortcut, the requirement
+/// that the principal be authenticated — is shared, which is what keeps the two from drifting into two definitions of
+/// an admitted caller.
+/// </para>
+/// <para>
+/// What an admitted caller may then <em>do</em> is a separate question and is not asked here. The permissions travel on
+/// the principal this judges, written by whichever scheme authenticated it, and where they were granted follows the
+/// same split as the owner: on a mail-serving surface the credential record carries the grant beside the owner it
+/// names, and on the administrative surface the configured entry states it. Either way admission stays one shared
+/// judgement while each surface comes to enforce the grant in the terms its own callers are answered in. <see cref="TransportGrant" /> is how one is read back, through the caller the
 /// application layer is handed. The MCP surface serves each caller the tools its grant permits and answers a call for
 /// any other as a tool that does not exist; the administrative surface refuses a route the grant does not admit and
 /// names the one permission that would have sufficed, because the caller there is an operator at their own terminal.
@@ -83,6 +92,40 @@ internal static class TransportAccessPolicy
             && CarriesEveryScopeItsIssuerRequires(principal, requiredScopesByIssuer);
     }
 
+    /// <summary>Judges an authenticated principal on a surface whose every credential resolves the owner it acts for.</summary>
+    /// <param name="principal">The principal a validated credential produced.</param>
+    /// <param name="requiredScopesByIssuer">The scopes an access token must carry, keyed by the issuer whose entry asks for them.</param>
+    /// <returns><see langword="true" /> when the caller may reach the surface; otherwise <see langword="false" />.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when either argument is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// There is no set of authorized identities to compare against here, because who this deployment serves is a set of
+    /// records rather than a list an operator wrote: a key, a public key, a password, and a validated subject each
+    /// resolve one, and a credential that resolves none was already refused where it was judged. What is left worth
+    /// asking is that the credential did resolve an owner — which is why the owner claim is required rather than
+    /// assumed, so a principal something else assembled cannot reach a mailbox by carrying a grant alone.
+    /// </para>
+    /// <para>
+    /// The scopes are still asked of a token, and only of a token, for the reason the shared judgement gives: a scope is
+    /// something an authorization server decides per issuance, and no credential this deployment holds can carry one.
+    /// </para>
+    /// </remarks>
+    internal static bool IsOwnerAuthorized(
+        ClaimsPrincipal principal,
+        IReadOnlyDictionary<string, IReadOnlyCollection<string>> requiredScopesByIssuer)
+    {
+        ArgumentNullException.ThrowIfNull(principal);
+        ArgumentNullException.ThrowIfNull(requiredScopesByIssuer);
+
+        if (principal.Identity is not { IsAuthenticated: true } || TransportCallerOwner.CarriedBy(principal) is null)
+        {
+            return false;
+        }
+
+        return AuthenticatedWithACredentialThisDeploymentHolds(principal)
+            || CarriesEveryScopeItsIssuerRequires(principal, requiredScopesByIssuer);
+    }
+
     /// <summary>Reports whether a token carries every scope the entry that trusts its issuer asks for.</summary>
     private static bool CarriesEveryScopeItsIssuerRequires(
         ClaimsPrincipal principal,
@@ -103,9 +146,10 @@ internal static class TransportAccessPolicy
     /// <summary>Reports whether a credential this deployment holds rather than a token an authorization server issued produced this principal, judged by what the principal carries rather than by which scheme named it.</summary>
     /// <remarks>
     /// Each claim type is read rather than one of them standing for the others, because each names a different kind of
-    /// credential and a principal carrying none of them has to fall through to the token rules. The first two name a
-    /// credential this deployment's configuration states; the third names one of its own database rows, which is the
-    /// only difference a password makes here — the identity is still established before this runs, and what is left to
+    /// credential and a principal carrying none of them has to fall through to the token rules. What each one names
+    /// follows the surface: on the administrative surface an API key and a client public key are stated in
+    /// configuration, and on a mail-serving surface all three name one of this deployment's own credential rows. The
+    /// distinction does not matter here — the identity is established before this runs either way, and what is left to
     /// decide is that it was not an unrecognized subject.
     /// </remarks>
     private static bool AuthenticatedWithACredentialThisDeploymentHolds(ClaimsPrincipal principal) =>

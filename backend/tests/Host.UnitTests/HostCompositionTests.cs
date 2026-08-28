@@ -96,6 +96,17 @@ public sealed class HostCompositionTests
         "ContentStorage:ObjectStorage:SecretAccessKey",
     ];
 
+    /// <summary>An MCP endpoint accepting an authorization server's validated subject, which is what registers the token backchannel and the subject resolver.</summary>
+    /// <remarks>The OAuth block sits on the <c>Authentication</c> entry rather than on the endpoint, because what a deployment validates is a property of the method it accepts.</remarks>
+    private static readonly KeyValuePair<string, string?>[] OAuthSubjectAcceptedOnTheMcpEndpoint =
+    [
+        new("McpEndpoint:Enabled", "true"),
+        new("McpEndpoint:Authentication:0:Method", "oauth-subject"),
+        new("McpEndpoint:Authentication:0:OAuth:Resource", "https://mail.example.test/mcp"),
+        new("McpEndpoint:Authentication:0:OAuth:AuthorizationServers:0:Name", "workforce"),
+        new("McpEndpoint:Authentication:0:OAuth:AuthorizationServers:0:Issuer", "https://sso.example.test/realms/mailfathom"),
+    ];
+
     /// <summary>Each deployment shape, as the configuration an operator would have written to reach it.</summary>
     /// <remarks>
     /// Written as configuration rather than as flags, because that is the input the composition actually reads: the
@@ -109,8 +120,7 @@ public sealed class HostCompositionTests
             ["mcp and admin served"] =
             [
                 new("McpEndpoint:Enabled", "true"),
-                new("McpEndpoint:Authentication:0:ApiKey:Name", "workstation"),
-                new("McpEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-key"),
+                new("McpEndpoint:Authentication:0:Method", "api-key"),
                 new("AdminEndpoint:Enabled", "true"),
                 new("AdminEndpoint:Port", "8082"),
                 new("AdminEndpoint:Authentication:0:ApiKey:Name", "operator"),
@@ -120,8 +130,35 @@ public sealed class HostCompositionTests
             [
                 new("ClientEndpoint:Enabled", "true"),
                 new("ClientEndpoint:Port", "8084"),
-                new("ClientEndpoint:Authentication:0:ApiKey:Name", "desktop-client"),
-                new("ClientEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-client-key"),
+                new("ClientEndpoint:Authentication:0:Method", "api-key"),
+            ],
+
+            // One shape per accepted method, because each registers services the others do not: a password entry adds
+            // the Basic scheme and the password authenticator, a public-key entry adds the assertion scheme with its
+            // replay store and authenticator, and an oauth-subject entry adds the token backchannel and the subject
+            // resolver. A shape accepting only api-key resolves none of those, so a dependency missing or wrongly
+            // scoped on one of the three paths would first be met by a request on somebody's deployment.
+            // A password typed by a person may not cross a hop anything can read, so this shape names the proxy that
+            // terminates TLS exactly as a deployment accepting one would have to.
+            ["mail served to a password"] =
+            [
+                new("McpEndpoint:Enabled", "true"),
+                new("McpEndpoint:Authentication:0:Method", "password"),
+                new("ReverseProxy:TrustedProxies:0", "10.0.0.5"),
+            ],
+            ["mail served to a key pair"] =
+            [
+                new("McpEndpoint:Enabled", "true"),
+                new("McpEndpoint:Authentication:0:Method", "public-key"),
+            ],
+            ["mail served to an authorization server's subject"] = OAuthSubjectAcceptedOnTheMcpEndpoint,
+            ["every mail credential method at once"] =
+            [
+                .. OAuthSubjectAcceptedOnTheMcpEndpoint,
+                new("McpEndpoint:Authentication:1:Method", "password"),
+                new("McpEndpoint:Authentication:2:Method", "api-key"),
+                new("McpEndpoint:Authentication:3:Method", "public-key"),
+                new("ReverseProxy:TrustedProxies:0", "10.0.0.5"),
             ],
             ["mail synchronized"] =
             [
@@ -160,16 +197,14 @@ public sealed class HostCompositionTests
             ["every capability at once"] =
             [
                 new("McpEndpoint:Enabled", "true"),
-                new("McpEndpoint:Authentication:0:ApiKey:Name", "workstation"),
-                new("McpEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-key"),
+                new("McpEndpoint:Authentication:0:Method", "api-key"),
                 new("AdminEndpoint:Enabled", "true"),
                 new("AdminEndpoint:Port", "8082"),
                 new("AdminEndpoint:Authentication:0:ApiKey:Name", "operator"),
                 new("AdminEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-key-either"),
                 new("ClientEndpoint:Enabled", "true"),
                 new("ClientEndpoint:Port", "8084"),
-                new("ClientEndpoint:Authentication:0:ApiKey:Name", "desktop-client"),
-                new("ClientEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-client-key"),
+                new("ClientEndpoint:Authentication:0:Method", "api-key"),
                 new("MailSynchronization:Enabled", "true"),
                 new("MailSynchronization:Accounts:0:AccountId", "personal"),
                 new("MailSynchronization:Accounts:0:DisplayName", "Personal"),
@@ -556,8 +591,7 @@ public sealed class HostCompositionTests
         .. mcpAuthenticates
             ?
             [
-                new("McpEndpoint:Authentication:0:ApiKey:Name", "workstation"),
-                new KeyValuePair<string, string?>("McpEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-key"),
+                new KeyValuePair<string, string?>("McpEndpoint:Authentication:0:Method", "api-key"),
             ]
             : Array.Empty<KeyValuePair<string, string?>>(),
         .. adminAuthenticates
@@ -570,8 +604,7 @@ public sealed class HostCompositionTests
         .. clientAuthenticates
             ?
             [
-                new("ClientEndpoint:Authentication:0:ApiKey:Name", "desktop-client"),
-                new KeyValuePair<string, string?>("ClientEndpoint:Authentication:0:ApiKey:SecretReference", "plaintext:not-a-real-client-key"),
+                new KeyValuePair<string, string?>("ClientEndpoint:Authentication:0:Method", "api-key"),
             ]
             : Array.Empty<KeyValuePair<string, string?>>(),
     ];

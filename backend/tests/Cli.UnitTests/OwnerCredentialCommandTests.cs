@@ -40,7 +40,7 @@ public sealed class OwnerCredentialCommandTests : IDisposable
         this.harness.Console.SecretToSupply = Password;
 
         // Act
-        var exitCode = await this.RunAsync(deployment, "credential", "create", "--username", "owner", "--endpoint", Endpoint);
+        var exitCode = await this.RunAsync(deployment, "credential", "create", "--method", "password", "--username", "owner", "--endpoint", Endpoint);
 
         // Assert
         Assert.Equal(CliExitCode.Success, exitCode);
@@ -62,7 +62,7 @@ public sealed class OwnerCredentialCommandTests : IDisposable
         this.harness.Console.SecretToSupply = Password;
 
         // Act
-        await this.RunAsync(deployment, "credential", "create", "--username", "owner", "--endpoint", Endpoint);
+        await this.RunAsync(deployment, "credential", "create", "--method", "password", "--username", "owner", "--endpoint", Endpoint);
 
         // Assert
         Assert.DoesNotContain(this.harness.Console.Lines, line => line.Contains(Password, StringComparison.Ordinal));
@@ -81,7 +81,7 @@ public sealed class OwnerCredentialCommandTests : IDisposable
         this.harness.Console.SecretToSupply = Password;
 
         // Act
-        await this.RunAsync(deployment, "credential", "create", "--username", "owner", "--endpoint", Endpoint);
+        await this.RunAsync(deployment, "credential", "create", "--method", "password", "--username", "owner", "--endpoint", Endpoint);
 
         // Assert
         Assert.NotNull(this.harness.Console.LastPrompt);
@@ -98,7 +98,7 @@ public sealed class OwnerCredentialCommandTests : IDisposable
         this.harness.Console.SecretToSupply = string.Empty;
 
         // Act
-        var exitCode = await this.RunAsync(deployment, "credential", "create", "--username", "owner", "--endpoint", Endpoint);
+        var exitCode = await this.RunAsync(deployment, "credential", "create", "--method", "password", "--username", "owner", "--endpoint", Endpoint);
 
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
@@ -118,7 +118,7 @@ public sealed class OwnerCredentialCommandTests : IDisposable
         this.harness.Console.SecretToSupply = "short";
 
         // Act
-        var exitCode = await this.RunAsync(deployment, "credential", "create", "--username", "owner", "--endpoint", Endpoint);
+        var exitCode = await this.RunAsync(deployment, "credential", "create", "--method", "password", "--username", "owner", "--endpoint", Endpoint);
 
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
@@ -138,7 +138,7 @@ public sealed class OwnerCredentialCommandTests : IDisposable
         this.harness.Console.SecretToSupply = Password;
 
         // Act
-        var exitCode = await this.RunAsync(deployment, "credential", "create", "--username", "owner", "--endpoint", Endpoint);
+        var exitCode = await this.RunAsync(deployment, "credential", "create", "--method", "password", "--username", "owner", "--endpoint", Endpoint);
 
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
@@ -154,7 +154,7 @@ public sealed class OwnerCredentialCommandTests : IDisposable
         this.harness.Console.SecretToSupply = Password;
 
         // Act
-        await this.RunAsync(deployment, "credential", "create", "--username", "owner", "--endpoint", Endpoint);
+        await this.RunAsync(deployment, "credential", "create", "--method", "password", "--username", "owner", "--endpoint", Endpoint);
 
         // Assert
         Assert.Single(deployment.RequestsTo(HttpMethod.Post, AdminEndpointRoutes.OwnerCredentialsPath(Owner)));
@@ -169,7 +169,7 @@ public sealed class OwnerCredentialCommandTests : IDisposable
         this.harness.Console.SecretToSupply = Password;
 
         // Act
-        var exitCode = await this.RunAsync(deployment, "credential", "create", "--username", "owner", "--endpoint", Endpoint);
+        var exitCode = await this.RunAsync(deployment, "credential", "create", "--method", "password", "--username", "owner", "--endpoint", Endpoint);
 
         // Assert
         Assert.Equal(CliExitCode.Failure, exitCode);
@@ -193,6 +193,8 @@ public sealed class OwnerCredentialCommandTests : IDisposable
             deployment,
             "credential",
             "create",
+            "--method",
+            "password",
             "--username",
             "owner",
             "--owner",
@@ -253,6 +255,10 @@ public sealed class OwnerCredentialCommandTests : IDisposable
             deployment,
             "credential",
             "rotate",
+            "--method",
+            "password",
+            "--username",
+            "owner",
             "--id",
             $"{CredentialId:D}",
             "--endpoint",
@@ -263,7 +269,7 @@ public sealed class OwnerCredentialCommandTests : IDisposable
 
         var rotation = Assert.Single(deployment.RequestsTo(
             HttpMethod.Put,
-            AdminEndpointRoutes.OwnerCredentialPasswordPath(Owner, CredentialId)));
+            AdminEndpointRoutes.OwnerCredentialMaterialPath(Owner, CredentialId)));
 
         Assert.Equal(Password, ReadField(rotation.ContentAsUtf8String(), "password"));
         Assert.DoesNotContain(this.harness.Console.Lines, line => line.Contains(Password, StringComparison.Ordinal));
@@ -460,6 +466,302 @@ public sealed class OwnerCredentialCommandTests : IDisposable
         Assert.Contains(this.harness.Console.Errors, line => line.Contains(Refusal, StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// A key is minted by the deployment rather than typed, so the invocation carries no material at all and the one
+    /// place the plaintext exists is the answer. Printing it once is what makes it usable; the deployment keeps only a
+    /// digest and cannot report it again.
+    /// </summary>
+    [Fact]
+    public async Task Create_AnApiKey_SendsNoMaterialAndPrintsWhatTheDeploymentMintedOnce()
+    {
+        // Arrange
+        const string Minted = "mfk_not-a-real-minted-key";
+        using var deployment = FakeOwnerCredentialDeployment.Provisioning([Owner], "mfk_not…", Minted);
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "credential",
+            "create",
+            "--method",
+            "api-key",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var provisioning = Assert.Single(deployment.RequestsTo(
+            HttpMethod.Post,
+            AdminEndpointRoutes.OwnerCredentialsPath(Owner)));
+
+        var body = provisioning.ContentAsUtf8String();
+
+        Assert.Equal("api-key", ReadField(body, "method"));
+        Assert.Null(ReadOptionalField(body, "password"));
+        Assert.Null(ReadOptionalField(body, "publicKey"));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains(Minted, StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("Copy it now", StringComparison.Ordinal));
+    }
+
+    /// <summary>The key is a public value read from a file, so it travels as an argument's target rather than through the prompt a secret needs.</summary>
+    [Fact]
+    public async Task Create_APublicKey_SendsWhatTheFileHeldAndReportsTheFingerprintToNameItBy()
+    {
+        // Arrange
+        const string PublicKey = "-----BEGIN PUBLIC KEY-----\nnot-a-real-key\n-----END PUBLIC KEY-----";
+        var keyFile = Path.Combine(Path.GetTempPath(), $"mailfathom-cli-{Guid.CreateVersion7():N}.pem");
+        await File.WriteAllTextAsync(keyFile, PublicKey, TestContext.Current.CancellationToken);
+
+        try
+        {
+            using var deployment = FakeOwnerCredentialDeployment.Provisioning([Owner], "SHA256:not-a-real-fingerprint", null);
+
+            // Act
+            var exitCode = await this.RunAsync(
+                deployment,
+                "credential",
+                "create",
+                "--method",
+                "public-key",
+                "--public-key-file",
+                keyFile,
+                "--endpoint",
+                Endpoint);
+
+            // Assert
+            Assert.Equal(CliExitCode.Success, exitCode);
+
+            var provisioning = Assert.Single(deployment.RequestsTo(
+                HttpMethod.Post,
+                AdminEndpointRoutes.OwnerCredentialsPath(Owner)));
+
+            var body = provisioning.ContentAsUtf8String();
+
+            Assert.Equal("public-key", ReadField(body, "method"));
+            Assert.Equal(PublicKey, ReadField(body, "publicKey"));
+            Assert.Contains(
+                this.harness.Console.Lines,
+                line => line.Contains("SHA256:not-a-real-fingerprint", StringComparison.Ordinal));
+        }
+        finally
+        {
+            File.Delete(keyFile);
+        }
+    }
+
+    /// <summary>A mapped subject holds no material of its own: what it states is which token this deployment resolves onto which owner.</summary>
+    [Fact]
+    public async Task Create_AMappedSubject_SendsTheIssuerAndSubjectAndNoMaterial()
+    {
+        // Arrange
+        const string Issuer = "https://sso.example.test/realms/mailfathom";
+        const string Subject = "9f2c7c1e-8a4d-4c62-9f0b-3d2a1b5e7c04";
+        using var deployment = FakeOwnerCredentialDeployment.Provisioning([Owner], $"{Issuer} {Subject}", null);
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "credential",
+            "create",
+            "--method",
+            "oauth-subject",
+            "--issuer",
+            Issuer,
+            "--subject",
+            Subject,
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var provisioning = Assert.Single(deployment.RequestsTo(
+            HttpMethod.Post,
+            AdminEndpointRoutes.OwnerCredentialsPath(Owner)));
+
+        var body = provisioning.ContentAsUtf8String();
+
+        Assert.Equal("oauth-subject", ReadField(body, "method"));
+        Assert.Equal(Issuer, ReadField(body, "issuer"));
+        Assert.Equal(Subject, ReadField(body, "subject"));
+        Assert.Null(ReadOptionalField(body, "password"));
+    }
+
+    /// <summary>Each method needs what only it needs, so the missing value is named rather than sent as nothing for the deployment to refuse.</summary>
+    [Theory]
+    [InlineData("password", "--username")]
+    [InlineData("public-key", "--public-key-file")]
+    [InlineData("oauth-subject", "--issuer")]
+    public async Task Create_AMethodMissingTheValueItNeeds_NamesTheOptionAndSendsNothing(string method, string option)
+    {
+        // Arrange
+        using var deployment = FakeOwnerCredentialDeployment.Holding([Owner]);
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "credential",
+            "create",
+            "--method",
+            method,
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Empty(deployment.RequestsTo(HttpMethod.Post, AdminEndpointRoutes.OwnerCredentialsPath(Owner)));
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains(option, StringComparison.Ordinal));
+    }
+
+    /// <summary>A word no method publishes selects nothing, and the operator is told which words do rather than sent a request the deployment refuses.</summary>
+    [Fact]
+    public async Task Create_AMethodTheDeploymentDoesNotPublish_NamesThePublishedOnesAndSendsNothing()
+    {
+        // Arrange
+        using var deployment = FakeOwnerCredentialDeployment.Holding([Owner]);
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "credential",
+            "create",
+            "--method",
+            "apikey",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Failure, exitCode);
+        Assert.Empty(deployment.RequestsTo(HttpMethod.Post, AdminEndpointRoutes.OwnerCredentialsPath(Owner)));
+        Assert.Contains(this.harness.Console.Errors, line => line.Contains("'api-key'", StringComparison.Ordinal));
+    }
+
+    /// <summary>What a credential grants is written where it is provisioned, so the invocation carries the grant and the deployment records it beside the owner.</summary>
+    [Fact]
+    public async Task Create_ANarrowedGrant_SendsExactlyThePermissionsTheInvocationNamed()
+    {
+        // Arrange
+        using var deployment = FakeOwnerCredentialDeployment.Provisioning([Owner], "mfk_not…", "mfk_a-key");
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "credential",
+            "create",
+            "--method",
+            "api-key",
+            "--permission",
+            "mailfathom.mail.read",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var provisioning = Assert.Single(deployment.RequestsTo(
+            HttpMethod.Post,
+            AdminEndpointRoutes.OwnerCredentialsPath(Owner)));
+
+        Assert.Equal(
+            ["mailfathom.mail.read"],
+            ReadStrings(provisioning.ContentAsUtf8String(), "permissions"));
+    }
+
+    /// <summary>
+    /// An empty grant and an absent one are opposite instructions the deployment reads from the same field — an empty
+    /// array grants nothing and no array at all grants the whole mail surface — so the flag that says which is meant is
+    /// asserted on the body rather than on the invocation parsing.
+    /// </summary>
+    [Fact]
+    public async Task Create_AGrantNamingNothing_SendsAnEmptyPermissionListRatherThanNone()
+    {
+        // Arrange
+        using var deployment = FakeOwnerCredentialDeployment.Provisioning([Owner], "mfk_not…", "mfk_a-key");
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "credential",
+            "create",
+            "--method",
+            "api-key",
+            "--no-permissions",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+
+        var provisioning = Assert.Single(deployment.RequestsTo(
+            HttpMethod.Post,
+            AdminEndpointRoutes.OwnerCredentialsPath(Owner)));
+
+        Assert.Empty(ReadStrings(provisioning.ContentAsUtf8String(), "permissions"));
+        Assert.Contains("\"permissions\"", provisioning.ContentAsUtf8String(), StringComparison.Ordinal);
+    }
+
+    /// <summary>The two ways of stating a grant contradict each other, so writing both is answered rather than silently resolved to one of them.</summary>
+    [Fact]
+    public async Task Create_AGrantBothNamedAndDeniedAtOnce_IsRefusedWithoutProvisioningAnything()
+    {
+        // Arrange
+        using var deployment = FakeOwnerCredentialDeployment.Provisioning([Owner], "mfk_not…", "mfk_a-key");
+
+        // Act
+        var exitCode = await this.RunAsync(
+            deployment,
+            "credential",
+            "create",
+            "--method",
+            "api-key",
+            "--permission",
+            "mailfathom.mail.read",
+            "--no-permissions",
+            "--endpoint",
+            Endpoint);
+
+        // Assert
+        Assert.NotEqual(CliExitCode.Success, exitCode);
+        Assert.Empty(deployment.RequestsTo(HttpMethod.Post, AdminEndpointRoutes.OwnerCredentialsPath(Owner)));
+    }
+
+    /// <summary>A listing describes four methods rather than one, so what each credential is resolved by is reported beside the method it belongs to.</summary>
+    [Fact]
+    public async Task List_CredentialsOfSeveralMethods_ReportsEachMethodAndWhatResolvesIt()
+    {
+        // Arrange
+        using var deployment = FakeOwnerCredentialDeployment.Holding(
+            [Owner],
+            FakeOwnerCredentialDeployment.Credential(CredentialId, "owner", permissions: "mailfathom.mail.read"),
+            FakeOwnerCredentialDeployment.Credential(Guid.Empty, null, "api-key"));
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "credential", "list", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("api-key", StringComparison.Ordinal));
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("mailfathom.mail.read", StringComparison.Ordinal));
+    }
+
+    /// <summary>A lookup derived from the secret would publish the secret, so the deployment withholds it and the listing says so rather than printing an empty cell.</summary>
+    [Fact]
+    public async Task List_ACredentialWhoseLookupIsWithheld_SaysSoRatherThanLeavingTheCellEmpty()
+    {
+        // Arrange
+        using var deployment = FakeOwnerCredentialDeployment.Holding(
+            [Owner],
+            FakeOwnerCredentialDeployment.Credential(CredentialId, null, "api-key"));
+
+        // Act
+        var exitCode = await this.RunAsync(deployment, "credential", "list", "--endpoint", Endpoint);
+
+        // Assert
+        Assert.Equal(CliExitCode.Success, exitCode);
+        Assert.Contains(this.harness.Console.Lines, line => line.Contains("not published", StringComparison.Ordinal));
+    }
+
     /// <summary>Nothing about an invocation may carry the password, which is what keeps it out of a shell history and a process table.</summary>
     [Fact]
     public async Task EveryCommand_TheHelpItPublishes_OffersNoOptionCarryingAPassword()
@@ -481,6 +783,13 @@ public sealed class OwnerCredentialCommandTests : IDisposable
 
     private static string ReadField(string body, string name) =>
         JsonDocument.Parse(body).RootElement.GetProperty(name).GetString() ?? string.Empty;
+
+    private static string? ReadOptionalField(string body, string name) =>
+        JsonDocument.Parse(body).RootElement.TryGetProperty(name, out var value) ? value.GetString() : null;
+
+    private static IReadOnlyList<string> ReadStrings(string body, string name) =>
+        [.. JsonDocument.Parse(body).RootElement.GetProperty(name).EnumerateArray()
+            .Select(element => element.GetString() ?? string.Empty)];
 
     private static bool ReadFlag(string body, string name) =>
         JsonDocument.Parse(body).RootElement.GetProperty(name).GetBoolean();

@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Infrastructure.Certificates;
@@ -52,7 +53,7 @@ public sealed class McpEndpointOptionsTests
         // Assert
         Assert.Empty(options.Authentication);
         Assert.False(options.RequiresAuthentication);
-        Assert.Empty(options.ApiKeys());
+        Assert.False(options.AllowsApiKey);
         Assert.Empty(options.OAuthMethods());
     }
 
@@ -72,73 +73,134 @@ public sealed class McpEndpointOptionsTests
     }
 
     [Fact]
-    public void FindConfigurationErrors_AnApiKeyEntry_IsAccepted()
+    public void FindConfigurationErrors_AnEntryAcceptingApiKeys_IsAccepted()
     {
         // Arrange
-        var options = EnabledWith(ApiKeyMethod("workstation"));
+        var options = EnabledWith(Accepting(OwnerCredentialMethod.ApiKey));
 
         // Act, Assert
         Assert.Empty(options.FindConfigurationErrors());
-    }
-
-    /// <summary>An entry is a credential, so rotation is a second entry rather than a nested list with a shape of its own.</summary>
-    [Fact]
-    public void ApiKeys_SeveralApiKeyEntries_ReadsThemAllInConfigurationOrder()
-    {
-        // Arrange
-        var options = EnabledWith(ApiKeyMethod("workstation"), ApiKeyMethod("chatgpt-connector"));
-
-        // Act, Assert
-        Assert.Empty(options.FindConfigurationErrors());
-        Assert.Equal(["workstation", "chatgpt-connector"], options.ApiKeys().Select(key => key.Name));
+        Assert.True(options.AllowsApiKey);
     }
 
     /// <summary>
-    /// An entry carrying no block at all is refused rather than skipped, because a list an operator wrote entries into
-    /// reads as an authenticated deployment while an entry stating nothing registers no scheme and requires no
-    /// credential.
+    /// An entry states which method is accepted rather than which credential is held, so a second entry accepting one
+    /// the endpoint already accepts says nothing the first did not. The credentials themselves are rows, and a second
+    /// one is provisioned rather than written here.
     /// </summary>
     [Fact]
-    public void FindConfigurationErrors_AnEntryStatingNoCredential_IsRefusedRatherThanIgnored()
+    public void FindConfigurationErrors_TwoEntriesAcceptingOneMethod_IsRefused()
     {
         // Arrange
-        var options = EnabledWith(new TransportAuthenticationOptions());
+        var options = EnabledWith(
+            Accepting(OwnerCredentialMethod.ApiKey),
+            Accepting(OwnerCredentialMethod.ApiKey));
 
         // Act
         var error = Assert.Single(options.FindConfigurationErrors());
 
         // Assert
-        Assert.StartsWith("McpEndpoint:Authentication:0 ", error, StringComparison.Ordinal);
+        Assert.StartsWith("McpEndpoint:Authentication:1:Method", error, StringComparison.Ordinal);
     }
 
-    /// <summary>Nothing about the two methods conflicts, so which entry a block sits in is a matter of how an operator grouped what they wrote.</summary>
+    /// <summary>
+    /// A mapped subject resolves one owner, so several entries naming several authorization servers are what a
+    /// deployment serving two of them writes — which is why that one method is the exception to the rule above.
+    /// </summary>
     [Fact]
-    public void FindConfigurationErrors_OneEntryCarryingBothBlocks_IsAccepted()
+    public void FindConfigurationErrors_TwoEntriesAcceptingMappedSubjects_IsAccepted()
     {
         // Arrange
-        var entry = ApiKeyMethod("workstation");
-        entry.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
-        var options = EnabledWith(entry);
+        var options = EnabledWith(
+            OAuthMethod(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom")),
+            OAuthMethod(AuthorizationServer("partners", "https://sso.partner.test/realms/mailfathom")));
 
         // Act, Assert
         Assert.Empty(options.FindConfigurationErrors());
-        Assert.True(options.AllowsApiKey);
-        Assert.True(options.AllowsOAuth);
     }
 
-    /// <summary>The two methods identify different kinds of caller, so a deployment reaching both a person and a scheduled job configures both.</summary>
+    /// <summary>
+    /// An entry naming no method is refused rather than skipped, because a list an operator wrote entries into reads as
+    /// an authenticated deployment while an entry stating nothing registers no scheme and requires no credential.
+    /// </summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("apikey")]
+    public void FindConfigurationErrors_AnEntryNamingNoPublishedMethod_IsRefusedRatherThanIgnored(string? method)
+    {
+        // Arrange
+        var options = EnabledWith(new OwnerFacingAuthenticationOptions { Method = method });
+
+        // Act
+        var error = Assert.Single(options.FindConfigurationErrors());
+
+        // Assert
+        Assert.StartsWith("McpEndpoint:Authentication:0:Method", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>A block belongs to the method it configures, so one written under another entry is a mistake to correct rather than a setting to ignore.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AnEntryCarryingABlockAnotherMethodOwns_IsRefused()
+    {
+        // Arrange
+        var entry = Accepting(OwnerCredentialMethod.ApiKey);
+        entry.OAuth = OAuthWith(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom"));
+        var options = EnabledWith(entry);
+
+        // Act
+        var error = Assert.Single(options.FindConfigurationErrors());
+
+        // Assert
+        Assert.StartsWith("McpEndpoint:Authentication:0:OAuth", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>The methods identify different kinds of caller, so a deployment reaching both a person and a scheduled job accepts both.</summary>
     [Fact]
     public void FindConfigurationErrors_ApiKeyAndOAuthTogether_IsAccepted()
     {
         // Arrange
         var options = EnabledWith(
-            ApiKeyMethod("nightly-digest"),
+            Accepting(OwnerCredentialMethod.ApiKey),
             OAuthMethod(AuthorizationServer("workforce", "https://sso.example.test/realms/mailfathom")));
 
         // Act, Assert
         Assert.Empty(options.FindConfigurationErrors());
         Assert.True(options.AllowsApiKey);
         Assert.True(options.AllowsOAuth);
+    }
+
+    /// <summary>A grant read from a token's scopes is meaningless where no token is presented, so it is refused where it could not be read.</summary>
+    [Fact]
+    public void FindConfigurationErrors_ScopesNarrowingAGrantOnAMethodCarryingNoToken_IsRefused()
+    {
+        // Arrange
+        var entry = Accepting(OwnerCredentialMethod.ApiKey);
+        entry.PermissionsFromTokenScopes = true;
+        var options = EnabledWith(entry);
+
+        // Act
+        var error = Assert.Single(options.FindConfigurationErrors());
+
+        // Assert
+        Assert.StartsWith(
+            "McpEndpoint:Authentication:0:PermissionsFromTokenScopes",
+            error,
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>An entry accepting mapped subjects and naming no authorization server says nothing about who may speak for the deployment.</summary>
+    [Fact]
+    public void FindConfigurationErrors_AnEntryAcceptingMappedSubjectsWithNoOAuthBlock_IsRefused()
+    {
+        // Arrange
+        var options = EnabledWith(Accepting(OwnerCredentialMethod.OAuthSubject));
+
+        // Act
+        var error = Assert.Single(options.FindConfigurationErrors());
+
+        // Assert
+        Assert.StartsWith("McpEndpoint:Authentication:0:OAuth", error, StringComparison.Ordinal);
     }
 
     /// <summary>Each entry states what it asks of the servers it configures, which is what makes two of them independent.</summary>
@@ -383,7 +445,7 @@ public sealed class McpEndpointOptionsTests
     public void FindConfigurationErrors_SeveralFaults_ReportsThemAllAtOnce()
     {
         // Arrange
-        var options = EnabledWith(new TransportAuthenticationOptions());
+        var options = EnabledWith(new OwnerFacingAuthenticationOptions());
         options.Cors.AllowedOrigins.Add("not-an-origin");
 
         // Act
@@ -477,7 +539,7 @@ public sealed class McpEndpointOptionsTests
 
     private static McpEndpointOptions Enabled() => new() { Enabled = true };
 
-    private static McpEndpointOptions EnabledWith(params TransportAuthenticationOptions[] methods)
+    private static McpEndpointOptions EnabledWith(params OwnerFacingAuthenticationOptions[] methods)
     {
         var options = Enabled();
 
@@ -491,11 +553,12 @@ public sealed class McpEndpointOptionsTests
         return options;
     }
 
-    private static TransportAuthenticationOptions ApiKeyMethod(string keyName) =>
-        new() { ApiKey = Key(keyName) };
+    private static OwnerFacingAuthenticationOptions Accepting(OwnerCredentialMethod method) =>
+        new() { Method = method.Name };
 
-    private static TransportAuthenticationOptions OAuthMethod(params AuthorizationServerOptions[] authorizationServers) =>
-        new() { OAuth = OAuthWith(authorizationServers) };
+    private static OwnerFacingAuthenticationOptions OAuthMethod(
+        params AuthorizationServerOptions[] authorizationServers) =>
+        new() { Method = OwnerCredentialMethod.OAuthSubject.Name, OAuth = OAuthWith(authorizationServers) };
 
     private static OAuthValidationOptions OAuthWith(params AuthorizationServerOptions[] authorizationServers)
     {
@@ -512,7 +575,7 @@ public sealed class McpEndpointOptionsTests
     }
 
     private static AuthorizationServerOptions AuthorizationServer(string name, string issuer) =>
-        new() { Name = name, Issuer = issuer, AuthorizedSubjects = { "9f2c" } };
+        new() { Name = name, Issuer = issuer };
 
     private static McpClientCertificateProfileOptions ConnectorProfile()
     {
@@ -595,9 +658,4 @@ public sealed class McpEndpointOptionsTests
         Assert.Empty(options.FindConfigurationErrors());
     }
 
-    private static ConfiguredSecret Key(string name) => new()
-    {
-        Name = name,
-        SecretReference = $"systemd-credential:mailfathom-mcp-{name}-key",
-    };
 }

@@ -62,8 +62,14 @@ internal sealed class AuthorizationServerOptions
     /// <remarks>
     /// <para>
     /// A tenant holds whoever the operator's identity platform holds, and a token proves which of them is asking rather
-    /// than that they were meant to read this mailbox. MailFathom serves one configured owner's mail to everyone it lets
-    /// in, so without this list every colleague who can obtain a token for this resource reads that owner's mail.
+    /// than that they were meant to administer this deployment. The administrative endpoint answers to the deployment
+    /// administrator, who is nobody's owner and holds no credential record, so without this list every colleague who can
+    /// obtain a token for that resource administers the deployment.
+    /// </para>
+    /// <para>
+    /// It is read on the administrative endpoint alone. A mail-serving endpoint resolves a subject to one owner's
+    /// credential record instead, so the setting is retired there and refused by name — see
+    /// <see cref="OAuthSubjectAdmission" />.
     /// </para>
     /// <para>
     /// Write the <c>sub</c> the server issues, which its administration console shows as the user's identifier — a UUID
@@ -81,8 +87,15 @@ internal sealed class AuthorizationServerOptions
         || this.AuthorizedSubjects.Count > 0;
 
     /// <summary>Finds everything an operator must fix before this profile can validate a token.</summary>
+    /// <param name="admission">What a subject decides on the endpoint this profile was configured for.</param>
     /// <returns>One message per faulty setting, relative to this profile, empty when the profile is usable.</returns>
-    public IReadOnlyList<string> FindConfigurationErrors()
+    /// <remarks>
+    /// <see cref="AuthorizedSubjects" /> is read only where the configured list is what admits a person. On an endpoint
+    /// whose subjects resolve owner records the setting is retired rather than optional, and it is refused by the walk
+    /// over the raw configuration that names every retired setting with the credential replacing it — so nothing here
+    /// reports it a second time in weaker words.
+    /// </remarks>
+    public IReadOnlyList<string> FindConfigurationErrors(OAuthSubjectAdmission admission)
     {
         var errors = new List<string>();
 
@@ -102,7 +115,11 @@ internal sealed class AuthorizationServerOptions
         }
 
         errors.AddRange(this.FindMetadataAddressErrors());
-        errors.AddRange(this.FindAuthorizedSubjectErrors());
+
+        if (admission == OAuthSubjectAdmission.ConfiguredSubjects)
+        {
+            errors.AddRange(this.FindAuthorizedSubjectErrors());
+        }
 
         return errors;
     }
@@ -135,7 +152,7 @@ internal sealed class AuthorizationServerOptions
     {
         if (this.AuthorizedSubjects.Count == 0)
         {
-            yield return $"{nameof(this.AuthorizedSubjects)} — an authorization server authenticates whoever its tenant holds, so a profile names the subjects it may authenticate; configure at least one, or every user who can obtain a token for this resource reads the configured owner's mail.";
+            yield return $"{nameof(this.AuthorizedSubjects)} — an authorization server authenticates whoever its tenant holds, so a profile names the subjects it may authenticate; configure at least one, or every user who can obtain a token for this resource administers the deployment.";
 
             yield break;
         }

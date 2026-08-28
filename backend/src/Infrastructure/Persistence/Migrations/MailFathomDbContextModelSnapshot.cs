@@ -1825,7 +1825,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("settings_accounts", (string)null);
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OwnerPasswordCredentialEntity", b =>
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OwnerCredentialEntity", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid");
@@ -1836,21 +1836,29 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Property<bool>("Enabled")
                         .HasColumnType("boolean");
 
-                    b.Property<Guid>("OwnerId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTimeOffset>("PasswordChangedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("PasswordHash")
+                    b.Property<string>("Lookup")
                         .IsRequired()
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)");
 
-                    b.Property<string>("Username")
+                    b.Property<string>("Material")
+                        .HasMaxLength(4096)
+                        .HasColumnType("character varying(4096)");
+
+                    b.Property<DateTimeOffset>("MaterialChangedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Method")
                         .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)");
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid");
+
+                    b.PrimitiveCollection<string[]>("Permissions")
+                        .IsRequired()
+                        .HasColumnType("text[]");
 
                     b.Property<long>("Version")
                         .IsConcurrencyToken()
@@ -1858,14 +1866,14 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Username")
+                    b.HasIndex("Method", "Lookup")
                         .IsUnique()
-                        .HasDatabaseName("ix_owner_password_credentials_username");
+                        .HasDatabaseName("ix_owner_credentials_method_lookup");
 
                     b.HasIndex("OwnerId", "CreatedAt")
-                        .HasDatabaseName("ix_owner_password_credentials_owner_created_at");
+                        .HasDatabaseName("ix_owner_credentials_owner_created_at");
 
-                    b.ToTable("owner_password_credentials", (string)null);
+                    b.ToTable("owner_credentials", (string)null);
                 });
 
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OwnerStoredContentEntity", b =>
@@ -2734,7 +2742,7 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Navigation("OutgoingEmail");
                 });
 
-            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OwnerPasswordCredentialEntity", b =>
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.OwnerCredentialEntity", b =>
                 {
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.OwnerAccountEntity", null)
                         .WithMany()

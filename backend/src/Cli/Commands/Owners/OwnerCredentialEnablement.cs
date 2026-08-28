@@ -10,8 +10,8 @@ namespace MailFathom.Cli.Commands.Owners;
 /// <summary>Builds whichever of the two commands turns a credential on or off.</summary>
 /// <remarks>
 /// <para>
-/// The reversible half of revoking. A disabled credential stops authenticating immediately and keeps its username and
-/// its password, so a suspicion acted on in a hurry costs nothing to undo and holds the name against anything else
+/// The reversible half of revoking. A disabled credential stops authenticating immediately and keeps what it is
+/// presented as, so a suspicion acted on in a hurry costs nothing to undo and holds that value against anything else
 /// being provisioned under it in the meantime. Removing the credential is what frees the name, and that is
 /// <c>credential delete</c>.
 /// </para>
@@ -41,8 +41,8 @@ internal static class OwnerCredentialEnablement
         Command command = new(
             enabled ? "enable" : "disable",
             enabled
-                ? "Let one credential authenticate requests again. Its username and password are unchanged."
-                : "Stop one credential authenticating requests, keeping its username and password.")
+                ? "Let one credential authenticate requests again. What it is presented as is unchanged."
+                : "Stop one credential authenticating requests, keeping what it is presented as.")
         {
             credentialOption,
             ownerOption,
@@ -87,8 +87,8 @@ internal static class OwnerCredentialEnablement
             cancellationToken);
 
         context.Console.WriteLine(enabled
-            ? $"Credential {credentialId:D} authenticates requests again, with the password it already had."
-            : $"Credential {credentialId:D} no longer authenticates anything. Its username stays claimed, so nothing else can be provisioned under it.");
+            ? $"Credential {credentialId:D} authenticates requests again, with the material it already had."
+            : $"Credential {credentialId:D} no longer authenticates anything. What it is resolved by stays claimed, so nothing else can be provisioned under it.");
 
         return CliExitCode.Success;
     }

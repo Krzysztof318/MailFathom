@@ -221,7 +221,7 @@ internal sealed class TransportAuthenticationOptions
 
         if (this.OAuth is { } oauth)
         {
-            errors.AddRange(oauth.FindConfigurationErrors().Select(error => $"{settingPath}:{nameof(this.OAuth)}:{error}"));
+            errors.AddRange(oauth.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects).Select(error => $"{settingPath}:{nameof(this.OAuth)}:{error}"));
         }
 
         if (this.Basic is { } basic)

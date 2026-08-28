@@ -208,11 +208,11 @@ what it was never granted is what the record exists to make visible.
 | `GET /api/admin/configuration/adoption` | `mailfathom.admin.read` | Reports what adopting a path would copy out of the deployment's files, naming the file behind each setting, and writes nothing. |
 | `POST /api/admin/configuration/adoption` | `mailfathom.admin.configuration.write` | Copies those values into the persisted document. **This is the one route that moves a decision out of a deployment's files and into its database.** |
 | `GET /api/admin/owners` | `mailfathom.admin.read` | Reads the owners this deployment holds records for, by identity alone. It is what a credential command reads before it acts, so that a deployment serving one person needs no `--owner`. |
-| `GET /api/admin/owners/{ownerId}/credentials` | `mailfathom.admin.read` | Reads one owner's [username-and-password credentials](#owner-credentials), each with its username, whether it still authenticates, and when its password was last replaced. It carries nothing derived from a password. |
-| `POST /api/admin/owners/{ownerId}/credentials` | `mailfathom.admin.credentials.write` | Provisions one, from a username and a password the body carries. **This is one of the two routes that mint a way into somebody's mail.** It answers `409` where the username is already taken across the deployment, and where the owner already holds the hundred credentials one owner may. |
-| `PUT /api/admin/owners/{ownerId}/credentials/{credentialId}/password` | `mailfathom.admin.credentials.write` | Replaces one credential's password in a single statement, which stops the previous one working at that instant. **This is the other.** |
-| `PUT /api/admin/owners/{ownerId}/credentials/{credentialId}/enablement` | `mailfathom.admin.credentials.write` | Stops one credential authenticating, or lets it authenticate again, keeping its username and password either way. |
-| `DELETE /api/admin/owners/{ownerId}/credentials/{credentialId}` | `mailfathom.admin.credentials.write` | Removes the record and frees the username. **This cannot be undone**, and it is the reason `mfctl credential delete` shows the credential and asks before sending it. What that command shows comes from the listing and what it reports comes from here, so an identifier the listing does not carry is still sent rather than answered locally. |
+| `GET /api/admin/owners/{ownerId}/credentials` | `mailfathom.admin.read` | Reads one owner's [credentials](#owner-credentials), each with its method, what it grants, whether it still authenticates, and when its material was last replaced. It publishes what each is resolved by, except where that value is derived from the secret. |
+| `POST /api/admin/owners/{ownerId}/credentials` | `mailfathom.admin.credentials.write` | Provisions one of the four methods, from what that method needs. **This is one of the two routes that mint a way into somebody's mail**, and the one that answers with a minted key where the method mints one. It answers `409` where the value the credential resolves by is already taken across the deployment, and where the owner already holds the hundred credentials one owner may. |
+| `PUT /api/admin/owners/{ownerId}/credentials/{credentialId}/material` | `mailfathom.admin.credentials.write` | Replaces what one credential's client presents, in a single statement, which stops the previous material working at that instant. **This is the other.** It is refused for a method holding no material to replace. |
+| `PUT /api/admin/owners/{ownerId}/credentials/{credentialId}/enablement` | `mailfathom.admin.credentials.write` | Stops one credential authenticating, or lets it authenticate again, keeping everything else about it either way. |
+| `DELETE /api/admin/owners/{ownerId}/credentials/{credentialId}` | `mailfathom.admin.credentials.write` | Removes the record and frees the value it was resolved by. **This cannot be undone**, and it is the reason `mfctl credential delete` shows the credential and asks before sending it. What that command shows comes from the listing and what it reports comes from here, so an identifier the listing does not carry is still sent rather than answered locally. |
 
 **Three of those routes carry a credential in the body**, which is what makes the clear-text warning below matter more
 here than it does for a session probe: the refresh-token route, and the two owner-credential routes that provision a
@@ -1107,11 +1107,21 @@ MailFathom setting, which is every override written for this deployment on purpo
 
 ### Owner credentials
 
-The one credential in MailFathom that belongs to a person rather than to a deployment is the username and password an
-owner signs in to [the client](client-endpoint.md) or [the MCP endpoint](mcp-endpoint.md#passwords) with, and these are
-the routes that administer one. There is no self-service and no default: whoever administers the deployment provisions
-the credential and tells the owner what it is, which is what keeps an owner from minting a way into anybody's mail,
-their own included.
+Every credential an owner's client presents belongs to a person rather than to a deployment, and these are the routes
+that administer one. A mail-serving endpoint states which methods it accepts and nothing about who holds one — see
+[the MCP endpoint](mcp-endpoint.md#authentication) — so provisioning is what decides who reaches whose mail. There is no
+self-service and no default: whoever administers the deployment provisions the credential and tells the owner what it
+is, which is what keeps an owner from minting a way into anybody's mail, their own included.
+
+**Four methods, one record shape.** Each credential names its method, is resolved by one indexed value, holds the
+permissions it was provisioned with, and can be disabled, rotated, or removed the same way:
+
+| Method | What the client presents | What it is resolved by | What a rotation replaces |
+| --- | --- | --- | --- |
+| `password` | A username and password, as HTTP Basic | The username | The password |
+| `api-key` | A key this deployment minted, as a bearer credential | A digest of the key, which is never published | The key, minted again |
+| `public-key` | A signed client assertion | The key's fingerprint, which the client names in `kid` | The registered public key |
+| `oauth-subject` | An access token its authorization server issued | The issuer and subject together | Nothing — the mapping is deleted and written again |
 
 Reading and writing are separately granted. A listing says which credentials exist and whose they are, which is
 `mailfathom.admin.read`; provisioning, rotating, disabling, and removing decide who can read somebody's mail, which is
@@ -1119,47 +1129,73 @@ Reading and writing are separately granted. A listing says which credentials exi
 given one that can mint a way into a mailbox.
 
 ```console
-$ mfctl credential create --username owner
+$ mfctl credential create --method password --username owner
 Password for 'owner':
-Provisioned credential 0198f0c4-... for owner 3f1d.... The owner signs in with 'owner' and the password you typed,
-which nothing here or in the deployment can report back.
+Provisioned password credential 0198f0c4-... for owner 3f1d....
+The owner signs in as 'owner' with the password you typed, which nothing here or in the deployment can report back.
+
+$ mfctl credential create --method api-key --permission mailfathom.mail.read
+Provisioned api-key credential 41d7e2b0-... for owner 3f1d....
+The client presents this key: mfk_...
+It is stored only as a digest, so nothing here or in the deployment can report it again. Copy it now.
 ```
 
-**The password is asked for, never passed.** There is no `--password` option and there will not be one: a value written
-on a command line reaches the shell's history, the process table, and the log of whatever supervisor started the
-command. It is read without echo where somebody is at the terminal and as one line where the input is a pipe, so a
-script supplies one without it ever being an argument. Nothing prints it back — not the confirmation, not a listing, and
-not a refusal, which names the rule the password broke rather than the value.
+**A secret is asked for or minted, never passed.** There is no `--password` option and there will not be one: a value
+written on a command line reaches the shell's history, the process table, and the log of whatever supervisor started the
+command. A password is read without echo where somebody is at the terminal and as one line where the input is a pipe, so
+a script supplies one without it ever being an argument; a key is minted by the deployment and printed once. Nothing
+prints a secret back afterwards — not a listing, and not a refusal, which names the rule the password broke rather than
+the value.
 
 | Command | What it does |
 | --- | --- |
-| `mfctl credential list` | Reads which credentials an owner holds, whether each still authenticates, and how old its password is |
-| `mfctl credential create --username <name>` | Provisions one, asking for the password |
-| `mfctl credential rotate --id <credential>` | Replaces the password, which stops the previous one working at that instant |
-| `mfctl credential disable --id <credential>` | Stops it authenticating, keeping its username and password |
-| `mfctl credential enable --id <credential>` | Lets it authenticate again, with the password it already had |
-| `mfctl credential delete --id <credential>` | Removes the record and frees the username, which cannot be undone |
+| `mfctl credential list` | Reads which credentials an owner holds, by which method, what each grants, whether each still authenticates, and how old its material is |
+| `mfctl credential create --method <method> …` | Provisions one, asking for the password or minting the key |
+| `mfctl credential rotate --method <method> --id <credential>` | Replaces what the client presents, which stops the previous material working at that instant |
+| `mfctl credential disable --id <credential>` | Stops it authenticating, keeping everything else about it |
+| `mfctl credential enable --id <credential>` | Lets it authenticate again |
+| `mfctl credential delete --id <credential>` | Removes the record and frees the value it was resolved by, which cannot be undone |
+
+`--method` is required on `create` and on `rotate`, and nothing is inferred from the other options: a credential is a way
+into somebody's mail, and which kind is being provisioned is not a thing to guess from a flag somebody happened to pass.
+Each method takes what only it needs — `--username` for a password, `--public-key-file` for a key pair, `--issuer` and
+`--subject` for a mapped subject — and the missing one is named rather than sent as nothing for the deployment to refuse.
+
+`--permission` is repeatable and records what the credential may do; naming none grants everything the mail surface
+publishes, and `--no-permissions` provisions one that authenticates and reaches no tool.
+[What a credential may do](permissions.md) is the model behind those names.
 
 Every command takes `--owner` and none of them needs it on a deployment holding one owner: the command reads the roster,
 acts on the single owner there is, and refuses rather than guessing where there are several — naming the identifiers to
 choose from, so the refusal is where an operator reads the one to pass.
 
-**Disabling and deleting are different acts.** A disabled credential keeps its username claimed, so nothing else can be
-provisioned under it, and one command undoes the decision — which is what to reach for when a way into somebody's mail
-has to be closed now and the reason may turn out to be nothing. Deleting frees the username and nothing in MailFathom
-puts the record back; the command shows the credential and then asks, and `--yes` is how a scripted removal states the
-agreement instead. What it shows is never what decides the outcome: reading and removing are separately granted, so a
-token holding `mailfathom.admin.credentials.write` and not `mailfathom.admin.read` is refused the listing, and the
-command reports that refusal, asks anyway, and sends the removal — otherwise the credential would be unremovable
-through the tool that exists to remove it.
+**Rotation replaces material and is refused where there is none to replace.** A `password`, an `api-key`, and a
+`public-key` each have material this deployment holds; an `oauth-subject` mapping has none — what it states is which
+token resolves which owner — so rotating one is refused with what to do instead, which is to provision the mapping the
+person should act under and delete the old one.
 
-**A rotation is one statement.** There is no moment at which both passwords work and none at which neither does, so a
-client still presenting the previous one meets a refusal rather than a half-written record. The credential keeps its
-identifier and its username, so nothing an operator wrote down about it goes stale.
+**Disabling and deleting are different acts.** A disabled credential keeps the value it is resolved by claimed, so
+nothing else can be provisioned under it, and one command undoes the decision — which is what to reach for when a way
+into somebody's mail has to be closed now and the reason may turn out to be nothing. Deleting frees that value and
+nothing in MailFathom puts the record back; the command shows the credential and then asks, and `--yes` is how a
+scripted removal states the agreement instead. What it shows is never what decides the outcome: reading and removing are
+separately granted, so a token holding `mailfathom.admin.credentials.write` and not `mailfathom.admin.read` is refused
+the listing, and the command reports that refusal, asks anyway, and sends the removal — otherwise the credential would be
+unremovable through the tool that exists to remove it.
 
-Every change to who can reach an owner's mail is written to the audit record: the act, the credential's identifier, the
-owner, the administrator who made it, and when. The username is not among them, and neither is anything derived from the
-password — an audit record names a credential without naming a way to sign in.
+**A rotation is one statement.** There is no moment at which both credentials work and none at which neither does, so a
+client still presenting the previous material meets a refusal rather than a half-written record. The credential keeps its
+identifier, so nothing an operator wrote down about it goes stale. Where an overlap is wanted instead — a client that
+cannot be moved in one step — provision a second credential, move the client, and delete the first.
+
+**A listing publishes what a credential is resolved by, except where publishing it would publish the secret.** A
+username, a fingerprint, and an issuer-and-subject pair are all values somebody wrote down or a provisioning reported, so
+each is listed; an API key's digest is a verifier for the key itself, so it is withheld and the listing says so rather
+than leaving the column empty.
+
+Every change to who can reach an owner's mail is written to the audit record: the act, the credential's identifier, its
+method, the owner, the administrator who made it, and when. The value it is resolved by is not among them, and neither is
+anything derived from its material — an audit record names a credential without naming a way to sign in.
 
 ## Rate limiting
 

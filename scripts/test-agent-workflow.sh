@@ -6395,8 +6395,8 @@ quick_start_refuses_to_overwrite_a_prepared_deployment() {
 
   run_quick_start "$checkout_root" --provider zoho > "$first_run" 2>&1
 
-  local original_key
-  original_key="$(cat "$compose_directory/secrets/mailfathom/mcp-workstation-key")"
+  local original_password
+  original_password="$(cat "$compose_directory/secrets/mailfathom/imap-primary-password")"
 
   if run_quick_start "$checkout_root" --provider zoho > "$second_run" 2>&1; then
     printf 'A second run replaced a prepared deployment instead of refusing.\n' >&2
@@ -6404,7 +6404,7 @@ quick_start_refuses_to_overwrite_a_prepared_deployment() {
   fi
 
   assert_contains 'deploy/compose/.env already exists' "$second_run"
-  assert_file_content "$original_key" "$compose_directory/secrets/mailfathom/mcp-workstation-key"
+  assert_file_content "$original_password" "$compose_directory/secrets/mailfathom/imap-primary-password"
 }
 
 # A mailbox whose provider accepts no password cannot be prepared by a script that asks for one, and a configuration
@@ -6430,7 +6430,9 @@ quick_start_refuses_a_mailbox_that_accepts_no_password() {
   fi
 }
 
-# The unauthenticated posture is legal and is never what a run that did not ask for it produces.
+# The unauthenticated posture is legal and is never what a run that did not ask for it produces. What the authenticated
+# posture writes is a method rather than a credential: the key belongs to the owner and is minted by the running
+# deployment, so the run has to turn the administrative endpoint on as well and say where the key comes from.
 quick_start_authenticates_the_mcp_endpoint_unless_asked_otherwise() {
   local guarded_root open_root
   local guarded_log="$test_directory/quick-start-guarded-log"
@@ -6439,11 +6441,14 @@ quick_start_authenticates_the_mcp_endpoint_unless_asked_otherwise() {
   guarded_root="$(stage_quick_start_checkout 'quick-start-guarded')"
   run_quick_start "$guarded_root" --provider icloud > "$guarded_log" 2>&1
 
-  assert_contains '"SecretReference": "file:/etc/mailfathom/secrets/mcp-workstation-key"' \
+  assert_contains '{ "Method": "api-key" }' \
     "$guarded_root/deploy/compose/config/10-mailfathom.json"
+  assert_contains '"AdminEndpoint"' "$guarded_root/deploy/compose/config/10-mailfathom.json"
+  assert_contains 'mfctl credential create --method api-key' "$guarded_log"
+  assert_excludes 'mcp-workstation-key' "$guarded_root/deploy/compose/config/10-mailfathom.json"
 
-  if [[ ! -s "$guarded_root/deploy/compose/secrets/mailfathom/mcp-workstation-key" ]]; then
-    printf 'The default posture wrote no MCP credential.\n' >&2
+  if [[ -e "$guarded_root/deploy/compose/secrets/mailfathom/mcp-workstation-key" ]]; then
+    printf 'A key an owner presents was written into the deployment that mints it.\n' >&2
     return 1
   fi
 
@@ -6451,11 +6456,6 @@ quick_start_authenticates_the_mcp_endpoint_unless_asked_otherwise() {
   run_quick_start "$open_root" --provider icloud --mcp-authentication none > "$open_log" 2>&1
 
   assert_contains '"Authentication": [],' "$open_root/deploy/compose/config/10-mailfathom.json"
-
-  if [[ -e "$open_root/deploy/compose/secrets/mailfathom/mcp-workstation-key" ]]; then
-    printf 'An endpoint asked to serve without authentication was given a key anyway.\n' >&2
-    return 1
-  fi
 }
 
 # A value carrying a control character would reach the configuration file as broken JSON, and the deployment would then
@@ -6524,15 +6524,46 @@ quick_start_serves_the_administrative_endpoint_on_a_port_of_its_own() {
     "$compose_directory/config/10-mailfathom.json"
   assert_contains '"127.0.0.1:8090:8090"' "$compose_directory/compose.override.yaml"
 
-  # Off unless it is asked for, which is the product's own default and what makes the override file the marker of a
-  # deliberate answer rather than of a run having happened.
+  # Off where nothing needs it, which is what keeps the override file the marker of a deliberate answer rather than of a
+  # run having happened. An MCP endpoint serving without a credential is that case: nothing has to be minted for it.
   off_root="$(stage_quick_start_checkout 'quick-start-admin-off')"
-  run_quick_start "$off_root" --provider yahoo > /dev/null 2>&1
+  run_quick_start "$off_root" --provider yahoo --mcp-authentication none > /dev/null 2>&1
 
   assert_excludes 'AdminEndpoint' "$off_root/deploy/compose/config/10-mailfathom.json"
 
   if [[ -e "$off_root/deploy/compose/compose.override.yaml" ]]; then
     printf 'An administrative endpoint nobody asked for was published.\n' >&2
+    return 1
+  fi
+}
+
+# What a client presents to the MCP endpoint is a record beside an owner, minted with `mfctl credential create` over the
+# administrative endpoint, so switching that endpoint off while the MCP endpoint demands a credential describes a
+# deployment nothing can ever be provisioned for. The default arrives at the combination without anybody choosing it and
+# is corrected; an operator who asked for it by name is refused, because correcting a stated answer is the worse failure.
+quick_start_serves_the_administrative_endpoint_wherever_an_mcp_key_has_to_be_minted() {
+  local derived_root refused_root
+  local derived_log="$test_directory/quick-start-admin-derived-log"
+  local refused_log="$test_directory/quick-start-admin-refused-log"
+
+  derived_root="$(stage_quick_start_checkout 'quick-start-admin-derived')"
+  run_quick_start "$derived_root" --provider yahoo > "$derived_log" 2>&1
+
+  assert_contains '"Port": 8090' "$derived_root/deploy/compose/config/10-mailfathom.json"
+  assert_contains '"127.0.0.1:8090:8090"' "$derived_root/deploy/compose/compose.override.yaml"
+  assert_contains 'mfctl credential create --method api-key' "$derived_log"
+
+  refused_root="$(stage_quick_start_checkout 'quick-start-admin-refused')"
+
+  if run_quick_start "$refused_root" --provider yahoo --admin-endpoint off > "$refused_log" 2>&1; then
+    printf 'A deployment whose MCP key could never be minted was prepared instead of refused.\n' >&2
+    return 1
+  fi
+
+  assert_contains '--admin-endpoint off cannot be' "$refused_log"
+
+  if [[ -e "$refused_root/deploy/compose/config/10-mailfathom.json" ]]; then
+    printf 'The refusal left a configuration file behind.\n' >&2
     return 1
   fi
 }
@@ -8128,6 +8159,7 @@ run_test quick_start_refuses_to_overwrite_a_prepared_deployment
 run_test quick_start_refuses_a_mailbox_that_accepts_no_password
 run_test quick_start_authenticates_the_mcp_endpoint_unless_asked_otherwise
 run_test quick_start_serves_the_administrative_endpoint_on_a_port_of_its_own
+run_test quick_start_serves_the_administrative_endpoint_wherever_an_mcp_key_has_to_be_minted
 run_test quick_start_refuses_a_value_that_would_write_broken_configuration
 run_test quick_start_says_it_is_an_evaluation_rather_than_a_recommended_deployment
 run_test every_external_action_names_an_approved_owner

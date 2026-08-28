@@ -13,16 +13,19 @@ namespace MailFathom.Infrastructure.Security.OAuth;
 /// <remarks>
 /// <para>
 /// A deployment can trust several authorization servers and can accept a credential a client minted for itself, and the
-/// token is the only thing that says which of them it is. Choosing a validator therefore has to read the token's own
-/// <c>iss</c> claim and its own declared type first — both unsigned input, chosen by whoever sent the request, and the
-/// name of this type says so at every call site.
+/// token is the only thing that says which of them it is. Choosing what verifies it therefore has to read the token's
+/// own <c>iss</c> claim, its own declared type, and its own <c>kid</c> header first — all three unsigned input, chosen
+/// by whoever sent the request, and the name of this type says so at every call site.
 /// </para>
 /// <para>
-/// What the value is allowed to decide is the point. It selects which configured profile validates the token, and that
-/// profile then checks the signature against its own key set and compares <c>iss</c> against its own configured issuer.
-/// A token claiming an issuer nobody configured selects no profile and is refused; a token claiming one profile's issuer
-/// while carrying another's signature fails that profile's signature check. So the worst an attacker achieves by writing
-/// whatever they like here is to pick which validator rejects them.
+/// What each value is allowed to decide is the point, and it is the same shape in all three: the value selects what
+/// will check the signature, and never anything the signature was supposed to establish. <c>iss</c> and <c>typ</c>
+/// select which configured profile validates the token, and that profile checks the signature against its own key set
+/// and compares <c>iss</c> against its own configured issuer. <c>kid</c> selects a stored owner-credential row, whose
+/// registered public key is then what the signature is verified against — so an assertion naming a key registered for
+/// another owner is refused by that key's own signature check rather than admitted as that owner, and one naming a
+/// fingerprint nobody registered is refused exactly as one naming nothing. In every case the worst an attacker achieves
+/// by writing whatever they like here is to pick which verifier rejects them.
 /// </para>
 /// <para>
 /// Nothing else is read. The remaining claims are the validated token's business, and reading one here would make an
@@ -38,6 +41,8 @@ public static class UnverifiedJsonWebToken
     private const string IssuerClaimName = "iss";
 
     private const string TypeHeaderName = "typ";
+
+    private const string KeyIdHeaderName = "kid";
 
     /// <summary>Reads the issuer a compact-serialized JSON Web Token claims.</summary>
     /// <param name="credential">The bearer credential a request presented.</param>
@@ -86,6 +91,25 @@ public static class UnverifiedJsonWebToken
         return credential is not null
             && TrySplitSegments(credential.AsSpan(), out var encodedHeader, out _)
             && TryReadStringMember(encodedHeader, TypeHeaderName, out declaredType);
+    }
+
+    /// <summary>Reads the key identifier a compact-serialized JSON Web Token names for the key that signed it.</summary>
+    /// <param name="credential">The bearer credential a request presented.</param>
+    /// <param name="keyId">The unverified <c>kid</c> header when the credential is a JSON Web Token carrying one; otherwise <see langword="null" />.</param>
+    /// <returns><see langword="true" /> when a key identifier was read; otherwise <see langword="false" />.</returns>
+    /// <remarks>
+    /// What it decides is which stored public key the signature is checked against, and no more. The key it names is
+    /// verified against afterwards, so a credential writing whatever it likes here picks which key refuses it — and one
+    /// naming a key this deployment holds for another owner is refused by that key's own signature check rather than
+    /// admitted as that owner.
+    /// </remarks>
+    public static bool TryReadKeyId(string? credential, [NotNullWhen(true)] out string? keyId)
+    {
+        keyId = null;
+
+        return credential is not null
+            && TrySplitSegments(credential.AsSpan(), out var encodedHeader, out _)
+            && TryReadStringMember(encodedHeader, KeyIdHeaderName, out keyId);
     }
 
     /// <summary>Isolates the encoded header and payload of a compact serialization, which are the first two of its three segments.</summary>

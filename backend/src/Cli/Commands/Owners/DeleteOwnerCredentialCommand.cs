@@ -9,7 +9,7 @@ using MailFathom.Cli.Administration.Owners;
 
 namespace MailFathom.Cli.Commands.Owners;
 
-/// <summary>Removes one credential and frees the username it held.</summary>
+/// <summary>Removes one credential and frees what it was resolved by.</summary>
 /// <remarks>
 /// <para>
 /// The irreversible half of revoking, and it cannot be undone: the record is gone from the database and nothing in
@@ -58,7 +58,7 @@ internal static class DeleteOwnerCredentialCommand
         var credentialOption = OwnerCredentialOptions.Credential();
         var confirmedOption = CliOptions.Confirmed("removal");
 
-        Command command = new("delete", "Remove one credential and free the username it held. This cannot be undone.")
+        Command command = new("delete", "Remove one credential and free what it was resolved by. This cannot be undone.")
         {
             credentialOption,
             ownerOption,
@@ -113,7 +113,7 @@ internal static class DeleteOwnerCredentialCommand
                 context,
                 confirmedUpFront,
                 "There is nobody at the terminal to agree to this, and removing a credential cannot be undone. Pass --yes to remove without being asked.",
-                "Remove that credential and free the username it holds? [y/N] "))
+                "Remove that credential and free what it is resolved by? [y/N] "))
         {
             context.Console.WriteError("Nothing was removed.");
 
@@ -123,8 +123,8 @@ internal static class DeleteOwnerCredentialCommand
         await deployment.DeleteOwnerCredentialAsync(profile.Token, owner, credentialId, cancellationToken);
 
         context.Console.WriteLine(
-            $"Removed credential {credentialId:D}. The username it held is free, and nothing in MailFathom can put the "
-            + "record back.");
+            $"Removed credential {credentialId:D}. What it was resolved by is free, and nothing in MailFathom can "
+            + "put the record back.");
 
         return CliExitCode.Success;
     }

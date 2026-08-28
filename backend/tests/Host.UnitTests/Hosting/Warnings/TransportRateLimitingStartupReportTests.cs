@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Hosting.Warnings;
@@ -218,7 +219,7 @@ public sealed class TransportRateLimitingStartupReportTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var mcpEndpointSettings = EnabledMcpEndpoint(new TransportRateLimitingOptions());
-        mcpEndpointSettings.Authentication.Add(ConfiguredAuthentication.ApiKey("desktop-agent"));
+        mcpEndpointSettings.Authentication.Add(ConfiguredAuthentication.Accepting(OwnerCredentialMethod.ApiKey));
 
         var adminEndpointSettings = EnabledAdminEndpoint(new TransportRateLimitingOptions());
         adminEndpointSettings.Authentication.Add(ConfiguredAuthentication.ApiKey("operator-laptop"));

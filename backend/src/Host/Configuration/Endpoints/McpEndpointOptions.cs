@@ -6,7 +6,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Net.Quic;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
-using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Security.ClientCertificates;
 using MailFathom.Mcp.Tools.Categories;
 
@@ -49,6 +48,8 @@ internal sealed class McpEndpointOptions
     /// <summary>The configuration section the endpoint settings are bound from.</summary>
     public const string SectionName = "McpEndpoint";
 
+    private IReadOnlyList<string> retiredSettings = [];
+
     /// <summary>The half of the published permission vocabulary a grant on this endpoint draws from.</summary>
     /// <remarks>Stated once here rather than derived wherever a grant is read, so a permission belonging to the other surface is refused by the same rule everywhere the section is judged.</remarks>
     public const ProtectedSurface GrantedSurface = ProtectedSurface.Mail;
@@ -69,12 +70,20 @@ internal sealed class McpEndpointOptions
     /// <remarks>Clear text unless a deployment states otherwise, which is what local development runs and what a deployment behind a TLS-terminating reverse proxy runs. Startup warns about it either way, because only an operator knows which of the two they have.</remarks>
     public EndpointTransport Transport { get; set; } = EndpointTransport.Http;
 
-    /// <summary>Gets the credentials a client may present, one entry per authentication method with that method's own settings.</summary>
+    /// <summary>Gets the methods a client may authenticate with, one entry per method with the conditions that method requires.</summary>
     /// <remarks>
+    /// <para>
     /// Empty by default, which is the unauthenticated posture. A request is served when it satisfies any one of the
     /// entries, because the methods identify different kinds of caller rather than layering checks on one.
+    /// </para>
+    /// <para>
+    /// An entry states which method is accepted and never who may use it. Every credential this endpoint judges names
+    /// the owner whose mail it reaches, and an owner is a record in this deployment's database — so the keys, the
+    /// public keys, the subjects, and the grants that used to be written here are provisioned through the
+    /// administrative endpoint instead, and a section still carrying one is refused by name at startup.
+    /// </para>
     /// </remarks>
-    public IList<TransportAuthenticationOptions> Authentication { get; } = [];
+    public IList<OwnerFacingAuthenticationOptions> Authentication { get; } = [];
 
     /// <summary>Gets the kinds of tool this endpoint publishes, empty to publish every one of them.</summary>
     /// <remarks>
@@ -121,18 +130,18 @@ internal sealed class McpEndpointOptions
     /// <remarks>Defaulted throughout like <see cref="RateLimiting" /> and separate from it, because how much traffic is admitted and how long an admitted request may hold its permit are different questions a deployment answers independently.</remarks>
     public TransportRequestTimeoutOptions RequestTimeout { get; set; } = new();
 
-    /// <summary>Gets whether a client may authenticate with one of the configured API keys.</summary>
-    public bool AllowsApiKey => this.ApiKeys().Count > 0;
+    /// <summary>Gets whether a client may authenticate with a key this deployment provisioned for an owner.</summary>
+    public bool AllowsApiKey => this.Accepts(OwnerCredentialMethod.ApiKey);
 
     /// <summary>Gets whether a client may authenticate with an access token from one of the configured authorization servers.</summary>
-    public bool AllowsOAuth => this.OAuthMethods().Count > 0;
+    public bool AllowsOAuth => this.Accepts(OwnerCredentialMethod.OAuthSubject);
 
-    /// <summary>Gets whether a client may authenticate with an assertion signed by one of the configured public keys.</summary>
-    public bool AllowsClientAssertion => this.PublicKeys().Count > 0;
+    /// <summary>Gets whether a client may authenticate with an assertion signed by a public key an owner registered.</summary>
+    public bool AllowsClientAssertion => this.Accepts(OwnerCredentialMethod.PublicKey);
 
     /// <summary>Gets whether a client may authenticate with an owner's own username and password.</summary>
-    /// <remarks>What it reports is that the endpoint accepts the method; which owners can actually use it is the credentials the administrative surface has provisioned, which is a question about the database rather than about this section.</remarks>
-    public bool AllowsBasic => this.BasicMethod() is not null;
+    /// <remarks>What every one of these reports is that the endpoint accepts the method; which owners can actually use it is the credentials the administrative surface has provisioned, which is a question about the database rather than about this section.</remarks>
+    public bool AllowsBasic => this.Accepts(OwnerCredentialMethod.Password);
 
     /// <summary>Gets whether a request must present a credential naming who is calling.</summary>
     /// <remarks>
@@ -179,6 +188,17 @@ internal sealed class McpEndpointOptions
         ArgumentNullException.ThrowIfNull(configuration);
 
         var section = configuration.GetSection(SectionName);
+
+        // Read before the strict bind rather than after it. A retired key is a key this type no longer declares, so
+        // binding first would raise the framework's own message about an unknown property — which says nothing about the
+        // credential that replaced the setting, and that is the whole of what an operator upgrading has to be told.
+        var retiredSettings = OwnerFacingAuthenticationConfiguration.FindRetiredSettingErrors(SectionName, section);
+
+        if (retiredSettings.Count > 0)
+        {
+            return RefusingRetiredSettings(section, retiredSettings);
+        }
+
         var settings = section.Get<McpEndpointOptions>(binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
             ?? new McpEndpointOptions();
 
@@ -196,40 +216,44 @@ internal sealed class McpEndpointOptions
             settings.Https.Redirect.MarkStated();
         }
 
-        // Each entry's grant is read the same way and for the same reason, and both endpoints ask it through one
-        // method so the absent-versus-emptied reading exists once.
-        TransportAuthenticationConfiguration.ReadWhatTheBinderCannotSay(section, [.. settings.Authentication]);
+        // Which key each entry was written under is read the same way and for the same reason, and both mail-serving
+        // endpoints ask it through one method so the reading exists once.
+        OwnerFacingAuthenticationConfiguration.ReadWhatTheBinderCannotSay(section, [.. settings.Authentication]);
 
         return settings;
     }
 
-    /// <summary>Reports every key a client may authenticate with, in configuration order.</summary>
-    /// <returns>The configured keys, empty when the endpoint accepts none.</returns>
+    /// <summary>Composes the settings a section carrying a retired key reads as, which is a refusal and one fact beside it.</summary>
     /// <remarks>
-    /// A method rather than a property, as <see cref="OAuthMethods" /> is, because it reads the same objects the list
-    /// already holds. The secret machinery discovers what to resolve by walking this graph's readable properties, and a
-    /// property here would offer it a second path to every configured key — leaving which of the two a refusal names
-    /// decided by the order reflection happens to report them in.
+    /// The section was never bound, so nothing else it states was read; reporting anything beside the retired keys would
+    /// be reporting defaults the operator did not write. <see cref="Enabled" /> is the exception, and it is read from
+    /// configuration rather than left at its default: whether any surface is served at all is judged before any section
+    /// answers for itself, so an endpoint the operator turned on that reported itself off would be refused for a process
+    /// serving nothing — a statement about their configuration that is false — instead of for the retired key that is
+    /// the whole of what an upgrade has to be told.
     /// </remarks>
-    public IReadOnlyList<ConfiguredSecret> ApiKeys() =>
-        TransportAuthenticationConfiguration.ApiKeysIn(this.Authentication);
+    private static McpEndpointOptions RefusingRetiredSettings(IConfigurationSection section, IReadOnlyList<string> retiredSettings)
+    {
+        var refused = new McpEndpointOptions { Enabled = section.GetValue<bool>(nameof(Enabled)) };
+        refused.retiredSettings = retiredSettings;
 
-    /// <summary>Reports every client public key a signed assertion may be verified against, in configuration order.</summary>
-    /// <returns>The configured public keys, empty when the endpoint accepts no assertion.</returns>
-    /// <remarks>A method rather than a property, for the reason <see cref="ApiKeys" /> is one.</remarks>
-    public IReadOnlyList<ConfiguredSecret> PublicKeys() =>
-        TransportAuthenticationConfiguration.PublicKeysIn(this.Authentication);
+        return refused;
+    }
 
-    /// <summary>Reports what an access token must prove, once per entry that states OAuth.</summary>
+    /// <summary>Reports what an access token must prove, once per entry that accepts one.</summary>
     /// <returns>The configured OAuth blocks, empty when the endpoint accepts no token.</returns>
+    /// <remarks>A method rather than a property, because it reads the same objects the list already holds and a second path to them would leave which one a refusal names decided by the order reflection reports them in.</remarks>
     public IReadOnlyList<OAuthValidationOptions> OAuthMethods() =>
-        TransportAuthenticationConfiguration.OAuthMethodsIn(this.Authentication);
+        OwnerFacingAuthenticationConfiguration.OAuthMethodsIn(this.Authentication);
 
     /// <summary>Reports the entry that accepts an owner's username and password, where the endpoint accepts one.</summary>
     /// <returns>The entry, or <see langword="null" /> when the endpoint accepts no password.</returns>
-    /// <remarks>A method rather than a property, for the reason <see cref="ApiKeys" /> is one.</remarks>
-    public TransportAuthenticationOptions? BasicMethod() =>
-        TransportAuthenticationConfiguration.BasicMethodIn(this.Authentication);
+    /// <remarks>A method rather than a property, for the reason <see cref="OAuthMethods" /> is one.</remarks>
+    public OwnerFacingAuthenticationOptions? BasicMethod() =>
+        OwnerFacingAuthenticationConfiguration.BasicMethodIn(this.Authentication);
+
+    private bool Accepts(OwnerCredentialMethod method) =>
+        OwnerFacingAuthenticationConfiguration.Accepts(this.Authentication, method);
 
     /// <summary>Describes every socket this endpoint asks for.</summary>
     /// <returns>One declaration per socket, empty when the endpoint is not served.</returns>
@@ -254,15 +278,22 @@ internal sealed class McpEndpointOptions
     /// </remarks>
     public IReadOnlyList<string> FindConfigurationErrors()
     {
+        // Before the enabled question rather than after it, because a retired key is what stopped the section being
+        // read at all: nothing below has values to judge, and a deployment that turned the endpoint off while leaving
+        // one written has still not provisioned the credential that replaced it.
+        if (this.retiredSettings.Count > 0)
+        {
+            return this.retiredSettings;
+        }
+
         if (!this.Enabled)
         {
             return [];
         }
 
-        var errors = new List<string>(TransportAuthenticationConfiguration.FindConfigurationErrors(
+        var errors = new List<string>(OwnerFacingAuthenticationConfiguration.FindConfigurationErrors(
             SectionName,
-            [.. this.Authentication],
-            GrantedSurface));
+            [.. this.Authentication]));
 
         errors.AddRange(this.FindPublishedToolCategoryErrors());
 

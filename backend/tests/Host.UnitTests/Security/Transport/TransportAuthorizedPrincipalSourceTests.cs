@@ -248,7 +248,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
         var clientEndpoint = new ClientEndpointOptions();
         if (mcpConfiguresACredential)
         {
-            mcpEndpoint.Authentication.Add(new TransportAuthenticationOptions());
+            mcpEndpoint.Authentication.Add(new OwnerFacingAuthenticationOptions());
         }
 
         if (adminConfiguresACredential)
@@ -258,7 +258,7 @@ public sealed class TransportAuthorizedPrincipalSourceTests
 
         if (clientConfiguresACredential)
         {
-            clientEndpoint.Authentication.Add(new TransportAuthenticationOptions());
+            clientEndpoint.Authentication.Add(new OwnerFacingAuthenticationOptions());
         }
 
         var deploymentOwner = Substitute.For<IDeploymentMailOwnerSource>();

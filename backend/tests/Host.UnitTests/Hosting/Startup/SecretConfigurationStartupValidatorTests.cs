@@ -472,12 +472,12 @@ public sealed class SecretConfigurationStartupValidatorTests
     }
 
     [Fact]
-    public async Task StartingAsync_AnMcpApiKeyThatCannotBeResolved_FailsStartupNamingItsPosition()
+    public async Task StartingAsync_AnApiKeyThatCannotBeResolved_FailsStartupNamingItsPosition()
     {
         // Arrange
         var endpoint = EndpointAcceptingApiKeys();
         AcceptKey(endpoint, new ConfiguredSecret { Name = "workstation", SecretReference = "file:/run/secrets/absent" });
-        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), mcpEndpointOptions: endpoint);
+        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), adminEndpointOptions: endpoint);
 
         // Act
         var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
@@ -485,18 +485,18 @@ public sealed class SecretConfigurationStartupValidatorTests
 
         // Assert
         var failure = Assert.Single(exception.Failures);
-        Assert.StartsWith("McpEndpoint:Authentication:0:ApiKey", failure, StringComparison.Ordinal);
+        Assert.StartsWith("AdminEndpoint:Authentication:0:ApiKey", failure, StringComparison.Ordinal);
         Assert.Contains(nameof(SecretResolutionFailure.MaterialNotFound), failure, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task StartingAsync_TwoMcpApiKeysSharingAName_FailsStartupBecauseNeitherCouldBeRotatedByName()
+    public async Task StartingAsync_TwoApiKeysSharingAName_FailsStartupBecauseNeitherCouldBeRotatedByName()
     {
         // Arrange
         var endpoint = EndpointAcceptingApiKeys();
         AcceptKey(endpoint, new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:one" });
         AcceptKey(endpoint, new ConfiguredSecret { Name = "workstation", SecretReference = "plaintext:two" });
-        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), mcpEndpointOptions: endpoint);
+        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), adminEndpointOptions: endpoint);
 
         // Act
         var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
@@ -504,7 +504,7 @@ public sealed class SecretConfigurationStartupValidatorTests
 
         // Assert
         var failure = Assert.Single(exception.Failures);
-        Assert.StartsWith("McpEndpoint:Authentication:1:ApiKey:Name", failure, StringComparison.Ordinal);
+        Assert.StartsWith("AdminEndpoint:Authentication:1:ApiKey:Name", failure, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -513,7 +513,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     /// deployment would look wrong: the key resolves, the profile is valid, and no client can ever authenticate.
     /// </summary>
     [Fact]
-    public async Task StartingAsync_AnMcpApiKeyShapedLikeATokenOfAConfiguredServer_FailsStartupNamingItsPosition()
+    public async Task StartingAsync_AnApiKeyShapedLikeATokenOfAConfiguredServer_FailsStartupNamingItsPosition()
     {
         // Arrange
         var endpoint = EndpointAcceptingBothCredentials();
@@ -522,7 +522,7 @@ public sealed class SecretConfigurationStartupValidatorTests
             Name = "workstation",
             SecretReference = $"plaintext:{TokenShapedKeyIssuedBy(WorkforceIssuer)}",
         });
-        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), mcpEndpointOptions: endpoint);
+        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), adminEndpointOptions: endpoint);
 
         // Act
         var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
@@ -530,13 +530,13 @@ public sealed class SecretConfigurationStartupValidatorTests
 
         // Assert
         var failure = Assert.Single(exception.Failures);
-        Assert.StartsWith("McpEndpoint:Authentication:1:ApiKey", failure, StringComparison.Ordinal);
+        Assert.StartsWith("AdminEndpoint:Authentication:1:ApiKey", failure, StringComparison.Ordinal);
         Assert.DoesNotContain(WorkforceIssuer, failure, StringComparison.Ordinal);
     }
 
     /// <summary>The shape alone decides nothing: a key naming an issuer this deployment does not configure selects no validator and is compared like any other opaque credential.</summary>
     [Fact]
-    public async Task StartingAsync_AnMcpApiKeyShapedLikeATokenOfAnUnconfiguredServer_IsAccepted()
+    public async Task StartingAsync_AnApiKeyShapedLikeATokenOfAnUnconfiguredServer_IsAccepted()
     {
         // Arrange
         var endpoint = EndpointAcceptingBothCredentials();
@@ -545,7 +545,7 @@ public sealed class SecretConfigurationStartupValidatorTests
             Name = "workstation",
             SecretReference = $"plaintext:{TokenShapedKeyIssuedBy("https://sso.other.test/realms/mailfathom")}",
         });
-        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), mcpEndpointOptions: endpoint);
+        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), adminEndpointOptions: endpoint);
 
         // Act
         await harness.Validator.StartingAsync(CancellationToken.None);
@@ -565,71 +565,7 @@ public sealed class SecretConfigurationStartupValidatorTests
         // Arrange
         using var clientKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
         var endpoint = EndpointAcceptingPublicKey($"plaintext:{clientKey.ExportPkcs8PrivateKeyPem()}");
-        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), mcpEndpointOptions: endpoint);
-
-        // Act
-        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
-            harness.Validator.StartingAsync(CancellationToken.None));
-
-        // Assert
-        var failure = Assert.Single(exception.Failures);
-        Assert.StartsWith("McpEndpoint:Authentication:0:PublicKey", failure, StringComparison.Ordinal);
-        Assert.Contains("private key", failure, StringComparison.Ordinal);
-    }
-
-    /// <summary>Material that resolves but is not a public key would pass a reference check and then refuse every client the entry exists to serve.</summary>
-    [Fact]
-    public async Task StartingAsync_APublicKeySettingHoldingSomethingElse_FailsStartupNamingItsPosition()
-    {
-        // Arrange
-        var endpoint = EndpointAcceptingPublicKey("plaintext:not-a-public-key");
-        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), mcpEndpointOptions: endpoint);
-
-        // Act
-        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
-            harness.Validator.StartingAsync(CancellationToken.None));
-
-        // Assert
-        var failure = Assert.Single(exception.Failures);
-        Assert.StartsWith("McpEndpoint:Authentication:0:PublicKey", failure, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public async Task StartingAsync_AUsablePublicKey_PassesStartup()
-    {
-        // Arrange
-        using var clientKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        var endpoint = EndpointAcceptingPublicKey($"plaintext:{clientKey.ExportSubjectPublicKeyInfoPem()}");
-        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), mcpEndpointOptions: endpoint);
-
-        // Act, Assert
-        await harness.Validator.StartingAsync(CancellationToken.None);
-    }
-
-    /// <summary>
-    /// The administrative endpoint carries the same credential list, so the same material has to be proven there. It is
-    /// worth its own test because nothing else validates that section's secrets: a rule that held on one endpoint and
-    /// lapsed on the other would let an operator register a private key on the surface that administers the service.
-    /// </summary>
-    [Fact]
-    public async Task StartingAsync_AnAdminPublicKeySettingHoldingAPrivateKey_FailsStartupSayingSo()
-    {
-        // Arrange
-        using var clientKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        var endpoint = new AdminEndpointOptions { Enabled = true };
-        endpoint.Authentication.Add(new TransportAuthenticationOptions
-        {
-            PublicKey = new ConfiguredSecret
-            {
-                Name = "nightly-digest",
-                SecretReference = $"plaintext:{clientKey.ExportPkcs8PrivateKeyPem()}",
-            },
-        });
-
-        var harness = CreateHarness(
-            new MailSynchronizationOptions(),
-            new PersistenceOptions(),
-            adminEndpointOptions: endpoint);
+        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), adminEndpointOptions: endpoint);
 
         // Act
         var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
@@ -639,6 +575,74 @@ public sealed class SecretConfigurationStartupValidatorTests
         var failure = Assert.Single(exception.Failures);
         Assert.StartsWith("AdminEndpoint:Authentication:0:PublicKey", failure, StringComparison.Ordinal);
         Assert.Contains("private key", failure, StringComparison.Ordinal);
+    }
+
+    /// <summary>Material that resolves but is not a public key would pass a reference check and then refuse every client the entry exists to serve.</summary>
+    [Fact]
+    public async Task StartingAsync_APublicKeySettingHoldingSomethingElse_FailsStartupNamingItsPosition()
+    {
+        // Arrange
+        var endpoint = EndpointAcceptingPublicKey("plaintext:not-a-public-key");
+        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), adminEndpointOptions: endpoint);
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        var failure = Assert.Single(exception.Failures);
+        Assert.StartsWith("AdminEndpoint:Authentication:0:PublicKey", failure, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StartingAsync_AUsablePublicKey_PassesStartup()
+    {
+        // Arrange
+        using var clientKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var endpoint = EndpointAcceptingPublicKey($"plaintext:{clientKey.ExportSubjectPublicKeyInfoPem()}");
+        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), adminEndpointOptions: endpoint);
+
+        // Act, Assert
+        await harness.Validator.StartingAsync(CancellationToken.None);
+    }
+
+    /// <summary>
+    /// A mail-serving endpoint's section holds neither a key nor a public key, so a private key cannot be written onto
+    /// one at all. What the read has to keep doing is the rest of that section's secrets, which is what this covers:
+    /// a certificate anchor that resolves to nothing still fails the start.
+    /// </summary>
+    [Fact]
+    public async Task StartingAsync_AnMcpTrustAnchorThatCannotBeResolved_FailsStartupNamingItsPosition()
+    {
+        // Arrange
+        var endpoint = new McpEndpointOptions { Enabled = true };
+        var profile = new McpClientCertificateProfileOptions
+        {
+            Name = "chatgpt-connector",
+            Requirement = McpClientCertificateRequirement.Optional,
+        };
+        profile.TrustAnchors.Add(new ConfiguredSecret
+        {
+            Name = "openai-connectors-ca",
+            SecretReference = "file:/run/secrets/absent",
+        });
+        profile.SubjectAlternativeNames.Add("mtls.prod.connectors.openai.com");
+        endpoint.ClientCertificateProfiles.Add(profile);
+
+        var harness = CreateHarness(
+            new MailSynchronizationOptions(),
+            new PersistenceOptions(),
+            mcpEndpointOptions: endpoint);
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        Assert.Contains(
+            exception.Failures,
+            failure => failure.StartsWith("McpEndpoint:ClientCertificateProfiles:0:TrustAnchors:0", StringComparison.Ordinal)
+                && failure.Contains(nameof(SecretResolutionFailure.MaterialNotFound), StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -696,82 +700,6 @@ public sealed class SecretConfigurationStartupValidatorTests
         Assert.True(harness.StartupGates.Completed);
     }
 
-    /// <summary>
-    /// The client endpoint carries the same credential list again, and the rule has to hold on the third surface for the
-    /// reason it has to hold on the second: nothing else validates that section's secrets, so a rule that lapsed here
-    /// would let an operator register a private key on the surface that serves a person their own mail.
-    /// </summary>
-    [Fact]
-    public async Task StartingAsync_AClientPublicKeySettingHoldingAPrivateKey_FailsStartupSayingSo()
-    {
-        // Arrange
-        using var signingKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        var endpoint = new ClientEndpointOptions { Enabled = true };
-        endpoint.Authentication.Add(new TransportAuthenticationOptions
-        {
-            PublicKey = new ConfiguredSecret
-            {
-                Name = "desktop-client",
-                SecretReference = $"plaintext:{signingKey.ExportPkcs8PrivateKeyPem()}",
-            },
-        });
-
-        var harness = CreateHarness(
-            new MailSynchronizationOptions(),
-            new PersistenceOptions(),
-            clientEndpointOptions: endpoint);
-
-        // Act
-        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
-            harness.Validator.StartingAsync(CancellationToken.None));
-
-        // Assert
-        var failure = Assert.Single(exception.Failures);
-        Assert.StartsWith("ClientEndpoint:Authentication:0:PublicKey", failure, StringComparison.Ordinal);
-        Assert.Contains("private key", failure, StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// The client endpoint admits both credential shapes exactly as the MCP endpoint does, so the same key can be
-    /// configured into the same trap: it resolves, the profile is valid, and every request presenting it is judged by
-    /// the authorization server instead of compared, which no running deployment would ever report.
-    /// </summary>
-    [Fact]
-    public async Task StartingAsync_AClientApiKeyShapedLikeATokenOfAConfiguredServer_FailsStartupNamingItsPosition()
-    {
-        // Arrange
-        var authorizationServer = new AuthorizationServerOptions { Name = "workforce", Issuer = WorkforceIssuer };
-        authorizationServer.AuthorizedSubjects.Add("9f2c");
-
-        var oauth = new OAuthValidationOptions { Resource = "https://mail.example.test/api/client" };
-        oauth.AuthorizationServers.Add(authorizationServer);
-
-        var endpoint = new ClientEndpointOptions { Enabled = true };
-        endpoint.Authentication.Add(new TransportAuthenticationOptions { OAuth = oauth });
-        endpoint.Authentication.Add(new TransportAuthenticationOptions
-        {
-            ApiKey = new ConfiguredSecret
-            {
-                Name = "desktop-client",
-                SecretReference = $"plaintext:{TokenShapedKeyIssuedBy(WorkforceIssuer)}",
-            },
-        });
-
-        var harness = CreateHarness(
-            new MailSynchronizationOptions(),
-            new PersistenceOptions(),
-            clientEndpointOptions: endpoint);
-
-        // Act
-        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
-            harness.Validator.StartingAsync(CancellationToken.None));
-
-        // Assert
-        var failure = Assert.Single(exception.Failures);
-        Assert.StartsWith("ClientEndpoint:Authentication:1:ApiKey", failure, StringComparison.Ordinal);
-        Assert.DoesNotContain(WorkforceIssuer, failure, StringComparison.Ordinal);
-    }
-
     /// <summary>Material that resolves but is not a certificate would pass a reference check and then refuse every client the profile exists to serve.</summary>
     [Fact]
     public async Task StartingAsync_AClientCertificateTrustAnchorThatIsNotACertificate_FailsStartupNamingItsPosition()
@@ -813,7 +741,7 @@ public sealed class SecretConfigurationStartupValidatorTests
         var endpoint = EndpointAcceptingApiKeys();
         endpoint.Enabled = false;
         AcceptKey(endpoint, new ConfiguredSecret { Name = "workstation", SecretReference = "file:/run/secrets/absent" });
-        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), mcpEndpointOptions: endpoint);
+        var harness = CreateHarness(new MailSynchronizationOptions(), new PersistenceOptions(), adminEndpointOptions: endpoint);
 
         // Act, Assert
         await harness.Validator.StartingAsync(CancellationToken.None);
@@ -895,12 +823,12 @@ public sealed class SecretConfigurationStartupValidatorTests
         Assert.Empty(harness.ReportedMessages);
     }
 
-    private static McpEndpointOptions EndpointAcceptingBothCredentials()
+    private static AdminEndpointOptions EndpointAcceptingBothCredentials()
     {
         var authorizationServer = new AuthorizationServerOptions { Name = "workforce", Issuer = WorkforceIssuer };
         authorizationServer.AuthorizedSubjects.Add("9f2c");
 
-        var oauth = new OAuthValidationOptions { Resource = "https://mail.example.test/mcp" };
+        var oauth = new OAuthValidationOptions { Resource = "https://mail.example.test/admin" };
         oauth.AuthorizationServers.Add(authorizationServer);
 
         var endpoint = EndpointAcceptingApiKeys();
@@ -910,12 +838,12 @@ public sealed class SecretConfigurationStartupValidatorTests
     }
 
     /// <summary>An enabled endpoint whose keys the caller adds, one entry per key.</summary>
-    private static McpEndpointOptions EndpointAcceptingApiKeys() => new() { Enabled = true };
+    private static AdminEndpointOptions EndpointAcceptingApiKeys() => new() { Enabled = true };
 
     /// <summary>An enabled endpoint accepting one client's assertions, verified against whatever the reference resolves to.</summary>
-    private static McpEndpointOptions EndpointAcceptingPublicKey(string secretReference)
+    private static AdminEndpointOptions EndpointAcceptingPublicKey(string secretReference)
     {
-        var endpoint = new McpEndpointOptions { Enabled = true };
+        var endpoint = new AdminEndpointOptions { Enabled = true };
         endpoint.Authentication.Add(new TransportAuthenticationOptions
         {
             PublicKey = new ConfiguredSecret { Name = "nightly-digest", SecretReference = secretReference },
@@ -925,7 +853,7 @@ public sealed class SecretConfigurationStartupValidatorTests
     }
 
     /// <summary>Adds one key as an entry of its own, which is what a configured credential is.</summary>
-    private static void AcceptKey(McpEndpointOptions endpoint, ConfiguredSecret key) =>
+    private static void AcceptKey(AdminEndpointOptions endpoint, ConfiguredSecret key) =>
         endpoint.Authentication.Add(new TransportAuthenticationOptions { ApiKey = key });
 
     private static string TokenShapedKeyIssuedBy(string issuer)

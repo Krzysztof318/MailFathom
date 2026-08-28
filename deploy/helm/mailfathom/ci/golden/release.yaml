@@ -38,12 +38,7 @@ data:
       "McpEndpoint": {
         "Enabled": true,
         "Authentication": [
-          {
-            "ApiKey": {
-              "Name": "workstation",
-              "SecretReference": "file:/etc/mailfathom/secrets/mcp-workstation-key"
-            }
-          }
+          { "Method": "api-key" }
         ]
       },
       "ClientEndpoint": {
@@ -53,13 +48,13 @@ data:
         },
         "Authentication": [
           {
+            "Method": "oauth-subject",
             "OAuth": {
               "Resource": "https://mailfathom.example.test/api/client",
               "AuthorizationServers": [
                 {
                   "Name": "workforce",
-                  "Issuer": "https://sso.example.test/realms/mailfathom",
-                  "AuthorizedSubjects": [ "11111111-2222-3333-4444-555555555555" ]
+                  "Issuer": "https://sso.example.test/realms/mailfathom"
                 }
               ]
             }
@@ -112,7 +107,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/config: 92ef0949a4e875ba27f88306b713dc73767002414178c4dccdd7b0cbad121d89
+        checksum/config: 145e99d56d7d7d8fd8c2945555f0f0759114a113bb355a84abcaf78ad95299f6
       labels:
         app.kubernetes.io/name: mailfathom
         app.kubernetes.io/instance: mailfathom

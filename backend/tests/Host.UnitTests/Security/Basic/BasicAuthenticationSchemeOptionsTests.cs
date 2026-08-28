@@ -2,7 +2,6 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using MailFathom.Domain.Access;
 using MailFathom.Host.Security.Basic;
 using MailFathom.Host.Security.Transport;
 using Xunit;
@@ -22,18 +21,6 @@ public sealed class BasicAuthenticationSchemeOptionsTests
     {
         // Arrange
         var options = Registered();
-
-        // Act, Assert
-        options.Validate();
-    }
-
-    /// <summary>The grant is what an owner admitted here holds, and an entry narrowed all the way is a posture rather than a mistake.</summary>
-    [Fact]
-    public void Validate_ARegistrationGrantingNothing_IsAccepted()
-    {
-        // Arrange
-        var options = Registered();
-        options.Grant = [];
 
         // Act, Assert
         options.Validate();
@@ -66,7 +53,6 @@ public sealed class BasicAuthenticationSchemeOptionsTests
     private static BasicAuthenticationSchemeOptions Registered() => new()
     {
         Surface = TransportSurface.Client,
-        Grant = [MailFathomPermission.MailRead],
         AttemptsPerMinute = 10,
     };
 }

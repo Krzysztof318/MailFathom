@@ -256,19 +256,29 @@ public sealed class ComposedPasswordAuthenticationTests
             TestContext.Current.CancellationToken,
             static builder =>
             {
-                builder.Services.RemoveAll<IOwnerPasswordCredentialStore>();
+                builder.Services.RemoveAll<IOwnerCredentialStore>();
                 builder.Services.AddScoped(static _ => OneProvisionedCredential());
                 builder.Services.AddSingleton<IPasswordHasher>(new OneKnownPasswordHasher());
             });
 
     /// <summary>The store as a deployment holding exactly one enabled credential answers.</summary>
-    private static IOwnerPasswordCredentialStore OneProvisionedCredential()
+    private static IOwnerCredentialStore OneProvisionedCredential()
     {
-        var credentials = Substitute.For<IOwnerPasswordCredentialStore>();
+        var credentials = Substitute.For<IOwnerCredentialStore>();
+        var provisioned = OwnerCredentialLookup.ForUsername(OwnerCredentialUsername.Create(Username));
 
-        credentials.FindByUsernameAsync(Arg.Any<OwnerCredentialUsername>(), Arg.Any<CancellationToken>())
-            .Returns(callInfo => callInfo.Arg<OwnerCredentialUsername>() == OwnerCredentialUsername.Create(Username)
-                ? new ResolvedOwnerPasswordCredential(CredentialId, Owner, Enabled: true, StoredHash)
+        credentials.FindAsync(
+                Arg.Any<OwnerCredentialMethod>(),
+                Arg.Any<OwnerCredentialLookup>(),
+                Arg.Any<CancellationToken>())
+            .Returns(callInfo => callInfo.Arg<OwnerCredentialLookup>() == provisioned
+                ? new ResolvedOwnerCredential(
+                    CredentialId,
+                    Owner,
+                    OwnerCredentialMethod.Password,
+                    MailFathomPermission.PublishedFor(ProtectedSurface.Mail),
+                    Enabled: true,
+                    StoredHash)
                 : null);
 
         return credentials;
@@ -283,6 +293,7 @@ public sealed class ComposedPasswordAuthenticationTests
     private static IReadOnlyList<KeyValuePair<string, string?>> BothOwnerSurfacesAcceptingAPassword() =>
     [
         new("McpEndpoint:Enabled", "true"),
+        new("McpEndpoint:Authentication:0:Method", "password"),
         new("McpEndpoint:Authentication:0:Basic:AttemptsPerMinute", "60"),
         new("AdminEndpoint:Enabled", "true"),
         new("AdminEndpoint:Port", AdminPort.ToString(CultureInfo.InvariantCulture)),
@@ -290,6 +301,7 @@ public sealed class ComposedPasswordAuthenticationTests
         new("AdminEndpoint:Authentication:0:ApiKey:SecretReference", $"plaintext:{AdminKey}"),
         new("ClientEndpoint:Enabled", "true"),
         new("ClientEndpoint:Port", ClientPort.ToString(CultureInfo.InvariantCulture)),
+        new("ClientEndpoint:Authentication:0:Method", "password"),
         new("ClientEndpoint:Authentication:0:Basic:AttemptsPerMinute", "60"),
         new("ReverseProxy:TrustedProxies:0", "127.0.0.1"),
     ];

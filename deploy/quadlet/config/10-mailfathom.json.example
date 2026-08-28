@@ -71,13 +71,7 @@
   "McpEndpoint": {
     "Enabled": true,
     "Authentication": [
-      {
-        "ApiKey": {
-          "Name": "workstation",
-          "SecretReference": "systemd-credential:mcp-workstation-key",
-          "Lifetime": "NoLimit"
-        }
-      }
+      { "Method": "api-key" }
     ],
     "Cors": {
       "AllowedOrigins": []

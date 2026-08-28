@@ -251,7 +251,6 @@ StopTimeout=60
 # systemd 258. docs/operations/deployment-quadlet.md states what an older systemd leaves available and what it gives up.
 LoadCredentialEncrypted=mailfathom-database-password:%h/.config/credstore.encrypted/mailfathom-database-password
 LoadCredentialEncrypted=imap-primary-password:%h/.config/credstore.encrypted/imap-primary-password
-LoadCredentialEncrypted=mcp-workstation-key:%h/.config/credstore.encrypted/mcp-workstation-key
 # Only when a mailbox authenticates with OAuth. See config/10-mailfathom.json.example.
 #LoadCredentialEncrypted=mailfathom-data-key:%h/.config/credstore.encrypted/mailfathom-data-key
 # Only when message content is stored in a bucket — uncommented together with the ContentStorage lines above. The third

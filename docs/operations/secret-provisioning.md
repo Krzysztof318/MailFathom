@@ -86,14 +86,14 @@ Every secret states how long it stays usable. The default is the literal `NoLimi
 ```json
 {
   "Name": "workstation",
-  "SecretReference": "systemd-credential:mailfathom-mcp-workstation-key",
+  "SecretReference": "systemd-credential:mailfathom-admin-workstation-key",
   "Lifetime": "2027-01-31T00:00:00Z"
 }
 ```
 
 A bounded lifetime is an **absolute instant carrying an explicit offset**, never a duration. A duration would restart at every process start and every configuration reload, so a credential retired for a week would come back with the next deployment. An instant without an offset is refused rather than read in the host's local time, because the same configuration would then expire at a different moment on every machine that runs it. `2027-01-31T00:00:00Z` and `2027-01-31T01:00:00+01:00` are the same instant and both are accepted; `2027-01-31T00:00:00` and `2027-01-31` are not.
 
-**A lifetime is enforced where the consumer can act on one.** Today that is the MCP API keys: an expired key authenticates nothing, which is what makes two overlapping keys a rotation rather than an outage. Everywhere else — a mailbox password, the database credential, a trust anchor — the lifetime is recorded and reported, and nothing stops using the credential when it passes. It is a statement of intent that shows up in the log, not a kill switch:
+**A lifetime is enforced where the consumer can act on one.** Today that is the administrative endpoint's own API keys: an expired key authenticates nothing, which is what makes two overlapping keys a rotation rather than an outage. A credential an owner's client presents carries no lifetime at all, because it is a record rather than a setting — `mfctl credential disable` and `mfctl credential rotate` are what retire one, at the moment somebody decides to rather than at an instant written months earlier. Everywhere else — a mailbox password, the database credential, a trust anchor — the lifetime is recorded and reported, and nothing stops using the credential when it passes. It is a statement of intent that shows up in the log, not a kill switch:
 
 ```
 warn: Configuration setting MailSynchronization:Accounts:0:Secrets:Password carries the secret

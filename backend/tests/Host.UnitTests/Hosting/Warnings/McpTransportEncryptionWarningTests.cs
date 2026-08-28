@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Hosting.Warnings;
 using MailFathom.Host.UnitTests.TestDoubles;
@@ -49,7 +50,7 @@ public sealed class McpTransportEncryptionWarningTests
         // Arrange
         using var logs = new RecordingLoggerProvider();
         var settings = Enabled();
-        settings.Authentication.Add(ConfiguredAuthentication.ApiKey("workstation"));
+        settings.Authentication.Add(ConfiguredAuthentication.Accepting(OwnerCredentialMethod.ApiKey));
         var warning = WarningFor(settings, logs);
 
         // Act

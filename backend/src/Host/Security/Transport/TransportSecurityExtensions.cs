@@ -6,10 +6,8 @@ using System.Security.Claims;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Security.ApiKeys;
-using MailFathom.Host.Security.Basic;
 using MailFathom.Host.Security.ClientAssertions;
 using MailFathom.Host.Security.Mcp;
-using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Security.ApiKeys;
 using MailFathom.Infrastructure.Security.OAuth;
 using Microsoft.AspNetCore.Authentication;
@@ -82,33 +80,22 @@ internal static partial class TransportSecurityExtensions
         var apiKeys = TransportAuthenticationConfiguration.ApiKeysIn(methods);
         var publicKeys = TransportAuthenticationConfiguration.PublicKeysIn(methods);
         var oauthMethods = TransportAuthenticationConfiguration.OAuthMethodsIn(methods);
-        var basicMethod = TransportAuthenticationConfiguration.BasicMethodIn(methods);
 
         var authentication = services.AddAuthentication();
 
         AddRoutingScheme(
             authentication,
             surface,
-            apiKeys,
-            publicKeys,
-            oauthMethods,
-            basicMethod is null ? null : surface.BasicSchemeName,
-            challengeSchemeName);
+            OAuthSchemesByIssuer(surface, oauthMethods),
+            apiKeys.Count > 0 ? surface.ApiKeySchemeName : null,
+            publicKeys.Count > 0 ? surface.ClientAssertionSchemeName : null,
 
-        if (basicMethod?.Basic is { } basic)
-        {
-            // Nothing about the credentials is registered, because there are none to register: what a caller presents is
-            // a row the administrative surface provisioned. What the scheme carries is the entry's grant and the entry's
-            // attempt bound, resolved here so the handler never reads a configuration section of its own.
-            authentication.AddScheme<BasicAuthenticationSchemeOptions, BasicAuthenticationHandler>(
-                surface.BasicSchemeName,
-                schemeOptions =>
-                {
-                    schemeOptions.Surface = surface;
-                    schemeOptions.Grant = basicMethod.GrantedPermissions(surface.GrantedSurface);
-                    schemeOptions.AttemptsPerMinute = basic.AttemptsPerMinute;
-                });
-        }
+            // No Basic scheme, whatever an entry states. A password names an owner, and the administrative endpoint —
+            // the one surface still registered this way — answers for the deployment rather than for a person, so the
+            // entry that would have selected the method is refused by that section's own validation instead of
+            // reaching a registration here.
+            basicSchemeName: null,
+            challengeSchemeName);
 
         if (publicKeys.Count > 0)
         {
@@ -172,9 +159,11 @@ internal static partial class TransportSecurityExtensions
                             jwtOptions,
                             authorizationServer,
                             oauthMethod,
-                            grant,
-                            narrowedByTokenScopes,
-                            transportFactory));
+                            transportFactory,
+                            context => ReplacePrincipalWithMinimalIdentity(
+                                context,
+                                grant,
+                                narrowedByTokenScopes)));
             }
         }
 
@@ -263,27 +252,38 @@ internal static partial class TransportSecurityExtensions
         string remoteIp,
         int localPort);
 
-    /// <summary>Registers the scheme that reads the presented credential and forwards it to the handler that judges it.</summary>
-    private static void AddRoutingScheme(
-        AuthenticationBuilder authentication,
+    /// <summary>Reports the scheme each configured issuer's tokens are validated by, keyed by the issuer a token names.</summary>
+    /// <remarks>Composed here rather than in the selector because it is what a surface's registration already knows: which entries it read, and what each authorization server on them is called.</remarks>
+    private static Dictionary<string, string> OAuthSchemesByIssuer(
         TransportSurface surface,
-        IReadOnlyList<ConfiguredSecret> apiKeys,
-        IReadOnlyList<ConfiguredSecret> publicKeys,
-        IReadOnlyList<OAuthValidationOptions> oauthMethods,
-        string? basicSchemeName,
-        string challengeSchemeName)
-    {
-        var oauthSchemesByIssuer = oauthMethods
+        IReadOnlyList<OAuthValidationOptions> oauthMethods) =>
+        oauthMethods
             .SelectMany(oauthMethod => oauthMethod.AuthorizationServers)
             .ToDictionary(
                 authorizationServer => authorizationServer.ValidatedIssuer(),
                 authorizationServer => surface.OAuthSchemeNameFor(authorizationServer.Name!),
                 StringComparer.Ordinal);
 
+    /// <summary>Registers the scheme that reads the presented credential and forwards it to the handler that judges it.</summary>
+    /// <remarks>
+    /// It is handed scheme names rather than the credentials behind them, which is what lets the configured axis and the
+    /// owner axis share one routing rule. Which handler judges a presented credential is decided by the shape of the
+    /// credential and never by where the material that answers it is kept, so a surface whose keys are rows routes
+    /// exactly as one whose keys are configuration entries does.
+    /// </remarks>
+    private static void AddRoutingScheme(
+        AuthenticationBuilder authentication,
+        TransportSurface surface,
+        IReadOnlyDictionary<string, string> oauthSchemesByIssuer,
+        string? apiKeySchemeName,
+        string? clientAssertionSchemeName,
+        string? basicSchemeName,
+        string challengeSchemeName)
+    {
         var schemeSelector = new CredentialSchemeSelector(
             oauthSchemesByIssuer,
-            apiKeys.Count > 0 ? surface.ApiKeySchemeName : null,
-            publicKeys.Count > 0 ? surface.ClientAssertionSchemeName : null,
+            apiKeySchemeName,
+            clientAssertionSchemeName,
             basicSchemeName,
             challengeSchemeName);
 
@@ -312,6 +312,13 @@ internal static partial class TransportSecurityExtensions
     /// identify the same way never validates a token claiming the other's issuer.
     /// </para>
     /// <para>
+    /// What a validated token then becomes is the caller's, because it is the one part the two axes genuinely differ
+    /// on: a configured entry writes the grant it stated onto the identity, and an owner-facing entry resolves the
+    /// subject to a credential record and takes both the owner and the grant from it. Everything above that — the
+    /// issuer, the audience, the metadata retrieval, the clear-text refusal — is the same question asked of the same
+    /// server, so it is asked once here.
+    /// </para>
+    /// <para>
     /// Nothing about the server's own endpoints is assembled here. The key set address comes out of the discovery
     /// document, so a server that moves an endpoint keeps working and one that publishes no document fails to configure
     /// rather than being reached at a guessed path.
@@ -321,9 +328,8 @@ internal static partial class TransportSecurityExtensions
         JwtBearerOptions jwtOptions,
         AuthorizationServerOptions authorizationServer,
         OAuthValidationOptions oauthSettings,
-        IReadOnlyList<MailFathomPermission> grant,
-        bool narrowedByTokenScopes,
-        IHttpClientFactory transportFactory)
+        IHttpClientFactory transportFactory,
+        Func<TokenValidatedContext, Task> onTokenValidated)
     {
         var issuer = authorizationServer.ValidatedIssuer();
         var metadataAddresses = authorizationServer.MetadataAddresses();
@@ -359,8 +365,7 @@ internal static partial class TransportSecurityExtensions
         jwtOptions.Events = new JwtBearerEvents
         {
             OnMessageReceived = RefuseATokenThatArrivedWithoutTransportEncryption,
-            OnTokenValidated = context =>
-                ReplacePrincipalWithMinimalIdentity(context, grant, narrowedByTokenScopes),
+            OnTokenValidated = context => onTokenValidated(context),
         };
     }
 

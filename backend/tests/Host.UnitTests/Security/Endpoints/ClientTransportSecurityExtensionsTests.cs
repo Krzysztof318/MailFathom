@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Security.Endpoints;
@@ -221,7 +222,11 @@ public sealed class ClientTransportSecurityExtensionsTests
             Issuer = "https://sso.example.test",
         });
 
-        endpointSettings.Authentication.Add(new TransportAuthenticationOptions { OAuth = oauthSettings });
+        endpointSettings.Authentication.Add(new OwnerFacingAuthenticationOptions
+        {
+            Method = OwnerCredentialMethod.OAuthSubject.Name,
+            OAuth = oauthSettings,
+        });
 
         services.AddClientTransportSecurity(endpointSettings);
 

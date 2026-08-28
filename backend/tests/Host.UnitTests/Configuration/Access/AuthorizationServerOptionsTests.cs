@@ -20,7 +20,7 @@ public sealed class AuthorizationServerOptionsTests
         var profile = Profile("workforce", "https://sso.example.test/realms/mailfathom");
 
         // Act, Assert
-        Assert.Empty(profile.FindConfigurationErrors());
+        Assert.Empty(profile.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
     }
 
     /// <summary>A startup message and a log line identify a profile by its name rather than by its issuer, which names the operator's identity provider.</summary>
@@ -34,7 +34,7 @@ public sealed class AuthorizationServerOptionsTests
         var profile = Profile(name, "https://sso.example.test/realms/mailfathom");
 
         // Act
-        var error = Assert.Single(profile.FindConfigurationErrors());
+        var error = Assert.Single(profile.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
 
         // Assert
         Assert.StartsWith("Name", error, StringComparison.Ordinal);
@@ -51,7 +51,7 @@ public sealed class AuthorizationServerOptionsTests
         var profile = Profile("workforce", issuer);
 
         // Act
-        var error = Assert.Single(profile.FindConfigurationErrors());
+        var error = Assert.Single(profile.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
 
         // Assert
         Assert.StartsWith("Issuer", error, StringComparison.Ordinal);
@@ -120,7 +120,7 @@ public sealed class AuthorizationServerOptionsTests
         profile.MetadataAddress = metadataAddress;
 
         // Act
-        var error = Assert.Single(profile.FindConfigurationErrors());
+        var error = Assert.Single(profile.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
 
         // Assert
         Assert.StartsWith("MetadataAddress", error, StringComparison.Ordinal);
@@ -138,7 +138,7 @@ public sealed class AuthorizationServerOptionsTests
         var profile = Profile("workforce", "https://operator:s3cret@sso.example.test/realms/mailfathom?token=abc");
 
         // Act
-        var error = Assert.Single(profile.FindConfigurationErrors());
+        var error = Assert.Single(profile.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
 
         // Assert
         Assert.StartsWith("Issuer", error, StringComparison.Ordinal);
@@ -161,7 +161,7 @@ public sealed class AuthorizationServerOptionsTests
         };
 
         // Act
-        var error = Assert.Single(profile.FindConfigurationErrors());
+        var error = Assert.Single(profile.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
 
         // Assert
         Assert.StartsWith("AuthorizedSubjects", error, StringComparison.Ordinal);
@@ -177,7 +177,7 @@ public sealed class AuthorizationServerOptionsTests
         profile.AuthorizedSubjects.Add(subject);
 
         // Act
-        var error = Assert.Single(profile.FindConfigurationErrors());
+        var error = Assert.Single(profile.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
 
         // Assert
         Assert.StartsWith("AuthorizedSubjects:1", error, StringComparison.Ordinal);
@@ -191,7 +191,7 @@ public sealed class AuthorizationServerOptionsTests
         profile.AuthorizedSubjects.Add(OwnerSubject);
 
         // Act
-        var error = Assert.Single(profile.FindConfigurationErrors());
+        var error = Assert.Single(profile.FindConfigurationErrors(OAuthSubjectAdmission.ConfiguredSubjects));
 
         // Assert
         Assert.StartsWith("AuthorizedSubjects:1", error, StringComparison.Ordinal);
