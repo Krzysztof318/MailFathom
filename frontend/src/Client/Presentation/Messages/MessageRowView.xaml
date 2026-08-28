@@ -9,7 +9,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
              x:Name="Root">
   <Grid Padding="4,8"
         ColumnSpacing="8"
-        AutomationProperties.Name="{x:Bind Row.Announcement}">
+        AutomationProperties.Name="{x:Bind Row.Announcement, Mode=OneWay}">
     <Grid.ColumnDefinitions>
       <ColumnDefinition Width="Auto" />
       <ColumnDefinition />
@@ -23,47 +23,47 @@ Project repository: https://github.com/Krzysztof318/MailFathom
             Margin="0,6,0,0"
             AutomationProperties.AccessibilityView="Raw"
             Background="{ThemeResource PrimaryBrush}"
-            Visibility="{x:Bind Row.IsUnread, Converter={StaticResource AffirmedVisibility}}" />
+            Visibility="{x:Bind Row.IsUnread, Mode=OneWay, Converter={StaticResource AffirmedVisibility}}" />
 
     <StackPanel Grid.Column="1"
                 Spacing="2">
-      <TextBlock Text="{x:Bind Row.Correspondent}"
+      <TextBlock Text="{x:Bind Row.Correspondent, Mode=OneWay}"
                  Style="{StaticResource BodyStrongTextBlockStyle}"
                  Foreground="{ThemeResource OnSurfaceBrush}"
                  AutomationProperties.AccessibilityView="Raw"
                  TextTrimming="CharacterEllipsis" />
 
-      <TextBlock Text="{x:Bind Row.Subject}"
+      <TextBlock Text="{x:Bind Row.Subject, Mode=OneWay}"
                  Style="{StaticResource BodyTextBlockStyle}"
                  Foreground="{ThemeResource OnSurfaceBrush}"
                  AutomationProperties.AccessibilityView="Raw"
                  TextTrimming="CharacterEllipsis" />
 
-      <TextBlock Text="{x:Bind Row.Preview}"
+      <TextBlock Text="{x:Bind Row.Preview, Mode=OneWay}"
                  Style="{StaticResource CaptionTextBlockStyle}"
                  Foreground="{ThemeResource OnSurfaceVariantBrush}"
                  AutomationProperties.AccessibilityView="Raw"
                  TextTrimming="CharacterEllipsis"
-                 Visibility="{x:Bind Row.HasPreview, Converter={StaticResource AffirmedVisibility}}" />
+                 Visibility="{x:Bind Row.HasPreview, Mode=OneWay, Converter={StaticResource AffirmedVisibility}}" />
 
-      <TextBlock Text="{x:Bind Row.MatchReason}"
+      <TextBlock Text="{x:Bind Row.MatchReason, Mode=OneWay}"
                  Style="{StaticResource CaptionTextBlockStyle}"
                  Foreground="{ThemeResource TertiaryBrush}"
                  AutomationProperties.AccessibilityView="Raw"
-                 Visibility="{x:Bind Row.HasMatchReason, Converter={StaticResource AffirmedVisibility}}" />
+                 Visibility="{x:Bind Row.HasMatchReason, Mode=OneWay, Converter={StaticResource AffirmedVisibility}}" />
 
-      <TextBlock Text="{x:Bind Row.MatchExtract}"
+      <TextBlock Text="{x:Bind Row.MatchExtract, Mode=OneWay}"
                  Style="{StaticResource CaptionTextBlockStyle}"
                  Foreground="{ThemeResource OnSurfaceVariantBrush}"
                  TextWrapping="Wrap"
                  AutomationProperties.AccessibilityView="Raw"
-                 Visibility="{x:Bind Row.HasMatchExtract, Converter={StaticResource AffirmedVisibility}}" />
+                 Visibility="{x:Bind Row.HasMatchExtract, Mode=OneWay, Converter={StaticResource AffirmedVisibility}}" />
     </StackPanel>
 
     <StackPanel Grid.Column="2"
                 Spacing="2"
                 HorizontalAlignment="Right">
-      <TextBlock Text="{x:Bind Row.Received}"
+      <TextBlock Text="{x:Bind Row.Received, Mode=OneWay}"
                  HorizontalAlignment="Right"
                  Style="{StaticResource CaptionTextBlockStyle}"
                  Foreground="{ThemeResource OnSurfaceVariantBrush}"
@@ -76,25 +76,25 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                   FontSize="12"
                   AutomationProperties.AccessibilityView="Raw"
                   Foreground="{ThemeResource OnSurfaceVariantBrush}"
-                  Visibility="{x:Bind Row.IsAnswered, Converter={StaticResource AffirmedVisibility}}" />
+                  Visibility="{x:Bind Row.IsAnswered, Mode=OneWay, Converter={StaticResource AffirmedVisibility}}" />
 
         <FontIcon Glyph="&#xE7C1;"
                   FontSize="12"
                   AutomationProperties.AccessibilityView="Raw"
                   Foreground="{ThemeResource TertiaryBrush}"
-                  Visibility="{x:Bind Row.IsFlagged, Converter={StaticResource AffirmedVisibility}}" />
+                  Visibility="{x:Bind Row.IsFlagged, Mode=OneWay, Converter={StaticResource AffirmedVisibility}}" />
 
         <FontIcon Glyph="&#xE723;"
                   FontSize="12"
                   AutomationProperties.AccessibilityView="Raw"
                   Foreground="{ThemeResource OnSurfaceVariantBrush}"
-                  Visibility="{x:Bind Row.HasAttachments, Converter={StaticResource AffirmedVisibility}}" />
+                  Visibility="{x:Bind Row.HasAttachments, Mode=OneWay, Converter={StaticResource AffirmedVisibility}}" />
 
-        <TextBlock Text="{x:Bind Row.AttachmentCountText}"
+        <TextBlock Text="{x:Bind Row.AttachmentCountText, Mode=OneWay}"
                    Style="{StaticResource CaptionTextBlockStyle}"
                    AutomationProperties.AccessibilityView="Raw"
                    Foreground="{ThemeResource OnSurfaceVariantBrush}"
-                   Visibility="{x:Bind Row.ShowsAttachmentCount, Converter={StaticResource AffirmedVisibility}}" />
+                   Visibility="{x:Bind Row.ShowsAttachmentCount, Mode=OneWay, Converter={StaticResource AffirmedVisibility}}" />
       </StackPanel>
     </StackPanel>
   </Grid>

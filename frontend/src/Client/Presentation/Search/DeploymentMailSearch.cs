@@ -241,7 +241,7 @@ public sealed class DeploymentMailSearch : IMailSearch
     public async ValueTask WidenAsync(CancellationToken cancellationToken)
     {
         await this.Account.SetAsync(string.Empty, cancellationToken).ConfigureAwait(false);
-        await this.Folder.SetAsync(string.Empty, cancellationToken).ConfigureAwait(false);
+        await this.SetFolderAsync(folder: null, cancellationToken).ConfigureAwait(false);
         await this.SearchAsync(cancellationToken).ConfigureAwait(false);
     }
 

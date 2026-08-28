@@ -237,21 +237,36 @@ public sealed class DeploymentMailSearchTests
             _ => StubTransport.JsonResponse(Page(1, nextCursor: null, "BothRankings", "Available")),
             cancellationToken: TestContext.Current.CancellationToken);
         using var session = Session();
-        var search = Search(harness, session, Workspace(WorkspaceScope.Everything), new StubMailThread());
+        var search = Search(
+            harness,
+            session,
+            Workspace(new WorkspaceScope { Account = "work", Role = "Inbox" }),
+            new StubMailThread());
+        await search.OpenAsync(TestContext.Current.CancellationToken);
         await search.Query.SetAsync("quarter", TestContext.Current.CancellationToken);
-        await search.Account.SetAsync("work", TestContext.Current.CancellationToken);
-        await search.Folder.SetAsync("INBOX", TestContext.Current.CancellationToken);
 
         // Act
         await search.WidenAsync(TestContext.Current.CancellationToken);
         _ = await search.Results;
+        await search.Folder.SetAsync("Inbox display", TestContext.Current.CancellationToken);
+        await search.SearchAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        var asked = Assert.Single(harness.Deployment.Requests).RequestUri;
-        Assert.NotNull(asked);
-        Assert.DoesNotContain("account=", asked.Query, StringComparison.Ordinal);
-        Assert.DoesNotContain("folder=", asked.Query, StringComparison.Ordinal);
-        Assert.Contains("query=quarter", asked.Query, StringComparison.Ordinal);
+        Assert.Collection(
+            harness.Deployment.Requests.Select(request => request.RequestUri),
+            widened =>
+            {
+                Assert.NotNull(widened);
+                Assert.DoesNotContain("account=", widened.Query, StringComparison.Ordinal);
+                Assert.DoesNotContain("folder=", widened.Query, StringComparison.Ordinal);
+                Assert.Contains("query=quarter", widened.Query, StringComparison.Ordinal);
+            },
+            literalFolder =>
+            {
+                Assert.NotNull(literalFolder);
+                Assert.Contains("folder=Inbox%20display", literalFolder.Query, StringComparison.Ordinal);
+                Assert.DoesNotContain("folder=role%3AInbox", literalFolder.Query, StringComparison.Ordinal);
+            });
     }
 
     /// <summary>A session refresh hides the previous owner's results and recent terms even when the grants are unchanged.</summary>
