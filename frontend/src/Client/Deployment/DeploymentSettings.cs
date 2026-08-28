@@ -10,7 +10,7 @@ namespace MailFathom.Client.Deployment;
 /// The configuration half of what <c>Client.Backend</c> refuses to decide. That assembly has no default address and
 /// composes none from a literal, because a client that guessed would reach somebody else's deployment; this is where
 /// the head is told, and what it is told with depends on the head. A desktop head is installed next to a file somebody
-/// edits, so it reads both values from here. A browser head is served by the deployment it talks to, so its address is
+/// edits, so it reads its address from here. A browser head is served by the deployment it talks to, so its address is
 /// the origin it was fetched from and this section's <see cref="Address" /> says nothing to it.
 /// </para>
 /// <para>
@@ -37,13 +37,4 @@ internal sealed record DeploymentSettings
     /// rule judges every address whoever wrote it.
     /// </remarks>
     public string Address { get; init; } = string.Empty;
-
-    /// <summary>Gets the client identifier this application presents to the deployment's authorization server.</summary>
-    /// <remarks>
-    /// Public information rather than a secret, which is why it ships with a value: this is a public client, holds no
-    /// secret, and every grant it makes is bound by a proof key instead. The default is the name MailFathom's own
-    /// documentation asks an operator to register the client under, so an installation whose authorization server was
-    /// set up from that page needs no edit here; one that registered another name writes it.
-    /// </remarks>
-    public string ClientId { get; init; } = string.Empty;
 }

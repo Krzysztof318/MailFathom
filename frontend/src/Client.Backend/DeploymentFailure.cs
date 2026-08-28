@@ -14,7 +14,7 @@ namespace MailFathom.Client.Backend;
 /// </remarks>
 public enum DeploymentFailureReason
 {
-    /// <summary>The deployment or its authorization server refused what was presented.</summary>
+    /// <summary>The deployment refused the credential presented to it.</summary>
     CredentialRefused = 0,
 
     /// <summary>Nothing answered within the configured timeout.</summary>

@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Client.Backend.Authorization;
-using MailFathom.Client.Backend.Authorization.Redirect;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -12,7 +11,7 @@ namespace MailFathom.Client.Backend;
 /// <summary>Puts everything the client needs to reach one deployment into a service collection.</summary>
 public static class DeploymentRegistration
 {
-    /// <summary>Registers the transports, the sign-in, the credential store, and the address they all follow.</summary>
+    /// <summary>Registers the transports, the sign-in, the session, and the address they all follow.</summary>
     /// <param name="services">The collection to add to.</param>
     /// <param name="options">What the installation states about reaching a deployment, which is not which one.</param>
     /// <returns>The same collection, so registration composes.</returns>
@@ -26,9 +25,10 @@ public static class DeploymentRegistration
     /// state of a first run.
     /// </para>
     /// <para>
-    /// The redirect listener is registered <em>if nothing already has</em>, with the loopback implementation the desktop
-    /// head uses. A head that catches its redirect differently — the browser one does — registers its own before
-    /// calling this, and that registration is the one that stands.
+    /// The credential store is registered <em>if nothing already has</em>, with the one that keeps nothing. A head that
+    /// keeps a credential — the desktop head, through the operating system's own store for one user — registers its own
+    /// before calling this, and that registration is the one that stands. Defaulting to keeping nothing is the safe
+    /// direction: a head composed without saying where it would keep a password keeps none.
     /// </para>
     /// </remarks>
     public static IServiceCollection AddMailFathomDeployment(
@@ -39,10 +39,10 @@ public static class DeploymentRegistration
         ArgumentNullException.ThrowIfNull(options);
 
         services.AddSingleton(options);
-        services.AddSingleton<AccessTokenStore>();
+        services.TryAddSingleton<IOwnerCredentialStore>(UnkeptOwnerCredentialStore.Instance);
+        services.AddSingleton<SignedInOwner>();
         services.AddSingleton<DeploymentAddress>();
-        services.AddTransient<AccessTokenHandler>();
-        services.TryAddSingleton<ISignInRedirectListenerFactory, LoopbackSignInRedirectListenerFactory>();
+        services.AddTransient<OwnerCredentialHandler>();
         services.AddSingleton<DeploymentSignIn>();
         services.AddSingleton<DeploymentClient>();
         services.AddSingleton<DeploymentProbe>();
@@ -64,20 +64,21 @@ public static class DeploymentRegistration
                     // it reads, which is the half that can say what happened.
                     transport.MaxResponseContentBufferSize = DeploymentExchange.MaxMailBodyBytes;
                 })
-            .AddHttpMessageHandler<AccessTokenHandler>();
+            .AddHttpMessageHandler<OwnerCredentialHandler>();
 
-        // No base address: every address this one is given is absolute and derived from the issuer the deployment
-        // named. No token handler either — a bearer token issued for MailFathom has no business being presented to
-        // somebody's identity provider, and the proof key is what authenticates this client there.
+        // Neither a base address nor the credential handler, and the second of those is the point: what this transport
+        // sends is one candidate credential, set on the request itself. Attaching whoever is already signed in would
+        // make a refused attempt indistinguishable from an accepted one and would present a running session to prove
+        // somebody else's password.
         services.AddHttpClient(
-            DeploymentHttpClients.AuthorizationServer,
+            DeploymentHttpClients.SignIn,
             transport =>
             {
                 transport.Timeout = options.Timeout;
                 transport.MaxResponseContentBufferSize = DeploymentExchange.MaxDocumentBytes;
             });
 
-        // Neither a base address nor a token handler, and the second of those is the point: this transport is aimed at
+        // Neither a base address nor the credential handler either, for a reason of its own: this transport is aimed at
         // an address somebody has just typed, which is a machine nobody has vouched for yet. Attaching the session's
         // credential to a request whose whole purpose is to find out what answers would hand that credential over to
         // whatever did.

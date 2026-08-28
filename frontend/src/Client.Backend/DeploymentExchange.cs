@@ -18,20 +18,20 @@ namespace MailFathom.Client.Backend;
 /// credential arrives as a status code rather than as an exception at all.
 /// </para>
 /// <para>
-/// Nothing a deployment or an authorization server answered is put into a failure message. The body is text from a
-/// machine this process does not own, and everything a MailFathom deployment returns about mail is personal data under
-/// the root instructions — so a screen that showed either would be leaking one or repeating the other.
+/// Nothing a deployment answered is put into a failure message. The body is text from a machine this process does not
+/// own, and everything a MailFathom deployment returns about mail is personal data under the root instructions — so a
+/// screen that showed either would be leaking one or repeating the other.
 /// </para>
 /// </remarks>
 internal static class DeploymentExchange
 {
     /// <summary>The largest body this assembly will read.</summary>
     /// <remarks>
-    /// Every document read here is small and bounded by its own specification — a session's grant, an RFC 9728
-    /// document, a discovery document, a token response — so a megabyte is generous for all four and still a ceiling.
-    /// The root instructions ask for an explicit limit at every remote boundary, and the reason bites hardest on this
-    /// side of one: an authorization server is a machine somebody else runs, and a client that read whatever it was
-    /// sent would let a compromised or merely broken one exhaust a browser tab's memory.
+    /// Every document read here is small and bounded by what the deployment composes — a session's grant, a list of
+    /// mailboxes, a folder tree, a page of a message list — so a megabyte is generous for all of them and still a
+    /// ceiling. The root instructions ask for an explicit limit at every remote boundary, and the reason bites hardest
+    /// on this side of one: a deployment is a machine somebody else runs, and a client that read whatever it was sent
+    /// would let a compromised or merely broken one exhaust a browser tab's memory.
     /// </remarks>
     internal const int MaxDocumentBytes = 1024 * 1024;
 

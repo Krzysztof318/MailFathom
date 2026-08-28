@@ -4,7 +4,6 @@
 
 using System.Text.Json.Serialization;
 using MailFathom.Client.Backend.Accounts;
-using MailFathom.Client.Backend.Authorization;
 using MailFathom.Client.Backend.Folders;
 using MailFathom.Client.Backend.Mail;
 using MailFathom.Client.Backend.Timeline;
@@ -20,9 +19,9 @@ namespace MailFathom.Client.Backend;
 /// reflection overloads outright for that reason, which makes this the only way to read a body here.
 /// </para>
 /// <para>
-/// The naming policy is camel case, which is what the deployment's own minimal APIs write. The OAuth documents state
-/// their snake-case names field by field instead, because those names are fixed by RFC 6749, RFC 8414, and RFC 9728
-/// rather than by either end's serializer settings.
+/// The naming policy is camel case, which is what the deployment's own minimal APIs write, and every document here is
+/// one this deployment composes. Nothing on this list belongs to a third party's specification, so nothing on it
+/// states its own names field by field.
 /// </para>
 /// </remarks>
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
@@ -41,7 +40,4 @@ namespace MailFathom.Client.Backend;
 [JsonSerializable(typeof(MailBodyImageBlock))]
 [JsonSerializable(typeof(MailBodySeparatorBlock))]
 [JsonSerializable(typeof(MailBodyPreformattedBlock))]
-[JsonSerializable(typeof(ProtectedResourceMetadata))]
-[JsonSerializable(typeof(AuthorizationServerMetadata))]
-[JsonSerializable(typeof(OAuthTokenResponse))]
 internal sealed partial class DeploymentJsonContext : JsonSerializerContext;

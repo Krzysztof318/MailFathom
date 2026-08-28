@@ -14,19 +14,10 @@ public sealed class DeploymentOptionsTests
     public void Constructor_NoTimeoutStated_TakesTheDefaultRatherThanNone()
     {
         // Arrange, Act
-        var options = new DeploymentOptions("the-client");
+        var options = new DeploymentOptions();
 
         // Assert
         Assert.Equal(DeploymentOptions.DefaultTimeout, options.Timeout);
-    }
-
-    [Theory]
-    [InlineData("")]
-    [InlineData("   ")]
-    public void Constructor_ABlankClientIdentifier_IsRefused(string clientId)
-    {
-        // Arrange, Act, Assert
-        Assert.Throws<ArgumentException>("clientId", () => new DeploymentOptions(clientId));
     }
 
     [Fact]
@@ -35,6 +26,6 @@ public sealed class DeploymentOptionsTests
         // Arrange, Act, Assert
         Assert.Throws<ArgumentOutOfRangeException>(
             "timeout",
-            () => new DeploymentOptions("the-client", TimeSpan.Zero));
+            () => new DeploymentOptions(TimeSpan.Zero));
     }
 }

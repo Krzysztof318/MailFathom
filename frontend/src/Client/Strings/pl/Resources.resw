@@ -181,6 +181,82 @@
     <value>Coś tam odpowiedziało, ale to nie jest MailFathom. Sprawdź adres.</value>
     <comment>Shown when the answer was not MailFathom's own — a captive portal, a proxy, or another service on the port.</comment>
   </data>
+  <data name="SignInPage.NavigationBar.Title.Content" xml:space="preserve">
+    <value>Logowanie</value>
+    <comment>Titles the screen that asks who somebody is on the deployment this client reaches.</comment>
+  </data>
+  <data name="SignInPage.TextBlock.Lead.Text" xml:space="preserve">
+    <value>Użyj nazwy użytkownika i hasła, które otrzymałeś od osoby prowadzącej Twój MailFathom. To nie jest hasło do żadnej skrzynki pocztowej, którą ten serwer czyta.</value>
+    <comment>Says which credential is being asked for, because a mail application asking for a password is otherwise read as asking for the mail account's own.</comment>
+  </data>
+  <data name="SignInPage.TextBlock.Username.Text" xml:space="preserve">
+    <value>Nazwa użytkownika</value>
+    <comment>Labels the box the username is written in, for a reader and for a screen reader.</comment>
+  </data>
+  <data name="SignInPage.TextBox.Username.PlaceholderText" xml:space="preserve">
+    <value>twoja nazwa użytkownika</value>
+    <comment>An example of the shape rather than a suggestion, since a username is whatever an administrator issued.</comment>
+  </data>
+  <data name="SignInPage.TextBlock.Password.Text" xml:space="preserve">
+    <value>Hasło</value>
+    <comment>Labels the box the password is written in, for a reader and for a screen reader.</comment>
+  </data>
+  <data name="SignInPage.Button.SignIn.Content" xml:space="preserve">
+    <value>Zaloguj się</value>
+    <comment>Offers what has been typed to the deployment. Phrased as the act, and nothing is kept unless it is accepted.</comment>
+  </data>
+  <data name="SignInPage.InfoBar.Keeping.Title" xml:space="preserve">
+    <value>Następnym razem</value>
+    <comment>Heads the sentence saying what this device does with the sign-in once it is accepted. States the subject; the message beside it states what happens.</comment>
+  </data>
+  <data name="SignInPage.Keeping.NotOfferedOnThisHead" xml:space="preserve">
+    <value>W przeglądarce zalogujesz się ponownie przy każdej wizycie. Cokolwiek działa na tej stronie mogłoby odczytać zapisane hasło, więc nic nie jest zapisywane.</value>
+    <comment>Shown on the browser head, where every store is scoped to the page's origin rather than to a person. Says why rather than only that, because it is a property of browsers rather than of this application.</comment>
+  </data>
+  <data name="SignInPage.Keeping.StoreUnavailable" xml:space="preserve">
+    <value>To urządzenie nie ma pęku kluczy, do którego aplikacja mogłaby sięgnąć, więc przy następnym uruchomieniu zalogujesz się ponownie.</value>
+    <comment>Shown where the operating system's own secret store is absent, locked, or refusing — a Linux session with no keyring is the ordinary case. Nothing weaker is written instead.</comment>
+  </data>
+  <data name="SignInPage.InfoBar.Refusal.Title" xml:space="preserve">
+    <value>Nie zalogowano</value>
+    <comment>Heads the sentence explaining why a sign-in was not accepted. States the outcome; the message beside it states the cause.</comment>
+  </data>
+  <data name="SignInPage.Refusal.NotACredential" xml:space="preserve">
+    <value>Wpisz nazwę użytkownika i hasło. Nazwa użytkownika nie może zawierać dwukropka.</value>
+    <comment>Shown when what was typed could not be presented at all — one half blank, or a colon in the username, which HTTP Basic would read as the start of the password.</comment>
+  </data>
+  <data name="SignInPage.Refusal.CredentialRefused" xml:space="preserve">
+    <value>Ta nazwa użytkownika i hasło nie zostały przyjęte. Sprawdź obie wartości i spróbuj ponownie.</value>
+    <comment>Shown when the deployment refused the credential. Names the pair rather than one half, because the deployment deliberately does not say which was wrong.</comment>
+  </data>
+  <data name="SignInPage.Refusal.PasswordSignInNotOffered" xml:space="preserve">
+    <value>Ten MailFathom nie przyjmuje nazwy użytkownika i hasła. Poproś osobę, która go prowadzi, o włączenie logowania hasłem.</value>
+    <comment>Shown when the deployment's refusal invited no password at all. Sends the person to their operator rather than to their own password, which was never the problem.</comment>
+  </data>
+  <data name="SignInPage.Refusal.Unreachable" xml:space="preserve">
+    <value>Nic nie odpowiedziało pod tym adresem. Sprawdź, czy to urządzenie ma połączenie z siecią.</value>
+    <comment>Shown when the connection failed outright. The address itself was already proved reachable when it was chosen, so this is about now.</comment>
+  </data>
+  <data name="SignInPage.Refusal.TimedOut" xml:space="preserve">
+    <value>Twój MailFathom nie odpowiedział na czas. Spróbuj ponownie za chwilę.</value>
+    <comment>Shown when something is there and was too slow. Worth retrying unchanged, which is what separates it from the message above.</comment>
+  </data>
+  <data name="SignInPage.Refusal.NotADeployment" xml:space="preserve">
+    <value>Coś odpowiedziało, ale nie tak jak MailFathom. Sprawdź adres na poprzednim ekranie.</value>
+    <comment>Shown when the answer was not MailFathom's own — a captive portal, a proxy, or another service that has taken the port since the address was chosen.</comment>
+  </data>
+  <data name="SettingsPage.TextBlock.SignedInAs.Text" xml:space="preserve">
+    <value>Zalogowano jako</value>
+    <comment>Labels the username this client is signed in under. Phrased as the relationship rather than as "Username", which names a field instead of saying who you are.</comment>
+  </data>
+  <data name="SettingsPage.TextBlock.SignOutIsLocal.Text" xml:space="preserve">
+    <value>Wylogowanie usuwa dane logowania z tego urządzenia. Twoje hasło pozostaje ważne, dopóki nie zmieni go osoba prowadząca Twój MailFathom.</value>
+    <comment>Says what signing out does and does not do, because a sign-out control is otherwise read as revoking the credential.</comment>
+  </data>
+  <data name="SettingsPage.Button.SignOut.Content" xml:space="preserve">
+    <value>Wyloguj się</value>
+    <comment>Ends the session on this device and clears whatever it kept of it. Named for the act rather than for the storage it empties.</comment>
+  </data>
   <data name="SettingsPage.TextBlock.Language.Text" xml:space="preserve">
     <value>Język</value>
     <comment>Labels the control that chooses which language the application is read in, for a reader and for a screen reader.</comment>

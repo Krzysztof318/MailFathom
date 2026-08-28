@@ -12,9 +12,9 @@ namespace MailFathom.Client.Backend;
 /// and can change while the client runs; what is left here is what stays true whichever deployment is reached.
 /// </para>
 /// <para>
-/// The client identifier is public information, unlike a client secret, which this application holds none of and could
-/// hold none of — a desktop binary and a WebAssembly bundle are both readable by whoever runs them, which is exactly
-/// the situation RFC 7636 defines a public client for. That is why every grant here is bound by a proof key.
+/// One value, and no client identifier beside it. Signing in is an owner's own username and password presented as HTTP
+/// Basic, so this application registers with nothing and is registered as nothing: the credential names the person
+/// rather than the program, and there is no identifier an installation could state wrongly.
 /// </para>
 /// </remarks>
 public sealed record DeploymentOptions
@@ -27,24 +27,16 @@ public sealed record DeploymentOptions
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(30);
 
     /// <summary>Initializes the options a deployment is reached under.</summary>
-    /// <param name="clientId">The client identifier registered with the deployment's authorization server.</param>
     /// <param name="timeout">How long a single request may take, or <see langword="null" /> for <see cref="DefaultTimeout" />.</param>
-    /// <exception cref="ArgumentException">Thrown when the client identifier is blank.</exception>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when the timeout is not positive.</exception>
-    public DeploymentOptions(string clientId, TimeSpan? timeout = null)
+    public DeploymentOptions(TimeSpan? timeout = null)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(clientId);
-
         var resolvedTimeout = timeout ?? DefaultTimeout;
 
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(resolvedTimeout, TimeSpan.Zero, nameof(timeout));
 
-        this.ClientId = clientId;
         this.Timeout = resolvedTimeout;
     }
-
-    /// <summary>Gets the client identifier presented to the authorization server.</summary>
-    public string ClientId { get; }
 
     /// <summary>Gets how long a single request to the deployment may take.</summary>
     public TimeSpan Timeout { get; }

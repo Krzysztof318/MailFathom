@@ -9,7 +9,7 @@ informed:
 
 # Keep a sign-in credential only where the operating system holds a secret for one user, persist nothing on the browser head, store the owner's password rather than anything derived from it, and let a command that must keep working fall back to a sealed file
 
-<!-- describes: backend/src/Cli/Credentials/**, backend/src/Cli/Commands/LoginCommand.cs, backend/src/Cli/Commands/LogoutCommand.cs, backend/src/Cli/Administration/DeploymentAccess.cs -->
+<!-- describes: backend/src/Cli/Credentials/**, backend/src/Cli/Commands/LoginCommand.cs, backend/src/Cli/Commands/LogoutCommand.cs, backend/src/Cli/Administration/DeploymentAccess.cs, frontend/src/Client.Backend/Authorization/IOwnerCredentialStore.cs, frontend/src/Client.Backend/Authorization/UnkeptOwnerCredentialStore.cs, frontend/src/Client/Platforms/Desktop/Credentials/** -->
 
 ## Context and Problem Statement
 

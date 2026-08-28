@@ -3,405 +3,297 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Net;
+using System.Text;
 using MailFathom.Client.Backend;
+using MailFathom.Client.Backend.Authorization;
 using MailFathom.Client.UnitTests.TestDoubles;
 
 namespace MailFathom.Client.UnitTests.Backend.Authorization;
 
-/// <summary>
-/// The whole sign-in, with the one head-specific step stubbed: discovery, the authorization request, the proof key, and
-/// the exchange. No browser, no socket, and no visual tree is involved in any of it.
-/// </summary>
+/// <summary>Offering an owner's username and password to a deployment, and what each of its answers means.</summary>
 public sealed class DeploymentSignInTests
 {
-    private const string ResourceIdentifier = "https://mail.example/api/client";
+    private const string SessionDocument =
+        """{"service":"MailFathom","version":"0.8.0","permissions":["mailfathom.mail.read"]}""";
 
-    private const string Issuer = "https://issuer.example";
-
-    private const string PublishedMetadata =
-        $$"""
-        {"resource":"{{ResourceIdentifier}}","authorization_servers":["{{Issuer}}"],"scopes_supported":["mail.read","mail.send"]}
-        """;
-
-    private const string PublishedDiscovery =
-        $$"""
-        {"issuer":"{{Issuer}}","authorization_endpoint":"{{Issuer}}/authorize","token_endpoint":"{{Issuer}}/token"}
-        """;
-
-    [Fact]
-    public async Task SignInAsync_AnApprovedSignIn_HoldsTheIssuedTokenForThisRun()
+    /// <summary>The refusal a deployment that accepts passwords answers with, which is what invites one.</summary>
+    private static HttpResponseMessage RefusedWithAPasswordChallenge()
     {
-        // Arrange
-        using var harness = new DeploymentHarness(
-            Publishing(PublishedMetadata),
-            IssuingTokens(),
-            StubSignInRedirectListener.Approved);
+        var refusal = new HttpResponseMessage(HttpStatusCode.Unauthorized);
 
-        // Act
-        await harness.SignIn.SignInAsync(TestContext.Current.CancellationToken);
+        refusal.Headers.TryAddWithoutValidation("WWW-Authenticate", "Bearer");
+        refusal.Headers.TryAddWithoutValidation("WWW-Authenticate", "Basic realm=\"MailFathom\", charset=\"UTF-8\"");
 
-        // Assert
-        Assert.True(harness.Tokens.IsSignedIn);
-        Assert.True(harness.Listener.Disposed);
+        return refusal;
+    }
+
+    /// <summary>The refusal a deployment with no password method configured answers with.</summary>
+    private static HttpResponseMessage RefusedWithoutOne()
+    {
+        var refusal = new HttpResponseMessage(HttpStatusCode.Unauthorized);
+
+        refusal.Headers.TryAddWithoutValidation("WWW-Authenticate", "Bearer");
+
+        return refusal;
     }
 
     [Fact]
-    public async Task SignInAsync_TheAuthorizationRequest_BindsTheGrantToAProofKeyAndToThisDeployment()
+    public async Task SignInAsync_WithACredentialTheDeploymentAccepts_SignsIn()
     {
         // Arrange
         using var harness = new DeploymentHarness(
-            Publishing(PublishedMetadata),
-            IssuingTokens(),
-            StubSignInRedirectListener.Approved);
+            _ => StubTransport.JsonResponse(SessionDocument),
+            store: new StubOwnerCredentialStore());
 
         // Act
-        await harness.SignIn.SignInAsync(TestContext.Current.CancellationToken);
+        var attempt = await harness.SignIn.SignInAsync(
+            new OwnerCredential("ada", "a-long-password"),
+            TestContext.Current.CancellationToken);
 
         // Assert
-        var query = harness.Listener.OpenedAuthorizationUrl!.Query;
-
-        Assert.Contains("response_type=code", query, StringComparison.Ordinal);
-        Assert.Contains("code_challenge_method=S256", query, StringComparison.Ordinal);
-        Assert.Contains("code_challenge=", query, StringComparison.Ordinal);
-        Assert.Contains("client_id=the-client", query, StringComparison.Ordinal);
-        Assert.Contains($"resource={Uri.EscapeDataString(ResourceIdentifier)}", query, StringComparison.Ordinal);
-        Assert.Contains(
-            $"scope={Uri.EscapeDataString("mail.read mail.send")}",
-            query,
-            StringComparison.Ordinal);
-        Assert.Contains(
-            $"redirect_uri={Uri.EscapeDataString(harness.Listener.RedirectUri.AbsoluteUri)}",
-            query,
-            StringComparison.Ordinal);
+        Assert.Equal(SignInResult.Accepted, attempt.Result);
+        Assert.True(harness.Owner.IsSignedIn);
+        Assert.Equal("ada", harness.Owner.Username);
     }
 
+    /// <summary>RFC 7617: the two halves in one Base64 field, separated by the first colon and encoded as UTF-8.</summary>
     [Fact]
-    public async Task SignInAsync_TheAuthorizationRequest_NeverCarriesTheVerifierItself()
+    public async Task SignInAsync_PresentsTheCredentialAsAnRfc7617BasicHeader()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
-            Publishing(PublishedMetadata),
-            IssuingTokens(),
-            StubSignInRedirectListener.Approved);
+        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(SessionDocument));
 
         // Act
-        await harness.SignIn.SignInAsync(TestContext.Current.CancellationToken);
+        await harness.SignIn.SignInAsync(
+            new OwnerCredential("ada", "hasło:z:dwukropkami"),
+            TestContext.Current.CancellationToken);
 
         // Assert
-        // The secret half of the pair goes to the token endpoint over a connection this process opened, never through
-        // the person's browser — which is the whole of what makes an intercepted code useless.
-        Assert.DoesNotContain(
-            "code_verifier",
-            harness.Listener.OpenedAuthorizationUrl!.Query,
-            StringComparison.Ordinal);
+        var offered = Assert.Single(harness.SignedInAt.Requests);
+
+        Assert.Equal(
+            $"Basic {Convert.ToBase64String(Encoding.UTF8.GetBytes("ada:hasło:z:dwukropkami"))}",
+            offered.Authorization);
     }
 
+    /// <summary>The route it offers the credential to is the session one, which answers about whatever was presented.</summary>
     [Fact]
-    public async Task SignInAsync_TheExchange_RedeemsWithTheVerifierAndWithNoClientSecret()
+    public async Task SignInAsync_OffersTheCredentialToTheSessionRouteOfTheDeploymentItIsPointedAt()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
-            Publishing(PublishedMetadata),
-            IssuingTokens(),
-            StubSignInRedirectListener.Approved);
+        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(SessionDocument));
 
         // Act
-        await harness.SignIn.SignInAsync(TestContext.Current.CancellationToken);
+        await harness.SignIn.SignInAsync(
+            new OwnerCredential("ada", "a-long-password"),
+            TestContext.Current.CancellationToken);
 
         // Assert
-        var exchange = Assert.Single(harness.AuthorizationServer.Requests, request => request.Body is not null);
+        var offered = Assert.Single(harness.SignedInAt.Requests);
 
-        Assert.Contains("grant_type=authorization_code", exchange.Body!, StringComparison.Ordinal);
-        Assert.Contains($"code={StubSignInRedirectListener.ApprovedCode}", exchange.Body, StringComparison.Ordinal);
-        Assert.Contains("code_verifier=", exchange.Body, StringComparison.Ordinal);
-        Assert.Contains(
-            $"resource={Uri.EscapeDataString(ResourceIdentifier)}",
-            exchange.Body,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain("client_secret", exchange.Body, StringComparison.Ordinal);
+        Assert.Equal(new Uri("https://mail.example/api/client/session"), offered.RequestUri);
     }
 
+    /// <summary>A refused credential leaves whoever was signed in exactly as they were.</summary>
     [Fact]
-    public async Task SignInAsync_ARedirectEchoingSomethingElse_IsNeverRedeemed()
+    public async Task SignInAsync_WithACredentialTheDeploymentRefuses_LeavesNobodySignedIn()
     {
         // Arrange
         using var harness = new DeploymentHarness(
-            Publishing(PublishedMetadata),
-            IssuingTokens(),
-            StubSignInRedirectListener.ApprovedForSomeOtherRequest);
+            _ => RefusedWithAPasswordChallenge(),
+            store: new StubOwnerCredentialStore());
 
         // Act
-        var failure = await Assert.ThrowsAsync<DeploymentFailure>(
-            () => harness.SignIn.SignInAsync(TestContext.Current.CancellationToken));
+        var attempt = await harness.SignIn.SignInAsync(
+            new OwnerCredential("ada", "the-wrong-password"),
+            TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(DeploymentFailureReason.Unusable, failure.Reason);
-        Assert.False(harness.Tokens.IsSignedIn);
-        Assert.DoesNotContain(harness.AuthorizationServer.Requests, request => request.Body is not null);
+        Assert.Equal(SignInResult.CredentialRefused, attempt.Result);
+        Assert.False(harness.Owner.IsSignedIn);
     }
 
+    /// <summary>
+    /// A deployment whose operator never enabled password sign-in is not a wrong password, and the challenge is what
+    /// says so: a surface with the method configured names it, and one without it does not.
+    /// </summary>
     [Fact]
-    public async Task SignInAsync_ARefusalForSomeOtherRequest_IsNotActedOnEither()
+    public async Task SignInAsync_WithARefusalThatInvitesNoPassword_ReportsThatTheDeploymentOffersNone()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
-            Publishing(PublishedMetadata),
-            IssuingTokens(),
-            StubSignInRedirectListener.RefusedForSomeOtherRequest);
+        using var harness = new DeploymentHarness(_ => RefusedWithoutOne());
 
         // Act
-        var failure = await Assert.ThrowsAsync<DeploymentFailure>(
-            () => harness.SignIn.SignInAsync(TestContext.Current.CancellationToken));
+        var attempt = await harness.SignIn.SignInAsync(
+            new OwnerCredential("ada", "a-long-password"),
+            TestContext.Current.CancellationToken);
 
         // Assert
-        // The state is compared before the error is read, so anything that can navigate a browser cannot end a sign-in
-        // it did not start.
-        Assert.Equal(DeploymentFailureReason.Unusable, failure.Reason);
+        Assert.Equal(SignInResult.PasswordSignInNotOffered, attempt.Result);
     }
 
+    /// <summary>Anything can answer 200 on a port, so the answer has to be MailFathom's own document.</summary>
     [Fact]
-    public async Task SignInAsync_AnApprovalTheServerRefused_ReportsARefusedCredential()
+    public async Task SignInAsync_WithSomethingThatIsNotMailFathomAnswering_RefusesTheAnswer()
     {
         // Arrange
         using var harness = new DeploymentHarness(
-            Publishing(PublishedMetadata),
-            IssuingTokens(),
-            StubSignInRedirectListener.Refused);
+            _ => StubTransport.JsonResponse("""{"service":"Something Else","version":"1","permissions":[]}"""));
 
         // Act
-        var failure = await Assert.ThrowsAsync<DeploymentFailure>(
-            () => harness.SignIn.SignInAsync(TestContext.Current.CancellationToken));
+        var refusal = await Assert.ThrowsAsync<DeploymentFailure>(
+            () => harness.SignIn.SignInAsync(
+                new OwnerCredential("ada", "a-long-password"),
+                TestContext.Current.CancellationToken));
 
         // Assert
-        Assert.Equal(DeploymentFailureReason.CredentialRefused, failure.Reason);
+        Assert.Equal(DeploymentFailureReason.Unusable, refusal.Reason);
+        Assert.False(harness.Owner.IsSignedIn);
     }
 
+    /// <summary>A client pointed nowhere has nothing to sign in to, and says so rather than composing an address.</summary>
     [Fact]
-    public async Task SignInAsync_ATokenEndpointRefusingTheCode_ReadsTheBodyRatherThanTheStatus()
+    public async Task SignInAsync_WithNothingPointedAt_Refuses()
     {
         // Arrange
-        // RFC 6749 requires a rejected grant to arrive as 400 with a machine-readable error, which is the shape here.
         using var harness = new DeploymentHarness(
-            Publishing(PublishedMetadata),
-            request => request.Method == HttpMethod.Post
-                ? StubTransport.JsonResponse("""{"error":"invalid_grant"}""", HttpStatusCode.BadRequest)
-                : StubTransport.JsonResponse(PublishedDiscovery),
-            StubSignInRedirectListener.Approved);
+            _ => StubTransport.JsonResponse(SessionDocument),
+            pointed: false);
 
-        // Act
-        var failure = await Assert.ThrowsAsync<DeploymentFailure>(
-            () => harness.SignIn.SignInAsync(TestContext.Current.CancellationToken));
-
-        // Assert
-        Assert.Equal(DeploymentFailureReason.CredentialRefused, failure.Reason);
-        Assert.False(harness.Tokens.IsSignedIn);
+        // Act, Assert
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => harness.SignIn.SignInAsync(
+                new OwnerCredential("ada", "a-long-password"),
+                TestContext.Current.CancellationToken));
     }
 
+    /// <summary>Where the head keeps a credential, an accepted one is kept beside the deployment it was accepted by.</summary>
     [Fact]
-    public async Task SignInAsync_ATokenEndpointAnsweringWithoutAToken_LeavesNobodySignedIn()
+    public async Task SignInAsync_OnAHeadThatKeepsACredential_KeepsItForTheDeploymentItWasAcceptedBy()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
-            Publishing(PublishedMetadata),
-            request => request.Method == HttpMethod.Post
-                ? StubTransport.JsonResponse("""{"expires_in":3600}""")
-                : StubTransport.JsonResponse(PublishedDiscovery),
-            StubSignInRedirectListener.Approved);
+        var store = new StubOwnerCredentialStore();
+
+        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(SessionDocument), store: store);
 
         // Act
-        var failure = await Assert.ThrowsAsync<DeploymentFailure>(
-            () => harness.SignIn.SignInAsync(TestContext.Current.CancellationToken));
+        var attempt = await harness.SignIn.SignInAsync(
+            new OwnerCredential("ada", "a-long-password"),
+            TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(DeploymentFailureReason.Unusable, failure.Reason);
-        Assert.False(harness.Tokens.IsSignedIn);
+        Assert.Equal(CredentialPersistence.Kept, attempt.Persistence);
+        Assert.Equal(DeploymentHarness.DeploymentAddress, store.Held?.Deployment);
+        Assert.Equal("ada", store.Held?.Credential.Username);
     }
 
+    /// <summary>A store that refuses is reported rather than thrown: the sign-in succeeded, and the next start will ask again.</summary>
     [Fact]
-    public async Task SignInAsync_ADeploymentPublishingNoMetadata_SaysSoRatherThanGuessingWhereToSignIn()
+    public async Task SignInAsync_WhereTheStoreRefuses_SignsInAndSaysTheNextStartWillAsk()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
-            _ => StubTransport.JsonResponse("{}", HttpStatusCode.NotFound),
-            IssuingTokens(),
-            StubSignInRedirectListener.Approved);
+        var store = new StubOwnerCredentialStore(CredentialPersistence.StoreUnavailable);
+
+        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(SessionDocument), store: store);
 
         // Act
-        var failure = await Assert.ThrowsAsync<DeploymentFailure>(
-            () => harness.SignIn.SignInAsync(TestContext.Current.CancellationToken));
+        var attempt = await harness.SignIn.SignInAsync(
+            new OwnerCredential("ada", "a-long-password"),
+            TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(DeploymentFailureReason.Unusable, failure.Reason);
-        Assert.Null(harness.Listener.OpenedAuthorizationUrl);
+        Assert.Equal(SignInResult.Accepted, attempt.Result);
+        Assert.Equal(CredentialPersistence.StoreUnavailable, attempt.Persistence);
+        Assert.True(harness.Owner.IsSignedIn);
+        Assert.Null(store.Held);
     }
 
+    /// <summary>Signing out ends the session here and clears what the head kept, without asking the deployment anything.</summary>
     [Fact]
-    public async Task SignInAsync_ADeploymentNamingSeveralAuthorizationServers_RefusesToChooseBetweenThem()
+    public async Task SignOutAsync_ClearsWhatIsHeldAndWhatWasKept()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
-            Publishing(
-                $$"""
-                {"resource":"{{ResourceIdentifier}}","authorization_servers":["{{Issuer}}","https://other.example"],"scopes_supported":[]}
-                """),
-            IssuingTokens(),
-            StubSignInRedirectListener.Approved);
+        var store = new StubOwnerCredentialStore();
+
+        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(SessionDocument), store: store);
+
+        await harness.SignIn.SignInAsync(
+            new OwnerCredential("ada", "a-long-password"),
+            TestContext.Current.CancellationToken);
+
+        var asked = harness.SignedInAt.Requests.Count;
 
         // Act
-        var failure = await Assert.ThrowsAsync<DeploymentFailure>(
-            () => harness.SignIn.SignInAsync(TestContext.Current.CancellationToken));
+        await harness.SignIn.SignOutAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(DeploymentFailureReason.Unusable, failure.Reason);
+        Assert.False(harness.Owner.IsSignedIn);
+        Assert.Null(store.Held);
+        Assert.Equal(asked, harness.SignedInAt.Requests.Count);
     }
 
+    /// <summary>A start whose head kept a credential for the deployment it comes up pointed at opens already signed in.</summary>
     [Fact]
-    public async Task SignInAsync_ADeploymentNamingNoAuthorizationServer_SaysThereIsNowhereToSignIn()
+    public async Task RestoreAsync_WithACredentialKeptForThisDeployment_SignsInWithoutAsking()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
-            Publishing(
-                $$"""
-                {"resource":"{{ResourceIdentifier}}","authorization_servers":[],"scopes_supported":[]}
-                """),
-            IssuingTokens(),
-            StubSignInRedirectListener.Approved);
+        var store = new StubOwnerCredentialStore(
+            held: new KeptOwnerCredential(
+                DeploymentHarness.DeploymentAddress,
+                new OwnerCredential("ada", "a-long-password")));
+
+        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(SessionDocument), store: store);
 
         // Act
-        var failure = await Assert.ThrowsAsync<DeploymentFailure>(
-            () => harness.SignIn.SignInAsync(TestContext.Current.CancellationToken));
+        var restored = await harness.SignIn.RestoreAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(DeploymentFailureReason.Unusable, failure.Reason);
+        Assert.True(restored);
+        Assert.Equal("ada", harness.Owner.Username);
+        Assert.Empty(harness.SignedInAt.Requests);
     }
 
+    /// <summary>A credential kept for a deployment the client is no longer pointed at is cleared rather than presented.</summary>
     [Fact]
-    public async Task SignInAsync_ADiscoveryDocumentReportingADifferentIssuer_IsNotFollowed()
+    public async Task RestoreAsync_WithACredentialKeptForAnotherDeployment_ClearsItAndSignsNobodyIn()
     {
         // Arrange
-        // RFC 8414 section 3.3: a document that does not report the issuer that led to it is not that issuer's. Without
-        // the check, a document served at a guessable address could move the sign-in to somebody else's login page.
-        using var harness = new DeploymentHarness(
-            Publishing(PublishedMetadata),
-            _ => StubTransport.JsonResponse(
-                """
-                {"issuer":"https://impostor.example","authorization_endpoint":"https://impostor.example/authorize","token_endpoint":"https://impostor.example/token"}
-                """),
-            StubSignInRedirectListener.Approved);
+        var store = new StubOwnerCredentialStore(
+            held: new KeptOwnerCredential(
+                new Uri("https://elsewhere.example/"),
+                new OwnerCredential("ada", "a-long-password")));
+
+        using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(SessionDocument), store: store);
 
         // Act
-        var failure = await Assert.ThrowsAsync<DeploymentFailure>(
-            () => harness.SignIn.SignInAsync(TestContext.Current.CancellationToken));
+        var restored = await harness.SignIn.RestoreAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.Equal(DeploymentFailureReason.Unreachable, failure.Reason);
-        Assert.Null(harness.Listener.OpenedAuthorizationUrl);
+        Assert.False(restored);
+        Assert.False(harness.Owner.IsSignedIn);
+        Assert.Null(store.Held);
     }
 
+    /// <summary>A start that resolved no address at all clears whatever was kept, for the same reason.</summary>
     [Fact]
-    public async Task SignInAsync_AnEndpointOverPlainHttp_IsReadAsAbsentRatherThanFollowed()
+    public async Task RestoreAsync_WithNothingPointedAt_ClearsWhatWasKept()
     {
         // Arrange
-        using var harness = new DeploymentHarness(
-            Publishing(PublishedMetadata),
-            _ => StubTransport.JsonResponse(
-                $$"""
-                {"issuer":"{{Issuer}}","authorization_endpoint":"{{Issuer}}/authorize","token_endpoint":"http://issuer.example/token"}
-                """),
-            StubSignInRedirectListener.Approved);
-
-        // Act
-        var failure = await Assert.ThrowsAsync<DeploymentFailure>(
-            () => harness.SignIn.SignInAsync(TestContext.Current.CancellationToken));
-
-        // Assert
-        Assert.Equal(DeploymentFailureReason.Unusable, failure.Reason);
-    }
-
-    [Fact]
-    public async Task SignInAsync_AnUnreachableDeployment_ReportsItAsUnreachableRatherThanAsARefusal()
-    {
-        // Arrange
-        using var harness = new DeploymentHarness(
-            _ => throw new HttpRequestException("Connection refused."),
-            IssuingTokens(),
-            StubSignInRedirectListener.Approved);
-
-        // Act
-        var failure = await Assert.ThrowsAsync<DeploymentFailure>(
-            () => harness.SignIn.SignInAsync(TestContext.Current.CancellationToken));
-
-        // Assert
-        Assert.Equal(DeploymentFailureReason.Unreachable, failure.Reason);
-    }
-
-    [Fact]
-    public async Task SignInAsync_ADeploymentThatDoesNotAnswerInTime_ReportsATimeout()
-    {
-        // Arrange
-        using var harness = new DeploymentHarness(
-            _ => throw new TaskCanceledException("The request timed out."),
-            IssuingTokens(),
-            StubSignInRedirectListener.Approved);
-
-        // Act
-        var failure = await Assert.ThrowsAsync<DeploymentFailure>(
-            () => harness.SignIn.SignInAsync(TestContext.Current.CancellationToken));
-
-        // Assert
-        Assert.Equal(DeploymentFailureReason.TimedOut, failure.Reason);
-    }
-
-    [Fact]
-    public async Task SignInAsync_ARefusedSignIn_ReleasesWhatTheHeadReservedForTheRedirect()
-    {
-        // Arrange
-        using var harness = new DeploymentHarness(
-            Publishing(PublishedMetadata),
-            IssuingTokens(),
-            StubSignInRedirectListener.Refused);
-
-        // Act
-        await Assert.ThrowsAsync<DeploymentFailure>(
-            () => harness.SignIn.SignInAsync(TestContext.Current.CancellationToken));
-
-        // Assert
-        Assert.True(harness.Listener.Disposed);
-    }
-
-    [Fact]
-    public async Task SignInAsync_AnAuthorizationEndpointPublishingAQuery_KeepsItRatherThanReplacingIt()
-    {
-        // Arrange
-        // A tenant that routes to a named policy through the endpoint address itself, which is how the largest
-        // deployments of this grant publish it.
-        const string PublishedWithAPolicy =
-            $$"""
-            {"issuer":"{{Issuer}}","authorization_endpoint":"{{Issuer}}/authorize?p=b2c_1_signin","token_endpoint":"{{Issuer}}/token"}
-            """;
+        var store = new StubOwnerCredentialStore(
+            held: new KeptOwnerCredential(
+                DeploymentHarness.DeploymentAddress,
+                new OwnerCredential("ada", "a-long-password")));
 
         using var harness = new DeploymentHarness(
-            Publishing(PublishedMetadata),
-            request => request.Method == HttpMethod.Post
-                ? StubTransport.JsonResponse("""{"access_token":"the-token","expires_in":3600}""")
-                : StubTransport.JsonResponse(PublishedWithAPolicy),
-            StubSignInRedirectListener.Approved);
+            _ => StubTransport.JsonResponse(SessionDocument),
+            store: store,
+            pointed: false);
 
         // Act
-        await harness.SignIn.SignInAsync(TestContext.Current.CancellationToken);
+        var restored = await harness.SignIn.RestoreAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        var query = harness.Listener.OpenedAuthorizationUrl!.Query;
-
-        Assert.Contains("p=b2c_1_signin", query, StringComparison.Ordinal);
-        Assert.Contains("response_type=code", query, StringComparison.Ordinal);
+        Assert.False(restored);
+        Assert.Null(store.Held);
     }
-
-    private static Func<HttpRequestMessage, HttpResponseMessage> Publishing(string metadata) =>
-        _ => StubTransport.JsonResponse(metadata);
-
-    private static Func<HttpRequestMessage, HttpResponseMessage> IssuingTokens() =>
-        request => request.Method == HttpMethod.Post
-            ? StubTransport.JsonResponse("""{"access_token":"the-token","expires_in":3600}""")
-            : StubTransport.JsonResponse(PublishedDiscovery);
 }

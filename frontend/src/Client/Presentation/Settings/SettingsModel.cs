@@ -19,6 +19,7 @@ public partial record SettingsModel
     private readonly ILocalizationService localization;
     private readonly IThemeService themes;
     private readonly DeploymentAddress address;
+    private readonly OwnerSignIn signIn;
     private readonly IImmutableList<AppLanguage> languages;
     private readonly IImmutableList<AppThemeOption> themeOptions;
 
@@ -27,6 +28,7 @@ public partial record SettingsModel
     /// <param name="themes">The theme service, which holds the choice and persists it across restarts.</param>
     /// <param name="address">Which deployment this client is pointed at, which is what the screen names.</param>
     /// <param name="session">What that deployment reported about itself, which is where its own version comes from.</param>
+    /// <param name="signIn">Who is signed in on that deployment, and how somebody stops being them.</param>
     /// <param name="localizer">Where a string resolved here rather than by a <c>x:Uid</c> in the view comes from.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public SettingsModel(
@@ -34,17 +36,20 @@ public partial record SettingsModel
         IThemeService themes,
         DeploymentAddress address,
         IClientSession session,
+        OwnerSignIn signIn,
         IStringLocalizer localizer)
     {
         ArgumentNullException.ThrowIfNull(localization);
         ArgumentNullException.ThrowIfNull(themes);
         ArgumentNullException.ThrowIfNull(address);
         ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(signIn);
         ArgumentNullException.ThrowIfNull(localizer);
 
         this.localization = localization;
         this.themes = themes;
         this.address = address;
+        this.signIn = signIn;
         this.Session = session.Standing;
         this.languages = [.. localization.SupportedCultures.Select(AppLanguage.FromCulture)];
         this.themeOptions = [.. AppThemeOption.Offered.Select(theme => AppThemeOption.Named(theme, localizer))];
@@ -70,6 +75,15 @@ public partial record SettingsModel
     /// </remarks>
     public IFeed<string> Deployment =>
         Feed.Async(_ => ValueTask.FromResult(this.address.Current?.AbsoluteUri ?? string.Empty));
+
+    /// <summary>The username this client is signed in under on that deployment.</summary>
+    /// <remarks>
+    /// The username and nothing else about the credential, which is the only half of it anything outside
+    /// <c>Client.Backend</c> is ever given. It is read once, for the reason the address is: signing out leaves this
+    /// screen and does not come back to it.
+    /// </remarks>
+    public IFeed<string> SignedInAs =>
+        Feed.Async(_ => ValueTask.FromResult(this.signIn.Username ?? string.Empty));
 
     /// <summary>
     /// The languages this application can be read in, in the order the configuration names them, carrying which of
@@ -155,6 +169,17 @@ public partial record SettingsModel
         await this.localization.SetCurrentCultureAsync(culture).ConfigureAwait(false);
         await this.LanguageAwaitsRestart.SetAsync(true, ct).ConfigureAwait(false);
     }
+
+    /// <summary>Ends the session and clears whatever this machine kept of it.</summary>
+    /// <param name="ct">Abandons clearing what was kept, which does not un-end the session.</param>
+    /// <returns>A task completing once nothing of the session is held.</returns>
+    /// <remarks>
+    /// Nothing here navigates. A session that has ended is answered in one place — <see cref="ShellModel" /> — because
+    /// this is not the only way one ends: a deployment that stops accepting a credential ends one too, from whichever
+    /// screen happened to be open, and two screens each navigating for themselves would be the same rule written
+    /// twice.
+    /// </remarks>
+    public ValueTask SignOut(CancellationToken ct) => this.signIn.SignOutAsync(ct);
 
     private AppThemeOption OptionFor(AppTheme theme) =>
         this.themeOptions.First(option => option.Theme == theme);

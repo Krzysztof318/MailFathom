@@ -32,47 +32,59 @@ namespace MailFathom.Client.Session;
 /// speaks — one left mid-attempt would close every one of them and leave a screen that failed in silence.
 /// </para>
 /// <para>
+/// A credential the deployment refuses is ended here rather than retried or reported as a screen that cannot load.
+/// This is the one place a deployment's verdict on the running session is read, so it is the one place that can tell a
+/// credential the deployment has stopped accepting from a request this caller was never granted — and the answer to
+/// the first is to forget it, which clears what the head kept and puts the person in front of the sign-in through the
+/// change that announces it.
+/// </para>
+/// <para>
 /// Nothing here is logged, stored, or exported. The answer carries a version and a grant and names no credential at
-/// all, and the client keeps it in memory for the run exactly as it keeps the token that fetched it.
+/// all, and the client keeps it in memory for the run exactly as it keeps the credential that fetched it.
 /// </para>
 /// </remarks>
 internal sealed class DeploymentClientSession : IClientSession, IDisposable
 {
     private readonly DeploymentClient deployment;
-    private readonly AccessTokenStore tokens;
+    private readonly SignedInOwner owner;
+    private readonly DeploymentSignIn signIn;
     private readonly DeploymentAddress address;
     private readonly DeploymentConnectionRetry retry;
     private readonly TimeProvider clock;
     private readonly IState<DeploymentConnection> connection;
     private readonly Signal refresh = new();
 
-    /// <summary>Initializes the session over the client that fetches it and the two things that end its usefulness.</summary>
+    /// <summary>Initializes the session over the client that fetches it and the things that end its usefulness.</summary>
     /// <param name="deployment">Where the session document is asked for.</param>
-    /// <param name="tokens">The credential this run signs in with, which announces when the identity changes.</param>
+    /// <param name="owner">Who is signed in during this run, which announces when the identity changes.</param>
+    /// <param name="signIn">How a session is ended, which is what a credential the deployment has stopped accepting leads to.</param>
     /// <param name="address">Which deployment the client reaches, which announces when it is pointed at another.</param>
     /// <param name="retry">How many times the client asks again by itself, and how long it waits between attempts.</param>
     /// <param name="clock">What the wait between attempts is measured against, so a test spends none of it.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public DeploymentClientSession(
         DeploymentClient deployment,
-        AccessTokenStore tokens,
+        SignedInOwner owner,
+        DeploymentSignIn signIn,
         DeploymentAddress address,
         DeploymentConnectionRetry retry,
         TimeProvider clock)
     {
         ArgumentNullException.ThrowIfNull(deployment);
-        ArgumentNullException.ThrowIfNull(tokens);
+        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(signIn);
         ArgumentNullException.ThrowIfNull(address);
         ArgumentNullException.ThrowIfNull(retry);
         ArgumentNullException.ThrowIfNull(clock);
 
         this.deployment = deployment;
-        this.tokens = tokens;
+        this.owner = owner;
+        this.signIn = signIn;
         this.address = address;
         this.retry = retry;
         this.clock = clock;
 
-        this.tokens.SignedInChanged += this.AskAgain;
+        this.owner.SignedInChanged += this.AskAgain;
         this.address.Moved += this.AskAgain;
 
         // Seeded at the first attempt rather than at a state of its own for "nobody has asked yet". The shell reads
@@ -94,7 +106,7 @@ internal sealed class DeploymentClientSession : IClientSession, IDisposable
     /// <inheritdoc />
     public void Dispose()
     {
-        this.tokens.SignedInChanged -= this.AskAgain;
+        this.owner.SignedInChanged -= this.AskAgain;
         this.address.Moved -= this.AskAgain;
         this.refresh.Dispose();
     }
@@ -130,6 +142,7 @@ internal sealed class DeploymentClientSession : IClientSession, IDisposable
                     var standing = Recoverable(failure) ? ConnectionStanding.Lost : ConnectionStanding.Reached;
 
                     await this.PublishAsync(standing, attempt, cancellationToken).ConfigureAwait(false);
+                    await this.EndRefusedSessionAsync(failure, cancellationToken).ConfigureAwait(false);
 
                     throw;
                 }
@@ -155,6 +168,25 @@ internal sealed class DeploymentClientSession : IClientSession, IDisposable
     /// </remarks>
     private static bool Recoverable(DeploymentFailure failure) =>
         failure.Reason is DeploymentFailureReason.Unreachable or DeploymentFailureReason.TimedOut;
+
+    /// <summary>Ends the session where the deployment refused the credential it was holding.</summary>
+    /// <remarks>
+    /// <para>
+    /// The credential is a copy of something the deployment owns, so the deployment's answer wins: a password an
+    /// administrator has rotated, or a credential they have disabled, is refused on every request from here on, and
+    /// leaving it in place would put somebody in front of a screen that fails again each time they touch it while a
+    /// password nothing will ever accept sat in their keyring.
+    /// </para>
+    /// <para>
+    /// Only where somebody was signed in. The same refusal reaches a caller who never signed in at all — that is what a
+    /// guarded deployment answers — and forgetting nothing announces nothing, which is what keeps this from asking the
+    /// session for itself again in a loop.
+    /// </para>
+    /// </remarks>
+    private ValueTask EndRefusedSessionAsync(DeploymentFailure failure, CancellationToken cancellationToken) =>
+        failure.Reason == DeploymentFailureReason.CredentialRefused && this.owner.IsSignedIn
+            ? this.signIn.SignOutAsync(cancellationToken)
+            : ValueTask.CompletedTask;
 
     private async ValueTask WaitBeforeAsync(int attempt, CancellationToken cancellationToken)
     {

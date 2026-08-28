@@ -4,6 +4,7 @@
 
 using System.Net;
 using MailFathom.Client.Backend;
+using MailFathom.Client.Backend.Authorization;
 using MailFathom.Client.Session;
 using MailFathom.Client.UnitTests.TestDoubles;
 
@@ -67,7 +68,10 @@ public sealed class DeploymentClientSessionTests
         await session.Standing;
 
         // Act
-        harness.Tokens.Accept("the-token");
+        await harness.Owner.AcceptAsync(
+            DeploymentHarness.DeploymentAddress,
+            new OwnerCredential("ada", "a-long-password"),
+            TestContext.Current.CancellationToken);
         await session.Standing;
 
         // Assert
@@ -80,14 +84,14 @@ public sealed class DeploymentClientSessionTests
     {
         // Arrange
         using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(ACallerWhoMayRead));
-        var address = new DeploymentAddress(harness.Tokens);
-        address.PointAt(new Uri("https://mail.example/"));
+        var address = new DeploymentAddress(harness.Owner);
+        await address.PointAtAsync(new Uri("https://mail.example/"), TestContext.Current.CancellationToken);
 
         using var session = SessionOver(harness, address);
         await session.Standing;
 
         // Act
-        address.PointAt(new Uri("https://other.example/"));
+        await address.PointAtAsync(new Uri("https://other.example/"), TestContext.Current.CancellationToken);
         await session.Standing;
 
         // Assert
@@ -130,6 +134,65 @@ public sealed class DeploymentClientSessionTests
         Assert.Equal(DeploymentFailureReason.CredentialRefused, failure.Reason);
     }
 
+    /// <summary>
+    /// A credential the deployment has stopped accepting is not a session to keep trying: it ends here, which is what
+    /// puts the person back in front of the sign-in and clears whatever this machine kept.
+    /// </summary>
+    /// <remarks>
+    /// Ended before the failure is raised, so the screen that receives it is already looking at a client with nobody
+    /// signed in. What answers the ending is <c>ShellModel</c>, in one place, because this is not the only way a session
+    /// ends.
+    /// </remarks>
+    [Fact]
+    public async Task Standing_ADeploymentThatHasStoppedAcceptingTheCredential_EndsTheSessionAndClearsWhatWasKept()
+    {
+        // Arrange
+        var kept = new StubOwnerCredentialStore();
+
+        using var harness = new DeploymentHarness(
+            _ => StubTransport.JsonResponse("{}", HttpStatusCode.Unauthorized),
+            store: kept);
+
+        using var session = SessionOver(harness);
+
+        await harness.Owner.AcceptAsync(
+            DeploymentHarness.DeploymentAddress,
+            new OwnerCredential("ada", "a-long-password"),
+            TestContext.Current.CancellationToken);
+
+        // Act
+        await Assert.ThrowsAsync<DeploymentFailure>(async () => await session.Standing);
+
+        // Assert
+        Assert.False(harness.Owner.IsSignedIn);
+        Assert.Null(kept.Held);
+    }
+
+    /// <summary>A caller nobody signed in was never a session, so a refusal of one ends nothing and clears nothing.</summary>
+    /// <remarks>
+    /// The session route answers an unauthenticated caller by design, so this is the ordinary first fetch of a run that
+    /// has not signed in yet. Treating its refusal as a session ending would announce an end to something that never
+    /// began, and would send a client that is on the sign-in screen to the sign-in screen.
+    /// </remarks>
+    [Fact]
+    public async Task Standing_ARefusalWithNobodySignedIn_ClearsNothing()
+    {
+        // Arrange
+        var kept = new StubOwnerCredentialStore();
+
+        using var harness = new DeploymentHarness(
+            _ => StubTransport.JsonResponse("{}", HttpStatusCode.Unauthorized),
+            store: kept);
+
+        using var session = SessionOver(harness);
+
+        // Act
+        await Assert.ThrowsAsync<DeploymentFailure>(async () => await session.Standing);
+
+        // Assert
+        Assert.Equal(0, kept.Cleared);
+    }
+
     /// <summary>A session that stopped listening would go on offering what a credential no longer carries.</summary>
     [Fact]
     public async Task Dispose_AfterTheSessionIsGone_LeavesNothingListeningToTheCredential()
@@ -141,7 +204,10 @@ public sealed class DeploymentClientSessionTests
 
         // Act
         session.Dispose();
-        harness.Tokens.Accept("the-token");
+        await harness.Owner.AcceptAsync(
+            DeploymentHarness.DeploymentAddress,
+            new OwnerCredential("ada", "a-long-password"),
+            TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Single(harness.Deployment.Requests);
@@ -338,21 +404,23 @@ public sealed class DeploymentClientSessionTests
     {
         // Arrange
         using var harness = new DeploymentHarness(_ => StubTransport.JsonResponse(ACallerWhoMayRead));
-        var address = new DeploymentAddress(harness.Tokens);
+        var address = new DeploymentAddress(harness.Owner);
         var retry = DeploymentConnectionRetry.Standard;
         var clock = new StubClock(DateTimeOffset.UnixEpoch);
 
         // Act, Assert
         Assert.Throws<ArgumentNullException>(
-            () => new DeploymentClientSession(null!, harness.Tokens, address, retry, clock));
+            () => new DeploymentClientSession(null!, harness.Owner, harness.SignIn, address, retry, clock));
         Assert.Throws<ArgumentNullException>(
-            () => new DeploymentClientSession(harness.Client, null!, address, retry, clock));
+            () => new DeploymentClientSession(harness.Client, null!, harness.SignIn, address, retry, clock));
         Assert.Throws<ArgumentNullException>(
-            () => new DeploymentClientSession(harness.Client, harness.Tokens, null!, retry, clock));
+            () => new DeploymentClientSession(harness.Client, harness.Owner, null!, address, retry, clock));
         Assert.Throws<ArgumentNullException>(
-            () => new DeploymentClientSession(harness.Client, harness.Tokens, address, null!, clock));
+            () => new DeploymentClientSession(harness.Client, harness.Owner, harness.SignIn, null!, retry, clock));
         Assert.Throws<ArgumentNullException>(
-            () => new DeploymentClientSession(harness.Client, harness.Tokens, address, retry, null!));
+            () => new DeploymentClientSession(harness.Client, harness.Owner, harness.SignIn, address, null!, clock));
+        Assert.Throws<ArgumentNullException>(
+            () => new DeploymentClientSession(harness.Client, harness.Owner, harness.SignIn, address, retry, null!));
     }
 
     /// <summary>A session over a scripted deployment, retrying on a curve a test spends no time on.</summary>
@@ -367,8 +435,9 @@ public sealed class DeploymentClientSessionTests
         int attempts = 1) =>
         new(
             harness.Client,
-            harness.Tokens,
-            address ?? new DeploymentAddress(harness.Tokens),
+            harness.Owner,
+            harness.SignIn,
+            address ?? new DeploymentAddress(harness.Owner),
             new DeploymentConnectionRetry(attempts, TimeSpan.Zero, TimeSpan.Zero),
             new StubClock(DateTimeOffset.UnixEpoch));
 }

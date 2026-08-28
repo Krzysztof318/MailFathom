@@ -126,6 +126,35 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                   HorizontalAlignment="Stretch" />
         </StackPanel>
 
+        <!-- Who this client is signed in as on that deployment, and the way to stop being them. It sits beside the
+             deployment rather than under a heading of its own because the two are one question — which MailFathom, as
+             whom — and somebody on a shared machine looking for the way out looks here. -->
+        <StackPanel Spacing="8">
+          <TextBlock x:Uid="SettingsPage.TextBlock.SignedInAs"
+                     Style="{StaticResource BodyTextBlockStyle}" />
+
+          <!-- Bound to the value rather than shown through a FeedView, for the reason the address above is: MVUX
+               projects a feed of a scalar as the scalar itself. -->
+          <TextBlock Text="{Binding SignedInAs}"
+                     Style="{StaticResource BodyStrongTextBlockStyle}"
+                     TextWrapping="Wrap"
+                     IsTextSelectionEnabled="True" />
+
+          <!-- Signing out ends the session here and clears whatever this machine kept of it. It revokes nothing: HTTP
+               Basic has no server-side session to end, so the password stays valid on the deployment until an
+               administrator rotates it — which is what the sentence below says rather than leaving somebody to read
+               this as revocation. -->
+          <TextBlock x:Uid="SettingsPage.TextBlock.SignOutIsLocal"
+                     Style="{StaticResource CaptionTextBlockStyle}"
+                     TextWrapping="Wrap"
+                     Foreground="{ThemeResource OnSurfaceVariantBrush}" />
+
+          <Button x:Uid="SettingsPage.Button.SignOut"
+                  Command="{Binding SignOut}"
+                  Style="{StaticResource OutlinedButtonStyle}"
+                  HorizontalAlignment="Stretch" />
+        </StackPanel>
+
         <!-- Both pickers sit outside the FeedView deliberately: they are the application's own state rather than
              anything the build feed carries, so they stay reachable while that feed is loading or has failed. -->
         <StackPanel Spacing="12">

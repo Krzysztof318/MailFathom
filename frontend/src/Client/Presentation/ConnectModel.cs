@@ -108,6 +108,9 @@ internal sealed partial record ConnectModel
             await this.IsAsking.SetAsync(false, ct).ConfigureAwait(false);
         }
 
+        // On to the sign-in rather than into the application, because nobody is signed in yet: a credential belongs to
+        // an owner on one deployment, so choosing a deployment is always followed by saying who you are on it.
+        //
         // The back stack is cleared rather than added to: the screen behind this one belonged to a deployment the
         // client has just stopped reaching, and the system back gesture returning to it would offer a way back into an
         // application pointed somewhere it no longer is.
@@ -120,7 +123,7 @@ internal sealed partial record ConnectModel
             .NavigateAsync(
                 new NavigationRequest(
                     this,
-                    new Route(Qualifier: Qualifiers.ClearBackStack, Base: ClientRoutes.Workspace),
+                    new Route(Qualifier: Qualifiers.ClearBackStack, Base: ClientRoutes.SignIn),
                     ct))
             .ConfigureAwait(false);
     }

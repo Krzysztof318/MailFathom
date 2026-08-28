@@ -18,8 +18,18 @@ public sealed class SettingsModelTests : IDisposable
     /// <summary>A deployment answering, for the tests whose subject is not what it answered.</summary>
     private readonly StubClientSession running = SessionRunning("0.8.0");
 
+    /// <summary>The deployment the sign-out reaches, which is nothing over the wire and everything held here.</summary>
+    private readonly DeploymentHarness deployment = new(
+        _ => StubTransport.JsonResponse(
+            """{"service":"MailFathom","version":"0.8.0","permissions":[]}"""),
+        store: new StubOwnerCredentialStore());
+
     /// <inheritdoc />
-    public void Dispose() => this.running.Dispose();
+    public void Dispose()
+    {
+        this.running.Dispose();
+        this.deployment.Dispose();
+    }
 
     /// <summary>Awaiting a feed is how a model's state is asserted in this stack, and this one proves the MVUX path behind the settings screen reaches the running build.</summary>
     [Fact]
@@ -40,8 +50,9 @@ public sealed class SettingsModelTests : IDisposable
     public async Task Deployment_AClientPointedAtADeployment_NamesIt()
     {
         // Arrange
-        var address = new DeploymentAddress(new AccessTokenStore());
-        address.PointAt(new Uri("https://mail.example/"));
+        var address = new DeploymentAddress(new SignedInOwner(UnkeptOwnerCredentialStore.Instance));
+
+        await address.PointAtAsync(new Uri("https://mail.example/"), TestContext.Current.CancellationToken);
 
         await using var model = this.ModelOver(address: address);
 
@@ -50,6 +61,69 @@ public sealed class SettingsModelTests : IDisposable
 
         // Assert
         Assert.Equal("https://mail.example/", deployment);
+    }
+
+    /// <summary>Who this client is signed in as, which is the half of the credential a screen may read.</summary>
+    [Fact]
+    public async Task SignedInAs_SomebodySignedIn_NamesThemByTheirUsernameAlone()
+    {
+        // Arrange
+        await this.deployment.Owner.AcceptAsync(
+            DeploymentHarness.DeploymentAddress,
+            new OwnerCredential("ada", "a-long-password"),
+            TestContext.Current.CancellationToken);
+
+        await using var model = this.ModelOver();
+
+        // Act
+        var signedInAs = await model.SignedInAs;
+
+        // Assert
+        Assert.Equal("ada", signedInAs);
+        Assert.DoesNotContain("a-long-password", signedInAs ?? string.Empty, StringComparison.Ordinal);
+    }
+
+    /// <summary>Signing out ends the session held here and clears whatever this machine kept of it.</summary>
+    [Fact]
+    public async Task SignOut_SomebodySignedIn_EndsTheSessionAndClearsWhatWasKept()
+    {
+        // Arrange
+        await this.deployment.Owner.AcceptAsync(
+            DeploymentHarness.DeploymentAddress,
+            new OwnerCredential("ada", "a-long-password"),
+            TestContext.Current.CancellationToken);
+
+        await using var model = this.ModelOver();
+
+        // Act
+        await model.SignOut(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(this.deployment.Owner.IsSignedIn);
+        Assert.Null(((StubOwnerCredentialStore)this.deployment.Store).Held);
+    }
+
+    /// <summary>
+    /// HTTP Basic has no server-side session to end, so the password stays valid on the deployment until an
+    /// administrator rotates it — and this client may not ask for something the surface does not offer.
+    /// </summary>
+    [Fact]
+    public async Task SignOut_SomebodySignedIn_AsksTheDeploymentNothing()
+    {
+        // Arrange
+        await this.deployment.Owner.AcceptAsync(
+            DeploymentHarness.DeploymentAddress,
+            new OwnerCredential("ada", "a-long-password"),
+            TestContext.Current.CancellationToken);
+
+        await using var model = this.ModelOver();
+
+        // Act
+        await model.SignOut(TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(this.deployment.Deployment.Requests);
+        Assert.Empty(this.deployment.SignedInAt.Requests);
     }
 
     /// <summary>
@@ -254,16 +328,29 @@ public sealed class SettingsModelTests : IDisposable
         // Arrange
         var localization = new StubLocalizationService("en", "en", "pl");
         var themes = new StubThemeService();
-        var address = new DeploymentAddress(new AccessTokenStore());
+        var address = new DeploymentAddress(new SignedInOwner(UnkeptOwnerCredentialStore.Instance));
         using var session = SessionRunning("0.8.0");
+        var signIn = this.SignIn();
         var localizer = ThemeWords();
 
         // Act & Assert
-        Assert.Throws<ArgumentNullException>(() => new SettingsModel(null!, themes, address, session, localizer));
-        Assert.Throws<ArgumentNullException>(() => new SettingsModel(localization, null!, address, session, localizer));
-        Assert.Throws<ArgumentNullException>(() => new SettingsModel(localization, themes, null!, session, localizer));
-        Assert.Throws<ArgumentNullException>(() => new SettingsModel(localization, themes, address, null!, localizer));
-        Assert.Throws<ArgumentNullException>(() => new SettingsModel(localization, themes, address, session, null!));
+        Assert.Throws<ArgumentNullException>(
+            () => new SettingsModel(null!, themes, address, session, signIn, localizer));
+
+        Assert.Throws<ArgumentNullException>(
+            () => new SettingsModel(localization, null!, address, session, signIn, localizer));
+
+        Assert.Throws<ArgumentNullException>(
+            () => new SettingsModel(localization, themes, null!, session, signIn, localizer));
+
+        Assert.Throws<ArgumentNullException>(
+            () => new SettingsModel(localization, themes, address, null!, signIn, localizer));
+
+        Assert.Throws<ArgumentNullException>(
+            () => new SettingsModel(localization, themes, address, session, null!, localizer));
+
+        Assert.Throws<ArgumentNullException>(
+            () => new SettingsModel(localization, themes, address, session, signIn, null!));
     }
 
     /// <summary>
@@ -306,9 +393,13 @@ public sealed class SettingsModelTests : IDisposable
         new(
             localization ?? new StubLocalizationService("en", "en", "pl"),
             themes ?? new StubThemeService(),
-            address ?? new DeploymentAddress(new AccessTokenStore()),
+            address ?? new DeploymentAddress(new SignedInOwner(UnkeptOwnerCredentialStore.Instance)),
             session ?? this.running,
+            this.SignIn(),
             ThemeWords());
+
+    /// <summary>Signing in and out as the screens above <c>Client.Backend</c> reach it.</summary>
+    private OwnerSignIn SignIn() => new(this.deployment.SignIn, this.deployment.Owner);
 
     private static StubClientSession SessionRunning(string version) =>
         new(SessionStanding.Of(new DeploymentSession("MailFathom", version, [])));

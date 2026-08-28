@@ -2,20 +2,19 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-using System.Net.Http.Headers;
-
 namespace MailFathom.Client.Backend.Authorization;
 
-/// <summary>Attaches the signed-in token to every request that goes to the deployment.</summary>
+/// <summary>Presents the signed-in owner's credential on every request that goes to the deployment.</summary>
 /// <remarks>
 /// <para>
 /// In the pipeline rather than at each call site, so a route added later cannot forget it and a route added later
-/// cannot present it to somewhere else: the handler is registered on the deployment's own client, whose base address
-/// the host stated, and nothing else in this assembly sends through it.
+/// cannot present it to somewhere else: the handler is registered on the deployment's own transport, whose base
+/// address <see cref="DeploymentAddress" /> decides, and nothing else in this assembly sends through it.
 /// </para>
 /// <para>
 /// The header alone, never a query parameter. A credential in a query reaches every access log, proxy, and browser
-/// history on the path, which is why the deployment publishes the header as the one bearer method it supports.
+/// history on the path — and this one is a password rather than a token that would have expired, so the exposure has
+/// no end.
 /// </para>
 /// <para>
 /// A request made before anybody signs in goes out unauthenticated rather than failing here. The session route answers
@@ -23,18 +22,18 @@ namespace MailFathom.Client.Backend.Authorization;
 /// credential may do — one this client is in no position to anticipate.
 /// </para>
 /// </remarks>
-internal sealed class AccessTokenHandler : DelegatingHandler
+internal sealed class OwnerCredentialHandler : DelegatingHandler
 {
-    private readonly AccessTokenStore tokens;
+    private readonly SignedInOwner owner;
 
-    /// <summary>Initializes the handler over the store the token lives in.</summary>
-    /// <param name="tokens">Where the access token is held for this run.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="tokens" /> is <see langword="null" />.</exception>
-    public AccessTokenHandler(AccessTokenStore tokens)
+    /// <summary>Initializes the handler over the session the credential lives in.</summary>
+    /// <param name="owner">Who is signed in during this run.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="owner" /> is <see langword="null" />.</exception>
+    public OwnerCredentialHandler(SignedInOwner owner)
     {
-        ArgumentNullException.ThrowIfNull(tokens);
+        ArgumentNullException.ThrowIfNull(owner);
 
-        this.tokens = tokens;
+        this.owner = owner;
     }
 
     /// <inheritdoc />
@@ -44,9 +43,9 @@ internal sealed class AccessTokenHandler : DelegatingHandler
     {
         ArgumentNullException.ThrowIfNull(request);
 
-        if (this.tokens.Current is { Length: > 0 } accessToken)
+        if (this.owner.Current is { } credential)
         {
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            request.Headers.Authorization = BasicCredentialHeader.ComposedFrom(credential);
         }
 
         return base.SendAsync(request, cancellationToken);

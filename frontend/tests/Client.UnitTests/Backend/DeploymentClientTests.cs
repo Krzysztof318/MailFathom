@@ -3,7 +3,9 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Net;
+using System.Text;
 using MailFathom.Client.Backend;
+using MailFathom.Client.Backend.Authorization;
 using MailFathom.Client.UnitTests.TestDoubles;
 
 namespace MailFathom.Client.UnitTests.Backend;
@@ -180,25 +182,29 @@ public sealed class DeploymentClientTests
         // Arrange
         using var harness = new DeploymentHarness(
             _ => StubTransport.JsonResponse(ACallerGrantedNothing),
-            throughTokenHandler: true);
+            throughCredentialHandler: true);
 
         // Act
         await harness.Client.ReadSessionAsync(TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.False(harness.Tokens.IsSignedIn);
+        Assert.False(harness.Owner.IsSignedIn);
         Assert.Null(Assert.Single(harness.Deployment.Requests).Authorization);
     }
 
+    /// <summary>RFC 7617, and in the header alone: an address is written into a log and a credential in one would be too.</summary>
     [Fact]
-    public async Task ReadSessionAsync_AfterSigningIn_PresentsTheTokenInTheHeaderAndNowhereElse()
+    public async Task ReadSessionAsync_AfterSigningIn_PresentsTheCredentialInTheHeaderAndNowhereElse()
     {
         // Arrange
         using var harness = new DeploymentHarness(
             _ => StubTransport.JsonResponse(AnAnsweringDeployment),
-            throughTokenHandler: true);
+            throughCredentialHandler: true);
 
-        harness.Tokens.Accept("the-token");
+        await harness.Owner.AcceptAsync(
+            DeploymentHarness.DeploymentAddress,
+            new OwnerCredential("ada", "a-long-password"),
+            TestContext.Current.CancellationToken);
 
         // Act
         await harness.Client.ReadSessionAsync(TestContext.Current.CancellationToken);
@@ -206,8 +212,11 @@ public sealed class DeploymentClientTests
         // Assert
         var request = Assert.Single(harness.Deployment.Requests);
 
-        Assert.Equal("Bearer the-token", request.Authorization);
-        Assert.DoesNotContain("the-token", request.RequestUri.ToString(), StringComparison.Ordinal);
+        Assert.Equal(
+            $"Basic {Convert.ToBase64String(Encoding.UTF8.GetBytes("ada:a-long-password"))}",
+            request.Authorization);
+
+        Assert.DoesNotContain("a-long-password", request.RequestUri.ToString(), StringComparison.Ordinal);
     }
 
     /// <summary>A body is the one document here that carries a message's own pictures, so it reads past the ordinary bound.</summary>

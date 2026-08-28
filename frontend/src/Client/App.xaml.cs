@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Client.Backend.Authorization;
 using MailFathom.Client.Deployment;
 using MailFathom.Client.Presentation.Settings;
 using MailFathom.Client.Presentation.Spaces;
@@ -20,29 +21,40 @@ namespace MailFathom.Client;
 public partial class App : Application
 {
     private readonly BuildStatedDeploymentAddress deploymentAddress;
+    private readonly IOwnerCredentialStore credentialStore;
 
-    /// <summary>Initializes the singleton application object for a head that is installed rather than served.</summary>
-    /// <remarks>The address comes from what the installation states, which is what a desktop head reads, unless the build that produced this head stated one — see the constructor below. A head served by the deployment it talks to passes its own source instead, exactly as it registers its own sign-in redirect listener.</remarks>
+    /// <summary>Initializes the singleton application object for a head that has said nothing about itself.</summary>
+    /// <remarks>
+    /// The address comes from what the installation states, and no credential is kept. Both are the safe answers rather
+    /// than the useful ones: a head that keeps a password says so by registering the store that keeps it, and one that
+    /// has said nothing keeps none. Every head this application actually ships as answers both for itself through the
+    /// constructor below.
+    /// </remarks>
     public App()
-        : this(new ConfiguredDeploymentAddress())
+        : this(new ConfiguredDeploymentAddress(), UnkeptOwnerCredentialStore.Instance)
     {
     }
 
-    /// <summary>Initializes the singleton application object for a head that answers the address question itself.</summary>
+    /// <summary>Initializes the singleton application object for a head that answers both questions itself.</summary>
     /// <param name="deploymentAddress">How this head learns where its deployment is.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="deploymentAddress" /> is <see langword="null" />.</exception>
+    /// <param name="credentialStore">Where this head keeps the credential somebody signs in with, if it keeps one.</param>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <remarks>
-    /// An address the build stated takes precedence over whatever the head would have answered, and the wrapping
-    /// happens here rather than at each head so that adding one owes an implementation of the interface and nothing
-    /// else. It is not a head's answer: a head started by an orchestration is served from a socket of its own while
-    /// the service listens on another, so neither the origin it was fetched from nor an installation that does not
-    /// exist can say where the deployment is. A build that stated nothing changes nothing.
+    /// The two things a head knows that the application cannot. An address the build stated takes precedence over
+    /// whatever the head would have answered, and the wrapping happens here rather than at each head so that adding one
+    /// owes an implementation of the interface and nothing else: a head started by an orchestration is served from a
+    /// socket of its own while the service listens on another, so neither the origin it was fetched from nor an
+    /// installation that does not exist can say where the deployment is. A build that stated nothing changes nothing.
+    /// The store is taken as it is given, because where a password may be kept is a property of the operating system a
+    /// head runs on and nothing above it may override that.
     /// </remarks>
-    internal App(IDeploymentAddressSource deploymentAddress)
+    internal App(IDeploymentAddressSource deploymentAddress, IOwnerCredentialStore credentialStore)
     {
         ArgumentNullException.ThrowIfNull(deploymentAddress);
+        ArgumentNullException.ThrowIfNull(credentialStore);
 
         this.deploymentAddress = new BuildStatedDeploymentAddress(deploymentAddress);
+        this.credentialStore = credentialStore;
 
         this.InitializeComponent();
     }
@@ -81,8 +93,11 @@ public partial class App : Application
                 // Everything this application registers, which is written beside this file rather than in it: a graph
                 // composed only inside OnLaunched is one nothing can resolve without a window, and it is what
                 // ClientCompositionTests builds and resolves in full.
-                .ConfigureServices((context, services) =>
-                    ClientComposition.Compose(services, context.Configuration, this.deploymentAddress))
+                .ConfigureServices((context, services) => ClientComposition.Compose(
+                    services,
+                    context.Configuration,
+                    this.deploymentAddress,
+                    this.credentialStore))
                 // Light, dark, and follow-the-system, with the choice written to the platform's own settings store so
                 // the application starts the way it was left. Nothing here decides which one: AppTheme.System is the
                 // default the service reads back when nothing was ever chosen.
@@ -105,17 +120,26 @@ public partial class App : Application
         this.MainWindow.SetWindowIcon();
 
         // Where the client starts is decided here rather than by a route's default, because it is the one thing about
-        // this application that cannot be known until something has been read: an installation that has been pointed at
-        // a deployment opens on the application, and one that has not opens on the screen that asks. Nothing in between
-        // — a shell that starts and then fails at its first request is exactly what this replaces.
+        // this application that cannot be known until two things have been read. An installation nobody has pointed
+        // anywhere opens on the screen that asks for a deployment; one that is pointed somewhere and whose head kept a
+        // usable credential opens on the application; and one that is pointed somewhere with nothing to present opens
+        // on the screen that asks who they are. Nothing in between — a shell that starts and then fails at its first
+        // request is exactly what this replaces.
         this.Host = await builder.NavigateAsync<Shell>(
             async (services, navigator) =>
             {
-                var pointed = services.GetRequiredService<DeploymentChoice>().Restore();
+                var pointed = await services.GetRequiredService<DeploymentChoice>().RestoreAsync();
+
+                // Asked whether or not the client is pointed anywhere, because reconciling what was kept against where
+                // the client came up pointed is what clears a credential for a deployment nobody is reaching — and a
+                // client pointed nowhere is pointed at no deployment at all.
+                var signedIn = await services.GetRequiredService<DeploymentSignIn>().RestoreAsync();
 
                 await navigator.NavigateRouteAsync(
                     this,
-                    pointed ? ClientRoutes.Workspace : ClientRoutes.Connect);
+                    pointed
+                        ? signedIn ? ClientRoutes.Workspace : ClientRoutes.SignIn
+                        : ClientRoutes.Connect);
             });
     }
 
@@ -145,7 +169,8 @@ public partial class App : Application
             new ViewMap<MailPage, MailModel>(),
             new ViewMap<CasesPage>(),
             new ViewMap<SettingsPage, SettingsModel>(),
-            new ViewMap<ConnectPage, ConnectModel>());
+            new ViewMap<ConnectPage, ConnectModel>(),
+            new ViewMap<SignInPage, SignInModel>());
 
         // No default among the three the shell holds, deliberately. Which of them a launch opens on is what
         // OnLaunched decides from whether this installation has been pointed at a deployment, and a route marked
@@ -168,6 +193,7 @@ public partial class App : Application
                         ]),
                     new RouteMap(ClientRoutes.Settings, View: views.FindByViewModel<SettingsModel>()),
                     new RouteMap(ClientRoutes.Connect, View: views.FindByViewModel<ConnectModel>()),
+                    new RouteMap(ClientRoutes.SignIn, View: views.FindByViewModel<SignInModel>()),
                 ]));
     }
 }
