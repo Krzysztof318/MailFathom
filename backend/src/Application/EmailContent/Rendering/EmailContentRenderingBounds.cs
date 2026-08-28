@@ -53,4 +53,20 @@ public sealed record EmailContentRenderingBounds(
     /// </para>
     /// </remarks>
     public bool RetainRemoteImageReferences { get; init; }
+
+    /// <summary>Gets how many octets of its own pictures the whole read may still inline when this email is reached.</summary>
+    /// <remarks>
+    /// <para>
+    /// The octet counterpart of <see cref="RemainingCharactersForRead" />, and it exists for the same reason: a read
+    /// may name several emails, each of which would otherwise inline a whole document's worth of pictures. The words
+    /// are bounded across the call and the pictures were not, so the response size was the sender's decision rather
+    /// than the deployment's.
+    /// </para>
+    /// <para>
+    /// It narrows what one document may carry rather than replacing it — the per-document bound still applies, so the
+    /// first email of a call is answered exactly as a call naming it alone would be. <see cref="int.MaxValue" /> is the
+    /// default because it means the caller stated nothing, which leaves the document's own bound the only one.
+    /// </para>
+    /// </remarks>
+    public int RemainingInlineImageOctetsForRead { get; init; } = int.MaxValue;
 }

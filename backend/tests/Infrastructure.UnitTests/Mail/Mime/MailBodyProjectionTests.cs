@@ -499,6 +499,132 @@ public sealed class MailBodyProjectionTests
         Assert.True(document.Truncated);
     }
 
+    /// <summary>A hidden element is hidden however the sender qualified the declaration that hides it.</summary>
+    /// <remarks>
+    /// <c>!important</c> is what a mail template writes on preheader text and on anything else meant never to be seen,
+    /// so a reader comparing the whole value would draw what every other client hides — and would do it at every
+    /// <c>Hidden</c> check at once rather than at one.
+    /// </remarks>
+    [Theory]
+    [InlineData("display:none !important")]
+    [InlineData("display: none !important")]
+    [InlineData("visibility: hidden !important")]
+    [InlineData("display:none!important")]
+    public async Task ProduceAsync_HiddenDeclarationQualifiedAsImportant_IsStillHidden(string declaration)
+    {
+        // Act
+        var document = await DocumentOf($"<p>Shown</p><div style=\"{declaration}\">Hidden</div>");
+
+        // Assert
+        Assert.Equal("Shown", TextOf(document));
+    }
+
+    /// <summary>A table section is read as the walk reads an element, so one asking not to be drawn is not drawn.</summary>
+    [Fact]
+    public async Task ProduceAsync_TableSectionAskingNotToBeDrawn_ContributesNoRow()
+    {
+        // Arrange
+        const string Markup = """
+            <table>
+              <tbody><tr><td>Shown</td></tr></tbody>
+              <tbody style="display:none"><tr><td>Hidden</td></tr></tbody>
+            </table>
+            """;
+
+        // Act
+        var document = await DocumentOf(Markup);
+
+        // Assert
+        var table = Assert.IsType<MailTableBlock>(Assert.Single(document.Blocks));
+        Assert.Single(table.Rows);
+        Assert.DoesNotContain("Hidden", TextOf(document), StringComparison.Ordinal);
+    }
+
+    /// <summary>A table section's own reference to somebody else's server is counted like any other element's.</summary>
+    [Fact]
+    public async Task ProduceAsync_TableSectionCarryingARemoteReference_HasItCountedOnce()
+    {
+        // Arrange
+        const string Markup = """
+            <table>
+              <tbody background="https://tracker.test/p.gif"><tr><td>Shown</td></tr></tbody>
+            </table>
+            """;
+
+        // Act
+        var document = await DocumentOf(Markup);
+
+        // Assert
+        Assert.Equal(1, document.RemovedRemoteReferenceCount);
+        Assert.DoesNotContain("tracker.test", Sources(document), StringComparison.Ordinal);
+    }
+
+    /// <summary>What the body element itself asked to load is counted, since the walk never meets that element.</summary>
+    [Theory]
+    [InlineData("<body background=\"https://tracker.test/px.gif\"><p>Readable</p></body>")]
+    [InlineData("<body style=\"background-image:url(https://tracker.test/px.gif)\"><p>Readable</p></body>")]
+    public async Task ProduceAsync_RemoteReferenceOnTheBodyElement_IsCounted(string markup)
+    {
+        // Act
+        var document = await DocumentOf(markup);
+
+        // Assert
+        Assert.Equal("Readable", TextOf(document));
+        Assert.Equal(1, document.RemovedRemoteReferenceCount);
+    }
+
+    /// <summary>A picture the message carries and names by its location is drawn from the message rather than fetched.</summary>
+    [Fact]
+    public async Task ProduceAsync_PictureNamedByItsContentLocation_IsDrawnFromTheMessage()
+    {
+        // Arrange
+        var content = MimeFixtures.StoredMessage(
+            "From: sender@example.test",
+            "Content-Type: multipart/related; boundary=\"rel\"",
+            string.Empty,
+            "--rel",
+            "Content-Type: text/html; charset=utf-8",
+            string.Empty,
+            "<p>Readable</p><img src=\"https://sender.test/logo.png\">",
+            "--rel",
+            "Content-Type: image/png",
+            "Content-Location: https://sender.test/logo.png",
+            "Content-Transfer-Encoding: base64",
+            string.Empty,
+            Convert.ToBase64String(Encoding.UTF8.GetBytes("not-really-a-png")),
+            "--rel--");
+
+        // Act
+        var document = await DocumentOf(content);
+
+        // Assert
+        Assert.Equal(1, document.InlineImageCount);
+        Assert.Contains("data:image/png;base64,", Sources(document), StringComparison.Ordinal);
+        Assert.DoesNotContain("sender.test", Sources(document), StringComparison.Ordinal);
+        Assert.Equal(0, document.RemovedRemoteReferenceCount);
+    }
+
+    /// <summary>A width no arithmetic can use leaves the column without one rather than producing a value nothing can write.</summary>
+    /// <remarks>
+    /// <c>double.TryParse</c> answers an overflowing literal with infinity rather than failing, and a share resolved
+    /// against an infinite total is <c>NaN</c> — which the serializer refuses, so the reader would lose the whole
+    /// message over one attribute.
+    /// </remarks>
+    [Theory]
+    [InlineData("1e400px")]
+    [InlineData("1e400")]
+    [InlineData("1e400%")]
+    public async Task ProduceAsync_ColumnWidthNoArithmeticCanUse_LeavesTheColumnWithoutOne(string width)
+    {
+        // Act
+        var document = await DocumentOf($"<table><tr><td width=\"{width}\">Readable</td></tr></table>");
+
+        // Assert
+        var table = Assert.IsType<MailTableBlock>(Assert.Single(document.Blocks));
+        var share = Assert.Single(table.Columns).WidthShare;
+        Assert.True(share is null || double.IsFinite(share.Value));
+    }
+
     /// <summary>Every link the document carries, in reading order.</summary>
     private static IEnumerable<MailDocumentLink> LinksIn(MailDocument document) => document.Blocks
         .OfType<MailParagraphBlock>()

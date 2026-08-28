@@ -184,6 +184,11 @@ public sealed class EmailContentReader
         var outcomes = new List<EmailContentReadOutcome>(selection.StoredEmailIds.Count);
         var remainingCharacters = this.readOptions.MaxCharactersPerRead;
 
+        // One document's worth of pictures for the whole call rather than for each email in it. The words already have
+        // a budget spent across the call, and the octets had none, so a read naming ten emails composed ten documents'
+        // worth of pictures — a size the senders chose rather than this deployment.
+        var remainingImageOctets = MailDocumentBounds.Default.MaximumInlineImageOctetsPerDocument;
+
         foreach (var storedEmailId in selection.StoredEmailIds)
         {
             var outcome = await this.ReadOneAsync(
@@ -191,9 +196,11 @@ public sealed class EmailContentReader
                 request,
                 threads,
                 remainingCharacters,
+                remainingImageOctets,
                 cancellationToken);
 
             remainingCharacters -= CharactersReturnedBy(outcome);
+            remainingImageOctets -= ImageOctetsReturnedBy(outcome);
             outcomes.Add(outcome);
         }
 
@@ -244,6 +251,7 @@ public sealed class EmailContentReader
         GetEmailContentRequest request,
         EmailThreadContexts threads,
         int remainingCharacters,
+        int remainingImageOctets,
         CancellationToken cancellationToken)
     {
         var summary = await this.summaryReader.FindAsync(storedEmailId, cancellationToken);
@@ -292,6 +300,7 @@ public sealed class EmailContentReader
             {
                 IncludeMailDocument = request.IncludeMailDocument,
                 RetainRemoteImageReferences = request.RetainRemoteImageReferences,
+                RemainingInlineImageOctetsForRead = Math.Max(remainingImageOctets, 0),
             },
             cancellationToken);
 
@@ -608,12 +617,6 @@ public sealed class EmailContentReader
         ];
     }
 
-    /// <summary>Counts what one outcome drew from the read's character budget.</summary>
-    /// <remarks>
-    /// Both representations count, because both are message content a caller received. What is counted is the text as
-    /// returned rather than the length the message held, so a body the per-representation bound already cut spends only
-    /// what it actually published.
-    /// </remarks>
     /// <summary>Counts what one email spent of the call's budget, which is every representation it returned.</summary>
     /// <remarks>
     /// The document is counted as the words it holds rather than as the JSON it serializes to. What the budget governs
@@ -621,6 +624,17 @@ public sealed class EmailContentReader
     /// <see cref="MailDocumentBounds" /> in octets rather than in characters, so counting its encoding here would
     /// spend a text budget on something no text bound was written for.
     /// </remarks>
+    /// <summary>Counts the octets of its own pictures one email inlined, which the call's octet budget is spent in.</summary>
+    /// <remarks>
+    /// Counted apart from the characters because the bound governing it is stated in octets: a <c>data:</c> URI is a
+    /// third longer than the picture behind it, and a text budget written for words would have to be read as a size
+    /// before it could bound one.
+    /// </remarks>
+    private static int ImageOctetsReturnedBy(EmailContentReadOutcome outcome) =>
+        outcome.Content?.Body.Document is { } document
+            ? (int)Math.Min(MailDocumentImages.OctetsIn(document), int.MaxValue)
+            : 0;
+
     private static int CharactersReturnedBy(EmailContentReadOutcome outcome) =>
         outcome.Content is { } content
             ? content.Body.PlainText.Text.Length

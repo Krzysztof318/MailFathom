@@ -70,6 +70,12 @@ internal sealed class MailBodyReducer
     {
         ArgumentNullException.ThrowIfNull(body);
 
+        // The body element never reaches the element walk, so what that walk counts about any other element is counted
+        // here. A background attribute or a background image on the body itself is how mail has put a picture behind a
+        // whole message for twenty years, and leaving it uncounted would tell the reader the message asked to load
+        // nothing when it asked to load something.
+        this.NoteRemoteReferences(body);
+
         var blocks = this.ReduceChildren(body, MailReductionContext.Root);
 
         return MailDocument.Reduced(
@@ -280,11 +286,19 @@ internal sealed class MailBodyReducer
 
     /// <summary>Resolves what a picture's source points at, or reports that nothing is drawn for it.</summary>
     /// <remarks>
+    /// <para>
     /// The four answers are the whole of what a source may be. A content identifier resolves to the message's own part;
     /// a <c>data:</c> URI the message wrote is kept when it is a picture this pane draws; an absolute address is kept
     /// only where the reader asked for remote content and counted as removed otherwise; and anything else — a relative
     /// reference above all — resolves to nothing, because there is no base to complete it against that would mean
     /// anything.
+    /// </para>
+    /// <para>
+    /// An absolute address is asked of the message's own parts before it is treated as remote, because a part may be
+    /// reached by its <c>Content-Location</c> as well as by its content identifier. A message carrying the octets and
+    /// naming them by location is self-contained, so fetching that address would turn a message that asks nothing of
+    /// anybody into one that tells its sender it was opened.
+    /// </para>
     /// </remarks>
     private string? ResolveImageSource(string? source)
     {
@@ -309,6 +323,11 @@ internal sealed class MailBodyReducer
             || (absolute.Scheme != Uri.UriSchemeHttp && absolute.Scheme != Uri.UriSchemeHttps))
         {
             return null;
+        }
+
+        if (this.inlineImages.Resolve(absolute.AbsoluteUri) is { } carried)
+        {
+            return carried;
         }
 
         if (!this.retainRemoteImages)

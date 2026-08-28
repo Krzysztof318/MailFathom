@@ -20,13 +20,16 @@ Project repository: https://github.com/Krzysztof318/MailFathom
        contents the same way the body does. -->
   <x:Double x:Key="MailBodyBlockSpacing">8</x:Double>
 
-  <!-- What the pane draws on and what it draws with, named here so the drawing can judge a sender's colour against
-       them. A message is written for the background its author imagined, and a body written for white paper says
-       black; drawn unexamined on a dark theme that is a message the reader cannot see. So the drawing composes: a
-       colour that stays legible against these is honoured and one that does not gives way to the theme's own, which is
-       the pane keeping the last word on legibility where a sender would otherwise decide it. -->
-  <StaticResource x:Key="MailBodySurfaceBrush" ResourceKey="SurfaceBrush" />
-  <StaticResource x:Key="MailBodyInkBrush" ResourceKey="OnSurfaceBrush" />
+  <!-- What the pane draws on and what it draws with are Material's own SurfaceBrush and OnSurfaceBrush, and the drawing
+       reads them by those names as each message is drawn. A message is written for the background its author imagined,
+       and a body written for white paper says black; drawn unexamined on a dark theme that is a message the reader
+       cannot see. So the drawing composes: a colour that stays legible against the surface is honoured and one that
+       does not gives way to the theme's own ink, which is the pane keeping the last word on legibility where a sender
+       would otherwise decide it.
+
+       Deliberately not aliased to a key of this dictionary's own. A StaticResource alias resolves once, when the
+       dictionary loads, so it would freeze the surface at whichever theme was in force then and judge every later
+       message against the wrong background — the unreadable-message outcome the composition exists to prevent. -->
 
   <!-- What a message's fixed-width text is drawn in. Named here rather than in the drawing so the one place a face is
        chosen is a resource dictionary, and so a head whose platform lacks this family falls back to the system default

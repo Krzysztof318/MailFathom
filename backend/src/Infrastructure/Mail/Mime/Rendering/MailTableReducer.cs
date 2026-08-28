@@ -43,7 +43,7 @@ internal static class MailTableReducer
         var bounds = reducer.Bounds;
         var rows = new List<MailTableRow>();
 
-        foreach (var row in RowsOf(element))
+        foreach (var row in RowsOf(element, reducer))
         {
             if (rows.Count >= bounds.MaximumTableRows)
             {
@@ -63,19 +63,46 @@ internal static class MailTableReducer
     }
 
     /// <summary>Names the rows that belong to this table rather than to one nested inside it.</summary>
-    private static IEnumerable<IElement> RowsOf(IElement table) =>
-        table.Children.SelectMany(RowsUnder);
+    /// <param name="table">The table as the message wrote it.</param>
+    /// <param name="reducer">
+    /// The reduction, or <see langword="null" /> where the rows are being read for their declared widths alone — that
+    /// pass walks the same sections a second time, so counting a section's references there would count each one twice.
+    /// </param>
+    private static IEnumerable<IElement> RowsOf(IElement table, MailBodyReducer? reducer) =>
+        table.Children.SelectMany(child => RowsUnder(child, reducer));
 
-    private static IEnumerable<IElement> RowsUnder(IElement child)
+    /// <summary>Names the rows one child of a table contributes, reading a section as the walk reads an element.</summary>
+    /// <remarks>
+    /// A section never passes through the element walk either, so what that walk does for an element it meets is done
+    /// for it here: a section that asked not to be drawn contributes no row, and the references to somebody else's
+    /// server it carries are counted. This is the same gap the row and the cell already close, one element further up —
+    /// a <c>tbody</c> is where a message would otherwise hide a whole table from every renderer but this one.
+    /// </remarks>
+    private static IEnumerable<IElement> RowsUnder(IElement child, MailBodyReducer? reducer)
     {
         if (IsNamed(child, "tr"))
         {
             return [child];
         }
 
-        return IsNamed(child, "thead") || IsNamed(child, "tbody") || IsNamed(child, "tfoot")
-            ? child.Children.Where(grandchild => IsNamed(grandchild, "tr"))
-            : [];
+        if (!IsNamed(child, "thead") && !IsNamed(child, "tbody") && !IsNamed(child, "tfoot"))
+        {
+            return [];
+        }
+
+        if (reducer is null)
+        {
+            return child.Children.Where(grandchild => IsNamed(grandchild, "tr"));
+        }
+
+        if (MailStyleReader.Read(child).Hidden)
+        {
+            return [];
+        }
+
+        reducer.NoteRemoteReferences(child);
+
+        return child.Children.Where(grandchild => IsNamed(grandchild, "tr"));
     }
 
     private static MailTableRow ReduceRow(
@@ -171,7 +198,7 @@ internal static class MailTableReducer
             return Padded(columns, columnCount);
         }
 
-        var firstRow = RowsOf(table).FirstOrDefault();
+        var firstRow = RowsOf(table, reducer: null).FirstOrDefault();
 
         return firstRow is null
             ? Padded([], columnCount)

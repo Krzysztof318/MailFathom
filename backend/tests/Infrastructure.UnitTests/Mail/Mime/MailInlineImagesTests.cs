@@ -81,17 +81,52 @@ public sealed class MailInlineImagesTests
         Assert.Equal(2, images.UndrawnCount);
     }
 
+    /// <summary>A part the body never names spends none of the document's budget and is not reported as undrawn.</summary>
+    /// <remarks>
+    /// An attached photograph carrying a content identifier is indistinguishable from an inline logo until the body is
+    /// read, and clients routinely give one to both. Resolving in MIME order would spend the whole budget on the
+    /// attachment and refuse the logo the reader would actually have seen.
+    /// </remarks>
+    [Fact]
+    public async Task ResolveAsync_PartTheBodyNeverNames_IsNeitherDecodedNorReportedAsUndrawn()
+    {
+        // Arrange
+        using var message = MessageCarrying(4000, 500);
+        var named = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "picture1@example.test" };
+
+        // Act
+        var images = await ResolvedFrom(message, maximumOctetsInTotal: 2000, named: named);
+
+        // Assert
+        Assert.Equal(1, images.ResolvedCount);
+        Assert.Equal(0, images.UndrawnCount);
+        Assert.NotNull(images.Resolve("cid:picture1@example.test"));
+        Assert.Null(images.Resolve("cid:picture0@example.test"));
+    }
+
     private static Task<MailInlineImages> ResolvedFrom(
         MimeMessage message,
         int maximumImages = 64,
         int maximumOctets = 1024 * 1024,
-        int maximumOctetsInTotal = 4 * 1024 * 1024) =>
+        int maximumOctetsInTotal = 4 * 1024 * 1024,
+        IReadOnlySet<string>? named = null) =>
         MailInlineImages.ResolveAsync(
             message,
+            named ?? EveryPictureIn(message),
             maximumImages,
             maximumOctets,
             maximumOctetsInTotal,
             TestContext.Current.CancellationToken);
+
+    /// <summary>Names every picture the message carries, which is the body asking for all of them.</summary>
+    private static HashSet<string> EveryPictureIn(MimeMessage message) =>
+        [
+            .. message.BodyParts
+                .OfType<MimePart>()
+                .Select(part => part.ContentId)
+                .OfType<string>()
+                .Select(MailInlineImages.KeyOf),
+        ];
 
     /// <summary>Builds a message carrying one picture per size given, each referenced by its own identifier.</summary>
     private static MimeMessage MessageCarrying(params int[] octets)

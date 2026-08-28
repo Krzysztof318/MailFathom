@@ -524,7 +524,14 @@ by `Content-Id` or `Content-Location` becomes a `data:` URI, bounded three times
 each may be, and by how much they may come to together — with `InlineImageCount` and `UndrawnInlineImageCount` saying
 how many were drawn and how many a bound left out. The third of those is the bound the answer is sized by rather than
 the message: without it a message carrying the permitted count at the permitted size composes a response no reading pane
-will buffer, and the reader loses the whole message rather than one photograph.
+will buffer, and the reader loses the whole message rather than one photograph. It is spent across the call rather than
+per message, exactly as the character budget is, so a read naming ten emails returns one document's worth of pictures
+between them rather than ten.
+
+Only the pictures the body actually names are decoded. A part carrying a content identifier may be an attachment the
+message never draws — clients routinely give one to both — and resolving in the order the message happens to carry its
+parts would spend the whole budget on that attachment and leave the logo the reader would have seen reported as
+undrawn.
 
 `RetainRemoteImageReferences` carries one reader's consent about one message, so a request asking for it names exactly
 one email and is refused otherwise. It is the one flag on this request that is an act rather than a preference: a read

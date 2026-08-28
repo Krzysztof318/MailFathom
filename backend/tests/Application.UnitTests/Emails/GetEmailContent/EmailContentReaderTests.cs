@@ -1124,6 +1124,59 @@ public sealed class EmailContentReaderTests
             MailDocumentTexts.Collect(document));
     }
 
+    /// <summary>What the reader consented to is what the rendering is asked for, since nothing downstream can re-derive it.</summary>
+    /// <remarks>
+    /// The one privacy decision this whole path exists to hold. Dropping or inverting the assignment onto the bounds
+    /// would render a message's remote references for a reader who never asked, and every other assertion in this file
+    /// would still pass — the renderer is substituted, so it answers whatever it was told to whatever it was handed.
+    /// </remarks>
+    [Fact]
+    public async Task ReadContentAsync_ADocumentWithTheReadersConsent_AsksTheRendererForBoth()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create();
+        var renderer = RendererReturning(RenderingOf(plainText: "Body") with { Document = DocumentSaying("Words") });
+        var reader = ReaderOver(summary, renderer);
+
+        // Act
+        await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId]) with
+            {
+                IncludeMailDocument = true,
+                RetainRemoteImageReferences = true,
+            },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        await renderer.Received(1).RenderAsync(
+            Arg.Any<StoredEmailContent>(),
+            Arg.Is<EmailContentRenderingBounds>(bounds =>
+                bounds != null && bounds.IncludeMailDocument && bounds.RetainRemoteImageReferences),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>A read nobody consented for asks for neither, which is what makes the assertion above able to fail.</summary>
+    [Fact]
+    public async Task ReadContentAsync_ADocumentWithoutTheReadersConsent_AsksForNeitherRemoteReferences()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create();
+        var renderer = RendererReturning(RenderingOf(plainText: "Body") with { Document = DocumentSaying("Words") });
+        var reader = ReaderOver(summary, renderer);
+
+        // Act
+        await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId]) with { IncludeMailDocument = true },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        await renderer.Received(1).RenderAsync(
+            Arg.Any<StoredEmailContent>(),
+            Arg.Is<EmailContentRenderingBounds>(bounds =>
+                bounds != null && bounds.IncludeMailDocument && !bounds.RetainRemoteImageReferences),
+            Arg.Any<CancellationToken>());
+    }
+
     /// <summary>A document of more texts than one read scans is cut at the bound rather than published unscanned.</summary>
     /// <remarks>
     /// The scan is per value, so the count of values is what a sender chooses: a body written as one span per word

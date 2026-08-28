@@ -48,8 +48,17 @@ internal sealed class MailBodyDrawing
     private const string HeaderCellStyleKey = "MailBodyTableHeaderCellStyle";
     private const string MonospaceFontKey = "MailBodyMonospaceFontFamily";
     private const string BlockSpacingKey = "MailBodyBlockSpacing";
-    private const string SurfaceBrushKey = "MailBodySurfaceBrush";
-    private const string InkBrushKey = "MailBodyInkBrush";
+    /// <summary>Material's own key for what this pane draws on, read as each message is drawn.</summary>
+    /// <remarks>
+    /// The design system's key rather than one of this application's, because the lookup has to happen per drawing: a
+    /// key of ours aliasing this one with <c>StaticResource</c> would resolve once when the dictionary loaded and
+    /// freeze the surface at whichever theme was in force then, which is exactly the wrong background to judge a
+    /// sender's colour against for every message drawn after a reader changes theme.
+    /// </remarks>
+    private const string SurfaceBrushKey = "SurfaceBrush";
+
+    /// <summary>Material's own key for what this pane draws with, read per drawing for the reason above.</summary>
+    private const string InkBrushKey = "OnSurfaceBrush";
 
     /// <summary>The contrast a sender's colour clears to be drawn, which is what WCAG asks of body text.</summary>
     private const double MinimumContrast = 4.5;
@@ -89,15 +98,30 @@ internal sealed class MailBodyDrawing
     }
 
     /// <summary>Fills in whichever pictures resolve, into the tree the drawing already produced.</summary>
-    /// <returns>A task that completes when every picture has been decided.</returns>
+    /// <param name="isCurrent">Answers whether the message this drawing belongs to is still the one being read.</param>
+    /// <returns>A task that completes when every picture has been decided, or when the reading moved on.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="isCurrent" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// A picture that resolves to nothing leaves what the message said it shows in its place, which is what a reader can
     /// act on. Awaited on the pane's own context, because every one of these continuations ends at the visual tree.
+    /// <para>
+    /// The window this asks about is a real one and it is here rather than before the loop: each picture is awaited in
+    /// turn, so a reader who opens another message part-way through would otherwise have the rest resolved into a tree
+    /// nothing is showing — and, for a source they consented to load remotely, still fetched from the sender's server,
+    /// disclosing a read of a message they have already left.
+    /// </para>
     /// </remarks>
-    internal async Task FillPicturesAsync()
+    internal async Task FillPicturesAsync(Func<bool> isCurrent)
     {
+        ArgumentNullException.ThrowIfNull(isCurrent);
+
         foreach (var pending in this.pictures)
         {
+            if (!isCurrent())
+            {
+                return;
+            }
+
             await Fill(pending);
         }
     }

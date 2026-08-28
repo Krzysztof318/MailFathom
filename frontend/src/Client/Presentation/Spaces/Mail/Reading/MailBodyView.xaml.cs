@@ -95,7 +95,7 @@ public sealed partial class MailBodyView : UserControl
         }
     }
 
-    /// <summary>Builds the document and puts it in place, unless another message arrived while it was being built.</summary>
+    /// <summary>Builds the document, puts it in place, and fills its pictures in while this message is still the one.</summary>
     /// <remarks>
     /// Started rather than awaited, because a dependency property change is not a place to wait: the notices and the
     /// words are already on the screen and the drawing joins them when it is ready. Its continuations keep their
@@ -110,16 +110,12 @@ public sealed partial class MailBodyView : UserControl
         // The tree is attached before a picture is resolved, so the message is on the screen while its pictures are
         // being decided. A remote one the reader consented to is a request to somebody else's server, and waiting for
         // it here would leave the reader an empty pane for as long as that server takes to answer or fail.
-        var drawn = drawing.Draw(reading.Blocks);
+        this.Document.Child = drawing.Draw(reading.Blocks);
 
-        if (!ReferenceEquals(this.Reading, reading))
-        {
-            return;
-        }
-
-        this.Document.Child = drawn;
-
-        await drawing.FillPicturesAsync();
+        // The staleness question belongs inside the fill rather than in front of it: the drawing above is synchronous,
+        // so nothing can have arrived by this line, and the pictures are awaited one at a time — which is the stretch a
+        // reader can leave the message in.
+        await drawing.FillPicturesAsync(() => ReferenceEquals(this.Reading, reading));
     }
 
     /// <summary>Shows where a link actually goes, and opens it only if the reader says so.</summary>

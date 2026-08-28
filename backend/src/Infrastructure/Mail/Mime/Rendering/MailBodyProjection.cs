@@ -34,6 +34,7 @@ internal static class MailBodyProjection
     /// <param name="htmlParts">The HTML the message displays, in the order the walk found the parts.</param>
     /// <param name="retainRemoteImages">Whether the reader asked for this message's remote pictures.</param>
     /// <param name="maximumCharacters">How much markup is reduced before the source is cut.</param>
+    /// <param name="maximumImageOctets">How many octets of its own pictures this document may still inline.</param>
     /// <param name="cancellationToken">Cancels the decode of the message's own pictures.</param>
     /// <returns>The document, or the fact that the pane reads this message as its plain text instead.</returns>
     /// <exception cref="ArgumentNullException">Thrown when either reference argument is <see langword="null" />.</exception>
@@ -42,6 +43,7 @@ internal static class MailBodyProjection
         IReadOnlyList<string> htmlParts,
         bool retainRemoteImages,
         int maximumCharacters,
+        int maximumImageOctets,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(message);
@@ -56,13 +58,6 @@ internal static class MailBodyProjection
         var joined = string.Join('\n', htmlParts);
         var source = MailTextBounds.TruncateAtTextElementBoundary(joined, maximumCharacters);
 
-        var inlineImages = await MailInlineImages.ResolveAsync(
-            message,
-            bounds.MaximumInlineImages,
-            bounds.MaximumInlineImageOctets,
-            bounds.MaximumInlineImageOctetsPerDocument,
-            cancellationToken);
-
         // The default configuration builds a parser with no requester and no script engine, so parsing fetches nothing
         // and runs nothing. Naming that here rather than trusting it is the point: a configuration that gained either
         // would turn this line into the one place mail could reach the network from.
@@ -72,6 +67,17 @@ internal static class MailBodyProjection
         {
             return MailDocument.Refused(MailDocumentRefusal.ReductionFailed);
         }
+
+        // The parse comes first so the pictures the body actually names are known before any part is decoded. Resolving
+        // in MIME order without that would spend the document's octet budget on an attached photograph the body never
+        // draws — which clients routinely give a content identifier — and leave the small logo it does draw refused.
+        var inlineImages = await MailInlineImages.ResolveAsync(
+            message,
+            MailPictureReferences.NamedBy(body),
+            bounds.MaximumInlineImages,
+            bounds.MaximumInlineImageOctets,
+            Math.Min(bounds.MaximumInlineImageOctetsPerDocument, maximumImageOctets),
+            cancellationToken);
 
         var reducer = new MailBodyReducer(bounds, inlineImages, retainRemoteImages);
 

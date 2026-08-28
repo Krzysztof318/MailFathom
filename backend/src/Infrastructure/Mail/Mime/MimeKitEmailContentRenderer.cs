@@ -162,6 +162,7 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
                         bounds.RemainingCharactersForRead
                             - plainTextBody.Text.Length
                             - (sanitizedHtmlBody?.Text.Length ?? 0)).MaxCharacters,
+                    bounds.RemainingInlineImageOctetsForRead,
                     cancellationToken)
                 : null,
         };

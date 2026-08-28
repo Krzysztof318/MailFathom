@@ -52,28 +52,38 @@ internal sealed class MailInlineImages
     /// <summary>Gets the resolution of a message that carries no picture of its own.</summary>
     public static MailInlineImages None { get; } = new([], resolved: 0, undrawn: 0);
 
-    /// <summary>Resolves every picture the message carries in itself.</summary>
+    /// <summary>Resolves the pictures the body asks for out of the message's own parts.</summary>
     /// <param name="message">The parsed message.</param>
+    /// <param name="named">The references the body's pictures name, which is what the budget is spent on.</param>
     /// <param name="maximumImages">How many pictures may be resolved at all.</param>
     /// <param name="maximumOctets">How large one picture may be.</param>
     /// <param name="maximumOctetsInTotal">How many octets every resolved picture may come to together.</param>
     /// <param name="cancellationToken">Cancels the decode.</param>
     /// <returns>The resolution.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="message" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when a reference argument is <see langword="null" />.</exception>
     /// <remarks>
+    /// <para>
+    /// A part the body never names is not decoded and is not reported as undrawn either, because nothing was going to
+    /// draw it: an attachment carrying a content identifier is a file rather than a picture in the message, and
+    /// spending the document's octet budget on it is what would leave the logo the body does draw refused.
+    /// </para>
+    /// <para>
     /// The count is of pictures rather than of the references that reach them, which is why a part already inlined
     /// under another reference costs nothing here: a message naming one photograph by both its content identifier and
     /// its location is carrying one picture, and counting it twice would leave a reader a photograph short of the
     /// bound they were promised.
+    /// </para>
     /// </remarks>
     public static async Task<MailInlineImages> ResolveAsync(
         MimeMessage message,
+        IReadOnlySet<string> named,
         int maximumImages,
         int maximumOctets,
         int maximumOctetsInTotal,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(message);
+        ArgumentNullException.ThrowIfNull(named);
 
         var byReference = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var resolved = 0;
@@ -83,7 +93,9 @@ internal sealed class MailInlineImages
         foreach (var part in message.BodyParts.OfType<MimePart>().Where(IsDrawable))
         {
             var references = ReferencesOf(part).ToArray();
-            if (references.Length == 0 || references.All(byReference.ContainsKey))
+            if (references.Length == 0
+                || references.All(byReference.ContainsKey)
+                || !references.Any(named.Contains))
             {
                 continue;
             }
@@ -128,13 +140,22 @@ internal sealed class MailInlineImages
     /// <summary>Resolves one reference the body wrote.</summary>
     /// <param name="reference">The reference as the body wrote it, with or without its scheme.</param>
     /// <returns>The picture as a <c>data:</c> URI, or <see langword="null" /> where the message carries no such part.</returns>
-    public string? Resolve(string reference)
+    public string? Resolve(string reference) => this.byReference.GetValueOrDefault(KeyOf(reference));
+
+    /// <summary>Reads the form a part is keyed by, out of a reference however the body wrote it.</summary>
+    /// <param name="reference">The reference as the body wrote it, with or without its scheme.</param>
+    /// <returns>The key.</returns>
+    /// <remarks>
+    /// One place rather than two, because the walk that decides which parts to decode and the walk that looks one up
+    /// have to agree: a reference normalized differently by the two would resolve to a part nothing decoded.
+    /// </remarks>
+    internal static string KeyOf(string reference)
     {
         var identifier = reference.StartsWith("cid:", StringComparison.OrdinalIgnoreCase)
             ? reference[4..]
             : reference;
 
-        return this.byReference.GetValueOrDefault(Uri.UnescapeDataString(identifier.Trim().Trim('<', '>')));
+        return Uri.UnescapeDataString(identifier.Trim().Trim('<', '>'));
     }
 
     /// <summary>Answers whether a part is a picture this resolution draws.</summary>
@@ -149,17 +170,22 @@ internal sealed class MailInlineImages
         && part.ContentType.MediaSubtype is { } subtype
         && DrawableSubtypes.Contains(subtype, StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Names every way the body could refer to one part.</summary>
+    /// <summary>Names every way the body could refer to one part, in the form a lookup is keyed by.</summary>
+    /// <remarks>
+    /// Through <see cref="KeyOf" /> rather than as the part wrote them, so what is stored and what is looked up are
+    /// normalized by one function. Two normalizations would resolve a reference the message and the body spelled
+    /// differently to nothing at all.
+    /// </remarks>
     private static IEnumerable<string> ReferencesOf(MimePart part)
     {
         if (part.ContentId is { Length: > 0 } contentId)
         {
-            yield return contentId.Trim().Trim('<', '>');
+            yield return KeyOf(contentId);
         }
 
         if (part.ContentLocation is { IsAbsoluteUri: true } location)
         {
-            yield return location.AbsoluteUri;
+            yield return KeyOf(location.AbsoluteUri);
         }
     }
 

@@ -77,10 +77,29 @@ internal static class MailStyleReader
             style = Apply(
                 style,
                 declaration[..separator].Trim(),
-                declaration[(separator + 1)..].Trim());
+                Declared(declaration[(separator + 1)..]));
         }
 
         return style;
+    }
+
+    /// <summary>Reads the value a declaration states, without the qualifier a sender may have written after it.</summary>
+    /// <remarks>
+    /// <c>display: none !important</c> is how a mail template hides preheader text and anything else meant never to be
+    /// seen, so a reader comparing the whole value would leave the one form every other client honours as the one form
+    /// this pane draws — and it would defeat every <see cref="MailNodeStyle.Hidden" /> check at once rather than one.
+    /// The qualifier decides which declaration wins a cascade, and there is no cascade here, so it is dropped rather
+    /// than carried.
+    /// </remarks>
+    private static string Declared(string value)
+    {
+        var stated = value.Trim();
+        var qualifier = stated.LastIndexOf('!');
+
+        return qualifier >= 0
+            && stated.AsSpan(qualifier + 1).Trim().Equals("important", StringComparison.OrdinalIgnoreCase)
+                ? stated[..qualifier].TrimEnd()
+                : stated;
     }
 
     [SuppressMessage(
@@ -211,12 +230,20 @@ internal static class MailStyleReader
             NumberStyles.Float,
             CultureInfo.InvariantCulture,
             out var percentage)
+            && double.IsFinite(percentage)
             && percentage is > 0 and <= 100
             ? percentage / 100
             : null;
     }
 
     /// <summary>Reads a pixel width, which is never a share on its own and is only ever resolved against siblings.</summary>
+    /// <remarks>
+    /// The finiteness check is the whole reason this refuses rather than clamps. <c>double.TryParse</c> answers an
+    /// overflowing literal with <see cref="double.PositiveInfinity" /> rather than failing, so <c>width="1e400px"</c>
+    /// would arrive as a real width, be summed into an infinite total, and resolve to a share of <c>NaN</c> — which
+    /// <c>Utf8JsonWriter</c> refuses to write, so one attribute a stranger wrote would cost the reader the whole
+    /// message rather than one column's proportion.
+    /// </remarks>
     private static double? PixelsOf(string? value)
     {
         if (value is null || value.EndsWith('%'))
@@ -231,6 +258,7 @@ internal static class MailStyleReader
         }
 
         return double.TryParse(digits, NumberStyles.Float, CultureInfo.InvariantCulture, out var pixels)
+            && double.IsFinite(pixels)
             && pixels > 0
             ? pixels
             : null;
