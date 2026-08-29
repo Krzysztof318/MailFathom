@@ -161,7 +161,7 @@ public partial class App : Application
     /// content by hand is a screen neither of them knows about.
     /// </para>
     /// </remarks>
-    private static void RegisterRoutes(IViewRegistry views, IRouteRegistry routes)
+    internal static void RegisterRoutes(IViewRegistry views, IRouteRegistry routes)
     {
         views.Register(
             new ViewMap(ViewModel: typeof(ShellModel)),
@@ -175,9 +175,9 @@ public partial class App : Application
             new ViewMap<ConnectPage, ConnectModel>(),
             new ViewMap<SignInPage, SignInModel>());
 
-        // No default among the three the shell holds, deliberately. Which of them a launch opens on is what
-        // OnLaunched decides from whether this installation has been pointed at a deployment, and a route marked
-        // default here would be the second answer to that question. The default inside the frame is a different
+        // Connect is the safe root default while the launch callback decides from restored state. Uno first resolves
+        // a default route and then invokes that callback; without one, desktop can accept the empty root as its launch
+        // route and never ask the callback for the actual destination. The default inside the frame is a different
         // question — which space the workspace opens on — and Discover carries it.
         routes.Register(
             new RouteMap(
@@ -197,7 +197,7 @@ public partial class App : Application
                     new RouteMap(ClientRoutes.MailThread, View: views.FindByView<MailThreadPage>()),
                     new RouteMap(ClientRoutes.MailMessage, View: views.FindByView<MailMessagePage>()),
                     new RouteMap(ClientRoutes.Settings, View: views.FindByViewModel<SettingsModel>()),
-                    new RouteMap(ClientRoutes.Connect, View: views.FindByViewModel<ConnectModel>()),
+                    new RouteMap(ClientRoutes.Connect, View: views.FindByViewModel<ConnectModel>(), IsDefault: true),
                     new RouteMap(ClientRoutes.SignIn, View: views.FindByViewModel<SignInModel>()),
                 ]));
     }
