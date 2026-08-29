@@ -25,7 +25,8 @@ internal sealed class MailKitRemoteFolderCatalog(
     IImapAccountSettingsProvider settingsProvider,
     IMailAccessTokenSource accessTokenSource,
     OutboundOperationExecutor operationExecutor,
-    ITransientFailureClassifier transientFailureClassifier) : IRemoteFolderCatalog
+    ITransientFailureClassifier transientFailureClassifier,
+    MailServerConnectionBudget connectionBudget) : IRemoteFolderCatalog
 {
     /// <summary>Bounds what one listing may retain, since the folder tree is a remote answer rather than local state.</summary>
     private const int MaximumAdvertisedFolderCount = 10_000;
@@ -56,6 +57,7 @@ internal sealed class MailKitRemoteFolderCatalog(
             accessTokenSource,
             operationExecutor,
             transientFailureClassifier,
+            connectionBudget,
             accountId,
             transportSecurityPolicy);
 

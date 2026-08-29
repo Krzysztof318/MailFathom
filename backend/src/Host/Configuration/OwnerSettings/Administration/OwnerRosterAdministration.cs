@@ -123,32 +123,42 @@ internal sealed partial class OwnerRosterAdministration(
         }
 
         var owner = MailOwnerId.Create(Guid.NewGuid());
+        await servedOwners.WaitForRosterPublicationAsync(cancellationToken);
 
-        if (!await provisioning.ProvisionAsync(owner, label, cancellationToken))
+        try
         {
-            // The label was taken between the roster being read and the insert reaching the table, which no reading of
-            // a snapshot could have refused earlier.
-            return OwnerProvisioningOutcome.Refused(LabelTaken(label));
-        }
+            if (!await provisioning.ProvisionAsync(owner, label, cancellationToken))
+            {
+                // The label was taken between the roster being read and the insert reaching the table, which no reading of
+                // a snapshot could have refused earlier.
+                return OwnerProvisioningOutcome.Refused(LabelTaken(label));
+            }
 
-        // The record rather than only the envelope, because an owner nothing declares is served from their own record
-        // or from nothing at all. It is the empty object the envelope already carries, so what the commit changes is
-        // the marker beside it — which is what the next start reads to decide that this owner is not waiting on a
-        // configuration section that does not exist.
-        if (await documents.CommitAsync(owner, EmptyRecord, ProvisionedVersion, cancellationToken) is null)
+            // The record rather than only the envelope, because an owner nothing declares is served from their own record
+            // or from nothing at all. It is the empty object the envelope already carries, so what the commit changes is
+            // the marker beside it — which is what the next start reads to decide that this owner is not waiting on a
+            // configuration section that does not exist.
+            if (await documents.CommitAsync(owner, EmptyRecord, ProvisionedVersion, cancellationToken) is not { } committed)
+            {
+                // The envelope was written and the row is gone again, which is another administrator erasing this owner
+                // between the two statements. Reporting the owner as recorded would hand back an identifier nothing holds;
+                // reporting it as provisioned without the marker would leave the next start reading their mail accounts
+                // out of a configuration section that was never written for them, and refusing to start over the second
+                // such row it met.
+                return OwnerProvisioningOutcome.Refused(
+                    "The owner was recorded and then removed before their record could be written, so this deployment holds nobody under that label. Record them again.");
+            }
+
+            servedOwners.OwnerDocumentPublished(owner, label, [], committed);
+
+            this.LogOwnerProvisioned(label);
+
+            return OwnerProvisioningOutcome.Provisioned(owner);
+        }
+        finally
         {
-            // The envelope was written and the row is gone again, which is another administrator erasing this owner
-            // between the two statements. Reporting the owner as recorded would hand back an identifier nothing holds;
-            // reporting it as provisioned without the marker would leave the next start reading their mail accounts
-            // out of a configuration section that was never written for them, and refusing to start over the second
-            // such row it met.
-            return OwnerProvisioningOutcome.Refused(
-                "The owner was recorded and then removed before their record could be written, so this deployment holds nobody under that label. Record them again.");
+            servedOwners.ReleaseRosterPublication();
         }
-
-        this.LogOwnerProvisioned(label);
-
-        return OwnerProvisioningOutcome.Provisioned(owner);
     }
 
     /// <summary>Puts a new label on an owner this deployment already holds.</summary>
@@ -214,9 +224,8 @@ internal sealed partial class OwnerRosterAdministration(
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminErase" />.</exception>
     /// <remarks>
     /// <para>
-    /// Whether the owner was served is read before the erasure rather than after, because the roster is what this
-    /// process settled at start and the answer must describe the deployment the caller asked about rather than the one
-    /// the erasure left.
+    /// Whether the owner was served is read before the erasure rather than after, because the answer must describe the
+    /// deployment the caller asked about rather than the roster the erasure left.
     /// </para>
     /// <para>
     /// An owner a configuration source names is refused rather than erased. The next start reconciles the declarations
@@ -235,21 +244,31 @@ internal sealed partial class OwnerRosterAdministration(
 
         authorization.RequirePermission(MailFathomPermission.AdminErase);
 
-        var served = servedOwners.Owners.Any(candidate => candidate.Owner == owner);
-
         if (configured.DeclaredByAConfigurationSource(owner))
         {
+            var served = servedOwners.Owners.Any(candidate => candidate.Owner == owner);
             return new OwnerErasureOutcome(OwnerErased: false, served, DeclaredElsewhere);
         }
 
-        var erased = await erasure.EraseAsync(owner, cancellationToken);
+        await servedOwners.WaitForRosterPublicationAsync(cancellationToken);
 
-        if (erased)
+        try
         {
-            this.LogOwnerErased(served);
-        }
+            var served = servedOwners.Owners.Any(candidate => candidate.Owner == owner);
+            var erased = await erasure.EraseAsync(owner, cancellationToken);
 
-        return new OwnerErasureOutcome(erased, served);
+            if (erased)
+            {
+                servedOwners.OwnerErased(owner);
+                this.LogOwnerErased(served);
+            }
+
+            return new OwnerErasureOutcome(erased, served);
+        }
+        finally
+        {
+            servedOwners.ReleaseRosterPublication();
+        }
     }
 
     /// <summary>Says why a label cannot be an owner's, or nothing when it can.</summary>
@@ -295,13 +314,9 @@ internal sealed partial class OwnerRosterAdministration(
         Message = "An owner this deployment holds was relabelled. Which owner, and under what label, is read from the roster rather than from here.")]
     private partial void LogOwnerRelabelled();
 
-    /// <remarks>
-    /// The record names no owner at all, not even the label: what is being written down is that a person's whole
-    /// record was disposed of, and a log line naming them would outlive the erasure it reports. A warning rather than
-    /// information for the same reason, and because the flag is what tells an operator whether a restart is owed.
-    /// </remarks>
+    /// <remarks>The record names no owner at all: a person's whole record was disposed of, and a log line naming them would outlive the erasure it reports.</remarks>
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "An owner and everything recorded for them were erased. This process was serving them: {WasServed}. A process that was serving an erased owner goes on composing callers against a row that is gone until it is restarted.")]
+        Message = "An owner and everything recorded for them were erased. This process was serving them: {WasServed}. The runtime roster now excludes them.")]
     private partial void LogOwnerErased(bool wasServed);
 }

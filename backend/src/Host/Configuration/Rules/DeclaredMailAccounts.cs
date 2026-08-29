@@ -84,7 +84,7 @@ internal static class DeclaredMailAccounts
         return
         [
             .. settings.Accounts
-                .Concat(settings.ServedOwners?.MailAccountsOfEveryOwner() ?? [])
+                .Concat(settings.ServedOwners?.SelectMany(static owner => owner.MailAccounts) ?? [])
                 .Where(account => !string.IsNullOrWhiteSpace(account.AccountId))
                 .Select(account => new DeclaredMailAccount(
                     account.AccountId.Trim(),

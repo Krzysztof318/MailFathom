@@ -2,6 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using Microsoft.Extensions.Primitives;
+
 namespace MailFathom.Host.Configuration;
 
 /// <summary>Supplies the settings a new operation should run with.</summary>
@@ -20,9 +22,9 @@ namespace MailFathom.Host.Configuration;
 /// </para>
 /// <para>
 /// That publication rule, together with the surface it withholds, is why this is declared rather than left to the
-/// framework: the single member is <c>IOptionsMonitor</c> deliberately narrowed — no lookup by name, no change
-/// callback, no way to observe a candidate that failed to resolve — and what it returns follows a rule no framework
-/// options type applies.
+/// framework: <c>IOptionsMonitor</c> is deliberately narrowed — no lookup by name and no way to observe a candidate
+/// that failed to resolve — and what it returns follows a rule no framework options type applies. Its token rises only
+/// after a usable snapshot has been published.
 /// </para>
 /// </remarks>
 internal interface ISettingsSnapshot<out TSettings>
@@ -30,4 +32,7 @@ internal interface ISettingsSnapshot<out TSettings>
 {
     /// <summary>Gets the most recent snapshot whose secret-bearing settings were all proven usable.</summary>
     TSettings Current { get; }
+
+    /// <summary>Gets a token that changes when a newer usable snapshot is published.</summary>
+    IChangeToken GetReloadToken();
 }

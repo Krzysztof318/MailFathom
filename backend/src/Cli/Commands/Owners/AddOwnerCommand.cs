@@ -75,7 +75,8 @@ internal static class AddOwnerCommand
         context.Console.WriteNotice(
             "Their mail accounts are read from their own record; no configuration source reaches them. Declare one with "
             + "'mfctl owner account add', and provision a way for them to sign in with 'mfctl credential create'. The "
-            + "running deployment settled its roster at start, so it begins serving this owner at its next restart.");
+            + "replica this request reached serves this owner now; other replicas pick up the change after their next "
+            + "owner write or restart.");
 
         return CliExitCode.Success;
     }

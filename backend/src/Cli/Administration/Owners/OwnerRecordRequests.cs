@@ -25,7 +25,7 @@ internal sealed record OwnerProvisioned([property: JsonPropertyName("id")] Guid 
 /// <summary>What an erasure removed.</summary>
 /// <param name="Erased">Whether the deployment held the owner at all.</param>
 /// <param name="WasServed">Whether the running deployment was serving them when they were erased.</param>
-/// <remarks>The second is what tells an operator a restart is owed: a process that was serving an erased owner goes on composing callers against a row that is gone.</remarks>
+/// <remarks>The second reports whether the erasure also removed the owner from the running process.</remarks>
 internal sealed record OwnerErasure(
     [property: JsonPropertyName("erased")] bool Erased,
     [property: JsonPropertyName("wasServed")] bool WasServed);

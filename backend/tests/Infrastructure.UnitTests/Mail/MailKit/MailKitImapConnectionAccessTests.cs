@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.MailKit;
 using MailFathom.Infrastructure.UnitTests.TestDoubles;
 using MailKit;
@@ -20,11 +21,49 @@ namespace MailFathom.Infrastructure.UnitTests.Mail.MailKit;
 /// </summary>
 public sealed class MailKitImapConnectionAccessTests
 {
+    /// <summary>A factory failure happens after the host slot is acquired, and must not shrink that host's budget.</summary>
+    [Fact]
+    public async Task EnsureAuthenticatedClientAsync_TheClientFactoryThrows_ReleasesTheConnectionBudget()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        using var connectionBudget = new MailServerConnectionBudget(maximumConnectionsPerHost: 2);
+        await using var connection = MailKitImapConnection.ForReading(
+            () => throw new InvalidOperationException("factory failed"),
+            CreateSettingsProvider(),
+            new UnusedMailAccessTokenSource(),
+            resilience.Executor,
+            resilience.TransientFailureClassifier,
+            connectionBudget,
+            MailServerConnectionPurpose.Work,
+            PrimaryAccount,
+            InboxFolder,
+            TlsOnConnectWithPlainPolicy);
+
+        // Act
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => connection.EnsureAuthenticatedClientAsync(TestContext.Current.CancellationToken));
+
+        // Assert
+        using var first = await connectionBudget.AcquireAsync(
+            "imap.example.test",
+            MailServerConnectionPurpose.Work,
+            TestContext.Current.CancellationToken);
+        var second = connectionBudget.AcquireAsync(
+            "imap.example.test",
+            MailServerConnectionPurpose.Work,
+            TestContext.Current.CancellationToken);
+
+        Assert.True(second.IsCompletedSuccessfully);
+        using var admitted = await second;
+    }
+
     [Fact]
     public async Task ExecuteMutationAsync_OnAConnectionOpenedForReading_IsRefusedWithoutReachingTheServer()
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
+        using var connectionBudget = CreateConnectionBudget();
         var openFolder = CreateSelectedFolder();
         var client = new FakeImapClient { Folder = openFolder };
         client.AuthenticationMechanisms.Add("PLAIN");
@@ -34,6 +73,8 @@ public sealed class MailKitImapConnectionAccessTests
             new UnusedMailAccessTokenSource(),
             resilience.Executor,
             resilience.TransientFailureClassifier,
+            connectionBudget,
+            MailServerConnectionPurpose.Work,
             PrimaryAccount,
             InboxFolder,
             TlsOnConnectWithPlainPolicy);
@@ -59,6 +100,7 @@ public sealed class MailKitImapConnectionAccessTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
+        using var connectionBudget = CreateConnectionBudget();
         var client = new FakeImapClient { Folder = CreateSelectedFolder() };
         client.AuthenticationMechanisms.Add("PLAIN");
         await using var connection = MailKitImapConnection.ForReading(
@@ -67,6 +109,8 @@ public sealed class MailKitImapConnectionAccessTests
             new UnusedMailAccessTokenSource(),
             resilience.Executor,
             resilience.TransientFailureClassifier,
+            connectionBudget,
+            MailServerConnectionPurpose.Work,
             PrimaryAccount,
             InboxFolder,
             TlsOnConnectWithPlainPolicy);
@@ -91,6 +135,7 @@ public sealed class MailKitImapConnectionAccessTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
+        using var connectionBudget = CreateConnectionBudget();
         var client = new FakeImapClient { Folder = CreateSelectedFolder() };
         client.AuthenticationMechanisms.Add("PLAIN");
         await using var connection = MailKitImapConnection.ForWriting(
@@ -99,6 +144,7 @@ public sealed class MailKitImapConnectionAccessTests
             new UnusedMailAccessTokenSource(),
             resilience.Executor,
             resilience.TransientFailureClassifier,
+            connectionBudget,
             PrimaryAccount,
             InboxFolder,
             TlsOnConnectWithPlainPolicy);
@@ -118,6 +164,7 @@ public sealed class MailKitImapConnectionAccessTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
+        using var connectionBudget = CreateConnectionBudget();
         var client = new FakeImapClient { Folder = CreateSelectedFolder() };
         client.AuthenticationMechanisms.Add("PLAIN");
         await using var connection = MailKitImapConnection.ForFolderManagement(
@@ -126,6 +173,7 @@ public sealed class MailKitImapConnectionAccessTests
             new UnusedMailAccessTokenSource(),
             resilience.Executor,
             resilience.TransientFailureClassifier,
+            connectionBudget,
             PrimaryAccount,
             TlsOnConnectWithPlainPolicy);
 
@@ -144,6 +192,7 @@ public sealed class MailKitImapConnectionAccessTests
     {
         // Arrange
         using var resilience = CreateSingleAttemptResilience();
+        using var connectionBudget = CreateConnectionBudget();
         var openFolder = CreateSelectedFolder();
         var client = new FakeImapClient { Folder = openFolder };
         client.AuthenticationMechanisms.Add("PLAIN");
@@ -153,6 +202,7 @@ public sealed class MailKitImapConnectionAccessTests
             new UnusedMailAccessTokenSource(),
             resilience.Executor,
             resilience.TransientFailureClassifier,
+            connectionBudget,
             PrimaryAccount,
             TlsOnConnectWithPlainPolicy);
 

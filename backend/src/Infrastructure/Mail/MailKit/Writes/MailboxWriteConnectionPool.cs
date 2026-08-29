@@ -53,6 +53,7 @@ internal sealed partial class MailboxWriteConnectionPool : IAsyncDisposable
     private readonly IServiceScopeFactory scopeFactory;
     private readonly OutboundOperationExecutor operationExecutor;
     private readonly ITransientFailureClassifier transientFailureClassifier;
+    private readonly MailServerConnectionBudget connectionBudget;
     private readonly MailboxWriteSessionOptions options;
     private readonly TimeProvider timeProvider;
     private readonly ILogger<MailboxWriteConnectionPool> logger;
@@ -65,6 +66,7 @@ internal sealed partial class MailboxWriteConnectionPool : IAsyncDisposable
     /// <param name="scopeFactory">Creates the dependency-injection scope each live connection owns.</param>
     /// <param name="operationExecutor">Runs establishment and mutation under their configured pipelines.</param>
     /// <param name="transientFailureClassifier">Decides whether a failure left a connection worth keeping.</param>
+    /// <param name="connectionBudget">Bounds connections to one host across every account in the process.</param>
     /// <param name="options">Bounds how long a connection is kept once it falls idle.</param>
     /// <param name="timeProvider">Schedules the idle expiry.</param>
     /// <param name="logger">Records connections opened and closed.</param>
@@ -74,6 +76,7 @@ internal sealed partial class MailboxWriteConnectionPool : IAsyncDisposable
         IServiceScopeFactory scopeFactory,
         OutboundOperationExecutor operationExecutor,
         ITransientFailureClassifier transientFailureClassifier,
+        MailServerConnectionBudget connectionBudget,
         MailboxWriteSessionOptions options,
         TimeProvider timeProvider,
         ILogger<MailboxWriteConnectionPool> logger)
@@ -82,6 +85,7 @@ internal sealed partial class MailboxWriteConnectionPool : IAsyncDisposable
         ArgumentNullException.ThrowIfNull(scopeFactory);
         ArgumentNullException.ThrowIfNull(operationExecutor);
         ArgumentNullException.ThrowIfNull(transientFailureClassifier);
+        ArgumentNullException.ThrowIfNull(connectionBudget);
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(logger);
@@ -90,6 +94,7 @@ internal sealed partial class MailboxWriteConnectionPool : IAsyncDisposable
         this.scopeFactory = scopeFactory;
         this.operationExecutor = operationExecutor;
         this.transientFailureClassifier = transientFailureClassifier;
+        this.connectionBudget = connectionBudget;
         this.options = options;
         this.timeProvider = timeProvider;
         this.logger = logger;
@@ -324,6 +329,7 @@ internal sealed partial class MailboxWriteConnectionPool : IAsyncDisposable
                         accessTokenSource,
                         pool.operationExecutor,
                         pool.transientFailureClassifier,
+                        pool.connectionBudget,
                         accountId,
                         selectedFolder,
                         transportSecurityPolicy)
@@ -333,6 +339,7 @@ internal sealed partial class MailboxWriteConnectionPool : IAsyncDisposable
                         accessTokenSource,
                         pool.operationExecutor,
                         pool.transientFailureClassifier,
+                        pool.connectionBudget,
                         accountId,
                         transportSecurityPolicy);
 

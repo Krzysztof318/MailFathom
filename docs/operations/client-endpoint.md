@@ -982,9 +982,9 @@ refused, naming the administrative `mfctl owner adopt` that moves them into the 
 would leave two answers to which mailboxes this deployment reads and the files would win at the next restart. Nothing on
 this surface can perform that move: which decisions leave a deployment's own files is the operator's, not the owner's.
 
-**What a record changes takes effect when the process next starts.** A mailbox declared here is stored at once and
-synchronized from the next restart, which is the same rule the deployment's own configuration follows and the same
-reason: what a synchronization run reads is decided once, so a run in flight never reads two answers.
+**An accepted record change is published to the running process.** A mailbox declared here is stored and scheduled
+without a restart. The coordinator drains work already in flight against the immutable document version it began with,
+then starts the replacement supervisor, so one run never reads two answers.
 
 ## Credentials do not cross surfaces
 

@@ -1,6 +1,6 @@
 # Mail configuration
 
-<!-- describes: backend/src/Host/Configuration/Mail/**, backend/src/Host/Configuration/Rules/** -->
+<!-- describes: backend/src/Host/Configuration/Mail/**, backend/src/Host/Configuration/Rules/**, backend/src/Infrastructure/Mail/MailServerConnectionBudget.cs -->
 
 Every key deciding which mail is fetched and how, what is sent, what a deployment records about either, what a mailbox
 query and a stored message may cost, and which rules run over what arrives. The tables read as
@@ -10,8 +10,8 @@ to the rest of the sections.
 
 Whether and how mailboxes are synchronized. [IMAP synchronization](../features/imap-synchronization.md#configuration)
 explains the model. The section reloads **per operation** — a run takes one validated snapshot when it begins, so a
-changed account list, bound, or policy is adopted at the next run rather than mid-run — except the four values that
-shape the coordinator loop itself, which are read once at start and marked *restart* below.
+changed account list, bound, or policy is adopted at the next run rather than mid-run. Values read into a process-wide
+budget or the coordinator loop itself are marked *restart* below.
 
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
@@ -20,6 +20,7 @@ shape the coordinator loop itself, which are read once at start and marked *rest
 | `MailSynchronization:MaxFailureBackoff` | TimeSpan | `00:30:00` | 10 s – 1 day, and never below `Interval` | reload |
 | `MailSynchronization:MaxConcurrentAccounts` | int | `4` | 1 – 100 | restart |
 | `MailSynchronization:MaxConcurrentFoldersPerAccount` | int | `1` | 1 – 20 | reload |
+| `MailSynchronization:MaxConcurrentConnectionsPerHost` | int | `20` | 2 – 1000; shared by every account on the same IMAP host, with one slot reserved from long-lived push sessions | restart |
 | `MailSynchronization:WriteConnectionIdlePeriod` | TimeSpan | `00:02:00` | 5 s – 30 min; how long an account's single write connection keeps its slot after the last change it carried | restart |
 | `MailSynchronization:MaxMutationAttempts` | int | `5` | 1 – 100; how many attempts one recorded change to a mailbox may spend before it is given up on and left visible as stuck | restart |
 | `MailSynchronization:MaxMutationsPerConvergencePass` | int | `50` | 1 – 1000; how many unfinished changes one account run takes in hand before the rest wait for the next run | reload |
