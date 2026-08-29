@@ -222,6 +222,12 @@ daemon:
 dotnet run --project backend/src/AppHost/AppHost.csproj
 ```
 
+Before any resource starts, Aspire asks for any of three parameters it has not already stored:
+`mail-account-host`, `mail-account-username`, and the secret `mail-account-password`. They configure one local account
+named `local`, over implicit TLS on port 993, with its inbox as the default folder. Aspire offers to keep the values in
+the AppHost's user secrets; leaving any of them unanswered leaves the application waiting rather than starting a host
+with no mailbox.
+
 Four resources come up, three of them in dependency order. The `postgres` container starts first and has to report
 healthy; the `mailfathom-migrations` resource then applies every pending migration to it; and `mailfathom-host` waits
 for that run
@@ -231,27 +237,30 @@ looks. The fourth is `mailfathom-client`, which serves the browser head and wait
 server has nothing to wait for; it is [described below](#the-client-resource).
 Because the host runs in `Development`, it also publishes [the HTTP API document and the explorer](http-api-documentation.md)
 at `/openapi/v1.json` and `/scalar` on every port this run actually binds. Neither exists in any other environment, and
-neither is on a port of its own. Which ports those are follows the shipped defaults rather than the two sockets the app
-model declares: the probes are on, so their loopback socket answers both addresses from the first run, and the MCP
-socket answers them once `McpEndpoint:Enabled` is turned on the way [development secrets](#development-secrets) below
-shows. What the document *carries* is a second question with the same shape — the administrative and client endpoints
-are both off by default and this orchestration turns neither on, so the explorer opens on an empty catalogue until a
-configuration enables one, which [the endpoint configuration](configuration-endpoints.md) page describes.
-The host runs in the `Development` environment on two sockets, the MCP endpoint's on `localhost` and the probes'
-on `127.0.0.1`, each on a free port the run takes unless this checkout [pinned one](#pinning-a-port); the
-dashboard reports the numbers it took. There is no local TLS listener: MailFathom
+neither is on a port of its own. The normal orchestration enables the MCP, administrative, and client surfaces, so the
+document carries both HTTP APIs from the first run. The host runs in the `Development` environment on four loopback
+sockets — MCP, probes, administration, and the client surface — each on a free port the run takes unless the setting
+has a documented pin; the dashboard reports the numbers it took. MCP and administration authenticate nobody in this
+local topology. The client surface accepts HTTP Basic and the AppHost provisions `test` / `test-password` for the sole
+owner once the host reports startup readiness. A credential already present under that username is left unchanged, so
+a local rotation survives the persistent database and every later orchestration restart.
+
+There is no local TLS listener: MailFathom
 never serves one out of an ASP.NET Core development certificate, so a developer who wants TLS configures
-`McpEndpoint:Https` the way a deployment does, which is also the shape they will ship. Neither socket is proxied: the
+`McpEndpoint:Https` the way a deployment does, which is also the shape they will ship. None of these sockets is proxied: the
 socket a client connects to is the socket Kestrel opened, which is what keeps a TLS handshake — and a client
 certificate — a conversation with the host itself. The probe listener is pinned to loopback deliberately, because the
-probes answer without a credential and nothing on a local network has any business asking them — which is also why it is a socket of
-its own here rather than the MCP endpoint's. A shared socket is one socket, so the probes would answer wherever the MCP
-endpoint does. The integration topology shares one deliberately, and [what that couples](configuration-endpoints.md#which-settings-a-shared-socket-couples)
+probes answer without a credential and nothing on a local network has any business asking them. The other three are
+also loopback because two deliberately authenticate nobody and the remaining one sends a reusable password over plain
+HTTP; none is a surface for another machine. The probes keep a socket of their own rather than sharing the MCP
+endpoint's. A shared socket is one socket, so the probes would answer wherever the MCP endpoint does. The integration
+topology shares one deliberately, and [what that couples](configuration-endpoints.md#which-settings-a-shared-socket-couples)
 is the same list a deployment reads.
 
-Both ports are stated by the app model the same way: a TCP endpoint that injects itself into the host's own setting —
-`McpEndpoint:Port` and `HealthEndpoints:Port` — so each number is declared once rather than declared and then configured
-again beside it. The scheme is what makes that possible. Aspire builds `ASPNETCORE_URLS` from HTTP and HTTPS endpoints,
+The four ports are stated by the app model the same way: a TCP endpoint that injects itself into the owning setting —
+`McpEndpoint:Port`, `HealthEndpoints:Port`, `AdminEndpoint:Port`, and `ClientEndpoint:Port` — so each number is declared
+once rather than declared and then configured again beside it. The scheme is what makes that possible. Aspire builds
+`ASPNETCORE_URLS` from HTTP and HTTPS endpoints,
 and MailFathom refuses that variable outright, because each surface states where it is served in its own section; a TCP
 endpoint is published without ever reaching it. That is also why the resource carries no `WithHttpHealthCheck`, which
 derives its address from an HTTP endpoint this app model declares none of.
@@ -319,19 +328,12 @@ machine, and that is also why it is a socket rather than a share of the MCP endp
 specific one on a single port is two sockets the operating system grants only one of, so sharing would have published
 the client surface wherever the MCP endpoint is published.
 
-**The surface itself is off until you turn it on**, exactly as `McpEndpoint` is, and for the same reason: enabling a
-listener that reads the mailbox is a developer's own act rather than something starting a head does for them. What the
-orchestration configures is everything else — the port, the loopback bind, and the head's own origin as the one browser
-origin `ClientEndpoint:Cors:AllowedOrigins` answers — so turning it on is one key beside whichever credential you want
-guarding it, and the first cross-origin call is served rather than refused on a preflight:
-
-```bash
-dotnet user-secrets --project backend/src/Host/Host.csproj set "ClientEndpoint:Enabled" "true"
-```
-
-Leave it off and the head still starts, still knows where the service is, and is refused by a socket nothing is
-listening on — which is the same answer a locally started MCP client gets before `McpEndpoint:Enabled` is set. A run
-started with `Client:Enabled` false configures no origin either, because no head exists to make the request.
+**The surface is enabled by the normal orchestration.** The app model supplies its port and loopback bind, enables the
+password method, and gives it the head's own origin as the one browser origin
+`ClientEndpoint:Cors:AllowedOrigins` answers. The AppHost then provisions the credential above through the ordinary
+administrative API, so password policy, hashing, ownership, and audit behavior are the same as for a credential an
+operator created. A run started with `Client:Enabled` false starts no head and configures no origin, but the client API
+surface and its Basic credential remain available for a desktop head or a direct request.
 
 A **desktop** head takes the same property and reads the same key, so an orchestration could point one the same way.
 Started by hand it is given none, and reads `Deployment:Address` out of
@@ -395,27 +397,20 @@ because Aspire injects `OTEL_EXPORTER_OTLP_ENDPOINT` into the resources it start
 only place telemetry export is configured at all — a deployment exports nothing until an operator sets the variable
 themselves. [Telemetry](telemetry.md) records what the host emits and where it goes.
 
-A freshly started host synchronizes nothing and serves neither the MCP endpoint nor the client surface, because every
-one of those defaults is the shipped one. Configure a development mailbox through user secrets as
-[development secrets](#development-secrets) below shows, and enable the endpoint the same way when a tool call is what
-is being tested — in Development the `ReferenceOrInline` interpretation keeps the credential a one-liner:
+A freshly started normal orchestration synchronizes the mailbox supplied through its required parameters. Its MCP and
+administrative endpoints accept unauthenticated local requests, and the client endpoint accepts the synthetic Basic
+credential above. These are AppHost development choices rather than changed product defaults: starting `Host.csproj`
+directly or running a deployment still reads the shipped disabled endpoint defaults.
 
-```bash
-dotnet user-secrets --project backend/src/Host/Host.csproj set "McpEndpoint:Enabled" "true"
-dotnet user-secrets --project backend/src/Host/Host.csproj set "McpEndpoint:Authentication:0:ApiKey:Name" "dev"
-dotnet user-secrets --project backend/src/Host/Host.csproj set "McpEndpoint:Authentication:0:ApiKey:SecretReference" "plaintext:dev-key"
-```
+The normal AppHost topology starts `mailfathom-host` under the repository's supported OpenSSL security-level-1 sample,
+so an older mail server is less likely to fail its TLS handshake under the misleading name of an authentication failure.
+[The platform TLS policy](platform-tls-policy.md) covers exactly what the file admits and what it leaves unchanged. An
+explicitly exported `OPENSSL_CONF` takes precedence when a developer needs another policy; the integration-test topology
+receives neither value, because a suite whose handshakes depended on the machine that ran it would prove nothing.
 
-A development mailbox served by a mail server whose TLS parameters the platform refuses needs one more thing, and the
-symptom sends most people the wrong way: the handshake fails, but reads as an authentication failure. Export
-`OPENSSL_CONF` in the shell the orchestration starts from and the AppHost passes it through to `mailfathom-host`, which
-then reports at startup that it is running under it. [The platform TLS policy](platform-tls-policy.md) covers the file,
-what it costs, and how to confirm the handshake is what failed. The AppHost passes an exported value through and never
-sets one, so a checkout that exports nothing runs under the platform default; the integration-test topology receives it
-under no circumstances, because a suite whose handshakes depended on the machine that ran it would prove nothing.
-
-An MCP client then connects to `http://localhost:<the port the MCP endpoint took>/mcp` with
-`Authorization: Bearer dev-key`. Stopping the orchestration with `Ctrl+C` — or
+An MCP client connects to `http://127.0.0.1:<the port the MCP endpoint took>/mcp` without a credential. An
+administrative client uses the dashboard's `admin` address the same way, while the browser client signs in as `test`
+with `test-password`. Stopping the orchestration with `Ctrl+C` — or
 `aspire stop --apphost backend/src/AppHost/AppHost.csproj --non-interactive` — leaves the synchronized mail in place, because
 the database volume outlives the container and the container outlives the run. The container is stopped rather than
 left running, so the next start is a restart of the server that was there.
@@ -501,7 +496,8 @@ generated per clone, so every checkout reads the same store and the commands bel
 store is loaded by the framework in the `Development` environment only, which is the environment the orchestration and
 both launch profiles run the host in.
 
-Configure a development account in `appsettings.Development.json` or, better, in user secrets:
+When the host is started directly rather than through Aspire, configure a development account in
+`appsettings.Development.json` or, better, in user secrets:
 
 ```bash
 dotnet user-secrets --project backend/src/Host/Host.csproj set \

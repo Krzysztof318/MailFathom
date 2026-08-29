@@ -174,13 +174,13 @@ therefore the same act written for a different launcher, and each is equally sup
   There is currently no chart hook for an arbitrary file, so the file has to reach the container another way — an image
   built on top of the published one is the straightforward path.
 
-- **Through Aspire, locally.** The AppHost starts the host as a child resource, which inherits nothing of the kind on
-  its own, so it passes the variable through from the shell the orchestration was started in. It passes a value through
-  rather than setting one, so a checkout that exports nothing runs under the platform default; the integration-test
-  topology never receives it at all.
+- **Through Aspire, locally.** The normal AppHost topology copies this repository's sample beside its output and points
+  the host at it by default, so a first run can reach an older mail server without diagnosing a misleading
+  authentication failure first. An explicitly exported value takes precedence when a developer needs another policy;
+  the integration-test topology never receives either value.
 
   ```bash
-  export OPENSSL_CONF=/etc/mailfathom/openssl-legacy.cnf
+  export OPENSSL_CONF=/etc/mailfathom/custom-openssl.cnf
   dotnet run --project backend/src/AppHost/AppHost.csproj
   ```
 

@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Collections.Frozen;
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
@@ -230,8 +231,9 @@ public static class OrchestrationContract
     /// <summary>The endpoint the MailFathom host serves its administrative surface on.</summary>
     /// <remarks>
     /// <para>
-    /// Present only under <see cref="IntegrationTestingArgument" />. A developer's orchestration administers nothing
-    /// over the network, and an endpoint enabled for them would be a socket nobody asked for.
+    /// Present in both topologies. The normal local run binds it to loopback and authenticates nobody so its own
+    /// credential provisioner can use the published API; the integration topology protects it with an API key and uses
+    /// the same name so the suite resolves the endpoint the app model declared.
     /// </para>
     /// <para>
     /// Declared with the <c>tcp</c> scheme rather than <c>http</c>, for the reason every endpoint on this resource is:
@@ -623,17 +625,18 @@ public static class OrchestrationContract
     /// <summary>The environment variable OpenSSL reads the path of its configuration file from.</summary>
     /// <remarks>
     /// <para>
-    /// A variable this app model passes through rather than one it publishes a value for. It exists here because a
-    /// developer whose mailbox is served by a mail server the platform's own TLS policy refuses sets it before starting
-    /// the orchestration, and a resource Aspire starts inherits nothing of the kind on its own.
+    /// The normal topology supplies the repository's supported security-level-1 policy so legacy mail servers remain
+    /// reachable on a first run. A developer may override that file by exporting this variable before starting Aspire.
     /// </para>
     /// <para>
-    /// The distinction is deliberate: deciding that a weaker TLS policy applies is an operator's act, taken once, in
-    /// the environment they start MailFathom from. An app model that named a file of its own would take that decision
-    /// for every developer who ever runs it.
+    /// The integration-test topology receives neither value, so its TLS behavior does not depend on the machine that
+    /// started it.
     /// </para>
     /// </remarks>
     public const string OpenSslConfigurationVariable = "OPENSSL_CONF";
+
+    /// <summary>The supported OpenSSL policy copied beside the normal AppHost output.</summary>
+    public const string DevelopmentOpenSslConfigurationFileName = "legacy-mail-server.cnf";
 
     /// <summary>The environment variable a caller states this run's ephemeral resource identifier in.</summary>
     /// <remarks>
@@ -708,6 +711,34 @@ public static class OrchestrationContract
     /// </remarks>
     public const string ClientEnabledKey = "Client:Enabled";
 
+    /// <summary>The fixed configuration a normal local run supplies beside its interactive mailbox values.</summary>
+    /// <remarks>
+    /// Every listener is restricted to loopback because the MCP and administrative surfaces deliberately authenticate
+    /// nobody in this topology. The client surface accepts the password credential the app host provisions after the
+    /// service starts.
+    /// </remarks>
+    public static IReadOnlyDictionary<string, string> DevelopmentHostEnvironment { get; } =
+        new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["MailSynchronization__Enabled"] = "true",
+            ["MailSynchronization__Accounts__0__AccountId"] = "local",
+            ["MailSynchronization__Accounts__0__DisplayName"] = "Local mailbox",
+            ["MailSynchronization__Accounts__0__Secrets__Password__Name"] = "local-mail-password",
+            ["McpEndpoint__Enabled"] = "true",
+            ["McpEndpoint__BindAddress"] = DeveloperLoopbackAddress,
+            ["AdminEndpoint__Enabled"] = "true",
+            ["AdminEndpoint__BindAddress"] = DeveloperLoopbackAddress,
+            ["ClientEndpoint__Enabled"] = "true",
+            ["ClientEndpoint__Authentication__0__Method"] = "password",
+        }.ToFrozenDictionary(StringComparer.Ordinal);
+
+    /// <summary>The username the normal local run provisions for the browser client.</summary>
+    public const string DevelopmentBasicUsername = "test";
+
+    /// <summary>The password the normal local run provisions for the browser client.</summary>
+    /// <remarks>Long enough to satisfy the product password policy, and synthetic because the local endpoint is restricted to loopback.</remarks>
+    public const string DevelopmentBasicPassword = "test-password";
+
     /// <summary>The lowest number a pinned port may state.</summary>
     private const int MinimumPortNumber = 1;
 
@@ -747,6 +778,41 @@ public static class OrchestrationContract
         }
 
         return $"{EphemeralResourceNamePrefix}-{statedIdentifier}";
+    }
+
+    /// <summary>Reports whether the argument list selects the integration-test topology.</summary>
+    /// <param name="arguments">The app host arguments exactly as its caller supplied them.</param>
+    /// <returns><see langword="true" /> only when the explicit integration-test switch is present.</returns>
+    public static bool RunsIntegrationTests(IReadOnlyList<string> arguments)
+    {
+        ArgumentNullException.ThrowIfNull(arguments);
+
+        return arguments.Contains(IntegrationTestingArgument, StringComparer.Ordinal);
+    }
+
+    /// <summary>Resolves the OpenSSL policy the MailFathom host receives from this topology.</summary>
+    /// <param name="runsIntegrationTests">Whether the integration-test topology is selected.</param>
+    /// <param name="explicitlyConfiguredPath">The path exported by the developer, or <see langword="null" /> when none was exported.</param>
+    /// <param name="appHostBaseDirectory">The directory containing the shipped development policy.</param>
+    /// <returns>The explicit or shipped policy path for a normal run, and <see langword="null" /> for an integration-test run.</returns>
+    public static string? ResolveOpenSslConfigurationPath(
+        bool runsIntegrationTests,
+        string? explicitlyConfiguredPath,
+        string appHostBaseDirectory)
+    {
+        if (runsIntegrationTests)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(explicitlyConfiguredPath))
+        {
+            return explicitlyConfiguredPath;
+        }
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(appHostBaseDirectory);
+
+        return Path.Combine(appHostBaseDirectory, DevelopmentOpenSslConfigurationFileName);
     }
 
     /// <summary>Reads the port a developer pinned under <paramref name="configurationKey" />.</summary>
