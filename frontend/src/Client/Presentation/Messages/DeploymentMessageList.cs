@@ -107,7 +107,7 @@ internal sealed class DeploymentMessageList : IMessageList
             Feed.Combine(standing, place, this.asked).SelectAsync(this.OpenAsync));
 
         this.Chosen = State<IImmutableList<MessageRow>>.Empty(this);
-        this.Rows = this.loaded.Select(this.Draw).AsListFeed().Selection(this.Chosen);
+        this.Rows = this.loaded.Select(this.Draw).AsListFeed();
         this.Arrangement = this.arranged;
         this.HasMoreAfter = this.loaded.Select(static window => window.HasMoreAfter);
         this.HasMoreBefore = this.loaded.Select(static window => window.HasMoreBefore);

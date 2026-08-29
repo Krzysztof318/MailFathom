@@ -133,6 +133,23 @@ public partial record MailModel
     /// <summary>What is selected in the list, which is what the rest of the client reads as the scope of a question.</summary>
     public IState<IImmutableList<MessageRow>> Chosen => this.messages.Chosen;
 
+    /// <summary>Makes the rows selected in the list the application's selection, which is what every other space reads as the scope of a question.</summary>
+    /// <param name="chosen">The rows selected in the list, or none.</param>
+    /// <param name="cancellationToken">Abandons the change.</param>
+    /// <returns>A task completing once the selection has been written.</returns>
+    /// <remarks>
+    /// Written from the list control rather than through MVUX's <c>Selection</c> operator, because that operator keeps
+    /// the list feed transient until a selector attaches, and the list is drawn through a <c>FeedView</c> whose value
+    /// template is the selector — a feed that stayed transient would never leave progress, which is a blank Mail space
+    /// after the deployment has already answered.
+    /// </remarks>
+    public ValueTask ChooseAsync(IImmutableList<MessageRow> chosen, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(chosen);
+
+        return this.Chosen.UpdateAsync(_ => chosen, cancellationToken);
+    }
+
     /// <summary>Whether there is more mail after what is loaded.</summary>
     public IFeed<bool> HasMoreAfter => this.messages.HasMoreAfter;
 

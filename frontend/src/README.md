@@ -132,7 +132,9 @@ when the message selection changes, and is never written to the mailbox memory. 
 ordinary extended selection with its modifiers and its drag, and on a touch head a press and hold puts the list into a
 selecting mode that is visible and can be left. Loading, a read that failed, a folder holding no mail,
 and a folder whose mail this list is keeping out are four rendered states rather than one blank list — the last two are
-told apart in words, and how current the copy is stays the tree's to say.
+told apart in words, and how current the copy is stays the tree's to say. Those states are a `FeedView` whose value
+template is the list itself, bound to `Data`, the way the mailbox tree is: a `ListView` bound to the feed as its items
+source draws nothing on the browser head after the deployment has already answered.
 
 **Search is the other list in Mail, and it is the run's own as well.** It starts at the account and folder the mailbox
 tree put in force, then keeps every constraint in front of the reader: account, folder, sender, recipient, both ends of

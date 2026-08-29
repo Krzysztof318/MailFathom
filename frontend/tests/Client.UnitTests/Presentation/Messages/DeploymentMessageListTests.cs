@@ -44,6 +44,47 @@ public sealed class DeploymentMessageListTests
         Assert.DoesNotContain("cursor=", asked.Query, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// A place holding no mail is an answer rather than a wait: the list leaves progress so the empty-folder state can
+    /// be drawn instead of looking like a request that never came back.
+    /// </summary>
+    [Fact]
+    public async Task Rows_ADeploymentAnsweringWithNoMail_LeavesProgressAndDrawsNothing()
+    {
+        // Arrange
+        using var over = await ListOver.CreateAsync(
+            _ => Answer(Page(1, 0, next: null, previous: null)),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Act
+        var rows = await over.List.Rows;
+
+        // Assert
+        Assert.NotNull(rows);
+        Assert.Empty(rows);
+        Assert.Single(over.Harness.Deployment.Requests);
+    }
+
+    /// <summary>
+    /// A leading page that did not arrive is the list's own failure, so a retryable error can be drawn instead of
+    /// waiting on an answer that will not come.
+    /// </summary>
+    [Fact]
+    public async Task Rows_ALeadingPageThatDidNotArrive_IsTheListsOwnFailure()
+    {
+        // Arrange
+        using var over = await ListOver.CreateAsync(
+            _ => StubTransport.JsonResponse("{}", HttpStatusCode.InternalServerError),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        // Act
+        var failure = await Assert.ThrowsAsync<DeploymentFailure>(async () => await over.List.Rows);
+
+        // Assert
+        Assert.Equal(DeploymentFailureReason.Unusable, failure.Reason);
+        Assert.Single(over.Harness.Deployment.Requests);
+    }
+
     /// <summary>The place somebody narrowed to is what the deployment is asked about, rather than every mailbox.</summary>
     [Fact]
     public async Task Rows_AScopeNarrowedToAFolder_AsksTheDeploymentAboutThatFolder()

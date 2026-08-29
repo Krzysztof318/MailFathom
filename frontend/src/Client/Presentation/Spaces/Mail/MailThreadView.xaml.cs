@@ -18,6 +18,7 @@ public sealed partial class MailThreadView : UserControl
         new PropertyMetadata(string.Empty));
 
     private string scrolledTo = string.Empty;
+    private ListView? threadMessageRows;
 
     /// <summary>Initializes the conversation.</summary>
     public MailThreadView() => this.InitializeComponent();
@@ -31,7 +32,9 @@ public sealed partial class MailThreadView : UserControl
 
     private void OnThreadLoaded(object sender, RoutedEventArgs args)
     {
-        if (this.ThreadMessageRows.ItemsSource is INotifyCollectionChanged watchable)
+        this.threadMessageRows = (ListView)sender;
+
+        if (this.threadMessageRows.ItemsSource is INotifyCollectionChanged watchable)
         {
             watchable.CollectionChanged += this.OnThreadMessagesChanged;
         }
@@ -41,10 +44,12 @@ public sealed partial class MailThreadView : UserControl
 
     private void OnThreadUnloaded(object sender, RoutedEventArgs args)
     {
-        if (this.ThreadMessageRows.ItemsSource is INotifyCollectionChanged watchable)
+        if (this.threadMessageRows is { } list && list.ItemsSource is INotifyCollectionChanged watchable)
         {
             watchable.CollectionChanged -= this.OnThreadMessagesChanged;
         }
+
+        this.threadMessageRows = null;
     }
 
     private void OnThreadMessagesChanged(object? sender, NotifyCollectionChangedEventArgs args) =>
@@ -52,7 +57,7 @@ public sealed partial class MailThreadView : UserControl
 
     private void BringOpenedMessageIntoView()
     {
-        if (this.ThreadMessageRows.ItemsSource is not IEnumerable<object> rows)
+        if (this.threadMessageRows?.ItemsSource is not IEnumerable<object> rows)
         {
             return;
         }
@@ -72,6 +77,6 @@ public sealed partial class MailThreadView : UserControl
         }
 
         this.scrolledTo = opened.Key;
-        this.ThreadMessageRows.ScrollIntoView(opened);
+        this.threadMessageRows.ScrollIntoView(opened);
     }
 }

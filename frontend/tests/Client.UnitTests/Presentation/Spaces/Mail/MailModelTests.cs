@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Collections.Immutable;
 using MailFathom.Client.Backend;
 using MailFathom.Client.Backend.Search;
 using MailFathom.Client.Backend.Timeline;
@@ -72,6 +73,32 @@ public sealed class MailModelTests
         Assert.Equal([MailMessages.Key(1), MailMessages.Key(2)], rows!.Select(row => row.Key));
         Assert.Same(list.Chosen, model.Chosen);
         Assert.Same(list.PagingFailed, model.PagingFailed);
+    }
+
+    /// <summary>
+    /// Selecting in the list is the application's selection rather than the control's, so a question asked next is
+    /// asked about the rows somebody picked.
+    /// </summary>
+    [Fact]
+    public async Task ChooseAsync_RowsSomebodySelected_ReachTheListAsWhatIsChosen()
+    {
+        // Arrange
+        using var session = SessionOffering("mailfathom.mail.read");
+        var list = new StubMessageList(Row(1), Row(2));
+        await using var model = new MailModel(
+            session,
+            list,
+            new StubMailThread(),
+            new StubWorkspace(),
+            new StubMailSearch());
+        var rows = await model.Messages;
+
+        // Act
+        await model.ChooseAsync(ImmutableList.Create(rows![0]), TestContext.Current.CancellationToken);
+
+        // Assert
+        var chosen = await model.Chosen;
+        Assert.Equal([MailMessages.Key(1)], chosen!.Select(row => row.Key));
     }
 
     /// <summary>
@@ -467,6 +494,24 @@ public sealed class MailModelTests
             () => new MailModel(session, new StubMessageList(), new StubMailThread(), null!, new StubMailSearch()));
         Assert.Throws<ArgumentNullException>(
             () => new MailModel(session, new StubMessageList(), new StubMailThread(), new StubWorkspace(), null!));
+    }
+
+    /// <summary>A selection nobody named is a caller's mistake rather than a list with nothing chosen.</summary>
+    [Fact]
+    public async Task ChooseAsync_AMissingSelection_IsRefused()
+    {
+        // Arrange
+        using var session = SessionOffering("mailfathom.mail.read");
+        await using var model = new MailModel(
+            session,
+            new StubMessageList(),
+            new StubMailThread(),
+            new StubWorkspace(),
+            new StubMailSearch());
+
+        // Act, Assert
+        await Assert.ThrowsAsync<ArgumentNullException>(
+            () => model.ChooseAsync(null!, TestContext.Current.CancellationToken).AsTask());
     }
 
     private static MessageRow Row(int number) => new(

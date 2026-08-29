@@ -30,9 +30,11 @@ public interface IMessageList
 
     /// <summary>What is selected in the list, which the workspace scope is written from.</summary>
     /// <remarks>
-    /// Held as a state the selector writes rather than as something composed from clicks, because a multi-selection is
-    /// the platform's own gesture — the modifiers, the range, the drag, and the touch selection mode all belong to the
-    /// control, and a list that reimplemented them would feel like neither platform.
+    /// Held as a state the list control writes rather than as something composed from clicks, because a multi-selection
+    /// is the platform's own gesture — the modifiers, the range, the drag, and the touch selection mode all belong to
+    /// the control, and a list that reimplemented them would feel like neither platform. The write is the view's, not
+    /// MVUX's <c>Selection</c> operator: that operator keeps a list feed transient until a selector attaches, and the
+    /// selector lives inside the <c>FeedView</c> that is waiting for the feed to leave progress.
     /// </remarks>
     IState<IImmutableList<MessageRow>> Chosen { get; }
 

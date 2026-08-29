@@ -4,6 +4,7 @@ Licensed under the Apache License, Version 2.0. See LICENSE in the project root 
 Project repository: https://github.com/Krzysztof318/MailFathom
 -->
 <UserControl x:Class="MailFathom.Client.Presentation.Search.MailSearchView"
+             x:Name="SearchViewRoot"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:messages="using:MailFathom.Client.Presentation.Messages"
@@ -179,28 +180,26 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                Severity="Warning" />
     </StackPanel>
 
-    <Grid Grid.Row="4">
-      <ListView x:Uid="MailSearchView.List.Results"
-                ItemsSource="{Binding SearchResults}"
-                SelectionMode="Single"
-                IsItemClickEnabled="True"
-                utu:CommandExtensions.Command="{Binding OpenSearchResult}"
-                Padding="4,0,4,12">
-        <ListView.ItemTemplate>
-          <DataTemplate x:DataType="messages:MessageRow">
-            <messages:MessageRowView Row="{x:Bind}" />
-          </DataTemplate>
-        </ListView.ItemTemplate>
-      </ListView>
+    <mvux:FeedView Grid.Row="4"
+                   Source="{Binding SearchResults}">
+      <mvux:FeedView.ValueTemplate>
+        <DataTemplate>
+          <ListView x:Uid="MailSearchView.List.Results"
+                    ItemsSource="{Binding Data}"
+                    SelectionMode="Single"
+                    IsItemClickEnabled="True"
+                    utu:CommandExtensions.Command="{Binding DataContext.OpenSearchResult, ElementName=SearchViewRoot}"
+                    Padding="4,0,4,12">
+            <ListView.ItemTemplate>
+              <DataTemplate x:DataType="messages:MessageRow">
+                <messages:MessageRowView Row="{x:Bind}" />
+              </DataTemplate>
+            </ListView.ItemTemplate>
+          </ListView>
+        </DataTemplate>
+      </mvux:FeedView.ValueTemplate>
 
-      <mvux:FeedView Source="{Binding SearchResults}">
-        <mvux:FeedView.ValueTemplate>
-          <DataTemplate>
-            <Border Height="0" />
-          </DataTemplate>
-        </mvux:FeedView.ValueTemplate>
-
-        <mvux:FeedView.ProgressTemplate>
+      <mvux:FeedView.ProgressTemplate>
           <DataTemplate>
             <ProgressBar IsIndeterminate="True"
                          VerticalAlignment="Top"
@@ -247,7 +246,6 @@ Project repository: https://github.com/Krzysztof318/MailFathom
           </DataTemplate>
         </mvux:FeedView.ErrorTemplate>
       </mvux:FeedView>
-    </Grid>
 
     <StackPanel Grid.Row="5"
                 Padding="12,4,12,8"
