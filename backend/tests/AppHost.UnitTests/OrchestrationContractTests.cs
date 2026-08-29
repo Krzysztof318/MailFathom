@@ -415,10 +415,10 @@ public sealed class OrchestrationContractTests
 
     /// <summary>The address the client and the service are wired together on is one nothing outside this machine reaches.</summary>
     /// <remarks>
-    /// The one property of that constant the compiler cannot state. Three things are built from it — the socket the
-    /// client's development server binds, the browser origin the service is configured to answer, and the address the
-    /// head is built to call — so a value that stopped being loopback would publish a Debug WebAssembly bundle to
-    /// every interface of a developer's machine without any of the three disagreeing about it.
+    /// The one property of that constant the compiler cannot state. Four things are built from it — the socket the
+    /// client's development server binds, the endpoint Aspire publishes, the browser origin the service is configured
+    /// to answer, and the address the head is built to call — so a value that stopped being loopback would publish a
+    /// Debug WebAssembly bundle to every interface of a developer's machine without any of the four disagreeing about it.
     /// </remarks>
     [Fact]
     public void DeveloperLoopbackAddress_IsAnAddressOnlyThisMachineReaches()
@@ -429,6 +429,23 @@ public sealed class OrchestrationContractTests
         // Assert
         Assert.True(parsed);
         Assert.True(IPAddress.IsLoopback(address!));
+    }
+
+    /// <summary>The browser origin Aspire publishes has to be the one the service admits, or the first API call is refused by CORS.</summary>
+    [Fact]
+    public void ResolveDevelopmentClientNetwork_NormalTopology_UsesOneLoopbackHostAcrossTheBrowserAndService()
+    {
+        // Arrange
+        const int clientPort = 5000;
+        const int clientEndpointPort = 8082;
+
+        // Act
+        var network = OrchestrationContract.ResolveDevelopmentClientNetwork(clientPort, clientEndpointPort);
+
+        // Assert
+        Assert.Equal("http://127.0.0.1:5000", network.ClientOrigin);
+        Assert.Equal("http://127.0.0.1:8082/", network.ServiceAddress);
+        Assert.Equal("127.0.0.1", network.PublishedClientHost);
     }
 
     /// <summary>The name the deployment address travels into the client's build under has to be one MSBuild will carry.</summary>

@@ -271,6 +271,11 @@ derives its address from an HTTP endpoint this app model declares none of.
 dashboard lists like any other endpoint. It is what makes `aspire run` bring up a MailFathom with a face on it rather
 than a service and a second terminal.
 
+The dashboard publishes that endpoint under `127.0.0.1`, the same loopback spelling the development server binds and
+the client surface admits through CORS. Aspire's default endpoint host is `localhost`; leaving that default in place
+would serve the page under a different browser origin even though both names reach the same machine, and the first
+client API request would be refused.
+
 It is an **executable** resource rather than a project one, and the reason is the client's target frameworks rather
 than its directory. Aspire starts a project resource by running `dotnet run --project <path> --configuration Debug
 --no-launch-profile`, and that argument list carries no framework — `ProjectResourceOptions` exposes a launch profile
