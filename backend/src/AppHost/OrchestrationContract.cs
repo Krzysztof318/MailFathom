@@ -335,11 +335,11 @@ public static class OrchestrationContract
     /// <summary>The address a developer's own machine serves the client on and reaches the service at.</summary>
     /// <remarks>
     /// Loopback, because a WebAssembly bundle built in Debug against somebody's own machine is not something anything
-    /// on a local network has any business loading. Stated once rather than beside each of the three things built from
-    /// it, which have to agree with one another: the address the client's development server binds, the browser origin
-    /// the service is configured to answer, and the address the head is built to call. A page served under one
-    /// spelling and permitted under another is a first call refused on a preflight, which reads as a broken client
-    /// rather than as two spellings of one machine.
+    /// on a local network has any business loading. Stated once rather than beside each of the four things built from
+    /// it, which have to agree with one another: the address the client's development server binds, the endpoint Aspire
+    /// publishes, the browser origin the service is configured to answer, and the address the head is built to call. A
+    /// page served under one spelling and permitted under another is a first call refused on a preflight, which reads
+    /// as a broken client rather than as two spellings of one machine.
     /// </remarks>
     public const string DeveloperLoopbackAddress = "127.0.0.1";
 
@@ -813,6 +813,21 @@ public static class OrchestrationContract
         ArgumentException.ThrowIfNullOrWhiteSpace(appHostBaseDirectory);
 
         return Path.Combine(appHostBaseDirectory, DevelopmentOpenSslConfigurationFileName);
+    }
+
+    /// <summary>Resolves the addresses and published host that join the browser client to the service in development.</summary>
+    /// <param name="clientPort">The port serving the browser head.</param>
+    /// <param name="clientEndpointPort">The port serving the client API.</param>
+    /// <returns>The browser origin, service address, and Aspire endpoint host, all under the development loopback address.</returns>
+    public static (string ClientOrigin, string ServiceAddress, string PublishedClientHost)
+        ResolveDevelopmentClientNetwork(int clientPort, int clientEndpointPort)
+    {
+        var clientOrigin =
+            $"http://{DeveloperLoopbackAddress}:{clientPort.ToString(CultureInfo.InvariantCulture)}";
+        var serviceAddress =
+            $"http://{DeveloperLoopbackAddress}:{clientEndpointPort.ToString(CultureInfo.InvariantCulture)}/";
+
+        return (clientOrigin, serviceAddress, DeveloperLoopbackAddress);
     }
 
     /// <summary>Reads the port a developer pinned under <paramref name="configurationKey" />.</summary>

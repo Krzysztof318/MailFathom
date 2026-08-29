@@ -593,13 +593,10 @@ else
     // an orchestration that already publishes the address as an endpoint does not need to do for the developer.
     if (OrchestrationContract.ResolveClientEnabled(builder.Configuration[OrchestrationContract.ClientEnabledKey]))
     {
-        // The two origins this pair is wired from, each composed once because both sides read the same one. The
-        // client's is what its development server binds and what the service is told to answer as a browser origin;
-        // the service's is the client surface's own socket, declared above, which is what the head is built to call.
-        var clientOrigin =
-            $"http://{OrchestrationContract.DeveloperLoopbackAddress}:{clientPort.ToString(CultureInfo.InvariantCulture)}";
-        var serviceAddress =
-            $"http://{OrchestrationContract.DeveloperLoopbackAddress}:{clientEndpointPort.ToString(CultureInfo.InvariantCulture)}/";
+        // The browser origin, the service address, and the host Aspire publishes are resolved together because a page
+        // served under one loopback spelling and admitted under another is a first call refused by CORS.
+        var clientNetwork =
+            OrchestrationContract.ResolveDevelopmentClientNetwork(clientPort, clientEndpointPort);
 
         builder
             .AddExecutable(
@@ -614,19 +611,23 @@ else
                 // and reads none of this process's environment, so the one channel that reaches it is the bundle the
                 // build produces: the client's project file writes this property into the runtime host configuration,
                 // and the WebAssembly SDK carries that into the boot configuration the page fetches.
-                $"--property:{OrchestrationContract.ClientDeploymentAddressProperty}={serviceAddress}")
+                $"--property:{OrchestrationContract.ClientDeploymentAddressProperty}={clientNetwork.ServiceAddress}")
             // The address the development server binds, stated to it and published to the app model as one number, so
             // the endpoint the dashboard links is the endpoint the browser head is served on. Unproxied for the reason
             // the host's sockets are: what the app model publishes is then what a browser connects to.
             //
             // On loopback, because a WebAssembly bundle built in Debug against a developer's own machine is not
             // something anything on a local network has any business loading.
-            .WithEnvironment(OrchestrationContract.ClientServerUrlsVariable, clientOrigin)
+            .WithEnvironment(OrchestrationContract.ClientServerUrlsVariable, clientNetwork.ClientOrigin)
             .WithHttpEndpoint(
                 name: OrchestrationContract.ClientHttpEndpointName,
                 port: clientPort,
                 targetPort: clientPort,
-                isProxied: false);
+                isProxied: false)
+            .WithEndpoint(
+                OrchestrationContract.ClientHttpEndpointName,
+                endpoint => endpoint.TargetHost = clientNetwork.PublishedClientHost,
+                createIfNotExists: false);
 
         // The service's half of the same wiring, and the whole of it: the head's own origin as the one browser origin
         // the client surface answers, rather than the every-origin posture an unstated list means. A local run is the
@@ -634,7 +635,7 @@ else
         // deployment will also have to answer, so the first call is not refused on a preflight.
         //
         // Written only where a head exists to make the request.
-        mailFathomHost.WithEnvironment("ClientEndpoint__Cors__AllowedOrigins__0", clientOrigin);
+        mailFathomHost.WithEnvironment("ClientEndpoint__Cors__AllowedOrigins__0", clientNetwork.ClientOrigin);
     }
 }
 
