@@ -441,6 +441,14 @@
     <value>Wybierz wiadomość, aby przeczytać rozmowę, której jest częścią.</value>
     <comment>Says what to do rather than that something is missing: nothing being open is the ordinary state of this column.</comment>
   </data>
+  <data name="MailPage.Message.Heading" xml:space="preserve">
+    <value>Żadna wiadomość nie jest otwarta</value>
+    <comment>Heads the phone-width message route while its conversation no longer names a message.</comment>
+  </data>
+  <data name="MailPage.Message.Detail" xml:space="preserve">
+    <value>Wróć i wybierz wiadomość z rozmowy.</value>
+    <comment>Says how to leave an empty message route.</comment>
+  </data>
   <data name="MailPage.List.ThreadMessages.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Wiadomości w tej rozmowie</value>
     <comment>Names the list itself, so a screen reader announces what the messages belong to before it reads one.</comment>
@@ -552,6 +560,14 @@
   <data name="SettingsPage.Button.Back.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
     <value>Wstecz</value>
     <comment>Names the button that returns to the workspace, which carries an icon rather than words.</comment>
+  </data>
+  <data name="MailThreadPage.Button.Back.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Wróć do poczty</value>
+    <comment>Names the icon button that returns from a conversation to the phone-width mail list.</comment>
+  </data>
+  <data name="MailMessagePage.Button.Back.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Wróć do rozmowy</value>
+    <comment>Names the icon button that returns from one message to its phone-width conversation.</comment>
   </data>
   <data name="SettingsPage.TextBlock.Title.Text" xml:space="preserve">
     <value>Ustawienia</value>

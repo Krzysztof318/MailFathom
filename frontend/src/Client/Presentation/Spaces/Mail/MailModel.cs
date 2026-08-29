@@ -56,6 +56,36 @@ public partial record MailModel
         IMailThread thread,
         IWorkspace workspace,
         IMailSearch search)
+        : this(session, messages, thread, workspace, search, openedMessageKey: null)
+    {
+    }
+
+    /// <summary>Initializes the same mail model for the phone route that draws one message from the open conversation.</summary>
+    /// <param name="openedMessage">The conversation row the route opened.</param>
+    /// <param name="session">What the deployment allows this caller.</param>
+    /// <param name="messages">The run's own message list, drawn from wherever the mailbox tree says somebody is.</param>
+    /// <param name="thread">The run's own conversation, which is whatever the list has one message selected in.</param>
+    /// <param name="workspace">The scope a selected passage narrows for the intent field.</param>
+    /// <param name="search">The run's own ranked list, which opens the same conversation without replacing itself.</param>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    public MailModel(
+        ThreadMessageRow openedMessage,
+        IClientSession session,
+        IMessageList messages,
+        IMailThread thread,
+        IWorkspace workspace,
+        IMailSearch search)
+        : this(session, messages, thread, workspace, search, KeyOf(openedMessage))
+    {
+    }
+
+    private MailModel(
+        IClientSession session,
+        IMessageList messages,
+        IMailThread thread,
+        IWorkspace workspace,
+        IMailSearch search,
+        string? openedMessageKey)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(messages);
@@ -81,6 +111,11 @@ public partial record MailModel
         this.KeepsEverything =
             messages.Arrangement.Select(static arrangement => !arrangement.KeepsLessThanEverything);
         this.ShowsTimeline = search.IsOpen.Select(static isOpen => !isOpen);
+        this.OpenedThreadMessage = thread.Messages.AsFeed().Select(
+            rows => openedMessageKey is null
+                ? ThreadMessageRow.Nothing
+                : rows.FirstOrDefault(row => string.Equals(row.Key, openedMessageKey, StringComparison.Ordinal))
+                    ?? ThreadMessageRow.Nothing);
     }
 
     /// <summary>Whether this session keeps the space correspondence is read in from being put in front of this caller.</summary>
@@ -195,6 +230,10 @@ public partial record MailModel
 
     /// <summary>Whether the last attempt to read more of the conversation did not arrive.</summary>
     public IFeed<bool> ThreadPagingFailed => this.thread.PagingFailed;
+
+    /// <summary>The live conversation row named by the phone's message route.</summary>
+    /// <remarks>Projected from the run-wide conversation rather than copied from navigation data, so a body read or attachment update reaches both compositions.</remarks>
+    public IFeed<ThreadMessageRow> OpenedThreadMessage { get; }
 
     /// <summary>Shows what one message of the conversation added, or collapses it back to a line.</summary>
     /// <param name="key">The message, as its row names itself.</param>
@@ -383,5 +422,12 @@ public partial record MailModel
         var arrangement = await this.messages.Arrangement ?? MessageListArrangement.Default;
 
         await this.messages.ArrangeAsync(change(arrangement), cancellationToken).ConfigureAwait(false);
+    }
+
+    private static string KeyOf(ThreadMessageRow message)
+    {
+        ArgumentNullException.ThrowIfNull(message);
+
+        return message.Key;
     }
 }

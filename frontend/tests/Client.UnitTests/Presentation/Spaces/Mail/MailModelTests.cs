@@ -9,6 +9,7 @@ using MailFathom.Client.Presentation.Messages;
 using MailFathom.Client.Presentation.Search;
 using MailFathom.Client.Presentation.Spaces.Mail;
 using MailFathom.Client.Presentation.Spaces.Mail.Reading;
+using MailFathom.Client.Presentation.Threads;
 using MailFathom.Client.Presentation.Workspace;
 using MailFathom.Client.Session;
 using MailFathom.Client.UnitTests.TestDoubles;
@@ -95,6 +96,55 @@ public sealed class MailModelTests
         Assert.Same(thread.Messages, model.ThreadMessages);
         Assert.Same(thread.HasMoreMessages, model.HasMoreThreadMessages);
         Assert.Same(thread.PagingFailed, model.ThreadPagingFailed);
+    }
+
+    /// <summary>The phone's message route reads the selected conversation row from the same run-wide thread as the wide composition.</summary>
+    [Fact]
+    public async Task OpenedThreadMessage_ANavigationRow_ReadsTheLiveRowFromTheRunsOwnConversation()
+    {
+        // Arrange
+        using var session = SessionOffering("mailfathom.mail.read");
+        var first = ThreadRow(1);
+        var navigation = ThreadRow(2);
+        var opened = navigation with { Contribution = "Updated after navigation" };
+        var thread = new StubMailThread(first, opened);
+        await using var model = new MailModel(
+            navigation,
+            session,
+            new StubMessageList(),
+            thread,
+            new StubWorkspace(),
+            new StubMailSearch());
+
+        // Act
+        var message = await model.OpenedThreadMessage;
+
+        // Assert
+        Assert.Same(opened, message);
+    }
+
+    /// <summary>The phone route can offer the whole-message read before the conversation row is expanded inline.</summary>
+    [Fact]
+    public void OffersStandaloneWholeMessage_ACollapsedConversationRow_OffersTheRead()
+    {
+        // Arrange
+        var message = ThreadRow(1);
+
+        // Act, Assert
+        Assert.True(message.OffersStandaloneWholeMessage);
+    }
+
+    /// <summary>The message route can distinguish a live row from the sentinel shown while none is open.</summary>
+    [Fact]
+    public void IsClosed_ARowWithoutAnIdentity_ReportsTheRouteAsClosed()
+    {
+        // Arrange
+        var opened = ThreadRow(1);
+        var closed = opened with { Key = string.Empty };
+
+        // Act, Assert
+        Assert.False(opened.IsClosed);
+        Assert.True(closed.IsClosed);
     }
 
     /// <summary>
@@ -432,6 +482,26 @@ public sealed class MailModelTests
         IsAnswered: false,
         HasAttachments: false,
         AttachmentCount: 0);
+
+    private static ThreadMessageRow ThreadRow(int number) => new(
+        MailMessages.Key(number),
+        "Someone",
+        "Quarterly review",
+        "Owner",
+        "What this one added",
+        "09:41",
+        "Someone, Quarterly review, 09:41",
+        IsExpanded: false,
+        IsOpenedAt: false,
+        IsUnread: false,
+        IsFlagged: false,
+        IsAnswered: false,
+        HasAttachments: false,
+        AttachmentCount: 0,
+        Message: null,
+        WholeMessage: null,
+        IsReadingWholeMessage: false,
+        WholeMessageFailed: false);
 
     private static StubClientSession SessionOffering(params string[] permissions) =>
         new(SessionStanding.Of(new DeploymentSession("MailFathom", "0.8.0", permissions)));

@@ -8,6 +8,7 @@ using MailFathom.Client.Deployment;
 using MailFathom.Client.Presentation.Settings;
 using MailFathom.Client.Presentation.Spaces;
 using MailFathom.Client.Presentation.Spaces.Mail;
+using MailFathom.Client.Presentation.Threads;
 using MailFathom.Client.Presentation.Workspace;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -167,6 +168,8 @@ public partial class App : Application
             new ViewMap<WorkspacePage, WorkspaceModel>(),
             new ViewMap<DiscoverPage>(),
             new ViewMap<MailPage, MailModel>(),
+            new ViewMap<MailThreadPage, MailModel>(),
+            new DataViewMap<MailMessagePage, MailModel, ThreadMessageRow>(),
             new ViewMap<CasesPage>(),
             new ViewMap<SettingsPage, SettingsModel>(),
             new ViewMap<ConnectPage, ConnectModel>(),
@@ -188,9 +191,11 @@ public partial class App : Application
                         Nested:
                         [
                             new RouteMap(ClientRoutes.Discover, View: views.FindByView<DiscoverPage>(), IsDefault: true),
-                            new RouteMap(ClientRoutes.Mail, View: views.FindByViewModel<MailModel>()),
+                            new RouteMap(ClientRoutes.Mail, View: views.FindByView<MailPage>()),
                             new RouteMap(ClientRoutes.Cases, View: views.FindByView<CasesPage>()),
                         ]),
+                    new RouteMap(ClientRoutes.MailThread, View: views.FindByView<MailThreadPage>()),
+                    new RouteMap(ClientRoutes.MailMessage, View: views.FindByView<MailMessagePage>()),
                     new RouteMap(ClientRoutes.Settings, View: views.FindByViewModel<SettingsModel>()),
                     new RouteMap(ClientRoutes.Connect, View: views.FindByViewModel<ConnectModel>()),
                     new RouteMap(ClientRoutes.SignIn, View: views.FindByViewModel<SignInModel>()),

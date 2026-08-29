@@ -44,13 +44,14 @@ message list described below, and Discover's and Cases' say they are empty until
 own page in.
 
 **Each space is a route, and so is everything else on screen.** `App.RegisterRoutes` nests `Discover`, `Mail`, and
-`Cases` inside the frame and registers `Settings` and `Connect` beside it, every one of them named once in
-`ClientRoutes`, so each is reachable and reloadable by its route — the
+`Cases` inside the frame and registers `MailThread`, `MailMessage`, `Settings`, and the two entry screens beside it,
+every one of them named once in `ClientRoutes`, so each is reachable and reloadable by its route — the
 browser opened at `/Workspace/Cases` lands on Cases with that space named on the bar. Because Uno's navigation is what
 moved there, the Android system back gesture and back key and the browser's back button all move back through the
-client's own screens rather than out of the application: going to settings and back returns to the space somebody left,
-not to the first one. A screen reached by swapping content by hand would be a screen neither of them knows about, which
-is why nothing here does that.
+client's own screens rather than out of the application: on a phone-width window a selected row opens its conversation,
+a selected conversation row opens its message, and each back returns one step; going to settings and back returns to
+the space somebody left, not to the first one. A screen reached by swapping content by hand would be a screen neither
+of them knows about, which is why nothing here does that.
 
 **Where a route is registered decides whether it can be returned from**, which is why settings is a level up rather
 than a fourth name beside the three. The spaces share one content area and are switched between, so moving among them
@@ -60,14 +61,16 @@ what puts the workspace behind it.
 **The composition follows the width of the window and never the platform.** Below 700 pixels the spaces are named on a
 bar along the bottom and the workspace is one column; at 700 that bar is replaced by a navigation rail beside the
 workspace; at 1000 the workspace itself opens a companion column, so what a space shows beside its main content stands
-next to it instead of being reached as a separate screen. The two widths are `WorkspaceRailWindowWidth` and
+next to it instead of being reached as a separate screen. Mail disables its row navigation at that second breakpoint:
+below it the list, conversation, and message are the route stack above; at and above it the list and the same
+`MailThreadView` share the workspace. The two widths are `WorkspaceRailWindowWidth` and
 `WorkspaceWideWindowWidth` in `App.xaml`, read by every adaptive trigger that acts on them, and the switch is
 `VisualStateManager` throughout: no code asks which platform is running, so a resized desktop window and a phone are
 the same case. `WorkspaceColumns` is the control that gives a space that workspace, so all three read the same at the
 same width. Content stays clear of a notch, a rounded corner, and a system bar through `utu:SafeArea.Insets`, stated at
-the root of the frame and again on the settings screen, which takes the whole surface rather than opening inside it.
-The soft keyboard is the one mask the toolkit supports on a `SafeArea` or a `ScrollViewer` alone, so it is stated as a
-control around the field this frame takes typing in.
+the root of the frame and again on every screen that takes the whole surface, including the conversation and message
+routes. The soft keyboard is the one mask the toolkit supports on a `SafeArea` or a `ScrollViewer` alone, so it is
+stated as a control around the field this frame takes typing in.
 
 **What travels with somebody between spaces is `IWorkspace`**, registered once for the run. It holds the question being
 composed and the scope that question would be asked against — an account, a folder within it or a special-use role
@@ -151,6 +154,13 @@ a forwarded copy is somewhere else again — so what is drawn is every folder of
 order. Where somebody arrived at a particular message, that message is the one opened and scrolled to; where they
 arrived at the conversation itself, the newest is.
 
+The view over that state is one `MailThreadView`, placed in the companion column on a wide window and on the
+`MailThread` route below the wide breakpoint. The latter gives its message list the `MailMessage` navigation request;
+the former gives it none, so choosing a conversation row expands it in place rather than leaving the multi-column
+workspace. Both route models resolve the same singleton list, conversation, workspace, and search, so filters,
+selection, position, account, and folder survive the change in composition instead of being reconstructed from a
+navigation payload.
+
 **What each message added arrived with the conversation, and the whole of one is a request somebody made.** A message
 collapses to a line and opens to what it contributed, which the deployment publishes with the quoted history and the
 signature trimmed off — so an exchange of thirty replies is one request to draw and the eighth reply does not redraw the
@@ -162,6 +172,11 @@ message, which is what keeps the question asked before a link is followed one pi
 that message drops the whole of it along with the answer about its remote pictures,
 so no allowance outlives the reason it was given. A page of the conversation that did not arrive, and a whole message
 that did not, are each said beside what is already drawn rather than instead of it.
+
+On the phone route the selected `ThreadMessageRow` is navigation data only long enough to name the row. `MailModel`
+projects that key back over the live `IMailThread.Messages` feed, so reading the whole body, revealing remote content,
+and attachment progress update the message route and the wide companion from one source rather than leaving a copied
+row behind.
 
 **Settings is reached from the frame rather than named among the spaces**, because it is not one. It is the screen that
 says which build is running and which deployment this client is pointed at, carries the two choices below and the way to

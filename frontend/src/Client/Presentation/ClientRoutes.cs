@@ -22,6 +22,12 @@ internal static class ClientRoutes
     /// <summary>The space correspondence is read in.</summary>
     internal const string Mail = "Mail";
 
+    /// <summary>The phone-width screen that follows the selected message's conversation.</summary>
+    internal const string MailThread = "MailThread";
+
+    /// <summary>The phone-width screen that reads one message of the open conversation.</summary>
+    internal const string MailMessage = "MailMessage";
+
     /// <summary>The space a thread being worked through is followed in.</summary>
     internal const string Cases = "Cases";
 

@@ -63,6 +63,33 @@ public sealed partial record ThreadMessageRow(
     bool IsReadingWholeMessage,
     bool WholeMessageFailed)
 {
+    /// <summary>An undrawn row used while no message route is open.</summary>
+    internal static ThreadMessageRow Nothing { get; } = new(
+        string.Empty,
+        string.Empty,
+        string.Empty,
+        string.Empty,
+        string.Empty,
+        string.Empty,
+        string.Empty,
+        IsExpanded: false,
+        IsOpenedAt: false,
+        IsUnread: false,
+        IsFlagged: false,
+        IsAnswered: false,
+        HasAttachments: false,
+        AttachmentCount: 0,
+        Message: null,
+        WholeMessage: null,
+        IsReadingWholeMessage: false,
+        WholeMessageFailed: false);
+
+    /// <summary>Gets whether this is a message the route can draw.</summary>
+    public bool IsOpen => this.Key.Length > 0;
+
+    /// <summary>Gets whether the route has no message to draw.</summary>
+    public bool IsClosed => this.Key.Length is 0;
+
     /// <summary>Gets whether there is anything of what the message added to draw.</summary>
     /// <remarks>
     /// A message this deployment holds but has not extracted yet has none, which is an ordinary state of a mailbox
@@ -96,6 +123,10 @@ public sealed partial record ThreadMessageRow(
     /// </remarks>
     public bool OffersWholeMessage =>
         this.IsExpanded && this.WholeMessage is null && !this.IsReadingWholeMessage && !this.WholeMessageFailed;
+
+    /// <summary>Gets whether the phone's message screen may ask for the whole message.</summary>
+    public bool OffersStandaloneWholeMessage =>
+        this.WholeMessage is null && !this.IsReadingWholeMessage && !this.WholeMessageFailed;
 
     /// <summary>Gets whether the whole message is on its way, which is what the message says while it waits.</summary>
     public bool AwaitsWholeMessage => this.IsExpanded && this.IsReadingWholeMessage;
