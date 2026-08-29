@@ -7,16 +7,29 @@ Project repository: https://github.com/Krzysztof318/MailFathom
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:mvux="using:Uno.Extensions.Reactive.UI"
+      xmlns:uen="using:Uno.Extensions.Navigation.UI"
       xmlns:utu="using:Uno.Toolkit.UI"
+      xmlns:mail="using:MailFathom.Client.Presentation.Spaces.Mail"
       xmlns:messages="using:MailFathom.Client.Presentation.Messages"
-      xmlns:reading="using:MailFathom.Client.Presentation.Spaces.Mail.Reading"
       xmlns:search="using:MailFathom.Client.Presentation.Search"
       xmlns:spaces="using:MailFathom.Client.Presentation.Spaces"
-      xmlns:threads="using:MailFathom.Client.Presentation.Threads"
       xmlns:workspace="using:MailFathom.Client.Presentation.Workspace"
       NavigationCacheMode="Required">
 
   <Grid>
+    <VisualStateManager.VisualStateGroups>
+      <VisualStateGroup>
+        <VisualState x:Name="WideMail">
+          <VisualState.StateTriggers>
+            <AdaptiveTrigger MinWindowWidth="{StaticResource WorkspaceWideWindowWidth}" />
+          </VisualState.StateTriggers>
+          <VisualState.Setters>
+            <Setter Target="MessageRows.(uen:Navigation.Request)" Value="" />
+          </VisualState.Setters>
+        </VisualState>
+      </VisualStateGroup>
+    </VisualStateManager.VisualStateGroups>
+
     <!-- The list beside what is open on a wide window, and the list alone on a narrow one, where opening something is
          a screen rather than a second column. What the companion column holds is the conversation the selected
          message is in.
@@ -134,6 +147,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
             <ListView x:Name="MessageRows"
                       x:Uid="MailPage.List.Messages"
                       ItemsSource="{Binding Messages}"
+                      uen:Navigation.Request="MailThread"
                       SelectionMode="Extended"
                       IsItemClickEnabled="False"
                       Holding="OnRowHeld"
@@ -240,328 +254,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
         </Grid>
       </workspace:WorkspaceColumns.Primary>
       <workspace:WorkspaceColumns.Companion>
-        <!-- The conversation the selected message is in. It is not scoped to the folder the list is drawn from and
-             cannot be: the question is in the inbox, the answer is in the sent folder, and a forwarded copy is
-             somewhere else again — so what is drawn here spans every folder of every account, in the conversation's
-             own order. -->
-        <Grid>
-          <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition />
-            <RowDefinition Height="Auto" />
-          </Grid.RowDefinitions>
-
-          <!-- Who is in the conversation and how large it is, answered by the deployment about the whole of it rather
-               than derived from the messages in hand: a header walked out of the page would name whoever happened to
-               be on it and would change as the rest arrived. -->
-          <StackPanel Grid.Row="0"
-                      Padding="16,12"
-                      Spacing="6"
-                      AutomationProperties.Name="{Binding Thread.Announcement}"
-                      Visibility="{Binding Thread.IsOpen, Converter={StaticResource AffirmedVisibility}}">
-            <TextBlock Text="{Binding Thread.Subject}"
-                       TextWrapping="Wrap"
-                       Style="{StaticResource SubtitleTextBlockStyle}"
-                       Foreground="{ThemeResource OnSurfaceBrush}" />
-
-            <TextBlock Text="{Binding Thread.MessageCount}"
-                       Style="{StaticResource CaptionTextBlockStyle}"
-                       Foreground="{ThemeResource OnSurfaceVariantBrush}"
-                       AutomationProperties.AccessibilityView="Raw" />
-
-            <ScrollViewer HorizontalScrollBarVisibility="Auto"
-                          VerticalScrollBarVisibility="Disabled"
-                          HorizontalScrollMode="Auto"
-                          VerticalScrollMode="Disabled">
-              <ItemsControl ItemsSource="{Binding Thread.Participants}">
-                <ItemsControl.ItemsPanel>
-                  <ItemsPanelTemplate>
-                    <StackPanel Orientation="Horizontal"
-                                Spacing="12" />
-                  </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="threads:ThreadParticipantRow">
-                    <StackPanel Orientation="Horizontal"
-                                Spacing="4"
-                                AutomationProperties.Name="{x:Bind Announcement}">
-                      <TextBlock Text="{x:Bind Author}"
-                                 Style="{StaticResource CaptionTextBlockStyle}"
-                                 Foreground="{ThemeResource OnSurfaceBrush}"
-                                 AutomationProperties.AccessibilityView="Raw"
-                                 TextTrimming="CharacterEllipsis" />
-                      <TextBlock Text="{x:Bind MessageCount}"
-                                 Style="{StaticResource CaptionTextBlockStyle}"
-                                 Foreground="{ThemeResource OnSurfaceVariantBrush}"
-                                 AutomationProperties.AccessibilityView="Raw" />
-                    </StackPanel>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </ScrollViewer>
-
-            <TextBlock x:Uid="MailPage.TextBlock.MoreParticipants"
-                       Style="{StaticResource CaptionTextBlockStyle}"
-                       Foreground="{ThemeResource OnSurfaceVariantBrush}"
-                       TextWrapping="Wrap"
-                       Visibility="{Binding Thread.HasUnnamedParticipants, Converter={StaticResource AffirmedVisibility}}" />
-
-            <!-- A conversation larger than one read assembles says so rather than showing what it did assemble as
-                 though that were the whole of it. -->
-            <InfoBar x:Uid="MailPage.InfoBar.ThreadRunsPast"
-                     IsOpen="{Binding Thread.RunsPastAssembly}"
-                     IsClosable="False"
-                     Severity="Informational" />
-          </StackPanel>
-
-          <Grid Grid.Row="1">
-            <!-- Every message of the conversation, each collapsed to one line and each opened by the control on that
-                 line. The list is what a screen reader announces the structure from and what the arrow keys move
-                 between; the control on each line is what opens one without a pointer. -->
-            <ListView x:Name="ThreadMessageRows"
-                      x:Uid="MailPage.List.ThreadMessages"
-                      ItemsSource="{Binding ThreadMessages}"
-                      SelectionMode="Single"
-                      IsItemClickEnabled="False"
-                      Loaded="OnThreadLoaded"
-                      Unloaded="OnThreadUnloaded"
-                      Padding="4,0,4,12">
-              <ListView.ItemTemplate>
-                <DataTemplate x:DataType="threads:ThreadMessageRow">
-                  <StackPanel Spacing="4">
-                    <ToggleButton x:Uid="MailPage.Toggle.ThreadMessage"
-                                  HorizontalAlignment="Stretch"
-                                  HorizontalContentAlignment="Stretch"
-                                  IsChecked="{x:Bind IsExpanded, Mode=OneWay}"
-                                  Command="{utu:ItemsControlBinding Path=DataContext.ToggleThreadMessage}"
-                                  CommandParameter="{x:Bind Key}"
-                                  AutomationProperties.Name="{x:Bind Announcement}">
-                      <!-- The line states itself once for a screen reader and draws itself in parts for everybody
-                           else, exactly as a row of the list beside it does. -->
-                      <Grid ColumnSpacing="8">
-                        <Grid.ColumnDefinitions>
-                          <ColumnDefinition Width="Auto" />
-                          <ColumnDefinition />
-                          <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
-                        <Border Width="8"
-                                Height="8"
-                                CornerRadius="4"
-                                VerticalAlignment="Top"
-                                Margin="0,6,0,0"
-                                AutomationProperties.AccessibilityView="Raw"
-                                Background="{ThemeResource PrimaryBrush}"
-                                Visibility="{x:Bind IsUnread, Converter={StaticResource AffirmedVisibility}}" />
-
-                        <StackPanel Grid.Column="1"
-                                    Spacing="2">
-                          <TextBlock Text="{x:Bind Author}"
-                                     Style="{StaticResource BodyStrongTextBlockStyle}"
-                                     Foreground="{ThemeResource OnSurfaceBrush}"
-                                     AutomationProperties.AccessibilityView="Raw"
-                                     TextTrimming="CharacterEllipsis" />
-
-                          <!-- What the message added, in the one line it collapses to. It arrived with the
-                               conversation, so a thread of thirty messages costs one request to draw. -->
-                          <TextBlock Text="{x:Bind Contribution}"
-                                     Style="{StaticResource CaptionTextBlockStyle}"
-                                     Foreground="{ThemeResource OnSurfaceVariantBrush}"
-                                     AutomationProperties.AccessibilityView="Raw"
-                                     TextTrimming="CharacterEllipsis"
-                                     Visibility="{x:Bind HasContribution, Converter={StaticResource AffirmedVisibility}}" />
-                        </StackPanel>
-
-                        <StackPanel Grid.Column="2"
-                                    Spacing="2"
-                                    HorizontalAlignment="Right">
-                          <TextBlock Text="{x:Bind Written}"
-                                     HorizontalAlignment="Right"
-                                     Style="{StaticResource CaptionTextBlockStyle}"
-                                     Foreground="{ThemeResource OnSurfaceVariantBrush}"
-                                     AutomationProperties.AccessibilityView="Raw" />
-
-                          <StackPanel Orientation="Horizontal"
-                                      HorizontalAlignment="Right"
-                                      Spacing="4">
-                            <FontIcon Glyph="&#xE172;"
-                                      FontSize="12"
-                                      AutomationProperties.AccessibilityView="Raw"
-                                      Foreground="{ThemeResource OnSurfaceVariantBrush}"
-                                      Visibility="{x:Bind IsAnswered, Converter={StaticResource AffirmedVisibility}}" />
-
-                            <FontIcon Glyph="&#xE7C1;"
-                                      FontSize="12"
-                                      AutomationProperties.AccessibilityView="Raw"
-                                      Foreground="{ThemeResource TertiaryBrush}"
-                                      Visibility="{x:Bind IsFlagged, Converter={StaticResource AffirmedVisibility}}" />
-
-                            <FontIcon Glyph="&#xE723;"
-                                      FontSize="12"
-                                      AutomationProperties.AccessibilityView="Raw"
-                                      Foreground="{ThemeResource OnSurfaceVariantBrush}"
-                                      Visibility="{x:Bind HasAttachments, Converter={StaticResource AffirmedVisibility}}" />
-
-                            <TextBlock Text="{x:Bind AttachmentCountText}"
-                                       Style="{StaticResource CaptionTextBlockStyle}"
-                                       AutomationProperties.AccessibilityView="Raw"
-                                       Foreground="{ThemeResource OnSurfaceVariantBrush}"
-                                       Visibility="{x:Bind ShowsAttachmentCount, Converter={StaticResource AffirmedVisibility}}" />
-                          </StackPanel>
-                        </StackPanel>
-                      </Grid>
-                    </ToggleButton>
-
-                    <!-- What the message added, in full, once it is open — and never the quoted history under it,
-                         which is the read below rather than eight copies of the first message down the page. -->
-                    <StackPanel Margin="16,0,8,8"
-                                Spacing="8"
-                                Visibility="{x:Bind IsExpanded, Converter={StaticResource AffirmedVisibility}}">
-                      <TextBlock Text="{x:Bind Recipients}"
-                                 TextWrapping="Wrap"
-                                 Style="{StaticResource CaptionTextBlockStyle}"
-                                 Foreground="{ThemeResource OnSurfaceVariantBrush}"
-                                 Visibility="{x:Bind HasRecipients, Converter={StaticResource AffirmedVisibility}}" />
-
-                      <TextBlock Text="{x:Bind Contribution}"
-                                 TextWrapping="Wrap"
-                                 IsTextSelectionEnabled="True"
-                                 Style="{StaticResource BodyTextBlockStyle}"
-                                 Foreground="{ThemeResource OnSurfaceBrush}"
-                                 Visibility="{x:Bind HasContribution, Converter={StaticResource AffirmedVisibility}}" />
-
-                      <!-- A message this deployment holds but has not extracted yet says so, rather than reading as a
-                           message somebody sent with nothing in it. -->
-                      <TextBlock x:Uid="MailPage.TextBlock.NoContribution"
-                                 TextWrapping="Wrap"
-                                 Style="{StaticResource CaptionTextBlockStyle}"
-                                 Foreground="{ThemeResource OnSurfaceVariantBrush}"
-                                 Visibility="{x:Bind AwaitsContribution, Converter={StaticResource AffirmedVisibility}}" />
-
-                      <!-- The one gesture on this screen that costs a request. The command carries the message it acts
-                           on, so it runs per message and its progress belongs to that message rather than to the
-                           conversation — which is why the wait below is drawn here and not by a LoadingView. -->
-                      <Button x:Uid="MailPage.Button.ShowWholeMessage"
-                              HorizontalAlignment="Left"
-                              Style="{StaticResource TextBlockButtonStyle}"
-                              Command="{utu:ItemsControlBinding Path=DataContext.ShowWholeThreadMessage}"
-                              CommandParameter="{x:Bind Key}"
-                              Visibility="{x:Bind OffersWholeMessage, Converter={StaticResource AffirmedVisibility}}" />
-
-                      <ProgressBar IsIndeterminate="True"
-                                   HorizontalAlignment="Stretch"
-                                   Visibility="{x:Bind AwaitsWholeMessage, Converter={StaticResource AffirmedVisibility}}" />
-
-                      <InfoBar x:Uid="MailPage.InfoBar.WholeMessageUnavailable"
-                               IsOpen="{x:Bind ShowsWholeMessageFailure, Mode=OneWay}"
-                               IsClosable="False"
-                               Severity="Warning">
-                        <InfoBar.ActionButton>
-                          <Button x:Uid="MailPage.Button.RetryWholeMessage"
-                                  Command="{utu:ItemsControlBinding Path=DataContext.ShowWholeThreadMessage}"
-                                  CommandParameter="{x:Bind Key}" />
-                        </InfoBar.ActionButton>
-                      </InfoBar>
-
-                      <!-- The whole message, quoted history and all, drawn by the pane that already knows how to draw
-                           one and how to ask before anything in it leaves the application. Its height is bounded so a
-                           long message stays one message of the conversation rather than the whole column. -->
-                      <reading:MailMessageView MaxHeight="640"
-                                               Reading="{x:Bind Message, Mode=OneWay}"
-                                               Body="{x:Bind WholeMessage, Mode=OneWay}"
-                                               Visibility="{x:Bind ShowsMessage, Converter={StaticResource AffirmedVisibility}}"
-                                               ShowRemoteContentCommand="{utu:ItemsControlBinding Path=DataContext.ShowThreadRemoteContent}"
-                                               ShowRemoteContentCommandParameter="{x:Bind Key}"
-                                               SaveAttachmentCommand="{utu:ItemsControlBinding Path=DataContext.SaveAttachment}"
-                                               CancelAttachmentCommand="{utu:ItemsControlBinding Path=DataContext.CancelAttachment}"
-                                               UseSelectionCommand="{utu:ItemsControlBinding Path=DataContext.UseBodySelection}" />
-                    </StackPanel>
-                  </StackPanel>
-                </DataTemplate>
-              </ListView.ItemTemplate>
-            </ListView>
-
-            <!-- The three states the conversation genuinely has, rendered by the feed rather than remembered by this
-                 page, on the same arrangement the list beside it uses. -->
-            <mvux:FeedView Source="{Binding ThreadMessages}">
-              <mvux:FeedView.ValueTemplate>
-                <DataTemplate>
-                  <Border Height="0" />
-                </DataTemplate>
-              </mvux:FeedView.ValueTemplate>
-
-              <mvux:FeedView.ProgressTemplate>
-                <DataTemplate>
-                  <ProgressBar IsIndeterminate="True"
-                               VerticalAlignment="Top"
-                               HorizontalAlignment="Stretch" />
-                </DataTemplate>
-              </mvux:FeedView.ProgressTemplate>
-
-              <!-- Two states rather than one, because they lead to different acts: nothing selected is a message to
-                   choose, and an open conversation holding nothing is mail this deployment has not taken in yet. Each
-                   is shown on its own affirmative, so neither is announced while the read that decides it is still
-                   running. -->
-              <mvux:FeedView.NoneTemplate>
-                <DataTemplate>
-                  <Grid>
-                    <spaces:SpacePlaceholder x:Uid="MailPage.Thread"
-                                             Visibility="{Binding Parent.Thread.IsClosed, Converter={StaticResource AffirmedVisibility}}" />
-
-                    <InfoBar x:Uid="MailPage.InfoBar.NoThreadMessages"
-                             Margin="16"
-                             VerticalAlignment="Top"
-                             IsOpen="{Binding Parent.Thread.IsOpen}"
-                             IsClosable="False"
-                             Severity="Informational" />
-                  </Grid>
-                </DataTemplate>
-              </mvux:FeedView.NoneTemplate>
-
-              <mvux:FeedView.ErrorTemplate>
-                <DataTemplate>
-                  <InfoBar x:Uid="MailPage.InfoBar.ThreadUnavailable"
-                           Margin="16"
-                           VerticalAlignment="Top"
-                           IsOpen="True"
-                           IsClosable="False"
-                           Severity="Error">
-                    <InfoBar.ActionButton>
-                      <Button x:Uid="MailPage.Button.RetryThread"
-                              Command="{Binding Parent.RetryThread}" />
-                    </InfoBar.ActionButton>
-                  </InfoBar>
-                </DataTemplate>
-              </mvux:FeedView.ErrorTemplate>
-            </mvux:FeedView>
-          </Grid>
-
-          <StackPanel Grid.Row="2"
-                      Padding="12,4,12,8"
-                      Spacing="4">
-            <!-- A page that did not arrive is said beside the conversation rather than instead of it, because what is
-                 already drawn is still true. -->
-            <InfoBar x:Uid="MailPage.InfoBar.ThreadPageUnavailable"
-                     IsOpen="{Binding ThreadPagingFailed}"
-                     IsClosable="False"
-                     Severity="Warning" />
-
-            <utu:LoadingView Source="{Binding ShowMoreThreadMessages}"
-                             Visibility="{Binding HasMoreThreadMessages, Converter={StaticResource AffirmedVisibility}}">
-              <utu:LoadingView.Content>
-                <Button x:Uid="MailPage.Button.ShowMoreThreadMessages"
-                        HorizontalAlignment="Stretch"
-                        Command="{Binding ShowMoreThreadMessages}"
-                        Style="{StaticResource TextBlockButtonStyle}" />
-              </utu:LoadingView.Content>
-
-              <utu:LoadingView.LoadingContent>
-                <ProgressBar IsIndeterminate="True"
-                             HorizontalAlignment="Stretch" />
-              </utu:LoadingView.LoadingContent>
-            </utu:LoadingView>
-          </StackPanel>
-        </Grid>
+        <mail:MailThreadView />
       </workspace:WorkspaceColumns.Companion>
     </workspace:WorkspaceColumns>
 
