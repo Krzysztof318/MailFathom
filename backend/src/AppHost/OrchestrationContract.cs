@@ -625,17 +625,18 @@ public static class OrchestrationContract
     /// <summary>The environment variable OpenSSL reads the path of its configuration file from.</summary>
     /// <remarks>
     /// <para>
-    /// A variable this app model passes through rather than one it publishes a value for. It exists here because a
-    /// developer whose mailbox is served by a mail server the platform's own TLS policy refuses sets it before starting
-    /// the orchestration, and a resource Aspire starts inherits nothing of the kind on its own.
+    /// The normal topology supplies the repository's supported security-level-1 policy so legacy mail servers remain
+    /// reachable on a first run. A developer may override that file by exporting this variable before starting Aspire.
     /// </para>
     /// <para>
-    /// The distinction is deliberate: deciding that a weaker TLS policy applies is an operator's act, taken once, in
-    /// the environment they start MailFathom from. An app model that named a file of its own would take that decision
-    /// for every developer who ever runs it.
+    /// The integration-test topology receives neither value, so its TLS behavior does not depend on the machine that
+    /// started it.
     /// </para>
     /// </remarks>
     public const string OpenSslConfigurationVariable = "OPENSSL_CONF";
+
+    /// <summary>The supported OpenSSL policy copied beside the normal AppHost output.</summary>
+    public const string DevelopmentOpenSslConfigurationFileName = "legacy-mail-server.cnf";
 
     /// <summary>The environment variable a caller states this run's ephemeral resource identifier in.</summary>
     /// <remarks>
@@ -787,6 +788,31 @@ public static class OrchestrationContract
         ArgumentNullException.ThrowIfNull(arguments);
 
         return arguments.Contains(IntegrationTestingArgument, StringComparer.Ordinal);
+    }
+
+    /// <summary>Resolves the OpenSSL policy the MailFathom host receives from this topology.</summary>
+    /// <param name="runsIntegrationTests">Whether the integration-test topology is selected.</param>
+    /// <param name="explicitlyConfiguredPath">The path exported by the developer, or <see langword="null" /> when none was exported.</param>
+    /// <param name="appHostBaseDirectory">The directory containing the shipped development policy.</param>
+    /// <returns>The explicit or shipped policy path for a normal run, and <see langword="null" /> for an integration-test run.</returns>
+    public static string? ResolveOpenSslConfigurationPath(
+        bool runsIntegrationTests,
+        string? explicitlyConfiguredPath,
+        string appHostBaseDirectory)
+    {
+        if (runsIntegrationTests)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(explicitlyConfiguredPath))
+        {
+            return explicitlyConfiguredPath;
+        }
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(appHostBaseDirectory);
+
+        return Path.Combine(appHostBaseDirectory, DevelopmentOpenSslConfigurationFileName);
     }
 
     /// <summary>Reads the port a developer pinned under <paramref name="configurationKey" />.</summary>

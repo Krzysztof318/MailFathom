@@ -256,17 +256,14 @@ var mailFathomHost = builder.AddProject<Projects.Host>(OrchestrationContract.Hos
         "DataEncryption__Keys__0__Material__SecretReference",
         $"plaintext:{OrchestrationContract.DataEncryptionKeyMaterial}");
 
-// Passed through from this process's own environment rather than set here, and only when a developer set it. OpenSSL
-// reads it while it initializes, so it is the one way to reach a mail server whose cipher suite or key size the
-// platform's TLS policy refuses — and it relaxes that policy for every connection the host makes, the database
-// included. Which is exactly why the app model must not be the thing that decides it applies: it carries the value an
-// operator chose, or nothing at all.
-//
-// Never under the integration-test topology. That suite proves what MailFathom does against servers it starts itself,
-// and a policy inherited from whichever machine ran it would make the handshakes it exercises depend on that machine.
-var openSslConfigurationPath = Environment.GetEnvironmentVariable(OrchestrationContract.OpenSslConfigurationVariable);
+// The normal local topology favors compatibility with older mail servers through the repository's supported
+// security-level-1 policy. It still accepts an explicit path for calibration, while integration tests inherit neither.
+var openSslConfigurationPath = OrchestrationContract.ResolveOpenSslConfigurationPath(
+    runsIntegrationTests,
+    Environment.GetEnvironmentVariable(OrchestrationContract.OpenSslConfigurationVariable),
+    AppContext.BaseDirectory);
 
-if (!runsIntegrationTests && !string.IsNullOrWhiteSpace(openSslConfigurationPath))
+if (openSslConfigurationPath is not null)
 {
     mailFathomHost.WithEnvironment(OrchestrationContract.OpenSslConfigurationVariable, openSslConfigurationPath);
 }

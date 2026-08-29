@@ -402,13 +402,11 @@ administrative endpoints accept unauthenticated local requests, and the client e
 credential above. These are AppHost development choices rather than changed product defaults: starting `Host.csproj`
 directly or running a deployment still reads the shipped disabled endpoint defaults.
 
-A development mailbox served by a mail server whose TLS parameters the platform refuses needs one more thing, and the
-symptom sends most people the wrong way: the handshake fails, but reads as an authentication failure. Export
-`OPENSSL_CONF` in the shell the orchestration starts from and the AppHost passes it through to `mailfathom-host`, which
-then reports at startup that it is running under it. [The platform TLS policy](platform-tls-policy.md) covers the file,
-what it costs, and how to confirm the handshake is what failed. The AppHost passes an exported value through and never
-sets one, so a checkout that exports nothing runs under the platform default; the integration-test topology receives it
-under no circumstances, because a suite whose handshakes depended on the machine that ran it would prove nothing.
+The normal AppHost topology starts `mailfathom-host` under the repository's supported OpenSSL security-level-1 sample,
+so an older mail server is less likely to fail its TLS handshake under the misleading name of an authentication failure.
+[The platform TLS policy](platform-tls-policy.md) covers exactly what the file admits and what it leaves unchanged. An
+explicitly exported `OPENSSL_CONF` takes precedence when a developer needs another policy; the integration-test topology
+receives neither value, because a suite whose handshakes depended on the machine that ran it would prove nothing.
 
 An MCP client connects to `http://127.0.0.1:<the port the MCP endpoint took>/mcp` without a credential. An
 administrative client uses the dashboard's `admin` address the same way, while the browser client signs in as `test`

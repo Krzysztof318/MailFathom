@@ -22,4 +22,10 @@
          migration resource names this project by path rather than as something to start. -->
     <ProjectReference Include="..\Infrastructure\Infrastructure.csproj" IsAspireProjectResource="false" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(RepositoryRoot)deploy/openssl/legacy-mail-server.cnf.example"
+          Link="legacy-mail-server.cnf"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

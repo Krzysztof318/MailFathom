@@ -7,9 +7,9 @@
 #
 # Read docs/operations/platform-tls-policy.md before you do: this relaxes the TLS policy of the whole process, not of
 # one account, so every connection it makes — the database included — may accept a weaker parameter afterwards.
-# scripts/quick-start-compose.sh is the one thing that applies it without being asked, because a first run meeting a
-# handshake error that names nothing is a first run that ends there; --no-legacy-tls prepares the same deployment
-# under the platform default. Every other deployment copies this file deliberately or holds no copy of it at all.
+# scripts/quick-start-compose.sh and the normal local Aspire topology apply it without being asked, because a first run
+# meeting a handshake error that names nothing is a first run that ends there. The quick start's --no-legacy-tls option
+# prepares the same deployment under the platform default; Aspire accepts an explicitly exported OPENSSL_CONF instead.
 #
 # OPENSSL_CONF replaces the distribution's own configuration rather than adding to it, which is why the whole
 # openssl_conf -> ssl_conf -> system_default chain is stated here: on Ubuntu the security level is compiled in, so

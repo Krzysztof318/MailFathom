@@ -336,6 +336,56 @@ public sealed class OrchestrationContractTests
     }
 
     [Fact]
+    public void ResolveOpenSslConfigurationPath_NormalTopologyWithNoOverride_UsesTheShippedDevelopmentPolicy()
+    {
+        // Arrange
+        var appHostBaseDirectory = Path.Combine("apphost", "output");
+
+        // Act
+        var configurationPath = OrchestrationContract.ResolveOpenSslConfigurationPath(
+            runsIntegrationTests: false,
+            explicitlyConfiguredPath: null,
+            appHostBaseDirectory);
+
+        // Assert
+        Assert.Equal(
+            Path.Combine(appHostBaseDirectory, OrchestrationContract.DevelopmentOpenSslConfigurationFileName),
+            configurationPath);
+    }
+
+    [Fact]
+    public void ResolveOpenSslConfigurationPath_NormalTopologyWithOverride_UsesTheExplicitPath()
+    {
+        // Arrange
+        const string explicitlyConfiguredPath = "/etc/mailfathom/custom-openssl.cnf";
+
+        // Act
+        var configurationPath = OrchestrationContract.ResolveOpenSslConfigurationPath(
+            runsIntegrationTests: false,
+            explicitlyConfiguredPath,
+            appHostBaseDirectory: "unused");
+
+        // Assert
+        Assert.Equal(explicitlyConfiguredPath, configurationPath);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("/etc/mailfathom/custom-openssl.cnf")]
+    public void ResolveOpenSslConfigurationPath_IntegrationTopology_LeavesOpenSslUnconfigured(
+        string? explicitlyConfiguredPath)
+    {
+        // Act
+        var configurationPath = OrchestrationContract.ResolveOpenSslConfigurationPath(
+            runsIntegrationTests: true,
+            explicitlyConfiguredPath,
+            appHostBaseDirectory: "unused");
+
+        // Assert
+        Assert.Null(configurationPath);
+    }
+
+    [Fact]
     public void DevelopmentHostEnvironment_NormalTopology_EnablesTheLocalSurfacesAndMailbox()
     {
         // Act
