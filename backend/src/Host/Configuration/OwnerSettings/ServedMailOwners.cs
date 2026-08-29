@@ -2,10 +2,12 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Host.Configuration.Mail;
+using Microsoft.Extensions.Primitives;
 
 namespace MailFathom.Host.Configuration.OwnerSettings;
 
@@ -14,7 +16,7 @@ namespace MailFathom.Host.Configuration.OwnerSettings;
 /// <para>
 /// A singleton because the roster is a property of the deployment rather than of a request, and because every admitted
 /// caller and every synchronization run is composed against it: resolving it per request would put a database read in
-/// front of each of them to establish a value that cannot change while the process runs.
+/// front of each of them instead of following the publication raised by the write that changed it.
 /// </para>
 /// <para>
 /// Reading it before the gate has settled it fails rather than answering, because the alternative is an owner nobody
@@ -24,16 +26,19 @@ namespace MailFathom.Host.Configuration.OwnerSettings;
 /// traffic off that window is the startup probe, which reports the deployment unstarted until every gate has completed.
 /// </para>
 /// <para>
-/// The roster is written once from the startup path and read from every request thread afterwards, and both take the
-/// same lock. The write is one assignment, but nothing about a bare field would establish that a thread which observes
-/// it observes the whole of what it points at, or observes it at all. That is what the lock is for rather than
-/// contention: it is uncontended for the life of the process, since the one write happens before any request the read
-/// serves.
+/// The startup gate publishes the first roster and a committed owner record publishes a replacement. Reads and writes
+/// take the same lock, so a caller observes one complete immutable list rather than a collection changing beneath it.
+/// The reload token rises only after the replacement is visible, which lets a mail-settings snapshot pair itself with
+/// exactly that roster.
 /// </para>
 /// </remarks>
+[SuppressMessage("Design", "CA1001:Types that own disposable fields should be disposable", Justification = "This process-lifetime singleton never requests SemaphoreSlim.AvailableWaitHandle, so the semaphore owns no operating-system handle to release.")]
 internal sealed class ServedMailOwners : IDeploymentMailOwnerSource
 {
     private readonly Lock mutex = new();
+    private readonly Dictionary<MailOwnerId, long> publishedDocumentVersions = [];
+    private readonly SemaphoreSlim rosterPublication = new(1, 1);
+    private ConfigurationReloadToken reloadToken = new();
 
     /// <summary>The roster the startup gate established, or nothing while it has not run.</summary>
     /// <remarks>
@@ -60,29 +65,32 @@ internal sealed class ServedMailOwners : IDeploymentMailOwnerSource
         }
     }
 
-    /// <summary>Gets the mail accounts every served owner declares, across the whole roster.</summary>
-    /// <returns>The accounts, empty while the startup gate that establishes the roster has not run.</returns>
-    /// <remarks>
-    /// The one read that answers rather than refusing before the gate, because its callers judge a candidate or a
-    /// reload rather than serve mail: a rule set is judged against the accounts that exist, and none exist yet. What
-    /// keeps that from being a hole is that the same judgement runs again over the composed configuration, where the
-    /// owners are read from the file directly and the roster is not consulted at all.
-    /// </remarks>
-    public IReadOnlyList<MailSynchronizationAccountOptions> MailAccountsOfEveryOwner()
+    /// <summary>Gets the established roster, or nothing before the startup gate has run.</summary>
+    internal IReadOnlyList<ServedMailOwner>? TryGetOwners()
     {
         lock (this.mutex)
         {
-            return [.. (this.resolvedOwners ?? []).SelectMany(owner => owner.MailAccounts)];
+            return this.resolvedOwners;
         }
     }
+
+    /// <summary>Gets a token that changes after a newer runtime roster has been published.</summary>
+    internal IChangeToken GetReloadToken() => Volatile.Read(ref this.reloadToken);
+
+    /// <summary>Waits until this process can validate and publish one owner-document write without another overtaking it.</summary>
+    internal Task WaitForRosterPublicationAsync(CancellationToken cancellationToken) =>
+        this.rosterPublication.WaitAsync(cancellationToken);
+
+    /// <summary>Lets the next owner-document write validate against the roster this one published.</summary>
+    internal void ReleaseRosterPublication() => this.rosterPublication.Release();
 
     /// <summary>Gets whether any served owner's mail accounts are their own rather than the deployment's section.</summary>
     /// <returns><see langword="true" /> when at least one owner is served from their own declaration or their own document.</returns>
     /// <remarks>
-    /// It answers rather than refusing before the gate, for the reason <see cref="MailAccountsOfEveryOwner" /> does: its
-    /// caller judges a reloaded candidate, and a deployment whose roster is not settled yet has nothing for a candidate
-    /// to conflict with. The question is about the source rather than about the count, because the deployment's own
-    /// section belongs to whichever sole owner a deployment holds and is legitimately populated for that one.
+    /// It answers rather than refusing before the gate because its caller judges a reloaded candidate, and a deployment
+    /// whose roster is not settled yet has nothing for a candidate to conflict with. The question is about the source
+    /// rather than about the count, because the deployment's own section belongs to whichever sole owner a deployment
+    /// holds and is legitimately populated for that one.
     /// </remarks>
     public bool ServesAnyOwnerFromTheirOwnAccounts()
     {
@@ -121,7 +129,8 @@ internal sealed class ServedMailOwners : IDeploymentMailOwnerSource
     /// <remarks>
     /// It answers only about the owners whose declarations this record holds — an owner declared in their own section
     /// of the file, and one who has taken their record over. An account of the deployment's own section is not here,
-    /// because that section is the reloadable mail snapshot's and is where the lookup that calls this looks first.
+    /// because that section is the reloadable mail snapshot's. The lookup that calls this checks a published owner
+    /// document first so an adoption takes effect before the stale deployment section is removed for the next start.
     /// </remarks>
     public (MailOwnerId Owner, MailSynchronizationAccountOptions Account)? FindAccount(MailAccountId accountId) =>
         this.Owners
@@ -147,7 +156,103 @@ internal sealed class ServedMailOwners : IDeploymentMailOwnerSource
 
         lock (this.mutex)
         {
-            this.resolvedOwners = owners;
+            this.resolvedOwners = [.. owners];
+            this.publishedDocumentVersions.Clear();
         }
+
+        this.SignalReload();
+    }
+
+    /// <summary>Publishes one owner's committed document as the source new operations read their mail accounts from.</summary>
+    /// <param name="owner">The owner whose document committed.</param>
+    /// <param name="displayName">The label the owner record carries.</param>
+    /// <param name="mailAccounts">The validated account declarations the committed document contains.</param>
+    /// <param name="version">The committed document version.</param>
+    /// <exception cref="ArgumentException">Thrown when the owner is unspecified, the display name is blank, or the version is not positive.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when the mail accounts are <see langword="null" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the startup gate has not established the roster.</exception>
+    internal void OwnerDocumentPublished(
+        MailOwnerId owner,
+        string displayName,
+        IReadOnlyList<MailSynchronizationAccountOptions> mailAccounts,
+        long version)
+    {
+        if (!owner.IsSpecified)
+        {
+            throw new ArgumentException("A published owner document belongs to a named owner.", nameof(owner));
+        }
+
+        ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
+        ArgumentNullException.ThrowIfNull(mailAccounts);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(version);
+
+        var changed = false;
+
+        lock (this.mutex)
+        {
+            var owners = this.resolvedOwners
+                ?? throw new InvalidOperationException(
+                    "An owner document cannot be published before the startup gate has established the roster.");
+            if (!this.publishedDocumentVersions.TryGetValue(owner, out var publishedVersion)
+                || version > publishedVersion)
+            {
+                var published = new ServedMailOwner(
+                    owner,
+                    displayName,
+                    MailOwnerAccountSource.OwnerDocument,
+                    [.. mailAccounts]);
+
+                this.resolvedOwners = owners.Any(candidate => candidate.Owner == owner)
+                    ? [.. owners.Select(candidate => candidate.Owner == owner ? published : candidate)]
+                    : [.. owners, published];
+                this.publishedDocumentVersions[owner] = version;
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            this.SignalReload();
+        }
+    }
+
+    /// <summary>Removes an erased owner from the runtime roster and publishes the resulting account set.</summary>
+    /// <param name="owner">The owner whose record was erased.</param>
+    /// <exception cref="ArgumentException">Thrown when the owner is unspecified.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the startup gate has not established the roster.</exception>
+    internal void OwnerErased(MailOwnerId owner)
+    {
+        if (!owner.IsSpecified)
+        {
+            throw new ArgumentException("An erased owner is named.", nameof(owner));
+        }
+
+        var changed = false;
+
+        lock (this.mutex)
+        {
+            var owners = this.resolvedOwners
+                ?? throw new InvalidOperationException(
+                    "An owner cannot be erased from the runtime roster before the startup gate has established it.");
+            var remaining = owners.Where(candidate => candidate.Owner != owner).ToArray();
+
+            if (remaining.Length != owners.Count)
+            {
+                this.resolvedOwners = remaining;
+                this.publishedDocumentVersions.Remove(owner);
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            this.SignalReload();
+        }
+    }
+
+    private void SignalReload()
+    {
+        var changed = Interlocked.Exchange(ref this.reloadToken, new ConfigurationReloadToken());
+        changed.OnReload();
     }
 }

@@ -22,6 +22,7 @@ internal sealed class MailKitImapNotificationSessionFactory(
     IMailAccessTokenSource accessTokenSource,
     OutboundOperationExecutor operationExecutor,
     ITransientFailureClassifier transientFailureClassifier,
+    MailServerConnectionBudget connectionBudget,
     ImapChangeSubscriptionCommand requestFolderNotifications,
     TimeProvider timeProvider) : IMailboxNotificationSessionFactory
 {
@@ -46,6 +47,8 @@ internal sealed class MailKitImapNotificationSessionFactory(
             accessTokenSource,
             operationExecutor,
             transientFailureClassifier,
+            connectionBudget,
+            MailServerConnectionPurpose.PushNotification,
             accountId,
             folder,
             transportSecurityPolicy);
@@ -107,6 +110,8 @@ internal sealed class MailKitImapNotificationSessionFactory(
             accessTokenSource,
             operationExecutor,
             transientFailureClassifier,
+            connectionBudget,
+            MailServerConnectionPurpose.PushNotification,
             accountId,
             folders[0],
             transportSecurityPolicy);

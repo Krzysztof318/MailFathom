@@ -43,6 +43,7 @@ public sealed class ValidatedSettingsSnapshotTests
         // Arrange
         await using var harness = CreateHarness(ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password")));
         var rotatedReference = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:rotated-password"));
+        var reload = harness.Settings.GetReloadToken();
 
         // Act
         await harness.Settings.PublishWhenUsableAsync(
@@ -51,6 +52,7 @@ public sealed class ValidatedSettingsSnapshotTests
 
         // Assert
         Assert.Same(rotatedReference, harness.Settings.Current);
+        Assert.True(reload.HasChanged);
     }
 
     [Fact]
@@ -60,6 +62,7 @@ public sealed class ValidatedSettingsSnapshotTests
         var startupSettings = ConfiguredAccounts.WithPasswordReferences(("primary", "plaintext:dev-password"));
         await using var harness = CreateHarness(startupSettings);
         var brokenCandidate = ConfiguredAccounts.WithPasswordReferences(("primary", "file:/run/secrets/absent"));
+        var reload = harness.Settings.GetReloadToken();
 
         // Act
         await harness.Settings.PublishWhenUsableAsync(
@@ -68,6 +71,7 @@ public sealed class ValidatedSettingsSnapshotTests
 
         // Assert
         Assert.Same(startupSettings, harness.Settings.Current);
+        Assert.False(reload.HasChanged);
     }
 
     [Fact]

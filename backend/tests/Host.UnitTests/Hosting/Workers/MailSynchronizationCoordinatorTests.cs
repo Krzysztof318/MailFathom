@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Folders;
 using MailFathom.Application.Synchronization.Administration;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Accounts;
@@ -128,6 +129,7 @@ public sealed class MailSynchronizationCoordinatorTests
     public async Task ExecuteAsync_AccountAddedByAReload_IsSupervisedWithoutARestart()
     {
         // Arrange
+        var originalAccountAttempted = new TaskCompletionSource();
         var addedAccountAttempted = new TaskCompletionSource();
         var sessionFactory = Substitute.For<IMailboxSessionFactory>();
         sessionFactory
@@ -144,6 +146,10 @@ public sealed class MailSynchronizationCoordinatorTests
                 {
                     addedAccountAttempted.TrySetResult();
                 }
+                else if (attemptedAccountId == "original")
+                {
+                    originalAccountAttempted.TrySetResult();
+                }
 
                 return new InvalidOperationException("connect failed");
             });
@@ -153,15 +159,12 @@ public sealed class MailSynchronizationCoordinatorTests
 
         // Act
         await harness.Coordinator.StartAsync(CancellationToken.None);
+        await originalAccountAttempted.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
         harness.Settings.Current = SynchronizationTestHost.CreateOptions(
             enabled: true,
             SynchronizationTestHost.CreateAccount("original", "INBOX"),
             SynchronizationTestHost.CreateAccount("added", "INBOX"));
-        await SynchronizationTestHost.AdvanceUntilAsync(
-            harness.Clock,
-            addedAccountAttempted.Task,
-            AdvanceStep,
-            DeadlockGuard);
+        await addedAccountAttempted.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
 
         // Assert
         // Drained first, because the awaited signal is raised from inside the supervisor and the coordinator writes
@@ -173,6 +176,57 @@ public sealed class MailSynchronizationCoordinatorTests
         Assert.Contains(
             harness.LoggedMessages,
             message => message.Contains("Account added is now supervised", StringComparison.Ordinal));
+    }
+
+    /// <summary>A changed account starts from the new snapshot without waiting for the old schedule to elapse.</summary>
+    [Fact]
+    public async Task ExecuteAsync_AccountChangedByAReload_IsResupervisedWithoutARestart()
+    {
+        // Arrange
+        var originalFolderAttempted = new TaskCompletionSource();
+        var releaseOriginalWorkUnit = new TaskCompletionSource();
+        var changedFolderAttempted = new TaskCompletionSource();
+        var originalWorkUnitObservedCancellation = false;
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        sessionFactory
+            .OpenReadOnlyAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolution>(),
+                Arg.Any<MailTransportSecurityPolicy>(),
+                Arg.Any<CancellationToken>())
+            .Returns(async call =>
+            {
+                var attemptedFolder = call.Arg<MailFolderResolution>()!.Alias.Value;
+
+                if (attemptedFolder == "ARCHIVE")
+                {
+                    changedFolderAttempted.TrySetResult();
+                }
+                else
+                {
+                    originalFolderAttempted.TrySetResult();
+                    await releaseOriginalWorkUnit.Task;
+                    originalWorkUnitObservedCancellation = call.Arg<CancellationToken>().IsCancellationRequested;
+                }
+
+                throw new InvalidOperationException("connect failed");
+            });
+        using var harness = CreateHarness(
+            SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX"),
+            sessionFactory,
+            CatalogAdvertising("INBOX", "ARCHIVE"));
+
+        // Act
+        await harness.Coordinator.StartAsync(CancellationToken.None);
+        await originalFolderAttempted.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+        harness.Settings.Current = SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "ARCHIVE");
+        Assert.False(changedFolderAttempted.Task.IsCompleted);
+        releaseOriginalWorkUnit.SetResult();
+        await changedFolderAttempted.Task.WaitAsync(DeadlockGuard, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(originalWorkUnitObservedCancellation);
+        await harness.StopAndDrainAsync();
     }
 
     /// <summary>A work unit is not torn down where it happens to be; shutdown stops scheduling and lets it finish.</summary>
@@ -265,13 +319,32 @@ public sealed class MailSynchronizationCoordinatorTests
 
     private static CoordinatorHarness CreateHarness(
         MailSynchronizationOptions options,
-        IMailboxSessionFactory sessionFactory)
+        IMailboxSessionFactory sessionFactory,
+        IRemoteFolderCatalog? remoteFolderCatalog = null)
     {
         var clock = new FakeTimeProvider();
         var settings = new StubSettingsSnapshot<MailSynchronizationOptions>(options);
-        var services = SynchronizationTestHost.BuildServiceProvider(options, settings, sessionFactory, clock);
+        var services = SynchronizationTestHost.BuildServiceProvider(
+            options,
+            settings,
+            sessionFactory,
+            clock,
+            remoteFolderCatalog: remoteFolderCatalog);
 
         return new CoordinatorHarness(services, settings, clock);
+    }
+
+    private static IRemoteFolderCatalog CatalogAdvertising(params string[] folders)
+    {
+        var catalog = Substitute.For<IRemoteFolderCatalog>();
+        catalog.ListFoldersAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailTransportSecurityPolicy>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<IReadOnlyList<RemoteFolder>>(
+                [.. folders.Select(folder => new RemoteFolder(RemoteFolderPath.Create(folder), []))]));
+
+        return catalog;
     }
 
     /// <summary>Holds the coordinator a test drives, together with what it was composed from.</summary>

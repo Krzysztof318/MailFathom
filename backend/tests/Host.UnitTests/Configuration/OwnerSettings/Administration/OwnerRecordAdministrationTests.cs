@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Administration;
@@ -337,6 +338,28 @@ public sealed class OwnerRecordAdministrationTests
             Arg.Is<string>(candidate => candidate!.Contains("archive", StringComparison.Ordinal)),
             3,
             Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>The committed document becomes the account source for this process, not only for its next start.</summary>
+    [Fact]
+    public async Task AddMailAccountAsync_ACommittedDocument_PublishesItsAccountToTheRunningDeployment()
+    {
+        // Arrange
+        var harness = new RecordHarness(MailFathomPermission.AdminConfigurationWrite);
+        harness.Holding(SyntheticMailOwner.Deployment, EmptyRecord, version: 3);
+
+        // Act
+        var outcome = await harness.Records.AddMailAccountAsync(
+            SyntheticMailOwner.Deployment,
+            Account("archive"),
+            expectedVersion: 3,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(outcome!.IsCommitted);
+        Assert.Equal(
+            SyntheticMailOwner.Deployment,
+            harness.ServedOwners.FindAccount(MailAccountId.Create("archive"))?.Owner);
     }
 
     /// <summary>
@@ -1023,8 +1046,6 @@ public sealed class OwnerRecordAdministrationTests
     /// <summary>The service over a substituted row and the real binder, so a candidate is judged the way a start judges one.</summary>
     private sealed class RecordHarness
     {
-        private readonly ServedMailOwners servedOwners = new();
-
         internal RecordHarness(
             MailFathomPermission granted,
             Dictionary<string, string?>? configuration = null,
@@ -1051,7 +1072,7 @@ public sealed class OwnerRecordAdministrationTests
 
             // The roster is settled with somebody the tests never write for, so the default deployment reads as an
             // owner nothing declares — which is the ordinary case — until a test states otherwise.
-            this.servedOwners.Resolved(
+            this.ServedOwners.Resolved(
                 [Serving(MailOwnerId.Create(new Guid("99999999-9999-9999-9999-999999999999")), MailOwnerAccountSource.OwnerDocument)]);
 
             var settings = new ConfigurationBuilder()
@@ -1066,8 +1087,8 @@ public sealed class OwnerRecordAdministrationTests
                     new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
                     new FakeTimeProvider(Today)),
                 SecretValidation.OverRegisteredSchemes(),
-                this.servedOwners,
-                new ConfiguredOwnerMailAccounts(settings, this.servedOwners));
+                this.ServedOwners,
+                new ConfiguredOwnerMailAccounts(settings, this.ServedOwners));
         }
 
         internal OwnerRecordAdministration Records { get; }
@@ -1076,10 +1097,12 @@ public sealed class OwnerRecordAdministrationTests
 
         internal IOwnerSettingsDocumentWriter Store { get; }
 
+        internal ServedMailOwners ServedOwners { get; } = new();
+
         internal void Holding(MailOwnerId owner, string json, long version) =>
             this.Documents.ReadAsync(owner, Arg.Any<CancellationToken>())
                 .Returns(new OwnerSettingsDocument(owner, $"owner-{owner.Value:D}", json, version, WrittenAtRuntime: true));
 
-        internal void Roster(params ServedMailOwner[] served) => this.servedOwners.Resolved(served);
+        internal void Roster(params ServedMailOwner[] served) => this.ServedOwners.Resolved(served);
     }
 }

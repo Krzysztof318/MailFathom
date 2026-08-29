@@ -10,6 +10,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
       xmlns:utu="using:Uno.Toolkit.UI"
       xmlns:messages="using:MailFathom.Client.Presentation.Messages"
       xmlns:reading="using:MailFathom.Client.Presentation.Spaces.Mail.Reading"
+      xmlns:search="using:MailFathom.Client.Presentation.Search"
       xmlns:spaces="using:MailFathom.Client.Presentation.Spaces"
       xmlns:threads="using:MailFathom.Client.Presentation.Threads"
       xmlns:workspace="using:MailFathom.Client.Presentation.Workspace"
@@ -25,6 +26,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
     <workspace:WorkspaceColumns>
       <workspace:WorkspaceColumns.Primary>
         <Grid>
+          <Grid Visibility="{Binding ShowsTimeline, Converter={StaticResource AffirmedVisibility}}">
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -45,6 +47,12 @@ Project repository: https://github.com/Krzysztof318/MailFathom
             <StackPanel Orientation="Horizontal"
                         Padding="12,8"
                         Spacing="8">
+              <Button x:Uid="MailPage.Button.Search"
+                      Command="{Binding OpenSearch}">
+                <FontIcon Glyph="&#xE721;"
+                          FontSize="14" />
+              </Button>
+
               <ToggleButton x:Uid="MailPage.Toggle.Order"
                             Command="{Binding ReverseOrder}"
                             IsChecked="{Binding ReadsOldestFirst, Mode=OneWay}">
@@ -132,93 +140,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                       Padding="4,0,4,12">
               <ListView.ItemTemplate>
                 <DataTemplate x:DataType="messages:MessageRow">
-                  <!-- The row states itself once for a screen reader and draws itself in parts for everybody else. The
-                       parts are raw to the accessibility tree deliberately: read out separately they would be six
-                       fragments per row and fifty rows of them. -->
-                  <Grid Padding="4,8"
-                        ColumnSpacing="8"
-                        AutomationProperties.Name="{x:Bind Announcement}">
-                    <Grid.ColumnDefinitions>
-                      <ColumnDefinition Width="Auto" />
-                      <ColumnDefinition />
-                      <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-
-                    <!-- Unread is a mark rather than a word, and absent rather than drawn faint where the message has
-                         been read. -->
-                    <Border Width="8"
-                            Height="8"
-                            CornerRadius="4"
-                            VerticalAlignment="Top"
-                            Margin="0,6,0,0"
-                            AutomationProperties.AccessibilityView="Raw"
-                            Background="{ThemeResource PrimaryBrush}"
-                            Visibility="{x:Bind IsUnread, Converter={StaticResource AffirmedVisibility}}" />
-
-                    <StackPanel Grid.Column="1"
-                                Spacing="2">
-                      <TextBlock Text="{x:Bind Correspondent}"
-                                 Style="{StaticResource BodyStrongTextBlockStyle}"
-                                 Foreground="{ThemeResource OnSurfaceBrush}"
-                                 AutomationProperties.AccessibilityView="Raw"
-                                 TextTrimming="CharacterEllipsis" />
-
-                      <TextBlock Text="{x:Bind Subject}"
-                                 Style="{StaticResource BodyTextBlockStyle}"
-                                 Foreground="{ThemeResource OnSurfaceBrush}"
-                                 AutomationProperties.AccessibilityView="Raw"
-                                 TextTrimming="CharacterEllipsis" />
-
-                      <!-- A message this deployment holds but has not extracted yet draws one line less rather than an
-                           empty one. -->
-                      <TextBlock Text="{x:Bind Preview}"
-                                 Style="{StaticResource CaptionTextBlockStyle}"
-                                 Foreground="{ThemeResource OnSurfaceVariantBrush}"
-                                 AutomationProperties.AccessibilityView="Raw"
-                                 TextTrimming="CharacterEllipsis"
-                                 Visibility="{x:Bind HasPreview, Converter={StaticResource AffirmedVisibility}}" />
-                    </StackPanel>
-
-                    <StackPanel Grid.Column="2"
-                                Spacing="2"
-                                HorizontalAlignment="Right">
-                      <TextBlock Text="{x:Bind Received}"
-                                 HorizontalAlignment="Right"
-                                 Style="{StaticResource CaptionTextBlockStyle}"
-                                 Foreground="{ThemeResource OnSurfaceVariantBrush}"
-                                 AutomationProperties.AccessibilityView="Raw" />
-
-                      <StackPanel Orientation="Horizontal"
-                                  HorizontalAlignment="Right"
-                                  Spacing="4">
-                        <FontIcon Glyph="&#xE172;"
-                                  FontSize="12"
-                                  AutomationProperties.AccessibilityView="Raw"
-                                  Foreground="{ThemeResource OnSurfaceVariantBrush}"
-                                  Visibility="{x:Bind IsAnswered, Converter={StaticResource AffirmedVisibility}}" />
-
-                        <FontIcon Glyph="&#xE7C1;"
-                                  FontSize="12"
-                                  AutomationProperties.AccessibilityView="Raw"
-                                  Foreground="{ThemeResource TertiaryBrush}"
-                                  Visibility="{x:Bind IsFlagged, Converter={StaticResource AffirmedVisibility}}" />
-
-                        <FontIcon Glyph="&#xE723;"
-                                  FontSize="12"
-                                  AutomationProperties.AccessibilityView="Raw"
-                                  Foreground="{ThemeResource OnSurfaceVariantBrush}"
-                                  Visibility="{x:Bind HasAttachments, Converter={StaticResource AffirmedVisibility}}" />
-
-                        <!-- One attachment is what the mark already says, so the number appears only where there is
-                             more than one of them. -->
-                        <TextBlock Text="{x:Bind AttachmentCountText}"
-                                   Style="{StaticResource CaptionTextBlockStyle}"
-                                   AutomationProperties.AccessibilityView="Raw"
-                                   Foreground="{ThemeResource OnSurfaceVariantBrush}"
-                                   Visibility="{x:Bind ShowsAttachmentCount, Converter={StaticResource AffirmedVisibility}}" />
-                      </StackPanel>
-                    </StackPanel>
-                  </Grid>
+                  <messages:MessageRowView Row="{x:Bind}" />
                 </DataTemplate>
               </ListView.ItemTemplate>
             </ListView>
@@ -312,6 +234,9 @@ Project repository: https://github.com/Krzysztof318/MailFathom
               </utu:LoadingView.LoadingContent>
             </utu:LoadingView>
           </StackPanel>
+          </Grid>
+
+          <search:MailSearchView Visibility="{Binding IsSearchOpen, Converter={StaticResource AffirmedVisibility}}" />
         </Grid>
       </workspace:WorkspaceColumns.Primary>
       <workspace:WorkspaceColumns.Companion>

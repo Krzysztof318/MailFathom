@@ -20,13 +20,13 @@ internal sealed record MailOwnerList(
 /// <param name="Id">The identifier the deployment minted for them, which every act names them by.</param>
 /// <param name="DisplayName">The label an administrator tells them apart by, which may change and is never the identity.</param>
 /// <param name="RecordIsTheirOwn">Whether their mail accounts come from their own record rather than from a configuration source.</param>
-/// <param name="Served">Whether the running deployment is serving them, which is false for an owner recorded since it started.</param>
+/// <param name="Served">Whether the running deployment is serving them.</param>
 /// <param name="DeclaredInConfiguration">Whether a configuration source names them, so a start puts their label back and writes their row again after an erasure.</param>
 /// <remarks>
 /// The label is here because an identifier is what a command needs and a person is what an operator is thinking about;
 /// the three flags are here because each is a different thing to act on — the first says an adoption still has
-/// something to move, the second says the deployment owes a restart before this owner's mail is read, and the third
-/// says the deployment's own files are where this owner is changed and removed.
+/// something to move, the second says whether this owner's mail is read now, and the third says the deployment's own
+/// files are where this owner is changed and removed.
 /// </remarks>
 internal sealed record MailOwnerRosterEntry(
     [property: JsonPropertyName("id")] Guid Id,

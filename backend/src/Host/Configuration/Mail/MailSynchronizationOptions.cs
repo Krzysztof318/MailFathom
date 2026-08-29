@@ -41,7 +41,7 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     /// <summary>What the shutdown budget keeps for the hosted services that stop beside a synchronization drain.</summary>
     private static readonly TimeSpan HostShutdownMargin = TimeSpan.FromSeconds(5);
 
-    private readonly Lazy<MailSynchronizationSettingsReaders> readers;
+    private Lazy<MailSynchronizationSettingsReaders> readers;
 
     /// <summary>Initializes the options the binder is about to write into.</summary>
     /// <remarks>
@@ -50,10 +50,7 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     /// reload binds a new instance rather than rewriting this one — so a value they memoize can never describe
     /// superseded configuration.
     /// </remarks>
-    public MailSynchronizationOptions() =>
-        this.readers = new(
-            () => new MailSynchronizationSettingsReaders(this),
-            LazyThreadSafetyMode.ExecutionAndPublication);
+    public MailSynchronizationOptions() => this.readers = ReadersFor(this);
 
     /// <summary>Gets the port readers this snapshot is read through.</summary>
     /// <remarks>
@@ -71,12 +68,28 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     /// candidate's own.
     /// </para>
     /// <para>
-    /// It is the roster holder rather than a copy of what it held, because the holder is filled once by a startup gate
-    /// that runs after the snapshot is first materialized. Reading it through the holder is what lets a lookup see the
-    /// answer the gate established rather than the emptiness that preceded it.
+    /// It is the immutable roster this snapshot was published with. A later owner-document commit produces another
+    /// settings snapshot, so a run already under way never sees its account declaration change beneath it.
     /// </para>
     /// </remarks>
-    internal ServedMailOwners? ServedOwners { get; set; }
+    internal IReadOnlyList<ServedMailOwner>? ServedOwners { get; set; }
+
+    /// <summary>Copies these bound settings onto one immutable owner roster, with readers of its own.</summary>
+    internal MailSynchronizationOptions WithServedOwners(IReadOnlyList<ServedMailOwner> servedOwners)
+    {
+        ArgumentNullException.ThrowIfNull(servedOwners);
+
+        var snapshot = (MailSynchronizationOptions)this.MemberwiseClone();
+        snapshot.ServedOwners = servedOwners;
+        snapshot.readers = ReadersFor(snapshot);
+
+        return snapshot;
+    }
+
+    private static Lazy<MailSynchronizationSettingsReaders> ReadersFor(MailSynchronizationOptions settings) =>
+        new(
+            () => new MailSynchronizationSettingsReaders(settings),
+            LazyThreadSafetyMode.ExecutionAndPublication);
 
     /// <summary>Gets or sets whether periodic synchronization is enabled.</summary>
     public bool Enabled { get; set; }
@@ -116,6 +129,17 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     /// </remarks>
     [Range(1, 20)]
     public int MaxConcurrentFoldersPerAccount { get; set; } = 1;
+
+    /// <summary>Gets or sets how many open or establishing IMAP connections one server host may hold across all owners.</summary>
+    /// <remarks>
+    /// Push sessions, folder synchronization, discovery, and the account's write connection all consume this one
+    /// process-wide budget. Push may consume at most one less than the bound, so a long-lived watch cannot prevent
+    /// ordinary synchronization from reaching the host. The value is read once because every existing lease belongs
+    /// to the budget that admitted it.
+    /// </remarks>
+    [Range(2, 1000)]
+    public int MaxConcurrentConnectionsPerHost { get; set; } =
+        MailServerConnectionBudget.DefaultMaximumConnectionsPerHost;
 
     /// <summary>Gets or sets how long an account's write connection is kept after the last change it carried.</summary>
     /// <remarks>
@@ -661,20 +685,25 @@ internal sealed class MailSynchronizationOptions : IValidatableObject
     /// Every other reader wants the account it was handed to exist, and keeps failing when it does not.
     /// </para>
     /// <para>
-    /// This section is searched first and the roster second, and the two never both answer: an owner whose accounts are
-    /// in this section holds none of their own, and an owner who holds their own is not served from this section. What
-    /// makes the identifier enough to search either of them is the deployment-wide bound on mail-account names that
-    /// <c>DeclaredOwners</c> states — until the per-account ports are keyed by the owner as well, a name two owners
-    /// shared would resolve to whichever declaration the search met.
+    /// The roster is searched first because an adoption publishes the owner's document without rewriting the file it
+    /// superseded. A later start refuses that stale deployment section, but the running process must follow the commit
+    /// now. What makes the identifier enough to search either source is the deployment-wide bound on mail-account names
+    /// that <c>DeclaredOwners</c> states.
     /// </para>
     /// </remarks>
     internal MailSynchronizationAccountOptions? FindConfiguredAccount(MailAccountId accountId) =>
-        (this.Accounts ?? []).SingleOrDefault(
+        this.ServedOwners?
+            .SelectMany(static owner => owner.MailAccounts)
+            .SingleOrDefault(
+                candidate => !string.IsNullOrWhiteSpace(candidate.AccountId)
+                    && StringComparer.Ordinal.Equals(
+                        MailAccountId.Create(candidate.AccountId).Value,
+                        accountId.Value))
+        ?? (this.Accounts ?? []).SingleOrDefault(
             candidate => !string.IsNullOrWhiteSpace(candidate.AccountId)
                 && StringComparer.Ordinal.Equals(
                     MailAccountId.Create(candidate.AccountId).Value,
-                    accountId.Value))
-        ?? this.ServedOwners?.FindAccount(accountId)?.Account;
+                    accountId.Value));
 
     /// <summary>Finds the account a reader was handed, failing when this snapshot does not name it.</summary>
     /// <param name="accountId">The local account identifier.</param>

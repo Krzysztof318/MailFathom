@@ -8,6 +8,7 @@ using MailFathom.Application.Resilience;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Mutations;
+using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.MailKit.Writes;
 using MailFathom.Infrastructure.Observability;
 using MailFathom.Infrastructure.Resilience;
@@ -277,6 +278,7 @@ public sealed class OrchestratedMailboxMutationTests(MailFathomOrchestrationFixt
             scope.GetRequiredService<IServiceScopeFactory>(),
             scope.GetRequiredService<OutboundOperationExecutor>(),
             scope.GetRequiredService<ITransientFailureClassifier>(),
+            scope.GetRequiredService<MailServerConnectionBudget>(),
             new MailboxWriteSessionOptions(),
             TimeProvider.System,
             NullLogger<MailboxWriteConnectionPool>.Instance);

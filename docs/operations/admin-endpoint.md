@@ -1237,10 +1237,10 @@ somebody's password. Material supplied through these routes is sealed under the 
 [data-encryption key](secret-provisioning.md) like every other MailFathom secret, and what the record keeps is the
 reference to it.
 
-**A roster settles when the process starts.** An owner recorded, adopted, or erased through these routes changes the
-database at once and changes what the running process reads at its next restart, which is what every command that
-records one says in its own output. That is the same rule the deployment's own configuration follows, for the same
-reason: what a synchronization run reads is decided once, so that a run in flight is never reading two answers.
+**A committed owner record is published to the running process.** Recording, adopting, changing, or erasing an owner
+replaces the runtime account snapshot after the database commit. The coordinator stops scheduling the superseded
+account set and starts the new one without a restart. A synchronization run already in flight keeps the snapshot it
+began with and drains before its supervisor ends, so one run never reads two document versions.
 
 ### Owner credentials
 

@@ -3,6 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Host.Configuration;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Primitives;
 
 namespace MailFathom.Host.UnitTests.TestDoubles;
 
@@ -10,5 +12,19 @@ namespace MailFathom.Host.UnitTests.TestDoubles;
 internal sealed class StubSettingsSnapshot<TSettings>(TSettings current) : ISettingsSnapshot<TSettings>
     where TSettings : class
 {
-    public TSettings Current { get; set; } = current;
+    private ConfigurationReloadToken reloadToken = new();
+
+    public TSettings Current
+    {
+        get;
+        set
+        {
+            field = value;
+
+            var changed = Interlocked.Exchange(ref this.reloadToken, new ConfigurationReloadToken());
+            changed.OnReload();
+        }
+    } = current;
+
+    public IChangeToken GetReloadToken() => Volatile.Read(ref this.reloadToken);
 }

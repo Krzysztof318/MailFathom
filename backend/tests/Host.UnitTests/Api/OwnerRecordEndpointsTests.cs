@@ -105,7 +105,7 @@ public sealed class OwnerRecordEndpointsTests
         Assert.False(erasure.WasServed);
     }
 
-    /// <summary>A restart is owed where the process was serving the person it removed, and nothing else would tell an operator so.</summary>
+    /// <summary>The response says whether the erasure also removed the person from the running process.</summary>
     [Fact]
     public async Task EraseAsync_AnOwnerThisProcessIsServing_ReportsThatItWasServingThem()
     {

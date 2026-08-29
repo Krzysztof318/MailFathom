@@ -26,13 +26,13 @@ internal sealed record OwnerRosterResponse(IReadOnlyList<OwnerRosterEntryRespons
 /// <param name="Id">The identifier the owner was minted under, which every other act names them by.</param>
 /// <param name="DisplayName">The label an administrator tells them apart by, which may change and is never the identity.</param>
 /// <param name="RecordIsTheirOwn">Whether this owner's mail accounts come from their own record rather than from a configuration source.</param>
-/// <param name="Served">Whether the running process is serving them, which is <see langword="false" /> for an owner recorded since it started and for one no source declares.</param>
+/// <param name="Served">Whether the running process is serving them, which is <see langword="false" /> for one no source declares.</param>
 /// <param name="DeclaredInConfiguration">Whether a configuration source names this owner, so a start puts their label back and writes their row again after an erasure.</param>
 /// <remarks>
 /// The last three are reported apart because they answer different questions and an operator acts on each differently.
 /// An owner whose record is not yet their own is one an adoption still has something to move; an owner the process is
-/// not serving is one whose mail is neither read nor refreshed until this deployment is restarted; an owner a
-/// configuration source declares is one whose label a start rewrites and whose erasure a start undoes.
+/// not serving is one whose mail is neither read nor refreshed; an owner a configuration source declares is one whose
+/// label a start rewrites and whose erasure a start undoes.
 /// </remarks>
 internal sealed record OwnerRosterEntryResponse(
     Guid Id,
@@ -75,7 +75,7 @@ internal sealed record OwnerProvisionedResponse(Guid Id);
 /// <summary>What an erasure removed.</summary>
 /// <param name="Erased">Whether this deployment held the owner at all.</param>
 /// <param name="WasServed">Whether the running process was serving them when they were erased.</param>
-/// <remarks>The second is reported because it is what tells an operator a restart is owed: a process that was serving an erased owner goes on composing callers against a row that is gone.</remarks>
+/// <remarks>The second reports whether the erasure also removed the owner from the running process.</remarks>
 internal sealed record OwnerErasureResponse(bool Erased, bool WasServed);
 
 /// <summary>What the deployment reports when asked for one owner's record.</summary>

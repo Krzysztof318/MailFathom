@@ -9,6 +9,7 @@ using MailFathom.Client.Deployment;
 using MailFathom.Client.Presentation;
 using MailFathom.Client.Presentation.Mailboxes;
 using MailFathom.Client.Presentation.Messages;
+using MailFathom.Client.Presentation.Search;
 using MailFathom.Client.Presentation.Spaces.Mail.Reading;
 using MailFathom.Client.Presentation.Threads;
 using MailFathom.Client.Presentation.Workspace;
@@ -148,6 +149,21 @@ public sealed class ResourceTableTests
     {
         // Arrange
         var expected = WorkspaceModel.ScopeResourceKeys;
+
+        // Act
+        var table = DeclaredLanguages.TableOf(culture);
+
+        // Assert
+        Assert.All(expected, key => Assert.True(table.ContainsKey(key), key));
+    }
+
+    /// <summary>Every explanation composed into a search result or its scope is present in each language.</summary>
+    [Theory]
+    [MemberData(nameof(Languages))]
+    public void Tables_TheWordsASearchIsExplainedWith_AreNamedInEveryLanguage(string culture)
+    {
+        // Arrange
+        var expected = MailSearchWords.ResourceKeys;
 
         // Act
         var table = DeclaredLanguages.TableOf(culture);

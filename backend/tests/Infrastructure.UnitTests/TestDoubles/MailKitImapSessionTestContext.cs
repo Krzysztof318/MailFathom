@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography.X509Certificates;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Accounts;
@@ -28,6 +29,9 @@ internal static class MailKitImapSessionTestContext
     internal static MailAccountId PrimaryAccount { get; } = MailAccountId.Create("primary");
 
     internal static MailAccountId SecondaryAccount { get; } = MailAccountId.Create("secondary");
+
+    /// <summary>Creates a generous isolated budget, so adapter tests wait only where the budget test asks them to.</summary>
+    internal static MailServerConnectionBudget CreateConnectionBudget() => new(1000);
 
     internal static MailFolderResolution InboxFolder { get; } = MailFolderResolution.FirstBindingOf(
         MailFolderAlias.Create("inbox"),
@@ -74,6 +78,7 @@ internal static class MailKitImapSessionTestContext
         ImapUid.Create(uid));
 
     /// <summary>Builds a catalog over one scripted connection, so a discovery test scripts the same server a session test does.</summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The returned test adapter owns the isolated process-lifetime budget through every connection it creates; no operating-system handle is allocated.")]
     internal static MailKitRemoteFolderCatalog CreateFolderCatalog(
         OutboundResilienceTestHost resilience,
         FakeImapClient client)
@@ -85,7 +90,8 @@ internal static class MailKitImapSessionTestContext
             CreateSettingsProvider(),
             new UnusedMailAccessTokenSource(),
             resilience.Executor,
-            resilience.TransientFailureClassifier);
+            resilience.TransientFailureClassifier,
+            CreateConnectionBudget());
     }
 
     /// <summary>Opens a session over one scripted connection that authenticates with the default permitted mechanism.</summary>
@@ -132,6 +138,7 @@ internal static class MailKitImapSessionTestContext
     }
 
     /// <summary>Builds a push session factory over a scripted connection sequence, so a reconnection can be asserted.</summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The returned test factory owns the isolated process-lifetime budget through every connection it creates; no operating-system handle is allocated.")]
     internal static MailKitImapNotificationSessionFactory CreateNotificationSessionFactory(
         OutboundResilienceTestHost resilience,
         Func<IImapClient> clientFactory,
@@ -143,6 +150,7 @@ internal static class MailKitImapSessionTestContext
             new UnusedMailAccessTokenSource(),
             resilience.Executor,
             resilience.TransientFailureClassifier,
+            CreateConnectionBudget(),
             requestFolderNotifications ?? ((_, _, _) => Task.CompletedTask),
             clock);
 
@@ -154,6 +162,7 @@ internal static class MailKitImapSessionTestContext
         CreateFactory(resilience, clientFactory, settingsProvider, new UnusedMailAccessTokenSource());
 
     /// <summary>Builds a factory whose connections authenticate with an access token from the supplied source.</summary>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The returned test factory owns the isolated process-lifetime budget through every connection it creates; no operating-system handle is allocated.")]
     internal static MailKitImapMailboxSessionFactory CreateFactory(
         OutboundResilienceTestHost resilience,
         Func<IImapClient> clientFactory,
@@ -165,6 +174,7 @@ internal static class MailKitImapSessionTestContext
             accessTokenSource,
             resilience.Executor,
             resilience.TransientFailureClassifier,
+            CreateConnectionBudget(),
             new FakeTimeProvider(ObservedAt));
 
     /// <summary>A policy that permits only the registered token-bearing mechanism, so no password path is reachable.</summary>

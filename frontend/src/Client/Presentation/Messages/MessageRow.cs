@@ -61,6 +61,33 @@ public sealed partial record MessageRow(
     bool HasAttachments,
     int AttachmentCount)
 {
+    /// <summary>An undrawn row used only while a reusable row control receives its binding.</summary>
+    internal static MessageRow Nothing { get; } = new(
+        string.Empty,
+        ThreadId: null,
+        string.Empty,
+        string.Empty,
+        string.Empty,
+        string.Empty,
+        string.Empty,
+        IsUnread: false,
+        IsFlagged: false,
+        IsAnswered: false,
+        HasAttachments: false,
+        AttachmentCount: 0);
+
+    /// <summary>Gets why this message matched a search, or empty when this is an ordinary timeline row.</summary>
+    public string MatchReason { get; init; } = string.Empty;
+
+    /// <summary>Gets the extracts around matched words, or empty when no word extract explains the match.</summary>
+    public string MatchExtract { get; init; } = string.Empty;
+
+    /// <summary>Gets whether this row carries the explanation only a search result has.</summary>
+    public bool HasMatchReason => this.MatchReason.Length > 0;
+
+    /// <summary>Gets whether this row carries an extract around matched words.</summary>
+    public bool HasMatchExtract => this.MatchExtract.Length > 0;
+
     /// <summary>Gets whether there is an opening of the message's own text to draw.</summary>
     /// <remarks>
     /// A message this deployment holds but has not extracted yet has none, which is an ordinary state of a folder still

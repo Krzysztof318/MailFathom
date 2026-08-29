@@ -585,14 +585,6 @@ internal sealed class OwnerRecordAdministration(
                 binding.Refusals);
         }
 
-        if (this.FindNamesHeldByAnotherOwner(owner, bound.MailAccounts) is { Count: > 0 } taken)
-        {
-            return OwnerRecordWriteOutcome.Refused(
-                MailFathomErrorCode.ConfigurationCandidateInvalid,
-                inForce.Version,
-                taken);
-        }
-
         if (authority == OwnerRecordAuthority.Owner
             && FindSecretsTheOwnerMayNotName(owner, inForce.Json, candidateJson) is { Count: > 0 } introduced)
         {
@@ -614,21 +606,40 @@ internal sealed class OwnerRecordAdministration(
                 unusable);
         }
 
-        if (await store.CommitAsync(owner, candidateJson, inForce.Version, cancellationToken) is { } committed)
-        {
-            return OwnerRecordWriteOutcome.Committed(committed);
-        }
+        await servedOwners.WaitForRosterPublicationAsync(cancellationToken);
 
-        // The record moved while this candidate was being judged, or the owner was erased under it. Which of the two
-        // is settled by reading rather than assumed, because the statement distinguishes neither.
-        return await documents.ReadAsync(owner, cancellationToken) is { } current
-            ? OwnerRecordWriteOutcome.Refused(
-                MailFathomErrorCode.ConfigurationVersionSuperseded,
-                current.Version,
-                [
-                    $"The change was composed over owner record version {inForce.Version}, and version {current.Version} is in force. Read the record as it now stands and decide again against it.",
-                ])
-            : null;
+        try
+        {
+            if (this.FindNamesHeldByAnotherOwner(owner, bound.MailAccounts) is { Count: > 0 } taken)
+            {
+                return OwnerRecordWriteOutcome.Refused(
+                    MailFathomErrorCode.ConfigurationCandidateInvalid,
+                    inForce.Version,
+                    taken);
+            }
+
+            if (await store.CommitAsync(owner, candidateJson, inForce.Version, cancellationToken) is { } committed)
+            {
+                servedOwners.OwnerDocumentPublished(owner, inForce.DisplayName, bound.MailAccounts, committed);
+
+                return OwnerRecordWriteOutcome.Committed(committed);
+            }
+
+            // The record moved while this candidate was being judged, or the owner was erased under it. Which of the
+            // two is settled by reading rather than assumed, because the statement distinguishes neither.
+            return await documents.ReadAsync(owner, cancellationToken) is { } current
+                ? OwnerRecordWriteOutcome.Refused(
+                    MailFathomErrorCode.ConfigurationVersionSuperseded,
+                    current.Version,
+                    [
+                        $"The change was composed over owner record version {inForce.Version}, and version {current.Version} is in force. Read the record as it now stands and decide again against it.",
+                    ])
+                : null;
+        }
+        finally
+        {
+            servedOwners.ReleaseRosterPublication();
+        }
     }
 
     /// <summary>Names every secret-bearing value the candidate carries that this owner may not point their record at.</summary>
@@ -702,16 +713,14 @@ internal sealed class OwnerRecordAdministration(
     /// The deployment-wide rule <c>DeclaredOwners</c> states for a file, asked again of a record so that the two cannot
     /// disagree: a mail account belongs to its owner, but this release resolves an account's settings by its identifier
     /// alone, so a name two owners share would reach whichever of the two the lookup met first. It is asked of the
-    /// roster this process settled rather than of every record the deployment holds, because the roster is what those
+    /// published runtime roster rather than of every record the deployment holds, because the roster is what those
     /// lookups actually resolve through — and reading everybody's document per write would be a query about other
     /// people's records on every change to one, which is the shape the reader beside this deliberately does not have.
     /// </para>
     /// <para>
-    /// What that leaves is a snapshot: two writes into two record-served owners in one process run are each judged
-    /// against a roster the other had not moved, so both can name one account. This is the early refusal rather than
-    /// the guarantee, and <c>ServedMailOwnersStartupGate</c> holds the guarantee — it composes the roster a start would
-    /// serve and refuses a start in which one name reaches two owners, which is the first moment the two records are
-    /// in one place.
+    /// Writes through this process are serialized from this check through publication, so each one sees the last one.
+    /// Two replicas can still commit conflicting owner documents independently; <c>ServedMailOwnersStartupGate</c>
+    /// holds the deployment-wide guarantee by composing every record together and refusing the next start.
     /// </para>
     /// </remarks>
     private IReadOnlyList<string> FindNamesHeldByAnotherOwner(
@@ -750,10 +759,9 @@ internal sealed class OwnerRecordAdministration(
 
     /// <summary>Reads where one owner's mail accounts come from, which is their own record for an owner the roster does not hold.</summary>
     /// <remarks>
-    /// An owner provisioned after this process settled its roster is not on it, and neither is one the deployment holds
-    /// and no source declares. Neither has a configuration section that a write into their record could be replacing,
-    /// so both are ordinary owners here — which is what makes an owner an administrator has just recorded writable at
-    /// once rather than after a restart.
+    /// An owner not yet published to this process, and one the deployment holds and no source declares, have no
+    /// configuration section a write into their record could be replacing. Both are ordinary owners here, which keeps
+    /// the narrow interval between provisioning the row and publishing the runtime roster writable.
     /// </remarks>
     private MailOwnerAccountSource SourceOf(MailOwnerId owner) =>
         servedOwners.Owners.FirstOrDefault(served => served.Owner == owner)?.Source

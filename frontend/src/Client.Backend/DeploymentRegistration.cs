@@ -64,7 +64,11 @@ public static class DeploymentRegistration
                     // it reads, which is the half that can say what happened.
                     transport.MaxResponseContentBufferSize = DeploymentExchange.MaxMailBodyBytes;
                 })
-            .AddHttpMessageHandler<OwnerCredentialHandler>();
+            .AddHttpMessageHandler<OwnerCredentialHandler>()
+
+            // This transport carries search text in one route's query string. The factory's default loggers record
+            // request URIs, so none may sit around the transport and turn that mail metadata into a log entry.
+            .RemoveAllLoggers();
 
         // Neither a base address nor the credential handler, and the second of those is the point: what this transport
         // sends is one candidate credential, set on the request itself. Attaching whoever is already signed in would

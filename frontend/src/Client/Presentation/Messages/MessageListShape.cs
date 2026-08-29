@@ -38,11 +38,11 @@ internal static class MessageListShape
         ArgumentNullException.ThrowIfNull(window);
         ArgumentNullException.ThrowIfNull(words);
 
-        return [.. window.Messages.Select(message => Draw(message, window.Place, now, words))];
+        return [.. window.Messages.Select(message => Of(message, window.Place, now, words))];
     }
 
     /// <summary>Draws one message as the line the list shows for it.</summary>
-    private static MessageRow Draw(
+    internal static MessageRow Of(
         DeploymentMailMessage message,
         MessagePlace place,
         DateTimeOffset now,

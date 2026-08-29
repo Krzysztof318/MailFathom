@@ -9,6 +9,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Infrastructure.Observability;
+using Microsoft.Extensions.Primitives;
 
 namespace MailFathom.Host.Hosting.Workers;
 
@@ -20,16 +21,16 @@ namespace MailFathom.Host.Hosting.Workers;
 /// the supervisor of the account it runs for.
 /// </para>
 /// <para>
-/// It keeps checking on its own interval rather than starting the supervisors once, for two reasons that share one
-/// mechanism: an account a configuration reload adds gets a supervisor without a restart, and a supervisor that ended
-/// unexpectedly is started again instead of leaving one account silently unsynchronized. A supervisor whose account
-/// was removed ends itself, so nothing here has to cancel it.
+/// It reconciles when a published snapshot changes, when a supervisor ends, and on its own interval. A reload therefore
+/// adds, replaces, or removes a supervisor without a restart; an unexpected end is likewise restarted instead of
+/// leaving one account silently unsynchronized. Replacing a supervisor cancels scheduling and never its in-flight
+/// work-unit token, so a run drains against the snapshot it began with.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this hosted service.")]
 internal sealed partial class MailSynchronizationCoordinator : BackgroundService
 {
-    private readonly Dictionary<string, Task> supervisedAccounts = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, SupervisedAccount> supervisedAccounts = new(StringComparer.Ordinal);
     private readonly IServiceScopeFactory scopeFactory;
     private readonly ISettingsSnapshot<MailSynchronizationOptions> settings;
     private readonly MailSynchronizationTelemetry telemetry;
@@ -90,13 +91,20 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
 
         try
         {
-            using var supervisionTimer = new PeriodicTimer(startupSettings.Interval, this.timeProvider);
-
             do
             {
-                this.SuperviseConfiguredAccounts(accountRunSlots, stoppingToken, workUnitCancellation.Token);
+                var settingsReload = this.settings.GetReloadToken();
+                var settingsSnapshot = this.settings.Current;
+
+                this.SuperviseConfiguredAccounts(
+                    settingsSnapshot,
+                    accountRunSlots,
+                    stoppingToken,
+                    workUnitCancellation.Token);
+
+                await this.WaitForNextSupervisionPassAsync(settingsReload, startupSettings.Interval, stoppingToken);
             }
-            while (await supervisionTimer.WaitForNextTickAsync(stoppingToken));
+            while (!stoppingToken.IsCancellationRequested);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
@@ -106,21 +114,61 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
         await this.DrainSupervisedAccountsAsync(workUnitCancellation, startupSettings.ShutdownDrainTimeout);
     }
 
+    /// <summary>Waits until the supervision interval elapses or a usable settings snapshot replaces the current one.</summary>
+    private async Task WaitForNextSupervisionPassAsync(
+        IChangeToken settingsReload,
+        TimeSpan interval,
+        CancellationToken stoppingToken)
+    {
+        using var waitCancellation = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+        using var reloadSubscription = settingsReload.RegisterChangeCallback(
+            static state => ((CancellationTokenSource)state!).Cancel(),
+            waitCancellation);
+
+        var intervalElapsed = Task.Delay(interval, this.timeProvider, waitCancellation.Token);
+        Task supervisionEnded = this.supervisedAccounts.Count == 0
+            ? Task.Delay(Timeout.InfiniteTimeSpan, waitCancellation.Token)
+            : Task.WhenAny(this.supervisedAccounts.Values.Select(static account => account.Task));
+
+        await Task.WhenAny(intervalElapsed, supervisionEnded);
+        await waitCancellation.CancelAsync();
+    }
+
     /// <summary>Starts a supervisor for every configured account that has none running.</summary>
     /// <remarks>
     /// A supervisor task that has completed is one whose account was removed, or one that ended unexpectedly. Both are
     /// answered the same way: if the current snapshot still names the account, it is supervised again. A supervisor
     /// never faults, so replacing a completed task leaves nothing unobserved.
     /// </remarks>
+    [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Ownership of each linked cancellation source passes to the supervised-account record and is released when that supervisor ends or the coordinator drains.")]
     private void SuperviseConfiguredAccounts(
+        MailSynchronizationOptions settingsSnapshot,
         SemaphoreSlim accountRunSlots,
         CancellationToken schedulingToken,
         CancellationToken workUnitToken)
     {
+        foreach (var accountId in this.supervisedAccounts
+            .Where(static entry => entry.Value.Task.IsCompleted)
+            .Select(static entry => entry.Key)
+            .ToArray())
+        {
+            this.supervisedAccounts.Remove(accountId, out var completed);
+            completed!.SchedulingCancellation.Dispose();
+        }
+
+        foreach (var supervision in this.supervisedAccounts.Values
+            .Where(supervision => !ReferenceEquals(supervision.SettingsSnapshot, settingsSnapshot)))
+        {
+            supervision.SchedulingCancellation.Cancel();
+        }
+
         // Read through the application port in a scope of its own rather than off the configuration snapshot, because
         // the served set is now configuration plus the owner a startup gate established and only the composed port
         // holds both. The scope lives for the read: a supervisor gets a scope of its own per work unit.
         using var accountScope = this.scopeFactory.CreateScope();
+        accountScope.ServiceProvider
+            .GetRequiredService<ScopedMailSynchronizationSettings>()
+            .UseRunSnapshot(settingsSnapshot);
 
         var servedAccounts = accountScope.ServiceProvider
             .GetRequiredService<IDeploymentMailAccountCatalog>()
@@ -128,16 +176,22 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
 
         foreach (var account in servedAccounts.Select(static account => account.Identity))
         {
-            if (this.supervisedAccounts.TryGetValue(account.Id.Value, out var supervision) && !supervision.IsCompleted)
+            if (this.supervisedAccounts.ContainsKey(account.Id.Value))
             {
                 continue;
             }
 
-            this.supervisedAccounts[account.Id.Value] = this.StartSupervisor(
+            var accountScheduling = CancellationTokenSource.CreateLinkedTokenSource(schedulingToken);
+            var task = this.StartSupervisor(
                 account,
                 accountRunSlots,
-                schedulingToken,
+                accountScheduling.Token,
                 workUnitToken);
+
+            this.supervisedAccounts[account.Id.Value] = new SupervisedAccount(
+                settingsSnapshot,
+                accountScheduling,
+                task);
 
             this.LogAccountSupervisionStarted(account.Id.Value);
         }
@@ -184,7 +238,7 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
             return;
         }
 
-        var supervision = Task.WhenAll(this.supervisedAccounts.Values);
+        var supervision = Task.WhenAll(this.supervisedAccounts.Values.Select(static account => account.Task));
 
         try
         {
@@ -197,7 +251,20 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
             await workUnitCancellation.CancelAsync();
             await supervision;
         }
+
+        foreach (var account in this.supervisedAccounts.Values)
+        {
+            account.SchedulingCancellation.Dispose();
+        }
+
+        this.supervisedAccounts.Clear();
     }
+
+    /// <summary>One account's supervisor, the snapshot it represents, and the scheduling stop it owns.</summary>
+    private sealed record SupervisedAccount(
+        MailSynchronizationOptions SettingsSnapshot,
+        CancellationTokenSource SchedulingCancellation,
+        Task Task);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "IMAP synchronization is disabled.")]
     private partial void LogSynchronizationDisabled();

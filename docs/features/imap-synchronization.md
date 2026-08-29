@@ -48,6 +48,17 @@ classification pass, the rules, and the cut that produces a message's passages �
 the account's outbox there, which is what makes sending correct without anything watching for it;
 [mail delivery](mail-delivery.md#how-a-written-down-send-reaches-a-server) states why that step can never fail the run.
 
+The account set is a published snapshot rather than a query the coordinator repeats. A validated configuration reload
+or a committed owner document raises its change token, and that signal replaces every supervisor together. The account
+set in the new snapshot then decides which accounts start, resume scheduling, or remain stopped; each replacement begins
+with a new schedule and failure backoff. A rejected reload raises no token and leaves the last valid snapshot in force.
+This costs no database query per account or per tick.
+
+Replacing a supervisor cancels its scheduling token and not the work-unit token. A run already writing content and its
+checkpoint therefore finishes against the immutable account snapshot it began with; only work still waiting to start
+is skipped. The coordinator starts the replacement after that supervisor has drained, so old and new document versions
+never run the same account concurrently.
+
 Each supervisor owns its own schedule, its own consecutive-failure count, and its own backoff, and creates a scope per
 folder work unit. That is what a server which stops answering can no longer reach: no other account inherits its
 failure state, waits out its backoff, or has its own interval pushed back by the folders it is still working through.
@@ -83,6 +94,25 @@ A deployment with a fast server and many folders raises it; nothing in the curre
 
 Both bounds count folders that are *synchronizing*. An account in push mode additionally holds one waiting connection
 per folder, which neither bound covers and [Push synchronization](#push-synchronization) explains.
+
+### One connection budget per mail server host
+
+`MaxConcurrentConnectionsPerHost` bounds every authenticated IMAP connection to the same host across all owners and
+accounts: synchronization sessions, folder discovery, push waits, and the idle write connection all take one slot and
+hold it until the socket closes. Host names are compared without regard to DNS casing. A protocol session still belongs
+to exactly one mail account; the budget shares capacity, never a client or an authenticated session.
+
+Push connections may occupy at most one less than the configured limit. They can remain open for the process lifetime,
+so allowing them to take every slot would let a full set of watches prevent the synchronization run needed to make
+progress. A further push attempt waits and can degrade to polling under the existing bounded establishment behavior,
+while ordinary work retains one route to the server.
+
+Three gauges make the bound readable, each tagged with the keyed process-local pseudonym
+`mailfathom.mail.server` rather than the configured host name:
+
+- `mailfathom.mail.server.connections.limit` — the configured ceiling;
+- `mailfathom.mail.server.connections.active` — connections holding slots;
+- `mailfathom.mail.server.connections.queued` — attempts waiting for a slot.
 
 ### Backoff is layered, and the layers never wrap each other
 

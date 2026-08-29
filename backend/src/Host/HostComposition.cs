@@ -151,7 +151,7 @@ internal static class HostComposition
         return AddNetworkSurfaces(builder);
     }
 
-    /// <summary>Refuses the owners this deployment declares before anything is registered against them, and puts the roster where a mail snapshot can read it.</summary>
+    /// <summary>Refuses the owners this deployment declares before anything is registered against them.</summary>
     /// <remarks>
     /// Who this deployment serves decides what every other section is read for, so it is judged first among the groups
     /// a start takes before its container exists. Nothing here reaches the database: what a declaration says is judged
@@ -164,11 +164,6 @@ internal static class HostComposition
         ComposedSettings.RefuseFirstOf(
             ComposedSettings.FindOwnerDeclarationRefusals(builder.Configuration, TimeProvider.System));
 
-        // The roster reaches a mail snapshot through the options framework's own post-configuration seam rather than
-        // through the bound sections, because the two halves of a mail account's declaration are established at
-        // different moments: the deployment's own section binds while the host is composed, and an owner's own is
-        // reconciled against the database afterwards.
-        builder.Services.AddSingleton<IPostConfigureOptions<MailSynchronizationOptions>, ServedOwnerMailAccounts>();
     }
 
     /// <summary>Registers the reading and writing sides of the deployment's persisted configuration, and the seam the layer is republished through.</summary>
@@ -246,7 +241,7 @@ internal static class HostComposition
         // the two cannot come to different answers about one deployment.
         builder.Services.AddSingleton<SeveralOwnerAdmission>();
         // What a configuration source still supplies for one owner, which is what an adoption moves and what a record
-        // is judged against. A singleton because both halves of it — the file and the roster this process settled — are
+        // is judged against. A singleton because both halves of it — the file and the published runtime roster — are
         // properties of the deployment rather than of a request.
         builder.Services.AddSingleton<ConfiguredOwnerMailAccounts>();
         // Scoped for the reason PersistedSettingsAdministration is: each asks AccessAuthorization for the permission
@@ -444,7 +439,10 @@ internal static class HostComposition
                 .FindDataEncryptionConfigurationErrorsAsync(candidate, cancellationToken),
             "DataEncryption",
             provider.GetRequiredService<ILogger<ValidatedSettingsSnapshot<DataEncryptionOptions>>>()));
-        builder.Services.AddSingleton<ISettingsSnapshot<MailSynchronizationOptions>>(provider => provider.GetRequiredService<ValidatedSettingsSnapshot<MailSynchronizationOptions>>());
+        builder.Services.AddSingleton(provider => new MailSynchronizationSettingsSnapshot(
+            provider.GetRequiredService<ValidatedSettingsSnapshot<MailSynchronizationOptions>>(),
+            provider.GetRequiredService<ServedMailOwners>()));
+        builder.Services.AddSingleton<ISettingsSnapshot<MailSynchronizationOptions>>(provider => provider.GetRequiredService<MailSynchronizationSettingsSnapshot>());
         builder.Services.AddSingleton<ISettingsSnapshot<PersistenceOptions>>(provider => provider.GetRequiredService<ValidatedSettingsSnapshot<PersistenceOptions>>());
         builder.Services.AddSingleton<ISettingsSnapshot<DataEncryptionOptions>>(provider => provider.GetRequiredService<ValidatedSettingsSnapshot<DataEncryptionOptions>>());
         // The key ring reads the published snapshot on every operation, so a key an operator adds reaches the next seal or
@@ -541,6 +539,9 @@ internal static class HostComposition
         // is also why the capacity is read once at startup, which the configuration reference marks as needing a restart.
         builder.Services.AddSingleton(provider => new RawMimeMemoryBudget(
             provider.GetRequiredService<ISettingsSnapshot<MailSynchronizationOptions>>().Current.MaxInFlightRawMimeBytes));
+        builder.Services.AddSingleton(provider => new MailServerConnectionBudget(
+            provider.GetRequiredService<ISettingsSnapshot<MailSynchronizationOptions>>()
+                .Current.MaxConcurrentConnectionsPerHost));
         builder.Services.AddScoped(provider =>
             provider.GetRequiredService<MailSynchronizationOptions>().ToMimeExtractionOptions());
     }
