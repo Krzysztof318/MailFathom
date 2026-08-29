@@ -314,6 +314,55 @@ public sealed class OrchestrationContractTests
         Assert.Contains(OrchestrationContract.ClientEnabledKey, failure.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void RunsIntegrationTests_IntegrationArgumentIsPresent_SelectsTheEphemeralTopology()
+    {
+        // Act
+        var runsIntegrationTests = OrchestrationContract.RunsIntegrationTests(
+            ["unrelated=value", OrchestrationContract.IntegrationTestingArgument]);
+
+        // Assert
+        Assert.True(runsIntegrationTests);
+    }
+
+    [Fact]
+    public void RunsIntegrationTests_IntegrationArgumentIsAbsent_SelectsTheDevelopmentTopology()
+    {
+        // Act
+        var runsIntegrationTests = OrchestrationContract.RunsIntegrationTests(["IntegrationTesting=false"]);
+
+        // Assert
+        Assert.False(runsIntegrationTests);
+    }
+
+    [Fact]
+    public void DevelopmentHostEnvironment_NormalTopology_EnablesTheLocalSurfacesAndMailbox()
+    {
+        // Act
+        var environment = OrchestrationContract.DevelopmentHostEnvironment;
+
+        // Assert
+        Assert.Equal(10, environment.Count);
+        Assert.Equal("true", environment["MailSynchronization__Enabled"]);
+        Assert.Equal("local", environment["MailSynchronization__Accounts__0__AccountId"]);
+        Assert.Equal("Local mailbox", environment["MailSynchronization__Accounts__0__DisplayName"]);
+        Assert.Equal("local-mail-password", environment["MailSynchronization__Accounts__0__Secrets__Password__Name"]);
+        Assert.Equal("true", environment["McpEndpoint__Enabled"]);
+        Assert.Equal(OrchestrationContract.DeveloperLoopbackAddress, environment["McpEndpoint__BindAddress"]);
+        Assert.Equal("true", environment["AdminEndpoint__Enabled"]);
+        Assert.Equal(OrchestrationContract.DeveloperLoopbackAddress, environment["AdminEndpoint__BindAddress"]);
+        Assert.Equal("true", environment["ClientEndpoint__Enabled"]);
+        Assert.Equal("password", environment["ClientEndpoint__Authentication__0__Method"]);
+    }
+
+    [Fact]
+    public void DevelopmentBasicCredential_NormalTopology_UsesTheDocumentedSyntheticValues()
+    {
+        // Assert
+        Assert.Equal("test", OrchestrationContract.DevelopmentBasicUsername);
+        Assert.Equal("test-password", OrchestrationContract.DevelopmentBasicPassword);
+    }
+
     /// <summary>The address the client and the service are wired together on is one nothing outside this machine reaches.</summary>
     /// <remarks>
     /// The one property of that constant the compiler cannot state. Three things are built from it — the socket the

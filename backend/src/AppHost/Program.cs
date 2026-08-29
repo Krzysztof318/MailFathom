@@ -15,7 +15,7 @@ var builder = DistributedApplication.CreateBuilder(args);
 // Read from the argument list rather than from builder.Configuration, which also binds environment variables. An
 // IntegrationTesting variable left in a shell or a CI environment would otherwise put an ordinary run on the fixed-name
 // ephemeral database and leave its volume under the prefix the test script deletes.
-var runsIntegrationTests = args.Contains(OrchestrationContract.IntegrationTestingArgument, StringComparer.Ordinal);
+var runsIntegrationTests = OrchestrationContract.RunsIntegrationTests(args);
 
 // The port this checkout pinned for a socket, or null where it pinned none — which is what leaves the number to be
 // found per run and lets a second checkout start while the first is running. Read from the app host's own
@@ -458,22 +458,43 @@ if (runsIntegrationTests)
 }
 else
 {
-    // The two sockets a developer's run serves, each stated by the section that owns it, and each on a free port this
-    // run found unless this checkout pinned one. Found here rather than left to the orchestrator, which allocates a
-    // port for the proxy it would put in front of a resource and refuses an endpoint that declares none while asking
-    // for no proxy — and no proxy is what keeps the socket a client reaches the socket Kestrel opened.
+    // The four host sockets and the browser client's socket, each stated by the section that owns it and each on a free
+    // port this run found unless this checkout pinned one. Found here rather than left to the orchestrator, which
+    // allocates a port for the proxy it would put in front of a resource and refuses an endpoint that declares none
+    // while asking for no proxy — and no proxy is what keeps the socket a client reaches the socket Kestrel opened.
     //
-    // All four are found in one call whether or not any is pinned, because that is what makes them different from each
+    // All five are found in one call whether or not any is pinned, because that is what makes them different from each
     // other; a pinned value then replaces the one it was found for and the others stay where they were put. The last
     // one belongs to the client below, and is found here rather than beside it for that reason: a second call would
     // release these before choosing, and two sockets handed one number is a run that fails on whichever binds second.
-    var foundPorts = OrchestrationContract.FindFreePorts(4);
+    var foundPorts = OrchestrationContract.FindFreePorts(5);
     var mcpEndpointPort = PinnedPort(OrchestrationContract.PinnedMcpEndpointPortKey) ?? foundPorts[0];
     var healthEndpointsPort = PinnedPort(OrchestrationContract.PinnedHealthEndpointsPortKey) ?? foundPorts[1];
-    var clientEndpointPort = PinnedPort(OrchestrationContract.PinnedClientEndpointPortKey) ?? foundPorts[2];
-    var clientPort = PinnedPort(OrchestrationContract.PinnedClientPortKey) ?? foundPorts[3];
+    var adminEndpointPort = foundPorts[2];
+    var clientEndpointPort = PinnedPort(OrchestrationContract.PinnedClientEndpointPortKey) ?? foundPorts[3];
+    var clientPort = PinnedPort(OrchestrationContract.PinnedClientPortKey) ?? foundPorts[4];
+
+    var mailAccountHost = builder
+        .AddParameter("mail-account-host")
+        .WithDescription("The IMAP server host name for the mailbox MailFathom synchronizes.");
+    var mailAccountUserName = builder
+        .AddParameter("mail-account-username")
+        .WithDescription("The IMAP username for the mailbox MailFathom synchronizes.");
+    var mailAccountPassword = builder
+        .AddParameter("mail-account-password", secret: true)
+        .WithDescription("The IMAP password or app password for the mailbox MailFathom synchronizes.");
+
+    foreach (var setting in OrchestrationContract.DevelopmentHostEnvironment)
+    {
+        mailFathomHost.WithEnvironment(setting.Key, setting.Value);
+    }
 
     mailFathomHost
+        .WithEnvironment("MailSynchronization__Accounts__0__Host", mailAccountHost)
+        .WithEnvironment("MailSynchronization__Accounts__0__UserName", mailAccountUserName)
+        .WithEnvironment(
+            "MailSynchronization__Accounts__0__Secrets__Password__SecretReference",
+            ReferenceExpression.Create($"plaintext:{mailAccountPassword}"))
         // The MCP endpoint's own socket, stated to the app model and injected into the host's own configuration key, so
         // the number is written once rather than declared here and configured again beside it. Its scheme is tcp rather
         // than http, for the reason the probe endpoint's is: Aspire builds ASPNETCORE_URLS from the http and https
@@ -521,11 +542,16 @@ else
             targetPort: healthEndpointsPort,
             isProxied: false,
             env: "HealthEndpoints__Port")
-        // The client surface's socket, declared exactly as the MCP endpoint's is and bound exactly as little: both
-        // sections ship disabled, so this run publishes a number and the host binds nothing under it until this
-        // checkout says otherwise. Enabling a surface that reads the mailbox stays a developer's own act here, the way
-        // McpEndpoint:Enabled is — and it is stated in the host's user secrets rather than by this app model, so the
-        // credential that guards it is decided in the same place and at the same time.
+        .WithEndpoint(
+            name: OrchestrationContract.HostAdminEndpointName,
+            scheme: "tcp",
+            port: adminEndpointPort,
+            targetPort: adminEndpointPort,
+            isProxied: false,
+            env: "AdminEndpoint__Port")
+        // The client surface's socket, declared exactly as the MCP endpoint's is. The normal app model enables it and
+        // admits the password method so the browser head has a usable service on its first run; the credential itself
+        // is provisioned through the administrative API after the host reports startup readiness.
         //
         // A socket of its own rather than the MCP endpoint's, though every surface's default port would have shared
         // one. What cannot be shared is the bind address: a wildcard beside a specific address on one port is two
@@ -540,6 +566,18 @@ else
             targetPort: clientEndpointPort,
             isProxied: false,
             env: "ClientEndpoint__Port");
+
+    builder.Services
+        .AddHttpClient(DevelopmentCredentialProvisioningWorker.HttpClientName, client =>
+            client.Timeout = TimeSpan.FromSeconds(10))
+        .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { AllowAutoRedirect = false });
+    builder.Services.AddHostedService(provider => new DevelopmentCredentialProvisioningWorker(
+        provider.GetRequiredService<ResourceNotificationService>(),
+        provider.GetRequiredService<IHttpClientFactory>(),
+        mailFathomHost.GetEndpoint("health"),
+        mailFathomHost.GetEndpoint(OrchestrationContract.HostAdminEndpointName),
+        TimeProvider.System,
+        provider.GetRequiredService<ILogger<DevelopmentCredentialProvisioningWorker>>()));
 
     // The client, in the one topology it belongs to. What the app model reaches into the other stack with is a
     // directory and a command: no project under frontend/ enters backend/MailFathom.slnx, no backend project references
@@ -596,11 +634,9 @@ else
         // The service's half of the same wiring, and the whole of it: the head's own origin as the one browser origin
         // the client surface answers, rather than the every-origin posture an unstated list means. A local run is the
         // one place the exact origin is known, so narrowing it costs nothing and answers in advance the preflight a
-        // deployment will also have to answer — which is what leaves turning the surface on a single key rather than a
-        // key and a puzzle about why the first call was refused.
+        // deployment will also have to answer, so the first call is not refused on a preflight.
         //
-        // Written only where a head exists to make the request. Turning the surface on is not written here at all, for
-        // the reason stated where its socket is declared.
+        // Written only where a head exists to make the request.
         mailFathomHost.WithEnvironment("ClientEndpoint__Cors__AllowedOrigins__0", clientOrigin);
     }
 }
