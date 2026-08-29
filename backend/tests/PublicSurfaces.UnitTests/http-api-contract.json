@@ -4833,6 +4833,38 @@
         ],
         "type": "object"
       },
+      "StoredSecretProvisionedResponse": {
+        "properties": {
+          "secretReference": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "secretReference"
+        ],
+        "type": "object"
+      },
+      "StoredSecretWriteRequest": {
+        "properties": {
+          "material": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "name",
+          "material"
+        ],
+        "type": "object"
+      },
       "Stream": {
         "format": "binary",
         "type": "string"
@@ -7011,6 +7043,67 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OwnerRecordWriteResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Administrative"
+        ]
+      }
+    },
+    "/api/admin/owners/{ownerId}/secrets": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "ownerId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/StoredSecretWriteRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StoredSecretProvisionedResponse"
                 }
               }
             },

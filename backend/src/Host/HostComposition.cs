@@ -248,6 +248,7 @@ internal static class HostComposition
         // its operations are published under, and that service is scoped to whatever admitted the caller.
         builder.Services.AddScoped<OwnerRosterAdministration>();
         builder.Services.AddScoped<OwnerRecordAdministration>();
+        builder.Services.AddScoped<StoredSecretAdministration>();
     }
 
     /// <summary>Registers the scanners this deployment switched on, and reports what it declared.</summary>

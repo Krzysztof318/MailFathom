@@ -443,6 +443,31 @@ public sealed class OwnerRecordAdministrationTests
             .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
     }
 
+    [Fact]
+    public async Task AddOwnMailAccountAsync_AMailboxNamingAnArbitraryDatabaseSecret_IsRefusedBeforeResolution()
+    {
+        // Arrange
+        var harness = new RecordHarness(
+            MailFathomPermission.MailAccountsWrite,
+            actingFor: SyntheticMailOwner.Deployment);
+        harness.Holding(SyntheticMailOwner.Deployment, EmptyRecord, version: 1);
+
+        // Act
+        var outcome = await harness.Records.AddOwnMailAccountAsync(
+            AccountSaved(
+                "archive",
+                "imap.example.test",
+                "database:019925df-96f4-7c6d-8f91-b9f6cf27f5b2"),
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Contains("not provisioned for you", Assert.Single(outcome.Messages), StringComparison.Ordinal);
+        await harness.Store.DidNotReceiveWithAnyArgs()
+            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+    }
+
     /// <summary>
     /// The rule reads which references a record carries rather than which path each sits at, so an owner withdrawing
     /// the first of two mailboxes is not refused over the credential that moved up an index behind it. Comparing per

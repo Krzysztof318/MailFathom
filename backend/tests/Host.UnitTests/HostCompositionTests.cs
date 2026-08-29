@@ -9,6 +9,8 @@ using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Host.Hosting;
 using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.Security.Transport;
+using MailFathom.Infrastructure.Secrets.Database;
+using MailFathom.Infrastructure.Secrets.References;
 using MailFathom.Mcp.Tools.Categories;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
@@ -295,6 +297,24 @@ public sealed class HostCompositionTests
                 $"The '{shape}' deployment registered services it cannot build:{Environment.NewLine}  "
                 + string.Join($"{Environment.NewLine}  ", unbuildable));
         }
+    }
+
+    [Fact]
+    public void Compose_TheDatabaseSecretScheme_ResolvesWithoutAKeyRingConstructionCycle()
+    {
+        // Arrange
+        var services = ComposeServices("probes only");
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions
+        {
+            ValidateOnBuild = true,
+            ValidateScopes = true,
+        });
+
+        // Act
+        var schemes = provider.GetServices<ISecretSchemeResolver>().Select(resolver => resolver.Scheme);
+
+        // Assert
+        Assert.Contains(DatabaseSecretReference.Scheme, schemes);
     }
 
     /// <summary>

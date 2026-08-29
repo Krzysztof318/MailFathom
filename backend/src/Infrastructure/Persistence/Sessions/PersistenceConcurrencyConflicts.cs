@@ -131,6 +131,12 @@ internal static class PersistenceConcurrencyConflicts
     /// second operator with a provider failure while the move they asked for is in fact under way.
     /// </para>
     /// <para>
+    /// The next is one owner's named stored secret created by two administrative requests. Both requests read that the
+    /// identity is absent and propose a different generated reference; the loser violates the owner-and-name index.
+    /// The retry reads the winner's row, seals the submitted material against that row's reference, and returns it, so
+    /// both answers name one rotatable secret rather than exposing a persistence constraint.
+    /// </para>
+    /// <para>
     /// The last is one message identifier bound to a thread by two arrivals. Two runs storing two messages of one
     /// conversation read that nothing binds the identifier yet, and each assembles a thread and binds it; the loser
     /// violates the key. The retry is what converges them: it re-reads, finds the winner's thread bound to the
@@ -162,6 +168,7 @@ internal static class PersistenceConcurrencyConflicts
                 or PersistenceConstraintNames.OutgoingEmailFilingPrimaryKeyConstraintName
                 or PersistenceConstraintNames.MailDraftCopyPrimaryKeyConstraintName
                 or PersistenceConstraintNames.ContentMoveRunPrimaryKeyConstraintName
+                or PersistenceConstraintNames.StoredSecretOwnerNameUniqueIndexName
                 or PersistenceConstraintNames.EmailThreadIdentifierPrimaryKeyConstraintName,
         };
 }

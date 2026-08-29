@@ -29,7 +29,7 @@ public static class DataEncryptionServiceCollectionExtensions
 
         services.AddSingleton(provider => new DataEncryptionKeyRing(
             () => readSettings(provider),
-            provider.GetRequiredService<ISecretReferenceResolver>()));
+            () => provider.GetRequiredService<ISecretReferenceResolver>()));
         services.AddSingleton<FieldEncryptor>();
 
         return services;

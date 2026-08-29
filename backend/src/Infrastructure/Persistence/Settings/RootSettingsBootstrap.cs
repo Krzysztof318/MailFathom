@@ -4,6 +4,7 @@
 
 using MailFathom.CodeCoverage;
 using MailFathom.Infrastructure.Persistence.Connections;
+using MailFathom.Infrastructure.Secrets.Database;
 using MailFathom.Infrastructure.Secrets.References;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using Microsoft.Extensions.DependencyInjection;
@@ -62,11 +63,14 @@ public static class RootSettingsBootstrap
 
         // The registration is reused rather than repeated, so a deployment that gains a managed-store scheme adapter
         // gains it here too instead of resolving one set of schemes at bootstrap and another once the host is running.
+        // The database scheme is the deliberate exception: bootstrap registers its refusing adapter because retrieving
+        // a stored row needs the connection this read is still composing.
         // The clock is what the host's own container would have supplied: the file adapter bounds how long a read of
         // credential material may take, and that bound is not one bootstrap gets to skip.
         await using var secretResolution = new ServiceCollection()
             .AddSingleton(TimeProvider.System)
             .AddSecretResolution(interpretation)
+            .AddSingleton<ISecretSchemeResolver, DatabaseSecretBootstrapResolver>()
             .BuildServiceProvider();
 
         var resolver = secretResolution.GetRequiredService<ISecretReferenceResolver>();

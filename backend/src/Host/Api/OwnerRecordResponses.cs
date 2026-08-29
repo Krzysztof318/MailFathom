@@ -131,6 +131,25 @@ internal sealed record OwnerMailAccountRemovalRequest(long Version, string? Acco
 /// <param name="Version">The version the preview reported.</param>
 internal sealed record OwnerAdoptionRequest(long Version);
 
+/// <summary>Material an administrator asks this deployment to store for one owner.</summary>
+/// <param name="Name">The stable declared name used for rotation and audit.</param>
+/// <param name="Material">The material to seal, carried only in this request.</param>
+/// <remarks><see cref="ToString" /> reports no field, so rendering the request cannot disclose material.</remarks>
+internal sealed record StoredSecretWriteRequest(string? Name, string? Material)
+{
+    /// <inheritdoc />
+    public override string ToString() => nameof(StoredSecretWriteRequest);
+}
+
+/// <summary>The reference a successful stored-secret write produced.</summary>
+/// <param name="SecretReference">The value an owner document keeps instead of material.</param>
+/// <remarks><see cref="ToString" /> reports no field, so a diagnostic cannot print the reference target by rendering the response.</remarks>
+internal sealed record StoredSecretProvisionedResponse(string SecretReference)
+{
+    /// <inheritdoc />
+    public override string ToString() => nameof(StoredSecretProvisionedResponse);
+}
+
 /// <summary>What adopting one owner would move into their record.</summary>
 /// <param name="Owner">The owner asked about.</param>
 /// <param name="DisplayName">The label the owner is recorded under.</param>

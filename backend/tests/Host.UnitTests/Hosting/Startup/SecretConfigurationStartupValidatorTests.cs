@@ -21,6 +21,7 @@ using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.DataEncryption;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Secrets.Discovery;
+using MailFathom.Infrastructure.Secrets.References;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using MailFathom.Infrastructure.Secrets.Sources;
 using MailFathom.Infrastructure.Security.ClientCertificates;
@@ -788,6 +789,62 @@ public sealed class SecretConfigurationStartupValidatorTests
     }
 
     [Fact]
+    public async Task StartingAsync_APersistenceCredentialStoredInTheDatabase_IsRefusedAsABootstrapCycle()
+    {
+        // Arrange
+        var harness = CreateHarness(
+            new MailSynchronizationOptions(),
+            new PersistenceOptions
+            {
+                Password = new ConfiguredSecret
+                {
+                    Name = "postgres",
+                    SecretReference = "database:019925df-96f4-7c6d-8f91-b9f6cf27f5b2",
+                },
+            });
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        var failure = Assert.Single(exception.Failures);
+        Assert.StartsWith("Persistence:Password", failure, StringComparison.Ordinal);
+        Assert.Contains("cannot be read from the database it is needed to reach", failure, StringComparison.Ordinal);
+        Assert.DoesNotContain("019925df", failure, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task StartingAsync_ADataEncryptionKeyStoredInTheDatabase_IsRefusedAsABootstrapCycle()
+    {
+        // Arrange
+        var options = new DataEncryptionOptions { ActiveKeyId = "2026-08" };
+        options.Keys.Add(new DataEncryptionKeyOptions
+        {
+            KeyId = "2026-08",
+            Material = new ConfiguredSecret
+            {
+                Name = "mailfathom-data-key",
+                SecretReference = "database:019925df-96f4-7c6d-8f91-b9f6cf27f5b2",
+            },
+        });
+        var harness = CreateHarness(
+            new MailSynchronizationOptions(),
+            new PersistenceOptions(),
+            dataEncryptionOptions: options);
+
+        // Act
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() =>
+            harness.Validator.StartingAsync(CancellationToken.None));
+
+        // Assert
+        var failure = Assert.Single(exception.Failures);
+        Assert.StartsWith("DataEncryption:Keys:0:Material", failure, StringComparison.Ordinal);
+        Assert.Contains("cannot be read from the database whose values it opens", failure, StringComparison.Ordinal);
+        Assert.DoesNotContain("019925df", failure, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task StartingAsync_ARingWhoseMaterialIsAKey_PassesTheGate()
     {
         // Arrange — the counterpart the two refusals need: without it they would pass against a validator that
@@ -798,6 +855,23 @@ public sealed class SecretConfigurationStartupValidatorTests
             dataEncryptionOptions: RingOf(
                 "2026-08",
                 Convert.ToBase64String(new byte[AesGcmEnvelope.KeySizeInBytes])));
+
+        // Act, Assert
+        await harness.Validator.StartingAsync(CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task StartingAsync_AMailboxPasswordStoredInTheDatabase_PassesTheBootstrapCycleCheck()
+    {
+        // Arrange — the counterpart to the two bootstrap refusals: a database reference under an ordinary consumer is
+        // resolved rather than rejected merely because it carries the database scheme.
+        const string storedReference = "database:019925df-96f4-7c6d-8f91-b9f6cf27f5b2";
+        var harness = CreateHarness(
+            ConfiguredAccounts.WithPasswordReferences(("primary", storedReference)),
+            new PersistenceOptions(),
+            secretReferenceResolver: new SingleSecretReferenceResolver(
+                storedReference,
+                "not-a-real-mailbox-password"));
 
         // Act, Assert
         await harness.Validator.StartingAsync(CancellationToken.None);
@@ -885,9 +959,10 @@ public sealed class SecretConfigurationStartupValidatorTests
         AdminEndpointOptions? adminEndpointOptions = null,
         ClientEndpointOptions? clientEndpointOptions = null,
         DataEncryptionOptions? dataEncryptionOptions = null,
-        ContentStorageOptions? contentStorageOptions = null)
+        ContentStorageOptions? contentStorageOptions = null,
+        ISecretReferenceResolver? secretReferenceResolver = null)
     {
-        var resolver = new PlaintextOnlySecretReferenceResolver { Source = source };
+        var resolver = secretReferenceResolver ?? new PlaintextOnlySecretReferenceResolver { Source = source };
         var connectionSettingsValidator = databaseConnectionSettings ?? new StubDatabaseConnectionSettingsValidator();
         var validationLogger = new RecordingLogger<SecretConfigurationValidator>();
         var startupLogger = new RecordingLogger<SecretConfigurationStartupValidator>();
@@ -915,6 +990,18 @@ public sealed class SecretConfigurationStartupValidatorTests
             startupLogger);
 
         return new ValidatorHarness(validator, startupGates, startupLogger, validationLogger);
+    }
+
+    private sealed class SingleSecretReferenceResolver(string reference, string material) : ISecretReferenceResolver
+    {
+        public Task<SecretResolutionResult> ResolveAsync(
+            string? configuredValue,
+            CancellationToken cancellationToken) => Task.FromResult(
+                string.Equals(configuredValue, reference, StringComparison.Ordinal)
+                    ? SecretResolutionResult.Resolved(
+                        ResolvedSecret.FromText(material),
+                        SecretMaterialSource.SchemeAdapter)
+                    : SecretResolutionResult.Failed(SecretResolutionFailure.MaterialNotFound));
     }
 
     /// <summary>An endpoint declaration whose two credential halves reference exactly what the caller states.</summary>

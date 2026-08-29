@@ -37,6 +37,13 @@ public sealed class DataEncryptionPurposeTests
     }
 
     [Fact]
+    public void Identity_StoredSecret_IsTheIdentityDatabaseBackedSecretsAreSealedUnder()
+    {
+        // Assert — changing this literal would make every secret already stored in the database fail to open.
+        Assert.Equal("stored-secret", DataEncryptionPurpose.StoredSecret.Identity);
+    }
+
+    [Fact]
     public void TryParse_ADeclaredIdentity_YieldsThatPurpose()
     {
         // Act

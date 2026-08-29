@@ -29,7 +29,7 @@ namespace MailFathom.Infrastructure.DataEncryption;
 internal sealed class DataEncryptionKeyRing
 {
     private readonly Func<DataEncryptionKeyRingSettings> readSettings;
-    private readonly ISecretReferenceResolver secretReferenceResolver;
+    private readonly Func<ISecretReferenceResolver> readSecretReferenceResolver;
 
     /// <summary>Initializes a key ring over the published settings and the secret resolver.</summary>
     /// <param name="readSettings">Reads the currently published key ring settings.</param>
@@ -38,12 +38,25 @@ internal sealed class DataEncryptionKeyRing
     public DataEncryptionKeyRing(
         Func<DataEncryptionKeyRingSettings> readSettings,
         ISecretReferenceResolver secretReferenceResolver)
+        : this(readSettings, ResolverAccessor(secretReferenceResolver))
+    {
+    }
+
+    /// <summary>Initializes a key ring whose resolver is read when an operation begins.</summary>
+    /// <remarks>
+    /// The deferred resolver breaks the legitimate dependency loop introduced by the database secret scheme: that
+    /// adapter needs the key ring to open a row, while the ring needs the composite resolver to obtain its own
+    /// deployment-provisioned key. Bootstrap validation refuses a database-backed key before either can recurse.
+    /// </remarks>
+    internal DataEncryptionKeyRing(
+        Func<DataEncryptionKeyRingSettings> readSettings,
+        Func<ISecretReferenceResolver> readSecretReferenceResolver)
     {
         ArgumentNullException.ThrowIfNull(readSettings);
-        ArgumentNullException.ThrowIfNull(secretReferenceResolver);
+        ArgumentNullException.ThrowIfNull(readSecretReferenceResolver);
 
         this.readSettings = readSettings;
-        this.secretReferenceResolver = secretReferenceResolver;
+        this.readSecretReferenceResolver = readSecretReferenceResolver;
     }
 
     /// <summary>Gets whether the deployment configures any key material at all.</summary>
@@ -106,7 +119,8 @@ internal sealed class DataEncryptionKeyRing
             return null;
         }
 
-        var resolution = await this.secretReferenceResolver.ResolveAsync(reference.Material.SecretReference, cancellationToken);
+        var resolution = await this.readSecretReferenceResolver()
+            .ResolveAsync(reference.Material.SecretReference, cancellationToken);
 
         using var material = resolution.Secret
             ?? throw new InvalidOperationException(
@@ -115,5 +129,12 @@ internal sealed class DataEncryptionKeyRing
         return DataEncryptionKey.Decode(keyId, material, out var failure)
             ?? throw new InvalidOperationException(
                 $"The material of data-encryption key '{keyId}' is not usable [{failure}].");
+    }
+
+    private static Func<ISecretReferenceResolver> ResolverAccessor(ISecretReferenceResolver resolver)
+    {
+        ArgumentNullException.ThrowIfNull(resolver);
+
+        return () => resolver;
     }
 }

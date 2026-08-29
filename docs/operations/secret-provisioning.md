@@ -2,7 +2,7 @@
 
 <!-- describes: backend/src/Infrastructure/Secrets/** -->
 
-Every secret-bearing setting holds a *reference* to material the deployment provisions, and the host resolves those references before any worker starts. Under the default `ReferenceOnly` mode with an externally provisioned scheme, a configuration file leaked from a backup or a repository therefore yields credential names and paths, not credentials.
+Every secret-bearing setting holds a *reference* to material rather than the material itself. A deployment provisions the material behind `systemd-credential:`, `file:`, and `env:`; MailFathom stores runtime-created material behind `database:`. The host resolves configured references before any worker starts. Under the default `ReferenceOnly` mode with an externally provisioned scheme, a configuration file leaked from a backup or a repository therefore yields credential names and paths, not credentials.
 
 That guarantee is a property of how a deployment is configured, not of MailFathom. Three shapes break it deliberately, and each is a visible choice rather than an accident: `plaintext:` puts the value in the file by definition, the `ReferenceOrInline` and `InlineOnly` modes accept a raw secret in `SecretReference`, and a password written into the connection string never passes through a secret block at all. Each is logged at startup by setting name. When judging what a leaked configuration file exposes, read the deployment's mode and schemes rather than this paragraph.
 
@@ -113,9 +113,16 @@ A reference is `<scheme>:<target>`, split on the **first** colon only, so a Wind
 | `systemd-credential` | credential name | The credentials directory systemd exposes to the unit through `$CREDENTIALS_DIRECTORY` |
 | `file` | absolute path | A deployment-provisioned protected file |
 | `env` | variable name | The process environment block |
+| `database` | stored-secret UUID | One `stored_secrets` row, sealed under the deployment's data-encryption key ring |
 | `plaintext` | the value itself | Nothing; the target *is* the material |
 
 An unknown scheme is a startup failure naming the setting, which is also how an operator learns that a provider adapter was not compiled in or not enabled.
+
+`database:` is emitted by the runtime write that stores the material; it is not an identifier an operator invents. The row carries the owner and declared secret name authenticated into its ciphertext, so changing either, changing the row identifier, or moving the ciphertext to another purpose makes it fail to open. The material is still bounded at 1 MiB and is resolved once for each use. Deleting the owner cascades to the row, while an index on the key identifier answers which stored secrets must be re-sealed before that key can be retired.
+
+An administrator granted `mailfathom.admin.configuration.write` creates that reference with `POST /api/admin/owners/{ownerId}/secrets`. The body carries `name`, the stable identity used for rotation within that owner, and `material`; the answer carries only `secretReference`. Repeating the request with the same owner and name replaces the sealed material and returns the same reference, including when concurrent requests first create that identity. The material is copied into an erasable buffer at the HTTP boundary, never returned, and never written into the owner's document; a later document write keeps only the returned reference.
+
+The scheme cannot bootstrap itself. `Persistence`, the database connection string, and `DataEncryption` key material reject `database:` with the exact setting named: the first two are required to reach the table, and the last is required to open it. A deployment with no configured data-encryption key ring can resolve no stored material and refuses to store one rather than writing plaintext.
 
 `plaintext:` is the unambiguous spelling for a literal that would otherwise look like a reference — a password whose value genuinely begins with `file:`. It retrieves nothing, so it is reported as inline material and earns the same startup warning as any other value written into configuration.
 
@@ -246,7 +253,7 @@ A Secrets Store CSI driver — Vault, Azure Key Vault, AWS Secrets Manager — n
 
 ## The data-encryption key
 
-MailFathom seals values it stores under a key the deployment provisions, and the key arrives as an ordinary secret reference like every other credential. Two things depend on it today. One value is sealed under it — the OAuth refresh token an account's authorization server rotates, which [mailbox OAuth](mailbox-oauth.md#rotation) describes. The other is not sealed at all: the key that signs an [attachment download link](../features/email-content.md#what-a-download-link-is-and-what-bounds-it) is derived from the ring per operation, under an identity of its own so it is never the material that seals a stored value. A deployment whose mailboxes all authenticate with a password and which hands out no attachment links needs no key at all and starts without one; one that wants links and configures no ring serves every other part of a read and issues none. What differs is the material behind it: it is **base64 that decodes to exactly 32 bytes**, and startup refuses anything else naming the setting rather than accepting a weaker key.
+MailFathom seals values it stores under a key the deployment provisions, and the key arrives as an ordinary secret reference like every other credential. Three things depend on it today. An OAuth refresh token an account's authorization server rotates is sealed under it, as [mailbox OAuth](mailbox-oauth.md#rotation) describes. Runtime-created secret material behind a `database:` reference is sealed under the same ring with a purpose and subject of its own. The third use is not sealing at all: the key that signs an [attachment download link](../features/email-content.md#what-a-download-link-is-and-what-bounds-it) is derived from the ring per operation, under an identity of its own so it is never the material that seals a stored value. A deployment that stores none of those values and hands out no attachment links needs no key and starts without one; a write that would create a database-backed secret refuses until the ring exists. What differs is the material behind the ring: it is **base64 that decodes to exactly 32 bytes**, and startup refuses anything else naming the setting rather than accepting a weaker key.
 
 Generate one with:
 
@@ -343,7 +350,7 @@ Locking pages with `mlock` is deliberately not attempted. It would need P/Invoke
 
 ## Adding a managed secret store
 
-This section describes the extension contract, not shipped behavior. No managed-store adapter exists today.
+This section describes the extension contract for an external managed store. The shipped `database:` adapter is MailFathom's own sealed persistence and introduces no provider, network, identity, or SDK; no external managed-store adapter exists today.
 
 Two integration shapes exist and must not be conflated. A provider that **pre-resolves** — Azure App Configuration with Key Vault references — does its mapping below MailFathom in the configuration pipeline and needs no adapter at all, only `InlineOnly`. A store MailFathom **queries itself** — direct Key Vault, HashiCorp Vault, AWS Secrets Manager — earns a scheme, because its retrieval behavior genuinely differs.
 

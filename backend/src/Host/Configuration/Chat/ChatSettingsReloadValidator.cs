@@ -48,6 +48,7 @@ internal sealed class ChatSettingsReloadValidator(
             await secretValidator.FindSecretReferenceErrorsAsync(
                 ChatModelOptions.SectionName,
                 candidate,
+                null,
                 cancellationToken));
 
         errors.AddRange(ChatDeclarationRules.FindDeclarationErrors(candidate, declaredEmbeddings, declaredAnswering));

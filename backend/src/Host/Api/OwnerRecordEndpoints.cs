@@ -2,11 +2,15 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Text;
 using System.Text.Json;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.OwnerSettings.Administration;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Infrastructure.Persistence.Owners;
+using MailFathom.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Secrets.Database;
+using MailFathom.Infrastructure.Secrets.Resolution;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 
@@ -71,9 +75,15 @@ internal static class OwnerRecordEndpoints
     /// <summary>The route one owner's adoption is previewed at and performed on.</summary>
     internal const string OwnerAdoptionRoute = $"{OwnerRecordRoute}/adoption";
 
+    /// <summary>The route material for one owner's record is stored or rotated at.</summary>
+    internal const string OwnerSecretsRoute = $"{OwnerRoute}/secrets";
+
     /// <summary>The greatest request body the write routes read before refusing it.</summary>
     /// <remarks>Twice what an owner's record may be, for the reason <see cref="ConfigurationEndpoints.MaxWriteRequestBytes" /> is twice the deployment document: a body larger than that composes no record this deployment would accept, and the doubling is the room JSON string escaping and the request envelope take on the way.</remarks>
     internal const int MaxWriteRequestBytes = 2 * OwnerSettingsDocument.MaximumOctets;
+
+    /// <summary>The largest encoded request that can contain one bounded secret and its JSON escaping.</summary>
+    internal const int MaxStoredSecretWriteRequestBytes = 8 * 1024 * 1024;
 
     /// <summary>Maps the owner routes into the administrative group, so they inherit its authorization.</summary>
     /// <param name="api">The administrative route group.</param>
@@ -119,6 +129,10 @@ internal static class OwnerRecordEndpoints
 
         api.MapPost(OwnerAdoptionRoute, AdoptAsync)
             .WithMetadata(new RequestSizeLimitAttribute(MaxWriteRequestBytes))
+            .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
+
+        api.MapPost(OwnerSecretsRoute, StoreSecretAsync)
+            .WithMetadata(new RequestSizeLimitAttribute(MaxStoredSecretWriteRequestBytes))
             .RequirePermission(MailFathomPermission.AdminConfigurationWrite);
     }
 
@@ -419,6 +433,68 @@ internal static class OwnerRecordEndpoints
         }
 
         return Answered(await records.AdoptAsync(owner, request.Version, cancellationToken));
+    }
+
+    /// <summary>Stores or rotates material one owner's record reaches through a database reference.</summary>
+    /// <param name="ownerId">The owner whose deletion removes the material.</param>
+    /// <param name="request">The stable declared name and material.</param>
+    /// <param name="secrets">Performs the bounded sealed write.</param>
+    /// <param name="cancellationToken">Cancels the owner read, sealing, or commit.</param>
+    /// <returns><c>200</c> with the reference, <c>404</c> when the owner is absent, or <c>400</c> when the request cannot be stored.</returns>
+    /// <remarks>
+    /// The material reaches this boundary as a string because that is what a JSON body deserializes to. It is copied
+    /// immediately into an owned erasable buffer, never echoed, and never included in a refusal; the response carries
+    /// only the reference a document keeps.
+    /// </remarks>
+    internal static async Task<Results<Ok<StoredSecretProvisionedResponse>, NotFound<ProblemDetails>, ProblemHttpResult>> StoreSecretAsync(
+        Guid ownerId,
+        [FromBody] StoredSecretWriteRequest? request,
+        [FromServices] StoredSecretAdministration secrets,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(secrets);
+
+        if (!TryReadOwner(ownerId, out var owner))
+        {
+            return EmptyOwner();
+        }
+
+        if (!SecretName.TryCreate(request?.Name, out var name))
+        {
+            return Refusal(
+                $"The request named no usable secret. Use at most {SecretName.MaximumLength} letters, digits, dots, dashes, or underscores, beginning with a letter or digit.");
+        }
+
+        if (request?.Material is not { Length: > 0 })
+        {
+            return Refusal("The request carried no secret material.");
+        }
+
+        if (Encoding.UTF8.GetByteCount(request.Material) > IStoredSecretStore.MaximumMaterialByteCount)
+        {
+            return Refusal("The secret material exceeds the bounded size MailFathom accepts.");
+        }
+
+        StoredSecretProvisioning provisioning;
+        try
+        {
+            using var material = ResolvedSecret.FromText(request.Material);
+            provisioning = await secrets.StoreAsync(owner, name, material, cancellationToken);
+        }
+        catch (ArgumentException)
+        {
+            return Refusal("The secret material is empty or exceeds the bounded size MailFathom accepts.");
+        }
+
+        return provisioning.Outcome switch
+        {
+            StoredSecretProvisioningOutcome.Stored =>
+                TypedResults.Ok(new StoredSecretProvisionedResponse(provisioning.Reference.ConfigurationValue)),
+            StoredSecretProvisioningOutcome.UnknownOwner => NoSuchOwner(),
+            StoredSecretProvisioningOutcome.KeyRingUnavailable => Refusal(
+                "DataEncryption configures no key ring, so this deployment cannot store secret material in the database."),
+            _ => Refusal("The stored-secret write was refused for a reason this deployment cannot describe."),
+        };
     }
 
     /// <summary>Answers what a write did, or that this deployment holds no such owner.</summary>

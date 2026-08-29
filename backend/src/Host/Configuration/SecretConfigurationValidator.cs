@@ -15,6 +15,7 @@ using MailFathom.Infrastructure.DataEncryption;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Secrets;
+using MailFathom.Infrastructure.Secrets.Database;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Secrets.References;
 using MailFathom.Infrastructure.Secrets.Resolution;
@@ -98,11 +99,20 @@ internal sealed partial class SecretConfigurationValidator
         ArgumentNullException.ThrowIfNull(candidate);
 
         var errors = new List<string>(
-            await this.FindSecretReferenceErrorsAsync(PersistenceConfigurationPath, candidate, cancellationToken));
+            await this.FindSecretReferenceErrorsAsync(
+                PersistenceConfigurationPath,
+                candidate,
+                "the secret cannot be read from the database it is needed to reach. Provision bootstrap material outside the database",
+                cancellationToken));
 
         errors.AddRange(this.FindTextSearchConfigurationErrors(candidate));
 
         errors.AddRange(this.FindCommandTimeoutErrors(candidate));
+
+        if (ContainsDatabaseSecretReference(candidate, PersistenceConfigurationPath))
+        {
+            return errors;
+        }
 
         var connectionFailures = await this.connectionSettingsValidator.FindConfigurationFailuresAsync(
             this.connectionSettingsMapper.Map(candidate),
@@ -132,7 +142,11 @@ internal sealed partial class SecretConfigurationValidator
         ArgumentNullException.ThrowIfNull(candidate);
 
         var errors = new List<string>(
-            await this.FindSecretReferenceErrorsAsync(DataEncryptionConfigurationPath, candidate, cancellationToken));
+            await this.FindSecretReferenceErrorsAsync(
+                DataEncryptionConfigurationPath,
+                candidate,
+                "the secret cannot be read from the database whose values it opens. Provision data-encryption key material outside the database",
+                cancellationToken));
 
         errors.AddRange(await this.FindKeyMaterialErrorsAsync(candidate, cancellationToken));
 
@@ -156,6 +170,11 @@ internal sealed partial class SecretConfigurationValidator
         {
             // A key configuring no material at all is reported by the options type, which needs no resolution to see it.
             if (configuredKey.Material is not { } material)
+            {
+                continue;
+            }
+
+            if (IsDatabaseSecretReference(material.SecretReference))
             {
                 continue;
             }
@@ -235,7 +254,7 @@ internal sealed partial class SecretConfigurationValidator
         ArgumentNullException.ThrowIfNull(candidate);
 
         var errors = new List<string>(
-            await this.FindSecretReferenceErrorsAsync(MailSynchronizationConfigurationPath, candidate, cancellationToken));
+            await this.FindSecretReferenceErrorsAsync(MailSynchronizationConfigurationPath, candidate, null, cancellationToken));
 
         errors.AddRange(await this.FindTrustAnchorErrorsAsync(
             $"{MailSynchronizationConfigurationPath}:{nameof(MailSynchronizationOptions.Accounts)}",
@@ -275,7 +294,7 @@ internal sealed partial class SecretConfigurationValidator
         var owner = new OwnerAccountOptions { MailAccounts = [.. mailAccounts] };
 
         var errors = new List<string>(
-            await this.FindSecretReferenceErrorsAsync(ownerConfigurationPath, owner, cancellationToken));
+            await this.FindSecretReferenceErrorsAsync(ownerConfigurationPath, owner, null, cancellationToken));
 
         errors.AddRange(await this.FindTrustAnchorErrorsAsync(
             $"{ownerConfigurationPath}:{nameof(OwnerAccountOptions.MailAccounts)}",
@@ -307,7 +326,7 @@ internal sealed partial class SecretConfigurationValidator
         }
 
         var errors = new List<string>(
-            await this.FindSecretReferenceErrorsAsync(McpEndpointOptions.SectionName, candidate, cancellationToken));
+            await this.FindSecretReferenceErrorsAsync(McpEndpointOptions.SectionName, candidate, null, cancellationToken));
 
         // No key and no public key is asked about, because this endpoint's section holds neither: what a client
         // presents resolves a credential record, and a record's material is proven where it is written rather than at
@@ -339,7 +358,7 @@ internal sealed partial class SecretConfigurationValidator
         }
 
         var errors = new List<string>(
-            await this.FindSecretReferenceErrorsAsync(AdminEndpointOptions.SectionName, candidate, cancellationToken));
+            await this.FindSecretReferenceErrorsAsync(AdminEndpointOptions.SectionName, candidate, null, cancellationToken));
 
         errors.AddRange(await this.FindClientPublicKeyErrorsAsync(
             AdminEndpointOptions.SectionName,
@@ -375,7 +394,7 @@ internal sealed partial class SecretConfigurationValidator
         }
 
         var errors = new List<string>(
-            await this.FindSecretReferenceErrorsAsync(ClientEndpointOptions.SectionName, candidate, cancellationToken));
+            await this.FindSecretReferenceErrorsAsync(ClientEndpointOptions.SectionName, candidate, null, cancellationToken));
 
         // No key and no public key is asked about, for the reason the MCP endpoint's read gives: this section holds
         // neither.
@@ -409,6 +428,7 @@ internal sealed partial class SecretConfigurationValidator
         return await this.FindSecretReferenceErrorsAsync(
             ContentStorageOptions.SectionName,
             candidate,
+            null,
             cancellationToken);
     }
 
@@ -635,6 +655,7 @@ internal sealed partial class SecretConfigurationValidator
     /// <summary>Resolves every secret reference in a bound options graph and reports the ones an operator must fix.</summary>
     /// <param name="rootConfigurationPath">The configuration path of the bound root, which prefixes every reported path.</param>
     /// <param name="boundOptions">The bound options root.</param>
+    /// <param name="databaseBootstrapRefusal">The reason this root cannot use a database-backed reference, or <see langword="null" /> when it may.</param>
     /// <param name="cancellationToken">Cancels the resolution.</param>
     /// <returns>One message per faulty declaration, per unresolvable reference, and per plain string setting that names a secret.</returns>
     /// <remarks>
@@ -646,6 +667,7 @@ internal sealed partial class SecretConfigurationValidator
     internal async Task<IReadOnlyList<string>> FindSecretReferenceErrorsAsync(
         string rootConfigurationPath,
         object boundOptions,
+        string? databaseBootstrapRefusal,
         CancellationToken cancellationToken)
     {
         var discovered = ConfiguredSecretDiscovery.FindSecretBearingSettings(boundOptions, rootConfigurationPath);
@@ -657,6 +679,14 @@ internal sealed partial class SecretConfigurationValidator
 
         foreach (var block in discovered.Blocks)
         {
+            if (databaseBootstrapRefusal is not null
+                && IsDatabaseSecretReference(block.Secret.SecretReference))
+            {
+                errors.Add($"{block.ConfigurationPath} — {databaseBootstrapRefusal}.");
+
+                continue;
+            }
+
             var result = await this.secretReferenceResolver.ResolveAsync(
                 block.Secret.SecretReference,
                 cancellationToken);
@@ -680,6 +710,14 @@ internal sealed partial class SecretConfigurationValidator
 
         return errors;
     }
+
+    private static bool ContainsDatabaseSecretReference(object boundOptions, string rootConfigurationPath) =>
+        ConfiguredSecretDiscovery.FindSecretBearingSettings(boundOptions, rootConfigurationPath)
+            .Blocks
+            .Any(block => IsDatabaseSecretReference(block.Secret.SecretReference));
+
+    private static bool IsDatabaseSecretReference(string configuredValue) =>
+        DatabaseSecretReference.TryParse(configuredValue, out _);
 
     /// <summary>Records a secret whose configured lifetime has already ended.</summary>
     /// <remarks>

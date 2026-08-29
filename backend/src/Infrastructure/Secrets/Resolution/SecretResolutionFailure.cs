@@ -37,7 +37,7 @@ public enum SecretResolutionFailure
     MaterialEmpty = 7,
 
     /// <summary>The provider backing the scheme could not be reached.</summary>
-    /// <remarks>No adapter shipped today produces this; it exists so a network-backed provider can distinguish an outage from a missing secret.</remarks>
+    /// <remarks>The database adapter uses this for a transport or server failure distinct from a missing row and a timeout.</remarks>
     ProviderUnavailable = 8,
 
     /// <summary>The material exceeds the maximum size a secret may occupy.</summary>
@@ -56,4 +56,10 @@ public enum SecretResolutionFailure
     /// provider that refused is a different operator problem from one that never answered.
     /// </remarks>
     RetrievalTimedOut = 11,
+
+    /// <summary>The reference points into the database while resolving it is required to reach or open that database.</summary>
+    BootstrapDependencyNotPermitted = 12,
+
+    /// <summary>The stored ciphertext, key, or authenticated binding could not produce material.</summary>
+    ProtectedMaterialUnavailable = 13,
 }
