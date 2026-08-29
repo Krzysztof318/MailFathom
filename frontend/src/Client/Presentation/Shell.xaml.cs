@@ -5,8 +5,8 @@
 namespace MailFathom.Client.Presentation;
 
 /// <summary>
-/// The control every route is nested inside. It holds the splash screen the application starts behind and the content
-/// area navigation writes into, and nothing else: a screen belongs to a route rather than to the shell.
+/// The control every route is nested inside. It holds the content area navigation writes into, and nothing else: a
+/// screen belongs to a route rather than to the shell.
 /// </summary>
 public sealed partial class Shell : UserControl, IContentControlProvider
 {
@@ -17,5 +17,5 @@ public sealed partial class Shell : UserControl, IContentControlProvider
     }
 
     /// <inheritdoc />
-    public ContentControl ContentControl => this.Splash;
+    public ContentControl ContentControl => this.RouteContent;
 }
