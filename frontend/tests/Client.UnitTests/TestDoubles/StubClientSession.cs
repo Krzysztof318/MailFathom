@@ -16,6 +16,7 @@ namespace MailFathom.Client.UnitTests.TestDoubles;
 internal sealed class StubClientSession : IClientSession, IDisposable
 {
     private readonly Signal signal = new();
+    private long revision;
 
     /// <summary>Builds a session answering with a standing, or with nothing at all.</summary>
     /// <param name="standing">What the deployment is to be read as having reported.</param>
@@ -26,6 +27,7 @@ internal sealed class StubClientSession : IClientSession, IDisposable
         this.Answered = reach ?? Reachable;
         this.Standing = State.Async(this, this.ReadAsync, this.signal);
         this.Connection = State.Async(this, this.ReadConnectionAsync, this.signal);
+        this.Revision = State.Async(this, this.ReadRevisionAsync, this.signal);
     }
 
     /// <summary>A deployment that answered on the first attempt, which is what a test not about the connection wants.</summary>
@@ -44,12 +46,22 @@ internal sealed class StubClientSession : IClientSession, IDisposable
     public IFeed<SessionStanding> Standing { get; }
 
     /// <inheritdoc />
+    public IFeed<long> Revision { get; }
+
+    /// <inheritdoc />
     public IFeed<DeploymentConnection> Connection { get; }
 
     /// <inheritdoc />
     public void Refresh()
     {
         this.Refreshes++;
+        this.signal.Raise();
+    }
+
+    /// <summary>Announces that the signed-in identity or deployment changed without modelling either value.</summary>
+    internal void ChangeSession()
+    {
+        Interlocked.Increment(ref this.revision);
         this.signal.Raise();
     }
 
@@ -65,4 +77,7 @@ internal sealed class StubClientSession : IClientSession, IDisposable
 
     private ValueTask<DeploymentConnection> ReadConnectionAsync(CancellationToken cancellationToken) =>
         ValueTask.FromResult(this.Answered);
+
+    private ValueTask<long> ReadRevisionAsync(CancellationToken cancellationToken) =>
+        ValueTask.FromResult(Interlocked.Read(ref this.revision));
 }

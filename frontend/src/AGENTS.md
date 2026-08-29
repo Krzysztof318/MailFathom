@@ -421,12 +421,15 @@ above is what keeps that from being a rule somebody has to enforce by reading.
   process does not own, and a screen that repeated it would be putting an attacker's words in MailFathom's voice.
 - **The surface it reaches is `/api/client`**, the backend's third transport surface, served only where a deployment
   enabled `ClientEndpoint`. It is not the MCP endpoint and not the administrative one: a credential admitted by either
-  of those authenticates nothing here. This client calls six of its routes today — `GET /api/client/session`,
+  of those authenticates nothing here. This client calls seven of its routes today — `GET /api/client/session`,
   reporting the running version and the grant the caller's credential carries and nothing that identifies that
   credential; `GET /api/client/accounts`, reporting the signed-in owner's own mailboxes and how current the copy of
   each one is; `GET /api/client/folders`, reporting the folder hierarchy beneath each of those mailboxes with the
   role the service gave each folder and how much mail it holds; `GET /api/client/emails`, serving one page of the
   message list by cursor, which is the route the mail screen then spends its time in;
+  `GET /api/client/emails/search`, serving one ranked page under the visible scope and filters; its query is carried in
+  the URL, so the deployment client removes the default HTTP loggers rather than putting that personal data in a request
+  log;
   `GET /api/client/threads/{threadId}`, serving one page of a conversation with what each of its messages added
   already on the message, which is what makes opening an exchange of thirty replies one request rather than thirty;
   and `GET /api/client/messages/{storedEmailId}/body`, reporting one message as the closed document tree a reading

@@ -5,6 +5,7 @@
 using MailFathom.Client.Backend.Accounts;
 using MailFathom.Client.Backend.Folders;
 using MailFathom.Client.Backend.Mail;
+using MailFathom.Client.Backend.Search;
 using MailFathom.Client.Backend.Threads;
 using MailFathom.Client.Backend.Timeline;
 
@@ -117,6 +118,26 @@ public sealed class DeploymentClient
                 HttpMethod.Get,
                 $"{DeploymentRoutes.MailTimelinePath}{query.QueryString()}"),
             DeploymentJsonContext.Default.DeploymentMailTimelinePage,
+            cancellationToken);
+    }
+
+    /// <summary>Asks the deployment for one forward page of mail ranked against a query.</summary>
+    /// <param name="query">The text, scope, filters, and cursor that define the ranked list.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The page and what explains both its rows and the ranking available.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="query" /> is <see langword="null" />.</exception>
+    /// <exception cref="DeploymentFailure">Thrown when the deployment refused, was unreachable, did not answer in time, or answered with something else.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when nothing has pointed this client at a deployment yet.</exception>
+    public Task<DeploymentMailSearchPage> SearchMailAsync(
+        MailSearchQuery query,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+
+        return DeploymentExchange.ReadAsync(
+            this.Transport(),
+            new HttpRequestMessage(HttpMethod.Get, $"{DeploymentRoutes.MailSearchPath}{query.QueryString()}"),
+            DeploymentJsonContext.Default.DeploymentMailSearchPage,
             cancellationToken);
     }
 

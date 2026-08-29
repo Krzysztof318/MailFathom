@@ -970,4 +970,180 @@
   <data name="MailMessage.Button.RetryAttachment.Content" xml:space="preserve"><value>Spróbuj ponownie</value><comment>Repeats the save choice and stream for one attachment.</comment></data>
   <data name="MailMessage.InfoBar.AttachmentSaved.Title" xml:space="preserve"><value>Zapisano</value><comment>Heads the completed save of one attachment.</comment></data>
   <data name="MailMessage.InfoBar.AttachmentSaved.Message" xml:space="preserve"><value>Załącznik został zapisany.</value><comment>Confirms the platform completed the chosen file update.</comment></data>
+  <data name="MailPage.Button.Search.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Przeszukaj pocztę</value>
+    <comment>Names the icon-only control that opens search from the mail timeline.</comment>
+  </data>
+  <data name="MailSearchView.Button.Close.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Wróć do listy wiadomości</value>
+    <comment>Names the icon-only control that closes search without discarding it.</comment>
+  </data>
+  <data name="MailSearchView.TextBox.Query.Header" xml:space="preserve">
+    <value>Przeszukaj pocztę</value>
+    <comment>The permanent label of the query field.</comment>
+  </data>
+  <data name="MailSearchView.TextBox.Query.PlaceholderText" xml:space="preserve">
+    <value>Słowa lub znaczenie do znalezienia</value>
+    <comment>An example of what the one unmistakable search field accepts.</comment>
+  </data>
+  <data name="MailSearchView.Button.Search.Content" xml:space="preserve">
+    <value>Szukaj</value>
+    <comment>Runs the query and every visible constraint.</comment>
+  </data>
+  <data name="MailSearchView.Button.CurrentScope.Content" xml:space="preserve">
+    <value>Użyj bieżącego zakresu skrzynki</value>
+    <comment>Takes the account and folder currently selected in the mailbox tree.</comment>
+  </data>
+  <data name="MailSearchView.TextBox.Account.Header" xml:space="preserve">
+    <value>Konto</value>
+    <comment>Labels the account constraint.</comment>
+  </data>
+  <data name="MailSearchView.Button.ClearAccount.Content" xml:space="preserve">
+    <value>Wszystkie konta</value>
+    <comment>Removes the account constraint alone.</comment>
+  </data>
+  <data name="MailSearchView.TextBox.Folder.Header" xml:space="preserve">
+    <value>Folder</value>
+    <comment>Labels the folder alias or role constraint.</comment>
+  </data>
+  <data name="MailSearchView.Button.ClearFolder.Content" xml:space="preserve">
+    <value>Wszystkie foldery</value>
+    <comment>Removes the folder constraint alone.</comment>
+  </data>
+  <data name="MailSearchView.TextBox.Sender.Header" xml:space="preserve">
+    <value>Nadawca</value>
+    <comment>Labels the sender address constraint.</comment>
+  </data>
+  <data name="MailSearchView.Button.ClearSender.Content" xml:space="preserve">
+    <value>Dowolny nadawca</value>
+    <comment>Removes the sender constraint alone.</comment>
+  </data>
+  <data name="MailSearchView.TextBox.Recipient.Header" xml:space="preserve">
+    <value>Odbiorca</value>
+    <comment>Labels the recipient address constraint.</comment>
+  </data>
+  <data name="MailSearchView.Button.ClearRecipient.Content" xml:space="preserve">
+    <value>Dowolny odbiorca</value>
+    <comment>Removes the recipient constraint alone.</comment>
+  </data>
+  <data name="MailSearchView.DatePicker.After.Header" xml:space="preserve">
+    <value>Odebrano tego dnia lub później</value>
+    <comment>Labels the inclusive beginning of the date range.</comment>
+  </data>
+  <data name="MailSearchView.Button.ClearAfter.Content" xml:space="preserve">
+    <value>Bez daty początkowej</value>
+    <comment>Removes the beginning of the date range alone.</comment>
+  </data>
+  <data name="MailSearchView.DatePicker.Before.Header" xml:space="preserve">
+    <value>Odebrano przed</value>
+    <comment>Labels the exclusive end of the date range.</comment>
+  </data>
+  <data name="MailSearchView.Button.ClearBefore.Content" xml:space="preserve">
+    <value>Bez daty końcowej</value>
+    <comment>Removes the end of the date range alone.</comment>
+  </data>
+  <data name="MailSearchView.CheckBox.Unread.Content" xml:space="preserve">
+    <value>Nieprzeczytane / przeczytane / oba</value>
+    <comment>Labels the three-state unread constraint; indeterminate means either.</comment>
+  </data>
+  <data name="MailSearchView.CheckBox.Flagged.Content" xml:space="preserve">
+    <value>Oflagowane / nieoflagowane / oba</value>
+    <comment>Labels the three-state flag constraint; indeterminate means either.</comment>
+  </data>
+  <data name="MailSearchView.CheckBox.Attachments.Content" xml:space="preserve">
+    <value>Z załącznikami / bez / oba</value>
+    <comment>Labels the three-state attachment constraint; indeterminate means either.</comment>
+  </data>
+  <data name="MailSearchView.List.Results.[using:Microsoft.UI.Xaml.Automation]AutomationProperties.Name" xml:space="preserve">
+    <value>Wyniki wyszukiwania</value>
+    <comment>What a screen reader announces the ranked list as.</comment>
+  </data>
+  <data name="MailSearchView.InfoBar.SemanticInactive.Title" xml:space="preserve">
+    <value>Wyszukiwanie po znaczeniu nie jest skonfigurowane</value>
+    <comment>Heads the notice that no embedding profile is active.</comment>
+  </data>
+  <data name="MailSearchView.InfoBar.SemanticInactive.Message" xml:space="preserve">
+    <value>Te wyniki dopasowano tylko po słowach, ponieważ ta instalacja nie ma aktywnego profilu embeddingów.</value>
+    <comment>Explains why a supported lexical-only deployment cannot find by meaning.</comment>
+  </data>
+  <data name="MailSearchView.InfoBar.SemanticDegraded.Title" xml:space="preserve">
+    <value>Wyszukiwanie po znaczeniu jest niedostępne</value>
+    <comment>Heads the notice that semantic ranking is configured but cannot currently answer.</comment>
+  </data>
+  <data name="MailSearchView.InfoBar.SemanticDegraded.Message" xml:space="preserve">
+    <value>Te wyniki dopasowano tylko po słowach. Instalacja wymaga przywrócenia dostawcy embeddingów.</value>
+    <comment>Explains the degraded result and the operator action without exposing provider details.</comment>
+  </data>
+  <data name="MailSearchView.InfoBar.AwaitingSearch.Title" xml:space="preserve">
+    <value>Znajdź wiadomości po słowach lub znaczeniu</value>
+    <comment>Heads the state before the first search.</comment>
+  </data>
+  <data name="MailSearchView.InfoBar.AwaitingSearch.Message" xml:space="preserve">
+    <value>Wpisz zapytanie, sprawdź widoczny zakres i filtry, a następnie wyszukaj.</value>
+    <comment>States the path from the empty editor to results.</comment>
+  </data>
+  <data name="MailSearchView.InfoBar.NoResults.Title" xml:space="preserve">
+    <value>Żadna wiadomość nie pasuje do tego wyszukiwania</value>
+    <comment>Heads the honest empty result.</comment>
+  </data>
+  <data name="MailSearchView.InfoBar.NoResults.Message" xml:space="preserve">
+    <value>Usuń filtr lub użyj bieżącego zakresu skrzynki, aby poszerzyć wyszukiwanie.</value>
+    <comment>Offers the next act from an empty ranked list.</comment>
+  </data>
+  <data name="MailSearchView.Button.Widen.Content" xml:space="preserve">
+    <value>Przeszukaj całą pocztę</value>
+    <comment>Removes account and folder constraints and immediately searches again.</comment>
+  </data>
+  <data name="MailSearchView.InfoBar.Unavailable.Title" xml:space="preserve">
+    <value>Wyszukiwanie jest niedostępne</value>
+    <comment>Heads a search request that did not arrive.</comment>
+  </data>
+  <data name="MailSearchView.InfoBar.Unavailable.Message" xml:space="preserve">
+    <value>MailFathom nie mógł przeszukać lokalnej kopii. Spróbuj ponownie bez zmiany zapytania.</value>
+    <comment>Explains the failure without showing a transport exception or query text.</comment>
+  </data>
+  <data name="MailSearchView.Button.Retry.Content" xml:space="preserve">
+    <value>Spróbuj ponownie</value>
+    <comment>Repeats the visible search after its first page failed.</comment>
+  </data>
+  <data name="MailSearchView.InfoBar.PageUnavailable.Title" xml:space="preserve">
+    <value>Nie udało się pobrać kolejnych wyników</value>
+    <comment>Heads a failure that leaves the existing result list intact.</comment>
+  </data>
+  <data name="MailSearchView.InfoBar.PageUnavailable.Message" xml:space="preserve">
+    <value>Pokazane wyniki są nadal dostępne. Poproś ponownie o następną stronę.</value>
+    <comment>Separates a failed continuation from a failed search.</comment>
+  </data>
+  <data name="MailSearchView.Button.ShowMore.Content" xml:space="preserve">
+    <value>Pokaż więcej wyników</value>
+    <comment>Takes the next keyset page onto the ranked list.</comment>
+  </data>
+  <data name="Search.Match.Lexical" xml:space="preserve">
+    <value>Dopasowano po słowach</value>
+    <comment>Explains a result found by lexical ranking.</comment>
+  </data>
+  <data name="Search.Match.Semantic" xml:space="preserve">
+    <value>Dopasowano po znaczeniu</value>
+    <comment>Explains a result found by semantic ranking without the query's words.</comment>
+  </data>
+  <data name="Search.Match.Both" xml:space="preserve">
+    <value>Dopasowano po słowach i znaczeniu</value>
+    <comment>Explains a result both rankings found.</comment>
+  </data>
+  <data name="Search.Match.Unknown" xml:space="preserve">
+    <value>Dopasowano przez tę instalację</value>
+    <comment>Claims no ranking where a newer deployment names one this client does not know.</comment>
+  </data>
+  <data name="Search.Scope.Everything" xml:space="preserve">
+    <value>Cała poczta</value>
+    <comment>Names a search across every account and folder.</comment>
+  </data>
+  <data name="Search.Scope.Account" xml:space="preserve">
+    <value>{0}</value>
+    <comment>Names a search constrained only by an account or only by a folder role.</comment>
+  </data>
+  <data name="Search.Scope.Folder" xml:space="preserve">
+    <value>{0} / {1}</value>
+    <comment>Names a search constrained by an account and a folder.</comment>
+  </data>
 </root>

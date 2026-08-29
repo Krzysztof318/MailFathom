@@ -6,6 +6,7 @@ using System.Text.Json.Serialization;
 using MailFathom.Client.Backend.Accounts;
 using MailFathom.Client.Backend.Folders;
 using MailFathom.Client.Backend.Mail;
+using MailFathom.Client.Backend.Search;
 using MailFathom.Client.Backend.Threads;
 using MailFathom.Client.Backend.Timeline;
 
@@ -30,6 +31,7 @@ namespace MailFathom.Client.Backend;
 [JsonSerializable(typeof(DeploymentMailAccounts))]
 [JsonSerializable(typeof(DeploymentMailFolders))]
 [JsonSerializable(typeof(DeploymentMailTimelinePage))]
+[JsonSerializable(typeof(DeploymentMailSearchPage))]
 [JsonSerializable(typeof(DeploymentMailThreadPage))]
 [JsonSerializable(typeof(DeploymentMailMessageDetail))]
 [JsonSerializable(typeof(DeploymentMailBody))]
