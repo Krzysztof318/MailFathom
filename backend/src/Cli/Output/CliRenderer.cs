@@ -46,9 +46,12 @@ internal sealed class CliRenderer
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <remarks>
     /// The console is built over the writer it was given rather than over the process's own, so what is drawn is
-    /// assertable: a test hands it a string writer and reads back the bytes an operator would have seen. Interaction is
-    /// off because nothing here prompts — a question is asked by <see cref="ICliConsole.Confirm" />, which reads the
-    /// answer as a line and needs no cursor.
+    /// assertable: a test hands it a string writer and reads back the bytes an operator would have seen. ANSI support
+    /// follows <paramref name="terminal" /> rather than Spectre.Console's detector, because
+    /// <see cref="CliTerminal.Decide" /> has already honoured <c>NO_COLOR</c> and a redirected stream: detecting again
+    /// would let the process environment veto a drawing a test constructed as coloured. Interaction is off because
+    /// nothing here prompts — a question is asked by <see cref="ICliConsole.Confirm" />, which reads the answer as a
+    /// line and needs no cursor.
     /// </remarks>
     internal CliRenderer(TextWriter writer, CliTerminal terminal)
     {
@@ -57,8 +60,8 @@ internal sealed class CliRenderer
 
         this.console = AnsiConsole.Create(new AnsiConsoleSettings
         {
-            Ansi = terminal.PermitsColour ? AnsiSupport.Detect : AnsiSupport.No,
-            ColorSystem = terminal.PermitsColour ? ColorSystemSupport.Detect : ColorSystemSupport.NoColors,
+            Ansi = terminal.PermitsColour ? AnsiSupport.Yes : AnsiSupport.No,
+            ColorSystem = terminal.PermitsColour ? ColorSystemSupport.TrueColor : ColorSystemSupport.NoColors,
             Interactive = InteractionSupport.No,
             Out = new AnsiConsoleOutput(new TrimmedLineWriter(writer)),
         });
