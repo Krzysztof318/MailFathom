@@ -6756,6 +6756,12 @@ every_workflow_job_declares_its_permissions() {
 # to the rule the rest of this list describes. It writes code-scanning alerts and nothing else, and an
 # analysis that cannot record one is a log line rather than a check.
 #
+# A second scope belongs to no publishing job either: `fathom-review.yml` holds `contents: write` on
+# the one job that turns a review request into a `repository_dispatch`, because that is the narrowest
+# permission `POST /repos/{owner}/{repo}/dispatches` reaches. It is the only write in that file not
+# minted from the App's private key, it is held by a job that checks nothing out and runs no model,
+# and `main`'s ruleset is what stands between the token and the default branch.
+#
 # `publish-documentation.yml` publishes too, and what it publishes is a GitHub Pages deployment rather
 # than a package: `pages: write` creates the deployment and `id-token: write` is what the deployment is
 # claimed with. Both sit on the deploying job alone, and neither reaches the repository — the site is
@@ -6769,6 +6775,7 @@ every_write_scope_is_one_the_policy_records() {
     printf '%s\n' \
       'apply-pull-request-rules.yml pull-requests: write' \
       'codeql.yml security-events: write' \
+      'fathom-review.yml contents: write' \
       'nightly.yml attestations: write' \
       'nightly.yml id-token: write' \
       'nightly.yml packages: write' \
@@ -7226,6 +7233,72 @@ a_comment_never_cancels_a_review_in_flight() {
       return 1
     fi
   done
+}
+
+# The other half of the same hole, and the half `cancel-in-progress` cannot reach. That expression
+# governs a run that is *running*; a concurrency group also cancels a run that is *pending*, and it
+# does so unconditionally — GitHub holds one pending run per group, and a run joining the group ends
+# whichever was waiting there. A review is pending for its first seconds, so any comment arriving in
+# them ended it and then declined to start one, leaving the head with no verdict at all.
+#
+# What answers it is membership rather than cancellation: a run that can neither review nor cancel
+# is keyed by its own run id, so it shares a group with nothing. Two events are in that position and
+# both arrive on a pull request repeatedly — a comment, and a label that is not `fathom-review`.
+#
+# The commentary is stripped before the expression is read, because this file's prose names every
+# term below while arguing for it, and an assertion satisfied by the argument for a rule rather than
+# by the rule would pass whatever the expression said.
+a_comment_never_cancels_a_queued_review() {
+  local reviewer_workflow="$source_repository_root/.github/workflows/fathom-review.yml"
+  local concurrency
+  local failures=''
+  local required_term
+
+  concurrency="$(sed -n '/^concurrency:/,/^permissions:/p' "$reviewer_workflow" | grep -v '^[[:space:]]*#')"
+
+  for required_term in \
+    "github.event_name == 'issue_comment'" \
+    "github.event.action == 'labeled'" \
+    "github.event.label.name != 'fathom-review'" \
+    'github.run_id'; do
+    if [[ "$concurrency" != *"$required_term"* ]]; then
+      failures+="fathom-review.yml's concurrency group does not name ${required_term}, so a run that reviews nothing shares the pull request's group and cancels a review still queued there. "
+    fi
+  done
+
+  if [[ "$concurrency" != *'github.event.client_payload.pull_request_number'* ]]; then
+    failures+="fathom-review.yml's concurrency group does not key a requested review by the pull request it reviews, so two reviews can post to one pull request at once. "
+  fi
+
+  if [[ -n "$failures" ]]; then
+    printf '%s\n' "$failures" >&2
+    return 1
+  fi
+}
+
+# The comment path is two runs joined by one `repository_dispatch` type: `request` names it when it
+# asks for the review, and the `on:` block names it when it listens for one. A mismatch loses every
+# requested review while the job that asked reports success, which is the one failure here that
+# nothing else would report — so the two spellings are held together rather than trusted to agree.
+the_reviewer_listens_for_the_dispatch_it_sends() {
+  local reviewer_workflow="$source_repository_root/.github/workflows/fathom-review.yml"
+  local declared_type
+  local sent_type
+
+  declared_type="$(sed -n '/^  repository_dispatch:/,/^[a-z]/p' "$reviewer_workflow" |
+    sed -nE 's/^      - (.+)$/\1/p')"
+  sent_type="$(sed -nE 's/^          EVENT_TYPE: (.+)$/\1/p' "$reviewer_workflow")"
+
+  if [[ -z "$declared_type" ]]; then
+    printf 'fathom-review.yml declares no repository_dispatch type, so a comment asking for a review reaches nothing\n' >&2
+    return 1
+  fi
+
+  if [[ "$declared_type" != "$sent_type" ]]; then
+    printf "fathom-review.yml listens for repository_dispatch '%s' but asks for one as '%s'\n" \
+      "$declared_type" "$sent_type" >&2
+    return 1
+  fi
 }
 
 # The reviewer's subscription credential is named in five places: the workflow-level `env` that
@@ -8285,6 +8358,8 @@ run_test the_mutation_score_is_reported_and_never_gated
 run_test a_paid_provider_run_is_never_the_default
 run_test only_the_recorded_workflows_use_pull_request_target
 run_test a_comment_never_cancels_a_review_in_flight
+run_test a_comment_never_cancels_a_queued_review
+run_test the_reviewer_listens_for_the_dispatch_it_sends
 run_test the_reviewer_resolves_one_claude_credential_everywhere
 run_test the_development_tooling_never_reaches_a_published_artifact
 run_test the_required_check_aggregates_every_job_in_ci
