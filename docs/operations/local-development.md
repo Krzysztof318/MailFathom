@@ -333,12 +333,14 @@ machine, and that is also why it is a socket rather than a share of the MCP endp
 specific one on a single port is two sockets the operating system grants only one of, so sharing would have published
 the client surface wherever the MCP endpoint is published.
 
-**The surface is enabled by the normal orchestration.** The app model supplies its port and loopback bind, enables the
-password method, and gives it the head's own origin as the one browser origin
-`ClientEndpoint:Cors:AllowedOrigins` answers. The AppHost then provisions the credential above through the ordinary
-administrative API, so password policy, hashing, ownership, and audit behavior are the same as for a credential an
-operator created. A run started with `Client:Enabled` false starts no head and configures no origin, but the client API
-surface and its Basic credential remain available for a desktop head or a direct request.
+**The surface is enabled by the normal orchestration.** The app model supplies its port and loopback bind and enables
+the password method. It does not write `ClientEndpoint:Cors:AllowedOrigins`, so the product default of every origin
+stands: `localhost` and `127.0.0.1` are two origins a browser treats as distinct, and a local run that named only one
+of them refused the first API call from a tab opened as the other. A deployment names the origin it actually serves.
+The AppHost then provisions the credential above through the ordinary administrative API, so password policy, hashing,
+ownership, and audit behavior are the same as for a credential an operator created. A run started with `Client:Enabled`
+false starts no head, but the client API surface and its Basic credential remain available for a desktop head or a
+direct request.
 
 A **desktop** head takes the same property and reads the same key, so an orchestration could point one the same way.
 Started by hand it is given none, and reads `Deployment:Address` out of

@@ -344,7 +344,9 @@ internal static class HostPipeline
     /// </remarks>
     internal static void ComposeAdminSurface(IEndpointRouteBuilder app, ComposedHostSurfaces composition)
     {
-        var adminApi = app.MapAdminApi();
+        var adminApi = app
+            .MapAdminApi()
+            .RequireCors(AdminTransportSecurityExtensions.CorsPolicyName);
 
         if (composition.AdminRateLimits is not null)
         {
@@ -366,8 +368,9 @@ internal static class HostPipeline
             // Outside the group the requirement was attached to, and deliberately: its reader is a client that has no
             // credential yet and is reading this to find out where to obtain one.
             app.MapProtectedResourceMetadata(
-                [.. composition.Admin.Authentication],
-                AdminEndpointOptions.GrantedSurface);
+                    [.. composition.Admin.Authentication],
+                    AdminEndpointOptions.GrantedSurface)
+                .RequireCors(AdminTransportSecurityExtensions.CorsPolicyName);
         }
     }
 

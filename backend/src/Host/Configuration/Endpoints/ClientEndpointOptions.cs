@@ -32,9 +32,9 @@ namespace MailFathom.Host.Configuration.Endpoints;
 /// method, a value written where the list belongs — fail startup instead.
 /// </para>
 /// <para>
-/// <see cref="Cors" /> is the one setting this section carries that the administrative one does not, and the difference
-/// is the client rather than a preference: that endpoint's clients are command-line tools with no browser origin to be
-/// told anything, while this one is called from a page and a preflight it cannot answer is a client that cannot start.
+/// <see cref="Cors" /> is the same section the MCP and administrative endpoints carry, configured separately. This
+/// surface is called from a page, so a preflight it cannot answer is a client that cannot start; the default of every
+/// origin is what a first run needs, and an operator who knows the origin they serve names it.
 /// There is no client-certificate profile here, for the reason the administrative section states — the trust question a
 /// certificate answers is a second one this endpoint does not yet ask — and where it is served is stated in exactly the
 /// settings both existing endpoints use, so the day it does ask, the answer arrives as a profile on a listener already
@@ -106,7 +106,7 @@ internal sealed class ClientEndpointOptions
     public ClientApplicationOptions Application { get; set; } = new();
 
     /// <summary>Gets or sets which browser origins the endpoint answers.</summary>
-    /// <remarks>The setting the administrative endpoint has no use for. A WebAssembly head calls this surface from a page origin, so a preflight this endpoint cannot answer is a client that never starts; the same section the MCP endpoint carries, configured separately.</remarks>
+    /// <remarks>The same section the MCP and administrative endpoints carry, configured separately. A WebAssembly head calls this surface from a page origin, so a preflight it cannot answer is a client that never starts.</remarks>
     public TransportCorsOptions Cors { get; set; } = new();
 
     /// <summary>Gets or sets under which domains and certificates Kestrel terminates TLS for this endpoint.</summary>

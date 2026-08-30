@@ -593,8 +593,10 @@ else
     // an orchestration that already publishes the address as an endpoint does not need to do for the developer.
     if (OrchestrationContract.ResolveClientEnabled(builder.Configuration[OrchestrationContract.ClientEnabledKey]))
     {
-        // The browser origin, the service address, and the host Aspire publishes are resolved together because a page
-        // served under one loopback spelling and admitted under another is a first call refused by CORS.
+        // The dashboard link, the development server, and the address baked into the bundle are one loopback spelling,
+        // so a developer who follows the dashboard reaches the same socket the head was built to call. CORS is not
+        // part of that join: `localhost` and `127.0.0.1` are two origins ASP.NET CORS treats as distinct, and a local
+        // run that named only one of them refused the first API call from the other.
         var clientNetwork =
             OrchestrationContract.ResolveDevelopmentClientNetwork(clientPort, clientEndpointPort);
 
@@ -629,13 +631,10 @@ else
                 endpoint => endpoint.TargetHost = clientNetwork.PublishedClientHost,
                 createIfNotExists: false);
 
-        // The service's half of the same wiring, and the whole of it: the head's own origin as the one browser origin
-        // the client surface answers, rather than the every-origin posture an unstated list means. A local run is the
-        // one place the exact origin is known, so narrowing it costs nothing and answers in advance the preflight a
-        // deployment will also have to answer, so the first call is not refused on a preflight.
-        //
-        // Written only where a head exists to make the request.
-        mailFathomHost.WithEnvironment("ClientEndpoint__Cors__AllowedOrigins__0", clientNetwork.ClientOrigin);
+        // CORS stays at the product default of every origin. A local head is served from this machine and
+        // authenticated by the password the AppHost provisions; naming one origin here is what made a tab opened as
+        // `localhost` look like an empty mailbox while the same tab opened as `127.0.0.1` worked. A deployment
+        // narrows the list once it knows the origin it actually serves.
     }
 }
 

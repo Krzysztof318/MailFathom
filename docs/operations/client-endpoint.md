@@ -1054,9 +1054,8 @@ must prove, and why the advertised scope list is longer than the checked one, is
 
 ## Browser origins
 
-This is the one control the administrative endpoint has no use for. Its clients are command-line tools with no origin to
-be told anything, while a WebAssembly head calls this surface from a page — and a preflight this endpoint cannot answer
-is a client that never starts.
+A WebAssembly head calls this surface from a page, and a preflight this endpoint cannot answer is a client that never
+starts. The same setting exists on the MCP and administrative endpoints, configured separately.
 
 | `ClientEndpoint:Cors:AllowedOrigins` | What the endpoint answers |
 | --- | --- |

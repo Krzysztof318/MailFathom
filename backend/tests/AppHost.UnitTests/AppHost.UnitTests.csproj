@@ -12,5 +12,6 @@
          so compiling it here exercises the same code the app model runs. -->
     <Compile Include="..\..\src\AppHost\OrchestrationContract.cs" Link="OrchestrationContract.cs" />
     <Compile Include="..\..\src\AppHost\DevelopmentCredentialProvisioner.cs" Link="DevelopmentCredentialProvisioner.cs" />
+    <None Include="..\..\src\AppHost\Program.cs" CopyToOutputDirectory="PreserveNewest" Link="Build\Program.cs" />
   </ItemGroup>
 </Project>
