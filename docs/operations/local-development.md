@@ -679,7 +679,7 @@ scanner's finding does. The seed is what reproduces a value; the message is wher
 
 The default mode writes every word from word lists in the repository. `--ai` is the opt-in mode in which the
 *content* — subject and body, greeting and signature — is written by a model instead, and OpenAI is the only provider
-the implementation reaches: the same single client construction [ADR 0011](../decisions/0011-reaching-a-provider-outside-the-openai-wire-protocol.md)
+the implementation reaches: the same single client construction [ADR 0011](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0011-reaching-a-provider-outside-the-openai-wire-protocol.md)
 records for the service — the OpenAI wire protocol, a base address, and a key — built by the tool directly, because a
 development tool composes from its own files rather than from the service's dependency injection.
 
