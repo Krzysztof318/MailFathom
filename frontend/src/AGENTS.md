@@ -64,6 +64,17 @@ framework beside it.
   what makes a loading state and an error state the default rather than something each screen remembers to add.
 - **Awaiting a feed inside a model is normal** (`var value = await SomeState;`); awaiting one inside a view is a sign
   the work belongs in the model.
+- **A model a route names publishes exactly one public constructor.** Navigation builds a routed screen's data context
+  by reflection over the bindable type the generator emits beside the model: it takes the first of `GetConstructors()`
+  — an order the runtime does not define — and fills every parameter from the container and from nowhere else. Publish
+  two and which one a screen is built through is decided by reflection ordering; the route that loses is handed `null`
+  for what it carried no data for, its own guard throws, and Uno swallows that and leaves the page with no data context
+  at all. Nothing reports it, because every binding then keeps its target's default: a `FeedView` bound to nothing
+  renders as loading for good, an overlay whose visibility never arrives stays over what it covers, a command that is
+  null is inert, and no request the screen exists to make is ever sent. A screen opened both with and without route
+  data is therefore one constructor with an optional parameter rather than two — a route's data reaches the container
+  as a registration that yields `null` when the navigation carried none, so the one constructor is asked for it either
+  way. `ClientNavigationTests` asserts this over the real route tree, because it is not visible in any one file.
 
 ## Nothing waits in silence, and nothing waits without a way out
 

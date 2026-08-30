@@ -136,12 +136,12 @@ public sealed class MailModelTests
         var opened = navigation with { Contribution = "Updated after navigation" };
         var thread = new StubMailThread(first, opened);
         await using var model = new MailModel(
-            navigation,
             session,
             new StubMessageList(),
             thread,
             new StubWorkspace(),
-            new StubMailSearch());
+            new StubMailSearch(),
+            navigation);
 
         // Act
         var message = await model.OpenedThreadMessage;

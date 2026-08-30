@@ -10,7 +10,6 @@ using MailFathom.Client.Presentation.Spaces.Mail.Reading;
 using MailFathom.Client.Presentation.Threads;
 using MailFathom.Client.Presentation.Workspace;
 using MailFathom.Client.Session;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace MailFathom.Client.Presentation.Spaces.Mail;
 
@@ -50,44 +49,34 @@ public partial record MailModel
     /// <param name="thread">The run's own conversation, which is whatever the list has one message selected in.</param>
     /// <param name="workspace">The scope a selected passage narrows for the intent field.</param>
     /// <param name="search">The run's own ranked list, which opens the same conversation without replacing itself.</param>
-    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    [ActivatorUtilitiesConstructor]
+    /// <param name="openedMessage">
+    /// The conversation row the phone route opened, or <see langword="null" /> where the route named none — which is
+    /// every route into this space but that one.
+    /// </param>
+    /// <exception cref="ArgumentNullException">Thrown when an argument other than <paramref name="openedMessage" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// One public constructor, and that is a constraint the navigation framework imposes rather than a preference.
+    /// Uno builds the bindable type the generator emits beside this record by taking
+    /// <see cref="Type.GetConstructors()" /> and using the first — an order the runtime does not define — and it fills
+    /// every parameter from the container alone. So a model reachable through a route may publish exactly one
+    /// constructor: publish two and which of them a screen is built through is decided by reflection ordering, and the
+    /// page whose turn it is to lose gets no data context at all rather than an error anybody sees.
+    /// </para>
+    /// <para>
+    /// That is also why <paramref name="openedMessage" /> is optional rather than a constructor of its own. A route's
+    /// data reaches the container as a registration that yields <see langword="null" /> when the navigation carried
+    /// none, so the one constructor is asked for it on every route into this space and answers for both: the row on
+    /// the phone route that named one, and nothing on the routes that open the space at large.
+    /// </para>
+    /// </remarks>
     public MailModel(
-        IClientSession session,
-        IMessageList messages,
-        IMailThread thread,
-        IWorkspace workspace,
-        IMailSearch search)
-        : this(session, messages, thread, workspace, search, openedMessageKey: null)
-    {
-    }
-
-    /// <summary>Initializes the same mail model for the phone route that draws one message from the open conversation.</summary>
-    /// <param name="openedMessage">The conversation row the route opened.</param>
-    /// <param name="session">What the deployment allows this caller.</param>
-    /// <param name="messages">The run's own message list, drawn from wherever the mailbox tree says somebody is.</param>
-    /// <param name="thread">The run's own conversation, which is whatever the list has one message selected in.</param>
-    /// <param name="workspace">The scope a selected passage narrows for the intent field.</param>
-    /// <param name="search">The run's own ranked list, which opens the same conversation without replacing itself.</param>
-    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
-    public MailModel(
-        ThreadMessageRow openedMessage,
-        IClientSession session,
-        IMessageList messages,
-        IMailThread thread,
-        IWorkspace workspace,
-        IMailSearch search)
-        : this(session, messages, thread, workspace, search, KeyOf(openedMessage))
-    {
-    }
-
-    private MailModel(
         IClientSession session,
         IMessageList messages,
         IMailThread thread,
         IWorkspace workspace,
         IMailSearch search,
-        string? openedMessageKey)
+        ThreadMessageRow? openedMessage = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(messages);
@@ -99,6 +88,10 @@ public partial record MailModel
         this.thread = thread;
         this.workspace = workspace;
         this.search = search;
+
+        // The key rather than the row, so the model outlives the navigation without holding one message's content for
+        // as long as the space is open. Which row carries that key is whatever the run's own conversation holds now.
+        var openedMessageKey = openedMessage?.Key;
 
         this.WithholdsMail = session.Standing.Select(standing => standing.Withholds(ClientCapability.Mail));
 
@@ -441,12 +434,5 @@ public partial record MailModel
         var arrangement = await this.messages.Arrangement ?? MessageListArrangement.Default;
 
         await this.messages.ArrangeAsync(change(arrangement), cancellationToken).ConfigureAwait(false);
-    }
-
-    private static string KeyOf(ThreadMessageRow message)
-    {
-        ArgumentNullException.ThrowIfNull(message);
-
-        return message.Key;
     }
 }
