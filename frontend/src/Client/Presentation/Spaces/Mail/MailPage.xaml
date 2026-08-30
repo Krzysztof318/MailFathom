@@ -4,6 +4,7 @@ Licensed under the Apache License, Version 2.0. See LICENSE in the project root 
 Project repository: https://github.com/Krzysztof318/MailFathom
 -->
 <Page x:Class="MailFathom.Client.Presentation.Spaces.Mail.MailPage"
+      x:Name="MailRoot"
       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
       xmlns:mvux="using:Uno.Extensions.Reactive.UI"
@@ -24,7 +25,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
             <AdaptiveTrigger MinWindowWidth="{StaticResource WorkspaceWideWindowWidth}" />
           </VisualState.StateTriggers>
           <VisualState.Setters>
-            <Setter Target="MessageRows.(uen:Navigation.Request)" Value="" />
+            <Setter Target="MailRoot.ThreadNavigationRequest" Value="" />
           </VisualState.Setters>
         </VisualState>
       </VisualStateGroup>
@@ -133,43 +134,33 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                   Style="{StaticResource TextBlockButtonStyle}"
                   Visibility="{Binding HasMoreBefore, Converter={StaticResource AffirmedVisibility}}" />
 
-          <Grid Grid.Row="2">
-            <!-- One virtualized list over a bounded window. The panel realizes the rows on screen rather than the rows
-                 loaded, and the window bounds what is loaded rather than what has been scrolled past, so message forty
-                 thousand of a folder costs what message one costs. Every row carries its own key, so a page arriving
-                 updates the rows it changed and leaves the containers of the rest — and what was selected stays
-                 selected.
+          <mvux:FeedView Grid.Row="2"
+                         Source="{Binding Messages}">
+            <!-- The list is drawn from the feed's value the way the mailbox tree is: a ListView bound to the feed
+                 itself sits empty on the browser head after the deployment has already answered, because that head
+                 does not expose an IListFeed as an items source the way a FeedView's Data does. -->
+            <mvux:FeedView.ValueTemplate>
+              <DataTemplate>
+                <ListView x:Uid="MailPage.List.Messages"
+                          ItemsSource="{Binding Data}"
+                          uen:Navigation.Request="{Binding ThreadNavigationRequest, ElementName=MailRoot}"
+                          SelectionMode="Extended"
+                          IsItemClickEnabled="False"
+                          Loaded="OnMessageRowsLoaded"
+                          Unloaded="OnMessageRowsUnloaded"
+                          SelectionChanged="OnMessageRowsSelectionChanged"
+                          Holding="OnRowHeld"
+                          Padding="4,0,4,12">
+                  <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="messages:MessageRow">
+                      <messages:MessageRowView Row="{x:Bind}" />
+                    </DataTemplate>
+                  </ListView.ItemTemplate>
+                </ListView>
+              </DataTemplate>
+            </mvux:FeedView.ValueTemplate>
 
-                 Extended is the selection a pointer expects: the modifiers, the range, the drag, and the keyboard all
-                 belong to the control rather than to anything written here, and a touch head reaches a multiple
-                 selection through the long press below. What comes out of it is the workspace scope, which is what
-                 makes selecting four messages the scope of the next question rather than a highlight. -->
-            <ListView x:Name="MessageRows"
-                      x:Uid="MailPage.List.Messages"
-                      ItemsSource="{Binding Messages}"
-                      uen:Navigation.Request="MailThread"
-                      SelectionMode="Extended"
-                      IsItemClickEnabled="False"
-                      Holding="OnRowHeld"
-                      Padding="4,0,4,12">
-              <ListView.ItemTemplate>
-                <DataTemplate x:DataType="messages:MessageRow">
-                  <messages:MessageRowView Row="{x:Bind}" />
-                </DataTemplate>
-              </ListView.ItemTemplate>
-            </ListView>
-
-            <!-- The three states the list genuinely has, rendered by the feed rather than remembered by this page. Its
-                 value template draws nothing, because the list above is what draws a list that arrived — the same
-                 arrangement the frame uses for the session it is composed over. -->
-            <mvux:FeedView Source="{Binding Messages}">
-              <mvux:FeedView.ValueTemplate>
-                <DataTemplate>
-                  <Border Height="0" />
-                </DataTemplate>
-              </mvux:FeedView.ValueTemplate>
-
-              <mvux:FeedView.ProgressTemplate>
+            <mvux:FeedView.ProgressTemplate>
                 <DataTemplate>
                   <ProgressBar IsIndeterminate="True"
                                VerticalAlignment="Top"
@@ -219,7 +210,6 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                 </DataTemplate>
               </mvux:FeedView.ErrorTemplate>
             </mvux:FeedView>
-          </Grid>
 
           <StackPanel Grid.Row="3"
                       Padding="12,4,12,8"

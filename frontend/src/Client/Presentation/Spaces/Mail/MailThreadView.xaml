@@ -81,15 +81,17 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                Severity="Informational" />
     </StackPanel>
 
-    <Grid Grid.Row="1">
-      <ListView x:Name="ThreadMessageRows"
-                x:Uid="MailPage.List.ThreadMessages"
-                ItemsSource="{Binding ThreadMessages}"
-                SelectionMode="Single"
-                IsItemClickEnabled="False"
-                Loaded="OnThreadLoaded"
-                Unloaded="OnThreadUnloaded"
-                Padding="4,0,4,12">
+    <mvux:FeedView Grid.Row="1"
+                   Source="{Binding ThreadMessages}">
+      <mvux:FeedView.ValueTemplate>
+        <DataTemplate>
+          <ListView x:Uid="MailPage.List.ThreadMessages"
+                    ItemsSource="{Binding Data}"
+                    SelectionMode="Single"
+                    IsItemClickEnabled="False"
+                    Loaded="OnThreadLoaded"
+                    Unloaded="OnThreadUnloaded"
+                    Padding="4,0,4,12">
         <ListView.ItemTemplate>
           <DataTemplate x:DataType="threads:ThreadMessageRow">
             <StackPanel Spacing="4">
@@ -97,7 +99,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Stretch"
                             IsChecked="{x:Bind IsExpanded, Mode=OneWay}"
-                            Command="{utu:ItemsControlBinding Path=DataContext.ToggleThreadMessage}"
+                            Command="{Binding DataContext.ToggleThreadMessage, ElementName=ThreadViewRoot}"
                             CommandParameter="{x:Bind Key}"
                             uen:Navigation.Request="{Binding MessageRoute, ElementName=ThreadViewRoot}"
                             uen:Navigation.Data="{Binding}"
@@ -199,7 +201,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                 <Button x:Uid="MailPage.Button.ShowWholeMessage"
                         HorizontalAlignment="Left"
                         Style="{StaticResource TextBlockButtonStyle}"
-                        Command="{utu:ItemsControlBinding Path=DataContext.ShowWholeThreadMessage}"
+                        Command="{Binding DataContext.ShowWholeThreadMessage, ElementName=ThreadViewRoot}"
                         CommandParameter="{x:Bind Key}"
                         Visibility="{x:Bind OffersWholeMessage, Converter={StaticResource AffirmedVisibility}}" />
 
@@ -213,7 +215,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                          Severity="Warning">
                   <InfoBar.ActionButton>
                     <Button x:Uid="MailPage.Button.RetryWholeMessage"
-                            Command="{utu:ItemsControlBinding Path=DataContext.ShowWholeThreadMessage}"
+                            Command="{Binding DataContext.ShowWholeThreadMessage, ElementName=ThreadViewRoot}"
                             CommandParameter="{x:Bind Key}" />
                   </InfoBar.ActionButton>
                 </InfoBar>
@@ -222,23 +224,18 @@ Project repository: https://github.com/Krzysztof318/MailFathom
                                          Reading="{x:Bind Message, Mode=OneWay}"
                                          Body="{x:Bind WholeMessage, Mode=OneWay}"
                                          Visibility="{x:Bind ShowsMessage, Converter={StaticResource AffirmedVisibility}}"
-                                         ShowRemoteContentCommand="{utu:ItemsControlBinding Path=DataContext.ShowThreadRemoteContent}"
+                                         ShowRemoteContentCommand="{Binding DataContext.ShowThreadRemoteContent, ElementName=ThreadViewRoot}"
                                          ShowRemoteContentCommandParameter="{x:Bind Key}"
-                                         SaveAttachmentCommand="{utu:ItemsControlBinding Path=DataContext.SaveAttachment}"
-                                         CancelAttachmentCommand="{utu:ItemsControlBinding Path=DataContext.CancelAttachment}"
-                                         UseSelectionCommand="{utu:ItemsControlBinding Path=DataContext.UseBodySelection}" />
+                                         SaveAttachmentCommand="{Binding DataContext.SaveAttachment, ElementName=ThreadViewRoot}"
+                                         CancelAttachmentCommand="{Binding DataContext.CancelAttachment, ElementName=ThreadViewRoot}"
+                                         UseSelectionCommand="{Binding DataContext.UseBodySelection, ElementName=ThreadViewRoot}" />
               </StackPanel>
             </StackPanel>
           </DataTemplate>
         </ListView.ItemTemplate>
-      </ListView>
-
-      <mvux:FeedView Source="{Binding ThreadMessages}">
-        <mvux:FeedView.ValueTemplate>
-          <DataTemplate>
-            <Border Height="0" />
-          </DataTemplate>
-        </mvux:FeedView.ValueTemplate>
+          </ListView>
+        </DataTemplate>
+      </mvux:FeedView.ValueTemplate>
 
         <mvux:FeedView.ProgressTemplate>
           <DataTemplate>
@@ -279,8 +276,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
             </InfoBar>
           </DataTemplate>
         </mvux:FeedView.ErrorTemplate>
-      </mvux:FeedView>
-    </Grid>
+    </mvux:FeedView>
 
     <StackPanel Grid.Row="2"
                 Padding="12,4,12,8"
