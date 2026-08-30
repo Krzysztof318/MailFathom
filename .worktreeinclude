@@ -20,3 +20,9 @@
 
 # Codex copies this ignored machine-local configuration into worktrees it creates.
 .codex/config.toml
+
+# Qwen Code keeps everything a session needs in one directory: settings.json wiring its tools, and
+# QWEN.local.md holding the instructions it loads. The whole directory rather than the two names,
+# because what belongs in it is Qwen's decision rather than this file's, and a worktree missing half
+# of it is a session configured differently from the checkout it was branched from.
+.qwen/
