@@ -208,6 +208,28 @@ public sealed class SyntheticEmailGeneratorAiModeTests
     }
 
     [Fact]
+    public void Generate_APlanWithNamedTopics_IsRefused()
+    {
+        // Arrange, Act, Assert
+        Assert.Throws<ArgumentException>(
+            () => SyntheticEmailGenerator.Generate(Plan([], [SyntheticMailTopic.Business])));
+    }
+
+    [Fact]
+    public async Task GenerateAsync_APlanWithNamedTopicsAndNoLanguages_IsRefused()
+    {
+        // Arrange
+        var source = new ScriptedAiEmailContentSource(Answer);
+
+        // Act, Assert
+        await Assert.ThrowsAsync<ArgumentException>(() => SyntheticEmailGenerator.GenerateAsync(
+            Plan([], [SyntheticMailTopic.Business]),
+            source,
+            CancellationToken.None));
+        Assert.Empty(source.Requests);
+    }
+
+    [Fact]
     public async Task GenerateAsync_APlanNamingNoTopics_IsRefused()
     {
         // Arrange, Act, Assert

@@ -169,14 +169,33 @@ internal sealed class OpenAiEmailContentSource : IAiEmailContentSource
                 "The model's answer was not the JSON object it was asked for. Retry; if it persists, name a different model in the AI provider file.");
         }
 
-        if (content is null || string.IsNullOrWhiteSpace(content.Subject) || string.IsNullOrWhiteSpace(content.Body))
+        // The endpoint is one a developer named rather than one the tool chose, and a named endpoint is not a trusted
+        // one: a line break in the subject would end the composed header early and turn what follows into headers the
+        // model never signed. The service reduces a stored subject the same way where it composes a reply, for the
+        // same reason, and a body keeps the whitespace that is its structure and nothing else of the control set.
+        var subject = ReadableSubject(content?.Subject);
+        var body = ReadableBody(content?.Body);
+
+        if (string.IsNullOrWhiteSpace(subject) || string.IsNullOrWhiteSpace(body))
         {
             throw new SyntheticMailFailure(
                 "The model's answer carried no subject or body. Retry; if it persists, name a different model in the AI provider file.");
         }
 
-        return new AiEmailContent(content.Subject.Trim(), content.Body.Trim());
+        return new AiEmailContent(subject, body);
     }
+
+    /// <summary>Reduces the answered subject to what a composed header can carry.</summary>
+    private static string ReadableSubject(string? subject) =>
+        string.IsNullOrWhiteSpace(subject)
+            ? string.Empty
+            : new string([.. subject.Where(static character => !char.IsControl(character))]).Trim();
+
+    /// <summary>Reduces the answered body to what a MIME text part can carry.</summary>
+    private static string ReadableBody(string? body) =>
+        string.IsNullOrWhiteSpace(body)
+            ? string.Empty
+            : new string([.. body.Where(static character => !char.IsControl(character) || char.IsWhiteSpace(character))]).Trim();
 
     private static List<ChatMessage> BuildMessages(AiEmailContentRequest request)
     {

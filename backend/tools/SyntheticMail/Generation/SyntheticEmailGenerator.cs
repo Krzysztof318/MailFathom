@@ -82,15 +82,17 @@ internal sealed class SyntheticEmailGenerator
     /// <param name="plan">What the corpus is, seed included.</param>
     /// <returns>The messages, oldest first.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="plan" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when the plan names languages, which is a corpus only <see cref="GenerateAsync" /> can build.</exception>
+    /// <exception cref="ArgumentException">Thrown when the plan names languages or topics, which is a corpus only <see cref="GenerateAsync" /> can build.</exception>
     internal static IReadOnlyList<SyntheticEmail> Generate(SyntheticCorpusPlan plan)
     {
         ArgumentNullException.ThrowIfNull(plan);
 
-        if (plan.Languages.Count > 0)
+        // A plan names the source's axis on either side, and the two move together: a corpus is either the one the
+        // vocabulary writes or the one a source writes, and a plan naming exactly one of the two is neither.
+        if (plan.Languages.Count > 0 || plan.Topics.Count > 0)
         {
             throw new ArgumentException(
-                "A plan that names languages is one a source writes, and GenerateAsync is the one that names it.",
+                "A plan that names languages or topics is one a source writes, and GenerateAsync is the one that names it.",
                 nameof(plan));
         }
 
@@ -103,7 +105,7 @@ internal sealed class SyntheticEmailGenerator
     /// <param name="cancellationToken">Cancels the run.</param>
     /// <returns>The messages, oldest first.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="plan" /> is <see langword="null" />, or <paramref name="contentSource" /> is when the plan needs one.</exception>
-    /// <exception cref="ArgumentException">Thrown when the plan's distribution names no topic or one that is not a topic.</exception>
+    /// <exception cref="ArgumentException">Thrown when the plan names topics without naming languages, or when its distribution names no topic or one that is not a topic.</exception>
     internal static async Task<IReadOnlyList<SyntheticEmail>> GenerateAsync(
         SyntheticCorpusPlan plan,
         IAiEmailContentSource? contentSource,

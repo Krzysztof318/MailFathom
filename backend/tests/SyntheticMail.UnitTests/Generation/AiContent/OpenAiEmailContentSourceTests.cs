@@ -101,6 +101,7 @@ public sealed class OpenAiEmailContentSourceTests
     [InlineData("""{ "subject": "Figures" }""")]
     [InlineData("""{ "body": "Hello." }""")]
     [InlineData("""{ "subject": "  ", "body": "  " }""")]
+    [InlineData("""{ "subject": "\u0000\u001b", "body": "Hello." }""")]
     public void ParseContent_AnAnswerThatIsNotOne_IsRefusedAsARetry(string contents)
     {
         // Arrange, Act
@@ -109,6 +110,20 @@ public sealed class OpenAiEmailContentSourceTests
         // Assert
         // A retry is the move rather than a corpus built around an answer the model did not give.
         Assert.Contains("Retry", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ParseContent_AnAnswerCarryingControlCharacters_IsReducedToWhatItsDestinationsCarry()
+    {
+        // Arrange, Act
+        var content = OpenAiEmailContentSource.ParseContent(
+            """{ "subject": "Figures\r\nSubject: injected", "body": "Hello.\u0000\n\nMore.\t" }""");
+
+        // Assert
+        // A line break in the subject would end the composed header early and make the rest of the answer a header,
+        // so it is removed rather than carried; the body's own line breaks are its structure and stay.
+        Assert.Equal("FiguresSubject: injected", content.Subject);
+        Assert.Equal("Hello.\n\nMore.", content.Body);
     }
 
     /// <summary>The one member of a provider response the mapping reads, over a type with no public constructor.</summary>
