@@ -1,0 +1,125 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+name: Weekly diagnostics
+
+# The two measurements `Nightly` used to carry, on a channel of their own: the hot-path benchmarks and the
+# mutation score. Neither is a property of the image a nightly publishes — one says what the hot paths
+# cost, the other says where the suite stopped asserting — so the publish decision that gates a nightly
+# was a gate they never needed, and a channel whose reason to exist is publishing an image is the wrong
+# home for two measurements that publish nothing.
+#
+# It runs at 02:00 UTC on Sundays, which is 04:00 in Europe/Warsaw under CEST and 03:00 under CET; GitHub
+# schedules are expressed in UTC only, and a run may start later than asked when the hosted queue is busy.
+# The schedule fires on `main` alone, which is what a measurement of the tree somebody deploys is, and a
+# manual dispatch measures the same head for a change that cannot wait for Sunday.
+#
+# **A week on which `main` has not moved still measures.** The nightly's skip was a decision about the
+# image it was about to publish, and this channel publishes nothing, so there is no state beside the run
+# to compare against and nothing to skip: a quiet week's run says the toolchain that produces the two
+# reports still works, which is the only fact such a week has left to say. Actions minutes are free for a
+# public repository, so the cost of the reprint is wall-clock on a runner nobody else is using.
+#
+# Nothing here gates anything, on the standing the two jobs carried on the nightly channel: neither job
+# waits on the other, and a failure marks the job failed without failing the run — a missing report is
+# legible on the run that should have carried it without reading as a verdict about `main`. What a change
+# *does* have to satisfy is the deterministic half of each claim, which the pull-request gate runs: the
+# allocation budgets in `backend/tests/AllocationBudgets.UnitTests` beside the benchmarks.
+# `docs/operations/agent-workflow.md` § *The mutation score is read, never enforced* and
+# `backend/tests/AGENTS.md` § *Cost claims* hold the rest.
+on:
+  schedule:
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+
+concurrency:
+  # A dispatch can land on the weekly run. The two measure independent checkouts of the same tree and
+  # collide on nothing, so the later one is not cancelled, and there is nothing to wait on in return.
+  group: weekly-diagnostics
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # What the hot paths cost, measured rather than claimed. It is a report and gates nothing: nothing waits
+  # on it, and a failure marks the job failed without failing the run. Throughput is not measurable on a
+  # shared, virtualized runner to a precision any gate could read, so the number is worth watching across
+  # releases and worth nothing as a threshold. The claim a change *does* have to satisfy is the allocation
+  # budget the same paths carry in `backend/tests/AllocationBudgets.UnitTests`, which the pull-request gate
+  # runs.
+  benchmarks:
+    name: Hot-path benchmarks
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+      NUGET_XMLDOC_MODE: skip
+    steps:
+      - name: Check out the commit being measured
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      # The same cache and the same key as the verification workflow, for the same reason.
+      - name: Cache NuGet packages
+        uses: actions/cache@v6
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('backend/Directory.Packages.props', 'global.json', 'NuGet.config', '.config/dotnet-tools.json', '**/packages.lock.json') }}
+
+      - name: Restore dependencies
+        run: dotnet restore backend/MailFathom.slnx --locked-mode
+
+      # Release, because a benchmark of a debug build measures the compiler rather than the code, and the
+      # harness refuses to run against one.
+      - name: Run the benchmarks
+        run: >-
+          dotnet run --project backend/tests/Benchmarks/Benchmarks.csproj --configuration Release --no-restore
+          -- --filter '*' --artifacts artifacts/benchmarks
+
+      - name: Write the report into the run summary
+        if: always()
+        run: |
+          set -euo pipefail
+
+          shopt -s nullglob
+          reports=(artifacts/benchmarks/results/*-report-github.md)
+
+          if ((${#reports[@]} == 0)); then
+            printf '### Hot-path benchmarks\n\nThe run produced no report.\n' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          printf '### Hot-path benchmarks\n\n' >> "$GITHUB_STEP_SUMMARY"
+          cat "${reports[@]}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the full report on the run
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmarks
+          path: artifacts/benchmarks
+          if-no-files-found: warn
+
+  # The mutation score, read on the same terms as the benchmarks beside it: nothing waits for it, nothing
+  # compares two runs automatically, and a failure marks the job failed without failing the run. It is the
+  # same measurement the nightly used to take, carried unchanged; `docs/operations/agent-workflow.md` §
+  # *The mutation score is read, never enforced* holds the rest.
+  mutation-score:
+    name: Mutation score
+    permissions:
+      contents: read
+    uses: ./.github/workflows/mutation-score.yml
+    with:
+      ref: ${{ github.sha }}
