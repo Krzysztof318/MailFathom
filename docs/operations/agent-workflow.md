@@ -1358,8 +1358,12 @@ grow:
 - `concurrency` with a conditional `cancel-in-progress` means a superseded head
   never finishes a review, so a rapid series of pushes costs one run rather than
   one per push, and a merge or a close ends the run reading a pull request that
-  has stopped being worth a verdict — while a comment, which cannot supersede
-  anything, queues rather than throwing a finished review away;
+  has stopped being worth a verdict. A comment supersedes nothing and no longer
+  joins that group at all: its run only decides, and the `repository_dispatch` it
+  may send is what queues there instead, so a review already running is neither
+  cancelled nor thrown away.
+  [When a review is cancelled](#when-a-review-is-cancelled) carries the whole of
+  it;
 - a fork's own pushes never start a review; a maintainer's label does;
 - the comment trigger requires an `OWNER`, `MEMBER`, or `COLLABORATOR` author, so
   nobody outside the project can spend the subscription by typing;
