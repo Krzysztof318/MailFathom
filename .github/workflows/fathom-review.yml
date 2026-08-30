@@ -9,9 +9,10 @@ name: Fathom review
 # `main` ruleset: it advises, and nothing waits on it.
 #
 # Every trigger here runs the workflow file from the default branch, never from the branch under
-# review. `pull_request_target` and `issue_comment` both do that by definition, and there is
-# deliberately no `workflow_dispatch`, because a dispatch takes a ref and would let a branch supply
-# the job that receives the Claude credential.
+# review. `pull_request_target` and `issue_comment` both do that by definition, and so does
+# `repository_dispatch`, which GitHub runs from the default branch and which takes no ref to run it
+# from in the first place. There is deliberately no `workflow_dispatch`, because that one *does*
+# take a ref and would let a branch supply the job that receives the Claude credential.
 #
 # The branch under review is never checked out and nothing from it is executed. The workspace holds
 # the base commit, which is code that already merged; the change itself arrives as data through the
@@ -82,9 +83,30 @@ on:
       - closed
     branches:
       - main
+
+  # The escape hatch that reviews a draft and a fork, and the half of it that decides. A run this
+  # event creates never reviews: it asks whether the comment requested one and, when it did, asks
+  # for the review through `repository_dispatch` below.
+  #
+  # That split is a property of the trigger rather than of the gate. `issue_comment` fires for every
+  # comment on every pull request, and the run has already joined a concurrency group before
+  # anything can tell a request from a passing remark — so what the group must not contain is every
+  # comment, which is a decision only the group expression can take. The commentary under it is the
+  # whole argument.
   issue_comment:
     types:
       - created
+
+  # The review a comment asked for, as a run of its own, carrying the pull request's number and the
+  # model the comment chose. It is the only event here that always reviews.
+  #
+  # `repository_dispatch` rather than `workflow_dispatch` for the reason the header gives: this one
+  # takes no ref, so nothing about it lets a branch supply the job that holds the Claude credential.
+  # Creating one needs write access to the repository, which is the bar the comment gate already
+  # applies to a comment's author, so it reaches nothing a comment did not reach before.
+  repository_dispatch:
+    types:
+      - fathom-review-requested
 
 concurrency:
   # One run per pull request, so two reviews never post to the same change at once. What decides
@@ -98,11 +120,10 @@ concurrency:
   # worth the saved usage, because the review is one POST at the end of the job — a run stopped
   # before it posts nothing at all, and a run stopped after it has already finished.
   #
-  # **Every other event asks for a review rather than invalidating one, so it waits.** A comment, a
-  # label, and a pull request marked ready all leave the head alone: what is running is still
-  # reading the code that will merge, and its verdict is still worth having. They queue on this
-  # group instead, which costs a pending run and produces two verdicts in order rather than one
-  # verdict thrown away.
+  # **Every other event asks for a review rather than invalidating one, so it waits.** A label and a
+  # pull request marked ready leave the head alone: what is running is still reading the code that
+  # will merge, and its verdict is still worth having. They queue on this group instead, which costs
+  # a pending run and produces two verdicts in order rather than one verdict thrown away.
   #
   # That distinction is the whole reason `cancel-in-progress` is an expression. `issue_comment`
   # fires for *any* comment on a pull request, including one written by a bot with no interest in
@@ -111,7 +132,46 @@ concurrency:
   # the run enters this group before the gate can speak, so an unconditional `true` here means a
   # comment cancels a review in flight several minutes in and then declines to start one, which is
   # the entire cost of a review spent to publish nothing.
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}
+  #
+  # **`cancel-in-progress` governs a running run and nothing else, and a group cancels a *pending*
+  # run whatever it says.** GitHub holds at most one pending run per group: when a run joins the
+  # group, whatever run was already pending there is cancelled outright, unconditionally. So the
+  # expression above never reaches the case that costs the most — a review created and not yet
+  # started, which is where every review is for its first seconds. Measured on pull request #1335 on
+  # 2026-08-28: run `33163573560`, the review of freshly pushed head `ce165647`, was created at
+  # 10:29:54 and cancelled at 10:30:05 having started no job at all, by an ordinary round-summary
+  # comment that created its own run one second earlier. That head carried no verdict until a
+  # maintainer asked for one four hours later.
+  #
+  # Which is why membership of this group is decided here rather than by the gate. A run that can
+  # neither review nor cancel is given a group of its own, keyed by its run id and therefore shared
+  # with nothing, so it never displaces a review waiting to start. Two classes of event are in that
+  # position, and both arrive on a pull request repeatedly while it is being worked on:
+  #
+  # - **A comment.** After #1347 an `issue_comment` run reviews nothing at all — it asks for the
+  #   review through `repository_dispatch`, and *that* run joins this group. So the trigger whose
+  #   verdict cannot be known in time is also the one that no longer needs to be known: a comment
+  #   never belongs here, whatever it says.
+  # - **A label that is not `fathom-review`.** `Apply pull request rules` writes labels, and the one
+  #   label that asks for a review is the only `labeled` event the gate admits.
+  #
+  # Everything else joins the group and must. `synchronize` and `closed` because cancelling is what
+  # they are here for; `repository_dispatch` and `labeled` with `fathom-review` because they review;
+  # and `opened`, `reopened`, and `ready_for_review` because each reviews unless the pull request is
+  # a draft, a fork's, or the updater's. Those three can decline, and are kept here anyway: a pull
+  # request just opened or reopened has no review of its own to displace, and `ready_for_review`
+  # would have to land in the seconds a requested review of the same draft sat pending. That is the
+  # residue this arrangement accepts, and it is bounded by an event a hand performs once.
+  #
+  # The clauses below are folded into one line, so each of them is a whole condition rather than a
+  # continuation: a run keyed apart, the two events that are keyed apart, the key that is shared
+  # with nothing, and the pull request's own key that everything else joins.
+  group: >-
+    ${{ github.workflow }}-${{
+    (github.event_name == 'issue_comment'
+    || (github.event.action == 'labeled' && github.event.label.name != 'fathom-review'))
+    && format('request-{0}', github.run_id)
+    || format('pull-request-{0}', github.event.pull_request.number || github.event.client_payload.pull_request_number) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request_target' && (github.event.action == 'synchronize' || github.event.action == 'closed') }}
 
 permissions:
@@ -160,6 +220,10 @@ jobs:
       actions: read
     outputs:
       review: ${{ steps.gate.outputs.review }}
+      # Whether this run is the deciding half of the comment path: it reviews nothing and asks for a
+      # review of its own instead. `request` below is the job that asks, and it is the only consumer.
+      # The two are never both true — a run either reviews or asks for one.
+      dispatch: ${{ steps.gate.outputs.dispatch }}
       pull_request_number: ${{ steps.gate.outputs.pull_request_number }}
       # Whether somebody asked for this review rather than a push starting it. The submission step is
       # what records it on the review it publishes, and the gate of a later run is what reads it back.
@@ -199,7 +263,12 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           EVENT_ACTION: ${{ github.event.action }}
           REPOSITORY: ${{ github.repository }}
-          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+          PULL_REQUEST_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || github.event.client_payload.pull_request_number }}
+          # The model the comment asked for, decided by the gate of the run that dispatched this one
+          # and carried here rather than parsed twice. It is data from an API call rather than from
+          # this workflow, so the branch that reads it checks it against the identifiers this file
+          # names instead of passing it to the action.
+          REQUESTED_MODEL: ${{ github.event.client_payload.model }}
           PULL_REQUEST_DRAFT: ${{ github.event.pull_request.draft }}
           PULL_REQUEST_AUTHOR: ${{ github.event.pull_request.user.login }}
           HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
@@ -228,6 +297,10 @@ jobs:
           set -euo pipefail
 
           review='false'
+          # Whether this run's answer is to ask for a review rather than to perform one. Only the
+          # comment path sets it, because only a comment arrives in a run that must stay out of the
+          # pull request's concurrency group — the commentary on that group is why.
+          dispatch='false'
           # Whether somebody asked for this run in so many words. A label or a comment is a person
           # with write access deciding the pass is worth its cost; every other path is the workflow
           # deciding for them, and only that one is bounded below.
@@ -328,12 +401,37 @@ jobs:
               elif [[ "$COMMENT_ASSOCIATION" != 'OWNER' && "$COMMENT_ASSOCIATION" != 'MEMBER' && "$COMMENT_ASSOCIATION" != 'COLLABORATOR' ]]; then
                 reason="the comment author is ${COMMENT_ASSOCIATION} and cannot spend review usage"
               else
-                review='true'
-                explicit='true'
-                reason='a maintainer asked for fathom-review in a comment'
+                # The decision is the same one this branch always took; what changed is that the
+                # run holding it cannot be the run that reviews. `request` below turns this into a
+                # `repository_dispatch`, and the review happens in the run that event creates.
+                dispatch='true'
+                reason='a maintainer asked for fathom-review in a comment; asking for a run of its own'
                 # The escape hatch to the more expensive model, for a change where the default
                 # reviewer's verdict is worth a second, costlier opinion.
                 if [[ "${COMMENT_BODY,,}" == *opus* ]]; then
+                  model='claude-opus-5'
+                fi
+              fi
+              ;;
+            repository_dispatch)
+              # The comment path's second half. Nothing is re-decided here: this event exists only
+              # because the gate above said yes in the run that dispatched it, and creating one by
+              # hand needs the write access that gate demands of a comment's author, so the two ways
+              # to reach this branch are bounded by the same permission.
+              if [[ -z "$PULL_REQUEST_NUMBER" ]]; then
+                # The payload arrives over the API, so it is checked rather than assumed. Refusing
+                # here costs one short job; letting it through would fail the collection step
+                # several minutes later with an error about a pull request nobody named.
+                reason='the dispatch names no pull request'
+              else
+                review='true'
+                explicit='true'
+                reason='a maintainer asked for fathom-review in a comment'
+
+                # Checked against the identifier this file names rather than passed through. A
+                # payload carrying anything else reviews with the default model, which is the same
+                # answer a comment that named no model gets.
+                if [[ "$REQUESTED_MODEL" == 'claude-opus-5' ]]; then
                   model='claude-opus-5'
                 fi
               fi
@@ -448,6 +546,7 @@ jobs:
 
           {
             echo "review=${review}"
+            echo "dispatch=${dispatch}"
             echo "pull_request_number=${PULL_REQUEST_NUMBER}"
             echo "model=${model}"
             echo "explicit=${explicit}"
@@ -455,7 +554,7 @@ jobs:
             echo "posture=${posture}"
           } >> "$GITHUB_OUTPUT"
 
-          echo "Review: ${review} (${reason}); posture: ${posture} after ${automatic_reviews} automatic passes."
+          echo "Review: ${review}, dispatch: ${dispatch} (${reason}); posture: ${posture} after ${automatic_reviews} automatic passes."
 
       # `security` says this change needs a security review before it merges. It is written on the
       # issue — `docs/operations/issue-tracking.md` § "Labels" — and `Apply pull request rules`
@@ -582,6 +681,55 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
           echo "Security review: ${security_review}, model: ${model} (${reason})."
+
+  # The other half of the comment path. A comment cannot start a review in the run it creates — the
+  # concurrency commentary above is the whole argument — so the comment's run ends here, by asking
+  # for the review as an event of its own. What that costs is one short job and a second entry in
+  # the run list; what it buys is a comment that cannot cancel anything, whatever it says and
+  # whoever wrote it.
+  #
+  # A failed ask fails this job rather than retrying. `call-github-api.sh` is for reads and for a
+  # mutation that writes a value it already knows, and this call creates a record: asking twice
+  # would review twice. A red run on a review somebody asked for is the signal a maintainer can act
+  # on, which is what the request path has and the automatic one does not.
+  request:
+    name: Ask for the review the comment asked for
+    needs:
+      - decide
+    if: needs.decide.outputs.dispatch == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      # `POST /repos/{owner}/{repo}/dispatches` is a write to the repository, and `contents: write`
+      # is the narrowest permission that reaches it. It is the only write in this file not minted
+      # from the App's private key, and this job alone holds it: it checks nothing out, runs no
+      # model, and its whole body is one API call built from values the gate decided. The `main`
+      # ruleset is what stands between that token and the default branch.
+      contents: write
+    steps:
+      - name: Ask for a review of this pull request
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PULL_REQUEST_NUMBER: ${{ needs.decide.outputs.pull_request_number }}
+          MODEL: ${{ needs.decide.outputs.model }}
+          # The `repository_dispatch` type this workflow listens for, spelled here and in the `on:`
+          # block above. `scripts/test-agent-workflow.sh` fails when the two disagree, because a
+          # mismatch drops every requested review while this job stays green saying it asked.
+          EVENT_TYPE: fathom-review-requested
+        run: |
+          set -euo pipefail
+
+          # Built with `jq` rather than interpolated, so the number and the model reach the payload
+          # as JSON values whatever they contain.
+          jq -n \
+            --arg event_type "$EVENT_TYPE" \
+            --arg pull_request_number "$PULL_REQUEST_NUMBER" \
+            --arg model "$MODEL" \
+            '{event_type: $event_type, client_payload: {pull_request_number: $pull_request_number, model: $model}}' \
+            | gh api "repos/${REPOSITORY}/dispatches" --input -
+
+          echo "Asked for a review of #${PULL_REQUEST_NUMBER} with ${MODEL}."
 
   # The board says a review is running, from the moment it starts rather than when it concludes. A
   # review takes minutes, and until this job existed the column said whatever the last event left

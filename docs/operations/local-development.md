@@ -679,7 +679,7 @@ scanner's finding does. The seed is what reproduces a value; the message is wher
 
 The default mode writes every word from word lists in the repository. `--ai` is the opt-in mode in which the
 *content* — subject and body, greeting and signature — is written by a model instead, and OpenAI is the only provider
-the implementation reaches: the same single client construction [ADR 0011](../decisions/0011-reaching-a-provider-outside-the-openai-wire-protocol.md)
+the implementation reaches: the same single client construction [ADR 0011](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0011-reaching-a-provider-outside-the-openai-wire-protocol.md)
 records for the service — the OpenAI wire protocol, a base address, and a key — built by the tool directly, because a
 development tool composes from its own files rather than from the service's dependency injection.
 
@@ -1331,7 +1331,7 @@ job of `repository-contracts.yml` and again locally in `scripts/verify-full.sh`,
 | `only_the_recorded_workflows_use_pull_request_target` | A third `pull_request_target` trigger beside the two `fathom-review.yml` and `contributor-licence.yml` hold, and a licence workflow that checks anything out, reaches an action beyond the token mint, or runs a command fetching the contribution directly |
 | `the_reviewer_resolves_one_claude_credential_everywhere` | A step in `fathom-review.yml` reaching a Claude credential without the `CLAUDE_CODE_PROFILE` selector, or a fifth step holding one, either of which leaves a leak check comparing a review against a token no run spent |
 
-Every write scope in the repository but one belongs to publishing something: `packages: write` with
+Every write scope in the repository but two belongs to publishing something: `packages: write` with
 `id-token: write` and `attestations: write` in `nightly.yml`, `publish-container-image.yml`, and
 `publish-helm-chart.yml`, plus `packages: write` on the nightly prune job and `contents: write` on
 the job that writes the release announcement. `publish-documentation.yml` holds `pages: write` with
@@ -1346,12 +1346,22 @@ its own announcing job holds. The jobs that build the schema artifact and the co
 nothing beyond a read, because neither publishes anything: they upload an artifact the announcing job
 attaches.
 
-The exception is `security-events: write` in `codeql.yml`, and it is the only write scope held by a
-job that runs for a pull request. It is what the analysis is for: the scope writes code-scanning
-alerts and nothing else — not repository contents, not a package, not a release — and an analysis
-that cannot record an alert produces a log line instead of a check. The contract above is what keeps
-the list honest, so adding a second such scope is an edit somebody argues rather than a line nobody
-notices.
+The first exception is `security-events: write` in `codeql.yml`. It is what the analysis is for: the
+scope writes code-scanning alerts and nothing else — not repository contents, not a package, not a
+release — and an analysis that cannot record an alert produces a log line instead of a check.
+
+The second is `contents: write` in `fathom-review.yml`, on the one job that turns a review somebody
+asked for in a comment into the `repository_dispatch` that performs it. That is the narrowest
+permission `POST /repos/{owner}/{repo}/dispatches` reaches, and it is the widest of the two
+exceptions, so what contains it is where it is held rather than how it is scoped: the job checks
+nothing out, runs no model, holds no Claude credential, and its whole body is one API call built from
+values the gate already decided. `main`'s ruleset is what stands between that token and the default
+branch. [When a review is cancelled](agent-workflow.md#when-a-review-is-cancelled) is why the comment
+path is two runs at all.
+
+Both are held by jobs reached from a pull request rather than from a publication — one from the
+change itself and one from a comment on it — and the contract above is what keeps the list honest, so
+adding a third such scope is an edit somebody argues rather than a line nobody notices.
 
 **What lives in the repository settings**, which no check here can read:
 

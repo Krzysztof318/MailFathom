@@ -904,6 +904,14 @@ Two things ask for a review anyway, whichever skip refused it:
   Adding `opus` to that comment buys a second, costlier opinion;
   `claude-sonnet-5` is the default.
 
+  A comment reaches the reviewer as two runs rather than one. The run the comment
+  itself creates only decides, and when the answer is yes it asks for the review
+  through a `repository_dispatch` the workflow listens for; the review happens in
+  the run that event creates. Nothing about the phrase or who may type it changes
+  — the split is about concurrency, and
+  [When a review is cancelled](#when-a-review-is-cancelled) is the whole reason
+  for it.
+
   Three things about that phrase are deliberate. It is not `@claude`, which
   collides with GitHub Copilot's own trigger. It has to lead a line rather than
   appear anywhere in the body, because `fathom-review` names this pipeline and is
@@ -955,6 +963,8 @@ A review published before this arrangement carries no marker and counts as
 nothing, which resets the budget of any pull request open at the time and is
 worth a sentence rather than a migration.
 
+### When a review is cancelled
+
 A run also ends before it finishes when the pull request it is reading closes. A
 merge — the owner's ruleset bypass included — and a close both arrive as
 `closed`, and the gate refuses that event outright: it is a trigger only so that
@@ -971,16 +981,52 @@ Those two events are the whole of what may cancel, and the rule they share is
 worth stating in the other direction: **a comment never ends a review already
 running.** A push replaces the head and a close removes it, so in both cases what
 is running has stopped describing the code that will merge. Everything else —
-a comment, a label, a pull request marked ready — asks for a review without
-invalidating one, and queues on the same group instead. `cancel-in-progress` is
-therefore an expression naming those two events rather than the literal `true`,
-because `issue_comment` fires for *any* comment on a pull request, a bot's
-included, and the gate that tells a request apart from a passing remark runs
-inside the run — after the run has entered the group. Left unconditional, a
-notice posted by another workflow ends a review several minutes in and then
-declines to start one, which spends the entire cost of a review to publish
-nothing. `a_comment_never_cancels_a_review_in_flight` in
+a label, a pull request marked ready — asks for a review without invalidating
+one, and queues on the same group instead. `cancel-in-progress` is therefore an
+expression naming those two events rather than the literal `true`, because
+`issue_comment` fires for *any* comment on a pull request, a bot's included, and
+the gate that tells a request apart from a passing remark runs inside the run —
+after the run has entered the group. Left unconditional, a notice posted by
+another workflow ends a review several minutes in and then declines to start one,
+which spends the entire cost of a review to publish nothing.
+`a_comment_never_cancels_a_review_in_flight` in
 `scripts/test-agent-workflow.sh` is what keeps it from quietly reverting.
+
+That expression governs a run that is **running**, and it is only half the
+answer, because a concurrency group also cancels a run that is **pending** — and
+that cancellation is unconditional. GitHub holds one pending run per group: when
+a run joins, whichever run was waiting there is ended outright, whatever
+`cancel-in-progress` says. Every review is pending for its first seconds, so any
+comment arriving in them ended it and then declined to start one, leaving the
+head with no verdict at all. Measured on pull request #1335 on 2026-08-28: the
+review of freshly pushed head `ce165647` was created at 10:29:54 and cancelled at
+10:30:05 having started no job, by an ordinary round-summary comment that created
+its own run a second earlier; that head carried no verdict until a maintainer
+asked for one four hours later.
+
+So what decides the outcome is **membership of the group** rather than the
+cancellation rule, and the group expression is where it is decided rather than
+in the gate — which is inside the run and therefore always too late. A run that
+can neither review nor cancel is keyed by its own run id and shares a group with
+nothing. Two events are in that position, and both arrive on a pull request
+repeatedly while it is being worked on: a comment, which after this arrangement
+reviews nothing at all and asks for the review through a `repository_dispatch`
+whose run joins the group in its place, and a `labeled` event for a label that is
+not `fathom-review`, since `Apply pull request rules` writes labels and only that
+one asks for a review.
+
+Everything else joins the group and must: `synchronize` and `closed` because
+cancelling is what they are there for, `repository_dispatch` and `fathom-review`
+labelling because they review, and `opened`, `reopened`, and `ready_for_review`
+because each of them reviews unless the pull request is a draft, a fork's, or the
+updater's. Those three can decline and are kept in the group anyway — a pull
+request just opened or reopened has no review of its own to displace, and
+`ready_for_review` would have to land in the seconds a requested review of the
+same draft sat pending. That residue is bounded by an event a hand performs once,
+which is why it is stated rather than engineered away.
+`a_comment_never_cancels_a_queued_review` is the assertion, and
+`the_reviewer_listens_for_the_dispatch_it_sends` is what keeps the two halves of
+the comment path naming one event type.
 
 The workflow reports no status check and is not in the `main` ruleset. It
 advises; nothing waits on it.
@@ -1067,8 +1113,12 @@ tells Claude to report such an instruction as a P1 finding rather than obey it,
 but the guarantee is structural rather than textual.
 
 Every trigger runs the workflow file from the default branch.
-`pull_request_target` and `issue_comment` both do, by definition, and the next
-section is why that trigger is allowed here when no other workflow may use it.
+`pull_request_target` and `issue_comment` both do, by definition, and so does
+`repository_dispatch`, which takes no ref to run from at all — which is why the
+comment path asks for its review that way rather than through a
+`workflow_dispatch`, whose ref a branch could aim at the job holding the Claude
+credential. The next section is why `pull_request_target` is allowed here when no
+other workflow may use it.
 
 The paths under `$RUNNER_TEMP` are declared on each step that uses them rather
 than once for the job, because `runner` is not among the contexts a job-level
@@ -1263,10 +1313,11 @@ with them. `Fathom review` uses it anyway, as the first of two recorded
 exceptions rather than as a rule the repository quietly breaks.
 
 The exception holds because the trigger is what the workflow needs and the danger
-is not what it does. `issue_comment` and a label event carry no head ref to run,
-and reviewing a fork at a maintainer's request is the whole reason the workflow
-reaches one at all; `pull_request` would give the run neither the secrets it needs
-to publish under the App nor a trigger a maintainer can aim. What makes that safe
+is not what it does. `issue_comment`, `repository_dispatch`, and a label event
+carry no head ref to run, and reviewing a fork at a maintainer's request is the
+whole reason the workflow reaches one at all; `pull_request` would give the run
+neither the secrets it needs to publish under the App nor a trigger a maintainer
+can aim. What makes that safe
 is structural rather than procedural: every job holds `base.sha` and never the
 branch, nothing from the contribution is executed, and every session — each reader
 and the judge — runs with `Read`, `Grep`, and `Glob` and no shell, writer, network
@@ -1307,8 +1358,12 @@ grow:
 - `concurrency` with a conditional `cancel-in-progress` means a superseded head
   never finishes a review, so a rapid series of pushes costs one run rather than
   one per push, and a merge or a close ends the run reading a pull request that
-  has stopped being worth a verdict — while a comment, which cannot supersede
-  anything, queues rather than throwing a finished review away;
+  has stopped being worth a verdict. A comment supersedes nothing and no longer
+  joins that group at all: its run only decides, and the `repository_dispatch` it
+  may send is what queues there instead, so a review already running is neither
+  cancelled nor thrown away.
+  [When a review is cancelled](#when-a-review-is-cancelled) carries the whole of
+  it;
 - a fork's own pushes never start a review; a maintainer's label does;
 - the comment trigger requires an `OWNER`, `MEMBER`, or `COLLABORATOR` author, so
   nobody outside the project can spend the subscription by typing;
@@ -1930,6 +1985,15 @@ now minted per run, scoped to this repository, expiring with the job, and held b
 the single step that makes no model call. The App itself needs exactly one
 permission, `Pull requests: Read and write`, which covers submitting a review and
 commenting on a pull request alike.
+
+One write in the file is not the App's, and it is worth naming because it is the
+exception: the job that turns a review request into a `repository_dispatch` holds
+`contents: write`, which is the narrowest permission that reaches
+`POST /repos/{owner}/{repo}/dispatches`. That job checks nothing out, runs no
+model, and its whole body is one API call built from values the gate decided;
+`main`'s ruleset is what stands between the token and the default branch. It is
+the only workflow-token write in the file; every other write a run performs is
+the App's, minted per run and held by the step that publishes.
 
 A missing or invalid App credential fails the run at its first step, before the
 change is collected and before any subscription usage is spent.
