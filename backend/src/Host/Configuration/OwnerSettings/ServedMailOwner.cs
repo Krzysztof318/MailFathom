@@ -4,6 +4,7 @@
 
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.Spam;
 
 namespace MailFathom.Host.Configuration.OwnerSettings;
 
@@ -12,6 +13,11 @@ namespace MailFathom.Host.Configuration.OwnerSettings;
 /// <param name="DisplayName">The label an operator tells this owner apart by.</param>
 /// <param name="Source">Where this owner's mail accounts are read from.</param>
 /// <param name="MailAccounts">The owner's mail accounts, where this record is what holds them.</param>
+/// <param name="SpamClassification">
+/// How this owner's own mail is classified, where their document is what decides it, and <see langword="null" /> where
+/// a configuration source still does. Absence is what says *read the deployment's section for this owner* rather than
+/// an owner who classifies nothing, which is why it is nullable and not an empty block.
+/// </param>
 /// <remarks>
 /// The accounts are empty for an owner whose source is <see cref="MailOwnerAccountSource.DeploymentSection" />, and
 /// deliberately so: those declarations are in the reloadable mail snapshot, which is where a reload of the file has to
@@ -23,7 +29,8 @@ internal sealed record ServedMailOwner(
     MailOwnerId Owner,
     string DisplayName,
     MailOwnerAccountSource Source,
-    IReadOnlyList<MailSynchronizationAccountOptions> MailAccounts)
+    IReadOnlyList<MailSynchronizationAccountOptions> MailAccounts,
+    OwnerSpamClassificationOptions? SpamClassification = null)
 {
     /// <summary>Gets whether a configuration source still reaches this owner's mail accounts.</summary>
     /// <remarks>

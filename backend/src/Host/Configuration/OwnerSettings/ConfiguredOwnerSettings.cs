@@ -6,16 +6,23 @@ using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Configuration;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.Spam;
 
 namespace MailFathom.Host.Configuration.OwnerSettings;
 
-/// <summary>Finds where a configuration source declares one owner's mail accounts, and what adopting them would write.</summary>
+/// <summary>Finds what a configuration source supplies for one owner, and what adopting it would write into their record.</summary>
 /// <remarks>
 /// <para>
 /// An owner is served from one of three sources and only two of them are configuration. Which of the two it is decides
 /// the section their declarations are written in, and the two sections are not interchangeable: the deployment's own
 /// <c>MailSynchronization:Accounts</c> names no owner and therefore belongs to whichever sole owner such a deployment
 /// holds, while a declared owner's mailboxes are a numbered entry of the top-level collection of owners.
+/// </para>
+/// <para>
+/// Their mailboxes are not the whole of what a file supplies them. Everything a configuration source still decides for
+/// an owner has to move in the one act that ends the file's reach over them, so an adoption carries their classification
+/// posture beside their accounts — and each further block the owner record grows joins the same act rather than being
+/// left behind by it.
 /// </para>
 /// <para>
 /// What an adoption writes is those same settings as configuration keys rather than as a serialized object, and that is
@@ -30,10 +37,20 @@ namespace MailFathom.Host.Configuration.OwnerSettings;
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this reading.")]
-internal sealed class ConfiguredOwnerMailAccounts(IConfiguration configuration, ServedMailOwners servedOwners)
+internal sealed class ConfiguredOwnerSettings(IConfiguration configuration, ServedMailOwners servedOwners)
 {
-    /// <summary>The property an owner's record holds their mail accounts under, which every adopted key is rooted at.</summary>
+    /// <summary>The property an owner's record holds their mail accounts under, which every adopted account key is rooted at.</summary>
     private const string MailAccountsProperty = nameof(OwnerAccountOptions.MailAccounts);
+
+    /// <summary>The settings of the deployment's classification section that are an owner's own to hold.</summary>
+    private static readonly string[] OwnPostureSettings =
+    [
+        nameof(OwnerSpamClassificationOptions.Enabled),
+        nameof(OwnerSpamClassificationOptions.UseScanner),
+        nameof(OwnerSpamClassificationOptions.ScannedFolders),
+        nameof(OwnerSpamClassificationOptions.ScannerThreshold),
+        nameof(OwnerSpamClassificationOptions.Actions),
+    ];
 
     /// <summary>Finds the configuration section one owner's mail accounts are declared in.</summary>
     /// <param name="owner">The owner asked about.</param>
@@ -145,8 +162,36 @@ internal sealed class ConfiguredOwnerMailAccounts(IConfiguration configuration, 
                 .Where(setting => !string.IsNullOrEmpty(setting.Key) && setting.Value is not null)
                 .OrderBy(setting => setting.Key, StringComparer.Ordinal)
                 .Select(setting => ConfigurationEdit.SetTo($"{MailAccountsProperty}:{setting.Key}", setting.Value!)),
+            .. this.ClassificationAdoptionEdits(),
         ];
     }
+
+    /// <summary>States the changes that would carry the deployment's classification posture into an owner's record.</summary>
+    /// <remarks>
+    /// <para>
+    /// The posture moves with the mailboxes because an adoption is a move rather than a rewrite: an owner served from a
+    /// configuration source has their mail classified on the deployment's section's terms, and a handover that left the
+    /// section behind would switch their classification off on the strength of an administrative act about where their
+    /// settings live. From the commit onwards the record is what decides it, and the section reaches them no longer.
+    /// </para>
+    /// <para>
+    /// Only the settings an owner's own block declares are carried. The section also states where the scanner daemon is,
+    /// what one scan may spend, how long a verdict may hold the index back, and how wide a run's batches are, and none
+    /// of those is an owner's to hold — a record carrying one would be refused by the strict binding, which is the same
+    /// answer this filter reaches before the candidate is composed.
+    /// </para>
+    /// </remarks>
+    private IEnumerable<ConfigurationEdit> ClassificationAdoptionEdits() =>
+        configuration.GetSection(SpamClassificationOptions.SectionName)
+            .AsEnumerable(makePathsRelative: true)
+            .Where(setting => !string.IsNullOrEmpty(setting.Key) && setting.Value is not null)
+            .Where(setting => OwnPostureSettings.Contains(
+                setting.Key.Split(':')[0],
+                StringComparer.Ordinal))
+            .OrderBy(setting => setting.Key, StringComparer.Ordinal)
+            .Select(setting => ConfigurationEdit.SetTo(
+                $"{OwnerSpamClassificationOptions.RecordProperty}:{setting.Key}",
+                setting.Value!));
 
     /// <summary>Finds the entry of the owner collection this owner is declared in, by the key it was written under.</summary>
     /// <remarks>

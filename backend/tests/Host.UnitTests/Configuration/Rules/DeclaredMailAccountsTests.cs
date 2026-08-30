@@ -187,6 +187,43 @@ public sealed class DeclaredMailAccountsTests
         Assert.Equal(["primary", "work"], Identifiers(fromSettings));
     }
 
+    /// <summary>One owner's own declarations are read exactly as the deployment's are, which is what a claim in their record is judged by.</summary>
+    /// <remarks>
+    /// The overload exists so that a scanned folder or a junk destination in somebody's record resolves within their own
+    /// accounts and nowhere else. Reading it differently from the deployment's would let a record be accepted for a
+    /// folder the same mapping refuses in a file, or the reverse.
+    /// </remarks>
+    [Fact]
+    public void ReadFrom_OneOwnersOwnDeclarations_AnswersAsTheDeploymentsAreRead()
+    {
+        // Arrange
+        List<MailSynchronizationAccountOptions> accounts =
+        [
+            new MailSynchronizationAccountOptions
+            {
+                AccountId = "  alex-work  ",
+                Folders = [new MailFolderMappingOptions { Alias = "quarantine", RemotePath = "Quarantine" }],
+            },
+            new MailSynchronizationAccountOptions { AccountId = "   " },
+        ];
+
+        // Act
+        var fromOwner = DeclaredMailAccounts.ReadFrom(accounts);
+        var fromDeployment = DeclaredMailAccounts.ReadFrom(new MailSynchronizationOptions { Accounts = accounts });
+
+        // Assert
+        Assert.Equal(Describe(fromDeployment), Describe(fromOwner));
+        Assert.Equal(["alex-work"], Identifiers(fromOwner));
+    }
+
+    [Fact]
+    public void ReadFrom_NoDeclarations_Throws()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(
+            () => DeclaredMailAccounts.ReadFrom((IEnumerable<MailSynchronizationAccountOptions>)null!));
+    }
+
     private static IConfiguration Configuration(Dictionary<string, string?> keys) =>
         new ConfigurationBuilder().AddInMemoryCollection(keys).Build();
 

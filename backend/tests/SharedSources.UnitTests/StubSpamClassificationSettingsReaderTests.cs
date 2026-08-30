@@ -3,6 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Spam;
+using MailFathom.Domain.Access;
+using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
 using Xunit;
@@ -13,7 +15,7 @@ namespace MailFathom.SharedSources.UnitTests;
 public sealed class StubSpamClassificationSettingsReaderTests
 {
     [Fact]
-    public void Settings_TheSettingsItWasGiven_AnswersThemUnchanged()
+    public void SettingsFor_TheSettingsItWasGiven_AnswersThemUnchanged()
     {
         // Arrange
         var settings = SpamClassificationSettings.Create(
@@ -25,7 +27,25 @@ public sealed class StubSpamClassificationSettingsReaderTests
         var reader = new StubSpamClassificationSettingsReader(settings);
 
         // Assert
-        Assert.Same(settings, reader.Settings);
+        Assert.Same(settings, reader.SettingsFor(MailOwnerId.Create(Guid.NewGuid())));
+    }
+
+    [Fact]
+    public void ScopeInForce_TheAccountsItWasGiven_ClassifiesEachOverTheConfiguredFolders()
+    {
+        // Arrange
+        var settings = SpamClassificationSettings.Create(
+            isEnabled: true,
+            usesScanner: false,
+            [MailFolderAlias.Create("INBOX")]);
+        var account = MailAccountId.Create("primary");
+
+        // Act
+        var scope = new StubSpamClassificationSettingsReader(settings, account).ScopeInForce;
+
+        // Assert
+        Assert.Equal([account], scope.ClassifyingAccounts);
+        Assert.Equal([new MailFolderIdentity(account, MailFolderAlias.Create("INBOX"))], scope.ClassifiedFolders);
     }
 
     [Fact]
@@ -35,7 +55,8 @@ public sealed class StubSpamClassificationSettingsReaderTests
         var reader = StubSpamClassificationSettingsReader.Disabled;
 
         // Assert
-        Assert.False(reader.Settings.IsEnabled);
-        Assert.Empty(reader.Settings.ScannedFolderAliases);
+        Assert.False(reader.SettingsFor(MailOwnerId.Create(Guid.NewGuid())).IsEnabled);
+        Assert.Empty(reader.SettingsFor(MailOwnerId.Create(Guid.NewGuid())).ScannedFolderAliases);
+        Assert.Empty(reader.ScopeInForce.ClassifyingAccounts);
     }
 }

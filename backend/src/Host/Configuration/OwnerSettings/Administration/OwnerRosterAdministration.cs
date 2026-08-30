@@ -43,7 +43,7 @@ internal sealed partial class OwnerRosterAdministration(
     IOwnerSettingsDocumentWriter documents,
     ServedMailOwners servedOwners,
     SeveralOwnerAdmission admission,
-    ConfiguredOwnerMailAccounts configured,
+    ConfiguredOwnerSettings configured,
     ILogger<OwnerRosterAdministration> logger)
 {
     /// <summary>The record an owner is provisioned with, which is the empty one until they declare something.</summary>
@@ -149,7 +149,7 @@ internal sealed partial class OwnerRosterAdministration(
                     "The owner was recorded and then removed before their record could be written, so this deployment holds nobody under that label. Record them again.");
             }
 
-            servedOwners.OwnerDocumentPublished(owner, label, [], committed);
+            servedOwners.OwnerDocumentPublished(owner, label, new OwnerAccountOptions(), committed);
 
             this.LogOwnerProvisioned(label);
 

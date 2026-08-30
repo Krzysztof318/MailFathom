@@ -84,7 +84,7 @@ internal static class SpamClassificationEndpoints
     /// <summary>Asks for every message stored for one account to be classified on the terms the caller named.</summary>
     /// <param name="request">The account, the scope, and the two switches.</param>
     /// <param name="accounts">Reports whether this deployment serves the named account.</param>
-    /// <param name="settings">Answers what scope classification is configured over, which is the default and the bound.</param>
+    /// <param name="settings">Answers what scope the account's own owner classifies over, which is the default and the bound.</param>
     /// <param name="requests">Records the request, or reports the run already in front of the account.</param>
     /// <param name="cancellationToken">Cancels the write when the client disconnects.</param>
     /// <returns><c>200</c> with the run, or <c>400</c> naming what was wrong with the request.</returns>
@@ -115,7 +115,7 @@ internal static class SpamClassificationEndpoints
             return AdminAccountRequest.Refuse(request?.Account);
         }
 
-        var configuredScope = settings.Settings.ScannedFolderAliases;
+        var configuredScope = settings.SettingsFor(servedAccount.Owner).ScannedFolderAliases;
         var scope = ResolveScope(request?.Folders, configuredScope);
 
         if (scope.Refusal is { } refusal)
@@ -257,7 +257,7 @@ internal static class SpamClassificationEndpoints
         {
             return configuredScope.Count > 0
                 ? (configuredScope, null)
-                : ([], "This deployment classifies no folder, so a run over one would read nothing. Name the folders in the SpamClassification section first.");
+                : ([], "The owner of this account classifies no folder, so a run over one would read nothing. Name the folders in their classification settings first.");
         }
 
         var named = requested.Where(static alias => !string.IsNullOrWhiteSpace(alias)).ToArray();
@@ -279,7 +279,7 @@ internal static class SpamClassificationEndpoints
 
         return outsideScope == default
             ? (aliases, null)
-            : ([], $"This deployment does not classify folder '{outsideScope.Value}', so a run over it would record nothing. Add it to the SpamClassification scope first.");
+            : ([], $"The owner of this account does not classify folder '{outsideScope.Value}', so a run over it would record nothing. Add it to their classification scope first.");
     }
 
     /// <summary>Reports whether text a caller sent is a value this system could have issued as an alias.</summary>

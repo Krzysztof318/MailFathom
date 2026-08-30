@@ -703,7 +703,7 @@ public sealed class OwnerRosterAdministrationTests
                 new SeveralOwnerAdmission(
                     Options.Create(new McpEndpointOptions()),
                     Options.Create(clientEndpoint ?? new ClientEndpointOptions())),
-                new ConfiguredOwnerMailAccounts(settings, this.ServedOwners),
+                new ConfiguredOwnerSettings(settings, this.ServedOwners),
                 NullLogger<OwnerRosterAdministration>.Instance);
         }
 

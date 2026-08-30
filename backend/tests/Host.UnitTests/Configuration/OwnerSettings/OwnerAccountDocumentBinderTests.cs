@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Text;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.OwnerSettings;
+using MailFathom.Host.Configuration.Spam;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Owners;
 using MailFathom.Infrastructure.Persistence.Settings;
@@ -292,6 +293,78 @@ public sealed class OwnerAccountDocumentBinderTests
         // Assert
         Assert.False(binding.IsBound);
         Assert.Contains(binding.Refusals, refusal => refusal.Contains("not a JSON object", StringComparison.Ordinal));
+    }
+
+    /// <summary>The block an owner states their own posture in binds as its own type, beside their mailboxes.</summary>
+    [Fact]
+    public void Bind_ADocumentStatingAClassificationPosture_BindsItAsTheOwnersOwn()
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind("""
+            {
+              "MailAccounts": [],
+              "SpamClassification": {
+                "Enabled": true,
+                "UseScanner": true,
+                "ScannedFolders": [ "inbox" ],
+                "ScannerThreshold": 6.5,
+                "Actions": { "MoveToJunkFolder": true, "JunkFolder": "role:Junk", "Threshold": 8 }
+              }
+            }
+            """);
+
+        // Assert
+        Assert.True(binding.IsBound);
+
+        var classification = binding.Owner!.SpamClassification;
+
+        Assert.True(classification.Enabled);
+        Assert.True(classification.UseScanner);
+        Assert.Equal(["inbox"], classification.ScannedFolders!);
+        Assert.Equal(6.5, classification.ScannerThreshold);
+        Assert.True(classification.Actions.MoveToJunkFolder);
+        Assert.Equal(8, classification.Actions.Threshold);
+    }
+
+    /// <summary>What the engine costs is the deployment's, so a record reaching for one of its settings is refused.</summary>
+    [Fact]
+    public void Bind_ADocumentStatingADeploymentOnlyClassificationSetting_IsRefused()
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind("""
+            { "MailAccounts": [], "SpamClassification": { "Enabled": true, "ScanConcurrency": 4 } }
+            """);
+
+        // Assert
+        Assert.False(binding.IsBound);
+        Assert.Contains(binding.Refusals, refusal => refusal.Contains("ScanConcurrency", StringComparison.Ordinal));
+    }
+
+    /// <summary>An owner writing outside the range the deployment permits is refused at the write, naming the range.</summary>
+    [Fact]
+    public void Bind_ADocumentStatingAThresholdOutsideTheDeploymentsRange_IsRefusedNamingTheRange()
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind("""
+            { "MailAccounts": [], "SpamClassification": { "Enabled": true, "ScannerThreshold": 5000 } }
+            """);
+
+        // Assert
+        Assert.False(binding.IsBound);
+        Assert.Contains(
+            binding.Refusals,
+            refusal => refusal.Contains(
+                SpamClassificationOptions.LargestThreshold.ToString(CultureInfo.InvariantCulture),
+                StringComparison.Ordinal));
     }
 
     /// <summary>The ceiling is applied before the parse, so a payload never costs the expansion it is refused for.</summary>

@@ -81,10 +81,28 @@ internal static class DeclaredMailAccounts
     {
         ArgumentNullException.ThrowIfNull(settings);
 
+        return ReadFrom(settings.Accounts
+            .Concat(settings.ServedOwners?.SelectMany(static owner => owner.MailAccounts) ?? []));
+    }
+
+    /// <summary>Reads the declared accounts from one bound set of mailbox declarations.</summary>
+    /// <param name="accounts">The declarations, which may be one owner's own rather than the whole deployment's.</param>
+    /// <returns>The accounts, in the order they are declared.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="accounts" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The overload a claim about one owner's own mailboxes is judged through, which is every claim an owner's record
+    /// makes about a folder: their scanned folders and their junk destination resolve within their own accounts and
+    /// nowhere else. Reading them the same way the deployment's are read is what keeps one answer to *is this a mapped
+    /// folder* rather than two.
+    /// </remarks>
+    public static IReadOnlyCollection<DeclaredMailAccount> ReadFrom(
+        IEnumerable<MailSynchronizationAccountOptions> accounts)
+    {
+        ArgumentNullException.ThrowIfNull(accounts);
+
         return
         [
-            .. settings.Accounts
-                .Concat(settings.ServedOwners?.SelectMany(static owner => owner.MailAccounts) ?? [])
+            .. accounts
                 .Where(account => !string.IsNullOrWhiteSpace(account.AccountId))
                 .Select(account => new DeclaredMailAccount(
                     account.AccountId.Trim(),

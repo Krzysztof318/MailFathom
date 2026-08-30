@@ -1088,7 +1088,7 @@ public sealed class OwnerRecordAdministrationTests
                     new FakeTimeProvider(Today)),
                 SecretValidation.OverRegisteredSchemes(),
                 this.ServedOwners,
-                new ConfiguredOwnerMailAccounts(settings, this.ServedOwners));
+                new ConfiguredOwnerSettings(settings, this.ServedOwners));
         }
 
         internal OwnerRecordAdministration Records { get; }

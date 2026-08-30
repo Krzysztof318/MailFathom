@@ -166,15 +166,20 @@ internal sealed class ServedMailOwners : IDeploymentMailOwnerSource
     /// <summary>Publishes one owner's committed document as the source new operations read their mail accounts from.</summary>
     /// <param name="owner">The owner whose document committed.</param>
     /// <param name="displayName">The label the owner record carries.</param>
-    /// <param name="mailAccounts">The validated account declarations the committed document contains.</param>
+    /// <param name="record">The validated record the committed document bound to.</param>
     /// <param name="version">The committed document version.</param>
     /// <exception cref="ArgumentException">Thrown when the owner is unspecified, the display name is blank, or the version is not positive.</exception>
-    /// <exception cref="ArgumentNullException">Thrown when the mail accounts are <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when the record is <see langword="null" />.</exception>
     /// <exception cref="InvalidOperationException">Thrown when the startup gate has not established the roster.</exception>
+    /// <remarks>
+    /// The whole bound record rather than the accounts alone, because everything of an owner's the roster publishes
+    /// comes from one document: a second parameter per settings block would leave a caller free to publish an owner's
+    /// mailboxes from the committed record and their spam posture from somewhere else.
+    /// </remarks>
     internal void OwnerDocumentPublished(
         MailOwnerId owner,
         string displayName,
-        IReadOnlyList<MailSynchronizationAccountOptions> mailAccounts,
+        OwnerAccountOptions record,
         long version)
     {
         if (!owner.IsSpecified)
@@ -183,7 +188,7 @@ internal sealed class ServedMailOwners : IDeploymentMailOwnerSource
         }
 
         ArgumentException.ThrowIfNullOrWhiteSpace(displayName);
-        ArgumentNullException.ThrowIfNull(mailAccounts);
+        ArgumentNullException.ThrowIfNull(record);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(version);
 
         var changed = false;
@@ -200,7 +205,8 @@ internal sealed class ServedMailOwners : IDeploymentMailOwnerSource
                     owner,
                     displayName,
                     MailOwnerAccountSource.OwnerDocument,
-                    [.. mailAccounts]);
+                    [.. record.MailAccounts],
+                    record.SpamClassification);
 
                 this.resolvedOwners = owners.Any(candidate => candidate.Owner == owner)
                     ? [.. owners.Select(candidate => candidate.Owner == owner ? published : candidate)]

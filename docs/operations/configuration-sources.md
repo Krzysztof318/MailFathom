@@ -150,6 +150,10 @@ Owners are the top-level `Accounts` collection. It is **not** `MailSynchronizati
 | `Accounts:<n>:DisplayName` | Yes | The label an administrator tells owners apart by, at most 128 characters and unique across the deployment |
 | `Accounts:<n>:MailAccounts` | No | The mail accounts this owner owns, each declared exactly as one in `MailSynchronization:Accounts` is |
 
+A declared owner states no settings of their own beyond their mailboxes. Everything else about them — how their mail is
+classified included — is read from the deployment's own sections until their document is written, which is what
+[the handover](#the-handover-and-what-it-costs) does.
+
 An owner declaring no mailbox is an ordinary state rather than an unfinished one: an owner exists before their first mailbox does, and one whose last mailbox is withdrawn is still an owner. Binding is strict, so a property nothing binds — a `DisplayNames` where `DisplayName` belongs — fails the start naming it rather than leaving the host running on a default.
 
 At most **256** owners may be declared. A file past that was generated rather than written, which is worth stopping for on its own.
@@ -226,9 +230,46 @@ remove'.
 
 The owner routes are the ones that do write that store, and until an owner is adopted **they refuse too** — through the administrative record routes and through the client's own alike — because a write against an empty document would silently drop every mailbox the file was supplying. That refusal names `mfctl owner adopt`, which is the one act that moves them.
 
+**What adoption moves is the posture as well as the mailboxes.** An owner served from a configuration source has their
+mail classified on the deployment's `SpamClassification` section's terms, so a handover that left it behind would switch
+their spam protection off on the strength of an administrative act about where their settings live. The section's own
+keys — and only those an owner may hold — are copied into the record with the accounts, and from the commit onwards the
+record is what decides them.
+
 **Once an owner is adopted the change is permanent for them, and no configuration source reaches their mail accounts at all** — not the provisioned file, and not an environment variable or a command-line argument either. Those accounts have stopped being configuration keys rather than merely losing precedence, so the precedence table at the top of this page has nothing to say about them. `mfctl` over the administrative port is what changes them afterwards, and what repairs a deployment whose file no longer reaches an owner it used to.
 
 This is the one place the page's standing claim needs reading carefully. **No file MailFathom reads is ever written back** — that still holds, and adoption writes nothing into anybody's file. What it does is stop MailFathom reading one owner's section out of it, which the file itself cannot show; the startup line naming that owner is what says so, and it is worth reading after any adoption.
+
+### One owner's own classification posture
+
+An adopted owner's record carries a `SpamClassification` property beside their `MailAccounts`, and it is the only source
+of their posture from the moment the document is written — the deployment's section reaches them no longer, and the two
+are never unioned. That is what makes switching classification off in a record actually switch it off.
+
+```json
+{
+  "MailAccounts": [ ... ],
+  "SpamClassification": {
+    "Enabled": true,
+    "UseScanner": true,
+    "ScannedFolders": [ "inbox" ],
+    "ScannerThreshold": 6.5,
+    "Actions": { "MoveToJunkFolder": true, "MarkAsRead": false, "JunkFolder": "role:Junk", "Threshold": 8 }
+  }
+}
+```
+
+Every key means exactly what the same-named key of
+[the deployment's section](configuration-ai.md#spamclassification) means, and the constraints are the same — including
+the `0.1` to `1000` range both thresholds are judged against, which stays the deployment's. A record stating none of it
+classifies that owner's mail not at all, which is the same answer a deployment that configured nothing gives.
+
+**A record may hold only what is that owner's.** The daemon's address, the per-scan bounds, the scan concurrency, the
+classification wait, and the run batch sizes are what the process holds open or spends rather than a judgement about
+anybody's mailbox, so a record naming one of them is refused at the write, naming the key. So is a threshold outside the
+permitted range, naming the range; a scanned folder that is not a usable alias; a scanner asked for with `Enabled` false;
+an action asked for with `Enabled` false; and a junk destination none of **that owner's** accounts maps — a folder only
+somebody else's account carries is refused exactly as one nobody maps, because MailFathom creates neither.
 
 ## Changing a persisted setting
 

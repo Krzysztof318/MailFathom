@@ -6,6 +6,7 @@ using MailFathom.Application.Jobs;
 using MailFathom.Application.Jobs.Execution;
 using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Spam.Actions;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Spam;
 
@@ -98,11 +99,15 @@ public sealed class EmailSpamClassificationHandler : IJobHandler
             return;
         }
 
-        var classification = await this.ClassifyAsync(emailId, cancellationToken);
+        var classification = await this.ClassifyAsync(account.Owner, emailId, cancellationToken);
 
         if (classification is not null)
         {
-            await this.actionRecorder.RecordAsync(classification, SpamActionPosture.Acting, cancellationToken);
+            await this.actionRecorder.RecordAsync(
+                account.Owner,
+                classification,
+                SpamActionPosture.Acting,
+                cancellationToken);
         }
     }
 
@@ -115,10 +120,12 @@ public sealed class EmailSpamClassificationHandler : IJobHandler
     /// not stored — and none of them has anything for the mailbox to be asked about.
     /// </remarks>
     private async Task<SpamClassification?> ClassifyAsync(
+        MailOwnerId owner,
         StoredEmailId emailId,
         CancellationToken cancellationToken)
     {
         var result = await this.classifier.ClassifyAsync(
+            owner,
             emailId,
             SpamClassificationMode.FirstTimeOnly,
             cancellationToken);

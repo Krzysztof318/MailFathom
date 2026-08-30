@@ -60,7 +60,7 @@ internal sealed class OwnerRecordAdministration(
     OwnerAccountDocumentBinder binder,
     SecretConfigurationValidator secrets,
     ServedMailOwners servedOwners,
-    ConfiguredOwnerMailAccounts configured)
+    ConfiguredOwnerSettings configured)
 {
     /// <summary>What a refused save is sent to, which is the act that states a mailbox and its credential afresh.</summary>
     /// <remarks>
@@ -620,7 +620,7 @@ internal sealed class OwnerRecordAdministration(
 
             if (await store.CommitAsync(owner, candidateJson, inForce.Version, cancellationToken) is { } committed)
             {
-                servedOwners.OwnerDocumentPublished(owner, inForce.DisplayName, bound.MailAccounts, committed);
+                servedOwners.OwnerDocumentPublished(owner, inForce.DisplayName, bound, committed);
 
                 return OwnerRecordWriteOutcome.Committed(committed);
             }

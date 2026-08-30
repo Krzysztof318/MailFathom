@@ -574,12 +574,14 @@ to name and the rule's own words are what an operator has to correct.
 
 ### Classifying the mail you already have, and reading what was concluded
 
-Three commands, and none of *them* writes a setting: they apply the deployment's classification settings to the mail
-it already holds and read what was decided. Whether mail is classified at all, what a scanner is judged by, and what
-happens to junk are configuration for the reason a rule is — which is what `mfctl config` reaches, so those settings
-are changeable without a restart through [reading and changing the
-configuration](#reading-and-changing-the-deployments-own-configuration) rather than through these three.
-[`SpamClassification`](configuration-ai.md#spamclassification) is the section, and [spam
+Three commands, and none of *them* writes a setting: they apply the account owner's classification settings to the mail
+this deployment already holds for them, and read what was decided. Whether mail is classified at all, what a scanner is
+judged by, and what happens to junk are that owner's to decide, and each is read from whichever source their record's
+marker names — the deployment's [`SpamClassification`](configuration-ai.md#spamclassification) section while a
+configuration source still reaches them, and their own document once it has been written. The first is changeable
+without a restart through [reading and changing the
+configuration](#reading-and-changing-the-deployments-own-configuration) and the second through
+[the owner record routes](#owners-and-their-records); neither is reached through these three. [Spam
 classification](../features/spam-classification.md) is what the feature does.
 
 **`mfctl spam run --account <id>` is a dry run unless you add `--apply`.** It returns as soon as the deployment has
@@ -595,9 +597,8 @@ Progress:  0 scored, 0 already decided, 0 unreadable
 The run is carried by the account's synchronization runs. Watch it with 'mfctl spam run-status --account work'.
 ```
 
-`--folder` narrows the walk and is repeatable; it narrows *within* the configured scope, and a folder outside it is
-refused naming the section to edit, because a run over a folder nobody classifies would read the whole of it and record
-nothing. `--rescore` scores mail again even where its verdict was already reached under the settings now in force,
+`--folder` narrows the walk and is repeatable; it narrows *within* that owner's own scope, and a folder outside it is
+refused, because a run over a folder nobody classifies would read the whole of it and record nothing. `--rescore` scores mail again even where its verdict was already reached under the settings now in force,
 which is the one form of the run that costs a scanner call per message however recently it was decided.
 
 Asking twice is asking once, and the command says which of the two happened — including that the terms the second

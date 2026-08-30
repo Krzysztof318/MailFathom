@@ -382,7 +382,8 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
             record.Owner,
             record.DisplayName,
             MailOwnerAccountSource.OwnerDocument,
-            bound.MailAccounts);
+            bound.MailAccounts,
+            bound.SpamClassification);
     }
 
     /// <summary>Refuses an owner whose own mail accounts carry a secret or a trust anchor this deployment cannot use.</summary>

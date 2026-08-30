@@ -219,8 +219,8 @@ public sealed class DerivedWorkGateTests
         Assert.True(terms.IsApplied);
         Assert.Equal(Now - Wait, terms.ReleasedWhenStoredBefore);
         Assert.Equal([new MailFolderIdentity(Primary, Junk)], terms.JunkFolders);
-        Assert.True(terms.Classifies(Inbox));
-        Assert.False(terms.Classifies(Archive));
+        Assert.True(terms.Classifies(Primary, Inbox));
+        Assert.False(terms.Classifies(Primary, Archive));
     }
 
     [Fact]
@@ -285,5 +285,8 @@ public sealed class DerivedWorkGateTests
     private static DerivedWorkGate Gate(
         SpamClassificationSettings settings,
         StubJunkMailFolderCatalog junkFolders) =>
-        new(new StubSpamClassificationSettingsReader(settings), junkFolders, new FakeTimeProvider(Now));
+        new(
+            new StubSpamClassificationSettingsReader(settings, Primary, Secondary),
+            junkFolders,
+            new FakeTimeProvider(Now));
 }

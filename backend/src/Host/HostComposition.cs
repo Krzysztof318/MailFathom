@@ -243,7 +243,7 @@ internal static class HostComposition
         // What a configuration source still supplies for one owner, which is what an adoption moves and what a record
         // is judged against. A singleton because both halves of it — the file and the published runtime roster — are
         // properties of the deployment rather than of a request.
-        builder.Services.AddSingleton<ConfiguredOwnerMailAccounts>();
+        builder.Services.AddSingleton<ConfiguredOwnerSettings>();
         // Scoped for the reason PersistedSettingsAdministration is: each asks AccessAuthorization for the permission
         // its operations are published under, and that service is scoped to whatever admitted the caller.
         builder.Services.AddScoped<OwnerRosterAdministration>();

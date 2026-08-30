@@ -15,7 +15,7 @@ namespace MailFathom.Host.UnitTests.Configuration.OwnerSettings;
 /// holds, while a declared owner's is a numbered entry of the owner collection — and what an adoption moves is what the
 /// files say now rather than what the roster copied at the start.
 /// </summary>
-public sealed class ConfiguredOwnerMailAccountsTests
+public sealed class ConfiguredOwnerSettingsTests
 {
     private static readonly MailOwnerId Alex =
         MailOwnerId.Create(new Guid("1a7f6b1c-2d3e-4f50-8a91-b2c3d4e5f601"));
@@ -222,6 +222,64 @@ public sealed class ConfiguredOwnerMailAccountsTests
         Assert.Equal("MailAccounts:0:AccountId", edit.Path);
     }
 
+    /// <summary>
+    /// An adoption is a move rather than a rewrite, so the posture the deployment's section classified this owner's mail
+    /// under travels into the record with their mailboxes — otherwise a handover about where somebody's settings live
+    /// would switch their spam protection off.
+    /// </summary>
+    [Fact]
+    public void AdoptionEditsFor_ADeploymentClassifyingTheirMail_CarriesThatPostureIntoTheRecord()
+    {
+        // Arrange
+        var reading = Reading(
+            new Dictionary<string, string?>
+            {
+                ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+                ["SpamClassification:Enabled"] = "true",
+                ["SpamClassification:ScannedFolders:0"] = "inbox",
+                ["SpamClassification:Actions:MoveToJunkFolder"] = "true",
+            },
+            Serving(Alex, MailOwnerAccountSource.DeploymentSection));
+
+        // Act
+        var edits = reading.AdoptionEditsFor(Alex);
+
+        // Assert
+        Assert.Equal(
+            [
+                "MailAccounts:0:AccountId=primary",
+                "SpamClassification:Actions:MoveToJunkFolder=true",
+                "SpamClassification:Enabled=true",
+                "SpamClassification:ScannedFolders:0=inbox",
+            ],
+            edits.Select(edit => $"{edit.Path}={edit.Value}"));
+    }
+
+    /// <summary>What the section states about the engine costs the deployment rather than the owner, and a record may not hold it.</summary>
+    [Fact]
+    public void AdoptionEditsFor_ASectionStatingTheDeploymentsOwnEngineSettings_LeavesThemBehind()
+    {
+        // Arrange
+        var reading = Reading(
+            new Dictionary<string, string?>
+            {
+                ["MailSynchronization:Accounts:0:AccountId"] = "primary",
+                ["SpamClassification:Enabled"] = "true",
+                ["SpamClassification:ClassificationWait"] = "02:00:00",
+                ["SpamClassification:ScanConcurrency"] = "4",
+                ["SpamClassification:Scanner:Host"] = "spamd.example.test",
+            },
+            Serving(Alex, MailOwnerAccountSource.DeploymentSection));
+
+        // Act
+        var edits = reading.AdoptionEditsFor(Alex);
+
+        // Assert
+        Assert.Equal(
+            ["MailAccounts:0:AccountId=primary", "SpamClassification:Enabled=true"],
+            edits.Select(edit => $"{edit.Path}={edit.Value}"));
+    }
+
     [Fact]
     public void AdoptionEditsFor_AnOwnerNoConfigurationSourceReaches_StatesNoChanges()
     {
@@ -250,7 +308,7 @@ public sealed class ConfiguredOwnerMailAccountsTests
     private static ServedMailOwner Serving(MailOwnerId owner, MailOwnerAccountSource source) =>
         new(owner, $"owner-{owner.Value:D}", source, []);
 
-    private static ConfiguredOwnerMailAccounts Reading(
+    private static ConfiguredOwnerSettings Reading(
         IEnumerable<KeyValuePair<string, string?>> values,
         params ServedMailOwner[] served)
     {

@@ -43,6 +43,8 @@ namespace MailFathom.Application.UnitTests.Synchronization;
 
 public sealed class MailboxSynchronizerTests
 {
+    private static readonly MailAccountId ClassifiedAccount = MailAccountId.Create("primary");
+
     private static readonly MailFolderAlias InboxAlias = MailFolderAlias.Create("inbox");
 
     private static readonly RemoteFolderPath InboxRemotePath = RemoteFolderPath.Create("INBOX", '/');
@@ -2753,7 +2755,8 @@ public sealed class MailboxSynchronizerTests
                 options),
             new DerivedWorkGate(
                 new StubSpamClassificationSettingsReader(
-                    classificationSettings ?? SpamClassificationSettings.Disabled),
+                    classificationSettings ?? SpamClassificationSettings.Disabled,
+                    ClassifiedAccount),
                 junkFolders ?? StubJunkMailFolderCatalog.None,
                 timeProvider),
             gateTelemetry ?? new RecordingDerivedWorkGateTelemetry(),
@@ -2761,7 +2764,8 @@ public sealed class MailboxSynchronizerTests
             new SpamClassificationArrivals(
                 jobStore ?? Substitute.For<IJobStore>(),
                 new StubSpamClassificationSettingsReader(
-                    classificationSettings ?? SpamClassificationSettings.Disabled)),
+                    classificationSettings ?? SpamClassificationSettings.Disabled,
+                    ClassifiedAccount)),
             contactCollector ?? CreateCollectorThatCollectsNothing(persistenceSessionFactory, timeProvider),
             concurrencyRetryPolicy,
             timeProvider,

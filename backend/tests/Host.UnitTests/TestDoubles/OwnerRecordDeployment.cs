@@ -87,7 +87,7 @@ internal sealed class OwnerRecordDeployment
 
         var authorization = new AccessAuthorization(principals);
         var settings = new ConfigurationBuilder().Build();
-        var configured = new ConfiguredOwnerMailAccounts(settings, this.servedOwners);
+        var configured = new ConfiguredOwnerSettings(settings, this.servedOwners);
         var admission = new SeveralOwnerAdmission(
             Options.Create(new McpEndpointOptions()),
             Options.Create(new ClientEndpointOptions()));
