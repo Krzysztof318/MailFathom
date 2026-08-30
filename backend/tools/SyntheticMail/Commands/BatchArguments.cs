@@ -21,6 +21,10 @@ namespace MailFathom.SyntheticMail.Commands;
 /// <param name="Interval">How long the run waits between two submissions.</param>
 /// <param name="ConfigurationPath">Where the sending account is read from.</param>
 /// <param name="DryRun">Whether to generate and report without submitting anything.</param>
+/// <param name="AiContent">Whether the message content comes from the configured provider rather than the seeded vocabulary.</param>
+/// <param name="Languages">The languages AI-generated messages are written in, and empty when <see cref="AiContent" /> is <see langword="false" />.</param>
+/// <param name="Topics">The topics AI-generated messages are written about, and empty when <see cref="AiContent" /> is <see langword="false" />.</param>
+/// <param name="AiConfigurationPath">Where the AI provider is read from, or <see langword="null" /> when the run generates without one.</param>
 /// <remarks>
 /// Defaults are resolved here rather than left to the point of use, which is what makes
 /// <see cref="RepeatCommandLine" /> possible: a run that chose its own seed and its own end date can print the exact
@@ -36,7 +40,11 @@ internal sealed record BatchArguments(
     int SensitivePercentage,
     TimeSpan Interval,
     string ConfigurationPath,
-    bool DryRun)
+    bool DryRun,
+    bool AiContent,
+    IReadOnlyList<string> Languages,
+    IReadOnlyList<SyntheticMailTopic> Topics,
+    string? AiConfigurationPath)
 {
     /// <summary>The largest batch one invocation may ask for.</summary>
     /// <remarks>
@@ -74,9 +82,19 @@ internal sealed record BatchArguments(
     internal DateOnly EarliestDate => this.LatestDate.AddDays(-this.SpanDays);
 
     /// <summary>The invocation that reproduces this run exactly.</summary>
+    /// <remarks>
+    /// In AI content mode the line reproduces the envelope — the seed, the distribution, the shape — and not the
+    /// words, which are the provider's to answer and differ from run to run.
+    /// </remarks>
     internal string RepeatCommandLine => string.Create(
         CultureInfo.InvariantCulture,
-        $"{this.Recipient.Address} --seed {this.Seed} --count {this.Count} --days {this.SpanDays} --until {this.LatestDate.ToString(DateFormat, CultureInfo.InvariantCulture)} --attachment-bytes {this.MaximumAttachmentBytes} --sensitive-percentage {this.SensitivePercentage}");
+        $"{this.Recipient.Address} --seed {this.Seed} --count {this.Count} --days {this.SpanDays} --until {this.LatestDate.ToString(DateFormat, CultureInfo.InvariantCulture)} --attachment-bytes {this.MaximumAttachmentBytes} --sensitive-percentage {this.SensitivePercentage}{this.AiCommandLine}");
+
+    private string AiCommandLine => this.AiContent
+        ? string.Create(
+            CultureInfo.InvariantCulture,
+            $" --ai --language {string.Join(",", this.Languages)} --topic {string.Join(",", this.Topics.Select(topic => topic.Name))}")
+        : string.Empty;
 
     /// <summary>Checks one invocation and resolves what it left unsaid.</summary>
     /// <param name="recipient">The address given as the argument.</param>
@@ -89,6 +107,10 @@ internal sealed record BatchArguments(
     /// <param name="intervalMilliseconds">How long to wait between two submissions.</param>
     /// <param name="configurationPath">Where to read the sending account, or <see langword="null" /> for the default.</param>
     /// <param name="dryRun">Whether to submit anything at all.</param>
+    /// <param name="ai">Whether the message content comes from the configured provider.</param>
+    /// <param name="language">The languages the content is written in, comma-separated, or <see langword="null" /> for the default.</param>
+    /// <param name="topic">The topics the content is written about, comma-separated, or <see langword="null" /> for the default.</param>
+    /// <param name="aiConfigurationPath">Where to read the AI provider, or <see langword="null" /> for the default.</param>
     /// <param name="timeProvider">What today is read from.</param>
     /// <returns>The checked invocation.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="recipient" /> or <paramref name="timeProvider" /> is <see langword="null" />.</exception>
@@ -108,6 +130,10 @@ internal sealed record BatchArguments(
         int intervalMilliseconds,
         string? configurationPath,
         bool dryRun,
+        bool ai,
+        string? language,
+        string? topic,
+        string? aiConfigurationPath,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(recipient);
@@ -124,6 +150,8 @@ internal sealed record BatchArguments(
                 $"'--until {latestDate.ToString(DateFormat, CultureInfo.InvariantCulture)}' with '--days {spanDays}' reaches before the first representable date.");
         }
 
+        var (aiContent, languages, topics, resolvedAiConfigurationPath) = ParseAiMode(ai, language, topic, aiConfigurationPath);
+
         return new BatchArguments(
             ParseRecipient(recipient),
             // Random.Shared rather than a seed of its own, because this draw decides nothing a run has to reproduce —
@@ -136,7 +164,11 @@ internal sealed record BatchArguments(
             Bounded(sensitivePercentage, 0, MaximumSensitivePercentage, "--sensitive-percentage"),
             TimeSpan.FromMilliseconds(Bounded(intervalMilliseconds, 0, MaximumIntervalMilliseconds, "--interval")),
             string.IsNullOrWhiteSpace(configurationPath) ? SendingAccountFile.DefaultPath() : configurationPath,
-            dryRun);
+            dryRun,
+            aiContent,
+            languages,
+            topics,
+            resolvedAiConfigurationPath);
     }
 
     /// <summary>Builds the plan this invocation describes.</summary>
@@ -148,7 +180,9 @@ internal sealed record BatchArguments(
             this.LatestSentAt,
             this.SpanDays,
             this.MaximumAttachmentBytes,
-            this.SensitivePercentage);
+            this.SensitivePercentage,
+            this.Languages,
+            this.Topics);
 
     private static MailboxAddress ParseRecipient(string recipient) =>
         MailboxAddress.TryParse(recipient, out var parsed)
@@ -165,6 +199,103 @@ internal sealed record BatchArguments(
         return DateOnly.TryParseExact(until, DateFormat, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)
             ? parsed
             : throw new SyntheticMailFailure($"'--until {until}' is not a date written as {DateFormat}.");
+    }
+
+    /// <summary>Resolves the AI content mode: what was named, what was defaulted, and what is refused.</summary>
+    /// <remarks>
+    /// A mode without content options is a mode with defaults rather than an error: a run that asks for AI content
+    /// without naming a language or a topic wants one written in English about whatever the tool ships, and a refusal
+    /// there would make the default a second invocation to type. Naming content options without the mode is an error,
+    /// because they decide nothing the seeded vocabulary reads.
+    /// </remarks>
+    private static (bool AiContent, IReadOnlyList<string> Languages, IReadOnlyList<SyntheticMailTopic> Topics, string? ConfigurationPath) ParseAiMode(
+        bool ai,
+        string? language,
+        string? topic,
+        string? aiConfigurationPath)
+    {
+        if (!ai)
+        {
+            if (!string.IsNullOrWhiteSpace(language) || !string.IsNullOrWhiteSpace(topic))
+            {
+                throw new SyntheticMailFailure("'--language' and '--topic' decide AI-generated content, which requires '--ai'.");
+            }
+
+            return (false, [], [], null);
+        }
+
+        return (
+            true,
+            ParseLanguages(language),
+            ParseTopics(topic),
+            string.IsNullOrWhiteSpace(aiConfigurationPath) ? SyntheticAiProviderFile.DefaultPath() : aiConfigurationPath);
+    }
+
+    /// <summary>Whether a value is written the way a language code is, which is the only shape accepted.</summary>
+    /// <remarks>
+    /// Two or three letters, for the reason ISO 639-1 and -3 are the two a model understands: the code is handed to
+    /// the provider as the name of a language, and a code neither of those registers would be a name it does not know.
+    /// The value is already lowercased where this is asked, so the check is letters and length rather than a pattern.
+    /// </remarks>
+    private static bool IsLanguageCode(string code) =>
+        code.Length is 2 or 3 && code.All(char.IsAsciiLetter);
+
+    private static List<string> ParseLanguages(string? language)
+    {
+        if (string.IsNullOrWhiteSpace(language))
+        {
+            return ["en"];
+        }
+
+        var codes = new List<string>();
+
+        foreach (var raw in language.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var code = raw.ToLowerInvariant();
+
+            if (!IsLanguageCode(code))
+            {
+                throw new SyntheticMailFailure(
+                    $"'--language {raw}' is not a language code: write two or three letters, comma-separated, as in en,pl,de.");
+            }
+
+            // Deduplicated in order of first naming, so a code written twice is one language, not two shares of one.
+            if (!codes.Contains(code))
+            {
+                codes.Add(code);
+            }
+        }
+
+        return codes.Count > 0
+            ? codes
+            : throw new SyntheticMailFailure(
+                $"'--language {language}' names no language code: write two or three letters, comma-separated, as in en,pl,de.");
+    }
+
+    private static List<SyntheticMailTopic> ParseTopics(string? topic)
+    {
+        if (string.IsNullOrWhiteSpace(topic))
+        {
+            return [.. SyntheticMailTopic.All];
+        }
+
+        var topics = new List<SyntheticMailTopic>();
+
+        foreach (var raw in topic.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (!SyntheticMailTopic.TryParse(raw, out var parsed))
+            {
+                throw new SyntheticMailFailure(
+                    $"'{raw}' is not a topic: one of {string.Join(", ", SyntheticMailTopic.All.Select(candidate => candidate.Name))}.");
+            }
+
+            if (!topics.Contains(parsed))
+            {
+                topics.Add(parsed);
+            }
+        }
+
+        return topics;
     }
 
     private static int Bounded(int value, int lowest, int highest, string option) =>

@@ -235,7 +235,8 @@ public sealed class SyntheticMimeComposerTests
         "The tidal buoy",
         new DateTimeOffset(2026, 6, 1, 9, 14, 0, TimeSpan.Zero),
         Body(shape, SyntheticCharacterSet.Utf8),
-        Attachment: null);
+        Attachment: null,
+        AiOrigin: null);
 
     private static SyntheticEmailBody Body(SyntheticBodyShape shape, SyntheticCharacterSet characterSet) => new(
         shape,

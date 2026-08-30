@@ -5,6 +5,7 @@
 using MailFathom.SyntheticMail.Configuration;
 using MailFathom.SyntheticMail.Delivery;
 using MailFathom.SyntheticMail.Generation;
+using MailFathom.SyntheticMail.Generation.AiContent;
 using MailFathom.SyntheticMail.UnitTests.TestDoubles;
 using Microsoft.Extensions.Time.Testing;
 using MimeKit;
@@ -187,14 +188,128 @@ public sealed class SyntheticMailRunnerTests
             TestContext.Current.CancellationToken));
     }
 
+    [Fact]
+    public async Task RunAsync_AIContentWithoutAProviderFile_SaysWhatToWriteAndGeneratesNothing()
+    {
+        // Arrange
+        var console = new RecordingSyntheticMailConsole();
+        await using var transport = new RecordingSyntheticMailTransport();
+        var missing = Path.Combine(AppContext.BaseDirectory, $"nothing-writes-this-{Guid.NewGuid():N}.local.json");
+
+        // Act
+        var exitCode = await SyntheticMailRunner.RunAsync(
+            Context(console, transport, aiConfigurationPath: missing),
+            ["developer@example.com", "--ai", "--ai-config", missing, "--count", "6", "--seed", "42", "--until", "2026-08-08"],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(SyntheticMailExitCode.Failure, exitCode);
+        Assert.Equal(0, transport.Opened);
+        Assert.Empty(console.Output);
+        Assert.Contains(console.Diagnostics, line => line.Contains(missing, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_ANAiDryRun_ListsTheCorpusWithItsLanguageAndTopicAndSubmitsNothing()
+    {
+        // Arrange
+        var console = new RecordingSyntheticMailConsole();
+        await using var transport = new RecordingSyntheticMailTransport();
+        var source = new ScriptedAiEmailContentSource(new AiEmailContent("Quarterly figures", "Hello,\n\nFigures attached.\n\nRegards\nAnna"));
+
+        // Act
+        var exitCode = await SyntheticMailRunner.RunAsync(
+            Context(console, transport, aiContentSource: source),
+            ["developer@example.com", "--ai", "--dry-run", "--count", "6", "--seed", "42", "--language", "pl", "--topic", "travel", "--until", "2026-08-08"],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(SyntheticMailExitCode.Success, exitCode);
+        Assert.Equal(6, console.Output.Count);
+        Assert.Equal(0, transport.Opened);
+        Assert.Equal(6, source.Requests.Count);
+        Assert.All(source.Requests, request =>
+        {
+            Assert.Equal("pl", request.LanguageCode);
+            Assert.Equal(SyntheticMailTopic.Travel, request.Topic);
+        });
+        Assert.All(console.Output, line =>
+        {
+            Assert.Contains("language=pl topic=travel", line, StringComparison.Ordinal);
+            Assert.Contains("Quarterly figures", line, StringComparison.Ordinal);
+        });
+        Assert.Contains(console.Diagnostics, line => line.Contains("AI content in pl over travel", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_AProviderThatRefusesTheKey_FailsTheRunNamingTheMoveAndSendsNothing()
+    {
+        // Arrange
+        var console = new RecordingSyntheticMailConsole();
+        await using var transport = new RecordingSyntheticMailTransport();
+        var source = new ScriptedAiEmailContentSource(new SyntheticMailFailure("The endpoint refused the API key: check 'apiKey'."));
+
+        // Act
+        var exitCode = await SyntheticMailRunner.RunAsync(
+            Context(console, transport, aiContentSource: source),
+            ["developer@example.com", "--ai", "--count", "6", "--seed", "42", "--interval", "0", "--until", "2026-08-08"],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(SyntheticMailExitCode.Failure, exitCode);
+        Assert.Equal(0, transport.Opened);
+        Assert.Empty(transport.Submissions);
+        Assert.Contains(console.Diagnostics, line => line.Contains("refused the API key", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_AIContentThatTheServerAccepts_DeliversEveryMessageAndReportsIt()
+    {
+        // Arrange
+        var console = new RecordingSyntheticMailConsole();
+        await using var transport = new RecordingSyntheticMailTransport();
+        var source = new ScriptedAiEmailContentSource(new AiEmailContent("Quarterly figures", "Hello,\n\nFigures attached.\n\nRegards\nAnna"));
+
+        // Act
+        var exitCode = await SyntheticMailRunner.RunAsync(
+            Context(console, transport, aiContentSource: source),
+            ["developer@example.com", "--ai", "--count", "4", "--seed", "1", "--interval", "0", "--until", "2026-08-08"],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(SyntheticMailExitCode.Success, exitCode);
+        Assert.Equal(1, transport.Opened);
+        Assert.Equal(4, transport.Submissions.Count);
+        Assert.True(transport.Disposed);
+        Assert.Contains(console.Diagnostics, line => line == "Delivered 4 of 4 to developer@example.com.");
+    }
+
     private static SyntheticMailContext Context(
         RecordingSyntheticMailConsole console,
         ISyntheticMailTransport? transport = null,
-        Func<string, SendingAccount>? readAccount = null) => new(
+        Func<string, SendingAccount>? readAccount = null,
+        string? aiConfigurationPath = null,
+        IAiEmailContentSource? aiContentSource = null)
+    {
+        // A path named by a test is read by the real reader, which is what makes the missing-file message the one a
+        // developer actually gets; a run that names none is handed a configuration that is never used, because a
+        // test that reaches for content supplies the source rather than the file it would come from.
+        Func<string, AiProviderConfiguration> readAiProvider = aiConfigurationPath is not null
+            ? SyntheticAiProviderFile.Read
+            : _ => new AiProviderConfiguration("not-a-real-key", "gpt-test", null);
+
+        Func<AiProviderConfiguration, IAiEmailContentSource> openAiContentSource = aiContentSource is { } source
+            ? _ => source
+            : _ => throw new SyntheticMailFailure("the test has not configured an AI content source");
+
+        return new SyntheticMailContext(
             console,
             readAccount ?? (_ => Account()),
+            readAiProvider,
             _ => transport ?? new RecordingSyntheticMailTransport(),
+            openAiContentSource,
             new FakeTimeProvider(Today));
+    }
 
     private static SendingAccount Account() => new(
         "smtp.example.test",

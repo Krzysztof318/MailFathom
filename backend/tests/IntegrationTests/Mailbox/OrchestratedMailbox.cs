@@ -424,7 +424,9 @@ internal sealed class OrchestratedMailbox(OrchestratedMailServerEndpoints endpoi
             LatestSentAt: new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero),
             SpanDays: 1,
             MaximumAttachmentBytes: 0,
-            SensitivePercentage: 0);
+            SensitivePercentage: 0,
+            Languages: [],
+            Topics: []);
 
         var seeded = SyntheticEmailGenerator.Generate(plan)[0];
         var generated = author is null

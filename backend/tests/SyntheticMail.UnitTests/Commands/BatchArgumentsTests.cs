@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.SyntheticMail.Commands;
+using MailFathom.SyntheticMail.Generation;
 using Microsoft.Extensions.Time.Testing;
 
 using Xunit;
@@ -210,6 +211,191 @@ public sealed class BatchArgumentsTests
         Assert.Equal(new DateTimeOffset(2026, 1, 31, 23, 59, 59, TimeSpan.Zero), plan.LatestSentAt);
     }
 
+    [Fact]
+    public void Parse_AIContentWithoutNamingALanguageOrATopic_DoesEnglishAndEveryTopic()
+    {
+        // Arrange, Act
+        var arguments = Parse(ai: true);
+
+        // Assert
+        Assert.True(arguments.AiContent);
+        Assert.Equal(["en"], arguments.Languages);
+        Assert.Equal(SyntheticMailTopic.All, arguments.Topics);
+    }
+
+    [Fact]
+    public void Parse_ANamedLanguage_ListsItInTheOrderNamedAndLowersIt()
+    {
+        // Arrange, Act
+        var arguments = Parse(ai: true, language: "EN, pl");
+
+        // Assert
+        Assert.Equal(["en", "pl"], arguments.Languages);
+        Assert.Equal(["en", "pl"], arguments.ToPlan().Languages);
+    }
+
+    [Theory]
+    [InlineData("en,pl,en")]
+    [InlineData("pl,en,pl")]
+    public void Parse_ALanguageNamedTwice_IsOneShareOfTheDistribution(string language)
+    {
+        // Arrange, Act
+        var arguments = Parse(ai: true, language: language);
+
+        // Assert
+        Assert.Equal(2, arguments.Languages.Count);
+    }
+
+    [Theory]
+    [InlineData("polish")]
+    [InlineData("e")]
+    [InlineData("engl")]
+    [InlineData("e1")]
+    public void Parse_ALanguageCodeOutsideItsShape_IsRefusedNamingTheValue(string language)
+    {
+        // Arrange, Act
+        var failure = Assert.Throws<SyntheticMailFailure>(() => Parse(ai: true, language: language));
+
+        // Assert
+        Assert.Contains(language, failure.Message, StringComparison.Ordinal);
+        Assert.Contains("--language", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Parse_ANEmptyLanguage_IsTheDefaultRatherThanAnError()
+    {
+        // Arrange, Act
+        var arguments = Parse(ai: true, language: "");
+
+        // Assert
+        Assert.Equal(["en"], arguments.Languages);
+    }
+
+    [Fact]
+    public void Parse_ALanguageNamingNoCode_IsRefused()
+    {
+        // Arrange, Act
+        var failure = Assert.Throws<SyntheticMailFailure>(() => Parse(ai: true, language: ",,"));
+
+        // Assert
+        Assert.Contains("--language", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Parse_ThreeLetterLanguageCodes_AreAccepted()
+    {
+        // Arrange, Act
+        var arguments = Parse(ai: true, language: "pol,swe");
+
+        // Assert
+        Assert.Equal(["pol", "swe"], arguments.Languages);
+    }
+
+    [Fact]
+    public void Parse_ANamedTopic_ListsItInTheOrderNamed()
+    {
+        // Arrange, Act
+        var arguments = Parse(ai: true, topic: "travel, technical-support");
+
+        // Assert
+        Assert.Equal([SyntheticMailTopic.Travel, SyntheticMailTopic.TechnicalSupport], arguments.Topics);
+        Assert.Equal([SyntheticMailTopic.Travel, SyntheticMailTopic.TechnicalSupport], arguments.ToPlan().Topics);
+    }
+
+    [Fact]
+    public void Parse_ATopicNamedByANameItSpellsDifferently_IsAccepted()
+    {
+        // Arrange, Act
+        var arguments = Parse(ai: true, topic: " Business ");
+
+        // Assert
+        Assert.Equal([SyntheticMailTopic.Business], arguments.Topics);
+    }
+
+    [Theory]
+    [InlineData("business,travel,business")]
+    [InlineData("invoices,business,invoices")]
+    public void Parse_ATopicNamedTwice_IsOneShareOfTheDistribution(string topic)
+    {
+        // Arrange, Act
+        var arguments = Parse(ai: true, topic: topic);
+
+        // Assert
+        Assert.Equal(2, arguments.Topics.Count);
+    }
+
+    [Fact]
+    public void Parse_ANUnknownTopic_IsRefusedNamingTheOneItIsNotAndTheOnesItMayBe()
+    {
+        // Arrange, Act
+        var failure = Assert.Throws<SyntheticMailFailure>(() => Parse(ai: true, topic: "culinary"));
+
+        // Assert
+        Assert.Contains("culinary", failure.Message, StringComparison.Ordinal);
+        Assert.Contains(SyntheticMailTopic.Business.Name, failure.Message, StringComparison.Ordinal);
+        Assert.Contains(SyntheticMailTopic.Travel.Name, failure.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(null, "invoices")]
+    [InlineData("en", null)]
+    public void Parse_AContentOptionWithoutTheMode_IsRefusedNamingWhatRequiresIt(string? language, string? topic)
+    {
+        // Arrange, Act
+        var failure = Assert.Throws<SyntheticMailFailure>(() => Parse(language: language, topic: topic));
+
+        // Assert
+        Assert.Contains("--ai", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Parse_AIContentWithoutNamingAConfiguration_ReadsTheProviderBesideTheBuiltCommand()
+    {
+        // Arrange, Act
+        var arguments = Parse(ai: true);
+
+        // Assert
+        Assert.EndsWith("synthetic-mail-ai.local.json", arguments.AiConfigurationPath, StringComparison.Ordinal);
+        Assert.True(Path.IsPathRooted(arguments.AiConfigurationPath));
+    }
+
+    [Fact]
+    public void Parse_AContentModeTheSeededVocabularyServes_CarriesNoContentAndNoProvider()
+    {
+        // Arrange, Act
+        var arguments = Parse();
+
+        // Assert
+        Assert.False(arguments.AiContent);
+        Assert.Empty(arguments.Languages);
+        Assert.Empty(arguments.Topics);
+        Assert.Null(arguments.AiConfigurationPath);
+    }
+
+    [Fact]
+    public void RepeatCommandLine_AIContent_CarriesTheModeAndTheDistributionItDecided()
+    {
+        // Arrange, Act
+        var arguments = Parse(ai: true, language: "en,pl", topic: "business,travel");
+
+        // Assert
+        Assert.Contains("--ai", arguments.RepeatCommandLine, StringComparison.Ordinal);
+        Assert.Contains("--language en,pl", arguments.RepeatCommandLine, StringComparison.Ordinal);
+        Assert.Contains("--topic business,travel", arguments.RepeatCommandLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RepeatCommandLine_TheSeededVocabulary_CarriesNoContentMode()
+    {
+        // Arrange, Act
+        var arguments = Parse();
+
+        // Assert
+        Assert.DoesNotContain("--ai", arguments.RepeatCommandLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("--language", arguments.RepeatCommandLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("--topic", arguments.RepeatCommandLine, StringComparison.Ordinal);
+    }
+
     private static BatchArguments Parse(
         string recipient = "developer@example.com",
         int? seed = null,
@@ -218,7 +404,11 @@ public sealed class BatchArgumentsTests
         int days = 90,
         int attachmentBytes = 4096,
         int sensitivePercentage = 20,
-        int intervalMilliseconds = 0) => BatchArguments.Parse(
+        int intervalMilliseconds = 0,
+        bool ai = false,
+        string? language = null,
+        string? topic = null,
+        string? aiConfigurationPath = null) => BatchArguments.Parse(
             recipient,
             seed,
             count,
@@ -229,5 +419,9 @@ public sealed class BatchArgumentsTests
             intervalMilliseconds,
             configurationPath: null,
             dryRun: false,
+            ai,
+            language,
+            topic,
+            aiConfigurationPath,
             new FakeTimeProvider(Today));
 }
