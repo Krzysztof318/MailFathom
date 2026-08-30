@@ -343,8 +343,8 @@ internal sealed class DeploymentMailThread : IMailThread
             return ThreadWindow.Nothing;
         }
 
-        await this.pagingFailed.UpdateAsync(static _ => false, cancellationToken).ConfigureAwait(false);
-
+        // The page is the whole of this production, for the same reason the message list's is: a FeedView waiting on
+        // it holds the dispatcher a sibling paging write needs, so clearing the indicator from here never ran.
         var page = await this.deployment
             .ReadMailThreadAsync(conversation, PageSize, cursor: null, cancellationToken)
             .ConfigureAwait(false);
