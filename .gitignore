@@ -5,6 +5,9 @@
 .worktrees/
 .claude/worktrees/
 .claude/settings.local.json
+# The session marker the Qwen Code harness writes at the root of every working directory it uses, holding the
+# session's own identifier. Machine-local, regenerated when the harness needs it, and read by nothing here.
+.qwen-session
 .remember/
 *.user
 *.suo

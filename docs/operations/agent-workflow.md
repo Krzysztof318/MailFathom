@@ -391,12 +391,12 @@ That answer is diagnostic, and the whole point of it is lost if it becomes a
 number to reach. So nothing gates on it, in four separate places rather than one:
 `scripts/mutation-score.sh` passes `--break-at 0`, so the score never decides an
 exit status; `mutation-score.yml` sets `continue-on-error`, so whatever else this
-job does never decides the nightly run's; neither verification script calls the
-script at all; and no pull-request workflow does either. It runs on the nightly channel —
-`nightly.yml` calls `mutation-score.yml`, which calls the script — where tens of
+job does never decides the run's; neither verification script calls the
+script at all; and no pull-request workflow does either. It runs on the weekly channel —
+`weekly-diagnostics.yml` calls `mutation-score.yml`, which calls the script — where tens of
 minutes of runtime and a preview test runner's false positives cost nobody a
 merge. Read the score, act on what survived, and never enforce either. It is the
-same arrangement the hot-path benchmarks sit under one job above it, for the same
+same arrangement the hot-path benchmarks sit under in the same workflow, for the same
 reason `backend/tests/AGENTS.md` § *Cost claims* gives: a measurement worth watching
 across releases is worth nothing as a threshold.
 
@@ -410,7 +410,7 @@ leaving it to whatever a test project happens to reference.
 The runner is Microsoft Testing Platform rather than Stryker's default. That is
 not a preference: `xunit.v3.mtp-v2` carries no VSTest adapter, so the default
 runner finds no tests here at all. Stryker calls its MTP runner preview and says
-so on every run, which is the second reason this is a nightly report and not a
+so on every run, which is the second reason this is a weekly report and not a
 gate.
 
 No score fails anything, and a score is the only thing that cannot. Stryker
@@ -418,9 +418,9 @@ failing to produce a report at all still turns the job red — the script exits
 non-zero when the JSON report is missing, and the step runs under `pipefail` — and
 that is the one failure worth surfacing, because it says the diagnostic did not
 come out. What `continue-on-error` decides is how far that failure travels: the
-job is marked failed and the nightly run around it stays green, so a missing
-report is legible on the run that should have carried it without implicating the
-image published beside it.
+job is marked failed and the run around it stays green, so a missing report is
+legible on the run that should have carried it without reading as a verdict about
+`main`.
 
 Each run leaves `mutation-report.html` on the workflow run under
 `mutation-report-<project>`, which is the form the next unit of test work is

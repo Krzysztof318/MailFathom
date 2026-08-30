@@ -7049,8 +7049,8 @@ the_mutation_score_is_reported_and_never_gated() {
   local offenders
   local measured
 
-  [[ "$(extract_workflow_job_uses "$workflow_directory/nightly.yml" mutation-score)" == './.github/workflows/mutation-score.yml' ]] ||
-    failures+='nightly.yml: mutation-score does not call mutation-score.yml. '
+  [[ "$(extract_workflow_job_uses "$workflow_directory/weekly-diagnostics.yml" mutation-score)" == './.github/workflows/mutation-score.yml' ]] ||
+    failures+='weekly-diagnostics.yml: mutation-score does not call mutation-score.yml. '
 
   # The one flag deciding whether a score can fail a run. Stryker already defaults it to 0, which is
   # exactly why the explicit value is asserted: a default nobody wrote down is not a decision anybody
@@ -7062,7 +7062,7 @@ the_mutation_score_is_reported_and_never_gated() {
   # preview test runner that crashes, a report that is never written. The hot-path benchmarks one job above are swallowed
   # the same way and for the reason `backend/tests/AGENTS.md` § *Cost claims* gives.
   grep -qE '^    continue-on-error: true$' "$workflow_directory/mutation-score.yml" ||
-    failures+='mutation-score.yml does not swallow its own failures, so a broken diagnostic reads as a red nightly. '
+    failures+='mutation-score.yml does not swallow its own failures, so a broken diagnostic reads as a red weekly run. '
 
   offenders="$(grep -l 'mutation-score' \
     "$source_repository_root/scripts/verify-fast.sh" \
@@ -7072,13 +7072,13 @@ the_mutation_score_is_reported_and_never_gated() {
     failures+="these verification scripts reach the mutation score: $(tr '\n' ' ' <<< "$offenders"). "
   fi
 
-  # The nightly and the workflow it calls, and nothing else. A pull request reaching this would put
-  # the runtime and the preview runner's false positives in front of a merge.
+  # The weekly diagnostics channel and the workflow it calls, and nothing else. A pull request
+  # reaching this would put the runtime and the preview runner's false positives in front of a merge.
   offenders="$(grep -rl 'mutation-score' "$workflow_directory" |
-    grep -vE '/(nightly|mutation-score)\.yml$' || true)"
+    grep -vE '/(weekly-diagnostics|mutation-score)\.yml$' || true)"
 
   if [[ -n "$offenders" ]]; then
-    failures+="these workflows reach the mutation score outside the nightly channel: $(tr '\n' ' ' <<< "$offenders"). "
+    failures+="these workflows reach the mutation score outside the weekly diagnostics channel: $(tr '\n' ' ' <<< "$offenders"). "
   fi
 
   # Two projects, because a surviving mutant names a missing assertion in the invariants and the use

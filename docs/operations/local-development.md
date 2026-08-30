@@ -184,10 +184,10 @@ longer holds is not one to put a digest behind, and a nightly reports it beside 
 contract suite nor the chart is in what a nightly ships. [The container image](container-image.md#published-images) records
 what they produce and how a published image is verified.
 
-`Nightly` carries one job that publishes nothing and gates nothing: `Hot-path benchmarks` times chunking, ranking, and
-MIME extraction with BenchmarkDotNet and leaves the table on the run and in its summary. No job waits on it and a
-failure there is swallowed, because throughput on a hosted runner is not reproducible to a precision worth blocking a
-channel over — what a change actually has to satisfy is the allocation budget the same paths carry in
+`Weekly diagnostics` measures `main` once a week: `Hot-path benchmarks` times chunking, ranking, and MIME extraction
+with BenchmarkDotNet and leaves the table on the run and in its summary. No job waits on it and a failure there is
+swallowed, because throughput on a hosted runner is not reproducible to a precision worth blocking a channel over —
+what a change actually has to satisfy is the allocation budget the same paths carry in
 `backend/tests/AllocationBudgets.UnitTests`, which the pull-request gate runs. It does have a local equivalent, and running it
 is how a suspected regression is looked at before anything is claimed about it:
 
@@ -687,7 +687,7 @@ implementation of *build a synthetic message* rather than two that would drift.
 
 ## Command-line tooling
 
-The repository provisions no development environment, so install the SDK and any command-line tools on the developer machine. Repository-local tools declared in `.config/dotnet-tools.json` come from `dotnet tool restore`: `reportgenerator` merges the per-assembly Cobertura reports the coverage run produces, `dotnet-ef` generates and scripts migrations, and `dotnet-stryker` measures the mutation score `Nightly` reports for `Domain` and `Application` through `scripts/mutation-score.sh`. Each is pinned there because each runs in continuous integration, which is also what keeps `dotnet-ef` at one version across every machine instead of at whichever one a developer installed. [The mutation score is read, never enforced](agent-workflow.md#the-mutation-score-is-read-never-enforced) states what that last report answers that coverage no longer does, and why nothing gates on it.
+The repository provisions no development environment, so install the SDK and any command-line tools on the developer machine. Repository-local tools declared in `.config/dotnet-tools.json` come from `dotnet tool restore`: `reportgenerator` merges the per-assembly Cobertura reports the coverage run produces, `dotnet-ef` generates and scripts migrations, and `dotnet-stryker` measures the mutation score `Weekly diagnostics` reports for `Domain` and `Application` through `scripts/mutation-score.sh`. Each is pinned there because each runs in continuous integration, which is also what keeps `dotnet-ef` at one version across every machine instead of at whichever one a developer installed. [The mutation score is read, never enforced](agent-workflow.md#the-mutation-score-is-read-never-enforced) states what that last report answers that coverage no longer does, and why nothing gates on it.
 
 Two tools are installed globally when their workflows are needed:
 
