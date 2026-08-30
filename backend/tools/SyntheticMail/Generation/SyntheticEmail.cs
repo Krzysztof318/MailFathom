@@ -14,6 +14,7 @@ namespace MailFathom.SyntheticMail.Generation;
 /// <param name="SentAt">When the message claims to have been sent.</param>
 /// <param name="Body">What it says, and in which MIME shape.</param>
 /// <param name="Attachment">What it carries, or <see langword="null" /> when it carries nothing.</param>
+/// <param name="AiOrigin">What the message was generated under, or <see langword="null" /> when the seeded vocabulary wrote it.</param>
 /// <remarks>
 /// This is deliberately not a <c>MimeMessage</c>. A description can be asserted against, compared between two runs of
 /// the same seed, and printed by a dry run without a mail server being involved; composing it into MIME is a separate
@@ -28,4 +29,5 @@ internal sealed record SyntheticEmail(
     string Subject,
     DateTimeOffset SentAt,
     SyntheticEmailBody Body,
-    SyntheticEmailAttachment? Attachment);
+    SyntheticEmailAttachment? Attachment,
+    SyntheticEmailAiOrigin? AiOrigin);

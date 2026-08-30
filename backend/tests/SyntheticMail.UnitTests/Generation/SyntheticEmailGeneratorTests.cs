@@ -425,5 +425,5 @@ public sealed class SyntheticEmailGeneratorTests
 
 
     private static SyntheticCorpusPlan Plan(int seed, int count, int sensitivePercentage = 0) =>
-        new(seed, count, LatestSentAt, SpanDays: 90, MaximumAttachmentBytes: 64 * 1024, sensitivePercentage);
+        new(seed, count, LatestSentAt, SpanDays: 90, MaximumAttachmentBytes: 64 * 1024, sensitivePercentage, [], []);
 }

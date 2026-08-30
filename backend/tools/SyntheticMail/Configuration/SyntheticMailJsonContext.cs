@@ -4,10 +4,11 @@
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using MailFathom.SyntheticMail.Generation.AiContent;
 
 namespace MailFathom.SyntheticMail.Configuration;
 
-/// <summary>The one serialization contract this tool reads, generated rather than discovered by reflection.</summary>
+/// <summary>The serialization contract this tool reads, generated rather than discovered by reflection.</summary>
 /// <remarks>
 /// Source-generated for the reason <c>mfctl</c>'s context is: <c>.config/BannedSymbols.txt</c> refuses the reflective
 /// overloads outright, so stating the contract is the only way to read the file at all. Names are matched without
@@ -20,4 +21,6 @@ namespace MailFathom.SyntheticMail.Configuration;
     ReadCommentHandling = JsonCommentHandling.Skip,
     AllowTrailingCommas = true)]
 [JsonSerializable(typeof(SendingAccountDocument))]
+[JsonSerializable(typeof(AiProviderConfigurationDocument))]
+[JsonSerializable(typeof(AiEmailContent))]
 internal sealed partial class SyntheticMailJsonContext : JsonSerializerContext;

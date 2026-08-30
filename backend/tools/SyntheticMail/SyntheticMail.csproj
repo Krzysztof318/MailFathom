@@ -13,6 +13,9 @@
   <ItemGroup>
     <PackageReference Include="MailKit" />
     <PackageReference Include="MimeKit" />
+    <!-- The opt-in AI content mode reaches the same single client construction the service's provider adapters use:
+         the OpenAI wire protocol, a base address, and a key. No project under backend/src/ is referenced. -->
+    <PackageReference Include="OpenAI" />
     <PackageReference Include="System.CommandLine" />
   </ItemGroup>
 
@@ -44,5 +47,8 @@
     <None Include="synthetic-mail.local.json"
           CopyToOutputDirectory="PreserveNewest"
           Condition="Exists('$(MSBuildProjectDirectory)/synthetic-mail.local.json')" />
+    <None Include="synthetic-mail-ai.local.json"
+          CopyToOutputDirectory="PreserveNewest"
+          Condition="Exists('$(MSBuildProjectDirectory)/synthetic-mail-ai.local.json')" />
   </ItemGroup>
 </Project>

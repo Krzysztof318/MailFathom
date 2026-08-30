@@ -686,6 +686,7 @@
         "dependencies": {
           "MailKit": "[4.17.0, )",
           "MimeKit": "[4.17.0, )",
+          "OpenAI": "[2.12.0, )",
           "System.CommandLine": "[2.0.10, )"
         }
       },

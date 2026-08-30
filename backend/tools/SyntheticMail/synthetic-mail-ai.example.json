@@ -1,0 +1,5 @@
+{
+  "apiKey": "the endpoint's API key",
+  "model": "the model name the endpoint routes to",
+  "endpoint": "https://api.openai.com/v1"
+}

@@ -41,8 +41,14 @@ internal static class CorpusListing
             ? string.Create(CultureInfo.InvariantCulture, $"{planted.Kind.Label}@{planted.Placement}")
             : "none";
 
+        // What an AI-generated message was written in and about, which the seed decided like every other axis and is
+        // the one a dry run of it has to say without a reader recognising a language in the subject.
+        var aiContent = email.AiOrigin is { } origin
+            ? string.Create(CultureInfo.InvariantCulture, $" | language={origin.Language} topic={origin.Topic}")
+            : string.Empty;
+
         return string.Create(
             CultureInfo.InvariantCulture,
-            $"{email.SentAt:yyyy-MM-dd'T'HH:mm:ssK} | <{email.MessageId}> | in-reply-to={email.InReplyTo ?? "-"} | {email.Body.Shape} | {email.Body.CharacterSet} | from={email.Author.Address} | cc={email.CarbonCopies.Count} | attachment={attachment} | sensitive={sensitive} | {email.Subject}");
+            $"{email.SentAt:yyyy-MM-dd'T'HH:mm:ssK} | <{email.MessageId}> | in-reply-to={email.InReplyTo ?? "-"} | {email.Body.Shape} | {email.Body.CharacterSet} | from={email.Author.Address} | cc={email.CarbonCopies.Count} | attachment={attachment} | sensitive={sensitive}{aiContent} | {email.Subject}");
     }
 }

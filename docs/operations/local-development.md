@@ -586,7 +586,8 @@ authored by anyone but the authenticated user needs.
 
 **Generation is deterministic and local.** No model is called and no network is reached: word lists, name lists, and
 templates carried in the repository, combined by a seeded generator, produce every subject, participant, body, thread,
-date, and attachment. A seed is what makes a page boundary, a ranking, or a retrieval result something to assert
+date, and attachment. The one exception is the opt-in AI content mode below, where the content is the model's and the
+seed keeps the rest. A seed is what makes a page boundary, a ranking, or a retrieval result something to assert
 against rather than something to look at, so a run that names none chooses one and reports it, together with the exact
 invocation that repeats the batch:
 
@@ -613,7 +614,11 @@ touches, and it is the only one the envelope ever carries.
 | `--sensitive-percentage` | How often a message carries a fabricated secret or personal identifier, 0..100. Zero generates a corpus carrying none. Defaults to 20. |
 | `--interval` | Milliseconds between two submissions, 0..60000, so a real server is not hit with a burst. Defaults to 250. |
 | `--config` | The credential file to read, when it is not the one beside the built command. |
-| `--dry-run` | Generate and list the corpus on standard output without connecting to anything. |
+| `--dry-run` | Generate and list the corpus on standard output without submitting anything. In AI content mode the provider is still called, because the content is what the listing lists. |
+| `--ai` | Generate the message content with the configured OpenAI provider instead of the seeded vocabulary. The sending account is still required. |
+| `--language` | The languages AI-generated messages are written in, comma-separated, as in `en` or `en,pl,de`. Defaults to `en`. Requires `--ai`. |
+| `--topic` | The topics AI-generated messages are written about, comma-separated, as in `business` or `invoices,technical-support,travel`. Defaults to every supported topic. Requires `--ai`. |
+| `--ai-config` | The AI provider file to read, when it is not the one beside the built command. |
 
 ### Mail with something in it to find
 
@@ -669,6 +674,54 @@ rule that could not see past a full stop was found in a mailbox rather than here
 
 A dry run names the category a message carries and the placement it was written in, and never the value, exactly as a
 scanner's finding does. The seed is what reproduces a value; the message is where it is.
+
+### AI-generated content
+
+The default mode writes every word from word lists in the repository. `--ai` is the opt-in mode in which the
+*content* — subject and body, greeting and signature — is written by a model instead, and OpenAI is the only provider
+the implementation reaches: the same single client construction [ADR 0011](../decisions/0011-reaching-a-provider-outside-the-openai-wire-protocol.md)
+records for the service — the OpenAI wire protocol, a base address, and a key — built by the tool directly, because a
+development tool composes from its own files rather than from the service's dependency injection.
+
+**Configure the provider first.** The key, the model, and the endpoint are read from
+`backend/tools/SyntheticMail/synthetic-mail-ai.local.json`, never from an argument, for the reason the sending
+account's password is not. `.gitignore` covers the file as `*.local.json`, and `synthetic-mail-ai.example.json`
+beside it shows the shape:
+
+```json
+{
+  "apiKey": "the endpoint's API key",
+  "model": "the model name the endpoint routes to",
+  "endpoint": "https://api.openai.com/v1"
+}
+```
+
+`endpoint` is optional and defaults to the provider's own address; written, it must be an absolute https address,
+because the key travels in a header and there is no unsecured option. A run that finds the file missing or
+incomplete says so with the file and the key to set, before it generates anything, for the reason the sending
+account does.
+
+**What the seed still decides, and what it no longer does.** The envelope is still the seed's: author, participants,
+threading, dates, attachments, and the fabricated sensitive material are drawn exactly as in the default mode, and
+the seed is reported and repeated the same way. Each message's language and topic are drawn from the seed too, so a
+batch of one hundred with `--language en,pl` has a reproducible *assignment* of English and Polish. What the seed no
+longer decides is the words: two dry runs of one seed in AI mode agree on everything the listing's columns carry and
+differ in the subjects and bodies, so the `diff` below compares envelopes, not content. A reply keeps the subject of
+the thread it answers rather than one the model invents, because the threading is what a corpus exists to exercise.
+The MIME shape a message takes is still drawn from the seed; the charset is not, because a body written in the
+language named is one the vocabulary's three charsets cannot be promised to hold, and `utf-8` is the one that holds
+any of them.
+
+**What leaves the machine.** In this mode a run sends the generation prompt to the endpoint and reads the message
+content back. The prompt names the language, the topic, who writes the message, and — for a reply — the subject of
+the thread it answers, and nothing more: no recipient, no body from another message, and nothing the default mode
+would not have invented locally. The answer is message content, and neither the prompt nor the answer reaches a log,
+for the reason the repository keeps both out of one.
+
+**What a refusal says.** A provider that refuses the key, does not serve the named model, rate-limits, times out, or
+fails the request stops the run with one line naming the move — check the key, check the model, wait, retry — and
+delivers nothing, because a mailbox holding a prefix of the batch the seed describes is the failure this tool exists
+to avoid.
 
 The corpus listing goes to standard output and everything the run says about itself to standard error, so two dry runs
 of one seed are compared with an ordinary `diff`:

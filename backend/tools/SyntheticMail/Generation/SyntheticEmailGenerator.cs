@@ -6,17 +6,24 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.Encodings.Web;
 using System.Text.Unicode;
+using MailFathom.SyntheticMail.Generation.AiContent;
 using MailFathom.SyntheticMail.Generation.SensitiveDecoys;
 
 namespace MailFathom.SyntheticMail.Generation;
 
-/// <summary>Turns a seed into a corpus, reaching nothing and calling nobody.</summary>
+/// <summary>Turns a seed into a corpus, reaching nothing and calling nobody for what the seed decides.</summary>
 /// <remarks>
 /// <para>
 /// Every draw comes from one <see cref="Random" /> constructed from the plan's seed, which the base class library
 /// documents as producing identical sequences for identical seeds. That is the whole reproducibility mechanism: the
 /// same plan yields the same messages, so a page boundary, a ranking, or a retrieval result is something to assert
 /// against rather than something to look at.
+/// </para>
+/// <para>
+/// The one input the seed does not decide is the content a plan with named languages is written with. The generator
+/// decides the envelope around it — author, thread, date, language, topic, attachment — and hands one question to the
+/// source it is given at a time, so the same plan asks the same questions in the same order on every run and what the
+/// source answers is the only thing that differs between them.
 /// </para>
 /// <para>
 /// The corpus is built as a loop rather than as a query because each message may answer one already produced. A
@@ -75,11 +82,62 @@ internal sealed class SyntheticEmailGenerator
     /// <param name="plan">What the corpus is, seed included.</param>
     /// <returns>The messages, oldest first.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="plan" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when the plan names languages, which is a corpus only <see cref="GenerateAsync" /> can build.</exception>
     internal static IReadOnlyList<SyntheticEmail> Generate(SyntheticCorpusPlan plan)
     {
         ArgumentNullException.ThrowIfNull(plan);
 
+        if (plan.Languages.Count > 0)
+        {
+            throw new ArgumentException(
+                "A plan that names languages is one a source writes, and GenerateAsync is the one that names it.",
+                nameof(plan));
+        }
+
         return new SyntheticEmailGenerator(plan).Produce();
+    }
+
+    /// <summary>Produces the corpus a plan describes, reaching the named source for what the seed does not decide.</summary>
+    /// <param name="plan">What the corpus is, seed included.</param>
+    /// <param name="contentSource">The source the message content comes from, required when the plan names languages.</param>
+    /// <param name="cancellationToken">Cancels the run.</param>
+    /// <returns>The messages, oldest first.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="plan" /> is <see langword="null" />, or <paramref name="contentSource" /> is when the plan needs one.</exception>
+    /// <exception cref="ArgumentException">Thrown when the plan's distribution names no topic or one that is not a topic.</exception>
+    internal static async Task<IReadOnlyList<SyntheticEmail>> GenerateAsync(
+        SyntheticCorpusPlan plan,
+        IAiEmailContentSource? contentSource,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+
+        if (plan.Languages.Count == 0)
+        {
+            return Generate(plan);
+        }
+
+        ArgumentNullException.ThrowIfNull(contentSource);
+        RequireCompleteDistribution(plan);
+
+        return await new SyntheticEmailGenerator(plan).ProduceAsync(contentSource, cancellationToken);
+    }
+
+    /// <summary>Refuses a distribution the seed could not draw from, before a message is built against it.</summary>
+    private static void RequireCompleteDistribution(SyntheticCorpusPlan plan)
+    {
+        if (plan.Topics.Count == 0)
+        {
+            throw new ArgumentException(
+                "A plan that names languages names the topics it distributes across.",
+                nameof(plan));
+        }
+
+        if (plan.Topics.Any(topic => !topic.IsSpecified))
+        {
+            throw new ArgumentException(
+                "The plan's topic distribution names a value that is not a topic.",
+                nameof(plan));
+        }
     }
 
     private static IReadOnlyList<SyntheticParticipant> BuildParticipantPool(Random source) =>
@@ -144,6 +202,19 @@ internal sealed class SyntheticEmailGenerator
         return this.produced;
     }
 
+    private async Task<List<SyntheticEmail>> ProduceAsync(
+        IAiEmailContentSource contentSource,
+        CancellationToken cancellationToken)
+    {
+        for (var index = 0; index < this.plan.Count; index++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            this.produced.Add(await this.BuildEmailAsync(index, contentSource, cancellationToken));
+        }
+
+        return this.produced;
+    }
+
     private SyntheticEmail BuildEmail(int index)
     {
         var author = this.participants[this.source.Next(this.participants.Count)];
@@ -161,8 +232,48 @@ internal sealed class SyntheticEmailGenerator
             subject,
             sentAt,
             this.BuildBody(),
-            this.BuildAttachment());
+            this.BuildAttachment(),
+            null);
     }
+
+    private async Task<SyntheticEmail> BuildEmailAsync(
+        int index,
+        IAiEmailContentSource contentSource,
+        CancellationToken cancellationToken)
+    {
+        var author = this.participants[this.source.Next(this.participants.Count)];
+        var carbonCopies = this.BuildCarbonCopies(author);
+        var parent = this.PickParent();
+        var sentAt = this.BuildSentAt(index, parent);
+        var origin = new SyntheticEmailAiOrigin(this.DrawLanguage(), this.DrawTopic());
+        var messageId = this.BuildMessageId(index, author);
+
+        // The envelope is decided before the call, for the reason the question is: the same plan asks the source the
+        // same questions in the same order on every run, so what differs between runs is the answer and nothing else.
+        var content = await contentSource.GenerateAsync(
+            new AiEmailContentRequest(origin.Language, origin.Topic, author.DisplayName, parent?.Subject),
+            cancellationToken);
+
+        // A reply keeps the thread's subject, which the deterministic layer owns: the source answers the body, and
+        // a subject it invented would break the In-Reply-To chain a corpus exists to exercise.
+        var subject = parent is null ? content.Subject : $"Re: {StripReplyPrefix(parent.Subject)}";
+
+        return new SyntheticEmail(
+            messageId,
+            parent?.MessageId,
+            parent is null ? [] : [.. parent.References, parent.MessageId],
+            author,
+            carbonCopies,
+            subject,
+            sentAt,
+            this.BuildAiBody(content),
+            this.BuildAttachment(),
+            origin);
+    }
+
+    private string DrawLanguage() => this.plan.Languages[this.source.Next(this.plan.Languages.Count)];
+
+    private SyntheticMailTopic DrawTopic() => this.plan.Topics[this.source.Next(this.plan.Topics.Count)];
 
     private List<SyntheticParticipant> BuildCarbonCopies(SyntheticParticipant author)
     {
@@ -264,6 +375,36 @@ internal sealed class SyntheticEmailGenerator
             string.Join("\n\n", blocks),
             BuildHtml(blocks),
             characterSet,
+            decoy);
+    }
+
+    private SyntheticEmailBody BuildAiBody(AiEmailContent content)
+    {
+        var shape = (SyntheticBodyShape)this.source.Next(3);
+
+        // The source answers with paragraphs separated by blank lines, and the MIME shape is still drawn from the
+        // seed for the reason the deterministic body varies it: both alternatives are built from the same paragraphs,
+        // which is what the extractor's choice between them is meant to read.
+        var blocks = content.Body
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Split(["\n\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+
+        // The charset is the one axis the seed does not draw here: a body written in the language the invocation names
+        // is one the vocabulary's three charsets cannot be promised to hold, and utf-8 is the one that holds any of
+        // them.
+        var decoy = this.PlantDecoy();
+
+        if (decoy is not null)
+        {
+            blocks.Add(decoy.Sentence);
+        }
+
+        return new SyntheticEmailBody(
+            shape,
+            string.Join("\n\n", blocks),
+            BuildHtml(blocks),
+            SyntheticCharacterSet.Utf8,
             decoy);
     }
 

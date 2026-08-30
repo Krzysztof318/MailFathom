@@ -97,7 +97,9 @@ internal static class LargeSyntheticMessage
             new DateTimeOffset(2026, 8, 21, 9, 0, 0, TimeSpan.Zero),
             SpanDays: 60,
             MaximumAttachmentBytes,
-            SensitivePercentage: 0));
+            SensitivePercentage: 0,
+            Languages: [],
+            Topics: []));
 
         return corpus
                    .Where(email => email.Attachment is not null)
@@ -141,7 +143,9 @@ internal static class LargeSyntheticMessage
             new DateTimeOffset(2026, 8, 21, 9, 0, 0, TimeSpan.Zero),
             SpanDays: 60,
             MaximumAttachmentBytes: 0,
-            SensitivePercentage: 0));
+            SensitivePercentage: 0,
+            Languages: [],
+            Topics: []));
 
         var text = string.Join("\n\n", corpus.Select(email => email.Body.PlainText));
 

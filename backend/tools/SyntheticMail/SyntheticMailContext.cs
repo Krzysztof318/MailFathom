@@ -4,13 +4,16 @@
 
 using MailFathom.SyntheticMail.Configuration;
 using MailFathom.SyntheticMail.Delivery;
+using MailFathom.SyntheticMail.Generation.AiContent;
 
 namespace MailFathom.SyntheticMail;
 
 /// <summary>Everything the command needs from outside itself.</summary>
 /// <param name="Console">The terminal the command reports to.</param>
 /// <param name="ReadAccount">Reads the sending account from the named local file.</param>
+/// <param name="ReadAiProvider">Reads the AI provider from the named local file.</param>
 /// <param name="OpenTransport">Opens a submission session for one account; the caller disposes it.</param>
+/// <param name="OpenAiContentSource">Opens a content source over one provider configuration.</param>
 /// <param name="Clock">What resolves today's date and what the pacing waits on.</param>
 /// <remarks>
 /// One seam rather than four, so a test drives the command end to end without a mail server, without a credential
@@ -19,7 +22,9 @@ namespace MailFathom.SyntheticMail;
 internal sealed record SyntheticMailContext(
     ISyntheticMailConsole Console,
     Func<string, SendingAccount> ReadAccount,
+    Func<string, AiProviderConfiguration> ReadAiProvider,
     Func<SendingAccount, ISyntheticMailTransport> OpenTransport,
+    Func<AiProviderConfiguration, IAiEmailContentSource> OpenAiContentSource,
     TimeProvider Clock)
 {
     /// <summary>Builds the context the command runs under for a developer at a terminal.</summary>
@@ -27,6 +32,8 @@ internal sealed record SyntheticMailContext(
     internal static SyntheticMailContext ForTerminal() => new(
         new SystemSyntheticMailConsole(),
         SendingAccountFile.Read,
+        SyntheticAiProviderFile.Read,
         account => new SmtpSyntheticMailTransport(account),
+        provider => new OpenAiEmailContentSource(provider),
         TimeProvider.System);
 }

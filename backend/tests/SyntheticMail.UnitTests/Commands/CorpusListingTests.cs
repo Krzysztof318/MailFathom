@@ -120,6 +120,33 @@ public sealed class CorpusListingTests
     }
 
     [Fact]
+    public void Describe_AMessageGeneratedByAProvider_NamesTheLanguageAndTheTopicItWasGeneratedUnder()
+    {
+        // Arrange
+        var email = Build(inReplyTo: null, carbonCopies: 0, attachment: null) with
+        {
+            AiOrigin = new SyntheticEmailAiOrigin("pl", SyntheticMailTopic.TechnicalSupport),
+        };
+
+        // Act
+        var line = CorpusListing.Describe(email);
+
+        // Assert
+        Assert.Contains("| sensitive=none | language=pl topic=technical-support |", line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Describe_AMessageTheSeededVocabularyWrote_CarriesNoLanguageField()
+    {
+        // Arrange, Act
+        var line = CorpusListing.Describe(Build(inReplyTo: null, carbonCopies: 0, attachment: null));
+
+        // Assert
+        Assert.DoesNotContain("language=", line, StringComparison.Ordinal);
+        Assert.DoesNotContain("topic=", line, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Describe_ANullArgument_IsRefused() =>
         Assert.Throws<ArgumentNullException>(() => CorpusListing.Describe(null!));
 
@@ -140,5 +167,6 @@ public sealed class CorpusListingTests
                 "<p>text</p>",
                 SyntheticCharacterSet.Utf8,
                 Decoy: null),
-            Attachment: attachment);
+            Attachment: attachment,
+            AiOrigin: null);
 }
