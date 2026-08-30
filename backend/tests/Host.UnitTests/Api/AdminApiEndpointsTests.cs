@@ -26,6 +26,7 @@ using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
@@ -97,6 +98,26 @@ public sealed class AdminApiEndpointsTests
         var mapped = endpoints.Materialize();
         Assert.NotEmpty(mapped);
         Assert.All(mapped, endpoint => Assert.Empty(endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>()));
+    }
+
+    /// <summary>The CORS policy reaches the routes as endpoint metadata, which is what makes a page's preflight answerable at all.</summary>
+    [Fact]
+    public void MapAdminApi_WithTheCorsPolicyRequired_CarriesItOnEveryRoute()
+    {
+        // Arrange
+        var endpoints = BuildRouteBuilder();
+
+        // Act
+        endpoints.MapAdminApi().RequireCors(AdminTransportSecurityExtensions.CorsPolicyName);
+
+        // Assert
+        var mapped = endpoints.Materialize();
+        Assert.NotEmpty(mapped);
+        Assert.All(
+            mapped,
+            endpoint => Assert.Contains(
+                endpoint.Metadata.GetOrderedMetadata<IEnableCorsAttribute>(),
+                policy => policy.PolicyName == AdminTransportSecurityExtensions.CorsPolicyName));
     }
 
     /// <summary>Every route is the group's, and the write route is the one whose absence from it would matter most.</summary>

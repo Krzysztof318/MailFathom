@@ -11,10 +11,10 @@ namespace MailFathom.Host.Configuration.Access;
 /// <summary>Which browser origins a transport surface answers, and what it tells a browser it may read.</summary>
 /// <remarks>
 /// <para>
-/// One section shared by the two surfaces a browser reaches, because the question and its three postures are the same
-/// for both: the MCP endpoint, whose browser clients are MCP hosts running in a page, and the client endpoint, whose
-/// WebAssembly head calls it from a page origin. Each surface binds its own copy, so neither one's origins reach the
-/// other's traffic.
+/// One section shared by the three surfaces a browser can reach, because the question and its three postures are the
+/// same for each: the MCP endpoint, whose browser clients are MCP hosts running in a page; the client endpoint, whose
+/// WebAssembly head calls it from a page origin; and the administrative endpoint, which a page can call the same way.
+/// Each surface binds its own copy, so none of the three's origins reach the others' traffic.
 /// </para>
 /// <para>
 /// Allowing every origin is the default because a surface is not protected by who is calling it — it is protected by

@@ -31,7 +31,72 @@ public sealed class AdminEndpointOptionsTests
         // Assert: off, and requiring no credential is then irrelevant because nothing is served.
         Assert.False(settings.Enabled);
         Assert.False(settings.RequiresAuthentication);
+        Assert.True(settings.Cors.ServesEveryBrowserOrigin);
         Assert.Empty(settings.FindConfigurationErrors());
+    }
+
+    /// <summary>
+    /// A deployment that wrote no list gets every browser origin, because a surface is protected by the credential a
+    /// caller presents rather than by which page called it, and because a first run that failed a preflight would look
+    /// like a broken deployment.
+    /// </summary>
+    [Fact]
+    public void ReadFrom_NoOriginListAtAll_ServesEveryBrowserOrigin()
+    {
+        // Arrange
+        var configuration = Configuration(new Dictionary<string, string?>
+        {
+            ["AdminEndpoint:Enabled"] = "true",
+        });
+
+        // Act
+        var settings = AdminEndpointOptions.ReadFrom(configuration);
+
+        // Assert
+        Assert.True(settings.Cors.ServesEveryBrowserOrigin);
+        Assert.Empty(settings.FindConfigurationErrors());
+    }
+
+    /// <summary>An operator who narrowed the surface to the origin they serve must get exactly that.</summary>
+    [Fact]
+    public void ReadFrom_AConfiguredOriginList_ServesExactlyThoseOrigins()
+    {
+        // Arrange
+        var configuration = ConfigurationFromJson("""
+            {
+              "AdminEndpoint": {
+                "Enabled": true,
+                "Cors": { "AllowedOrigins": [ "https://ops.example.test" ] }
+              }
+            }
+            """);
+
+        // Act
+        var settings = AdminEndpointOptions.ReadFrom(configuration);
+
+        // Assert
+        Assert.False(settings.Cors.ServesEveryBrowserOrigin);
+        Assert.Equal(["https://ops.example.test"], settings.Cors.AllowedOrigins);
+        Assert.Empty(settings.FindConfigurationErrors());
+    }
+
+    /// <summary>An emptied list is the deployment that serves no browser at all, and it must not read as the absent one that serves every page on the internet.</summary>
+    [Fact]
+    public void ReadFrom_AnEmptiedOriginList_ServesNoBrowserOrigin()
+    {
+        // Arrange
+        var configuration = ConfigurationFromJson("""
+            {
+              "AdminEndpoint": { "Enabled": true, "Cors": { "AllowedOrigins": [] } }
+            }
+            """);
+
+        // Act
+        var settings = AdminEndpointOptions.ReadFrom(configuration);
+
+        // Assert
+        Assert.False(settings.Cors.ServesEveryBrowserOrigin);
+        Assert.Empty(settings.Cors.AllowedOrigins);
     }
 
     /// <summary>A misspelled key must fail rather than bind a default, or an operator reads their own configuration as though it took effect.</summary>

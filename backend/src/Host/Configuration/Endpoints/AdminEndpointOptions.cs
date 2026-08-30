@@ -27,13 +27,14 @@ namespace MailFathom.Host.Configuration.Endpoints;
 /// misspelled key, an entry naming no method, a value written where the list belongs — fail startup instead.
 /// </para>
 /// <para>
-/// There is no CORS section and no client-certificate profile here, and neither is an omission. The clients are command
-/// line tools configured with an address, so no browser origin has anything to be told; and the trust question a
-/// certificate answers is a second one this endpoint does not yet ask. Where it is served, however, is stated in
-/// exactly the settings the MCP endpoint uses — <see cref="BindAddress" />, <see cref="Port" />,
-/// <see cref="Transport" />, and the profiles beneath <see cref="Https" /> — so the day this endpoint does ask the trust
-/// question, the answer arrives as a profile on a listener already shaped to carry one rather than as a second way to
-/// configure a socket.
+/// There is no client-certificate profile here, which is not an omission: the trust question a certificate answers is
+/// a second one this endpoint does not yet ask. Where it is served is stated in exactly the settings the MCP endpoint
+/// uses — <see cref="BindAddress" />, <see cref="Port" />, <see cref="Transport" />, and the profiles beneath
+/// <see cref="Https" /> — so the day this endpoint does ask the trust question, the answer arrives as a profile on a
+/// listener already shaped to carry one rather than as a second way to configure a socket.
+/// <see cref="Cors" /> is the same section the other two surfaces carry, configured separately, defaulting to every
+/// origin so a first run and a local orchestration answer a preflight; an operator who knows the origin they serve
+/// names it.
 /// </para>
 /// <para>
 /// The value is read once, while the host is being composed, because whether an endpoint exists and what guards it are
@@ -92,6 +93,16 @@ internal sealed class AdminEndpointOptions
     /// issued for is what separates administering this service from reading a mailbox through it.
     /// </remarks>
     public IList<TransportAuthenticationOptions> Authentication { get; } = [];
+
+    /// <summary>Gets or sets which browser origins the endpoint answers.</summary>
+    /// <remarks>
+    /// The same section the MCP and client endpoints carry, configured separately. A deployment that wrote no list
+    /// serves every origin, because a surface is protected by the credential a caller presents rather than by which
+    /// page called it, and because a first run that failed a preflight would look like a broken deployment. An empty
+    /// list advertises nothing to a browser, which is what a deployment whose only clients are command-line tools
+    /// wants.
+    /// </remarks>
+    public TransportCorsOptions Cors { get; set; } = new();
 
     /// <summary>Gets or sets under which domains and certificates Kestrel terminates TLS for this endpoint.</summary>
     /// <remarks>
@@ -152,6 +163,14 @@ internal sealed class AdminEndpointOptions
         var section = configuration.GetSection(SectionName);
         var settings = section.Get<AdminEndpointOptions>(binderOptions => binderOptions.ErrorOnUnknownConfiguration = true)
             ?? new AdminEndpointOptions();
+
+        // The origin list is the one setting whose default cannot be a property initializer, for the reason the MCP
+        // and client sections state: a collection the binder finds values for is added to rather than replaced, and an
+        // empty JSON list binds identically to an absent one while meaning the opposite.
+        if (!section.GetSection($"{nameof(Cors)}:{nameof(TransportCorsOptions.AllowedOrigins)}").Exists())
+        {
+            settings.Cors.ServeEveryBrowserOrigin();
+        }
 
         // Read from configuration rather than from what was bound, because the redirect is on by default: an absent
         // section and one an operator wrote produce identical values, and only configuration can say which happened. It is
@@ -231,6 +250,9 @@ internal sealed class AdminEndpointOptions
 
         errors.AddRange(this.RequestTimeout.FindConfigurationErrors()
             .Select(error => $"{SectionName}:{nameof(this.RequestTimeout)}:{error}"));
+
+        errors.AddRange(this.Cors.FindConfigurationErrors()
+            .Select(error => $"{SectionName}:{nameof(this.Cors)}:{error}"));
 
         // The platform capability is read here rather than passed in, because whether this host can serve HTTP/3 is a
         // property of the machine the process is running on and not a decision composition takes.

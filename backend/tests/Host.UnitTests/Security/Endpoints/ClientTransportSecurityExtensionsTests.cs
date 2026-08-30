@@ -21,9 +21,9 @@ namespace MailFathom.Host.UnitTests.Security.Endpoints;
 
 /// <summary>Covers what the client endpoint's composition decides about browsers and about credentials.</summary>
 /// <remarks>
-/// The CORS policy is the one control this surface has that the administrative one does not, and it is the difference
-/// between a WebAssembly head that starts and one that never gets past its first preflight. It is also the control most
-/// easily written too wide, so what the policy carries is asserted rather than left to the day a route needs more.
+/// The CORS policy is the control that decides whether a WebAssembly head gets past its first preflight. It is also
+/// the control most easily written too wide, so what the policy carries is asserted rather than left to the day a
+/// route needs more.
 /// </remarks>
 public sealed class ClientTransportSecurityExtensionsTests
 {

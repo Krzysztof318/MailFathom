@@ -451,6 +451,34 @@ public sealed class ComposedClientEndpointSecurityTests
         Assert.Equal(PageOrigin, response.Headers[HeaderNames.AccessControlAllowOrigin].ToString());
     }
 
+    /// <summary>
+    /// The local Aspire topology leaves the origin list unstated, which is every origin. A tab opened as
+    /// <c>localhost</c> is a different origin from one opened as <c>127.0.0.1</c>, and a host that named only one of
+    /// them answered the other's preflight without <c>Access-Control-Allow-Origin</c> — which a browser reads as no
+    /// mail rather than as a refused origin.
+    /// </summary>
+    [Fact]
+    public async Task ClientEndpoint_AnUnstatedOriginList_AnswersAPreflightFromLocalhost()
+    {
+        // Arrange
+        await using var host = await InProcessComposedHost.StartAsync(
+            ClientServedWithoutANamedOrigin(),
+            TestContext.Current.CancellationToken);
+
+        // Act
+        var response = await host.SendAsync(
+            HttpMethods.Options,
+            ClientSessionRoute,
+            ClientPort,
+            (HeaderNames.Origin, "http://localhost:5000"),
+            (HeaderNames.AccessControlRequestMethod, HttpMethods.Get),
+            (HeaderNames.AccessControlRequestHeaders, HeaderNames.Authorization));
+
+        // Assert
+        Assert.Equal(StatusCodes.Status204NoContent, response.StatusCode);
+        Assert.Equal("*", response.Headers[HeaderNames.AccessControlAllowOrigin].ToString());
+    }
+
     /// <summary>The health probes answer whatever the surfaces do, because the limits and the ceilings are attached to routes rather than applied as default policies.</summary>
     [Fact]
     public async Task HealthProbes_BesideAServedClientSurface_KeepAnswering()
@@ -504,6 +532,16 @@ public sealed class ComposedClientEndpointSecurityTests
         new("ClientEndpoint:Authentication:1:ApiKey:Name", NarrowedClientKeyName),
         new("ClientEndpoint:Authentication:1:ApiKey:SecretReference", $"plaintext:{NarrowedClientKey}"),
         new("ClientEndpoint:Authentication:1:Permissions:0", "mailfathom.mail.ask"),
+    ];
+
+    /// <summary>The local Aspire shape: the client surface is on, authenticated, and CORS is left at every origin.</summary>
+    private static IReadOnlyList<KeyValuePair<string, string?>> ClientServedWithoutANamedOrigin() =>
+    [
+        .. OtherSurfacesServed(),
+        new("ClientEndpoint:Enabled", "true"),
+        new("ClientEndpoint:Port", ClientPort.ToString(CultureInfo.InvariantCulture)),
+        new("ClientEndpoint:Authentication:0:ApiKey:Name", ClientKeyName),
+        new("ClientEndpoint:Authentication:0:ApiKey:SecretReference", $"plaintext:{ClientKey}"),
     ];
 
     /// <summary>The client surface accepting an access token, which is the shape that publishes its metadata document.</summary>

@@ -19,11 +19,10 @@ namespace MailFathom.Host.Security.Endpoints;
 /// change to either reaches every endpoint.
 /// </para>
 /// <para>
-/// What is this surface's own is the CORS policy, and it is the one control the administrative endpoint has no use for:
-/// its clients are command-line tools with no origin to be told anything, while this endpoint is called by a page and a
-/// preflight it cannot answer is a client that never starts. It is not the origin validation the MCP surface performs
-/// beside its own policy — that check belongs to the Streamable HTTP transport's own requirement, and this surface
-/// speaks no such protocol.
+/// What is this surface's own is the CORS policy, named separately from the MCP and administrative policies because an
+/// endpoint resolves exactly one. This endpoint is called by a page and a preflight it cannot answer is a client that
+/// never starts. It is not the origin validation the MCP surface performs beside its own policy — that check belongs
+/// to the Streamable HTTP transport's own requirement, and this surface speaks no such protocol.
 /// </para>
 /// <para>
 /// A protected resource metadata document is published as well, by

@@ -19,7 +19,7 @@ namespace MailFathom.Host.UnitTests.Configuration.Endpoints;
 /// <remarks>
 /// This is the surface a person's mail client reaches, so two of its answers matter more here than on either existing
 /// endpoint: what a deployment that wrote nothing serves, which must be nothing at all, and what a browser is told it
-/// may do, which is the one section the administrative endpoint has no use for and the one a page cannot start without.
+/// may do, which is the section a page cannot start without.
 /// </remarks>
 public sealed class ClientEndpointOptionsTests
 {
@@ -316,9 +316,8 @@ public sealed class ClientEndpointOptionsTests
     }
 
     /// <summary>
-    /// The setting that separates this endpoint from the administrative one. A deployment that wrote no list gets every
-    /// browser origin, because a page whose preflight is refused is a client that never starts, and because an origin
-    /// authenticates nobody — the credential does.
+    /// A deployment that wrote no list gets every browser origin, because a page whose preflight is refused is a
+    /// client that never starts, and because an origin authenticates nobody — the credential does.
     /// </summary>
     [Fact]
     public void ReadFrom_NoOriginListAtAll_ServesEveryBrowserOrigin()
