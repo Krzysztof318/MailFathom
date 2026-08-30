@@ -222,6 +222,14 @@ daemon:
 dotnet run --project backend/src/AppHost/AppHost.csproj
 ```
 
+The AppHost's only launch profile is named `http` and sets `ASPIRE_ALLOW_UNSECURED_TRANSPORT`, because there is no
+local TLS listener and Aspire otherwise allocates `aspire-dashboard-https` against the ASP.NET development certificate.
+That certificate can be present in the user store and still untrusted by the OS; the profile must not require it.
+
+A browser head driven from a script uses `scripts/chromium-headless.sh`. Snap Chromium's `/usr/bin/chromium` wrapper
+calls `snap-confine`, which cannot change AppArmor profile from an unconfined process; the script starts the chrome
+binary on the snap mount instead, with `--headless` and a writable `--user-data-dir`.
+
 Before any resource starts, Aspire asks for any of three parameters it has not already stored:
 `mail-account-host`, `mail-account-username`, and the secret `mail-account-password`. They configure one local account
 named `local`, over implicit TLS on port 993, with its inbox as the default folder. Aspire offers to keep the values in

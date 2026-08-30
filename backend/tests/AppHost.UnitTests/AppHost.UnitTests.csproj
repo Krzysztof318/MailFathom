@@ -13,5 +13,6 @@
     <Compile Include="..\..\src\AppHost\OrchestrationContract.cs" Link="OrchestrationContract.cs" />
     <Compile Include="..\..\src\AppHost\DevelopmentCredentialProvisioner.cs" Link="DevelopmentCredentialProvisioner.cs" />
     <None Include="..\..\src\AppHost\Program.cs" CopyToOutputDirectory="PreserveNewest" Link="Build\Program.cs" />
+    <None Include="..\..\src\AppHost\Properties\launchSettings.json" CopyToOutputDirectory="PreserveNewest" Link="Build\launchSettings.json" />
   </ItemGroup>
 </Project>

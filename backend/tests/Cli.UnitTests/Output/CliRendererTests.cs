@@ -99,6 +99,10 @@ public sealed class CliRendererTests
         Assert.DoesNotContain(EscapeSequence, writer.ToString(), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Colour follows the terminal the renderer was given, not a second look at <c>NO_COLOR</c>. Detecting again would
+    /// let a harness that exports that variable strip the marks a test constructed as coloured.
+    /// </summary>
     [Fact]
     public void WriteLine_FailureOnAStreamThatPermitsColour_MarksTheLine()
     {
