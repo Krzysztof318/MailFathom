@@ -625,6 +625,10 @@
     <value>Not reported — the deployment could not be asked.</value>
     <comment>Stated rather than left blank, which would read as a deployment reporting no version at all.</comment>
   </data>
+  <data name="SettingsPage.TextBlock.BuildUnavailable.Text" xml:space="preserve">
+    <value>Not reported — this build could not be read.</value>
+    <comment>Stated rather than left blank, which would read as a client reporting no version at all.</comment>
+  </data>
   <data name="Workspace.InfoBar.Reaching.Title" xml:space="preserve">
     <value>Reconnecting to your MailFathom</value>
     <comment>Heads the notice shown while the client is asking its deployment again after an attempt that did not arrive.</comment>

@@ -53,17 +53,36 @@ Project repository: https://github.com/Krzysztof318/MailFathom
         <!-- A FeedView renders the three axes of a feed — data, error, progress — rather than only the value, so a
              screen states what it is doing while it loads and what went wrong when it fails. -->
         <mvux:FeedView Source="{Binding Build}">
-          <DataTemplate>
-            <StackPanel HorizontalAlignment="Center"
-                        Spacing="8">
-              <TextBlock Text="{Binding Data.Product}"
+          <mvux:FeedView.ValueTemplate>
+            <DataTemplate>
+              <StackPanel HorizontalAlignment="Center"
+                          Spacing="8">
+                <TextBlock Text="{Binding Data.Product}"
+                           HorizontalAlignment="Center"
+                           Style="{StaticResource SubtitleTextBlockStyle}" />
+                <TextBlock Text="{Binding Data.Version}"
+                           HorizontalAlignment="Center"
+                           Style="{StaticResource BodyTextBlockStyle}" />
+              </StackPanel>
+            </DataTemplate>
+          </mvux:FeedView.ValueTemplate>
+
+          <mvux:FeedView.ProgressTemplate>
+            <DataTemplate>
+              <ProgressBar IsIndeterminate="True"
+                           HorizontalAlignment="Stretch" />
+            </DataTemplate>
+          </mvux:FeedView.ProgressTemplate>
+
+          <mvux:FeedView.ErrorTemplate>
+            <DataTemplate>
+              <TextBlock x:Uid="SettingsPage.TextBlock.BuildUnavailable"
                          HorizontalAlignment="Center"
-                         Style="{StaticResource SubtitleTextBlockStyle}" />
-              <TextBlock Text="{Binding Data.Version}"
-                         HorizontalAlignment="Center"
-                         Style="{StaticResource BodyTextBlockStyle}" />
-            </StackPanel>
-          </DataTemplate>
+                         Style="{StaticResource BodyTextBlockStyle}"
+                         TextWrapping="Wrap"
+                         Foreground="{ThemeResource OnSurfaceVariantBrush}" />
+            </DataTemplate>
+          </mvux:FeedView.ErrorTemplate>
         </mvux:FeedView>
 
         <!-- Which deployment this client reaches, and the way to point it at another one. It is on the screen rather

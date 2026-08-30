@@ -29,12 +29,18 @@ tree, so most of it is reachable by an ordinary unit test.
   until then the model's own public surface is the seam.
 - **A model reaching a service is tested against a fake of that service**, hand-written or substituted at the port, the
   same way the backend tests an adapter boundary.
-- **What genuinely needs a running head stays out of the unit suite**: XAML that has to be parsed, a layout that has to
-  be measured, navigation that has to move a frame, and anything platform-specific. Name such a case in the pull
-  request rather than asserting it indirectly, and leave it for the UI-test project a later change adds — an
-  `Uno.UITest` head is a decision that has not been taken yet, so do not add one as a side effect of a feature.
+- **What genuinely needs a running head stays out of the unit suite**: XAML that has to be parsed into a visual tree,
+  a layout that has to be measured, navigation that has to move a frame, and anything platform-specific. Reading
+  authored XAML as files — the way `AuthoredViews` holds `x:Uid` and `AuthoredXaml` holds `FeedView` sources,
+  templates, `ItemsSource`, commands, two-way bindings, and named visual states — is not that, and belongs here.
+  Name a case that still needs a head in the pull request rather than asserting it indirectly, and leave it for the
+  UI-test project a later change adds — an `Uno.UITest` head is a decision that has not been taken yet, so do not add
+  one as a side effect of a feature.
 - **The Uno App MCP is evidence, not a test.** A screenshot and a visual-tree snapshot are how a change is shown to
-  work; they prove nothing on somebody else's machine and never stand in for a test.
+  work; they prove nothing on somebody else's machine and never stand in for a test. A change that edits XAML or
+  styles still owes both of them in the session that wrote it, and they do not stand in for the authored-view
+  assertions above. `$review-change` and `docs/operations/agent-workflow.md` name the same obligation, so skipping it
+  fails review rather than only this page.
 
 ## Layout, and what runs the suite
 

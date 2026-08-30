@@ -625,6 +625,10 @@
     <value>Nie podano — nie udało się zapytać wdrożenia.</value>
     <comment>Stated rather than left blank, which would read as a deployment reporting no version at all.</comment>
   </data>
+  <data name="SettingsPage.TextBlock.BuildUnavailable.Text" xml:space="preserve">
+    <value>Nie podano — nie udało się odczytać tej kompilacji.</value>
+    <comment>Stated rather than left blank, which would read as a client reporting no version at all.</comment>
+  </data>
   <data name="Workspace.InfoBar.Reaching.Title" xml:space="preserve">
     <value>Ponowne łączenie z Twoim MailFathom</value>
     <comment>Heads the notice shown while the client is asking its deployment again after an attempt that did not arrive.</comment>

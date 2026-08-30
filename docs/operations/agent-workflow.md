@@ -610,7 +610,10 @@ The canonical skills are:
   the same pass that places it;
 - `review-change` performs a findings-first diff review and records verification
   status and residual risks, and reruns the fast loop only when something has
-  invalidated its last green run;
+  invalidated its last green run. A change that edits XAML or styles under
+  `frontend/` owes a Uno App MCP screenshot and a visual-tree snapshot of the
+  affected screen in that review; the evidence is not a test and does not stand
+  in for the authored-view binding assertions in `Client.UnitTests`;
 - `check-docs-licenses` is the mandatory documentation, changelog, and licensing
   gate;
 - `finish-change` stages only the task files, requires that gate, runs full
@@ -1390,10 +1393,15 @@ happens, so a stuck labelling run must not hold a review open or fail one.
 
 The prompt points the reviewer at this repository's own rules rather than at
 general review practice: root `AGENTS.md`, the nested `AGENTS.md` files under
-`backend/src/`, `backend/tests/`, and `docs/`, the recurring findings in the `review-change`
-skill, and the ADRs that govern the area the change touches. A finding names the
-rule it rests on in a field of its own, and one that applies generic advice
-where this repository has stated a different rule is itself wrong.
+`backend/src/`, `backend/tests/`, `frontend/src/`, `frontend/tests/`, and `docs/`,
+the recurring findings in the `review-change` skill, and the ADRs that govern
+the area the change touches. A change that edits XAML or styles under
+`frontend/` owes a Uno App MCP screenshot and a visual-tree snapshot of the
+affected screen; that evidence is not a test and does not stand in for the
+authored-view binding assertions `frontend/tests/AGENTS.md` requires of
+`Client.UnitTests`. A finding names the rule it rests on in a field of its own,
+and one that applies generic advice where this repository has stated a different
+rule is itself wrong.
 
 Beyond that contract it works through six rubrics — the repository's rules,
 security and privacy, reliability, performance, clean code, and what the change
