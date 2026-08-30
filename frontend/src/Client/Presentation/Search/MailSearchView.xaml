@@ -11,7 +11,7 @@ Project repository: https://github.com/Krzysztof318/MailFathom
              xmlns:mvux="using:Uno.Extensions.Reactive.UI"
              xmlns:search="using:MailFathom.Client.Presentation.Search"
              xmlns:utu="using:Uno.Toolkit.UI">
-  <Grid>
+  <Grid Background="{ThemeResource BackgroundBrush}">
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />

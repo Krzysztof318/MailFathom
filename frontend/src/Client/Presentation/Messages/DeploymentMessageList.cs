@@ -48,12 +48,13 @@ internal sealed class DeploymentMessageList : IMessageList
     private readonly IMessageListMemory memory;
     private readonly TimeProvider clock;
     private readonly IStringLocalizer words;
-    private readonly IState<MessageListArrangement> arranged;
     private readonly IState<int> asked;
     private readonly IState<bool> pagingFailed;
     private readonly IState<MessageWindow> loaded;
 
     private MessagePlace? openedPlace;
+    private MessageListArrangement currentArrangement = MessageListArrangement.Default;
+    private MessageWindow? pagingFailedFor;
 
     /// <summary>Initializes the list over what serves it, where it is drawn from, and where it was left.</summary>
     /// <param name="deployment">Where a page of the owner's mail is asked for.</param>
@@ -93,7 +94,6 @@ internal sealed class DeploymentMessageList : IMessageList
         // The place rather than the scope, so a row being clicked is not a folder being opened again.
         var place = workspace.Scope.Select(MessagePlace.Of);
 
-        this.arranged = State.Value(this, () => MessageListArrangement.Default);
         this.pagingFailed = State.Value(this, () => false);
 
         // Why a counter beside the two triggers above: a session that answers a second time with the same grant is one
@@ -108,10 +108,15 @@ internal sealed class DeploymentMessageList : IMessageList
 
         this.Chosen = State<IImmutableList<MessageRow>>.Empty(this);
         this.Rows = this.loaded.Select(this.Draw).AsListFeed();
-        this.Arrangement = this.arranged;
+        this.Arrangement = this.loaded.Select(static window => window.Arrangement);
         this.HasMoreAfter = this.loaded.Select(static window => window.HasMoreAfter);
         this.HasMoreBefore = this.loaded.Select(static window => window.HasMoreBefore);
-        this.PagingFailed = this.pagingFailed;
+
+        // True only for a paging failure of the window that is still loaded. A sibling state written from OpenAsync
+        // never runs while a FeedView is waiting on that production — the view holds the dispatcher the write needs —
+        // so a folder change clears the indicator by producing a window the failure is not of, rather than by writing
+        // the state from inside the read.
+        this.PagingFailed = Feed.Combine(this.loaded, this.pagingFailed).Select(this.IsPagingFailureOfLoaded);
 
         // What makes the selection the application's rather than the control's. MVUX owns the subscription's lifetime,
         // so it ends with this instance.
@@ -151,7 +156,7 @@ internal sealed class DeploymentMessageList : IMessageList
     {
         ArgumentNullException.ThrowIfNull(arrangement);
 
-        await this.arranged.UpdateAsync(_ => arrangement, cancellationToken).ConfigureAwait(false);
+        this.currentArrangement = arrangement;
 
         await this.asked.UpdateAsync(static asked => asked + 1, cancellationToken).ConfigureAwait(false);
     }
@@ -178,15 +183,14 @@ internal sealed class DeploymentMessageList : IMessageList
         var arriving = !place.Equals(this.openedPlace);
         var remembered = this.memory.Read(place.RememberedAs);
 
-        var arrangement = arriving
-            ? remembered.Arrangement
-            : await this.arranged.Value(cancellationToken).ConfigureAwait(false) ?? MessageListArrangement.Default;
+        var arrangement = arriving ? remembered.Arrangement : this.currentArrangement;
 
         this.openedPlace = place;
+        this.currentArrangement = arrangement;
 
-        await this.arranged.UpdateAsync(_ => arrangement, cancellationToken).ConfigureAwait(false);
-        await this.pagingFailed.UpdateAsync(static _ => false, cancellationToken).ConfigureAwait(false);
-
+        // The page is the whole of this production. A FeedView waiting on it holds the dispatcher a sibling state
+        // write needs, so an arrangement or paging update from here never ran and left Mail on progress without a
+        // request leaving the process. The tree's folder read is the same shape: HTTP, then the value, nothing else.
         var page = await this.ReopeningAsync(
             place,
             arrangement,
@@ -302,6 +306,8 @@ internal sealed class DeploymentMessageList : IMessageList
         {
             if (await this.StillLoadedAsync(window, cancellationToken).ConfigureAwait(false) is not null)
             {
+                this.pagingFailedFor = window;
+
                 await this.pagingFailed.UpdateAsync(static _ => true, cancellationToken).ConfigureAwait(false);
             }
 
@@ -317,10 +323,16 @@ internal sealed class DeploymentMessageList : IMessageList
             return;
         }
 
+        this.pagingFailedFor = null;
+
         await this.pagingFailed.UpdateAsync(static _ => false, cancellationToken).ConfigureAwait(false);
 
         this.Remember(extended);
     }
+
+    /// <summary>Whether the paging indicator names a failure of the window that is still on the screen.</summary>
+    private bool IsPagingFailureOfLoaded((MessageWindow Window, bool Failed) pair) =>
+        pair.Failed && this.pagingFailedFor is { } failed && pair.Window.IsOf(failed);
 
     /// <summary>Reads the loaded window back, where it is still of the list a read was started for.</summary>
     /// <param name="window">The window that read was started from.</param>

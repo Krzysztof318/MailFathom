@@ -66,6 +66,54 @@ public sealed class DeploymentMessageListTests
     }
 
     /// <summary>
+    /// Opening Mail is the first time the list is composed, and the workspace has already read the session by then. A
+    /// list that waited on a sibling state — the arrangement, a paging flag — before asking for the page sat on
+    /// progress without a request leaving, because the FeedView waiting on that production holds the dispatcher those
+    /// writes need. The page is asked for first, the same way the mailbox tree reads folders.
+    /// </summary>
+    [Fact]
+    public async Task Rows_ASessionTheWorkspaceAlreadyRead_StillAsksForTheLeadingPage()
+    {
+        // Arrange
+        using var harness = await DeploymentHarness.CreateAsync(
+            _ => Answer(Page(1, 1, next: null, previous: null)),
+            cancellationToken: TestContext.Current.CancellationToken);
+        using var session = Session();
+        var workspace = new SharedWorkspace(new StubMailboxTreeMemory());
+
+        Assert.NotNull(await session.Standing);
+
+        var list = new DeploymentMessageList(
+            harness.Client,
+            session,
+            workspace,
+            new StubMessageListMemory(),
+            new StubClock(Now),
+            Words());
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+        timeout.CancelAfter(Patience);
+
+        // Act
+        IImmutableList<MessageRow>? rows;
+        try
+        {
+            rows = await list.Rows.AsFeed().Value(timeout.Token);
+        }
+        catch (OperationCanceledException) when (!TestContext.Current.CancellationToken.IsCancellationRequested)
+        {
+            Assert.Fail(
+                "The list did not ask the deployment for the leading page after the workspace had already read the session.");
+            return;
+        }
+
+        // Assert
+        Assert.NotNull(rows);
+        Assert.Equal(MailMessages.Key(1), Assert.Single(rows).Key);
+        Assert.Equal("/api/client/emails", Assert.Single(harness.Deployment.Requests).RequestUri.AbsolutePath);
+    }
+
+    /// <summary>
     /// A leading page that did not arrive is the list's own failure, so a retryable error can be drawn instead of
     /// waiting on an answer that will not come.
     /// </summary>

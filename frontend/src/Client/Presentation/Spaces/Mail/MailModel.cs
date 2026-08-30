@@ -10,6 +10,7 @@ using MailFathom.Client.Presentation.Spaces.Mail.Reading;
 using MailFathom.Client.Presentation.Threads;
 using MailFathom.Client.Presentation.Workspace;
 using MailFathom.Client.Session;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace MailFathom.Client.Presentation.Spaces.Mail;
 
@@ -50,6 +51,7 @@ public partial record MailModel
     /// <param name="workspace">The scope a selected passage narrows for the intent field.</param>
     /// <param name="search">The run's own ranked list, which opens the same conversation without replacing itself.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    [ActivatorUtilitiesConstructor]
     public MailModel(
         IClientSession session,
         IMessageList messages,

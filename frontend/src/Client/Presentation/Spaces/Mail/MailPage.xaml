@@ -40,7 +40,10 @@ Project repository: https://github.com/Krzysztof318/MailFathom
     <workspace:WorkspaceColumns>
       <workspace:WorkspaceColumns.Primary>
         <Grid>
-          <Grid Visibility="{Binding ShowsTimeline, Converter={StaticResource AffirmedVisibility}}">
+          <!-- Collapsed would unload the FeedView and cancel the list's read, so a search overlay that opened as
+               this space did left Mail on progress without a request leaving the process. The overlay covers the
+               list; this grid only stops taking input while search is in front. -->
+          <Grid IsHitTestVisible="{Binding ShowsTimeline}">
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
