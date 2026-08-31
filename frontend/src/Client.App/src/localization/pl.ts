@@ -12,6 +12,24 @@ import type { Catalogue } from './en';
 export const pl: Catalogue = {
     'shell.title': 'MailFathom',
     'shell.language': 'Język',
+    'shell.theme': 'Motyw',
+    'shell.spaces': 'Przestrzenie',
+
+    'theme.system': 'Zgodnie z systemem',
+    'theme.light': 'Jasny',
+    'theme.dark': 'Ciemny',
+
+    'space.discover': 'Odkrywaj',
+    'space.mail': 'Poczta',
+    'space.cases': 'Sprawy',
+    'space.pending':
+        'Ta przestrzeń nie jest jeszcze zbudowana. Jest tu rama wokół niej: jej adres, nawigacja i zakres, w którym zadawane jest każde pytanie.',
+
+    'intent.label': 'Zapytaj swoją pocztę',
+    'intent.placeholder': 'O co chcesz zapytać swoją pocztę?',
+
+    'scope.mailbox': 'Skrzynka w zakresie',
+    'scope.allMailboxes': 'Wszystkie skrzynki',
 
     'connect.title': 'Wskaż temu klientowi swój MailFathom',
     'connect.explanation':
@@ -37,20 +55,17 @@ export const pl: Catalogue = {
     'deployment.change': 'Wskaż inne wdrożenie',
 
     'accounts.reading': 'Odczytywanie kont…',
-    'accounts.refreshing': 'To wdrożenie odświeża lokalną kopię tych kont.',
     'accounts.notRefreshing': 'To wdrożenie nie odświeża lokalnej kopii tych kont.',
     'accounts.failed': 'Nie udało się odczytać kont: {reason}.',
+
+    'connection.current': 'Wszystkie konta są aktualne.',
+    'connection.behind': 'Część kont ma zaległości.',
+    'connection.failing': 'Część kont przestała się synchronizować.',
+    'connection.noAccounts': 'Dla tego właściciela nie skonfigurowano jeszcze żadnego konta pocztowego.',
+    'connection.retry': 'Spróbuj ponownie',
 
     'failure.unauthenticated': 'brak uwierzytelnienia',
     'failure.unauthorized': 'brak uprawnień',
     'failure.unavailable': 'usługa niedostępna',
     'failure.unreadable': 'odpowiedź nie do odczytania',
-
-    'synchronization.neverSynchronized': 'nigdy nie zsynchronizowano',
-    'synchronization.synchronized': 'zsynchronizowano',
-    'synchronization.failing': 'niepowodzenie',
-    'synchronization.unreachable': 'nieosiągalne',
-
-    'account.stateBehind': '{state}, zaległości',
-    'account.lastSynchronized': 'ostatnia synchronizacja {when}',
 };

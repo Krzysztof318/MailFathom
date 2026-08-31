@@ -90,8 +90,8 @@ Four things may never cross, in either direction:
 ## Components, props, and names
 
 - **A component is one thing a reader can name.** When naming it needs "and", it is two components. When it renders a
-  list, the row is its own component: `AccountRow` beside `Accounts` is the shape, because the row is what gains state,
-  a keyboard path, and a test.
+  list, the row is its own component: `SpaceLink` beside `SpaceNavigation` is the shape, because the row is what gains
+  state, a keyboard path, and a test.
 - **A prop travels at most one component that does not read it.** A second such hop means the tree is wrong rather than
   that context is needed — move the component that reads the value to where the value is, or render it as a child.
   Reach for context only for what genuinely belongs to the whole screen, such as the session.
@@ -121,9 +121,9 @@ computation, a decision with more than one branch, a mapping from a service valu
 named function or constant above the component, not an expression inside the markup.
 
 The line is drawn where a reader stops being able to see the structure: a ternary choosing between two elements is
-markup, a ternary chain choosing between four is a function returning one. `synchronizationLabels` in
-`Client.App/src/App.tsx` is the shape a mapping takes — a lookup declared once, exhaustive by its own type, rather than a
-chain inside the element that renders it.
+markup, a ternary chain choosing between four is a function returning one. `failureLabels` in
+`Client.App/src/shell/ConnectionSummary.tsx` is the shape a mapping takes — a lookup declared once, exhaustive by its
+own type, rather than a chain inside the element that renders it.
 
 ## The two heads
 
