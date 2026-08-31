@@ -24,10 +24,11 @@ public sealed class StubSpamClassificationSettingsReaderTests
             [MailFolderAlias.Create("INBOX")]);
 
         // Act
-        var reader = new StubSpamClassificationSettingsReader(settings, MailAccountId.Create("primary"));
+        var answered = new StubSpamClassificationSettingsReader(settings, MailAccountId.Create("primary"))
+            .SettingsFor(MailOwnerId.Create(Guid.NewGuid()));
 
         // Assert
-        Assert.Same(settings, reader.SettingsFor(MailOwnerId.Create(Guid.NewGuid())));
+        Assert.Same(settings, answered);
     }
 
     /// <summary>A posture that classifies beside a scope naming nobody is a pairing the deployed reader cannot produce.</summary>

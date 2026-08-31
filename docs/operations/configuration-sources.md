@@ -274,11 +274,12 @@ key off. What the key decides for an owner is whether a scanner the deployment *
 classification wait, and the run batch sizes are what the process holds open or spends rather than a judgement about
 anybody's mailbox, so a record naming one of them is refused at the write, naming the key. So is a threshold outside the
 permitted range, naming the range; a scanned folder that is not a usable alias; a scanner asked for with `Enabled` false;
-an action asked for with `Enabled` false; and, once filing is switched on, a junk destination **any** of that owner's
-accounts fails to map — every one of them has to map it, exactly as every configured account has to map the
-deployment's own, because MailFathom creates a folder on nobody's server. A folder only somebody else's account carries
-is therefore refused exactly as one nobody maps. A destination named with filing off is judged by nothing, exactly as
-the deployment's own key is: what is refused is a folder something would file into.
+an action asked for with `Enabled` false; a junk destination that is neither a usable alias nor a role written as
+`role:<name>`; and, once filing is switched on, a junk destination **any** of that owner's accounts fails to map — every
+one of them has to map it, exactly as every configured account has to map the deployment's own, because MailFathom
+creates a folder on nobody's server. A folder only somebody else's account carries is therefore refused exactly as one
+nobody maps. The destination's syntax is judged whatever the switches say; what filing being off leaves unjudged is only
+whether the accounts map it, exactly as with the deployment's own key.
 
 ## Changing a persisted setting
 
