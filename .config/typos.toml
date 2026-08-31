@@ -66,10 +66,14 @@
 # the English prose that is the rest of this repository — the file is excluded whole instead. `en.ts` beside it stays
 # checked, being the language everything else here is written in.
 #
-# This governs the walk `typos` does when it is given a directory. A path named on the command line is read whether
-# this says so or not — `--force-exclude` would change that and `crate-ci/typos` passes no such flag — which is the
-# same asymmetry `.github/workflows/typo-check.yml` argues about images where it builds its file list. So a pull
-# request that changes the Polish catalogue has it read anyway, and what this entry governs is every other run.
+# This governs the walk `typos` does when it is given a directory, and a path named on the command line is read
+# whether it says so or not — `--force-exclude` would change that and `crate-ci/typos` passes no such flag. So a run
+# over a list of files applies this entry only because something applies it: `.github/workflows/typo-check.yml` reads
+# these paths and drops them from the list it builds before handing the rest over, which is why a pull request that
+# changes the Polish catalogue passes. Both paths through the checker therefore honour one list, and it is this one.
+# Each is read as a plain path — the file itself, or a directory and everything under it — because that is the shape
+# the workflow can apply to a file list; a glob here would be exact only on the walk, so the step widens to the whole
+# checkout instead of guessing, and its own comment says so.
 extend-exclude = ['frontend/pnpm-lock.yaml', 'frontend/src/Client.App/src/localization/pl.ts']
 
 # Hidden files are checked, which is not the default. Most of the prose that decides how this

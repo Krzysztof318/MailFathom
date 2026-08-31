@@ -45,6 +45,13 @@ concurrency:
 permissions:
   contents: read
 
+# Named once because both steps below read it: the step that builds the file list applies the
+# exclusions it declares, and the checking step hands it to `typos` as `--config`. Naming it twice
+# would let the list drop paths against a configuration the checker never read, which is the shape of
+# mistake the filtering exists to correct.
+env:
+  TYPOS_CONFIGURATION: .config/typos.toml
+
 jobs:
   typo-check:
     name: Typo check
@@ -119,11 +126,10 @@ jobs:
             exit 0
           fi
 
-          # Images are dropped here rather than left to the configuration: `typos` applies its own
-          # binary detection and the exclusions in `.config/typos.toml` to the walk it does when it
-          # is given a directory, while a path named on the command line is read whether either of
-          # them says so or not. `--force-exclude` would change that, and `crate-ci/typos` passes no
-          # such flag through, so a list this step builds has to be a list of files worth reading.
+          # Images are dropped by what they are rather than by the configuration, which says nothing
+          # about them: `typos` applies its own binary detection to the walk it does when it is given
+          # a directory, while a path named on the command line is read whether that detection would
+          # have skipped it or not.
           #
           # An image holds no prose, and a changed PNG handed over as a path arrives as a page of
           # corrections against compressed bytes nobody wrote. The formats are listed rather than
@@ -142,6 +148,67 @@ jobs:
 
           if (( ${#changed_paths[@]} == 0 )); then
             echo 'Every file this pull request changes is an image, so there is nothing to spell-check.'
+            echo 'files=' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # The exclusions the configuration declares are applied here, and here is the only place
+          # they can reach a pull request: `typos` applies them to the walk it does over a directory
+          # and reads a path named on the command line whether they say so or not. `--force-exclude`
+          # is what would change that, and `crate-ci/typos@v1.48.0` passes no such flag through — its
+          # entrypoint forwards `--isolated`, `--write-changes`, and `--config` and nothing else. They
+          # are read out of the file rather than repeated here, so which paths are exempt stays one
+          # decision in one place rather than one that depends on how the run was started. `tomllib`
+          # is the standard library's own TOML parser and the interpreter is already on the runner, so
+          # reading the file exactly costs this job nothing it was avoiding — a `grep` over the line
+          # would be a second reading of the configuration, which is what this is here to stop.
+          exclusions_text="$(python3 -c '
+          import sys
+          import tomllib
+
+          with open(sys.argv[1], "rb") as configuration:
+              for exclusion in tomllib.load(configuration).get("files", {}).get("extend-exclude", []):
+                  print(exclusion)
+          ' "$TYPOS_CONFIGURATION")"
+
+          exclusions=()
+          if [[ -n "$exclusions_text" ]]; then
+            mapfile -t exclusions <<< "$exclusions_text"
+          fi
+
+          # Each entry is applied as a plain path: the file itself, or a directory and everything
+          # beneath it. `typos` reads them as gitignore-style globs, so one carrying a glob character,
+          # one negating another, and one naming no directory — which matches at any depth — are all
+          # patterns this list cannot apply faithfully. Each falls back to the whole checkout, which
+          # is the run where `typos` applies the pattern itself, rather than to a list that drops the
+          # wrong paths or keeps them.
+          literal_exclusions=()
+          for exclusion in "${exclusions[@]}"; do
+            if [[ "$exclusion" == *[\*\?\[]* || "$exclusion" == '!'* || "${exclusion#/}" != */* ]]; then
+              fall_back_to_whole_checkout "The exclusion '${exclusion}' in ${TYPOS_CONFIGURATION} is not a plain path under a directory, so it cannot be applied to a list of changed files."
+            fi
+
+            # A leading `/` anchors a gitignore pattern to the root the changed paths are written
+            # from already; a trailing one marks a directory, which the prefix match below covers.
+            exclusion="${exclusion#/}"
+            literal_exclusions+=("${exclusion%/}")
+          done
+
+          included_paths=()
+          for changed_path in "${changed_paths[@]}"; do
+            for exclusion in "${literal_exclusions[@]}"; do
+              if [[ "$changed_path" == "$exclusion" || "$changed_path" == "$exclusion"/* ]]; then
+                continue 2
+              fi
+            done
+
+            included_paths+=("$changed_path")
+          done
+
+          changed_paths=("${included_paths[@]}")
+
+          if (( ${#changed_paths[@]} == 0 )); then
+            echo "Every file this pull request changes is excluded by ${TYPOS_CONFIGURATION}, so there is nothing to spell-check."
             echo 'files=' >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -177,4 +244,4 @@ jobs:
           # through as `--config` to both runs it makes — the one that formats annotations and the
           # one whose exit code fails the job — and `typos` merges an explicitly named file after the
           # implicit walk, which is what keeps `ignore-hidden = false` applying to the whole tree.
-          config: .config/typos.toml
+          config: ${{ env.TYPOS_CONFIGURATION }}

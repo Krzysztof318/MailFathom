@@ -1666,6 +1666,10 @@ run_typo_check_step() {
   local output_file="$2"
   local step_output_file="$3"
   local changed_file_count="${4:-$(printf '%s\n' "$changed_paths" | grep -c '')}"
+  # The repository's own configuration by default, because what the exclusion contracts below assert
+  # is that the entries in that file reach a pull request rather than that the step can apply some
+  # entry. A contract about a pattern the step refuses supplies a fixture of its own instead.
+  local configuration_path="${5:-$source_repository_root/.config/typos.toml}"
   local step_script="$test_directory/typo-check-step.sh"
 
   extract_typo_check_step "$step_script"
@@ -1679,6 +1683,7 @@ run_typo_check_step() {
     export CHANGED_FILE_COUNT="$changed_file_count"
     export FAKE_CHANGED_PATHS="$changed_paths"
     export GITHUB_OUTPUT="$step_output_file"
+    export TYPOS_CONFIGURATION="$configuration_path"
     bash "$step_script"
   ) > "$output_file" 2>&1
 }
@@ -1745,6 +1750,68 @@ typo_check_checks_nothing_when_the_pull_request_only_removes_files() {
 
   assert_file_content 'files=' "$step_output_file"
   assert_contains 'nothing to check' "$output_file"
+}
+
+typo_check_leaves_an_excluded_path_out_of_the_file_list() {
+  local output_file="$test_directory/typo-check-excluded-output"
+  local step_output_file="$test_directory/typo-check-excluded-step-output"
+
+  if ! run_typo_check_step \
+    $'README.md\nfrontend/src/Client.App/src/localization/pl.ts\nfrontend/src/Client.App/src/localization/en.ts' \
+    "$output_file" \
+    "$step_output_file"; then
+    printf 'Typo check failed to collect a changed-file list containing an excluded path\n' >&2
+    return 1
+  fi
+
+  # The Polish catalogue is what `.config/typos.toml` excludes, and the English one beside it is what
+  # that entry deliberately leaves checked — so this asserts the exclusion applies and that it stops
+  # where the file says it does.
+  assert_file_content \
+    'files=README.md frontend/src/Client.App/src/localization/en.ts' \
+    "$step_output_file"
+}
+
+typo_check_checks_nothing_when_a_pull_request_only_changes_excluded_paths() {
+  local output_file="$test_directory/typo-check-excluded-only-output"
+  local step_output_file="$test_directory/typo-check-excluded-only-step-output"
+
+  if ! run_typo_check_step \
+    $'frontend/pnpm-lock.yaml\nfrontend/src/Client.App/src/localization/pl.ts' \
+    "$output_file" \
+    "$step_output_file"; then
+    printf 'Typo check failed on a pull request that only changes excluded paths\n' >&2
+    return 1
+  fi
+
+  # The empty list rather than the whole checkout, for the reason the images-only contract above
+  # gives: widening here would spell-check the repository over a change to files it exempts.
+  assert_file_content 'files=' "$step_output_file"
+  assert_contains 'nothing to spell-check' "$output_file"
+}
+
+typo_check_falls_back_to_the_whole_checkout_for_an_exclusion_it_cannot_apply() {
+  local output_file="$test_directory/typo-check-unappliable-exclusion-output"
+  local step_output_file="$test_directory/typo-check-unappliable-exclusion-step-output"
+  local configuration_file="$test_directory/typo-check-glob-exclusion.toml"
+
+  # `typos` reads an exclusion as a gitignore-style glob, and a file list cannot be filtered by one
+  # faithfully. The whole checkout is where `typos` applies the pattern itself, so widening is the
+  # answer that keeps the exclusion exact rather than approximating it.
+  printf '[files]\nextend-exclude = ["docs/**/*.md"]\n' > "$configuration_file"
+
+  if ! run_typo_check_step \
+    'README.md' \
+    "$output_file" \
+    "$step_output_file" \
+    1 \
+    "$configuration_file"; then
+    printf 'Typo check failed instead of widening its scope for an exclusion it cannot apply\n' >&2
+    return 1
+  fi
+
+  assert_file_content 'files=.' "$step_output_file"
+  assert_contains 'docs/**/*.md' "$output_file"
 }
 
 typo_check_falls_back_to_the_whole_checkout_for_a_path_containing_whitespace() {
@@ -8468,6 +8535,9 @@ run_test typo_check_passes_the_files_the_pull_request_changed
 run_test typo_check_leaves_an_image_out_of_the_file_list
 run_test typo_check_checks_nothing_when_a_pull_request_only_changes_images
 run_test typo_check_checks_nothing_when_the_pull_request_only_removes_files
+run_test typo_check_leaves_an_excluded_path_out_of_the_file_list
+run_test typo_check_checks_nothing_when_a_pull_request_only_changes_excluded_paths
+run_test typo_check_falls_back_to_the_whole_checkout_for_an_exclusion_it_cannot_apply
 run_test typo_check_falls_back_to_the_whole_checkout_for_a_path_containing_whitespace
 run_test typo_check_falls_back_to_the_whole_checkout_for_a_path_containing_a_glob_character
 run_test typo_check_falls_back_to_the_whole_checkout_for_a_pull_request_beyond_the_reportable_limit
