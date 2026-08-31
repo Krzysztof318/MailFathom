@@ -176,20 +176,25 @@ is the same one Uno's was, carried over because it was never about the platform:
   import of either fails to resolve rather than being caught in review.
 - `Client.App` is the application, and it depends on `Client.Backend`. Nothing depends on `Client.App`.
 
-The suite is Vitest, run by `pnpm test` as one Vitest project per package: `Client.Backend` without a DOM, and
+The unit suite is Vitest, run by `pnpm test` as one Vitest project per package: `Client.Backend` without a DOM, and
 `Client.App` in jsdom with React Testing Library. A test file sits beside the source it covers, because a component
 test has to import a component neither package publishes and a test tree beside `src/` could reach one only by
-crossing the boundary above — so `frontend/tests/` holds the contract governing those tests and no test, and
-[`frontend/tests/AGENTS.md`](https://github.com/Krzysztof318/MailFathom/blob/main/frontend/tests/AGENTS.md) is it.
+crossing the boundary above. A second suite, `pnpm test:browser`, builds the bundle and drives it with Playwright in a
+real browser, which is what answers the questions jsdom structurally cannot — the built bundle rather than the source,
+a document with a history, and the requests a page actually issued; it belongs to neither package, imports neither, and
+therefore does live under `frontend/tests/`, beside the contract governing both.
+[`frontend/tests/AGENTS.md`](https://github.com/Krzysztof318/MailFathom/blob/main/frontend/tests/AGENTS.md) is that
+contract.
 
 What the workspace builds is a directory of static files under `frontend/src/Client.App/dist/` and nothing else, so no
 Node process joins any deployment shape.
 
 The repository's own shape around it was kept when the old client went. `CI` still runs a `Frontend` job, gated on a
 `frontend` path filter, calling `.github/workflows/build-test-frontend.yml`; a nightly and a release still wait on that
-job before they publish. That workflow asserts nothing yet and says so, and filling it in for this stack is a change to
-that one file rather than a reconstruction of every caller. Both verification gates already run the client's flow —
-[which stack a gate runs](../operations/agent-workflow.md#which-stack-a-gate-runs) is where that is decided.
+job before they publish. What that workflow asserts today is the browser suite, which is gated on a pull request
+because a break only a browser can see is otherwise found the morning after a merge; the linter, the type check, and
+the unit suites join it there. Both verification gates already run the client's flow, and deliberately not the browser
+suite — [which stack a gate runs](../operations/agent-workflow.md#which-stack-a-gate-runs) is where both are decided.
 
 **Nothing the service does for a client moved with it**, because none of it was Uno's. The client surface under
 `/api/client` is an endpoint of its own, with its own listener and its own credentials —

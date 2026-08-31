@@ -1,6 +1,10 @@
 pnpm-lock.yaml
 src/Client.App/dist/
 
+# What a failing browser run retains — a trace, a screenshot, and the run's own record. `.gitignore` keeps it out of a
+# commit for the reason `playwright.config.ts` gives; this keeps the formatter from reporting on it in the meantime.
+.playwright/
+
 # Agent sandboxes mask harness configuration by bind-mounting over these paths in whichever directory a session runs
 # in, so they appear inside this workspace as files nothing can read. None of them is the client's, and `.gitignore`
 # at the repository root keeps them out of a commit for the same reason.

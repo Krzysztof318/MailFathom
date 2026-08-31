@@ -216,11 +216,11 @@ jobs:
   # draft — with both asked in the job's own condition rather than one of them passed inward, because there is a single
   # job on the other side and nothing for a switch to select between.
   #
-  # That workflow asserts nothing today: the Uno Platform client was withdrawn and the React one has not landed, so
-  # `frontend/` holds two placeholder directories. The wiring stays anyway — this job, the filter above, and the
-  # aggregate below — because what fills it back in is then a change to the called workflow alone. Both conditions are
-  # kept for the same reason, including the draft exemption, which is the expensive-job rule the client's build will
-  # need again the moment it has one.
+  # What that workflow asserts today is the browser suite: it builds the client's bundle and drives it in a real
+  # browser, which is the one check the client's own unit suite structurally cannot make. The linter, the type check,
+  # and the unit suites join it there under #1400. The draft exemption is kept for the reason the server's build has
+  # one — this is now an expensive job, downloading a browser and building a bundle — and the `frontend` filter above
+  # is what keeps a change that cannot reach the client from paying either cost.
   frontend:
     name: Frontend
     needs:
