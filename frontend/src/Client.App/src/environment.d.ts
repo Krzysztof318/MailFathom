@@ -10,6 +10,22 @@
  */
 declare const __MAILFATHOM_VERSION__: string;
 
+interface Window {
+    /**
+     * The Tauri API the desktop shell injects, declared as the one part of it this application reaches.
+     *
+     * It is present only where a shell is hosting the page, which is what `credentialStore` reads to decide where the
+     * credential is kept — a question about whether a shell is there rather than about which platform this is. The
+     * shell turns it on through `withGlobalTauri` in `tauri.conf.json`, so the binding is Tauri's own rather than a
+     * package this workspace pins and a web bundle then carries for a head it is not.
+     */
+    readonly __TAURI__?: {
+        readonly core: {
+            invoke: (command: string, argument?: Readonly<Record<string, unknown>>) => Promise<unknown>;
+        };
+    };
+}
+
 interface ImportMetaEnv {
     /**
      * Where the service serves its client surface, as an origin with no trailing separator, or absent when nothing

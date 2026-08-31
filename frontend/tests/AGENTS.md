@@ -90,9 +90,11 @@ question is answered again rather than reworded.
 
 - **The network boundary is `MailFathomTransport`, and it is the only thing a read fakes.** It is a function the caller
   supplies, so a test hands one over and nothing patches `fetch`, starts a server, or adds an HTTP mocking package.
-- Prefer a component that takes its transport, or the value already read through one, from its caller. Where a
-  component reaches for its own — `App` does today for mail, from `stubMailFathom` — the module supplying it is replaced with
-  `vi.mock`, and that is read as the seam being wrong rather than as the pattern to copy.
+- Every component that reads takes its transport, or the value already read through one, from its caller, so no
+  application test replaces a module to fake the network. Where the credential is part of what is being proven, the
+  `CredentialStore` is the second thing supplied that way — a fake holding a map is enough, and it is what lets a test
+  assert what was kept rather than which method was called. A component that reached for either itself would be a seam
+  in the wrong place, and the answer is to move it rather than to reach for `vi.mock`.
 - **Never `vi.mock` a module of `Client.Backend` from an application test.** The parsing and the failure mapping are
   part of what the screen is being proven against; faking them leaves a test that asserts a screen renders whatever it
   was handed.
@@ -162,17 +164,20 @@ the answer; dropping it is not, and neither is asserting it in jsdom where it wo
 - **The same rule about what a test asserts holds**, and this suite has no exemption from it: a role first, then the
   text a person would read. Playwright's `getByRole` is the same query React Testing Library's is. No CSS selector, no
   `data-testid`, no coordinate, and no assertion on a class name.
-- **The service is not started and no credential is used.** The bundle carries `stubMailFathom`, so the mail the client
-  reads is a canned body and the suite proves the screen rather than a deployment. What is not stubbed is reaching a
-  deployment at all, and the preview server is the reason that costs nothing here: it serves the bundle from a loopback
-  origin, which the client adopts as its deployment without asking anybody, so the connect screen never opens and
-  nothing is sent. Driving a real deployment is the agent's own work with `@playwright/cli`, which
-  `frontend/AGENTS.md` covers, and it is not this suite.
+- **The service is not started, and the credential belongs to nobody.** The preview server serves the bundle and
+  answers nothing else, so the two routes the client reaches are fulfilled by Playwright's own routing — a browser
+  feature rather than a package, and the reason a mocking library is refused here as it is above. What that fakes is
+  one side of a real exchange: the request is composed, sent, and read by the built bundle exactly as it would be
+  against a deployment, which is what lets this suite assert the header the bundle put on the wire. The password typed
+  into it is invented in the spec and reaches a loopback origin, so nothing here is anybody's mail or anybody's
+  credential. Driving a real deployment is the agent's own work with `@playwright/cli`, which `frontend/AGENTS.md`
+  covers, and it is not this suite.
 - **Nothing here retries.** A check that passes on a second attempt has reported that the client is flaky rather than
   that it works.
 - **A failure keeps its trace and its screenshot in `frontend/.playwright/`, which Git ignores and nothing uploads.**
-  That is a privacy decision rather than a storage one: the moment this suite drives anything but the stub, a capture
-  shows somebody's mail, and an artifact anybody with the run's link can download is the wrong place for it. A pipeline
+  That is a privacy decision rather than a storage one: the moment this suite drives anything but a routed answer, a
+  capture shows somebody's mail and a trace carries the header it was read with, and an artifact anybody with the run's
+  link can download is the wrong place for either. A pipeline
   failure is therefore read from the job log and reproduced locally — where the trace is, on the machine that produced
   it.
 - **Where it runs is decided**: on every pull request that reaches the client stack, in
@@ -180,15 +185,17 @@ the answer; dropping it is not, and neither is asserting it in jsdom where it wo
   Neither verification gate runs it, because it needs a browser install the gates would otherwise demand of every
   machine.
 
-One thing it does not cover yet, because the client does not have it: nothing goes over the wire to a service, because
-the mail is stubbed inside the bundle and the origin serving it is the deployment it is pointed at, so what is asserted
-about the network today is that the client reaches its own origin and no other.
+What the suite asserts about the network is therefore two things rather than one: that the client reaches the origin
+it was served from and no other, and that what it sends there is the credential the bundle composed — the second being
+the one claim jsdom structurally cannot make, since the encoding runs through the browser's own `TextEncoder` and
+`btoa` after the bundler has been over it. Where the credential is kept is here for the same reason: a reload is a real
+one, and a second tab is a second document, which is what `sessionStorage` is bounded by and what jsdom has one of.
 
-Navigation is no longer on that list. Each space is reached at a fragment address of its own, so this suite moves
-between them, reloads one, and moves back and forward through the client's own history — which is the whole reason the
-address is a fragment, and which nothing but a real document with a history can answer. Where the composition changes
-is here as well, because it is geometry: the navigation sits beside the workspace in a wide window and under it in a
-narrow one, asked of two viewport widths rather than of two heads.
+Navigation is the third of those. Each space is reached at a fragment address of its own, so this suite moves between
+them, reloads one, and moves back and forward through the client's own history — which is the whole reason the address
+is a fragment, and which nothing but a real document with a history can answer. Where the composition changes is here
+as well, because it is geometry: the navigation sits beside the workspace in a wide window and under it in a narrow
+one, asked of two viewport widths rather than of two heads.
 
 ## Coverage
 

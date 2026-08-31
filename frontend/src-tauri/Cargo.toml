@@ -25,4 +25,5 @@ publish = false
 tauri-build = { version = "=2.6.3", features = [] }
 
 [dependencies]
+keyring = "=4.2.0"
 tauri = { version = "=2.11.5", features = [] }

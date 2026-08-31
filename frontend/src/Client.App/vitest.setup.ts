@@ -11,18 +11,24 @@ import { afterEach } from 'vitest';
 afterEach(cleanup);
 
 // Node publishes a Web Storage implementation of its own, and the jsdom window this suite runs in is the worker's
-// global object — so Node's `localStorage` getter is the one on it, and it answers `undefined` unless the process was
-// started with `--localstorage-file`. jsdom's own storage is there and reachable; nothing is being invented here, only
-// the name put back on the object it belongs to, so a component reading storage in a test reads what a browser would
-// give it rather than a global that reports a browser API as absent.
-const jsdomStorage = (window as unknown as Record<string, unknown>)['_localStorage'];
+// global object — so Node's getters are the ones on it: `localStorage` answers `undefined` unless the process was
+// started with `--localstorage-file`, and `sessionStorage` answers a store belonging to the worker rather than to the
+// document. jsdom's own two are there and reachable; nothing is being invented here, only the names put back on the
+// object they belong to, so a component reading storage in a test reads what a browser would give it rather than a
+// global that reports a browser API as absent or hands out one shared between files.
+reinstateJsdomStorage('localStorage', '_localStorage');
+reinstateJsdomStorage('sessionStorage', '_sessionStorage');
 
-if (jsdomStorage instanceof Storage) {
-    Object.defineProperty(globalThis, 'localStorage', {
-        value: jsdomStorage,
-        configurable: true,
-        writable: false,
-    });
+function reinstateJsdomStorage(name: string, jsdomName: string): void {
+    const jsdomStorage = (window as unknown as Record<string, unknown>)[jsdomName];
+
+    if (jsdomStorage instanceof Storage) {
+        Object.defineProperty(globalThis, name, {
+            value: jsdomStorage,
+            configurable: true,
+            writable: false,
+        });
+    }
 }
 
 // jsdom evaluates no media query and publishes no `matchMedia` at all, so a component asking what appearance the

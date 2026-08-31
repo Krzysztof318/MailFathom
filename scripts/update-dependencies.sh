@@ -952,7 +952,7 @@ regenerate_lock_files() {
 
     printf '  %s\n' "${desktop_manifest%/*}/Cargo.lock"
 
-    # Named crate by crate rather than as one bare `cargo update`, which would re-resolve all four hundred and rewrite
+    # Named crate by crate rather than as one bare `cargo update`, which would re-resolve all five hundred and rewrite
     # a closure the register records as a census somebody read. What is wanted here is the lock agreeing with the pin
     # that moved and nothing else moving with it.
     for crate in "${moved_crates[@]}"; do

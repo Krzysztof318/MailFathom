@@ -1,0 +1,46 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+import { describe, expect, it } from 'vitest';
+import { resolveCredentialEntry, type CredentialEntryRefusal } from './credentialEntry';
+
+function refusal(userName: string, password: string): CredentialEntryRefusal | 'resolved' {
+    const result = resolveCredentialEntry(userName, password);
+
+    return result.outcome === 'resolved' ? 'resolved' : result.refusal;
+}
+
+function authorization(userName: string, password: string): string | null {
+    const result = resolveCredentialEntry(userName, password);
+
+    return result.outcome === 'resolved' ? result.authorization : null;
+}
+
+describe('resolveCredentialEntry', () => {
+    // RFC 7617's own worked example, so what this asserts is the specification rather than this implementation's
+    // agreement with itself.
+    it('composes the header value the specification writes for a user name and a password', () => {
+        expect(authorization('Aladdin', 'open sesame')).toBe('Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==');
+    });
+
+    it('encodes a password as UTF-8, which is the one encoding the challenge names', () => {
+        expect(authorization('właściciel', 'hasło')).toBe('Basic d8WCYcWbY2ljaWVsOmhhc8WCbw==');
+    });
+
+    it('keeps a colon inside a password, which the scheme reads as part of it', () => {
+        expect(authorization('owner', 'a:b')).toBe('Basic b3duZXI6YTpi');
+    });
+
+    it.each([
+        ['neither half', '', ''],
+        ['no user name', '', 'open sesame'],
+        ['no password', 'Aladdin', ''],
+    ])('refuses %s, rather than presenting half a credential', (_, userName, password) => {
+        expect(refusal(userName, password)).toBe('incomplete');
+    });
+
+    it('refuses a colon in the user name, which the deployment would split at the wrong place', () => {
+        expect(refusal('own:er', 'open sesame')).toBe('userNameHasColon');
+    });
+});

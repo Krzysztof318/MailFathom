@@ -2,23 +2,12 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { failed, read, type ClientResult } from './failure';
-import { routeFor, type DeploymentAddress } from './session';
-import { send, type MailFathomTransport } from './transport';
+import { type DeploymentAddress } from './session';
 
 // Where the client's address is decided, and it is here rather than in the screen that collects one because an address
 // is a security boundary rather than a convenience: every request carries the credential on it, so the rule saying
 // which addresses may carry one belongs beside the wire it travels on. Nothing here holds a default, and nothing here
 // composes an address from a literal — a deployment is somewhere only its owner knows.
-
-/** The route a deployment reports itself at, relative to the client prefix. It needs no grant, which is what lets a client reach it before it holds a credential. */
-export const deploymentSessionRoute = '/session';
-
-/** The name every MailFathom surface challenges under, which is what a refusal proves the client reached one by. */
-const protectionSpace = 'realm="MailFathom"';
-
-/** The product name the session route answers with. */
-const productName = 'MailFathom';
 
 /** Why an address a person gave was not taken. */
 export type DeploymentEntryRefusal = 'blank' | 'malformed' | 'clearTextRefused';
@@ -27,12 +16,6 @@ export type DeploymentEntryRefusal = 'blank' | 'malformed' | 'clearTextRefused';
 export type DeploymentEntryResult =
     | { readonly outcome: 'resolved'; readonly deployment: DeploymentAddress }
     | { readonly outcome: 'refused'; readonly refusal: DeploymentEntryRefusal };
-
-/** What a deployment says about itself to a caller holding no credential yet. */
-export interface DeploymentGreeting {
-    /** The release it reports, or `null` where it answered a challenge rather than a body. */
-    readonly version: string | null;
-}
 
 /**
  * Turns what somebody typed into the address of a deployment, or refuses it.
@@ -66,82 +49,6 @@ export function resolveDeploymentEntry(entry: string, clearTextPermitted: boolea
     return { outcome: 'resolved', deployment: { baseAddress: `${address.scheme}://${address.authority}` } };
 }
 
-/**
- * Asks an address whether MailFathom is what answers there, before anything is sent to it.
- *
- * It is one request at the scheme the address names and there is no second one: a deployment that refused a TLS
- * connection reports that refusal rather than being tried again without it. The route it reaches needs no grant, so
- * this answers for a client that has nothing to sign in with yet — and a deployment that demands a credential proves
- * itself by the protection space its refusal challenges under.
- *
- * @param deployment The address to reach.
- * @param transport How the request goes out.
- * @returns What the deployment reported, or why the address was not taken as one.
- */
-export async function reachDeployment(
-    deployment: DeploymentAddress,
-    transport: MailFathomTransport,
-): Promise<ClientResult<DeploymentGreeting>> {
-    const response = await send(transport, {
-        method: 'GET',
-        path: routeFor(deployment, deploymentSessionRoute),
-        headers: { Accept: 'application/json' },
-    });
-
-    if (response === null) {
-        return failed('unavailable', null);
-    }
-
-    if (response.status === 200) {
-        const version = versionReported(response.body);
-
-        return version === null ? failed('unreadable', response.status) : read({ version });
-    }
-
-    // A deployment serving this surface refuses a caller carrying no credential, which is the answer a client asking
-    // where it is gets from every deployment somebody actually runs. The challenge is what makes that answer say more
-    // than "something refused me": every MailFathom surface names one protection space, and a browser can read the
-    // header because the client endpoint's own CORS policy exposes it.
-    if (response.status === 401 && challengesAsMailFathom(response.headers)) {
-        return read({ version: null });
-    }
-
-    return failed(response.status >= 500 ? 'unavailable' : 'unreadable', response.status);
-}
-
-/** The release a session body reports, or `null` where the body was not one MailFathom answers with. */
-function versionReported(body: string): string | null {
-    if (body.length > longestSessionBody) {
-        return null;
-    }
-
-    let parsed: unknown;
-
-    try {
-        parsed = JSON.parse(body);
-    } catch {
-        return null;
-    }
-
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-        return null;
-    }
-
-    const answered = parsed as Record<string, unknown>;
-    const service = answered['service'];
-    const version = answered['version'];
-
-    if (service !== productName || typeof version !== 'string') {
-        return null;
-    }
-
-    return version.length > 0 && version.length <= longestVersion ? version : null;
-}
-
-function challengesAsMailFathom(headers: Readonly<Record<string, string>>): boolean {
-    return headers['www-authenticate']?.includes(protectionSpace) === true;
-}
-
 /** Where a deployment is, once what was typed has been read as a scheme, a host, and a port. */
 interface ParsedAddress {
     readonly scheme: 'http' | 'https';
@@ -173,18 +80,6 @@ const bracketedHost = /^\[[0-9a-f:.]+\]$/i;
 // anything past this is not an address somebody mistyped — and a bound is what keeps the work below proportional to
 // what a person can mean rather than to what can be pasted.
 const longestEntry = 320;
-
-// The longest release string read out of a session answer. It is a version rather than prose, and a bound here is what
-// keeps an answer from an address nobody has trusted yet from becoming an unbounded string the client carries around.
-const longestVersion = 64;
-
-// The longest session answer read at all. This is the one answer in the client that arrives from an address nobody has
-// trusted yet — the whole point of asking is that the client does not know what is there — so the bound is applied
-// before the body is expanded rather than to what parsing it produced. It names a product, a release, and the caller's
-// own grant out of a published set, which is a few hundred bytes; anything past this is not a session answer, whatever
-// it turns out to be. `longestResponseBody` is the transport's backstop behind it, and this is the bound that says what
-// *this* route may answer with.
-const longestSessionBody = 4096;
 
 const defaultPorts: Readonly<Record<'http' | 'https', string>> = { http: '80', https: '443' };
 

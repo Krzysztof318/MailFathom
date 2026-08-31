@@ -8,6 +8,7 @@
     "frontendDist": "../src/Client.App/dist"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "label": "main",
