@@ -1,0 +1,204 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+name: Build the desktop client
+
+# The one place MailFathom's client is published as something somebody downloads and runs. A release calls it and
+# attaches the result; a nightly calls it and leaves it on the run. It gates nothing and publishes nothing itself, for
+# the reason `Build the CLI binaries` does not either: a release whose client failed is still a release whose image and
+# chart are correct, and the failure is visible on the run.
+#
+# **A matrix rather than a loop, and that is the substantive difference from every other build here.** The desktop head
+# links against the target platform's WebView and system libraries — WebKitGTK on Linux, WebView2 on Windows — so a
+# Tauri build does not cross-compile the way an IL publish with a runtime identifier does. Windows is therefore built on
+# a Windows runner and Linux on a Linux one, and neither runner can stand in for the other.
+#
+# The Linux runner is pinned to a version rather than left on `ubuntu-latest`, because it decides what the `deb` and the
+# `rpm` will install onto: they link against the runner's glibc, so the image is the compatibility floor and moving it
+# is a decision about who can run the client rather than a routine bump. Tauri's own guidance names `ubuntu-22.04` for
+# the widest floor and that image is being retired by GitHub, so this takes the oldest one that remains, and
+# `docs/operations/desktop-client.md` states the floor it buys.
+#
+# The Linux bundles are `deb` and `rpm` alone. `frontend/src-tauri/tauri.conf.json` chose those two and no AppImage,
+# and that is a licensing decision rather than a packaging preference: an AppImage packages the host's own GTK and
+# WebKitGTK shared objects, several of them LGPL-2.1-or-later, which a `deb` and an `rpm` depend on the distribution's
+# copies of instead. `THIRD_PARTY_LICENSES.md` carries that reading and `docs/operations/desktop-client.md` the whole
+# posture.
+#
+# Nothing published here is code-signed, on Windows or on Linux, so the checksum file the collecting job writes over
+# exactly the published bytes is the only thing that verifies a download.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'The commit SHA to build. Resolved by the caller, so what is published is never re-resolved from a moving ref.'
+        required: true
+        type: string
+      version:
+        description: 'The full stamped version the bundles are named after, for example `0.8.0`.'
+        required: true
+        type: string
+    outputs:
+      artifact:
+        description: 'The name of the uploaded artifact holding every bundle and the checksum file.'
+        value: ${{ jobs.collect.outputs.artifact }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      # Each platform is a separate answer about a separate toolchain, so a Windows failure must not cancel a Linux
+      # build that would otherwise have said something useful.
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Linux
+            runner: ubuntu-24.04
+          - platform: Windows
+            runner: windows-latest
+    steps:
+      - name: Check out the commit being built
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      # The system half of the Linux toolchain, which the runner image does not carry: the WebView the shell renders in
+      # and the libraries Tauri links and bundles beside it. The Windows runner needs none of this — WebView2 and the
+      # MSVC build tools are part of its image.
+      - name: Install the Linux WebView and bundling dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      # `engines.node` in the client's manifest is where the Node version is decided, so it is read from there rather
+      # than restated here — the same arrangement the client's own gate uses.
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend/package.json
+
+      - name: Install pnpm
+        shell: bash
+        run: npm install --global "$(jq --raw-output .packageManager frontend/package.json)"
+
+      - name: Resolve the pnpm store directory
+        id: pnpm-store
+        shell: bash
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      # Per platform, because a store and a crate cache hold platform-specific binaries: the Tauri CLI, the esbuild and
+      # Rollup native packages, and every compiled crate artifact differ per runner. `runner.os` in each key is what
+      # keeps one platform from restoring the other's.
+      - name: Cache the pnpm store
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+
+      # The registry and the git checkouts Cargo downloads, keyed on the lock file that fixes exactly which crate
+      # versions those are. Compiled output under `target/` is deliberately not cached: it is gigabytes per platform
+      # against a repository-wide cache budget, on a job nothing waits for.
+      - name: Cache the Cargo dependencies
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-${{ runner.os }}-${{ hashFiles('frontend/src-tauri/Cargo.lock') }}
+
+      - name: Restore the client workspace
+        run: pnpm --dir frontend install --frozen-lockfile
+
+      # Rust is whatever stable the runner image carries. This repository pins no toolchain — there is no
+      # `rust-toolchain.toml` — and what fixes the build is `Cargo.lock`, which `run-tauri.ts` makes binding by handing
+      # Cargo `--locked`.
+      #
+      # `MAILFATHOM_VERSION` is what makes the version an input rather than a second resolution: without it the wrapper
+      # reads `Version.props` itself, which would name the release rather than the nightly identifier the caller
+      # resolved. It is merged into the Tauri configuration, so it names the bundles, the installer, and the version the
+      # installed application reports, all from one number.
+      #
+      # A version carrying a prerelease identifier is also what makes the wrapper drop the `rpm` target, because RPM's
+      # own version field cannot hold one — so a nightly's Linux job produces a `.deb` and nothing else, and a release's
+      # produces both. `docs/operations/desktop-client.md` carries that reading.
+      - name: Build the desktop bundles
+        env:
+          MAILFATHOM_VERSION: ${{ inputs.version }}
+        run: pnpm --dir frontend run desktop:build
+
+      # The bundles themselves rather than the tree around them: each bundler leaves its staging directories beside its
+      # output, and an installer is the only part of that a person downloads.
+      - name: Collect the bundles
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p artifacts/desktop
+
+          find frontend/src-tauri/target/release/bundle -type f \
+            \( -name '*.deb' -o -name '*.rpm' -o -name '*-setup.exe' \) \
+            -exec cp {} artifacts/desktop/ \;
+
+      - name: Upload the bundles
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-client-${{ matrix.platform }}
+          path: artifacts/desktop
+          if-no-files-found: error
+
+  # One checksum file covers every bundle, so somebody verifies whichever they downloaded with one command from the
+  # directory they downloaded into — and a checksum file covering every platform can only be written once both have
+  # built. That is also why this job waits for the whole matrix rather than merging whatever arrived: a file claiming to
+  # cover every bundle while half of them were never built is worse than no artifact at all, and a caller that attaches
+  # nothing is already the failure this workflow is allowed to have.
+  collect:
+    name: Collect
+    needs: build
+    runs-on: ubuntu-latest
+    outputs:
+      artifact: ${{ steps.checksum.outputs.artifact }}
+    steps:
+      - name: Download every platform's bundles
+        uses: actions/download-artifact@v8
+        with:
+          pattern: desktop-client-*
+          merge-multiple: true
+          path: artifacts/desktop
+
+      - name: Take the checksums
+        id: checksum
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          # Nothing rewrites a bundle between here and the release page, so these are the checksums of the file
+          # somebody downloads and they are the only thing that verifies it: no artifact published here carries a code
+          # signature.
+          ( cd artifacts/desktop && sha256sum ./* > "mailfathom-client-${VERSION}.sha256" )
+
+          echo "artifact=desktop-client" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the bundles and the checksum file
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-client
+          path: artifacts/desktop
+          if-no-files-found: error

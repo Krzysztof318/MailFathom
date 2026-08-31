@@ -7253,7 +7253,7 @@ no_channel_builds_an_artifact_before_the_commit_has_verified() {
   # A derived list that derives nothing asserts nothing, and it would do so silently: the loops above
   # are vacuous the moment the `ref:` expression they read is spelled some other way. These three are
   # the floor rather than the coverage.
-  for job in schema-artifact cli-binaries publish; do
+  for job in schema-artifact cli-binaries desktop-client publish; do
     [[ "$release_consumers" == *" $job "* ]] ||
       failures+="release.yml: ${job} was not recognized as building from the released commit. "
     [[ "$nightly_consumers" == *" $job "* ]] ||
@@ -7303,6 +7303,45 @@ no_channel_builds_an_artifact_before_the_commit_has_verified() {
 
   if [[ -n "$failures" ]]; then
     printf 'Publication is not gated as recorded: %s\n' "$failures" >&2
+    return 1
+  fi
+}
+
+# The desktop client is the one artifact whose version is stamped by a tool of its own rather than by
+# MSBuild, and the tool would happily resolve a number itself: `frontend/src-tauri/run-tauri.ts` reads
+# `Version.props` when nothing hands it one. That is right for a development build and wrong for a
+# publication, where the caller has already resolved the commit and the version once — a nightly's
+# identifier is not in `Version.props` at all — so a bundle that resolved its own would be named
+# something other than what the run attaching it says. The whole of what prevents that is one
+# environment variable, read in one place and written in one, which is exactly the shape that rots
+# silently.
+the_desktop_publication_is_stamped_with_the_version_its_caller_resolved() {
+  local workflow_directory="$source_repository_root/.github/workflows"
+  local workflow="$workflow_directory/build-desktop-client.yml"
+  local wrapper="$source_repository_root/frontend/src-tauri/run-tauri.ts"
+  local failures=''
+
+  grep -qE "^[[:space:]]+MAILFATHOM_VERSION: \\\$\{\{ inputs\.version \}\}$" "$workflow" ||
+    failures+='build-desktop-client.yml does not hand the version it was given to the build. '
+
+  grep -qF "process.env['MAILFATHOM_VERSION']" "$wrapper" ||
+    failures+='run-tauri.ts does not read MAILFATHOM_VERSION, so a publication cannot name the version. '
+
+  # The one shape of version this repository produces that a bundle format cannot express. RPM's version
+  # field admits no hyphen and a SemVer prerelease identifier is introduced by one, so a nightly cannot
+  # name an RPM version at all — and the string has to stay SemVer for the Windows installer, which is
+  # what rules out spelling the prerelease some other way. The wrapper drops that one target instead,
+  # which is a line nothing else would notice the loss of until a nightly's Linux job failed.
+  grep -qF "target !== 'rpm'" "$wrapper" ||
+    failures+='run-tauri.ts does not drop the rpm target, so a prerelease version reaches a bundler that cannot hold it. '
+
+  [[ "$(extract_workflow_job_uses "$workflow_directory/release.yml" desktop-client)" == './.github/workflows/build-desktop-client.yml' ]] ||
+    failures+='release.yml: desktop-client does not call build-desktop-client.yml. '
+  [[ "$(extract_workflow_job_uses "$workflow_directory/nightly.yml" desktop-client)" == './.github/workflows/build-desktop-client.yml' ]] ||
+    failures+='nightly.yml: desktop-client does not call build-desktop-client.yml. '
+
+  if [[ -n "$failures" ]]; then
+    printf 'The desktop client is not stamped from its caller: %s\n' "$failures" >&2
     return 1
   fi
 }
@@ -8625,6 +8664,7 @@ run_test every_write_scope_is_one_the_policy_records
 run_test every_checkout_refuses_to_persist_credentials
 run_test the_release_restores_the_annotated_tag_before_asserting_it
 run_test no_channel_builds_an_artifact_before_the_commit_has_verified
+run_test the_desktop_publication_is_stamped_with_the_version_its_caller_resolved
 run_test the_mutation_score_is_reported_and_never_gated
 run_test a_paid_provider_run_is_never_the_default
 run_test only_the_recorded_workflows_use_pull_request_target

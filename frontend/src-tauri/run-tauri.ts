@@ -22,6 +22,7 @@
 // package manifest would not be.
 
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { resolve } from 'node:path';
 import { run } from '@tauri-apps/cli';
@@ -29,11 +30,23 @@ import { run } from '@tauri-apps/cli';
 const desktopShell = import.meta.dirname;
 const repositoryRoot = resolve(desktopShell, '../..');
 
-// Invoked through `bash` rather than executed directly, so that a Windows machine building the desktop head resolves
-// the script through Git Bash instead of asking the operating system to run a file it has no interpreter for.
-const declaredVersion = execFileSync('bash', [resolve(repositoryRoot, 'scripts/read-declared-version.sh')], {
-    encoding: 'utf8',
-}).trim();
+// `MAILFATHOM_VERSION` is how a publication hands the number in rather than letting it be resolved a second time.
+// `build-desktop-client.yml` is given a version its caller already resolved — a release's, or a nightly's identifier,
+// which `Version.props` alone cannot produce — and a build that resolved its own would name the bundles something
+// other than what the release attaching them says. Everywhere else the variable is unset and the declared version is
+// read here, which is the only number a development build could mean.
+//
+// The fallback is invoked through `bash` rather than executed directly, so that a Windows machine building the desktop
+// head resolves the script through Git Bash instead of asking the operating system to run a file it has no interpreter
+// for.
+const passedVersion = process.env['MAILFATHOM_VERSION']?.trim() ?? '';
+
+const declaredVersion =
+    passedVersion.length > 0
+        ? passedVersion
+        : execFileSync('bash', [resolve(repositoryRoot, 'scripts/read-declared-version.sh')], {
+              encoding: 'utf8',
+          }).trim();
 
 // Asking the operating system for port zero is what makes the answer free rather than merely unused a moment ago.
 // The port is released again before Vite binds it, which leaves a window another process could take it in; the Vite
@@ -60,6 +73,25 @@ async function reserveFreePort(): Promise<number> {
 
 const forwardedArguments = process.argv.slice(2);
 const configurationPatch: Record<string, unknown> = { version: declaredVersion };
+
+// RPM's `Version` tag admits no hyphen — the hyphen is what separates its own release field — and a SemVer prerelease
+// identifier is introduced by exactly that character, so a nightly's version is not expressible as an RPM version at
+// all. The two constraints cannot both be met by one number: Windows needs the string to parse as SemVer, which is
+// what rules out spelling the prerelease any other way. The bundler passes the string through unvalidated, so an
+// unguarded nightly would either fail the Linux job or publish a package whose version field is malformed.
+//
+// The target is therefore dropped rather than the version bent, and dropped only for a version that carries a
+// prerelease identifier: a release builds every format `tauri.conf.json` names. Filtering the configured list rather
+// than restating it keeps that file the one place the formats are chosen.
+if (declaredVersion.includes('-')) {
+    const configuredBundle = JSON.parse(readFileSync(resolve(desktopShell, 'tauri.conf.json'), 'utf8')) as {
+        bundle: { targets: string[] };
+    };
+
+    configurationPatch['bundle'] = {
+        targets: configuredBundle.bundle.targets.filter((target) => target !== 'rpm'),
+    };
+}
 
 if (forwardedArguments[0] === 'dev') {
     const developmentPort = String(await reserveFreePort());

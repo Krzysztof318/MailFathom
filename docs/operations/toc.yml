@@ -116,6 +116,9 @@
     - name: The release procedure
       href: release-procedure.md
       description: Where the version number lives, how a build acquires it, and the sequence that turns a commit into a published release.
+    - name: The desktop client
+      href: desktop-client.md
+      description: Which platforms and formats a release publishes the client as an installable application in, what each installer does and does not do, and how a download is verified.
     - name: The documentation site
       href: documentation-site.md
       description: How this site is generated, which versions it carries, how a link in it is written, and what it publishes for an AI agent to read.

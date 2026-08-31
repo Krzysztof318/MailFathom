@@ -353,11 +353,11 @@ Publication runs the gates instead, in an order that spends the cheap ones first
    is built, so a change that put a variable back is caught by the next nightly rather than by the branch that made it.
 
 **Nothing is built from the commit until the verification gates have passed** — not the image, not the schema script,
-and not the command binaries. They are jobs in `Release` and `Nightly` themselves rather than
+not the command binaries, and not the desktop client. They are jobs in `Release` and `Nightly` themselves rather than
 steps inside the workflow that pushes the image, because the image is one of several things a channel builds and a gate
 inside it would gate only that one. The contract gate is the one that holds back less than the rest, and deliberately:
 it blocks the image and leaves the other artifacts alone, since what it asserts says nothing about whether a schema
-script or a command binary builds. Everything above is therefore the order of a whole publication rather than of the image alone: what a red run
+script, a command binary, or a desktop bundle builds. Everything above is therefore the order of a whole publication rather than of the image alone: what a red run
 costs is the gate that refused it, not four `dotnet publish` invocations and a schema generation beside a failing
 build. `scripts/test-agent-workflow.sh` reads both workflows' job graphs and fails one whose publishing job does not
 wait for the gates, so a further artifact is gated by being added rather than by being reviewed.
