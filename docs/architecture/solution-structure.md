@@ -1,6 +1,6 @@
 # Solution structure
 
-<!-- describes: backend/MailFathom.slnx, backend/Directory.Build.props, Version.props, backend/src/*/*.csproj, backend/tests/*/*.csproj, backend/tools/*/*.csproj, frontend/README.md, frontend/*/README.md, backend/src/Host/ServiceDefaultsExtensions.cs -->
+<!-- describes: backend/MailFathom.slnx, backend/Directory.Build.props, Version.props, backend/src/*/*.csproj, backend/tests/*/*.csproj, backend/tools/*/*.csproj, frontend/README.md, frontend/*/README.md, frontend/package.json, frontend/pnpm-workspace.yaml, frontend/src/*/package.json, frontend/src/*/tsconfig.json, backend/src/Host/ServiceDefaultsExtensions.cs -->
 
 MailFathom uses a clean-architecture modular monolith. Dependencies point inward from adapters and hosts toward application and domain contracts.
 

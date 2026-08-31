@@ -49,7 +49,7 @@ export default defineConfig(
         // The package boundary, stated where a reader meets it. `Client.Backend` declares neither React nor a
         // DOM-typed dependency, so the import below already fails to resolve and `document` and `fetch` are already
         // undeclared; this says why rather than leaving a resolution error to be read as a missing install.
-        files: ['src/Client.Backend/**/*.ts'],
+        files: ['src/Client.Backend/**/*.{ts,tsx}'],
         rules: {
             'no-restricted-imports': [
                 'error',

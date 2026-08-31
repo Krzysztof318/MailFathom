@@ -823,7 +823,7 @@ cd frontend
 pnpm install --frozen-lockfile   # restore, refusing to rewrite pnpm-lock.yaml
 pnpm build                       # the static bundle, into src/Client.App/dist/
 pnpm dev                         # the development server
-pnpm typecheck                   # both packages
+pnpm typecheck                   # both packages, plus the workspace's own configuration
 pnpm lint                        # every rule an error, no warning tolerated
 pnpm format                      # rewrite; pnpm format:check reports instead
 ```

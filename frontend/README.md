@@ -8,7 +8,7 @@ served beneath `/api/client`, which [the client endpoint](../docs/operations/cli
 pnpm install --frozen-lockfile   # restore, refusing to rewrite pnpm-lock.yaml
 pnpm dev                         # the development server
 pnpm build                       # the static bundle, into src/Client.App/dist/
-pnpm typecheck                   # both packages, under the strict set below
+pnpm typecheck                   # both packages and eslint.config.ts, under the strict set below
 pnpm lint                        # every rule an error, no warning tolerated
 pnpm format                      # rewrite; pnpm format:check reports instead
 ```
