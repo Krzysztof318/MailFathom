@@ -53,18 +53,24 @@ export function App({
     const [result, setResult] = useState<ClientResult<MailAccountDirectory> | null>(null);
     const baseAddress = adopted === null ? null : adopted.deployment.baseAddress;
     const mail = useRef<HTMLDivElement>(null);
-    const loading = useRef(true);
+    const focusedFor = useRef(adopted);
 
     // The view changed, so focus goes to the start of what replaced it rather than staying on a control that is no
     // longer there. Only in this direction: the connect screen places focus itself, on the field it is asking to have
-    // filled, and a parent effect runs after a child's and would take it back off. The first render is a cold start
-    // rather than a move between screens, which is what the guard is for.
+    // filled, and a parent effect runs after a child's and would take it back off. A cold start is not a view change,
+    // so opening against a deployment already adopted moves nothing.
+    //
+    // What separates the two is the deployment this effect last acted on rather than a flag saying the first render
+    // has happened. React invokes an effect twice on mount under `StrictMode`, which `main.tsx` mounts the application
+    // in, and a flag the first invocation cleared is already cleared when the second one reads it — so the guard would
+    // pull focus onto the mail on exactly the ordinary open it exists to leave alone. Both invocations see the same
+    // adopted deployment, so a comparison against it survives being run twice.
     useEffect(() => {
-        if (loading.current) {
-            loading.current = false;
-
+        if (adopted === focusedFor.current) {
             return;
         }
+
+        focusedFor.current = adopted;
 
         if (adopted !== null) {
             mail.current?.focus();

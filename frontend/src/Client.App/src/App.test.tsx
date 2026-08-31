@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+import { StrictMode } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientResponse, MailFathomTransport } from '@mailfathom/client-backend';
@@ -42,18 +43,29 @@ const servedFrom: AdoptedDeployment = {
 
 const nothingSent: MailFathomTransport = () => Promise.reject(new Error('This screen reaches no deployment.'));
 
-// The application is mounted the way `main.tsx` mounts it. Nothing reads a message without the provider above it, and
-// a test that supplied its own would be proving a second arrangement.
+// The application is mounted the way `main.tsx` mounts it, `StrictMode` included. Nothing reads a message without the
+// provider above it, and a test that supplied its own would be proving a second arrangement — and the mode is half of
+// that arrangement rather than a detail of it: it invokes every effect twice on mount, which is the difference between
+// a screen that behaves and one that behaves the first time it is run.
 function renderApp(deployment: AdoptedDeployment | null = servedFrom, send: MailFathomTransport = nothingSent): void {
     render(
-        <LocalizationProvider>
-            <App deployment={deployment} send={send} />
-        </LocalizationProvider>,
+        <StrictMode>
+            <LocalizationProvider>
+                <App deployment={deployment} send={send} />
+            </LocalizationProvider>
+        </StrictMode>,
     );
 }
 
 function chose(baseAddress: string): AdoptedDeployment {
     return { deployment: { baseAddress }, chosen: true };
+}
+
+// Which deployments were reached, in the order they were first reached. `StrictMode` invokes the effect that reads the
+// accounts twice on mount, as React does in development and as `main.tsx` therefore does here, so a repeat of the
+// address already being read is the mode rather than the screen — what these tests are about is which address that is.
+function deploymentsAsked(asked: string[]): string[] {
+    return [...new Set(asked)];
 }
 
 function recordingWhatIsAsked(asked: string[]): void {
@@ -178,7 +190,7 @@ describe('App deployment', () => {
         renderApp(chose('https://elsewhere.example.invalid'));
         await screen.findAllByRole('listitem');
 
-        expect(asked).toEqual(['https://elsewhere.example.invalid/api/client/accounts']);
+        expect(deploymentsAsked(asked)).toEqual(['https://elsewhere.example.invalid/api/client/accounts']);
     });
 
     it('asks for an address when nothing has said where the deployment is', () => {
@@ -210,6 +222,15 @@ describe('App deployment', () => {
 
         expect(screen.getByRole('textbox', { name: 'Deployment address' })).toBeDefined();
         expect(screen.queryByRole('list')).toBeNull();
+    });
+
+    it('leaves focus where the document opened it when the deployment was already known', async () => {
+        renderApp();
+        await screen.findAllByRole('listitem');
+
+        // A cold start is not a view change. `main.tsx` mounts under `StrictMode`, so every effect runs twice here as
+        // it does under `pnpm dev`, and a guard that only survives one invocation would have pulled focus by now.
+        expect(document.activeElement).toBe(document.body);
     });
 
     it('puts focus at the start of the mail once the deployment has been named, rather than leaving it behind', async () => {
@@ -247,7 +268,7 @@ describe('App deployment', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
         await screen.findAllByRole('listitem');
 
-        expect(asked).toEqual([
+        expect(deploymentsAsked(asked)).toEqual([
             'https://first.example.invalid/api/client/accounts',
             'https://second.example.invalid/api/client/accounts',
         ]);
