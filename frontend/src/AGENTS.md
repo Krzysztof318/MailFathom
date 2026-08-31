@@ -19,6 +19,16 @@ credential is composed, or a permission is judged — each of those is the servi
 a second implementation that will disagree with the first. When a screen appears to need one, the answer is a route on
 `/api/client` that answers it, which is service work with an issue of its own.
 
+It is also a **single-page application**: one document, loaded once, whose every later screen is rendered rather than
+fetched. Both heads are that same page — the web head is the bundle `Client.App/vite.config.ts` builds, and the desktop
+head is that bundle in a WebView — so it is a property of the client rather than a fact about browsers. Three things
+follow. Navigation is the application's own state, so moving between screens changes what is rendered and never asks
+for a document. A reload is a cold start rather than a way out, which is why § _UX_ refuses it as the only escape from
+an error state: it discards everything the session holds in order to recover from something the screen could have
+recovered from itself. And whatever carries routes is a decision rather than an import — the workspace pins no router,
+`frontend/AGENTS.md` holds that among four deliberate absences, and adopting one is an issue with a licence review
+rather than a line added by the first screen that wanted a second address.
+
 ## The package boundary, and what may never cross it
 
 The two packages and the three mechanisms that hold them apart are in [`frontend/README.md`](../README.md). What that
@@ -122,6 +132,21 @@ target: a difference between the heads is a CSS one — a safe-area inset, a poi
 concern that belongs to the shell rather than to the application. A screen that cannot be written without knowing which
 head it is running on is a design that has not been finished, and taking that branch is what turns one client into two.
 
+**What a screen adapts to instead is the width it has been given and what the pointer can do.** Those two are the whole
+of it, and the refusal above is not an instruction to adapt to nothing: a window is resized far more often than a head
+is changed, and one head produces both shapes anyway. A half-width window on a desktop gets the composition a
+phone-width viewport gets — a stack, not a wide layout that stopped fitting — and the same desktop maximized gets the
+wide one, out of the same tree at the same breakpoint. `pointer: coarse` is asked where a target has to be big enough
+for a finger and `hover` where an affordance would otherwise exist only under one; neither is a question about the
+operating system, and a touch screen on a desktop answers both the way a phone does.
+
+The bar is stated rather than left to taste. Every screen is usable from 320 CSS pixels upward and at every width above
+it, with no horizontal scrolling of the page: content reflows, and what a narrow width cannot show at once is reached
+rather than dropped. Nothing is hidden by width alone — a control that disappears below a breakpoint has moved
+somewhere a reader can still get to, or it was not needed at the wide width either. The number is the narrowest
+viewport a supported head presents rather than a threshold anybody measured a failure at, and a window dragged narrower
+than any phone is where the client is allowed to scroll.
+
 ## UX: nothing waits in silence, and nothing waits without a way out
 
 This is the contract's oldest rule and it survived the platform it was written for. It is an obligation on every surface,
@@ -155,6 +180,10 @@ so this is written to be mechanically visible in a diff rather than remembered.
   plus the `@theme` block in `Client.App/src/styles.css`, which is where MailFathom's own values are declared and the
   only place a hexadecimal colour is written. An arbitrary-value utility — `text-[#0048e0]`, `p-[13px]`, `text-[15px]` —
   is the thing this rule refuses: a value that needs one is a token missing from the theme, so add it there.
+- **A breakpoint is a token like any other.** The widths a composition changes at are declared once, beside the colours,
+  and every screen composes against those names — so the point where narrow stops is one decision rather than one per
+  screen. An arbitrary width such as `min-[734px]:` is the same defect as `text-[#0048e0]`, and is answered the same
+  way: add the breakpoint to the theme.
 - **A repeated structure has one shape, stated once.** The second screen needing a card, a list row, a section header,
   or a page title uses the first one's component rather than a similar arrangement of utilities. Two implementations of
   one shape is how a client stops looking like one product, and it is invisible in review because each diff is fine.
