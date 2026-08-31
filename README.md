@@ -130,6 +130,8 @@ MailFathom is being built to change what mail *is* to software: keep the local c
 
 The tools are the foundation, not the product. Sending was the capability whose effect first reached somebody who is not this mailbox's owner; what remains of writing to a mailbox is moving, filing, and deleting. Every later capability takes the route these took: a named permission, a recorded change, and a pass of its own that owns the mail server.
 
+**MailFathom's own client is being rebuilt**, in React and TypeScript under [`frontend/`](https://github.com/Krzysztof318/MailFathom/tree/main/frontend), the Uno Platform one having been withdrawn. No release carries a client page yet, so what a deployment serves today is the client *surface* — an HTTP API under `/api/client` that a client of your own calls. → [The client endpoint](https://krzysztof318.github.io/MailFathom/operations/client-endpoint.html)
+
 **Ideas, not yet scope** — recorded as open questions, each waiting on a decision rather than on effort. [Discussions](https://github.com/Krzysztof318/MailFathom/discussions) is where they are argued, and the `Ideas` category is open to yours: [encrypted and signed mail](https://github.com/Krzysztof318/MailFathom/issues/75), [antivirus scanning of stored attachments](https://github.com/Krzysztof318/MailFathom/issues/77), [OAuth for outbound IMAP and SMTP](https://github.com/Krzysztof318/MailFathom/issues/78), and skill-based jobs, whose body is an instruction an agent carries out against a slice of your mail rather than a deterministic rule.
 
 ## Contributing

@@ -7,9 +7,9 @@ packages, and what separates them is the resolver rather than the folder:
 - `Client.App/` — the application, which depends on `Client.Backend`. Nothing depends on `Client.App`.
 
 [`frontend/README.md`](../README.md) is the page for the workspace itself: the commands, the boundary and how to
-reproduce it, the strict TypeScript settings, the styling, and what the build produces. The source contract that will
-govern what is written _in_ these packages is `AGENTS.md` beside this file, and it has not landed yet — until it does,
-the repository-root instructions are the whole of what applies here.
+reproduce it, the strict TypeScript settings, the styling, and what the build produces. What governs what is written
+_in_ these packages — the boundary between the two, the state model, the UX, UI, accessibility, and performance
+obligations a screen meets — is [`AGENTS.md`](AGENTS.md) beside this file.
 
 Nothing about the service moved when the Uno Platform client that stood here was withdrawn. The client surface is the
 HTTP API served beneath `/api/client`, which is a transport surface of its own with its own listener and its own

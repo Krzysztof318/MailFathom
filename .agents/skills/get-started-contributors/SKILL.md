@@ -115,8 +115,10 @@ offer to go deeper on any one of them instead of expanding all six.
 
 3. **Where things live.** `backend/` holds the .NET stack: `backend/src/` holds the clean-architecture boundaries —
    `Domain`, `Application`, `Infrastructure`, `AI`, `Mcp`, `Host`, `Cli` — and `backend/tests/` mirrors them.
-   `frontend/` carries the same two directories for the client, and nothing else: the Uno Platform client that stood
-   there was withdrawn and the React one has not landed, so each holds a placeholder README and no build.
+   `frontend/` carries the same two directories for the client, which is a pnpm workspace of React and TypeScript:
+   `frontend/src/` holds the two packages, `Client.Backend` and `Client.App`, and `frontend/tests/` holds a placeholder
+   README, because the client's suite is written with the screens it covers. It needs Node and pnpm rather than the .NET
+   SDK.
    `docs/` states what the code *does*, and `docs/decisions/` holds the ADRs a change is written to be
    consistent with. `deploy/`, `scripts/`, and `backend/tools/` are
    the deployment assets, the gates, and the development utilities — `backend/tools/SyntheticMail` fills a mailbox to work
@@ -135,8 +137,9 @@ offer to go deeper on any one of them instead of expanding all six.
    the history. A new
    dependency, service, image, or copied sample also needs a row in `THIRD_PARTY_LICENSES.md` in the same pull request.
    `CONTRIBUTING.md` § *Licensing your contribution* is the whole of it. Say one more thing here, because it runs the
-   other way — what this repository hands *them*: everything a restore brings is permissive, and `frontend/` restores
-   nothing at all.
+   other way — what this repository hands *them*: everything a restore brings is permissive, in both stacks. The
+   client's own graph is the larger of the two and is reviewed the same way, which is why `THIRD_PARTY_LICENSES.md`
+   carries `pnpm --dir frontend licenses list` beside the service's command.
 
 5. **The file header, and no name beside it.** Every file carries the same three lines naming the project, the licence,
    and the repository. In a C# file it is never typed — `scripts/verify-fast.sh` inserts it and `IDE0073` fails the
