@@ -220,7 +220,7 @@ else
       fi
     fi
 
-    # The client stack's flow, which is the fast loop's four steps with the formatting pass verifying
+    # The client stack's flow, which is the fast loop's five steps with the formatting pass verifying
     # instead of repairing, and the build added — the same difference this gate has from that loop on the
     # service side. `pnpm build` is what proves the stack still produces the directory of static files an
     # image serves, which nothing else here would notice breaking, because the type check reads the source
@@ -234,6 +234,7 @@ else
       pnpm --dir frontend install --frozen-lockfile
       pnpm --dir frontend run lint
       pnpm --dir frontend run typecheck
+      pnpm --dir frontend run test
       pnpm --dir frontend run format:check
       pnpm --dir frontend run build
     fi

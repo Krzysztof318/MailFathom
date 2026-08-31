@@ -1,6 +1,6 @@
 # Local development
 
-<!-- describes: scripts/**, global.json, MailFathom.code-workspace, .config/dotnet-tools.json, .config/typos.toml, .config/CodeCoverage.proj, .config/testconfig.json, backend/src/AppHost/**, backend/src/Infrastructure/Persistence/MailFathomDbContextDesignTimeFactory.cs, .github/workflows/**, backend/tests/IntegrationTests/ProviderAdapters/**, backend/tests/IntegrationTests/ObjectStorage/**, backend/tools/**, frontend/package.json, frontend/pnpm-workspace.yaml, frontend/.npmrc, frontend/tsconfig.base.json, frontend/tsconfig.json, frontend/eslint.config.ts -->
+<!-- describes: scripts/**, global.json, MailFathom.code-workspace, .config/dotnet-tools.json, .config/typos.toml, .config/CodeCoverage.proj, .config/testconfig.json, backend/src/AppHost/**, backend/src/Infrastructure/Persistence/MailFathomDbContextDesignTimeFactory.cs, .github/workflows/**, backend/tests/IntegrationTests/ProviderAdapters/**, backend/tests/IntegrationTests/ObjectStorage/**, backend/tools/**, frontend/package.json, frontend/pnpm-workspace.yaml, frontend/.npmrc, frontend/tsconfig.base.json, frontend/tsconfig.json, frontend/eslint.config.ts, frontend/vitest.config.ts -->
 
 Use the .NET SDK pinned in `global.json`. Test execution is configured for Microsoft Testing Platform through the repository-level `global.json` test runner setting.
 
@@ -825,6 +825,7 @@ pnpm build                       # the static bundle, into src/Client.App/dist/
 pnpm dev                         # the development server
 pnpm typecheck                   # both packages, plus the workspace's own configuration
 pnpm lint                        # every rule an error, no warning tolerated
+pnpm test                        # both packages' suites, once, non-interactively
 pnpm format                      # rewrite; pnpm format:check reports instead
 ```
 
@@ -835,15 +836,18 @@ lock file being regenerated fails here rather than resolving to something nobody
 Four things around those commands are worth knowing before they are discovered:
 
 - **Both verification gates run this flow**, through `scripts/resolve-changed-stacks.sh`, for any change that reaches
-  the client stack. The fast loop restores, lints, type-checks, and formats — repairing, the way `dotnet format` does
-  there — and the full gate runs the same steps with the formatting pass verifying instead, and the build after them.
+  the client stack. The fast loop restores, lints, type-checks, runs the suite, and formats — repairing, the way
+  `dotnet format` does there — and the full gate runs the same steps with the formatting pass verifying instead, and
+  the build after them.
   [Which stack a gate runs](agent-workflow.md#which-stack-a-gate-runs) carries how that is decided and what keeps it in
   step with `ci.yml`.
 - **`CI`'s `Frontend` job asserts nothing yet.** It is gated on the `frontend` path filter and calls
   `.github/workflows/build-test-frontend.yml`, which keeps its `workflow_call` contract and one job that reports rather
   than builds. Filling it in for this stack is a change to that file rather than to every caller.
-- **There is no client test suite yet**, so `frontend/tests/` holds a placeholder README and no command above runs one.
-  It is written with the screens it covers.
+- **`pnpm test` is the whole of the client suite.** It is Vitest, one project per package — `Client.Backend` without a
+  DOM and `Client.App` in jsdom with React Testing Library — and a test file sits beside the source it covers rather
+  than under `frontend/tests/`, which holds the suite's contract and no test. `frontend/tests/AGENTS.md` is that
+  contract.
 - **Nothing the service does for a client changed**, because none of it was the client's: the surface under
   `/api/client` is an endpoint of its own — [the client endpoint](client-endpoint.md) is the page — and `Host` serves
   whatever files an image carries beneath its web root. No current image carries any, so a deployment that switches

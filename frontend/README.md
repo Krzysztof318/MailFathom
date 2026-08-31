@@ -10,6 +10,7 @@ pnpm dev                         # the development server
 pnpm build                       # the static bundle, into src/Client.App/dist/
 pnpm typecheck                   # both packages and eslint.config.ts, under the strict set below
 pnpm lint                        # every rule an error, no warning tolerated
+pnpm test                        # both packages' suites, once, non-interactively
 pnpm format                      # rewrite; pnpm format:check reports instead
 ```
 
@@ -52,6 +53,14 @@ maximum as a named entry with its reason, and there is one.
 
 A lint violation is a build failure. `pnpm lint` runs with `--max-warnings 0`, so a rule the plugins ship as a warning
 still fails — which is what `TreatWarningsAsErrors` and the analyzer set are to the service half of this repository.
+
+## The suite
+
+`pnpm test` is the whole of how the client is tested, and `vitest.config.ts` declares one Vitest project per package
+because the two are tested differently: `Client.Backend` is ordinary logic run without a DOM, and `Client.App` is
+components rendered into jsdom with React Testing Library. A test file sits beside the source it covers — the package
+boundary above is the reason, and [`tests/AGENTS.md`](tests/AGENTS.md) is where that and the rest of the suite's policy
+are decided.
 
 ## Whitespace is decided in `.editorconfig`
 
