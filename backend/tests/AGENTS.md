@@ -1,8 +1,8 @@
 # Unit Test Instructions
 
-These instructions apply under `backend/tests/` in addition to the repository root instructions.
+These instructions apply under `backend/tests/` in addition to `backend/AGENTS.md` and the repository root instructions.
 
-The **.NET and C# conventions** in the root `AGENTS.md` apply to test code as well: a test is C# compiled by the same build with the same analyzers, so naming, async shape, LINQ, disposal, and the rest hold here exactly as they do in production code. The root file also carries the unit-test rules both stacks share. What follows is this suite's own.
+The **.NET and C# conventions** in `backend/AGENTS.md` apply to test code as well: a test is C# compiled by the same build with the same analyzers, so naming, async shape, LINQ, disposal, and the rest hold here exactly as they do in production code. That file also carries the test-naming convention and the framework the suites run on, and the root one the obligations every stack's tests share. What follows is this suite's own.
 
 ## Unit testing policy
 
