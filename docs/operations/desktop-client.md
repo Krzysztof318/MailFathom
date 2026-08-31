@@ -20,7 +20,11 @@ client](local-development.md#building-and-testing-the-client) is how a developer
 | Windows, x86-64 | NSIS `-setup.exe` | `windows-latest` |
 
 `frontend/src-tauri/tauri.conf.json` is where those three formats are chosen, and the build publishes what that
-configuration produces rather than a list of its own.
+configuration produces rather than a list of its own. **A nightly is the one exception, and it publishes no `.rpm`**:
+RPM's `Version` tag admits no hyphen, a nightly's version carries a prerelease identifier introduced by exactly that
+character, and Windows needs the same string to parse as SemVer — so the two cannot be satisfied by one number, and
+`src-tauri/run-tauri.ts` drops that one target rather than publishing a package whose version field is malformed. A
+release, whose version is a plain `x.y.z`, builds all three.
 
 **Two runners rather than one, and that is the difference from every other artifact this project publishes.** The
 service's container image and the `mfctl` binaries are built for every platform on one Linux runner, because an IL

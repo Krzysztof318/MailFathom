@@ -7327,6 +7327,14 @@ the_desktop_publication_is_stamped_with_the_version_its_caller_resolved() {
   grep -qF "process.env['MAILFATHOM_VERSION']" "$wrapper" ||
     failures+='run-tauri.ts does not read MAILFATHOM_VERSION, so a publication cannot name the version. '
 
+  # The one shape of version this repository produces that a bundle format cannot express. RPM's version
+  # field admits no hyphen and a SemVer prerelease identifier is introduced by one, so a nightly cannot
+  # name an RPM version at all — and the string has to stay SemVer for the Windows installer, which is
+  # what rules out spelling the prerelease some other way. The wrapper drops that one target instead,
+  # which is a line nothing else would notice the loss of until a nightly's Linux job failed.
+  grep -qF "target !== 'rpm'" "$wrapper" ||
+    failures+='run-tauri.ts does not drop the rpm target, so a prerelease version reaches a bundler that cannot hold it. '
+
   [[ "$(extract_workflow_job_uses "$workflow_directory/release.yml" desktop-client)" == './.github/workflows/build-desktop-client.yml' ]] ||
     failures+='release.yml: desktop-client does not call build-desktop-client.yml. '
   [[ "$(extract_workflow_job_uses "$workflow_directory/nightly.yml" desktop-client)" == './.github/workflows/build-desktop-client.yml' ]] ||

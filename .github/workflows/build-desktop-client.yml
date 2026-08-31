@@ -134,6 +134,10 @@ jobs:
       # reads `Version.props` itself, which would name the release rather than the nightly identifier the caller
       # resolved. It is merged into the Tauri configuration, so it names the bundles, the installer, and the version the
       # installed application reports, all from one number.
+      #
+      # A version carrying a prerelease identifier is also what makes the wrapper drop the `rpm` target, because RPM's
+      # own version field cannot hold one — so a nightly's Linux job produces a `.deb` and nothing else, and a release's
+      # produces both. `docs/operations/desktop-client.md` carries that reading.
       - name: Build the desktop bundles
         env:
           MAILFATHOM_VERSION: ${{ inputs.version }}
