@@ -67,4 +67,7 @@ if (forwardedArguments[0] === 'dev') {
     configurationPatch['build'] = { devUrl: `http://localhost:${developmentPort}` };
 }
 
-await run([...forwardedArguments, '--config', JSON.stringify(configurationPatch)], 'run-tauri');
+// Everything after `--` is handed to the runner, which is Cargo. `--locked` is what makes a `Cargo.toml` that has
+// moved away from `Cargo.lock` a refusal to build rather than a lock file quietly rewritten under the reviewed crate
+// closure, and it is the counterpart of the `--frozen-lockfile` both verification gates install pnpm with.
+await run([...forwardedArguments, '--config', JSON.stringify(configurationPatch), '--', '--locked'], 'run-tauri');
