@@ -77,8 +77,16 @@ export default defineConfig({
     ],
 
     webServer: {
-        command: `pnpm --filter @mailfathom/client-app exec vite preview --port ${String(previewPort)} --strictPort`,
+        // `--host 127.0.0.1` rather than the default, which is the name `localhost`: where that name resolves to `::1`
+        // first — as it does on a GitHub-hosted runner — the server listens on the IPv6 loopback alone and the address
+        // below is unreachable, which arrives as the web server timing out rather than as an address mismatch. Binding
+        // the same literal the suite navigates to removes the resolution from the question.
+        command: `pnpm --filter @mailfathom/client-app exec vite preview --host 127.0.0.1 --port ${String(previewPort)} --strictPort`,
         url: previewOrigin,
+
+        // Piped rather than ignored, so a server that refuses to start says why in the run that failed. It prints one
+        // line naming the address it bound, which is the whole diagnosis for this class of failure.
+        stdout: 'pipe',
 
         // Never reused, even though the port is this worktree's own. A server already listening on it is either a
         // stale one from a crashed run, serving a bundle this one did not build, or somebody else's — and a suite that
