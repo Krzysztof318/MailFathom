@@ -364,10 +364,6 @@ config:
 # bundle travels inside the container image, so turning this on pulls nothing, renders no second workload, and publishes
 # no second host — it is one setting, and what it exposes is the application's own code rather than any mail.
 #
-# **No image carries a bundle today.** The Uno Platform client was withdrawn and the client is being rebuilt in React,
-# so turning this on fails at startup on every current release. It stays here as the deployment plumbing the rebuilt
-# client lands against; leave it off.
-#
 # Three things have to be true before it is useful, and the chart can see one of them:
 #
 #   * `ClientEndpoint:Enabled` in `config.files`, because the page is served on that surface's listeners and calls it.

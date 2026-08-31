@@ -6809,13 +6809,15 @@ quick_start_serves_the_administrative_endpoint_on_a_port_of_its_own() {
   assert_excludes '8090' "$off_root/deploy/compose/compose.override.yaml"
 }
 
-# The quick start prepares no MailFathom client, and this is what holds it to that. The Uno Platform client whose
-# bundle travelled inside the image was withdrawn and the React one has not shipped, so a run that wrote the client
-# surface, the page setting, or a credential to sign in with would produce a deployment that refuses to start — the
-# host names `ClientEndpoint:Application:Enabled` when the entry document is absent. What it still ends with is the MCP
-# endpoint, and the report says which of the two a person is getting.
-quick_start_prepares_no_client_while_the_stack_carries_none() {
+# The quick start prepares the client, and this is what holds it to both halves of that. The bundle travels inside the
+# image, so serving it is the page setting in .env and the surface it is served on in the configuration file — the two
+# together, because the page is served on that surface's listeners and enabling one without the other is refused at
+# startup naming both. The surface takes `password` rather than nothing, because it reads mail. No credential is
+# generated for it: the client draws its own sample data and calls no route yet, so a password would be a record
+# nothing can present, and generating one would send somebody to a sign-in the page does not have.
+quick_start_prepares_the_client_it_can_serve() {
   local checkout_root compose_directory
+  local without_client_root
   local output_file="$test_directory/quick-start-client-log"
 
   checkout_root="$(stage_quick_start_checkout 'quick-start-client')"
@@ -6823,19 +6825,26 @@ quick_start_prepares_no_client_while_the_stack_carries_none() {
 
   run_quick_start "$checkout_root" --provider fastmail > "$output_file" 2>&1
 
-  assert_excludes 'ClientEndpoint' "$compose_directory/config/10-mailfathom.json"
-  assert_excludes 'MAILFATHOM_CLIENT' "$compose_directory/.env"
+  assert_contains 'ClientEndpoint' "$compose_directory/config/10-mailfathom.json"
+  assert_contains '"Method": "password"' "$compose_directory/config/10-mailfathom.json"
+  assert_contains 'MAILFATHOM_CLIENT=true' "$compose_directory/.env"
 
   if compgen -G "$compose_directory/secrets/client-*-password" > /dev/null; then
-    printf 'A credential was generated for a client this deployment cannot serve.\n' >&2
+    printf 'A credential was generated for a page that has no sign-in to present it at.\n' >&2
     return 1
   fi
 
-  # Said rather than left out, because somebody who read the old report is looking for an address to open.
-  assert_contains 'no MailFathom client to open' "$output_file"
-
-  # The MCP endpoint is still the whole point of the run, so the report has to arrive at one.
+  # The address is what somebody is looking for at the end of a run, beside the MCP endpoint the run is also for.
+  assert_contains 'The MailFathom client answers at' "$output_file"
   assert_contains '/mcp' "$output_file"
+
+  # And declining it leaves the deployment the run would otherwise have produced: neither the page nor the surface,
+  # because publishing a mail-reading endpoint for nobody is what --no-client is for.
+  without_client_root="$(stage_quick_start_checkout 'quick-start-no-client')"
+  run_quick_start "$without_client_root" --provider fastmail --no-client > /dev/null 2>&1
+
+  assert_excludes 'ClientEndpoint' "$without_client_root/deploy/compose/config/10-mailfathom.json"
+  assert_excludes 'MAILFATHOM_CLIENT' "$without_client_root/deploy/compose/.env"
 }
 
 # A mail server the platform's own policy refuses is not something a first run can diagnose from the error it produces,
@@ -7617,6 +7626,52 @@ the_development_tooling_never_reaches_a_published_artifact() {
   # The image's build context is an allow-list, so the tool reaches it only if a line says so.
   if grep -qE '^!/backend/tools' "$source_repository_root/deploy/docker/Dockerfile.dockerignore"; then
     failures+='deploy/docker/Dockerfile.dockerignore admits backend/tools/ into the container build context. '
+  fi
+
+  if [[ -n "$failures" ]]; then
+    printf '%s\n' "$failures" >&2
+    return 1
+  fi
+}
+
+# The condition the web head was adopted under: it changes no deployment shape. The client is built by a stage of the
+# image's own build, so the one thing that may cross into the runtime stage is the directory of static files that stage
+# produced — a Node runtime, a package manager, or a `node_modules` reaching it would put a second process into Compose,
+# Quadlet, Helm, and the native systemd service at once, which is a decision no styling change may take by accident.
+the_runtime_image_carries_the_client_bundle_and_no_node() {
+  local dockerfile="$source_repository_root/deploy/docker/Dockerfile"
+  local runtime_stage crossings toolchain_stages failures=''
+
+  # From the runtime stage's own FROM to the end of the file, which is where this image is assembled.
+  runtime_stage="$(awk '/^FROM .* AS runtime$/ { in_runtime = 1 } in_runtime' "$dockerfile")"
+
+  if [[ -z "$runtime_stage" ]]; then
+    printf 'deploy/docker/Dockerfile declares no stage named runtime, so nothing here reads the published image.\n' >&2
+    return 1
+  fi
+
+  crossings="$(grep -c 'COPY --from=client' <<< "$runtime_stage" || true)"
+
+  if [[ "$crossings" != '1' ]]; then
+    failures+="the runtime stage takes $crossings copies from the client stage rather than exactly one. "
+  fi
+
+  if ! grep -q 'COPY --from=client .*Client\.App/dist \./wwwroot$' <<< "$runtime_stage"; then
+    failures+='the runtime stage does not copy the client build output into its web root. '
+  fi
+
+  # Anything the client stage installed rather than produced. Comment lines are dropped first, because this section
+  # explains in prose what it refuses to carry.
+  if grep -vE '^[[:space:]]*#' <<< "$runtime_stage" |
+    grep -qE 'node_modules|(^|[^[:alnum:]_-])(npm|pnpm|node)([^[:alnum:]_.-]|$)'; then
+    failures+='the runtime stage names a Node runtime, a package manager, or a module directory. '
+  fi
+
+  # And the toolchain image is the client stage's alone, so no second stage built on it could become the runtime.
+  toolchain_stages="$(grep -c 'FROM .*${NODE_IMAGE}' "$dockerfile" || true)"
+
+  if [[ "$toolchain_stages" != '1' ]]; then
+    failures+="the Node base image is named by $toolchain_stages stages rather than by the client stage alone. "
   fi
 
   if [[ -n "$failures" ]]; then
@@ -8453,7 +8508,7 @@ run_test quick_start_refuses_a_mailbox_that_accepts_no_password
 run_test quick_start_authenticates_the_mcp_endpoint_unless_asked_otherwise
 run_test quick_start_serves_the_administrative_endpoint_on_a_port_of_its_own
 run_test quick_start_serves_the_administrative_endpoint_wherever_a_credential_has_to_be_minted
-run_test quick_start_prepares_no_client_while_the_stack_carries_none
+run_test quick_start_prepares_the_client_it_can_serve
 run_test quick_start_prepares_the_tls_policy_a_legacy_mail_server_needs
 run_test quick_start_refuses_a_value_that_would_write_broken_configuration
 run_test quick_start_says_it_is_an_evaluation_rather_than_a_recommended_deployment
@@ -8471,6 +8526,7 @@ run_test a_comment_never_cancels_a_queued_review
 run_test the_reviewer_listens_for_the_dispatch_it_sends
 run_test the_reviewer_resolves_one_claude_credential_everywhere
 run_test the_development_tooling_never_reaches_a_published_artifact
+run_test the_runtime_image_carries_the_client_bundle_and_no_node
 run_test the_required_check_aggregates_every_job_in_ci
 run_test the_stacks_change_filters_name_no_path_in_each_other
 run_test the_gates_decide_from_the_change_filters_ci_declares

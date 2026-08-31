@@ -21,16 +21,18 @@ than anything in here. [Applying the database schema](database-schema.md) docume
 
 ## What is inside, and what is not
 
-The runtime image is built on `mcr.microsoft.com/dotnet/aspnet:10.0.11-noble-chiseled-extra` and is about 88 MB, down
-from about 105 MB while it still carried the client bundle described below.
+The runtime image is built on `mcr.microsoft.com/dotnet/aspnet:10.0.11-noble-chiseled-extra` and is about 88 MB
+uncompressed, of which the client bundle described below is about 230 kB — a quarter of one percent, measured with
+`docker image inspect` and `docker history` on a local build of this Dockerfile.
 Chiseled means there is no shell, no package manager, and no HTTP client: a process that reaches the container finds
 almost nothing to use. `-extra` carries ICU and tzdata, which the plain chiseled image does not — MailFathom decodes
 internationalized headers, folds case for search, and formats instants for several time zones, and the invariant
 globalization the smaller image forces would quietly change how mail from outside one alphabet is read.
 
-It contains the published application and nothing else — plus the two files that licensing requires travel with it,
-`/app/LICENSE` and `/app/NOTICE`. No SDK, no source tree, no
-repository history, no test
+It contains the published application and the client bundle under `/app/wwwroot` — plus the two files that licensing
+requires travel with it, `/app/LICENSE` and `/app/NOTICE`. **No Node runtime and no `node_modules`:** the client is
+built in a stage of its own and what crosses into the runtime image is a directory of static files, so no deployment
+shape gains a second process or a second service. No SDK, no source tree, no repository history, no test
 artifacts, no build cache, no credential, and no certificate. The XML documentation files every project generates are
 dropped at publish, because none is read at run time and shipping them would put the repository's commentary about its
 own internal contracts into an artifact an operator can unpack. The portable symbol files stay, because they are what
@@ -45,22 +47,28 @@ prefers it, so the file bounding the context travels with the definition that us
 Every base image is pinned to an explicit patch version rather than to a floating `10.0`, so a rebuild months from now
 resolves what the change was reviewed against.
 
-## No client travels in it
+## The client travels in it
 
-**The image carries no client page.** The Uno Platform client whose browser head used to be published into
-`/app/wwwroot` was withdrawn — the platform did not work out for this project — and the client is being rebuilt in
-React, so this Dockerfile has no client stage and the runtime image's web root is empty. A deployment that switches
-`ClientEndpoint:Application:Enabled` on against a current image is refused at startup by name, rather than serving a
-page of 404s.
+**The image carries MailFathom's own client** under `/app/wwwroot`, built by a stage of its own from the pnpm
+workspace under `frontend/`: a pinned Node image, `pnpm install --frozen-lockfile`, and `pnpm build`, whose output is
+the directory of static files copied into the runtime image's web root. Nothing else crosses. **The runtime carries no
+Node process and no `node_modules`**, which is the condition the web head was adopted under: serving the client adds a
+static-file middleware to one process and changes no deployment shape.
 
-Nothing about the *service* moved with it. `Host` still puts a static-file middleware in front of the client
+What it costs an operator who does not want it is **about 230 kB**, unconditionally, because the bundle is copied into
+every image whether or not a deployment serves it. That is a quarter of a percent of the 88 MB the image measures, and
+it buys the property that turning the client on is a setting rather than a different artifact to pull.
+
+Nothing about the *service* changes with it. `Host` still puts a static-file middleware in front of the client
 surface's listeners where that setting says so, and what it serves is whatever the web root holds. The composition
-root's whole knowledge of a client is still whether that directory has an `index.html` in it — which is what keeps
-the next client a directory of files copied in beside the application rather than a project this build references.
+root's whole knowledge of a client is still whether that directory has an `index.html` in it — which is what keeps the
+client a directory of files copied in beside the application rather than a project this build references, and what
+made replacing one client stack with another a change to this file rather than to the service.
 
 **No project under `backend/` references one under `frontend/`**, the service solution names none there, and the
-service assembly's reference list is asserted by a unit test. That was true while the two stacks met in this build and
-is true now that they do not.
+service assembly's reference list is asserted by a unit test. This build is the one place both stacks are compiled by
+one command, and it shares nothing between them: separate sources, separate package managers, separate pins and lock
+files, and a directory of files as the only thing that crosses.
 
 **Serving it is off**, in this image and in every deployment asset built on it. `ClientEndpoint:Application:Enabled`
 turns it on and [the client endpoint](client-endpoint.md#serving-the-client-from-the-deployment) is the page; an image
@@ -322,7 +330,9 @@ Publication runs the gates instead, in an order that spends the cheap ones first
    beside the gate above rather than behind it: the two solutions share no project, and the contract suite installs
    nothing and answers in twenty seconds, so putting either in sequence would delay a verdict without sharpening one.
    The client's gate blocks the push on both channels, and what it asserts is the browser suite: the client's bundle is
-   built and driven in a real browser, so a publication cannot carry a client that does not load. The contract gate — the licensing headers, the page contracts, and the chart rendered against the
+   built and driven in a real browser, so a publication cannot carry a client that does not load. The image build below
+   compiles that bundle again on its own, which is what makes the dependency worth as much as the assertion — a client
+   that does not build is an image that does not build. The contract gate — the licensing headers, the page contracts, and the chart rendered against the
    manifests committed beside it — blocks a release and reports on a nightly, which is the same difference the
    vulnerability scan draws and for the same reason: a release is one claim about one commit, and a nightly exists to
    be tried.

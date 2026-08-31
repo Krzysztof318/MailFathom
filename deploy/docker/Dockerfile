@@ -24,6 +24,10 @@ ARG DOTNET_SDK_IMAGE=mcr.microsoft.com/dotnet/sdk:10.0.302-noble
 # instants for several time zones, so invariant globalization — what the plain chiseled image forces — would quietly
 # change how mail from outside one alphabet is read. The size saved is not worth that.
 ARG DOTNET_ASPNET_IMAGE=mcr.microsoft.com/dotnet/aspnet:10.0.11-noble-chiseled-extra
+# The client stack's toolchain, and it appears in no runtime stage. `library/node` is written out in full because the
+# survey in scripts/update-dependencies.sh reads this line and asks Docker Hub for the repository as named; the
+# active LTS line is what `frontend/package.json` declares its floor against in `engines`.
+ARG NODE_IMAGE=docker.io/library/node:24.20.0-bookworm-slim
 
 
 ########################################################################################################################
@@ -97,6 +101,51 @@ RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
         -p:PublishDocumentationFiles=false \
         -p:PublishReferencesDocumentationFiles=false \
         --output /app
+
+
+########################################################################################################################
+# Client: the browser bundle, published as static files. Runs once, on the build platform.
+########################################################################################################################
+
+# A stage of its own, and the one place in this repository where both stacks are built by one command. Nothing is
+# shared with the stage above: a separate workspace, a separate package manager, separate pins and lock file, and no
+# reference in either direction — `backend/MailFathom.slnx` names nothing under frontend/ and `Host` references no
+# project there, which HostDependencyBoundaryTests asserts. What crosses is a directory of files, copied into the
+# runtime image below, which is why serving it costs the composition root a static-file middleware and nothing else.
+#
+# Pinned to BUILDPLATFORM for the same reason the stage above is, and more strongly: what comes out is JavaScript, CSS,
+# and HTML, which no architecture of the runtime image has anything to do with.
+FROM --platform=$BUILDPLATFORM ${NODE_IMAGE} AS client
+
+WORKDIR /source
+
+# The restore inputs first, so editing a component does not invalidate the install layer. `pnpm-workspace.yaml` names
+# the two packages and `.npmrc` names the registry they resolve from, which is the client stack's half of what
+# NuGet.config is above: a registry configured on a build machine must not be able to supply a dependency
+# THIRD_PARTY_LICENSES.md never reviewed.
+COPY frontend/package.json frontend/pnpm-lock.yaml frontend/pnpm-workspace.yaml frontend/.npmrc frontend/
+COPY frontend/src/Client.Backend/package.json frontend/src/Client.Backend/
+COPY frontend/src/Client.App/package.json frontend/src/Client.App/
+
+# Corepack no longer ships with Node, so pnpm is installed rather than activated — and its version is read out of the
+# `packageManager` field the lock file was written by rather than restated here, which is the same field a contributor
+# installs from. A second literal would be a second place to remember.
+RUN npm install --global "pnpm@$(node --print "require('/source/frontend/package.json').packageManager.split('@')[1]")"
+
+# Frozen, like every other restore in this repository: `--frozen-lockfile` is to pnpm what `--locked-mode` is to
+# `dotnet restore`, so a manifest whose pins moved without the lock file fails here rather than a different closure
+# being installed silently.
+RUN pnpm --dir frontend install --frozen-lockfile
+
+# The declared version and the script that reads it, because `vite.config.ts` substitutes the number into the bundle at
+# build time rather than letting a manifest carry a second copy of it. Copied after the install for the reason the
+# licence files above are: neither is a restore input.
+COPY Version.props ./
+COPY scripts/read-declared-version.sh scripts/
+
+COPY frontend/ frontend/
+
+RUN pnpm --dir frontend run build
 
 
 ########################################################################################################################
@@ -203,11 +252,14 @@ EXPOSE 8080 8081
 WORKDIR /app
 COPY --from=build --chown=root:root /app .
 
-# No client bundle is copied here. The Uno Platform client this image used to carry was withdrawn and the client is
-# being rebuilt in React, so nothing under frontend/ is built and the web root stays empty. What is unchanged is the
-# service: `Host` still serves whatever the web root holds where ClientEndpoint:Application:Enabled says so, and
-# refuses to start when that setting is on and the entry document is absent — which is the refusal a deployment that
-# switches it on against this image gets, by name rather than as a page of 404s.
+# The client's bundle, under the web root the runtime resolves beneath the content root. It is copied unconditionally
+# and served only where ClientEndpoint:Application:Enabled says so, which is what makes an image that serves no client
+# cost its size and nothing else — no route, no middleware, and nothing reachable. Owned by root like everything else
+# here, so the process reads the page it serves and cannot rewrite it.
+#
+# Static files and no process: nothing from the stage above joins this image, so no deployment shape gains a second
+# service, and the runtime carries no Node and no node_modules.
+COPY --from=client --chown=root:root /source/frontend/src/Client.App/dist ./wwwroot
 
 # `app` is the unprivileged account the .NET base images define, and root owns everything under /app, so the process
 # cannot rewrite its own code even before a read-only root filesystem is imposed on it. The image needs no writable

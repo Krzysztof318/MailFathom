@@ -77,11 +77,10 @@
   //
   // It is commented out, like everything else here that costs anything: serving a mailbox to a browser is always
   // something an operator turned on, so a file copied verbatim serves the MCP endpoint and nothing else. Uncomment it
-  // and provision a credential to sign in with. No image carries a page to put in front of it today — the Uno Platform
-  // client was withdrawn and the React one has not shipped — so MAILFATHOM_CLIENT stays false and this endpoint serves
-  // its routes to whatever calls them. The empty origin list is the same posture as the endpoint below and for the
-  // same reason: the page this deployment serves is same-origin, so no browser origin beyond it has any business
-  // calling the surface.
+  // beside MAILFATHOM_CLIENT=true in .env, and provision a credential to sign in with; scripts/quick-start-compose.sh
+  // writes the first two. It provisions no credential, because the page it prepares reads its own sample data and
+  // calls nothing yet. The empty origin list is the same posture as the endpoint below and for the same reason: the
+  // page this deployment serves is same-origin, so no browser origin beyond it has any business calling the surface.
   //
   // "ClientEndpoint": {
   //   "Enabled": true,

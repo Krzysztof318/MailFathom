@@ -172,8 +172,14 @@ sampled from the product icon.
 ## What the build produces
 
 `pnpm build` writes `src/Client.App/dist/` — a directory of static files and nothing else. No Node process joins any
-deployment shape: the container image serves whatever bundle it carries beneath its web root, from a deployment
-setting rather than from anything a client build states.
+deployment shape: the container image builds this in a stage of its own and copies the result beneath its web root, so
+what a deployment gains is files and a setting rather than a second service.
+
+`src/Client.App/public/` is copied into that directory verbatim, and it holds one file:
+`THIRD-PARTY-NOTICES.txt`, the MIT notice of the three packages the bundle actually redistributes. The build minifies
+every module into one chunk and none of the three carries a banner of its own, so the notice travels as text beside
+the code rather than inside it. [The third-party register](../THIRD_PARTY_LICENSES.md) is where the review behind it
+lives, and it is what says which packages that file has to name.
 
 The version the client displays comes from `<VersionPrefix>` in `Version.props`, read at build time through
 `scripts/read-declared-version.sh` and substituted into the bundle. No version number is written into a manifest or

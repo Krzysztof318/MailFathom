@@ -366,7 +366,7 @@ the MCP endpoint's grants come from, because the client reads the mail an agent 
 | `ClientEndpoint:Https:Redirect` | block | on | Same shape and rules as `McpEndpoint:Https:Redirect`; its socket is this surface's own `BindAddress` and `Port` | restart |
 | `ClientEndpoint:RateLimiting` | block | bounded | Same shape, defaults, and rules as [`McpEndpoint:RateLimiting`](#rate-limiting) above; applied whether or not it is written | restart |
 | `ClientEndpoint:RequestTimeout` | block | bounded | Same shape, defaults, and rules as [`McpEndpoint:RequestTimeout`](#request-timeout) above; applied whether or not it is written | restart |
-| `ClientEndpoint:Application:Enabled` | bool | `false` | Refused unless `ClientEndpoint:Enabled` is on. Serves a client bundle from this endpoint's own listeners. No release carries one today, the Uno Platform client having been withdrawn while its React replacement is written, so every host refuses this at startup rather than answering 404s | restart |
+| `ClientEndpoint:Application:Enabled` | bool | `false` | Refused unless `ClientEndpoint:Enabled` is on. Serves the client bundle every published image carries from this endpoint's own listeners. A host given an image built without the client stage refuses this at startup, naming the setting, rather than answering 404s | restart |
 | `ClientEndpoint:Application:AllowClearText` | bool | `false` | Required before the page is served over a socket this process opens in the clear, and refused where it is not — see [serving the page](#serving-the-page--clientendpointapplication) | restart |
 
 There is no `ClientCertificateProfiles` here: the trust question a certificate answers is a second one this surface does

@@ -71,12 +71,11 @@ between the deployed database and one you operate, before the install command.
 
 The native process is the shape that brings no database at all.
 
-**No shape serves MailFathom's own client today.** The Uno Platform client whose bundle travelled inside the container
-image was withdrawn, and the client is being rebuilt in React, so no image carries a page and every shape here serves
-an assistant rather than a browser. Turning `client.enabled` on in the Helm chart, `MAILFATHOM_CLIENT=true` on in
-Compose, or the two adjacent `Environment=` lines on in the Quadlet unit is refused at startup, naming the setting.
-Each switch is kept because it is the deployment's rather than the client's, and each turns the next client on with no
-change to these assets.
+**Every shape can serve MailFathom's own client, and none of them does until you say so.** The bundle travels inside
+the container image, so serving it is a setting rather than anything to install and no shape gains a second process for
+it: `client.enabled` in the Helm chart, `MAILFATHOM_CLIENT=true` in Compose, or the two adjacent `Environment=` lines in
+the Quadlet unit. Each needs the client endpoint on beside it, because the page is served on that surface's listeners,
+and each is refused over a clear-text socket until the deployment states that something in front of it terminates TLS.
 [Serving the client from the deployment](../operations/client-endpoint.md#serving-the-client-from-the-deployment) is
 the page.
 

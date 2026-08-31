@@ -1115,10 +1115,10 @@ this port while still having to declare that the page may be served over it.
 
 ## Serving the client from the deployment
 
-**No release carries a client page today.** The Uno Platform client whose bundle used to travel inside the container
-image was withdrawn, and the client is being rebuilt in React, so a current image serves the API surface alone and the
-setting below refuses at startup on every artifact this project publishes. It is documented as the contract the
-rebuilt client lands against rather than as something an operator can turn on now.
+**Every published image carries the page**, built into it from the client workspace under `frontend/` and copied
+beneath the image's web root. Serving it pulls nothing, starts no second process, and costs an image that never serves
+it about 230 kB. What it is today is an early client: it draws its own sample data rather than this deployment's mail,
+so a person can open it and nothing signs in to it yet.
 
 One setting serves a bundle from this endpoint's own listeners, where a host was given one:
 

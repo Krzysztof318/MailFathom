@@ -201,8 +201,9 @@ suite — [which stack a gate runs](../operations/agent-workflow.md#which-stack-
 [the client endpoint](../operations/client-endpoint.md) is the page — and `Host` still serves whatever files the image
 carries beneath its web root, from a deployment setting rather than from anything a client build states.
 
-What did change is the image. `deploy/docker/Dockerfile` no longer builds a browser head into it, so a current image
-carries no bundle and a deployment that switches the client application on is refused at startup by name rather than
-serving a page of 404s. The boundary that made that a file copy rather than a reference is unchanged and still
-asserted: no project in either stack names one in the other, and `HostDependencyBoundaryTests` holds the service
+The image builds the client again, in a stage of its own: `deploy/docker/Dockerfile` installs the pnpm workspace on a
+pinned Node base, runs `pnpm build`, and copies the resulting directory of static files beneath the runtime image's web
+root — where the previous stack's browser head used to be copied from a .NET WebAssembly publish. Nothing else crosses,
+and the runtime carries no Node process. That the replacement was a change to one build stage is what the boundary
+below bought, and it is unchanged and still asserted: no project in either stack names one in the other, and `HostDependencyBoundaryTests` holds the service
 assembly's reference list to it.

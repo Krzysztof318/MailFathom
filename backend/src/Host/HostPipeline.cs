@@ -211,7 +211,7 @@ internal static class HostPipeline
                 ClientEndpointOptions.SectionName,
                 typeof(ClientEndpointOptions),
                 [
-                    $"{ClientEndpointOptions.SectionName}:{nameof(ClientEndpointOptions.Application)}:{nameof(ClientApplicationOptions.Enabled)} is set, but this deployment carries no client to serve: '{ClientApplicationOptions.EntryDocument}' is absent from '{app.Environment.WebRootPath}'. No MailFathom release carries a client bundle today, so this setting has nothing to serve; leave it off.",
+                    $"{ClientEndpointOptions.SectionName}:{nameof(ClientEndpointOptions.Application)}:{nameof(ClientApplicationOptions.Enabled)} is set, but this deployment carries no client to serve: '{ClientApplicationOptions.EntryDocument}' is absent from '{app.Environment.WebRootPath}'. Every published MailFathom image carries one, so this is an artifact built without the client stage; use a published image, or leave the setting off.",
                 ]);
         }
 

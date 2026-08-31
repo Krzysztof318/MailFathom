@@ -16,8 +16,8 @@ namespace MailFathom.Host.Configuration.Endpoints;
 /// served from, so a deployment whose endpoint requires a credential still requires one from the page.
 /// </para>
 /// <para>
-/// Off unless a deployment says otherwise, and no image carries a bundle today: the Uno Platform client was withdrawn
-/// and the client is being rebuilt in React, so this refuses at startup on every current artifact.
+/// Off unless a deployment says otherwise, which is what makes the bundle free to carry: every published image holds
+/// one, and an installation that wants only the server pays its size and nothing else.
 /// </para>
 /// <para>
 /// <see cref="AllowClearText" /> is the one setting here that is not a switch, and it exists because this hop is a
