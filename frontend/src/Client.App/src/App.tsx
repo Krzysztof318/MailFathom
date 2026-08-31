@@ -113,9 +113,7 @@ export function App({
     }
 
     return (
-        <div className="flex h-dvh flex-col-reverse bg-rail pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left workspace:flex-row">
-            <SpaceNavigation current={space} />
-
+        <div className="flex h-dvh flex-col bg-rail pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left workspace:flex-row">
             <div ref={workspace} tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col bg-page">
                 <header className="flex flex-wrap items-center gap-3 border-b border-line-soft bg-panel px-4 py-2 workspace:px-8">
                     <ConnectionSummary accounts={accounts} reread={reread} />
@@ -135,6 +133,14 @@ export function App({
 
                 <Space space={space} />
             </div>
+
+            {/* Navigation is last in the document because the keyboard follows the document rather than the layout,
+                and the narrow composition puts it at the bottom of the screen: written the other way round, a reader
+                tabbing into a narrow window would reach the bottom bar before the header above it. The wide
+                composition then carries the one mismatch CSS cannot remove — a rail drawn on the left out of a node
+                that comes last — because no single document order matches both shapes, and content before navigation
+                is the direction a skip link exists to manufacture rather than the one it works around. */}
+            <SpaceNavigation current={space} />
         </div>
     );
 }

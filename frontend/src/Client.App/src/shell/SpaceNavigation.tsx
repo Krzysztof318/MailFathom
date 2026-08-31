@@ -24,7 +24,7 @@ export function SpaceNavigation({ current }: { readonly current: Space }) {
     return (
         <nav
             aria-label={translate('shell.spaces')}
-            className="flex shrink-0 justify-around gap-1 border-t border-line bg-rail p-1 workspace:w-24 workspace:flex-col workspace:justify-start workspace:gap-2 workspace:border-t-0 workspace:border-e workspace:p-3"
+            className="flex shrink-0 justify-around gap-1 border-t border-line bg-rail p-1 workspace:order-first workspace:w-24 workspace:flex-col workspace:justify-start workspace:gap-2 workspace:border-t-0 workspace:border-e workspace:p-3"
         >
             {spaces.map((space) => (
                 <SpaceLink key={space} space={space} current={space === current} />

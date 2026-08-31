@@ -117,6 +117,25 @@ test('puts the navigation beside the workspace in a wide window and under it in 
     await expect(page.getByRole('link', { name: 'Cases' })).toBeVisible();
 });
 
+test('moves a keyboard through a narrow window in the order the window shows', async ({ page }) => {
+    await page.setViewportSize(narrowWindow);
+    await page.goto('/');
+
+    // The narrow composition draws the navigation at the bottom of the screen, and the keyboard follows the document
+    // rather than the layout — so a document that put the navigation first would hand a reader the bottom bar before
+    // the header at the top of the window. Only a browser answers this: jsdom has no sequential focus navigation.
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('combobox', { name: 'Theme' })).toBeFocused();
+
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('searchbox', { name: 'Ask your mail' })).toBeFocused();
+
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('link', { name: 'Discover' })).toBeFocused();
+});
+
 test('stays usable at the narrowest width a supported head presents', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 640 });
     await page.goto('/');
