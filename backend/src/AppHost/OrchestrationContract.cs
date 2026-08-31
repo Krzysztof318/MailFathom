@@ -276,95 +276,24 @@ public static class OrchestrationContract
     /// <summary>The endpoint the MailFathom host serves its client surface on.</summary>
     /// <remarks>
     /// A socket of its own rather than the MCP endpoint's, and the difference is the bind address rather than the
-    /// number. This one is on <see cref="DeveloperLoopbackAddress" />, because the only thing that calls it is a
-    /// browser head served on the same machine, and a wildcard beside a specific address on one port is two sockets
-    /// the operating system grants only one of — so sharing would have meant publishing the client surface wherever
-    /// the MCP endpoint is published, or moving that endpoint to loopback as a side effect.
+    /// number. This one is on <see cref="DeveloperLoopbackAddress" />, because the only thing that calls it is a client
+    /// running on the same machine, and a wildcard beside a specific address on one port is two sockets the operating
+    /// system grants only one of — so sharing would have meant publishing the client surface wherever the MCP endpoint
+    /// is published, or moving that endpoint to loopback as a side effect.
     /// </remarks>
     public const string HostClientEndpointName = "client";
 
     /// <summary>The EF Core migration tool resource.</summary>
     public const string MigrationsResourceName = "mailfathom-migrations";
 
-    /// <summary>The MailFathom client resource, which serves the browser head beside the service it talks to.</summary>
+    /// <summary>The address a developer's own machine serves the service's own surfaces on.</summary>
     /// <remarks>
-    /// <para>
-    /// An executable resource rather than a project one, and the difference is the client's target frameworks rather
-    /// than its directory. Aspire runs a project resource through <c>dotnet run --project</c>, whose argument list
-    /// carries no framework — <c>ProjectResourceOptions</c> exposes a launch profile and nothing that would select a
-    /// target — while the client declares three of them, so the command exits with <c>Your project targets multiple
-    /// frameworks. Specify which framework to run using '--framework'.</c> before it builds anything. Naming the head
-    /// on the command line is what starts the browser one, and only an executable resource can.
-    /// </para>
-    /// <para>
-    /// Present only in a developer's topology. The integration suite starts this same app model to test the service,
-    /// and a browser head there would build a WebAssembly bundle on every run that no test reads.
-    /// </para>
-    /// </remarks>
-    public const string ClientResourceName = "mailfathom-client";
-
-    /// <summary>The client project's directory, relative to the app host's own.</summary>
-    /// <remarks>
-    /// A path rather than a reference, which is the whole of what the app model asks of the other stack: MSBuild is
-    /// never told the two projects are related, so <c>backend/MailFathom.slnx</c> still names no project under
-    /// <c>frontend/</c> and building the service restores nothing the client needs. What the app host holds is a
-    /// directory it starts a process in.
-    /// </remarks>
-    public const string ClientProjectDirectory = "../../../frontend/src/Client";
-
-    /// <summary>The target framework the client resource starts, which is the browser head.</summary>
-    /// <remarks>
-    /// Stated here rather than read from the client's project file, because it is this app model's choice of head
-    /// rather than the client's list of them: the desktop head is started from an IDE, and an orchestration adds
-    /// nothing to it. It has to name one of the frameworks <c>frontend/src/Client/Client.csproj</c> declares, and a
-    /// run whose name matches none of them fails on this resource alone.
-    /// </remarks>
-    public const string ClientBrowserTargetFramework = "net10.0-browserwasm";
-
-    /// <summary>The endpoint the client's development server answers the browser head on.</summary>
-    public const string ClientHttpEndpointName = "http";
-
-    /// <summary>The environment variable the client's development server reads the address it binds from.</summary>
-    /// <remarks>
-    /// The .NET SDK's WebAssembly host is an ASP.NET Core server, so it takes its address the way one does. Stating it
-    /// is what makes the number the app model published and the number the server bound the same; left unset, the host
-    /// takes a pair of ports of its own choosing and the dashboard would link an address nothing is served on.
-    /// </remarks>
-    public const string ClientServerUrlsVariable = "ASPNETCORE_URLS";
-
-    /// <summary>The address a developer's own machine serves the client on and reaches the service at.</summary>
-    /// <remarks>
-    /// Loopback, because a WebAssembly bundle built in Debug against somebody's own machine is not something anything
-    /// on a local network has any business loading. Stated once rather than beside each of the four things built from
-    /// it, which have to agree with one another: the address the client's development server binds, the endpoint Aspire
-    /// publishes, the browser origin the service is configured to answer, and the address the head is built to call. A
-    /// page served under one spelling and permitted under another is a first call refused on a preflight, which reads
-    /// as a broken client rather than as two spellings of one machine.
+    /// Loopback, because a development run authenticates nobody on the MCP and administrative surfaces and its client
+    /// surface accepts a password this app host provisioned for one machine. Stated once rather than beside each
+    /// listener that binds it, so a value the dashboard links and a value a request is written against cannot drift
+    /// apart.
     /// </remarks>
     public const string DeveloperLoopbackAddress = "127.0.0.1";
-
-    /// <summary>The MSBuild property the client's build takes the deployment address it points its head at from.</summary>
-    /// <remarks>
-    /// <para>
-    /// The one name here handed to a build rather than to a process, and the browser is the reason. Every other
-    /// resource in this app model is told where its dependencies are through its own environment; the client resource
-    /// is a development server that serves static files, and the application runs in a tab that reads none of that
-    /// process's environment — measured while <c>#1095</c> was implemented, against the served document, the runtime
-    /// loader, and every boot document beside them.
-    /// </para>
-    /// <para>
-    /// What the process does do is build the bundle the tab downloads, so the address travels into the build instead.
-    /// <c>frontend/src/Client/Client.csproj</c> writes the value of this property into the runtime host configuration,
-    /// which the WebAssembly SDK carries into the boot configuration the page fetches and every head reads back
-    /// without reflection a trimmer could remove. The desktop head takes the same property and reads the same key out
-    /// of its own <c>runtimeconfig.json</c>, so the two heads differ in nothing but which answer they fall back to.
-    /// </para>
-    /// <para>
-    /// Nothing but this app model states it. A publish that states none emits no such option at all, which is what
-    /// keeps a head served from the container image resolving its deployment as the origin it was fetched from.
-    /// </para>
-    /// </remarks>
-    public const string ClientDeploymentAddressProperty = "MailFathomDeploymentAddress";
 
     /// <summary>The IMAP and SMTP server the integration-test topology synchronizes against.</summary>
     /// <remarks>
@@ -681,35 +610,12 @@ public static class OrchestrationContract
     /// <remarks>Read the way <see cref="PinnedMcpEndpointPortKey" /> is. Pinning it is what a database tool configured once wants; leaving it unset is what lets a second checkout start a server of its own.</remarks>
     public const string PinnedPostgresPortKey = "Ports:Postgres";
 
-    /// <summary>The configuration key a developer states the client's development server port under to pin it.</summary>
-    /// <remarks>Read the way <see cref="PinnedMcpEndpointPortKey" /> is. Pinning it is what a bookmarked browser tab wants; leaving it unset is what lets a second checkout serve a head of its own.</remarks>
-    public const string PinnedClientPortKey = "Ports:Client";
-
     /// <summary>The configuration key a developer states the client surface's port under to pin it.</summary>
     /// <remarks>
     /// Read the way <see cref="PinnedMcpEndpointPortKey" /> is. Pinning it is what a request written once against
-    /// <c>/api/client</c> wants; leaving it unset is what lets a second checkout serve the surface of its own. Nothing
-    /// about the browser head depends on it — that head is told the address by the build that produced it — so this
-    /// exists for whoever calls the surface by hand.
+    /// <c>/api/client</c> wants; leaving it unset is what lets a second checkout serve the surface of its own.
     /// </remarks>
     public const string PinnedClientEndpointPortKey = "Ports:ClientEndpoint";
-
-    /// <summary>The configuration key a developer states <see langword="false" /> under to run the orchestration without the client.</summary>
-    /// <remarks>
-    /// <para>
-    /// Starting the browser head builds a WebAssembly bundle, which needs the <c>wasm-tools</c> workload installed and
-    /// costs a minute the first time. That is a fact about one machine rather than about this repository, so it is
-    /// stated where the pinned ports are — the app host's own user secrets, out of every checkout — and its
-    /// environment form, <c>Client__Enabled</c>, is what leaves the client out of a single run.
-    /// </para>
-    /// <para>
-    /// Read from configuration rather than from the argument list, unlike <see cref="IntegrationTestingArgument" />,
-    /// and the difference is what each one decides. The argument selects a topology, so an ambient value could divert
-    /// an ordinary run onto the ephemeral database; this removes one resource from a topology already selected, which
-    /// is a thing a developer who set it meant and a thing no other run is harmed by.
-    /// </para>
-    /// </remarks>
-    public const string ClientEnabledKey = "Client:Enabled";
 
     /// <summary>The fixed configuration a normal local run supplies beside its interactive mailbox values.</summary>
     /// <remarks>
@@ -815,21 +721,6 @@ public static class OrchestrationContract
         return Path.Combine(appHostBaseDirectory, DevelopmentOpenSslConfigurationFileName);
     }
 
-    /// <summary>Resolves the addresses and published host that join the browser client to the service in development.</summary>
-    /// <param name="clientPort">The port serving the browser head.</param>
-    /// <param name="clientEndpointPort">The port serving the client API.</param>
-    /// <returns>The browser origin, service address, and Aspire endpoint host, all under the development loopback address.</returns>
-    public static (string ClientOrigin, string ServiceAddress, string PublishedClientHost)
-        ResolveDevelopmentClientNetwork(int clientPort, int clientEndpointPort)
-    {
-        var clientOrigin =
-            $"http://{DeveloperLoopbackAddress}:{clientPort.ToString(CultureInfo.InvariantCulture)}";
-        var serviceAddress =
-            $"http://{DeveloperLoopbackAddress}:{clientEndpointPort.ToString(CultureInfo.InvariantCulture)}/";
-
-        return (clientOrigin, serviceAddress, DeveloperLoopbackAddress);
-    }
-
     /// <summary>Reads the port a developer pinned under <paramref name="configurationKey" />.</summary>
     /// <param name="configurationKey">The key the value was read from, which is what a refusal names.</param>
     /// <param name="statedPort">The value configuration holds under that key, or <see langword="null" /> when it holds none.</param>
@@ -857,33 +748,6 @@ public static class OrchestrationContract
         }
 
         return port;
-    }
-
-    /// <summary>Reads whether this run starts the client, from the value configuration holds under <see cref="ClientEnabledKey" />.</summary>
-    /// <param name="statedValue">The value configuration holds under that key, or <see langword="null" /> when it holds none.</param>
-    /// <returns><see langword="true" /> unless the developer stated otherwise, which is what makes one command bring up a working MailFathom.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when a stated value is not a boolean.</exception>
-    /// <remarks>
-    /// A stated value that is not a boolean is refused rather than ignored, for the reason an unusable pinned port is:
-    /// a developer who wrote <c>0</c> or <c>no</c> asked for the client to stay out of the run, and starting it anyway
-    /// would build a WebAssembly bundle they were trying to avoid while nothing said why.
-    /// </remarks>
-    public static bool ResolveClientEnabled(string? statedValue)
-    {
-        if (string.IsNullOrWhiteSpace(statedValue))
-        {
-            return true;
-        }
-
-        var statedBoolean = statedValue.Trim();
-
-        if (!bool.TryParse(statedBoolean, out var clientEnabled))
-        {
-            throw new InvalidOperationException(
-                $"{ClientEnabledKey} is '{statedBoolean}', which is not true or false. State one of those, or leave it unset to start the client with the rest of the orchestration.");
-        }
-
-        return clientEnabled;
     }
 
     /// <summary>Finds free TCP ports for the sockets the orchestration publishes without a proxy in front of them.</summary>

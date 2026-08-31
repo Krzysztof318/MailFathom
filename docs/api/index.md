@@ -18,9 +18,9 @@ reference to follow how a contract is implemented, not to take a dependency on i
 ## What it covers
 
 A namespace appears here when its boundary exposes something publicly. [The solution structure](../architecture/solution-structure.md)
-describes what each of them is for, and why the dependencies between them point the way they do. The last row is the
-other stack: the client is a solution of its own that references no project here and reaches the service over HTTP,
-and it is in the same reference because one site describes the whole product.
+describes what each of them is for, and why the dependencies between them point the way they do. Only the service
+stack appears: `frontend/` carries no build while the client is rebuilt in React, and a client written in JavaScript
+would not be read by this generator in any case.
 
 | Boundary | What you will find |
 | --- | --- |
@@ -30,7 +30,6 @@ and it is in the same reference because one site describes the whole product.
 | [Mcp](xref:MailFathom.Mcp) | The protocol mapping, and nothing else |
 | [Common](xref:MailFathom.Common) | What more than one boundary needs and none of them owns |
 | [Host](xref:MailFathom.Host.Configuration.Provisioning) | One exception type, which is all of the host that is public |
-| [Client](xref:MailFathom.Client) | The application: its models, its pages, and the bindable types the MVUX generator writes from each model |
 
 ## What it does not cover, and why that is the point
 

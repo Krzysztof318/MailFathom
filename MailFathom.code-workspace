@@ -2,31 +2,22 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 //
-// The VS Code entry point for this repository, because the repository root is not a solution directory. Each stack
-// owns its own solution — backend/MailFathom.slnx and frontend/MailFathom.Client.slnx — so a root opened on its own
-// loads neither: C# Dev Kit finds no project, and the Uno Platform extension reports `Uno SDK not found`, which names
-// the state it ended in rather than the step that failed. Open this file instead, with `code MailFathom.code-workspace`
-// or File → Open Workspace from File.
+// The VS Code entry point for this repository, because the repository root is not a solution directory. The service
+// owns its own solution — backend/MailFathom.slnx — so a root opened on its own loads nothing and C# Dev Kit finds no
+// project. Open this file instead, with `code MailFathom.code-workspace` or File → Open Workspace from File.
 //
 // This is a VS Code file and nothing else reads it. Rider and Visual Studio open a solution directly and neither has
 // the problem it solves. `.vscode/` stays gitignored, which is why every section below is inline here rather than in
 // a per-user file the repository would have to start tracking.
 {
-  // The order of these three is a contract rather than a preference, and `scripts/test-agent-workflow.sh` asserts it.
-  // The Uno Platform extension resolves the solution from `workspace.workspaceFolders[0]` and from nowhere else, and
-  // when it finds none there it scans that one directory for project files without descending into it. So the client
-  // has to be first: with `backend` first the extension would find a solution that names no Uno project and stop, and
-  // client work would be unavailable in the editor. Nothing is lost by the ordering, because C# Dev Kit reads every
-  // folder and its Solution Explorer switches between the two solutions.
+  // The service, and then the repository itself for everything belonging to neither stack — `docs/`, `deploy/`,
+  // `scripts/`, `.github/`, `frontend/`, and the root files. `files.exclude` below keeps the service from appearing
+  // twice under it.
   //
-  // The third entry is the repository itself, for everything belonging to neither stack — `docs/`, `deploy/`,
-  // `scripts/`, `.github/`, and the root files. `files.exclude` below keeps the two stacks from appearing twice under
-  // it.
+  // There is no `client` entry, because there is nothing for it to open: the Uno Platform client was withdrawn and the
+  // client is being rebuilt in React, so `frontend/` holds two placeholder directories and no solution. It is read
+  // under `repository` until the new stack arrives with whatever its own editor tooling turns out to be.
   "folders": [
-    {
-      "name": "client",
-      "path": "frontend"
-    },
     {
       "name": "service",
       "path": "backend"
@@ -38,12 +29,11 @@
   ],
 
   "settings": {
-    // Applied per folder root, so this hides the two stacks from the `repository` entry and reaches nothing inside
-    // `frontend` or `backend`, neither of which contains a directory by either name. Quick Open and search still find
-    // every file in both, through the folders that own them.
+    // Applied per folder root, so this hides the service from the `repository` entry and reaches nothing inside
+    // `backend`, which contains no directory by that name. Quick Open and search still find every file in it, through
+    // the folder that owns it.
     "files.exclude": {
-      "backend": true,
-      "frontend": true
+      "backend": true
     },
     // The lock files, the golden manifests, and the generated site are read rather than edited, and a search that
     // returns them buries the file that was actually being looked for.
@@ -58,25 +48,23 @@
     "[csharp]": {
       "editor.defaultFormatter": "ms-dotnettools.csharp"
     },
-    // `.slnx` is the solution format both stacks use, and VS Code has no built-in association for it.
+    // `.slnx` is the solution format the service uses, and VS Code has no built-in association for it.
     "files.associations": {
       "*.slnx": "xml",
       "*.code-workspace": "jsonc"
     },
-    // Both stacks pin the SDK through the root `global.json`, so nothing here should reach for another one.
+    // The SDK is pinned through the root `global.json`, so nothing here should reach for another one.
     "dotnet.dotnetPath": "",
     "dotnet.server.useOmnisharp": false
   },
 
   "extensions": {
-    // What a fresh machine is prompted to install. C# Dev Kit loads the solutions, the Uno extension owns the client's
-    // XAML, its Hot Reload, and its debugger, and the YAML extension is for the workflows and the Helm chart. None of
-    // them is a dependency of what MailFathom ships — they are editor tooling, and the third-party register covers
-    // what the product carries rather than what a contributor's editor loads.
+    // What a fresh machine is prompted to install. C# Dev Kit loads the solution, and the YAML extension is for the
+    // workflows and the Helm chart. Neither is a dependency of what MailFathom ships — they are editor tooling, and
+    // the third-party register covers what the product carries rather than what a contributor's editor loads.
     "recommendations": [
       "ms-dotnettools.csdevkit",
       "ms-dotnettools.csharp",
-      "unoplatform.vscode",
       "redhat.vscode-yaml"
     ]
   },
@@ -84,31 +72,9 @@
   "launch": {
     "version": "0.2.0",
     "configurations": [
-      // The Skia desktop head, which is one target framework serving Windows, Linux, and macOS. `coreclr` is the
-      // debugger type for it; the Uno extension's own `Uno` type is for the mono-based heads, which is why the two
-      // configurations below do not match. The pre-launch task name is the shape that extension contributes:
-      // `Uno: {target framework} | {configuration}`.
-      {
-        "name": "Client: desktop head",
-        "type": "coreclr",
-        "request": "launch",
-        "preLaunchTask": "Uno: net10.0-desktop | Debug",
-        "program": "${workspaceFolder:client}/src/Client/bin/Debug/net10.0-desktop/MailFathom.Client.dll",
-        "cwd": "${workspaceFolder:client}/src/Client",
-        "console": "internalConsole",
-        "stopAtEntry": false
-      },
-      // The browser head. It builds the WebAssembly bundle and serves it, so it takes appreciably longer than the
-      // desktop head on a cold build and needs the `wasm-tools` workload installed.
-      {
-        "name": "Client: browser head",
-        "type": "Uno",
-        "request": "launch",
-        "preLaunchTask": "Uno: net10.0-browserwasm | Debug"
-      },
-      // The whole local system: PostgreSQL, the migration run, the service, and the browser head of the client, in the
-      // order the app model declares. This is the same thing `dotnet run --project backend/src/AppHost/AppHost.csproj`
-      // starts, with a debugger attached to the app host itself rather than to the resources it launches.
+      // The whole local system: PostgreSQL, the migration run, and the service, in the order the app model declares.
+      // This is the same thing `dotnet run --project backend/src/AppHost/AppHost.csproj` starts, with a debugger
+      // attached to the app host itself rather than to the resources it launches.
       {
         "name": "Service: app host with the whole orchestration",
         "type": "coreclr",
@@ -126,26 +92,6 @@
           "action": "openExternally",
           "pattern": "\\blogin\\?t=[a-z0-9]+"
         }
-      },
-      // The orchestration without the client, which is what `Client__Enabled` turns off. Useful when the change under
-      // test is in the service and building a WebAssembly bundle on every start is a minute nobody is spending well.
-      {
-        "name": "Service: app host without the client",
-        "type": "coreclr",
-        "request": "launch",
-        "preLaunchTask": "build the app host",
-        "program": "${workspaceFolder:service}/src/AppHost/bin/Debug/net10.0/MailFathom.AppHost.dll",
-        "cwd": "${workspaceFolder:service}/src/AppHost",
-        "console": "internalConsole",
-        "stopAtEntry": false,
-        "env": {
-          "DOTNET_ENVIRONMENT": "Development",
-          "Client__Enabled": "false"
-        },
-        "serverReadyAction": {
-          "action": "openExternally",
-          "pattern": "\\blogin\\?t=[a-z0-9]+"
-        }
       }
     ]
   },
@@ -153,12 +99,9 @@
   "tasks": {
     "version": "2.0.0",
     "tasks": [
-      // The client's own build tasks are contributed by the Uno extension rather than declared here, because the set
-      // of them follows the target frameworks `frontend/src/Client/Client.csproj` declares and a copy would go stale
-      // the moment a head is added. What is declared here is everything that extension has no opinion about.
       {
         "label": "build the app host",
-        "detail": "Builds backend/src/AppHost, which is what the two service launch configurations run.",
+        "detail": "Builds backend/src/AppHost, which is what the service launch configuration runs.",
         "type": "process",
         "command": "dotnet",
         "args": [
@@ -188,18 +131,6 @@
           "cwd": "${workspaceFolder:repository}"
         },
         "problemMatcher": [],
-        "group": "test"
-      },
-      {
-        "label": "test the client",
-        "detail": "Runs frontend/tests, which is the suite the client's own gate runs.",
-        "type": "process",
-        "command": "dotnet",
-        "args": [
-          "test",
-          "${workspaceFolder:client}/MailFathom.Client.slnx"
-        ],
-        "problemMatcher": "$msCompile",
         "group": "test"
       }
     ]

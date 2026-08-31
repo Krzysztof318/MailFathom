@@ -647,7 +647,7 @@
       "properties": {
         "enabled": {
           "type": "boolean",
-          "description": "Whether the application serves MailFathom's own client as a page. The bundle is in the image either way, so this renders no workload and pulls nothing; it writes the switch, and the clear-text permission the application requires when the ingress below is what terminates TLS."
+          "description": "Whether the application serves MailFathom's own client as a page. No image carries a bundle today, so this refuses at startup on every current release; it renders no workload and pulls nothing, and writes the switch and the clear-text permission the application requires when the ingress below is what terminates TLS."
         }
       },
       "additionalProperties": false

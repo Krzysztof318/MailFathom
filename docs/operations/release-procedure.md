@@ -254,7 +254,7 @@ rather than automated. Nothing here pushes a tag on the owner's behalf.
 
 ## What a release publishes, and what it needs to
 
-Five artifacts leave one run, and a failure in the first three leaves the release incomplete rather than
+Four artifacts leave one run, and a failure in the first three leaves the release incomplete rather than
 half-published:
 
 | Artifact | Where | Depends on |
@@ -263,13 +263,12 @@ half-published:
 | The Helm chart | `ghcr.io/krzysztof318/charts/mailfathom` | the image's digest |
 | `mailfathom-schema-<version>.sql` | the GitHub release's assets | nothing else the release produces |
 | `mfctl-<version>-<rid>` for `linux-x64`, `linux-arm64`, `win-x64`, and `win-arm64`, plus one `.sha256` covering all of them | the GitHub release's assets | nothing else the release produces |
-| `mailfathom-client-<version>-<rid>.zip` for `win-x64` and `win-arm64`, plus one `.sha256` covering both | the GitHub release's assets | nothing else the release produces |
 
-The column names what each artifact needs from the other four. What all five need is the same and comes before any of
-them: the tag assertion, then the build, unit-test, and migration checks, then the integration suite, and for the two
-artifacts built out of the client stack the client's own build beside them. **No artifact is built until every one of
-those has passed**, so a commit a unit test rejects costs the gate that rejected
-it rather than six `dotnet publish` invocations and a schema generation beside a red build.
+The column names what each artifact needs from the other three. What all four need is the same and comes before any of
+them: the tag assertion, then the build, unit-test, and migration checks, then the integration suite, and the client
+stack's own gate beside them. **No artifact is built until every one of those has passed**, so a commit a unit test
+rejects costs the gate that rejected it rather than several `dotnet publish` invocations and a schema generation beside
+a red build.
 
 The repository contracts run beside those gates and hold back the image alone rather than the artifacts. What they
 assert — the licensing headers, the page contracts, and the chart rendered against the manifests committed beside it —
@@ -290,20 +289,11 @@ provenance attestation, so the checksum file the build takes over exactly the pu
 verifies a download against, and it is the whole of what the release offers for that.
 [The administrative endpoint](admin-endpoint.md#getting-the-command) is where an operator is told so and how to check.
 
-The desktop client gates nothing either, for the same reason and one more: it is the artifact somebody installs on
-their own machine rather than the one a deployment runs, and the browser head that a deployment *does* serve is inside
-the image instead. Two runtime identifiers are published — Windows on x64 and on arm64 — because those are the ones a
-hosted Windows runner produces self-contained without a second machine; the Linux and macOS desktop heads build from
-the same target framework and are not published yet, and no mobile head exists. Each zip carries the head and the
-project's `LICENSE` and `NOTICE`, which are the two files the publish attaches by hand. No component in that head is
-copyleft any more: the one that was — `LibVLCSharp`, LGPL-2.1-or-later, which `Uno.WinUI.Runtime.Skia.X11` declares
-unconditionally and which nothing built here calls — is excluded from the publish by the project file, so
-[ADR 0016](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0016-third-party-licence-obligations-per-artifact.md)
-places it among the packages a build resolves and no artifact carries, and the licence text and source offer that used
-to travel with each archive are gone with it. The permissive components inside the head still oblige their own
-notices, which the notice bundle discharges for every artifact rather than this publish for one.
-`THIRD_PARTY_LICENSES.md` holds the verdict and the terms each component arrives under, and
-`frontend/src/AGENTS.md` what turning `MediaPlayerElement` on would bring back with it.
+No client is published at all. The Uno Platform client whose desktop head this release used to attach was withdrawn —
+the platform did not work out for this project — and the client is being rebuilt in React, so no archive is attached
+here and no browser head travels inside the image. The client stack's gate is still called and still blocks the image,
+and it asserts nothing while that stack carries no build; the release notes say the same thing to whoever is looking
+for a download.
 
 The chart is published **after** the image and **against the digest it produced**, because a chart names the image it
 deploys: before pushing, the run renders the packaged chart against that digest and refuses to publish one that would

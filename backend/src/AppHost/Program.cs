@@ -455,21 +455,20 @@ if (runsIntegrationTests)
 }
 else
 {
-    // The four host sockets and the browser client's socket, each stated by the section that owns it and each on a free
-    // port this run found unless this checkout pinned one. Found here rather than left to the orchestrator, which
-    // allocates a port for the proxy it would put in front of a resource and refuses an endpoint that declares none
-    // while asking for no proxy — and no proxy is what keeps the socket a client reaches the socket Kestrel opened.
+    // The four host sockets, each stated by the section that owns it and each on a free port this run found unless this
+    // checkout pinned one. Found here rather than left to the orchestrator, which allocates a port for the proxy it
+    // would put in front of a resource and refuses an endpoint that declares none while asking for no proxy — and no
+    // proxy is what keeps the socket a client reaches the socket Kestrel opened.
     //
-    // All five are found in one call whether or not any is pinned, because that is what makes them different from each
-    // other; a pinned value then replaces the one it was found for and the others stay where they were put. The last
-    // one belongs to the client below, and is found here rather than beside it for that reason: a second call would
-    // release these before choosing, and two sockets handed one number is a run that fails on whichever binds second.
-    var foundPorts = OrchestrationContract.FindFreePorts(5);
+    // All four are found in one call whether or not any is pinned, because that is what makes them different from each
+    // other; a pinned value then replaces the one it was found for and the others stay where they were put. A second
+    // call would release these before choosing, and two sockets handed one number is a run that fails on whichever
+    // binds second.
+    var foundPorts = OrchestrationContract.FindFreePorts(4);
     var mcpEndpointPort = PinnedPort(OrchestrationContract.PinnedMcpEndpointPortKey) ?? foundPorts[0];
     var healthEndpointsPort = PinnedPort(OrchestrationContract.PinnedHealthEndpointsPortKey) ?? foundPorts[1];
     var adminEndpointPort = foundPorts[2];
     var clientEndpointPort = PinnedPort(OrchestrationContract.PinnedClientEndpointPortKey) ?? foundPorts[3];
-    var clientPort = PinnedPort(OrchestrationContract.PinnedClientPortKey) ?? foundPorts[4];
 
     var mailAccountHost = builder
         .AddParameter("mail-account-host")
@@ -547,14 +546,16 @@ else
             isProxied: false,
             env: "AdminEndpoint__Port")
         // The client surface's socket, declared exactly as the MCP endpoint's is. The normal app model enables it and
-        // admits the password method so the browser head has a usable service on its first run; the credential itself
-        // is provisioned through the administrative API after the host reports startup readiness.
+        // admits the password method so a client has a usable service on its first run; the credential itself is
+        // provisioned through the administrative API after the host reports startup readiness. No client is started
+        // beside it — the Uno one was withdrawn and the React one has not landed — so what this serves today is the
+        // surface itself, for whoever calls it by hand.
         //
         // A socket of its own rather than the MCP endpoint's, though every surface's default port would have shared
         // one. What cannot be shared is the bind address: a wildcard beside a specific address on one port is two
         // sockets the operating system grants only one of, so sharing would either publish the client surface wherever
         // the MCP endpoint is published or move that endpoint to loopback as a side effect. On loopback because the
-        // only thing that calls this is a browser head served on this machine.
+        // only thing that calls this is a client running on this machine.
         .WithEnvironment("ClientEndpoint__BindAddress", OrchestrationContract.DeveloperLoopbackAddress)
         .WithEndpoint(
             name: OrchestrationContract.HostClientEndpointName,
@@ -575,67 +576,6 @@ else
         mailFathomHost.GetEndpoint(OrchestrationContract.HostAdminEndpointName),
         TimeProvider.System,
         provider.GetRequiredService<ILogger<DevelopmentCredentialProvisioningWorker>>()));
-
-    // The client, in the one topology it belongs to. What the app model reaches into the other stack with is a
-    // directory and a command: no project under frontend/ enters backend/MailFathom.slnx, no backend project references
-    // one, and MSBuild is never told the two are related — so a build of the service still restores nothing the client
-    // needs, and starting the client still costs the Uno SDK and the wasm-tools workload the client's own build costs.
-    // The boundary the repository keeps is a compile-time one, and this is a process the orchestration starts beside
-    // another process.
-    //
-    // An executable rather than a project resource, because the client declares three target frameworks and Aspire runs
-    // a project resource through `dotnet run --project`, whose argument list carries no framework: the command refuses
-    // a multi-targeted project before it builds anything, and neither a launch profile nor ProjectResourceOptions
-    // supplies one. Naming the head on the command line is what starts the browser one.
-    //
-    // No launch profile, so the profiles in frontend/src/Client/Properties/launchSettings.json stay what an IDE reads.
-    // The first of them is what `dotnet run` would otherwise take, and it opens a browser window on every start — which
-    // an orchestration that already publishes the address as an endpoint does not need to do for the developer.
-    if (OrchestrationContract.ResolveClientEnabled(builder.Configuration[OrchestrationContract.ClientEnabledKey]))
-    {
-        // The dashboard link, the development server, and the address baked into the bundle are one loopback spelling,
-        // so a developer who follows the dashboard reaches the same socket the head was built to call. CORS is not
-        // part of that join: `localhost` and `127.0.0.1` are two origins ASP.NET CORS treats as distinct, and a local
-        // run that named only one of them refused the first API call from the other.
-        var clientNetwork =
-            OrchestrationContract.ResolveDevelopmentClientNetwork(clientPort, clientEndpointPort);
-
-        builder
-            .AddExecutable(
-                OrchestrationContract.ClientResourceName,
-                "dotnet",
-                Path.Combine(builder.AppHostDirectory, OrchestrationContract.ClientProjectDirectory),
-                "run",
-                "--framework",
-                OrchestrationContract.ClientBrowserTargetFramework,
-                "--no-launch-profile",
-                // Where the service is, handed to the build rather than to the process. The head runs in a browser tab
-                // and reads none of this process's environment, so the one channel that reaches it is the bundle the
-                // build produces: the client's project file writes this property into the runtime host configuration,
-                // and the WebAssembly SDK carries that into the boot configuration the page fetches.
-                $"--property:{OrchestrationContract.ClientDeploymentAddressProperty}={clientNetwork.ServiceAddress}")
-            // The address the development server binds, stated to it and published to the app model as one number, so
-            // the endpoint the dashboard links is the endpoint the browser head is served on. Unproxied for the reason
-            // the host's sockets are: what the app model publishes is then what a browser connects to.
-            //
-            // On loopback, because a WebAssembly bundle built in Debug against a developer's own machine is not
-            // something anything on a local network has any business loading.
-            .WithEnvironment(OrchestrationContract.ClientServerUrlsVariable, clientNetwork.ClientOrigin)
-            .WithHttpEndpoint(
-                name: OrchestrationContract.ClientHttpEndpointName,
-                port: clientPort,
-                targetPort: clientPort,
-                isProxied: false)
-            .WithEndpoint(
-                OrchestrationContract.ClientHttpEndpointName,
-                endpoint => endpoint.TargetHost = clientNetwork.PublishedClientHost,
-                createIfNotExists: false);
-
-        // CORS stays at the product default of every origin. A local head is served from this machine and
-        // authenticated by the password the AppHost provisions; naming one origin here is what made a tab opened as
-        // `localhost` look like an empty mailbox while the same tab opened as `127.0.0.1` worked. A deployment
-        // narrows the list once it knows the origin it actually serves.
-    }
 }
 
 // Host is the startup project because it is the project resource the connection string is issued to; Infrastructure

@@ -60,9 +60,7 @@ readonly global_json='global.json'
 readonly tool_manifest='.config/dotnet-tools.json'
 readonly workflow_directory='.github/workflows'
 readonly backend_pins='backend/Directory.Packages.props'
-readonly frontend_pins='frontend/Directory.Packages.props'
 readonly backend_solution='backend/MailFathom.slnx'
-readonly frontend_solution='frontend/MailFathom.Client.slnx'
 
 apply_pins='false'
 run_verification='false'
@@ -266,7 +264,7 @@ register_lines_naming() {
 survey_nuget_pins() {
   local pin_file package_id pinned latest allow_prerelease licence recorded note stable
 
-  for pin_file in "$backend_pins" "$frontend_pins"; do
+  for pin_file in "$backend_pins"; do
     [[ -f "$pin_file" ]] || continue
 
     while IFS=$'\t' read -r package_id pinned; do
@@ -318,8 +316,8 @@ survey_sdk_pins() {
 
   [[ -f "$global_json" ]] || return 0
 
-  # The MSBuild SDKs are ordinary NuGet packages and are rewritten like any other pin. Uno.Sdk is the one that matters:
-  # it decides the version of every Uno package the client restores, so the lock diff is where a move of it shows.
+  # The MSBuild SDKs are ordinary NuGet packages and are rewritten like any other pin. `global.json` declares none
+  # today — the Uno SDK left with the client it belonged to — and this reads whatever it declares next.
   while IFS=$'\t' read -r sdk_id pinned; do
     [[ -n "$sdk_id" ]] || continue
 
@@ -793,7 +791,7 @@ regenerate_lock_files() {
     exit 1
   fi
 
-  for solution in "$backend_solution" "$frontend_solution"; do
+  for solution in "$backend_solution"; do
     [[ -f "$solution" ]] || continue
 
     printf '  %s\n' "$solution"

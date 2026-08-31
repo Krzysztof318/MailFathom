@@ -160,10 +160,12 @@ Environment=Persistence__Password__SecretReference=systemd-credential:mailfathom
 #Environment=ContentStorage__ObjectStorage__TrustAnchor__Name=mailfathom-object-storage-trust-anchor
 #Environment=ContentStorage__ObjectStorage__TrustAnchor__SecretReference=systemd-credential:mailfathom-object-storage-trust-anchor
 
-# MailFathom's own client, off because these two lines are commented out. The bundle travels inside the image, so
-# uncommenting them pulls nothing and installs no second unit; what they need beside them is ClientEndpoint:Enabled in
-# the configuration directory, since the page is served on that surface's listeners and calls them. Uncommenting
-# these without it is refused at startup, naming both; the reverse is what this unit does today.
+# MailFathom's own client, off because these two lines are commented out. No image carries a bundle today — the Uno
+# Platform client was withdrawn and the client is being rebuilt in React — so uncommenting them fails at startup on
+# every current release, and they stay here as the plumbing the rebuilt client lands against. A bundle would travel
+# inside the image, so uncommenting them would pull nothing and install no second unit; what they need beside them is
+# ClientEndpoint:Enabled in the configuration directory, since the page is served on that surface's listeners and calls
+# them. Uncommenting these without it is refused at startup, naming both; the reverse is what this unit does today.
 #
 # The second line is a statement about this deployment rather than a second switch. MailFathom refuses to serve the
 # client over a clear-text socket — the page, and every token a browser then sends back, would cross the network

@@ -101,12 +101,12 @@ internal sealed class ClientEndpointOptions
     /// </remarks>
     public IList<OwnerFacingAuthenticationOptions> Authentication { get; } = [];
 
-    /// <summary>Gets or sets whether this deployment also serves the client's browser head from this endpoint's listeners.</summary>
-    /// <remarks>The one setting here that is about a page rather than about an API. It belongs to this section because the page is served on this surface's listeners and nowhere else: same origin is what lets the head carry no address at all, and it is what a deployment gives up by publishing the two apart.</remarks>
+    /// <summary>Gets or sets whether this deployment also serves the client's bundle from this endpoint's listeners.</summary>
+    /// <remarks>The one setting here that is about a page rather than about an API. It belongs to this section because the page is served on this surface's listeners and nowhere else: same origin is what lets the bundle carry no address at all, and it is what a deployment gives up by publishing the two apart.</remarks>
     public ClientApplicationOptions Application { get; set; } = new();
 
     /// <summary>Gets or sets which browser origins the endpoint answers.</summary>
-    /// <remarks>The same section the MCP and administrative endpoints carry, configured separately. A WebAssembly head calls this surface from a page origin, so a preflight it cannot answer is a client that never starts.</remarks>
+    /// <remarks>The same section the MCP and administrative endpoints carry, configured separately. A browser-hosted client calls this surface from a page origin, so a preflight it cannot answer is a client that never starts.</remarks>
     public TransportCorsOptions Cors { get; set; } = new();
 
     /// <summary>Gets or sets under which domains and certificates Kestrel terminates TLS for this endpoint.</summary>

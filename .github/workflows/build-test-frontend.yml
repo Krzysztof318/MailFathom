@@ -4,26 +4,21 @@
 
 name: Build and test the frontend
 
-# The client stack's half of the required check: both heads compiled and the unit suite run, defined once so that
-# whatever else comes to need it — a nightly, a release, a packaging run — is gated on the same definition rather than
-# on a copy of these steps. `build-test-format-and-migrations.yml` is the same arrangement for the server, and the two
-# deliberately share nothing but the `CI` workflow that calls them: separate solutions, separate build contracts,
-# separate package pins, and therefore separate jobs.
+# The client stack's half of the required check, and it asserts nothing today. The Uno Platform client this workflow
+# compiled was withdrawn and the client is being rebuilt in React, so `frontend/` holds two placeholder directories and
+# no build. What is kept is the wiring rather than the work: the `workflow_call` contract below, the `Frontend` job of
+# `CI` that calls it, the `frontend` path filter that decides whether it runs, and the callers in `nightly.yml` and
+# `release.yml` that gate a publication on it. Filling the job in for the new stack is then a change to this file
+# alone, rather than a reconstruction of every caller that had learned to stop expecting one.
 #
-# What is not here is the decision about whether to run at all. That needs the changed files, which the caller has and
-# this workflow does not, so `CI` gates the job that calls this rather than passing a switch inward. The server's
-# workflow takes a switch per job because it holds three jobs a change can affect independently; this one holds a
-# single job, and a job-level condition in the caller says the same thing with nothing to keep in step.
+# `build-test-format-and-migrations.yml` is the same arrangement for the server, and the two deliberately share nothing
+# but the `CI` workflow that calls them.
 #
-# What it does take beside that is a commit. A release and a nightly build the revision they resolved once rather than
-# whatever a ref points at by the time this job starts, which is the same reason the server's workflow takes one; a
-# pull request passes nothing and gets its own event's checkout.
-#
-# The one switch it takes is not about the changed files either. Formatting is the one verdict here that a pull
-# request settles for good — it is a property of the files a change wrote, and two changes that merged without seeing
-# each other cannot break it — so it is asked on a pull request and nowhere else: not on a push to `main`, not on a
-# release, and not on a nightly. Both stacks are held to that from the same rule rather than to whichever one somebody
-# remembered, which is why every caller passes this switch to both workflows rather than to one.
+# The two inputs are kept for the same reason the job is. `ref` is what lets a release and a nightly check the revision
+# they resolved once rather than whatever a ref points at by the time the job starts, and `run-format` is the switch
+# every caller already passes to both stacks: formatting is the one verdict a pull request settles for good, so it is
+# asked there and on no publication. Neither is read while the job below does nothing, and both are what the callers
+# already send.
 on:
   workflow_call:
     inputs:
@@ -43,74 +38,13 @@ permissions:
 
 jobs:
   build-and-unit-test-client:
-    name: Build, format, and unit test the client
+    name: Client stack, which carries no build yet
     runs-on: ubuntu-latest
-    env:
-      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
-      DOTNET_NOLOGO: '1'
-      NUGET_XMLDOC_MODE: skip
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-        with:
-          ref: ${{ inputs.ref }}
-          persist-credentials: false
-
-      - name: Set up .NET SDK
-        uses: actions/setup-dotnet@v6
-        with:
-          global-json-file: global.json
-
-      # The browser head compiles native WebAssembly assets — SkiaSharp's, and the runtime's own — through the
-      # Emscripten toolchain the `wasm-tools` workload carries, and `actions/setup-dotnet` installs an SDK with no
-      # workloads at all. Without this step the build fails at `net10.0-browserwasm` with NETSDK1147, naming the
-      # workload rather than anything about this repository. The desktop head needs nothing installed: Skia reaches it
-      # as an ordinary NuGet package, and `net10.0-desktop` is one target framework for Windows, Linux, and macOS
-      # alike, so compiling it on the Linux runner compiles exactly the code the Windows one would.
-      - name: Install the WebAssembly workload
-        run: dotnet workload install wasm-tools
-
-      # `frontend/Directory.Packages.props` pins the direct versions, the committed lock files fix the transitive
-      # closure, `NuGet.config` decides which sources any of it may come from, and `global.json` pins both the SDK and
-      # the Uno SDK that chooses every Uno package version — so the key covers all four. The client's own cache entry
-      # rather than a share of the server's: the two graphs overlap barely, and one key over both would evict on every
-      # change to either.
-      - name: Cache NuGet packages
-        uses: actions/cache@v6
-        with:
-          path: ~/.nuget/packages
-          key: nuget-client-${{ runner.os }}-${{ hashFiles('frontend/Directory.Packages.props', 'global.json', 'NuGet.config', 'frontend/**/packages.lock.json') }}
-
-      # Locked, like every other gated restore here. What it enforces in this solution is the unit-test project's lock
-      # file alone: the application project deliberately carries none, because the browser head's restore graph is
-      # partly the SDK's rather than this repository's, and `frontend/Directory.Build.props` states which packages and
-      # why. Locked mode passes over a project with no lock file rather than failing on it, which is how the server's
-      # solution already restores past the two projects carrying the Aspire graph.
-      - name: Restore dependencies
-        run: dotnet restore frontend/MailFathom.Client.slnx --locked-mode
-
-      # One command builds every target framework the solution declares: `net10.0-desktop`, `net10.0-browserwasm`, and
-      # the plain `net10.0` reference target the unit suite references the application through.
-      - name: Build both heads
-        run: dotnet build frontend/MailFathom.Client.slnx --configuration Release --no-restore
-
-      - name: Run unit tests
-        run: dotnet test --solution frontend/MailFathom.Client.slnx --configuration Release --no-build
-
-      # The verifying half of the pair whose repairing half is in `scripts/verify-fast.sh`: the loop rewrites the
-      # client files a branch changed, and this says whether a change that never went through the loop still needs it.
-      # `--no-restore` because the restore above already ran in this job, and last because a compile error and a
-      # failing test are the answers worth reaching first — the pass loads a Roslyn workspace of its own, so nothing
-      # in front of it makes it cheaper.
-      #
-      # A step here rather than a job of its own, unlike the server. A second job would pay for a second checkout, a
-      # second SDK, a second `wasm-tools` workload install, and a second restore — roughly 70 seconds — to run a pass
-      # that costs 26; the server's is a job of its own because its proportions are the other way round, and
-      # `build-test-format-and-migrations.yml` carries that half of the reasoning beside the job it decided.
-      #
-      # A step reports no conclusion of its own, so this job's name is what says formatting happened here. That is the
-      # whole of why it reads `Build, format, and unit test the client` rather than naming the two halves a reader
-      # would otherwise assume were all of it.
-      - name: Verify formatting
-        if: inputs.run-format
-        run: dotnet format frontend/MailFathom.Client.slnx --no-restore --verify-no-changes --verbosity diagnostic
+      # Nothing is checked out, no SDK is installed, and no toolchain is restored, because there is nothing under
+      # `frontend/` for any of them to read. A job that succeeds having done nothing is the honest report while that
+      # is true; a job removed instead would take the caller wiring with it.
+      - name: Report that the client stack carries no build
+        run: |
+          echo 'The Uno Platform client was withdrawn and the React client has not landed yet, so there is nothing'
+          echo 'under frontend/ to restore, build, test, or format. See frontend/src/README.md.'

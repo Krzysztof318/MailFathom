@@ -133,9 +133,8 @@ jobs:
 
   # The client stack's half of the same gate, against the same commit and with the same one switch turned off. It is a
   # second job rather than a switch on the one above because the two stacks share no solution, no build contract, and
-  # no package pins — and it blocks the image for a reason the two artifacts it produces make plain: the browser head
-  # published into that image is built from this commit, so a client that does not compile is a release whose image
-  # would carry the previous run's answer or none at all.
+  # no package pins. It asserts nothing today — the Uno client was withdrawn and the React one has not landed — and it
+  # is kept called so that the job which replaces it blocks this release without a change here.
   verify-client:
     name: Build and test the client
     needs:
@@ -208,26 +207,6 @@ jobs:
       ref: ${{ needs.assert.outputs.revision }}
       version: ${{ needs.assert.outputs.version }}
 
-  # The client as something somebody downloads and runs on their own machine, built from the same commit. It blocks
-  # nothing, on the same terms as the command binaries above and for the same reason.
-  desktop-client:
-    name: Desktop client
-    needs:
-      - assert
-      # Both gates, for the reason the command binaries wait for them: a commit the service's tests or
-      # the integration suite reject is not one to spend two self-contained publishes on. Its own
-      # stack's gate is here as well, because a client that does not compile is answered faster by the
-      # job that says so than by two publishes failing the same way.
-      - verify
-      - integration-tests
-      - verify-client
-    permissions:
-      contents: read
-    uses: ./.github/workflows/build-desktop-client.yml
-    with:
-      ref: ${{ needs.assert.outputs.revision }}
-      version: ${{ needs.assert.outputs.version }}
-
   publish:
     name: Publish
     needs:
@@ -238,9 +217,9 @@ jobs:
       # Reached through `schema-artifact` already, and named anyway: what gates a publication is the sort of thing that
       # has to be readable off the job that publishes rather than followed through another job's dependencies.
       - integration-tests
-      # The image carries the client's browser head, built from these sources by the image build itself, so a client
-      # that does not compile fails the publication anyway — twenty minutes into a multi-platform build rather than
-      # where the answer already is.
+      # The client's own gate, which is where a client that does not compile is answered rather than twenty minutes
+      # into a multi-platform image build. It asserts nothing while the client stack carries no build; the dependency
+      # is what makes it gate again the moment it does.
       - verify-client
       # Nothing above reaches this one, because it produces no artifact for a publishing job to inherit the dependency
       # through. It is named for what it holds rather than for what it builds: the chart this release goes on to
@@ -293,12 +272,11 @@ jobs:
       - publish
       - publish-chart
       - cli-binaries
-      - desktop-client
-    # cli-binaries and desktop-client are needs so that their `result` exists to be read below — the context carries
-    # only a job's declared dependencies, so a conditional step referring to a job that is not one is a condition that
-    # is always false. They are also the jobs producing what the release attaches. The four gates that must pass are named
-    # here instead of left to the default, because a job with an `if` is still skipped when a need fails unless the
-    # condition tolerates it:
+    # cli-binaries is a need so that its `result` exists to be read below — the context carries only a job's declared
+    # dependencies, so a conditional step referring to a job that is not one is a condition that is always false. It is
+    # also the job producing what the release attaches beside the schema artifact. The four gates that must pass are
+    # named here instead of left to the default, because a job with an `if` is still skipped when a need fails unless
+    # the condition tolerates it:
     # !cancelled() is what admits a failed or skipped command build, and the four equality checks are what keep
     # everything else gating exactly as before.
     if: >-
@@ -335,19 +313,6 @@ jobs:
         with:
           name: ${{ needs.cli-binaries.outputs.artifact }}
           path: artifacts/cli
-
-      # Conditional for the same reason: each archive holds the application with MailFathom's own licence and
-      # attribution beside it. What it no longer carries is the LGPL notice, licence text, and source offer, because
-      # the one copyleft package the restore graph resolves is now excluded from the publish rather than shipped under
-      # conditions — THIRD_PARTY_LICENSES.md carries that verdict. The permissive components inside it still oblige
-      # their own notices, which the notice bundle issue #191 owns discharges for every artifact at once rather than
-      # this step for one.
-      - name: Download the desktop client
-        if: needs.desktop-client.result == 'success'
-        uses: actions/download-artifact@v8
-        with:
-          name: ${{ needs.desktop-client.outputs.artifact }}
-          path: artifacts/desktop
 
       # The notes are the changelog section, not a list of pull-request titles: no arrangement of titles can state that
       # a release cannot be deployed over the previous release's data, which is the most important sentence a MailFathom
@@ -428,22 +393,13 @@ jobs:
             printf '`mfctl-%s.sha256` is what verifies a download — on every platform.\n' "$VERSION"
 
             printf '\n## The client\n\n'
-            printf 'There are two ways to have it, and the deployment decides which. The **browser head** travels '
-            printf 'inside the image above and is served by the deployment itself, from the same address its client '
-            printf 'surface answers on — one setting turns it on, and '
-            printf '[the client endpoint](https://github.com/%s/blob/%s/docs/operations/client-endpoint.md) ' \
+            printf 'This release carries none. The Uno Platform client was withdrawn and the client is being rebuilt '
+            printf 'in React, so no browser head travels inside the image and no desktop head is attached here. '
+            printf '[The client endpoint](https://github.com/%s/blob/%s/docs/operations/client-endpoint.md) ' \
               "$REPOSITORY" "$RELEASE_TAG"
-            printf 'is the page. The **desktop head** is attached to this release for Windows, as '
-            printf '`mailfathom-client-%s-win-x64.zip` and `mailfathom-client-%s-win-arm64.zip`; unpack one and run ' \
-              "$VERSION" "$VERSION"
-            printf '`MailFathom.Client.exe`. Verify a download against `mailfathom-client-%s.sha256`, which is the ' "$VERSION"
-            printf 'only thing that verifies it: no artifact here is code-signed either.\n\n'
-            printf 'Each archive carries `LICENSE` and `NOTICE` beside the application, which are the terms '
-            printf 'MailFathom itself is under. Everything else inside it is permissively licensed — MIT, '
-            printf 'Apache-2.0, MS-PL, and the Unicode License — and '
-            printf '[THIRD_PARTY_LICENSES.md](https://github.com/%s/blob/%s/THIRD_PARTY_LICENSES.md) ' \
-              "$REPOSITORY" "$RELEASE_TAG"
-            printf 'records each component and the terms it arrives under.\n'
+            printf 'is the surface the next one will call, and it is served whether or not a page stands in front of '
+            printf 'it — but a deployment that switches the client application on is refused by name, because the '
+            printf 'image has no bundle to serve.\n'
           } > "$notes_file"
 
           # Idempotent, because a re-run of a release must not fail on the release it already created.
@@ -466,11 +422,6 @@ jobs:
             gh release upload "$RELEASE_TAG" artifacts/cli/* --clobber
           fi
 
-          # Every published head of the client, plus its own checksum file. Guarded like the command above, because
-          # this job runs whether or not the client built.
-          if [ -d artifacts/desktop ]; then
-            gh release upload "$RELEASE_TAG" artifacts/desktop/* --clobber
-          fi
 
   # The Windows Package Manager channel, offered from the assets the job above has just attached. It is paused, and the
   # condition below is where that is said; what follows is why the job has the shape it has, for whoever resumes it.

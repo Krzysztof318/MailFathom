@@ -149,12 +149,12 @@ jobs:
               - 'backend/Directory.Packages.props'
             # The client stack, which shares no solution, no build contract, and no package pins with the server —
             # so this filter names nothing under `backend/` and the three above name nothing under `frontend/`, which
-            # is what makes a change to one stack cost nothing in the other. What it does name beside `frontend/**`
-            # is everything above both stacks that the client build still reads: the SDK and the Uno SDK pin in
-            # `global.json`, the version both stacks stamp from `Version.props`, the feeds `NuGet.config` permits, the
-            # style rules `.editorconfig` turns into build failures through `EnforceCodeStyleInBuild`, and `.config/`,
-            # which holds the banned-symbol list and the test-runner configuration the client's own build contract
-            # links into every project.
+            # is what makes a change to one stack cost nothing in the other. What it does name beside `frontend/**` is
+            # everything above both stacks a client build reads: the SDK pin in `global.json`, the version both stacks
+            # stamp from `Version.props`, the feeds `NuGet.config` permits, the style rules `.editorconfig` turns into
+            # build failures, and `.config/`, which holds the banned-symbol list and the test-runner configuration.
+            # The list is kept whole while the client stack carries no build, because it is what the job it gates will
+            # read again and `scripts/resolve-changed-stacks.sh` is held to it either way.
             frontend:
               - 'frontend/**'
               - '.config/**'
@@ -180,7 +180,7 @@ jobs:
   #
   # It is named after the stack it gates rather than after the act of gating, which is the whole of what
   # `Backend` buys over the `Verify` this job used to be called. A check arrives at a reader as one line —
-  # `Backend / dotnet format`, `Frontend / Build, format, and unit test the client` — and that line is
+  # `Backend / dotnet format`, `Frontend / Client stack, which carries no build yet` — and that line is
   # where a skipped job is either read as work the change could not reach or misread as a stack nobody
   # verified. Under the old name the two stacks were not comparable at a glance: `Verify` said which
   # question was asked and never which half of the repository it was asked about, so a client-only change
@@ -216,10 +216,11 @@ jobs:
   # draft — with both asked in the job's own condition rather than one of them passed inward, because there is a single
   # job on the other side and nothing for a switch to select between.
   #
-  # The draft exemption is the expensive-job rule rather than a copy of the server's: the browser head compiles native
-  # WebAssembly assets through Emscripten, which is minutes of runner time on a cold cache, so a draft pays for it at
-  # the moment it is marked ready like every other build here. `Repository contracts` is what does run for a draft, and
-  # its argument — seconds of runner time, nothing installed — is the one this job cannot make.
+  # That workflow asserts nothing today: the Uno Platform client was withdrawn and the React one has not landed, so
+  # `frontend/` holds two placeholder directories. The wiring stays anyway — this job, the filter above, and the
+  # aggregate below — because what fills it back in is then a change to the called workflow alone. Both conditions are
+  # kept for the same reason, including the draft exemption, which is the expensive-job rule the client's build will
+  # need again the moment it has one.
   frontend:
     name: Frontend
     needs:

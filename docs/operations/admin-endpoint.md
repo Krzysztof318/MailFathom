@@ -1971,9 +1971,8 @@ sealed in the file**, a credentials file that leaves the machine — in a backup
 screenshot of a directory listing — still discloses nothing on its own, because the key is random rather than derived
 from anything about the machine; but someone already able to read your files on your machine reads the key as easily as
 the store, and on Linux nothing prevents that. Neither arrangement defends against code running as you: a keyring
-answers whoever can ask it. [ADR 0018](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0018-where-the-client-keeps-its-sign-in-credential.md)
-records the decision and the threat model it accepts, and packaging the command so it can be installed is tracked as
-[#318](https://github.com/Krzysztof318/MailFathom/issues/318).
+answers whoever can ask it. That is the threat model this accepts, and packaging the command so it can be installed is
+tracked as [#318](https://github.com/Krzysztof318/MailFathom/issues/318).
 
 ## What the command records about itself
 

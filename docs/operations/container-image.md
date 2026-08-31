@@ -21,15 +21,15 @@ than anything in here. [Applying the database schema](database-schema.md) docume
 
 ## What is inside, and what is not
 
-The runtime image is built on `mcr.microsoft.com/dotnet/aspnet:10.0.11-noble-chiseled-extra` and is about 105 MB, of
-which about 19 MB is the client's browser bundle described below.
+The runtime image is built on `mcr.microsoft.com/dotnet/aspnet:10.0.11-noble-chiseled-extra` and is about 88 MB, down
+from about 105 MB while it still carried the client bundle described below.
 Chiseled means there is no shell, no package manager, and no HTTP client: a process that reaches the container finds
 almost nothing to use. `-extra` carries ICU and tzdata, which the plain chiseled image does not — MailFathom decodes
 internationalized headers, folds case for search, and formats instants for several time zones, and the invariant
 globalization the smaller image forces would quietly change how mail from outside one alphabet is read.
 
-It contains the published application, the client's browser bundle under `/app/wwwroot`, and nothing else — plus the
-two files that licensing requires travel with it, `/app/LICENSE` and `/app/NOTICE`. No SDK, no source tree, no
+It contains the published application and nothing else — plus the two files that licensing requires travel with it,
+`/app/LICENSE` and `/app/NOTICE`. No SDK, no source tree, no
 repository history, no test
 artifacts, no build cache, no credential, and no certificate. The XML documentation files every project generates are
 dropped at publish, because none is read at run time and shipping them would put the repository's commentary about its
@@ -45,28 +45,22 @@ prefers it, so the file bounding the context travels with the definition that us
 Every base image is pinned to an explicit patch version rather than to a floating `10.0`, so a rebuild months from now
 resolves what the change was reviewed against.
 
-## The client travels in it
+## No client travels in it
 
-`/app/wwwroot` is the MailFathom client's browser head — the WebAssembly bundle, about 51 MB across 205 files, which
-compresses into about 19 MB of image. It is built by a stage of this same Dockerfile, so one `docker build` still
-produces the published image: the stage installs the `wasm-tools` workload, restores
-`frontend/src/Client/Client.csproj` in locked mode — the application project rather than the solution, because the
-image needs one head and not the test suite beside it — and publishes the browser head in Release. Release is not a preference here — the Uno SDK drops its
-proprietary designer and App MCP assets only when `Optimize` is on, and it decides that at restore time, so both the
-restore and the publish state it. The pre-compressed `.br` and `.gz` copies the WebAssembly SDK emits are deleted
-before the bundle is copied into the runtime image: the static-file middleware serving it negotiates no content
-encoding, so they would be a second copy of the whole bundle that no request can reach.
+**The image carries no client page.** The Uno Platform client whose browser head used to be published into
+`/app/wwwroot` was withdrawn — the platform did not work out for this project — and the client is being rebuilt in
+React, so this Dockerfile has no client stage and the runtime image's web root is empty. A deployment that switches
+`ClientEndpoint:Application:Enabled` on against a current image is refused at startup by name, rather than serving a
+page of 404s.
 
-The stage carries two files from outside `frontend/` as well, and the allow-list above names them for that reason:
-`assets/icon-1254.png` and `assets/icon-900.png`, which are the product mark the client's build renders its favicon,
-its web manifest icons, and its splash screen from. They are build inputs rather than anything the bundle carries — the
-artwork lives once, under `assets/`, and `frontend/src/Client/Client.csproj` stages it for the Uno resizetizer instead
-of keeping a second copy beside the sources.
+Nothing about the *service* moved with it. `Host` still puts a static-file middleware in front of the client
+surface's listeners where that setting says so, and what it serves is whatever the web root holds. The composition
+root's whole knowledge of a client is still whether that directory has an `index.html` in it — which is what keeps
+the next client a directory of files copied in beside the application rather than a project this build references.
 
-**This couples the two stacks at build time and nowhere else.** No project under `backend/` references one under
-`frontend/`, neither solution names a project in the other, and the service assembly's reference list is asserted by a
-unit test. What the image carries is a directory of files copied in beside the application, and the composition root's
-whole knowledge of the client is whether that directory has an `index.html` in it.
+**No project under `backend/` references one under `frontend/`**, the service solution names none there, and the
+service assembly's reference list is asserted by a unit test. That was true while the two stacks met in this build and
+is true now that they do not.
 
 **Serving it is off**, in this image and in every deployment asset built on it. `ClientEndpoint:Application:Enabled`
 turns it on and [the client endpoint](client-endpoint.md#serving-the-client-from-the-deployment) is the page; an image
@@ -327,8 +321,8 @@ Publication runs the gates instead, in an order that spends the cheap ones first
 2. **The client stack's build and unit suite, and the repository contracts**, both against the same commit and both
    beside the gate above rather than behind it: the two solutions share no project, and the contract suite installs
    nothing and answers in twenty seconds, so putting either in sequence would delay a verdict without sharpening one.
-   The client's gate blocks the push on both channels, because the image carries the browser head published out of
-   that stack. The contract gate — the licensing headers, the page contracts, and the chart rendered against the
+   The client's gate blocks the push on both channels — it asserts nothing while that stack carries no build, and the
+   dependency is what makes it block again the moment it does. The contract gate — the licensing headers, the page contracts, and the chart rendered against the
    manifests committed beside it — blocks a release and reports on a nightly, which is the same difference the
    vulnerability scan draws and for the same reason: a release is one claim about one commit, and a nightly exists to
    be tried.
@@ -348,7 +342,7 @@ Publication runs the gates instead, in an order that spends the cheap ones first
    is built, so a change that put a variable back is caught by the next nightly rather than by the branch that made it.
 
 **Nothing is built from the commit until the verification gates have passed** — not the image, not the schema script,
-not the command binaries, and not the desktop client. They are jobs in `Release` and `Nightly` themselves rather than
+and not the command binaries. They are jobs in `Release` and `Nightly` themselves rather than
 steps inside the workflow that pushes the image, because the image is one of several things a channel builds and a gate
 inside it would gate only that one. The contract gate is the one that holds back less than the rest, and deliberately:
 it blocks the image and leaves the other artifacts alone, since what it asserts says nothing about whether a schema

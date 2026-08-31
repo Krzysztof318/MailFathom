@@ -113,11 +113,11 @@ The remaining labels are flags, applied only when they are true: `blocked` when 
 
 ### The stack the work lands in
 
-`backend` and `frontend` say which of the repository's two stacks the work lands in: `backend` is the .NET solution under `backend/`, `frontend` is the application under `frontend/`. An issue carries the one label its work lands under, both where a single unit of work genuinely spans the two, and neither where it lands in neither.
+`backend` and `frontend` say which of the repository's two stacks the work lands in: `backend` is the .NET solution under `backend/`, `frontend` is the client under `frontend/`, which carries no build while it is rebuilt in React. An issue carries the one label its work lands under, both where a single unit of work genuinely spans the two, and neither where it lands in neither.
 
 **Neither is a value rather than an omission**, and it is the ordinary case for a large part of this backlog: repository-wide tooling, the workflow contract, the board, the release process, the deployment assets, and documentation about the project rather than about one stack's code all sit outside both trees. So does the rule you are reading.
 
-A change outside both trees that exists for exactly one of them takes that stack's label anyway. A workflow job that builds only the Uno heads and a `docfx` source list that reads only `backend/src` are each about one stack whatever directory they are written in, and a reader filtering the list to one stack wants the pipeline work for it as much as the code. What decides the label is which stack the issue is about, and where the diff falls is the usual evidence for that rather than the rule itself.
+A change outside both trees that exists for exactly one of them takes that stack's label anyway. A workflow job that builds only the client and a `docfx` source list that reads only `backend/src` are each about one stack whatever directory they are written in, and a reader filtering the list to one stack wants the pipeline work for it as much as the code. What decides the label is which stack the issue is about, and where the diff falls is the usual evidence for that rather than the rule itself.
 
 **Both labels are for one unit of work that spans the two**, which is rarer than it sounds — a contract that has to move on both sides in the same pull request. Two issues that each land in one stack take one label each, even where one follows directly from the other, because the pair is what a reader filters on and an issue labelled for a stack it does not touch is noise in exactly the view the labels exist to make readable.
 
@@ -172,7 +172,7 @@ The board carries three single-select fields beyond `Status`. Set `Area` on ever
   | Agents & answering | Chat providers, the agent, `ask_mail`, and the bounds on what leaves the process |
   | Automation | Rules, the job model, executions, and classification |
   | MCP surface | Tools, the protocol, and transport authentication |
-  | Client | The mail client under `frontend/`: its screens, navigation, view models, and the platform heads it runs on |
+  | Client | The mail client under `frontend/`: its screens, its navigation, its state, and whatever it runs on |
   | Platform | Repository tooling, CI, verification, dependencies, and telemetry |
   | Release | Packaging, distribution, versioning, and user documentation — never which release ships it, because that is the milestone's question |
 

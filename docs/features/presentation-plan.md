@@ -18,8 +18,9 @@ template, an expression, or a reference to code, and adding a tenth block type i
 presentation safe here: the flexibility is in which blocks a run composes and what it puts in them, and the drawing is
 typed UI a client already has.
 
-**It is versioned apart from the application.** A deployment and a client are updated separately — a browser bundle is
-served by the deployment, but a desktop head is not — so a client will meet a plan written by a service ahead of it.
+**It is versioned apart from the application.** A deployment and a client are updated separately — a client installed
+on somebody's own machine most obviously, but equally a page cached in a browser — so a client will meet a plan written
+by a service ahead of it.
 The plan carries a schema version, and every block carries the version of its own type, so such a client can draw the
 blocks it recognizes, say what it cannot, and keep the rest of the run. Without both, the only safe answer to one
 unfamiliar block would be to discard the whole thing.

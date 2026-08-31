@@ -51,9 +51,9 @@ Every key this section takes is in
 [endpoint configuration](configuration-endpoints.md#clientendpoint), with its default and its constraint.
 
 **A normal local `aspire run` is the development exception to that default.** It enables the surface on a loopback
-socket of its own, admits the password method, and permits only the browser head's own origin, because that run starts
-a head that has to reach something. The AppHost provisions its synthetic credential after the service reports ready;
-[the client resource](local-development.md#the-client-resource) records the complete local topology and credential.
+socket of its own and admits the password method, so whatever a developer points at it has something to reach. The
+AppHost provisions its synthetic credential after the service reports ready;
+[the client surface](local-development.md#the-client-surface) records the complete local topology and credential.
 
 ## What it serves
 
@@ -861,8 +861,8 @@ a message cannot set the remote `\Seen` flag. The words and the document both pa
 guard the tool surface's readings pass, so a redaction rule configured for this deployment applies to what a pane draws
 exactly as it applies to what a model reads.
 
-[Rendering mail HTML in the client](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0019-rendering-mail-html-in-the-client.md)
-is the decision this route implements, and it holds the reasoning for every paragraph above.
+[The mail document](../features/email-content.md) holds the reasoning for every paragraph above, and states what a
+client is left to render.
 
 ### The attachment route
 
@@ -1112,8 +1112,12 @@ this port while still having to declare that the page may be served over it.
 
 ## Serving the client from the deployment
 
-The MailFathom container image carries the client's browser head, and one setting serves it from this endpoint's own
-listeners:
+**No release carries a client page today.** The Uno Platform client whose bundle used to travel inside the container
+image was withdrawn, and the client is being rebuilt in React, so a current image serves the API surface alone and the
+setting below refuses at startup on every artifact this project publishes. It is documented as the contract the
+rebuilt client lands against rather than as something an operator can turn on now.
+
+One setting serves a bundle from this endpoint's own listeners, where a host was given one:
 
 ```jsonc
 {
@@ -1139,7 +1143,7 @@ the client in front of the sign-in the endpoint already required.
 
 Serving it from the same origin as the surface it calls is the point of serving it here at all: the page then needs no
 cross-origin permission and `Cors:AllowedOrigins` has nothing to say about it. A client downloaded and installed rather
-than served — the desktop head — reaches the same routes from its own origin and does need one.
+than served reaches the same routes from an origin of its own and does need one.
 
 **Clear text is refused rather than warned about**, and that is the one difference from every other posture on this
 page. A page is what a person types their credential into, so a deployment that serves it over a socket this process
@@ -1150,9 +1154,9 @@ from a socket published to a network, which is why the second one is a declarati
 something MailFathom infers. A socket that only redirects to HTTPS serves nothing and needs no permission.
 
 Two more refusals belong to the same setting. Writing `Application:Enabled` while `ClientEndpoint:Enabled` is off fails
-at startup rather than being ignored, and so does enabling it on a host that carries no bundle — the files travel
-inside the container image, so a service run straight from the sources serves the API surfaces alone and says so
-instead of answering a page of 404s.
+at startup rather than being ignored, and so does enabling it on a host that carries no bundle — which is every host
+today, and was already the answer for a service run straight from the sources. It says so instead of answering a page
+of 404s.
 
 There is no client-certificate profile here. The trust question a certificate answers is a second one this endpoint does
 not yet ask; where it is served is stated in exactly the settings the existing endpoints use, so the day it does ask,

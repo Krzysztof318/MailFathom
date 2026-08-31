@@ -24,9 +24,8 @@ The fast loop restores, builds Release, runs the unit tests, and then formats th
 C# files the branch changed: everything committed since `origin/main`, staged,
 modified, or newly added. It is the only workflow script that rewrites source
 files, and every `dotnet format` pass it runs is a repairing one. Each file is
-formatted against the solution that holds it — `backend/MailFathom.slnx`, or
-`frontend/MailFathom.Client.slnx` for a path under `frontend/` — and formatting
-is skipped in a stack whose C# the branch did not touch.
+formatted against `backend/MailFathom.slnx`, which is the solution that holds it,
+and formatting is skipped where the branch touched no C#.
 
 Which of the two stacks it does any of that in follows from the changed paths
 rather than from whoever started it;
@@ -41,16 +40,9 @@ formatting the rules reject fails the Release build with `error IDE0005`,
 `error IDE0073`, and `error IDE0055`, each naming its file and line.
 
 One rule sits outside both halves of that. `IDE0060` has no code fix, so the
-repairing pass cannot act on it, and the Release build passes over it in either
-stack despite `.editorconfig` setting it to `warning`. What names it is the
-verifying pass — `scripts/verify-full.sh`, in whichever stacks the change
-reaches, and the `Frontend` job of `CI` for the client — which is how the two the
-client scaffold carried came to light at all.
-
-`frontend/Directory.Build.props` sets the same two properties as the server's, so
-all of the above reads identically in either stack: the loop builds the solution a
-change reaches before it formats anything in it, and the three rules the build
-reports are named there rather than left to the pipeline.
+repairing pass cannot act on it, and the Release build passes over it despite
+`.editorconfig` setting it to `warning`. What names it is the verifying pass in
+`scripts/verify-full.sh`.
 
 What the repairing pass is for is the remainder, which is real and is invisible
 to a build: the ordering of using directives and a missing final newline are
@@ -170,9 +162,16 @@ The repository carries two stacks that share no solution, no build contract, and
 no package pins, so building one proves nothing about the other and a change that
 reaches neither is proved by building neither. Both gates decide that from the
 changed paths, and the decision is not the person's who started the run: a change
-under `frontend/` builds and tests `frontend/MailFathom.Client.slnx`, a change
-under `backend/` builds and tests `backend/MailFathom.slnx`, a change to a file
-above both does both, and a documentation-only change does neither.
+under `backend/` builds and tests `backend/MailFathom.slnx`, a change under
+`frontend/` reaches the client stack, a change to a file above both reaches both,
+and a documentation-only change reaches neither.
+
+**The client stack's flow is nothing today, and both gates say so.** The Uno
+Platform client was withdrawn and the client is being rebuilt in React, so
+`frontend/` holds two placeholder directories and no solution to restore. What is
+kept is the detection rather than the work, because that is what the flow
+replacing it will be hung on — and a gate that reached the client stack and
+printed nothing would read as a gate that was not run.
 
 `ci.yml` has answered the same question since the client existed, in its
 `detect-changes` job, and the gates answer it from the same two lists rather than
@@ -196,30 +195,28 @@ as editing one does, so both gates read `list_removed_or_renamed_paths` as well
 before they decide.
 
 Six entries appear in both filters, and that is the answer rather than an
-overlap to resolve: `global.json` pins the SDK the service compiles with *and* the
-Uno SDK that chooses every client package, `.editorconfig` becomes a build failure
-in both through `EnforceCodeStyleInBuild`, and `Version.props`, `NuGet.config`,
-`.config/`, and `ci.yml` itself are read by both builds. A change to one of those
-runs both flows because it genuinely moves both. Neither filter names a path in
+overlap to resolve: `global.json` pins the SDK, `.editorconfig` becomes a build
+failure through `EnforceCodeStyleInBuild`, and `Version.props`, `NuGet.config`,
+`.config/`, and `ci.yml` itself are read above both stacks. A change to one of
+those reaches both flows because it genuinely moves both. Neither filter names a path in
 the other stack's directory, and
 `the_stacks_change_filters_name_no_path_in_each_other` asserts that too, which is
 what makes a change to one stack cost nothing in the other.
 
 Three things follow that are worth knowing before they are discovered.
 
-- **A branch that changed nothing under `frontend/` never loads the client
-  solution.** The loop costs such a branch exactly what it cost before the client
+- **A branch that changed nothing under `frontend/` reaches nothing of that
+  stack.** The loop costs such a branch exactly what it cost before the client
   stack existed, which
   `verify_fast_runs_restore_build_tests_and_formatting` asserts by comparing the
   whole invocation log rather than a line of it.
-- **A branch that did change something there needs the `wasm-tools` workload.**
-  Both gates compile the browser head, which the Emscripten toolchain in that
-  workload supplies, and `dotnet format` evaluates it like any other project in
-  the solution. A machine set up for the server alone fails the flow rather than
-  skipping it quietly, which is the right answer — the alternative is a green gate
-  that never loaded half the change.
+- **A branch that did change something there is told the stack carries no build.**
+  Both gates print it and restore nothing, which is the verdict the `Frontend` job
+  of `CI` publishes as well —
+  `verify_fast_reports_the_client_stack_carrying_no_build` and
+  `verify_full_reports_the_client_stack_carrying_no_build` hold both to it.
   [Building and testing the client](local-development.md#building-and-testing-the-client)
-  names the workload and carries the commands by hand.
+  carries what is there instead.
 - **A change no build reads runs no solution.** Documentation, a skill, a
   deployment asset, a board rule: the full gate answers such a change with the
   contract suite and the whitespace checks, and that is the complete answer rather
@@ -227,13 +224,10 @@ Three things follow that are worth knowing before they are discovered.
   a file no build reads. The loop says so rather than exiting silently, since a gate
   that prints nothing reads as a gate that was not run.
 
-Formatting is where the two stacks differ, and in one place only. The service
-solution is verified over the C# files the branch changed and the client's is
-verified whole, for the reason the full-gate paragraphs above give: `dotnet format`
-loads the whole workspace whatever the scope, the client's holds two projects, and
-the whole-solution form is what the `Frontend` job of `CI` holds a branch to
-anyway. The repairing half is the fast loop's in both stacks, scoped to the changed
-files in both, and `dotnet format` is never invoked by hand in either.
+Formatting reaches the service solution alone, over the C# files the branch
+changed, since there is no client solution to load. The repairing half is the fast
+loop's and the verifying half the full gate's, and `dotnet format` is never
+invoked by hand in either.
 
 ### A gate does not prove the same tree twice
 
@@ -308,12 +302,12 @@ writes `FETCH_HEAD`, so a repository with a missing or remapped
 base check against it. An unreachable remote is a failure and never degrades
 into verifying against the stale ref.
 
-Six cases in the contract suite that gate runs assert the licensing header
+Five cases in the contract suite that gate runs assert the licensing header
 rather than a script's behaviour. IDE0073 applies `.editorconfig`'s
 `file_header_template` to C# and reaches nothing else, so the workflows, the
 shell scripts, the chart, the documentation site's own assets, the Quadlet unit
-sources, the client's XAML, and the skills would each carry the mark only for as
-long as somebody remembered to type it, and nothing would say when one stopped.
+sources, and the skills would each carry the mark only for as long as somebody
+remembered to type it, and nothing would say when one stopped.
 The cases read `git ls-files` against the real repository, which is what keeps
 the fixture checkouts the suite builds from either failing or satisfying them.
 Each surface states the same three lines in the form its own readers parse: a
@@ -322,11 +316,9 @@ Each surface states the same three lines in the form its own readers parse: a
 under the shebang that has to stay first, a file under
 `deploy/helm/mailfathom/templates/` carries them as a `{{- /* ... */ -}}` comment
 so the rendered manifest is unchanged, a `.js` module opens with them as `//`
-comments and a `.css` file as the one `/* ... */` block it has instead, a
-`.xaml` file under `frontend/` carries them as an `<!-- ... -->` comment above
-its root element, which is where a XAML parser still reads the root's type from
-the first element it meets, and a `SKILL.md` declares `license` and a `metadata`
-block, which is where the Agent Skills format puts them. All of them are
+comments and a `.css` file as the one `/* ... */` block it has instead, and a
+`SKILL.md` declares `license` and a `metadata` block, which is where the Agent
+Skills format puts them. All of them are
 compared against the text parsed out of `.editorconfig`, so the header stays one
 decision written in one place: an edit to the template that leaves the other
 files behind fails as a disagreement rather than quietly splitting the mark in
@@ -610,10 +602,7 @@ The canonical skills are:
   the same pass that places it;
 - `review-change` performs a findings-first diff review and records verification
   status and residual risks, and reruns the fast loop only when something has
-  invalidated its last green run. A change that edits XAML or styles under
-  `frontend/` owes a Uno App MCP screenshot and a visual-tree snapshot of the
-  affected screen in that review; the evidence is not a test and does not stand
-  in for the authored-view binding assertions in `Client.UnitTests`;
+  invalidated its last green run;
 - `check-docs-licenses` is the mandatory documentation, changelog, and licensing
   gate;
 - `finish-change` stages only the task files, requires that gate, runs full
@@ -1448,13 +1437,9 @@ happens, so a stuck labelling run must not hold a review open or fail one.
 
 The prompt points the reviewer at this repository's own rules rather than at
 general review practice: root `AGENTS.md`, the nested `AGENTS.md` files under
-`backend/src/`, `backend/tests/`, `frontend/src/`, `frontend/tests/`, and `docs/`,
-the recurring findings in the `review-change` skill, and the ADRs that govern
-the area the change touches. A change that edits XAML or styles under
-`frontend/` owes a Uno App MCP screenshot and a visual-tree snapshot of the
-affected screen; that evidence is not a test and does not stand in for the
-authored-view binding assertions `frontend/tests/AGENTS.md` requires of
-`Client.UnitTests`. A finding names the rule it rests on in a field of its own,
+`backend/src/`, `backend/tests/`, and `docs/`, the recurring findings in the
+`review-change` skill, and the ADRs that govern the area the change touches. A
+finding names the rule it rests on in a field of its own,
 and one that applies generic advice where this repository has stated a different
 rule is itself wrong.
 

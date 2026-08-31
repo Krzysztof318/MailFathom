@@ -24,24 +24,19 @@ knowing before you start, because neither announces itself:
 
 `scripts/quick-start-compose.sh` performs everything on this page that is typed rather than decided: it asks where the
 mailbox lives, generates the credentials, writes the configuration, sets the modes, starts the stack, offers the schema
-step, reports the two probes, and provisions the credential to sign in to the client with.
+step, and reports the two probes.
 
 ```bash
 scripts/quick-start-compose.sh
 ```
 
-**It ends with an address for a chat client and an address for a browser.** The client travels inside the same image,
-so preparing it is two settings and a credential rather than anything to install: `MAILFATHOM_CLIENT=true` in `.env`, a
-`Basic` entry in `ClientEndpoint:Authentication`, and a generated username and password provisioned over the
-administrative endpoint once the stack answers. The password is written to `secrets/client-<name>-password` with the
-mode every other generated credential gets — beside the two database passwords rather than in `secrets/mailfathom/`,
-which is bind-mounted into the container and would make it readable there for no purpose — and the closing report
-names the address, the username, and that file. `--no-client` prepares the MCP endpoint alone, and
-`--client-user-name` names somebody other than `owner`.
+**It ends with an address for a chat client and nothing for a browser.** No image carries MailFathom's own client
+today — the Uno Platform one was withdrawn and the React one has not landed — so the script prepares no client
+credential and writes no client switch, and says so in its closing report.
 
-That credential is why the administrative endpoint is served whether or not you would otherwise have asked for it:
-provisioning one is an administrative operation and there is no other way to reach one. `--admin-endpoint off` together
-with the client is refused naming the conflict rather than quietly overridden.
+The administrative endpoint is still served whether or not you would otherwise have asked for it, because the MCP key
+is minted over it and there is no other way to reach one. `--admin-endpoint off` together with `--mcp-authentication
+api-key` is refused naming the conflict rather than quietly overridden.
 
 **It also relaxes the platform's TLS policy for this deployment**, by copying
 [`deploy/openssl/legacy-mail-server.cnf.example`](https://github.com/Krzysztof318/MailFathom/blob/main/deploy/openssl/legacy-mail-server.cnf.example)
@@ -75,25 +70,21 @@ shape the chat clients with no field for a static header can connect to. The key
 client presents to that endpoint is a record beside the owner whose mail it reaches, minted with
 `mfctl credential create` once the deployment is running, and the script prints that command when it finishes.
 
-The administrative endpoint comes with what those two credentials need rather than from an answer. Minting the MCP key
-is an administrative operation, and so is provisioning the username and password a person signs in to the client with —
-neither has another way to reach one. So a default run serves that endpoint on port 8090 through a generated
-`compose.override.yaml`, with a generated key of its own; its own default port is 8080, which is the socket the MCP
-endpoint is already served on, and `compose.yaml` publishes nothing for it. Only a run that asked for neither — both
-`--no-client` and `--mcp-authentication none` — leaves it off, and that run is asked whether to serve it and whether to
-serve it without a key.
+The administrative endpoint comes with what that credential needs rather than from an answer. Minting the MCP key is
+an administrative operation and has no other way to reach one. So a default run serves that endpoint on port 8090
+through a generated `compose.override.yaml`, with a generated key of its own; its own default port is 8080, which is
+the socket the MCP endpoint is already served on, and `compose.yaml` publishes nothing for it. Only a run that asked
+for no key at all — `--mcp-authentication none` — leaves it off, and that run is asked whether to serve it and whether
+to serve it without a key.
 
-**The client's password crosses an unencrypted hop**, which is the same hop everything else here crosses and is worth
-naming separately because a password is the one credential a person typed. On a port published to `127.0.0.1` that hop
-is this machine. MailFathom reports it at every startup, naming the surface and the port, and does not refuse it: this
-process reads the scheme of its own socket and nothing beyond it, so it cannot tell this deployment from one exposed to
-a network. Moving `MAILFATHOM_HTTP_BIND` off loopback without putting TLS in front is what makes the warning matter.
+**Every credential here crosses an unencrypted hop.** On a port published to `127.0.0.1` that hop is this machine.
+MailFathom reports it at every startup, naming the surface and the port, and does not refuse it: this process reads the
+scheme of its own socket and nothing beyond it, so it cannot tell this deployment from one exposed to a network. Moving
+`MAILFATHOM_HTTP_BIND` off loopback without putting TLS in front is what makes the warning matter.
 
-`--non-interactive` takes every answer as an argument instead, with `--password-file` for the credential, and
-`--no-start` writes the files and stops. Both end before the schema and before the client credential is provisioned —
-an unattended run declines the schema question the same way it declines every other — so what either leaves is a
-prepared deployment and a password nothing has been told about yet.
-[Provisioning it](client-endpoint.md#signing-a-person-in) is one administrative call afterwards.
+`--non-interactive` takes every answer as an argument instead, with `--password-file` for the mailbox credential, and
+`--no-start` writes the files and stops. Both end before the schema — an unattended run declines that question the same
+way it declines every other — so what either leaves is a prepared deployment nothing has been told about yet.
 `scripts/quick-start-compose.sh --help` lists all of them.
 
 ## Before the first start
@@ -535,9 +526,10 @@ reading a sentence saying it is not a release.
 
 ## The client
 
-MailFathom's own client is inside the image the application service already runs, so serving it starts no second
-container and pulls nothing. It is off, like everything else here that costs anything, and turning it on is one
-variable in `.env`:
+**No image carries MailFathom's own client today.** The Uno Platform client whose bundle used to travel inside the
+image was withdrawn and the client is being rebuilt in React, so the variable below fails at startup on every current
+release. It stays in `.env` as the plumbing the rebuilt client lands against, and what the rest of this section
+describes is the contract it carries once an image has a bundle again:
 
 ```dotenv
 MAILFATHOM_CLIENT=true

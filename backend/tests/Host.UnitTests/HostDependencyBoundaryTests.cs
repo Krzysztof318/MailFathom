@@ -17,10 +17,10 @@ namespace MailFathom.Host.UnitTests;
 public sealed class HostDependencyBoundaryTests
 {
     /// <summary>
-    /// The list is an exact set rather than a prohibition on the client's two assemblies, so a reference added for an
-    /// ordinary reason lands here for review instead of passing unread. What it refuses above all is
-    /// <c>MailFathom.Client</c> and <c>MailFathom.Client.Backend</c>, which belong to the other solution: neither
-    /// enters <c>backend/MailFathom.slnx</c>, and a build of this one mentions nothing under <c>frontend/</c>.
+    /// The list is an exact set rather than a prohibition on one name, so a reference added for an ordinary reason
+    /// lands here for review instead of passing unread. What it refuses above all is anything belonging to the client
+    /// stack: nothing under <c>frontend/</c> enters <c>backend/MailFathom.slnx</c>, and a build of this one mentions
+    /// none of it.
     /// </summary>
     [Fact]
     public void HostAssembly_ReferencesNoClientStackAssembly()

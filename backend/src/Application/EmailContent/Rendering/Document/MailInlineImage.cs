@@ -12,7 +12,7 @@ namespace MailFathom.Application.EmailContent.Rendering.Document;
 /// <remarks>
 /// <para>
 /// An inline part is inlined rather than linked, so drawing it needs no second request and no interception API — which
-/// matters because the browser head has none to offer. A part too large for the bound is not inlined at all and the
+/// matters because a browser-hosted client may have none to offer. A part too large for the bound is not inlined at all and the
 /// picture is reported as one the message carries but the pane does not draw, rather than as a reference to fetch.
 /// </para>
 /// <para>
