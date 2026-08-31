@@ -1772,6 +1772,29 @@ typo_check_leaves_an_excluded_path_out_of_the_file_list() {
     "$step_output_file"
 }
 
+typo_check_applies_an_excluded_directory_to_everything_beneath_it() {
+  local output_file="$test_directory/typo-check-excluded-directory-output"
+  local step_output_file="$test_directory/typo-check-excluded-directory-step-output"
+  local configuration_file="$test_directory/typo-check-excluded-directory.toml"
+
+  # The complement of the shape the fallback contract below refuses. `/frontend/dist/` carries a
+  # slash before its trailing one, so gitignore anchors it to the root and it names one directory —
+  # which the step applies to every path under it rather than widening over.
+  printf '[files]\nextend-exclude = ["/frontend/dist/"]\n' > "$configuration_file"
+
+  if ! run_typo_check_step \
+    $'README.md\nfrontend/dist/index.js' \
+    "$output_file" \
+    "$step_output_file" \
+    2 \
+    "$configuration_file"; then
+    printf 'Typo check failed to collect a changed-file list containing an excluded directory\n' >&2
+    return 1
+  fi
+
+  assert_file_content 'files=README.md' "$step_output_file"
+}
+
 typo_check_checks_nothing_when_a_pull_request_only_changes_excluded_paths() {
   local output_file="$test_directory/typo-check-excluded-only-output"
   local step_output_file="$test_directory/typo-check-excluded-only-step-output"
@@ -1793,25 +1816,30 @@ typo_check_checks_nothing_when_a_pull_request_only_changes_excluded_paths() {
 typo_check_falls_back_to_the_whole_checkout_for_an_exclusion_it_cannot_apply() {
   local output_file="$test_directory/typo-check-unappliable-exclusion-output"
   local step_output_file="$test_directory/typo-check-unappliable-exclusion-step-output"
-  local configuration_file="$test_directory/typo-check-glob-exclusion.toml"
+  local configuration_file="$test_directory/typo-check-unappliable-exclusion.toml"
+  local exclusion
 
   # `typos` reads an exclusion as a gitignore-style glob, and a file list cannot be filtered by one
   # faithfully. The whole checkout is where `typos` applies the pattern itself, so widening is the
-  # answer that keeps the exclusion exact rather than approximating it.
-  printf '[files]\nextend-exclude = ["docs/**/*.md"]\n' > "$configuration_file"
+  # answer that keeps the exclusion exact rather than approximating it. Three shapes reach it, and
+  # `generated/` is the one a slash count alone would misread: a trailing slash marks a directory
+  # and anchors nothing, so the pattern still matches at every depth.
+  for exclusion in 'docs/**/*.md' '!frontend/pnpm-lock.yaml' 'pnpm-lock.yaml' 'generated/'; do
+    printf '[files]\nextend-exclude = ["%s"]\n' "$exclusion" > "$configuration_file"
 
-  if ! run_typo_check_step \
-    'README.md' \
-    "$output_file" \
-    "$step_output_file" \
-    1 \
-    "$configuration_file"; then
-    printf 'Typo check failed instead of widening its scope for an exclusion it cannot apply\n' >&2
-    return 1
-  fi
+    if ! run_typo_check_step \
+      $'README.md\nbackend/src/x/generated/y.cs' \
+      "$output_file" \
+      "$step_output_file" \
+      2 \
+      "$configuration_file"; then
+      printf "Typo check failed instead of widening its scope for the exclusion '%s'\\n" "$exclusion" >&2
+      return 1
+    fi
 
-  assert_file_content 'files=.' "$step_output_file"
-  assert_contains 'docs/**/*.md' "$output_file"
+    assert_file_content 'files=.' "$step_output_file"
+    assert_contains "$exclusion" "$output_file"
+  done
 }
 
 typo_check_falls_back_to_the_whole_checkout_for_a_path_containing_whitespace() {
@@ -8536,6 +8564,7 @@ run_test typo_check_leaves_an_image_out_of_the_file_list
 run_test typo_check_checks_nothing_when_a_pull_request_only_changes_images
 run_test typo_check_checks_nothing_when_the_pull_request_only_removes_files
 run_test typo_check_leaves_an_excluded_path_out_of_the_file_list
+run_test typo_check_applies_an_excluded_directory_to_everything_beneath_it
 run_test typo_check_checks_nothing_when_a_pull_request_only_changes_excluded_paths
 run_test typo_check_falls_back_to_the_whole_checkout_for_an_exclusion_it_cannot_apply
 run_test typo_check_falls_back_to_the_whole_checkout_for_a_path_containing_whitespace

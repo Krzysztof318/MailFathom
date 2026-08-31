@@ -178,20 +178,27 @@ jobs:
 
           # Each entry is applied as a plain path: the file itself, or a directory and everything
           # beneath it. `typos` reads them as gitignore-style globs, so one carrying a glob character,
-          # one negating another, and one naming no directory — which matches at any depth — are all
-          # patterns this list cannot apply faithfully. Each falls back to the whole checkout, which
-          # is the run where `typos` applies the pattern itself, rather than to a list that drops the
-          # wrong paths or keeps them.
+          # one negating another, and one matching at any depth are all patterns this list cannot
+          # apply faithfully. Each falls back to the whole checkout, which is the run where `typos`
+          # applies the pattern itself, rather than to a list that drops the wrong paths or keeps
+          # them.
+          #
+          # What decides the third is the rule gitignore states: a pattern is anchored to the root
+          # when it carries a `/` anywhere but at its end, and matches at any depth when it does not.
+          # A trailing `/` marks a directory and anchors nothing, so `generated/` is `generated`
+          # wherever it appears while `frontend/dist/` is one directory — which is why the trailing
+          # one comes off before the question is asked rather than after.
           literal_exclusions=()
           for exclusion in "${exclusions[@]}"; do
-            if [[ "$exclusion" == *[\*\?\[]* || "$exclusion" == '!'* || "${exclusion#/}" != */* ]]; then
-              fall_back_to_whole_checkout "The exclusion '${exclusion}' in ${TYPOS_CONFIGURATION} is not a plain path under a directory, so it cannot be applied to a list of changed files."
+            anchored_exclusion="${exclusion%/}"
+
+            if [[ "$exclusion" == *[\*\?\[]* || "$exclusion" == '!'* || "$anchored_exclusion" != */* ]]; then
+              fall_back_to_whole_checkout "The exclusion '${exclusion}' in ${TYPOS_CONFIGURATION} is not a path anchored to the repository root, so it cannot be applied to a list of changed files."
             fi
 
-            # A leading `/` anchors a gitignore pattern to the root the changed paths are written
-            # from already; a trailing one marks a directory, which the prefix match below covers.
-            exclusion="${exclusion#/}"
-            literal_exclusions+=("${exclusion%/}")
+            # The leading `/` is what anchored it, and a changed path is written from that root
+            # already, so it comes off for the comparison below.
+            literal_exclusions+=("${anchored_exclusion#/}")
           done
 
           included_paths=()
