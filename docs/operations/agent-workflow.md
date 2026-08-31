@@ -1437,7 +1437,7 @@ happens, so a stuck labelling run must not hold a review open or fail one.
 
 The prompt points the reviewer at this repository's own rules rather than at
 general review practice: root `AGENTS.md`, the nested `AGENTS.md` files under
-`backend/src/`, `backend/tests/`, and `docs/`, the recurring findings in the
+`backend/`, `backend/src/`, `backend/tests/`, and `docs/`, the recurring findings in the
 `review-change` skill, and the ADRs that govern the area the change touches. A
 finding names the rule it rests on in a field of its own,
 and one that applies generic advice where this repository has stated a different
@@ -2159,16 +2159,20 @@ second time.
 
 ## Instruction scope
 
-Root `AGENTS.md` is loaded into every agent session, so it carries what has to be
-true before a file is read and nothing else. Its *Where the rest of the contract
-lives* table names every other file and says when each one is read; this section
-is the same split seen from the other end, with the reason each destination is
-reached whenever its rule matters.
+Root `AGENTS.md` is loaded into every agent session in either stack, so it carries
+what has to be true before a file is read and what a session in one stack still
+owes the other, and nothing else. A rule a client session could not act on is not
+one of them, which is why the .NET and C# contract sits in `backend/AGENTS.md`
+rather than at the root. Its *Where the rest of the contract lives* table names
+every other file and says when each one is read; this section is the same split
+seen from the other end, with the reason each destination is reached whenever its
+rule matters.
 
 | File | Loaded when | Reached because |
 |---|---|---|
 | `AGENTS.md` | Always | `CLAUDE.md` is a single `@AGENTS.md` include |
-| `backend/src/AGENTS.md` | A change under `backend/src/` | The directory cascade. It holds what is true of the service alone; the .NET and C# conventions are in the root file, because they govern the client and both test suites as well |
+| `backend/AGENTS.md` | A change anywhere under `backend/` | The directory cascade. It holds the service stack's whole contract — the .NET and C# conventions among it — because the root file is loaded into client sessions that have no `.cs` file to apply them to |
+| `backend/src/AGENTS.md` | A change under `backend/src/` | The directory cascade. It holds what is true of the service's production code alone |
 | `backend/src/Infrastructure/AGENTS.md` | A change under `backend/src/Infrastructure/` | The directory cascade |
 | `backend/tests/AGENTS.md` | A change under `backend/tests/` | The directory cascade, and root `AGENTS.md` names it wherever tests are owed |
 | `docs/AGENTS.md` | A change under `docs/` | The directory cascade |

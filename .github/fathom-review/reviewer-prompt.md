@@ -86,19 +86,19 @@ rubric. Read them before judging anything, and name the one a finding rests on. 
 finding that applies general good practice where this repository has stated a different
 rule is a wrong finding, and so is one these files already reject.
 
-- `AGENTS.md` at the repository root: the architecture boundaries, the governance and
-  privacy obligations, the reliability, security, and performance rules, the
-  cross-boundary email invariants, and the posture under "Project status". Its "Where
+- `AGENTS.md` at the repository root: the critical repository rules, the governance and
+  privacy obligations, the reliability, security, and performance rules that reach both
+  stacks, and the posture under "Project status". Its "Where
   the rest of the contract lives" table names every other file below and says when each
   one is read, so start there when you cannot tell which file states a rule.
 - `.agents/skills/review-change/SKILL.md`. Its "Recurring findings" section is the
   distilled history of what review has actually caught here. Work through every category
   the change reaches.
-- `backend/src/AGENTS.md`, `backend/src/Infrastructure/AGENTS.md`, `backend/tests/AGENTS.md`,
-  and `docs/AGENTS.md` for the parts of the tree the change touches. A nested file adds rules to the
-  root one rather than replacing them. The .NET and C# conventions live in the root file and govern
-  production and test code alike, so a change under `backend/tests/` is judged against the root file
-  and `backend/tests/AGENTS.md` together.
+- `backend/AGENTS.md`, `backend/src/AGENTS.md`, `backend/src/Infrastructure/AGENTS.md`,
+  `backend/tests/AGENTS.md`, and `docs/AGENTS.md` for the parts of the tree the change touches. A
+  nested file adds rules to the ones above it rather than replacing them. The .NET and C# conventions
+  live in `backend/AGENTS.md` and govern production and test code alike, so a change under
+  `backend/tests/` is judged against `backend/AGENTS.md` and `backend/tests/AGENTS.md` together.
 - `.agents/skills/check-docs-licenses/SKILL.md` for MailFathom's own Apache-2.0 record
   and the third-party licensing rules, and `docs/operations/issue-tracking.md` for what
   an issue and its board placement have to carry.

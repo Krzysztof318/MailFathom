@@ -60,15 +60,16 @@ rubric. Read the ones your group reaches before judging anything, and name the o
 candidate rests on. A candidate that applies general good practice where this repository
 has stated a different rule is a wrong candidate, and so is one these files already reject.
 
-- `AGENTS.md` at the repository root: the architecture boundaries, the governance and
-  privacy obligations, the reliability, security, and performance rules, the cross-boundary
-  email invariants, and the posture under "Project status".
+- `AGENTS.md` at the repository root: the critical repository rules, the governance and
+  privacy obligations, the reliability, security, and performance rules that reach both
+  stacks, and the posture under "Project status".
 - `.agents/skills/review-change/SKILL.md`. Its "Recurring findings" section is the
   distilled history of what review has actually caught here.
-- `backend/src/AGENTS.md`, `backend/src/Infrastructure/AGENTS.md`, `backend/tests/AGENTS.md`,
-  and `docs/AGENTS.md` for the parts of the tree your group touches. A nested file adds rules to the
-  root one rather than replacing them, and the .NET and C# conventions are in the root file, where
-  they govern production and test code alike.
+- `backend/AGENTS.md`, `backend/src/AGENTS.md`, `backend/src/Infrastructure/AGENTS.md`,
+  `backend/tests/AGENTS.md`, and `docs/AGENTS.md` for the parts of the tree your group touches. A
+  nested file adds rules to the ones above it rather than replacing them, and the .NET and C#
+  conventions, the architecture boundaries, and the email invariants are in `backend/AGENTS.md`,
+  where they govern production and test code alike.
 - The ADRs under `docs/decisions/` that govern the area your files change.
 
 ## How to work through your group

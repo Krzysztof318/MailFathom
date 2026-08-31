@@ -1,10 +1,10 @@
 # Source Development Instructions
 
-These instructions apply under `backend/src/` in addition to the repository root instructions.
+These instructions apply under `backend/src/` in addition to `backend/AGENTS.md` and the repository root instructions.
 
 ## Service conventions
 
-The root `AGENTS.md` holds the .NET and C# conventions and the asynchronous return types, and they govern this directory like every other. What follows is what is true of the service alone.
+`backend/AGENTS.md` holds the .NET and C# conventions, the asynchronous return types, and the service's architecture boundaries, and they govern this directory like every other under `backend/`. What follows is what is true of the production code alone.
 
 - Qualify `Session` wherever it appears: `IMailboxSession` for an open IMAP folder, `IPersistenceSession` for a local write transaction. It is the name this stack meets most that is ambiguous on its own.
 - Use `Email` for the mail artifact throughout `Domain`, `Application`, and `Infrastructure`: `EmailOccurrenceId`, `RemoteEmailMetadata`, `IEmailContentStore`, `StoredEmailEntity`. Do not name a mail type `Message` or `MailMessage`; the first is ambiguous once AI conversations exist and the second shadows `System.Net.Mail.MailMessage`. Name an AI conversation turn `ChatMessage` or `AgentMessage` after the domain concept, never after the layer.

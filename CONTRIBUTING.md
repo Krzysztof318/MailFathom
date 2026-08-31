@@ -245,8 +245,9 @@ The files that carry the licensing decision itself are not merely off limits by 
 
 | Document | What it governs |
 |---|---|
-| [`AGENTS.md`](AGENTS.md) | The non-negotiables, the architecture boundaries, the .NET and C# conventions every file in both stacks follows — comments and XML documentation among them — the privacy and licensing obligations, the reliability and security rules — and a table naming every file below and when each one is read |
-| [`backend/src/AGENTS.md`](backend/src/AGENTS.md) | What holds for the service alone: API and failure design, dependency injection and configuration, and outbound HTTP client lifetimes |
+| [`AGENTS.md`](AGENTS.md) | The non-negotiables, what holds across both stacks, the privacy and licensing obligations, the reliability and security rules — and a table naming every file below and when each one is read |
+| [`backend/AGENTS.md`](backend/AGENTS.md) | The service stack's whole contract: the .NET and C# conventions every file under `backend/` follows — comments and XML documentation among them — the asynchronous return types, the architecture boundaries, and the email invariants |
+| [`backend/src/AGENTS.md`](backend/src/AGENTS.md) | What holds for the service's production code alone: API and failure design, dependency injection and configuration, and outbound HTTP client lifetimes |
 | [`backend/tests/AGENTS.md`](backend/tests/AGENTS.md) | The service suite's own policy, coverage rules, and what belongs in the integration suite |
 | [`docs/AGENTS.md`](docs/AGENTS.md) | Documentation rules and the `describes:` marker every page carries |
 | [`docs/operations/issue-tracking.md`](docs/operations/issue-tracking.md) | Which work needs an issue, what its body carries, and how a maintainer triages one that arrives from outside the project |
