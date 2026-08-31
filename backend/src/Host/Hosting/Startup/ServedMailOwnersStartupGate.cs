@@ -366,6 +366,12 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
     /// what a write to it would be judged by. A record that will not bind stops the start rather than leaving that
     /// owner served from a section they have stopped reading: the alternative is a deployment quietly synchronizing the
     /// mailboxes an adoption was meant to replace.
+    /// <para>
+    /// It is read as a record already held, which drops exactly one rule — see <see cref="OwnerRecordArrival" />. The
+    /// scanning block a stored record carries is composed against the deployment's section rather than refused against
+    /// it, so an operator tightening what the deployment requires does not turn every record accepted before that into
+    /// a start this host cannot complete.
+    /// </para>
     /// </remarks>
     private async Task<ServedMailOwner> ServeFromTheOwnDocumentAsync(
         AsyncServiceScope scope,
@@ -381,7 +387,7 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
 
         var binding = scope.ServiceProvider
             .GetRequiredService<OwnerAccountDocumentBinder>()
-            .Bind(document.Json);
+            .Bind(document.Json, OwnerRecordArrival.AlreadyHeld);
 
         if (binding.Owner is not { } bound)
         {

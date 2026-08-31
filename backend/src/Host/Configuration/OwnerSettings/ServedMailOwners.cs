@@ -7,7 +7,6 @@ using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Host.Configuration.Mail;
-using MailFathom.Host.Configuration.SensitiveContent;
 using Microsoft.Extensions.Primitives;
 
 namespace MailFathom.Host.Configuration.OwnerSettings;

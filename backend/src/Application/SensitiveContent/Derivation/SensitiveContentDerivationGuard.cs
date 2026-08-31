@@ -81,6 +81,20 @@ public sealed class SensitiveContentDerivationGuard
     /// </remarks>
     public IReadOnlyList<OwnerSensitiveContentPosture> Current => this.postures.Current;
 
+    /// <summary>Gets what a row belonging to an owner this deployment no longer serves is judged against.</summary>
+    /// <remarks>
+    /// The deployment's own posture, which is what <see cref="ISensitiveContentPostures.ForOwner" /> answers for an
+    /// owner off the roster and is the stricter of the two candidates. Read by the walk that judges rows belonging to
+    /// several owners at once, so that mail still stored for somebody a deployment has stopped serving is judged by
+    /// something rather than stepped over.
+    /// <para>
+    /// The unspecified identifier is what asks the question, because no roster carries one: an owner is declared with a
+    /// UUID that is refused if it is the all-zero one, so this reaches the fallback by the same route every owner the
+    /// roster does not name reaches it.
+    /// </para>
+    /// </remarks>
+    public SensitiveContentDerivationStamp? StampForUnrostered => this.postures.ForOwner(default).Stamp;
+
     /// <summary>Gets the configuration a row of one owner's mail written now records, or nothing where it is not scanned.</summary>
     /// <param name="owner">The owner whose mail the row is derived from.</param>
     /// <returns>That owner's stamp, or <see langword="null" /> where nothing scans their mail.</returns>

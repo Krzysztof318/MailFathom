@@ -985,6 +985,68 @@ public sealed class ServedMailOwnersStartupGateTests
     }
 
     /// <summary>States one owner's own record, holding a single mail account named as the test asks.</summary>
+    /// <summary>
+    /// The gate is what carries an owner's scanning block onto the roster, and the posture every path reads is composed
+    /// from what the roster holds. A block dropped between the declaration and the published owner would leave that
+    /// owner's mail derived and published unscanned while their own record read as protection in force.
+    /// </summary>
+    [Fact]
+    public async Task StartAsync_ADeclaredOwnerAskingForAScanner_PublishesWhatTheyAskedFor()
+    {
+        // Arrange
+        var roster = new ServedMailOwners();
+        var declared = Configuration(new Dictionary<string, string?>(StringComparer.Ordinal)
+        {
+            [$"{DeclaredOwnerOptions.SectionName}:0:{nameof(DeclaredOwnerOptions.Id)}"] = DeclaredIdentifier.ToString(),
+            [$"{DeclaredOwnerOptions.SectionName}:0:{nameof(DeclaredOwnerOptions.DisplayName)}"] = "alex",
+            [$"{DeclaredOwnerOptions.SectionName}:0:{OwnerSensitiveContentOptions.BlockName}:Secrets:Enabled"] = "true",
+        });
+
+        // Act
+        await CreateGate([], declared, servedOwners: roster).StartAsync(CancellationToken.None);
+
+        // Assert
+        var served = Assert.Single(roster.Owners);
+
+        Assert.True(served.SensitiveContent!.Secrets.Enabled);
+    }
+
+    /// <summary>The same for the other source a served owner's settings come from, which is their own record.</summary>
+    [Fact]
+    public async Task StartAsync_AnAdoptedOwnerWhoseRecordAsksForAScanner_PublishesWhatTheyAskedFor()
+    {
+        // Arrange
+        var owner = MailOwnerId.Create(DeclaredIdentifier);
+        var roster = new ServedMailOwners();
+        var documents = Substitute.For<IOwnerSettingsDocumentReader>();
+
+        ScanningDocumentOf(documents, owner);
+
+        // Act
+        await CreateGate(
+                [Adopted(owner, "alex")],
+                Declaring(DeclaredIdentifier, "alex"),
+                servedOwners: roster,
+                documents: documents)
+            .StartAsync(CancellationToken.None);
+
+        // Assert
+        var served = Assert.Single(roster.Owners);
+
+        Assert.True(served.SensitiveContent!.Secrets.Enabled);
+        Assert.Equal(["Secrets"], served.SensitiveContent!.ScreenOutgoingMailFor!);
+    }
+
+    /// <summary>An owner's record declaring one scanner and no mailbox at all, which is what the block alone looks like.</summary>
+    private static void ScanningDocumentOf(IOwnerSettingsDocumentReader documents, MailOwnerId owner) =>
+        documents.ReadAsync(owner, Arg.Any<CancellationToken>()).Returns(
+            Task.FromResult<OwnerSettingsDocument?>(new OwnerSettingsDocument(
+                owner,
+                $"owner-{owner.Value:D}",
+                """{"MailAccounts":[],"SensitiveContent":{"Secrets":{"Enabled":true},"ScreenOutgoingMailFor":["Secrets"]}}""",
+                Version: 2,
+                WrittenAtRuntime: true)));
+
     private static void DocumentOf(
         IOwnerSettingsDocumentReader documents,
         MailOwnerId owner,

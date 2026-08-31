@@ -67,9 +67,15 @@ in the owner's record.
 **One direction only.** An owner may switch on a scanner the deployment left off, and may add a scanner to what stops
 their outgoing mail. They may not switch off a scanner the deployment requires, and may not name fewer scanners than the
 deployment screens for. The obligation belongs to whoever holds the mail, so a loosening is **refused where it is
-written** — at the record write and at the start that reads the file — rather than accepted and then quietly overruled,
-which would leave an owner reading a record that describes something other than what is in force. Each refusal names the
-deployment setting behind it, and never the text of the record.
+written** — at the record write, and at the start that reads a block declared in the deployment's own file — rather than
+accepted and then quietly overruled, which would leave an owner reading a record that describes something other than
+what is in force. Each refusal names the deployment setting behind it, and never repeats the text of the record.
+
+A record this deployment *already holds* is composed rather than refused, and that is deliberate rather than a gap. An
+operator who tightens the deployment afterwards turns every record accepted before into one that asks for less, and
+refusing those on the next start would refuse the start itself for every owner — over records their authors could no
+longer reach to rewrite, the surface that would rewrite them being behind the gate that is failing. The composition
+takes the stricter of the two, so such a record loosens nothing.
 
 **Asking for a scanner the deployment cannot run is refused at the write too.** The personal-data scanner reaches an
 analyzer an operator deploys beside the service, so an owner switching it on where

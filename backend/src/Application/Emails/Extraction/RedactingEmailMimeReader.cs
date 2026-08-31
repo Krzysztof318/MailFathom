@@ -67,13 +67,22 @@ public sealed class RedactingEmailMimeReader : IEmailMimeReader
         MailOwnerId owner,
         CancellationToken cancellationToken)
     {
+        // Read before the scan rather than where the reading is written, and before the scan rather than after it.
+        // A posture republished while this message is being scanned then leaves the row stamped with the older one,
+        // which reads as stale and is re-derived — the safe direction, where a stamp taken at the write would record a
+        // posture the text never went through and the row would never be revisited.
+        var redactedUnder = this.guard.StampFor(owner);
         var extraction = await this.inner.ReadMetadataAsync(content, owner, cancellationToken);
 
         // A message nobody could parse carries no text to redact, and neither does one whose body held no words or
-        // arrived inside a cryptographic envelope. Each of those reaches the derived store as the absence it already is.
+        // arrived inside a cryptographic envelope. Each of those reaches the derived store as the absence it already
+        // is, and is still stamped: a row nothing had to redact was still derived under this posture, and one left
+        // unstamped would be outstanding to every rebuild for ever.
         if (extraction.Metadata is not { Text: { OriginalText: { } original, TrimmedText: { } trimmed } text } metadata)
         {
-            return extraction;
+            return extraction.Metadata is { } unredacted
+                ? EmailMimeExtractionResult.Extracted(unredacted with { RedactedUnder = redactedUnder })
+                : extraction;
         }
 
         var redactedOriginal = await this.guard.GuardAsync(owner, original, cancellationToken);
@@ -85,7 +94,10 @@ public sealed class RedactingEmailMimeReader : IEmailMimeReader
             ? redactedOriginal
             : await this.guard.GuardAsync(owner, trimmed, cancellationToken);
 
-        return EmailMimeExtractionResult.Extracted(
-            metadata with { Text = text.WithRedactedText(redactedOriginal, redactedTrimmed) });
+        return EmailMimeExtractionResult.Extracted(metadata with
+        {
+            Text = text.WithRedactedText(redactedOriginal, redactedTrimmed),
+            RedactedUnder = redactedUnder,
+        });
     }
 }

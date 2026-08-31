@@ -232,11 +232,11 @@ public sealed class OwnerSensitiveContentPosturesTests : IDisposable
 
         Assert.False(postures.ForOwner(SyntheticMailOwner.Deployment).IsActive);
 
-        var asked = new OwnerSensitiveContentOptions();
-        asked.Secrets.Enabled = true;
+        var asked = new OwnerAccountOptions();
+        asked.SensitiveContent.Secrets.Enabled = true;
 
         // Act
-        servedOwners.OwnerDocumentPublished(SyntheticMailOwner.Deployment, "owner", [], asked, 1);
+        servedOwners.OwnerDocumentPublished(SyntheticMailOwner.Deployment, "owner", asked, 1);
 
         // Assert
         Assert.Equal(
@@ -258,11 +258,11 @@ public sealed class OwnerSensitiveContentPosturesTests : IDisposable
         ]);
 
         var postures = this.PosturesOver(new SensitiveContentOptions(), servedOwners);
-        var asked = new OwnerSensitiveContentOptions();
-        asked.Secrets.Enabled = true;
+        var asked = new OwnerAccountOptions();
+        asked.SensitiveContent.Secrets.Enabled = true;
 
         // Act
-        servedOwners.OwnerDocumentPublished(SyntheticMailOwner.Deployment, "owner", [], asked, 1);
+        servedOwners.OwnerDocumentPublished(SyntheticMailOwner.Deployment, "owner", asked, 1);
 
         // Assert
         Assert.True(postures.ForOwner(SyntheticMailOwner.Deployment).IsActive);
@@ -354,7 +354,7 @@ public sealed class OwnerSensitiveContentPosturesTests : IDisposable
             owner.Value.ToString(),
             MailOwnerAccountSource.DeploymentSection,
             [],
-            sensitiveContent);
+            SensitiveContent: sensitiveContent);
 
     /// <summary>Composes the postures of a deployment whose roster is settled and names exactly these owners.</summary>
     private OwnerSensitiveContentPostures PosturesOver(

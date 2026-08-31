@@ -6,7 +6,6 @@ using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.OwnerSettings;
-using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.UnitTests.TestDoubles;
 using Xunit;
 

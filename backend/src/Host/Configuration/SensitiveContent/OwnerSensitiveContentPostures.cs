@@ -106,15 +106,26 @@ internal sealed class OwnerSensitiveContentPostures : ISensitiveContentPostures
 
     /// <summary>Composes what one owner asked for over the deployment's own answer, in the one direction allowed.</summary>
     /// <remarks>
+    /// <para>
     /// A scanner is on where either side switched it on, and the screening list is the union of the two. Both are the
     /// same rule read twice: the deployment's answer is a floor, and an owner's record can only stand on it.
+    /// </para>
+    /// <para>
+    /// An owner's opt-in reaches only what the deployment provides. <see cref="OwnerSensitiveContentRules" /> refuses
+    /// the other case at the write, but a record accepted while an analyzer was configured outlives the operator
+    /// removing that address, and honouring it then would compose a plan naming a scanner no detector is registered
+    /// for — which would throw out of here and take every scanning path on the deployment with it. The deployment's
+    /// own switch needs no such guard: startup validation already refuses it.
+    /// </para>
     /// </remarks>
     private static EffectivePosture Compose(
         SensitiveContentOptions deployment,
         OwnerSensitiveContentOptions? owner)
     {
+        var provided = deployment.ProvidedScanners;
         var switchedOn = Enum.GetValues<SensitiveContentScannerKind>()
-            .Where(scanner => deployment.For(scanner).Enabled || owner?.For(scanner).Enabled is true)
+            .Where(scanner => deployment.For(scanner).Enabled
+                || (owner?.For(scanner).Enabled is true && provided.Contains(scanner)))
             .ToArray();
 
         var screening = SensitiveContentPlanMapper.ScreeningScannersOf(deployment)

@@ -189,7 +189,7 @@ owner's mail is the stricter of them.
 
 **Only tightening is accepted, and a loosening is refused where it is written** — at this file's own start and at a
 record write alike, because the two are one block arriving by two routes. Three refusals, each naming the deployment
-setting behind it and never the record's own text:
+setting behind it and never repeating the record's own text:
 
 - `false` against a scanner the deployment switched on. The obligation belongs to whoever holds the mail, so an owner
   may switch a scanner on for their own and never off.
@@ -198,6 +198,14 @@ setting behind it and never the record's own text:
   closed on the owner's next message.
 - A `ScreenOutgoingMailFor` naming fewer scanners than `SensitiveContent:ScreenOutgoingMailFor` does. An owner may add
   to that list and never take from it; removing the key altogether takes the deployment's list as it stands.
+
+**A record this deployment already holds is composed rather than refused.** The three refusals above are judged where a
+record is *written*; on the next start a stored record is read back and its block composed against the section as it
+stands. That is what keeps the tightening this feature exists for from being a trap: an operator who switches a scanner
+on deployment-wide, or widens `SensitiveContent:ScreenOutgoingMailFor`, turns every record accepted before that into one
+that now asks for less — and refusing those would refuse the start itself, for every owner, over records their authors
+could no longer reach to rewrite. What is in force is the stricter of the two either way, so nothing is loosened by
+accepting them.
 
 Everything else about scanning stays the deployment's: the analyzer's address, the analyzed ceiling, the per-scan
 timeout, the process-wide scan concurrency — one budget every owner shares — and the rebuild switch. A record naming one

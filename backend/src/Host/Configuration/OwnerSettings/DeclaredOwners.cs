@@ -232,21 +232,6 @@ internal static class DeclaredOwners
         return refusals.Select(refusal => $"{path} — {Describe(owner)}: {refusal.ErrorMessage ?? "the declaration is invalid."}");
     }
 
-    /// <summary>Reports a mail-account name two owners would both answer to.</summary>
-    /// <remarks>
-    /// <para>
-    /// The pair <c>(owner, identifier)</c> is what a mail account is keyed by, so two owners each declaring
-    /// <c>work</c> is a state persistence carries. What does not carry it yet is the settings read in front of it: the
-    /// per-account ports a synchronization run and a mail read resolve are keyed by the identifier alone, so a name
-    /// two owners share would resolve to whichever declaration the lookup met. This is the bound that keeps that from
-    /// happening, and it is deployment-wide rather than per owner for exactly that reason.
-    /// </para>
-    /// <para>
-    /// It is stated here rather than left to the per-owner naming space above, which is the rule that governs what a
-    /// caller may name and stays within its owner. Removing this one is keying those ports by the pair, at which point
-    /// the file needs no deployment-wide naming convention at all.
-    /// </para>
-    /// </remarks>
     /// <summary>Finds what one declared owner asks to have their mail scanned for that this deployment could not serve.</summary>
     /// <remarks>
     /// The rule is the one an owner's own record is written under rather than a second copy of it, so an operator
@@ -262,6 +247,21 @@ internal static class DeclaredOwners
             deployment,
             $"{DeclaredOwnerOptions.SectionName}:{index}:{OwnerSensitiveContentOptions.BlockName}");
 
+    /// <summary>Reports a mail-account name two owners would both answer to.</summary>
+    /// <remarks>
+    /// <para>
+    /// The pair <c>(owner, identifier)</c> is what a mail account is keyed by, so two owners each declaring
+    /// <c>work</c> is a state persistence carries. What does not carry it yet is the settings read in front of it: the
+    /// per-account ports a synchronization run and a mail read resolve are keyed by the identifier alone, so a name
+    /// two owners share would resolve to whichever declaration the lookup met. This is the bound that keeps that from
+    /// happening, and it is deployment-wide rather than per owner for exactly that reason.
+    /// </para>
+    /// <para>
+    /// It is stated here rather than left to the per-owner naming space above, which is the rule that governs what a
+    /// caller may name and stays within its owner. Removing this one is keying those ports by the pair, at which point
+    /// the file needs no deployment-wide naming convention at all.
+    /// </para>
+    /// </remarks>
     private static IEnumerable<string> FindCrossOwnerAccountNameCollisions(IReadOnlyList<DeclaredOwnerOptions> owners)
     {
         var named = owners

@@ -51,8 +51,22 @@ public sealed class SensitiveContentScanConcurrency : IDisposable
     public void Dispose() => this.permits.Dispose();
 
     /// <summary>One held permit, which releases itself when the scan that took it finishes.</summary>
+    /// <remarks>
+    /// Released on the first disposal and on no later one, which is what the disposal contract asks of every
+    /// implementation. Releasing twice would either add a permit nothing took — quietly raising the process-wide bound
+    /// this whole type exists to hold — or throw <see cref="SemaphoreFullException" /> out of a <c>Dispose</c>, where
+    /// it would mask whatever the scan was already failing with.
+    /// </remarks>
     private sealed class Permit(SemaphoreSlim permits) : IDisposable
     {
-        public void Dispose() => permits.Release();
+        private int released;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref this.released, 1) == 0)
+            {
+                permits.Release();
+            }
+        }
     }
 }

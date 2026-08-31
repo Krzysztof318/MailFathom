@@ -77,14 +77,14 @@ internal sealed class StoredEmailMetadataRepository(
             StoredEmailMetadataMapping.ApplyExtractedMetadata(entity, extractedMetadata);
 
             // The search document is written from the same extraction in the same session, so an email's indexed text
-            // can never describe a different reading of its MIME than its own metadata columns do. The stamp is written
-            // with it, because the reading arrived here already redacted and the row has to say under what.
+            // can never describe a different reading of its MIME than its own metadata columns do. The stamp travels
+            // on that reading rather than being resolved here, because the reading arrived already redacted and the
+            // row has to say under what it was — not under what is in force at the moment it commits.
             await EmailSearchDocumentWriter.SaveAsync(
                 dbContext,
                 entity,
                 extractedMetadata,
                 timeProvider.GetUtcNow(),
-                derivationGuard.StampFor(MailOwnerId.Create(entity.OwnerId)),
                 cancellationToken);
         }
         else

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.Summaries;
+using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Emails.Authorship;
@@ -61,4 +62,16 @@ public sealed record ExtractedEmailMetadata(
     /// deployment that assesses no authorship stores and what a message with no readable body carries.
     /// </remarks>
     public MachineAuthorshipAssessment MachineAuthorship { get; init; } = MachineAuthorshipAssessment.NotAssessed;
+
+    /// <summary>Gets the owner's scanning posture this reading was redacted under, or nothing where none redacted it.</summary>
+    /// <remarks>
+    /// Carried on the reading rather than resolved where the reading is written, because the two happen at different
+    /// moments and a posture can change between them: a batch of mail is read outside any transaction and commits
+    /// afterwards, so a stamp taken at the write would record a configuration the text beside it never went through —
+    /// and a row stamped with a posture stricter than the one that produced it is a row nothing ever revisits. The
+    /// value is set by <see cref="RedactingEmailMimeReader" /> for the same reason
+    /// <see cref="SenderTrust" /> is set by the reader that judges it, and is <see langword="null" /> exactly where
+    /// nothing scans this owner's mail.
+    /// </remarks>
+    public SensitiveContentDerivationStamp? RedactedUnder { get; init; }
 }

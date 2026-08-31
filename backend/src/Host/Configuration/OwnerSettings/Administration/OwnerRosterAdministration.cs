@@ -5,7 +5,6 @@
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
-using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Infrastructure.Persistence.Owners;
 
 namespace MailFathom.Host.Configuration.OwnerSettings.Administration;

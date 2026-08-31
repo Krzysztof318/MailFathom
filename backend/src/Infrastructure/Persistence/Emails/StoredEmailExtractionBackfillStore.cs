@@ -134,7 +134,6 @@ internal sealed class StoredEmailExtractionBackfillStore(
             storedEmail,
             metadata,
             timeProvider.GetUtcNow(),
-            derivationGuard.StampFor(MailOwnerId.Create(storedEmail.OwnerId)),
             cancellationToken);
 
         // Cut from the same extraction, so an email this walk reaches arrives at the same state a newly synchronized
@@ -200,20 +199,31 @@ internal sealed class StoredEmailExtractionBackfillStore(
                 && email.SearchDocument != null
                 && email.SearchDocument.TextSource != ExtractedEmailTextSource.BodyNotExtracted);
 
-        return StaleFor(derived, derivationGuard.Current).CountAsync(cancellationToken);
+        return StaleFor(derived, derivationGuard.Current, derivationGuard.StampForUnrostered)
+            .CountAsync(cancellationToken);
     }
 
     /// <summary>Narrows a set of derived rows to the ones written under something other than their own owner's posture.</summary>
     /// <remarks>
+    /// <para>
     /// One branch per owner, unioned, rather than one predicate over a set of pairs: a row is stale against its own
     /// owner's stamp alone, and comparing it against every stamp in force would call a message fresh because somebody
     /// else's posture happens to match the configuration it was actually written under. Each branch is an equality on
     /// the owner column beside an inequality on the stamp, so PostgreSQL walks the same index a per-owner read walks,
     /// and a deployment serving one owner produces the single predicate it produced before any of this existed.
+    /// </para>
+    /// <para>
+    /// One further branch covers the rows whose owner the roster does not name — mail still stored for somebody a
+    /// deployment has stopped serving. They are judged against the deployment's own posture, which is what
+    /// <see cref="ISensitiveContentPostures.ForOwner" /> already answers for that owner and is the stricter of the two
+    /// candidates. Without it those rows would match nothing, and a walk that silently steps over stored mail is
+    /// exactly what the deployment-wide predicate this replaced did not do.
+    /// </para>
     /// </remarks>
     private static IQueryable<StoredEmailEntity> StaleFor(
         IQueryable<StoredEmailEntity> derived,
-        IReadOnlyList<OwnerSensitiveContentPosture> postures)
+        IReadOnlyList<OwnerSensitiveContentPosture> postures,
+        SensitiveContentDerivationStamp? unrostered)
     {
         // An owner whose mail nothing scans has no stamp to be stale against: their derived rows carry none and are
         // exactly what a deployment that scans nobody writes, so nothing about them is outstanding.
@@ -223,9 +233,19 @@ internal sealed class StoredEmailExtractionBackfillStore(
             .Select(posture => derived.Where(email =>
                 email.OwnerId == posture.Owner
                 && email.SearchDocument!.SensitiveContentStamp != posture.Stamp))
-            .ToArray();
+            .ToList();
 
-        return branches.Length == 0
+        if (unrostered is { } deployment)
+        {
+            var rostered = postures.Select(posture => posture.Owner.Value).ToArray();
+            var deploymentStamp = deployment.Value;
+
+            branches.Add(derived.Where(email =>
+                !rostered.Contains(email.OwnerId)
+                && email.SearchDocument!.SensitiveContentStamp != deploymentStamp));
+        }
+
+        return branches.Count == 0
             ? derived.Take(0)
             : branches.Skip(1).Aggregate(branches[0], (stale, branch) => stale.Concat(branch));
     }
@@ -265,7 +285,7 @@ internal sealed class StoredEmailExtractionBackfillStore(
         var derived = outstanding.Where(email => email.SearchDocument != null
             && email.SearchDocument.TextSource != ExtractedEmailTextSource.BodyNotExtracted);
 
-        return neverDerived.Concat(StaleFor(derived, rebuiltTowards));
+        return neverDerived.Concat(StaleFor(derived, rebuiltTowards, derivationGuard.StampForUnrostered));
     }
 
     /// <summary>Asks both stages that stand in front of the cut about one email, through the predicates they own.</summary>

@@ -581,7 +581,7 @@ internal sealed class OwnerRecordAdministration(
         OwnerRecordAuthority authority,
         CancellationToken cancellationToken)
     {
-        var binding = binder.Bind(candidateJson);
+        var binding = binder.Bind(candidateJson, OwnerRecordArrival.BeingWritten);
 
         if (binding.Owner is not { } bound)
         {

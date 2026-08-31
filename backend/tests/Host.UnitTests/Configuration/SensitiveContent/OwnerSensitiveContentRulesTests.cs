@@ -114,7 +114,8 @@ public sealed class OwnerSensitiveContentRulesTests
         var refusal = Assert.Single(OwnerSensitiveContentRules.FindRefusals(owner, new SensitiveContentOptions(), Path));
 
         // Assert
-        Assert.Contains("Sekrety", refusal, StringComparison.Ordinal);
+        Assert.DoesNotContain("Sekrety", refusal, StringComparison.Ordinal);
+        Assert.Contains("names 1 entry", refusal, StringComparison.Ordinal);
         Assert.Contains("Secrets", refusal, StringComparison.Ordinal);
         Assert.Contains("Pii", refusal, StringComparison.Ordinal);
     }

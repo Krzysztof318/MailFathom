@@ -194,6 +194,72 @@ public sealed class RedactingEmailMimeReaderTests
         Assert.Equal($"trimmed {Marker}", extraction.Metadata?.Text.TrimmedText);
     }
 
+    /// <summary>
+    /// The stamp travels on the reading rather than being resolved where the reading is written, because a batch is
+    /// read outside any transaction and commits afterwards: a stamp taken at the write would record a posture the text
+    /// beside it never went through, and a row stamped stricter than what produced it is a row nothing revisits.
+    /// </summary>
+    [Fact]
+    public async Task ReadMetadataAsync_ABodyRedactedForAnOwner_CarriesThePostureItWasRedactedUnder()
+    {
+        // Arrange
+        using var derivation = ScanningSensitiveContentDerivation.Finding(Marker, this.timeProvider);
+        var reader = new RedactingEmailMimeReader(
+            ReaderYielding($"before {Marker} after", $"before {Marker} after"),
+            derivation.Guard);
+
+        // Act
+        var extraction = await reader.ReadMetadataAsync(
+            Content(),
+            SyntheticMailOwner.Deployment,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            derivation.Guard.StampFor(SyntheticMailOwner.Deployment),
+            extraction.Metadata!.RedactedUnder);
+    }
+
+    /// <summary>A message with no body to redact is still derived under a posture, and a row left unstamped would be outstanding for ever.</summary>
+    [Fact]
+    public async Task ReadMetadataAsync_AMessageWithNoTextToRedact_IsStampedJustTheSame()
+    {
+        // Arrange
+        using var derivation = ScanningSensitiveContentDerivation.Finding(Marker, this.timeProvider);
+        var reader = new RedactingEmailMimeReader(
+            ReaderYielding(ExtractedEmailText.NoTextualBody),
+            derivation.Guard);
+
+        // Act
+        var extraction = await reader.ReadMetadataAsync(
+            Content(),
+            SyntheticMailOwner.Deployment,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            derivation.Guard.StampFor(SyntheticMailOwner.Deployment),
+            extraction.Metadata!.RedactedUnder);
+    }
+
+    /// <summary>Nothing scanned it, so the row says so: that is what separates "written under no scanner" from "written under this one".</summary>
+    [Fact]
+    public async Task ReadMetadataAsync_ADeploymentThatScansNothing_CarriesNoPosture()
+    {
+        // Arrange
+        var guard = ScanningSensitiveContentDerivation.Inactive();
+        var reader = new RedactingEmailMimeReader(ReaderYielding("body", "body"), guard);
+
+        // Act
+        var extraction = await reader.ReadMetadataAsync(
+            Content(),
+            SyntheticMailOwner.Deployment,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(extraction.Metadata!.RedactedUnder);
+    }
+
     private static IEmailMimeReader ReaderYielding(string trimmedText, string originalText) =>
         ReaderYielding(ExtractedEmailText.FromPlainTextBody(originalText, trimmedText));
 

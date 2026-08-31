@@ -20,10 +20,17 @@ namespace MailFathom.Infrastructure.Observability;
 /// listing and nothing to an embedding call, is where a category list or a bound gets changed.
 /// </para>
 /// <para>
-/// Nothing recorded here is mail or derived from it. The tags are an egress point, a category name, and a scanner name,
-/// all three of them MailFathom's own closed sets, and the values are counts and durations — never a rule's match, a
-/// position, a message identity, or any part of what was found, each of which would put the credential in the
-/// telemetry written to prove it never left.
+/// Nothing recorded here is mail or derived from it. The tags on the instruments are an egress point, a category name,
+/// and a scanner name, all three of them MailFathom's own closed sets, and the values are counts and durations — never
+/// a rule's match, a position, a message identity, or any part of what was found, each of which would put the
+/// credential in the telemetry written to prove it never left.
+/// </para>
+/// <para>
+/// One further attribute is exported, on the span alone and on no instrument: <c>mailfathom.owner</c>, the deployment's
+/// own configured identifier for whoever the published mail belongs to. Postures differ between the people one
+/// deployment serves, so a scan nothing attributes cannot be read against what its owner asked for; it names a person
+/// no more than a mail account alias does, and it stays off every counter because an identifier on a series
+/// incremented once per guarded text would be the unbounded dimension the closed sets above exist to avoid.
 /// </para>
 /// </remarks>
 public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTelemetry
