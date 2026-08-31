@@ -231,8 +231,8 @@ dotnet docfx serve artifacts/docs-site     # http://localhost:8080
 ```
 
 The build restores the service solution, because generating the API reference loads every project through MSBuild, and
-then runs docfx once. Nothing under `frontend/` is read: the client stack carries no build while the React client is
-being written. Expect a few minutes the first time. While a page is being written,
+then runs docfx once. Nothing under `frontend/` is read: the client is React and TypeScript, which this generator
+does not document. Expect a few minutes the first time. While a page is being written,
 `dotnet docfx docfx/docfx.json --serve` rebuilds and serves in one step instead — that shorter loop runs docfx alone,
 so the artifacts an agent reads are absent from what it serves; `scripts/write-docs-agent-artifacts.sh <directory>`
 writes them into an already-built version in a second, without rebuilding anything.

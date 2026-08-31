@@ -1,0 +1,8 @@
+{
+  "name": "@mailfathom/client-backend",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  // What separates this package from the one beside it is this file rather than its folder. `lib` names the standard
+  // library alone, so `document`, `window`, and `fetch` are undeclared identifiers here, and `types` is empty, so no
+  // ambient declaration a dependency ships can put them back. React is absent from the manifest, so importing it does
+  // not resolve either. The package's own transport is a function type its caller supplies, which is what lets the
+  // application own the fetch adapter without this package ever naming one.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": []
+  },
+  "include": ["src"]
+}

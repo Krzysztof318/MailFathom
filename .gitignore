@@ -18,6 +18,13 @@ artifacts/
 .env.*
 !.env.example
 
+# What the client's package manager and its build write. `node_modules/` is pnpm's virtual store and the symlink farm
+# above it, restored from `frontend/pnpm-lock.yaml` rather than committed, and `frontend/src/Client.App/dist/` is the
+# directory of static files `pnpm build` produces — the whole of what that stack ships, named here rather than as a
+# bare `dist/` so nothing else in the repository is caught by a directory name that common.
+node_modules/
+frontend/src/Client.App/dist/
+
 # What a documentation build writes beside its own configuration. `api/` is the reference generated from the XML
 # comments in `backend/src/`, and `_site/` is the rendered site when docfx is run without an output directory;
 # `scripts/build-docs-site.sh` writes under `artifacts/` instead, which is ignored above.

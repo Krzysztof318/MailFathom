@@ -1,0 +1,11 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+# The two packages the client is split into, and the split is a reference graph rather than a convention: nothing
+# depends on `Client.App`, and `Client.Backend` declares neither React nor a DOM-typed dependency, so an import of
+# either from it fails to resolve rather than being caught in review. `README.md` beside this file says how that is
+# reproduced.
+packages:
+  - src/Client.Backend
+  - src/Client.App

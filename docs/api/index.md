@@ -19,8 +19,7 @@ reference to follow how a contract is implemented, not to take a dependency on i
 
 A namespace appears here when its boundary exposes something publicly. [The solution structure](../architecture/solution-structure.md)
 describes what each of them is for, and why the dependencies between them point the way they do. Only the service
-stack appears: `frontend/` carries no build while the client is rebuilt in React, and a client written in JavaScript
-would not be read by this generator in any case.
+stack appears: `frontend/` is a pnpm workspace of React and TypeScript, which this generator does not read.
 
 | Boundary | What you will find |
 | --- | --- |

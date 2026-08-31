@@ -27,6 +27,16 @@ if [[ "$(basename "$0")" == 'dotnet' ]]; then
   exit 0
 fi
 
+# The client stack's half of the same arrangement. Both gates reach the workspace under `frontend/`
+# through `pnpm` and nothing else, so one shim standing in for it records the whole of what a client
+# flow did, the way the one above records the service's.
+if [[ "$(basename "$0")" == 'pnpm' ]]; then
+  : "${FAKE_PNPM_LOG:?FAKE_PNPM_LOG must identify the invocation log}"
+  printf '%s\n' "$*" >> "$FAKE_PNPM_LOG"
+
+  exit 0
+fi
+
 scripts_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 source_repository_root="$(cd "$scripts_directory/.." && pwd -P)"
 test_directory="$(mktemp -d)"
@@ -46,6 +56,7 @@ submit_bin_directory="$test_directory/fathom-review-submit-bin"
 board_bin_directory="$test_directory/fathom-review-board-bin"
 rules_board_bin_directory="$test_directory/pull-request-rules-board-bin"
 invocation_log="$test_directory/dotnet-invocations.log"
+client_invocation_log="$test_directory/pnpm-invocations.log"
 workflow_invocation_log="$test_directory/workflow-invocations.log"
 fixture_branch='agent/workflow-fixture'
 passed_count=0
@@ -64,6 +75,7 @@ mkdir -p \
   "$repository_root/backend/src" \
   "$repository_root/backend/tests"
 ln -s "$scripts_directory/test-agent-workflow.sh" "$fake_bin_directory/dotnet"
+ln -s "$scripts_directory/test-agent-workflow.sh" "$fake_bin_directory/pnpm"
 
 git -C "$repository_root" init --initial-branch=main --quiet
 git -C "$repository_root" config user.email agent-workflow@example.invalid
@@ -178,6 +190,7 @@ FAKE_GH
 chmod +x "$settle_bin_directory/gh"
 
 export FAKE_DOTNET_LOG="$invocation_log"
+export FAKE_PNPM_LOG="$client_invocation_log"
 export FAKE_WORKFLOW_LOG="$workflow_invocation_log"
 export PATH="$fake_bin_directory:$PATH"
 
@@ -256,10 +269,9 @@ run_test() {
 }
 
 # A contract about the client stack needs a change under `frontend/`, which is the whole of what makes
-# one: the stack carries no build today, so what the gates do with such a change is report that rather
-# than restore anything. It is added and removed inside one test rather than carried by the fixture
-# branch, because the contract below asserts the *whole* invocation log of a service-only change —
-# which is where the guarantee that a branch opening no client file pays nothing lives.
+# one. It is added and removed inside one test rather than carried by the fixture branch, because the
+# contract below asserts the *whole* invocation log of a service-only change — which is where the
+# guarantee that a branch opening no client file pays nothing lives.
 #
 # One file rather than the directory, and it is added beside the placeholders `frontend/` already
 # tracks rather than replacing them: removing the directory would leave every later test running
@@ -345,61 +357,63 @@ verify_fast_runs_restore_build_tests_and_formatting() {
     "$invocation_log"
 }
 
-# The other half of the same decision. A branch that reaches both stacks runs the service's flow and
-# says what it found of the client's — which is nothing, because that stack carries no build while the
-# React client is being written. What the contract holds is that the detection still fires: the run
-# names the client stack rather than passing over it in silence, and the invocation log stays the
-# service's alone because there is no client solution to restore.
-verify_fast_reports_the_client_stack_carrying_no_build() {
-  local loop_output="$test_directory/verify-fast-client-output"
-
+# The other half of the same decision. A branch that reaches both stacks runs both flows, and each
+# one's invocation log is the whole of what its stack cost: the service's names no path under
+# `frontend/` and the client's names no solution. The loop's client flow ends on the repairing
+# formatting pass, which is what makes it the loop rather than the gate.
+verify_fast_runs_the_client_flow_for_a_change_under_frontend() {
   add_client_change
   : > "$invocation_log"
+  : > "$client_invocation_log"
 
   (
     cd "$repository_root"
     "$scripts_directory/verify-fast.sh"
-  ) > "$loop_output" 2>&1
+  ) > "$test_directory/verify-fast-client-output" 2>&1
 
   remove_client_change
   assert_file_content \
     $'restore backend/MailFathom.slnx --locked-mode\nbuild backend/MailFathom.slnx --configuration Release --no-restore\ntest --solution backend/MailFathom.slnx --configuration Release --no-build\nformat backend/MailFathom.slnx --no-restore --include backend/src/Sample.cs' \
     "$invocation_log"
-  assert_contains 'the client stack, which carries no build yet' "$loop_output"
+  assert_file_content \
+    $'--dir frontend install --frozen-lockfile\n--dir frontend run lint\n--dir frontend run typecheck\n--dir frontend run format' \
+    "$client_invocation_log"
 }
 
 # The full gate over the same branch. The service solution is verified with the files the branch
 # changed, because `--include` selects within the workspace `dotnet format` loaded and the service
-# workspace is several dozen projects; the client stack is reported and nothing of it is restored,
-# which is the verdict the `Frontend` job of `CI` publishes while that stack carries no build. A
-# client path in the service list would name no file that solution holds, which is what the split
-# exists for and what keeps it worth asserting now.
-verify_full_reports_the_client_stack_carrying_no_build() {
-  local gate_output="$test_directory/verify-full-client-output"
-
+# workspace is several dozen projects; a client path in that list would name no file the solution
+# holds, which is what the split exists for. The client flow differs from the loop's in exactly the
+# two places the service flow does: the formatting pass verifies rather than repairs, and the build
+# runs.
+verify_full_runs_the_client_flow_for_a_change_under_frontend() {
   add_client_change
   : > "$invocation_log"
+  : > "$client_invocation_log"
 
   (
     cd "$repository_root"
     "$scripts_directory/verify-full.sh"
-  ) > "$gate_output" 2>&1
+  ) > "$test_directory/verify-full-client-output" 2>&1
 
   remove_client_change
   assert_contains \
     'format backend/MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic --include backend/src/Sample.cs' \
     "$invocation_log"
-  assert_contains 'the client stack, which carries no build yet' "$gate_output"
+  assert_file_content \
+    $'--dir frontend install --frozen-lockfile\n--dir frontend run lint\n--dir frontend run typecheck\n--dir frontend run format:check\n--dir frontend run build' \
+    "$client_invocation_log"
   assert_excludes 'frontend/' "$invocation_log"
 }
 
 # A file above both stacks is the case neither filter owns alone. `global.json` pins the SDK, and it
 # is named by both filters, so a change to it reaches both stacks — which is the answer `ci.yml` gives
-# it as well. The service builds; the client stack is reported, because it carries no build yet.
+# it as well. Both flows run, neither having a path of its own in the change to earn it.
 verify_full_runs_both_flows_for_a_change_above_both_stacks() {
   local gate_output="$test_directory/verify-full-both-stacks-output"
 
   : > "$invocation_log"
+  : > "$client_invocation_log"
   # Detached at the base, so `global.json` is the only path the change carries and each flow is
   # earned by it rather than by the C# file the fixture branch already holds.
   git -C "$repository_root" checkout --quiet --detach origin/main
@@ -416,7 +430,7 @@ verify_full_runs_both_flows_for_a_change_above_both_stacks() {
   git -C "$repository_root" checkout --quiet "$fixture_branch"
 
   assert_contains 'build backend/MailFathom.slnx --configuration Release --no-restore' "$invocation_log"
-  assert_contains 'the client stack, which carries no build yet' "$gate_output"
+  assert_contains '--dir frontend run build' "$client_invocation_log"
 }
 
 # The fixture branch changes one C# file and nothing else, which is also the case the scoped
@@ -640,9 +654,9 @@ verify_fast_accepts_the_record_the_full_gate_wrote() {
 }
 
 # And it answers on a client change too. Both gates read the same two path lists, so a change under
-# `frontend/` reaches the client stack in either of them and the record one wrote covers the other —
-# which stays true while that stack carries no build and is what makes the record a property of the
-# tree rather than of which stacks happened to have work in them.
+# `frontend/` reaches the client stack in either of them and the record one wrote covers the other,
+# which is what makes the record a property of the tree rather than of which stacks happened to have
+# work in them.
 verify_fast_accepts_the_full_gate_record_for_a_client_change() {
   add_client_change
 
@@ -7827,6 +7841,9 @@ template_license_header() {
   printf '{{- /*\n%s\n*/ -}}\n' "$(license_header_lines)"
 }
 
+# `frontend/pnpm-lock.yaml` is excluded because it is the one YAML in the repository nobody wrote: pnpm
+# regenerates it whole from the three manifests above it, so a header placed at the top of it would
+# survive until the next dependency change and no further.
 every_yaml_file_carries_the_license_header() {
   local file expected actual failures=0
 
@@ -7844,14 +7861,16 @@ every_yaml_file_carries_the_license_header() {
       failures=$(( failures + 1 ))
     fi
   done < <(git -C "$source_repository_root" ls-files -- \
-    '*.yml' '*.yaml' 'deploy/helm/mailfathom/templates/*.tpl')
+    '*.yml' '*.yaml' 'deploy/helm/mailfathom/templates/*.tpl' ':(exclude)frontend/pnpm-lock.yaml')
 
   (( failures == 0 ))
 }
 
-# The documentation site's template is the fourth place the analyzer cannot reach, and it carries two
-# more forms of the same three lines. A module is JavaScript, where `//` opens a comment; a stylesheet
-# has no line-comment syntax at all, so CSS's one block form is what carries it there.
+# The documentation site's template and the client stack are the fourth place the analyzer cannot reach,
+# and they carry three more forms of the same three lines. A module — JavaScript or TypeScript — opens a
+# comment with `//`; a stylesheet has no line-comment syntax at all, so CSS's one block form is what
+# carries it there; and the client's one page is markup, where a comment is delimited rather than
+# per-line. The client's `.json` manifests carry none, because JSON has no comment syntax to put one in.
 module_license_header() {
   license_header_lines | sed 's|^|// |'
 }
@@ -7860,12 +7879,19 @@ stylesheet_license_header() {
   printf '/*\n%s\n */\n' "$(license_header_lines | sed 's|^| * |')"
 }
 
+markup_license_header() {
+  printf '<!--\n%s\n-->\n' "$(license_header_lines)"
+}
+
 every_browser_asset_carries_the_license_header() {
   local file expected actual failures=0
 
   while IFS= read -r file; do
     if [[ "$file" == *.css ]]; then
       expected="$(stylesheet_license_header)"
+      actual="$(head -n 5 "$source_repository_root/$file")"
+    elif [[ "$file" == *.html ]]; then
+      expected="$(markup_license_header)"
       actual="$(head -n 5 "$source_repository_root/$file")"
     else
       expected="$(module_license_header)"
@@ -7876,7 +7902,8 @@ every_browser_asset_carries_the_license_header() {
       printf '%s does not open with the license header\n' "$file" >&2
       failures=$(( failures + 1 ))
     fi
-  done < <(git -C "$source_repository_root" ls-files -- '*.js' '*.mjs' '*.css')
+  done < <(git -C "$source_repository_root" ls-files -- \
+    '*.js' '*.mjs' '*.cjs' '*.ts' '*.tsx' '*.css' '*.html')
 
   (( failures == 0 ))
 }
@@ -8064,12 +8091,12 @@ no_tracked_text_file_carries_a_nul_byte() {
 }
 
 run_test verify_fast_runs_restore_build_tests_and_formatting
-run_test verify_fast_reports_the_client_stack_carrying_no_build
+run_test verify_fast_runs_the_client_flow_for_a_change_under_frontend
 run_test verify_fast_runs_no_stack_flow_for_a_change_no_build_reads
 run_test verify_full_runs_no_stack_flow_for_a_change_no_build_reads
 run_test verify_full_runs_both_flows_for_a_change_above_both_stacks
 run_test verify_full_runs_tests_once_through_coverage
-run_test verify_full_reports_the_client_stack_carrying_no_build
+run_test verify_full_runs_the_client_flow_for_a_change_under_frontend
 run_test verify_full_runs_workflow_contracts_for_a_change_beyond_csharp
 run_test verify_full_skips_workflow_contracts_for_a_csharp_only_change
 run_test verify_full_runs_workflow_contracts_when_the_branch_removed_a_path

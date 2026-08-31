@@ -1,0 +1,11 @@
+{
+  // The workspace's own TypeScript files, which belong to neither package: ADR 0021 puts configuration and build files
+  // in TypeScript too, so `eslint.config.ts` is source that has to be type-checked like any other. It runs under Node,
+  // which is what `types` admits.
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023"],
+    "types": ["node"]
+  },
+  "include": ["eslint.config.ts"]
+}

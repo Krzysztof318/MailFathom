@@ -1,0 +1,35 @@
+{
+  // What both packages compile under. The service half of this repository builds with `TreatWarningsAsErrors`, so the
+  // client is held to the strictest set the compiler publishes rather than to `strict` alone, and every relaxation
+  // from that maximum is an entry below with its reason beside it.
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "noEmit": true,
+
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "forceConsistentCasingInFileNames": true,
+
+    // The one relaxation, and it is about other people's files rather than ours: `skipLibCheck` stops the compiler
+    // type-checking the `.d.ts` files inside `node_modules`, which this repository neither writes nor can repair. A
+    // declaration file two dependencies down that disagrees with a third is upstream's defect, and failing the
+    // client's type check on it would make `pnpm typecheck` report something no change here can fix.
+    "skipLibCheck": true
+  }
+}

@@ -210,13 +210,16 @@ Three things follow that are worth knowing before they are discovered.
   stack existed, which
   `verify_fast_runs_restore_build_tests_and_formatting` asserts by comparing the
   whole invocation log rather than a line of it.
-- **A branch that did change something there is told the stack carries no build.**
-  Both gates print it and restore nothing, which is the verdict the `Frontend` job
-  of `CI` publishes as well —
-  `verify_fast_reports_the_client_stack_carrying_no_build` and
-  `verify_full_reports_the_client_stack_carrying_no_build` hold both to it.
+- **A branch that did change something there runs the client's own flow.** The
+  loop restores the pnpm workspace in locked mode and runs its lint, its type
+  check, and a repairing formatting pass; the full gate runs the same three with
+  the formatting pass verifying instead, and adds the build —
+  `verify_fast_runs_the_client_flow_for_a_change_under_frontend` and
+  `verify_full_runs_the_client_flow_for_a_change_under_frontend` hold both to it,
+  each by comparing the whole of what the flow invoked. Neither gate touches the
+  service solution for it, and both need Node and pnpm on the path.
   [Building and testing the client](local-development.md#building-and-testing-the-client)
-  carries what is there instead.
+  carries what those commands are.
 - **A change no build reads runs no solution.** Documentation, a skill, a
   deployment asset, a board rule: the full gate answers such a change with the
   contract suite and the whitespace checks, and that is the complete answer rather
@@ -224,10 +227,11 @@ Three things follow that are worth knowing before they are discovered.
   a file no build reads. The loop says so rather than exiting silently, since a gate
   that prints nothing reads as a gate that was not run.
 
-Formatting reaches the service solution alone, over the C# files the branch
-changed, since there is no client solution to load. The repairing half is the fast
-loop's and the verifying half the full gate's, and `dotnet format` is never
-invoked by hand in either.
+Each stack formats through its own tool, and the split into a repairing and a
+verifying half is the same on both sides: the fast loop repairs and the full gate
+verifies. `dotnet format` reaches the service solution alone, over the C# files
+the branch changed, and Prettier reaches the pnpm workspace; neither is ever
+invoked by hand, because both already run where they belong.
 
 ### A gate does not prove the same tree twice
 

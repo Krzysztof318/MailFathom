@@ -113,7 +113,7 @@ The remaining labels are flags, applied only when they are true: `blocked` when 
 
 ### The stack the work lands in
 
-`backend` and `frontend` say which of the repository's two stacks the work lands in: `backend` is the .NET solution under `backend/`, `frontend` is the client under `frontend/`, which carries no build while it is rebuilt in React. An issue carries the one label its work lands under, both where a single unit of work genuinely spans the two, and neither where it lands in neither.
+`backend` and `frontend` say which of the repository's two stacks the work lands in: `backend` is the .NET solution under `backend/`, `frontend` is the client under `frontend/`, which is a pnpm workspace of React and TypeScript. An issue carries the one label its work lands under, both where a single unit of work genuinely spans the two, and neither where it lands in neither.
 
 **Neither is a value rather than an omission**, and it is the ordinary case for a large part of this backlog: repository-wide tooling, the workflow contract, the board, the release process, the deployment assets, and documentation about the project rather than about one stack's code all sit outside both trees. So does the rule you are reading.
 

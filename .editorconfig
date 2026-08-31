@@ -19,9 +19,16 @@ indent_size = 2
 indent_size = 2
 tab_width = 2
 
-[*.{ts,tsx,css,scss,sass,less}]
+# The client stack's own file types. Prettier reads this section rather than restating any of it, which is what keeps
+# whitespace one decision in one place; `frontend/README.md` says how that is wired. `quote_type` is here for the same
+# reason and reaches Prettier the same way. Plain `.js` and `.jsx` are deliberately absent: the client refuses either
+# under `frontend/src/` by lint rule, and the only JavaScript in the repository is the documentation site's template
+# asset, which no formatter runs over.
+[*.{ts,tsx,mts,cts,mjs,cjs,css,scss,sass,less,html}]
 indent_size = 4
 tab_width = 4
+max_line_length = 120
+quote_type = single
 
 [*.{cs,vb}]
 dotnet_sort_system_directives_first = true

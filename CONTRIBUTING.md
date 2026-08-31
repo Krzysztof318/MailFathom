@@ -39,7 +39,7 @@ MailFathom is developed and run on Linux.
 
 [`docs/operations/local-development.md`](docs/operations/local-development.md) is the full setup: tool versions and install commands, running the app model, development secrets, and the migration workflow. Read it once before your first change.
 
-**`frontend/` carries no build today.** The Uno Platform client that stood there was withdrawn and the client is being rebuilt in React, so `frontend/src/` and `frontend/tests/` hold a placeholder README each and nothing restores, builds, or tests there. Everything the commands below fetch is the server's solution, which is Apache-2.0 and permissive throughout.
+**`frontend/` needs Node and pnpm rather than the .NET SDK.** It is a pnpm workspace of React and TypeScript, and [`frontend/README.md`](frontend/README.md) is its page; the commands below fetch the server's solution alone, which is Apache-2.0 and permissive throughout.
 
 ## From a clone to a green run
 
@@ -114,7 +114,7 @@ bash scripts/verify-fast.sh
 
 It restores, builds, runs the unit tests, and then formats the C# files your branch changed. **It rewrites working-tree files by design** — that is how a style diagnostic reaches you in seconds rather than after the full gate has run. Review what it changed.
 
-It does that in whichever of the two stacks your change reaches, decided from the paths you touched rather than by you: the server's solution for a change under `backend/`, both stacks for a change to a file above them such as `global.json`, and neither for a change no build reads. The lists are the ones `ci.yml` uses, so the gate builds what the pipeline will. The client stack's half of that is a line saying there is nothing to build, and it stays wired so that filling it in for React is a change to one workflow rather than to five.
+It does that in whichever of the two stacks your change reaches, decided from the paths you touched rather than by you: the server's solution for a change under `backend/`, both stacks for a change to a file above them such as `global.json`, and neither for a change no build reads. The lists are the ones `ci.yml` uses, so the gate builds what the pipeline will. The client stack's half restores the pnpm workspace under `frontend/` in locked mode and runs its lint, its type check, and a formatting pass, so a change under `frontend/` needs Node and pnpm on the path exactly as a change under `backend/` needs the SDK.
 
 Do not invoke `dotnet format` by hand. Both of its modes already run where they belong — the loop repairs the files you changed, the full gate verifies them — and a hand-run pass over the whole solution costs minutes to report what the build has already told you: a style rule with no automatic fix fails the Release build above, naming its file and line.
 
@@ -125,7 +125,7 @@ git add <your files>
 bash scripts/verify-full.sh
 ```
 
-The full gate fetches `origin main` and refuses a branch that does not contain that freshly fetched base, so rebase when it complains; verifying against a stale base proves nothing about the branch that will actually merge. In the server stack it builds, runs the complete unit-test and coverage gate, and verifies formatting over the C# files you changed — over the whole solution when you touched an `.editorconfig` or one of the shared build files. In the client stack it builds both heads, runs the client's unit suite with no coverage threshold — there is no client code measured yet — and verifies formatting over the whole of its two-project solution. Beside all of that it runs the workflow contract suite where your change can have moved something it asserts, and it checks the diff. It rejects remaining untracked files, so a newly added file cannot slip past diff validation.
+The full gate fetches `origin main` and refuses a branch that does not contain that freshly fetched base, so rebase when it complains; verifying against a stale base proves nothing about the branch that will actually merge. In the server stack it builds, runs the complete unit-test and coverage gate, and verifies formatting over the C# files you changed — over the whole solution when you touched an `.editorconfig` or one of the shared build files. In the client stack it restores the pnpm workspace in locked mode, lints it, type-checks it, verifies its formatting rather than repairing it, and builds the static bundle. Beside all of that it runs the workflow contract suite where your change can have moved something it asserts, and it checks the diff. It rejects remaining untracked files, so a newly added file cannot slip past diff validation.
 
 Neither script proves the same tree twice. Each records a digest of what it verified under `artifacts/verify/`, which is ignored and never staged, and a run handed a tree it has already passed over prints the earlier run and stops in under a second. So run the gate rather than working out whether the last run still counts: a failing run records nothing, a fast loop whose formatting pass rewrote a file records nothing, and `VERIFY_FORCE=1` runs everything regardless.
 
@@ -232,6 +232,11 @@ Every file in this repository carries the same three lines, and a new file is no
 | `.sh` | The same three `#` lines, directly under the shebang, which has to stay first |
 | `deploy/helm/mailfathom/templates/` | A `{{- /* ... */ -}}` comment, so the header stays in the template instead of being rendered into every Kubernetes object the chart applies |
 | A skill's `SKILL.md` | `license: Apache-2.0` and a `metadata` block naming the author and the repository, which is where the [Agent Skills](https://agentskills.io/specification) format puts them |
+| `.ts`, `.tsx`, `.js`, `.mjs`, and `.cjs` under `frontend/` | Three `// ` lines, first in the file, then a blank line before the imports |
+| `.css` | One `/* ... */` block holding all three lines, because CSS has no line comment to use instead |
+| `.html` | One `<!-- ... -->` comment, first in the document |
+
+A `.json` file carries no header. A `package.json` is strict JSON and has no comment syntax at all; a `tsconfig.json` does take a comment, since `tsc` parses it as JSONC, but that is one tool's parser rather than a form the header is written in.
 
 `scripts/test-agent-workflow.sh` fails when one of those is missing, so a forgotten header is a red check rather than a review comment. It reads the expected text out of `.editorconfig`, which means the header is one decision written in one place no matter how many forms it takes.
 

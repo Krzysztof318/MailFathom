@@ -118,12 +118,27 @@ if [[ -n "$run_service_stack" ]]; then
   fi
 fi
 
-# The client stack's flow, which is nothing today and says so. The Uno Platform client was withdrawn
-# and the client is being rebuilt in React, so `frontend/` holds two placeholder directories, no
-# solution, and no build — exactly what the `Frontend` job of `CI` reports. The detection above is
-# kept whole rather than deleted, because it is what the flow that replaces this is hung on.
+# The client stack's flow. `frontend/` is a pnpm workspace, so every step runs from that directory and
+# resolves against `frontend/pnpm-lock.yaml`; `--frozen-lockfile` fails rather than rewriting it, which
+# is what locked mode is to the service restore above.
+#
+# The lint is the client's `TreatWarningsAsErrors`: every rule reports as an error and `--max-warnings 0`
+# refuses a warning too, so there is no severity below failing. The type check is the closest thing the
+# client has to the Release build, because Vite's build strips types rather than checking them.
+#
+# The formatting pass repairs rather than reports, exactly as `dotnet format` does above, and for the same
+# reason: this loop is where a file is rewritten and the full gate is where the same question is asked
+# without one being touched.
 if [[ -n "$run_client_stack" ]]; then
-  printf 'This change reaches the client stack, which carries no build yet. See frontend/src/README.md.\n'
+  if ! command -v pnpm > /dev/null 2>&1; then
+    printf 'This change reaches the client stack, which needs Node and pnpm on the path. See docs/operations/local-development.md.\n' >&2
+    exit 1
+  fi
+
+  pnpm --dir frontend install --frozen-lockfile
+  pnpm --dir frontend run lint
+  pnpm --dir frontend run typecheck
+  pnpm --dir frontend run format
 fi
 
 # A change no build reads — documentation, a skill, a deployment asset — runs neither flow and says

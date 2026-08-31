@@ -1,0 +1,28 @@
+/*
+ * Copyright © 2026 Krzysztof Kasprowicz
+ * Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+ * Project repository: https://github.com/Krzysztof318/MailFathom
+ */
+
+/*
+ * The whole of the client's styling configuration. Tailwind is wired CSS-first through its Vite plugin, so the palette
+ * and the type scale are `@theme` tokens here and there is no JavaScript configuration file to keep in step with them.
+ *
+ * The colours are MailFathom's own, sampled from `assets/icon-900.png` rather than picked by eye: the near-black navy
+ * the mark sits on, the blue ramp across it, the pale blue of the lettering, and the gold of the star.
+ */
+
+@import 'tailwindcss';
+
+@theme {
+    --color-fathom-950: #010d33;
+    --color-fathom-800: #0028a0;
+    --color-fathom-600: #0048e0;
+    --color-fathom-500: #0068f8;
+    --color-fathom-200: #a8c8f8;
+    --color-fathom-star: #f8d848;
+
+    --font-sans:
+        'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-mono: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
+}
