@@ -319,7 +319,7 @@ describe('SignIn', () => {
         const asked: ClientRequest[] = [];
         const { presented } = renderScreen(recording(asked, somethingElse));
 
-        typeAddress('mail.exapmle.test');
+        typeAddress('mail.mistyped.test');
         typeCredential();
         submit();
 
