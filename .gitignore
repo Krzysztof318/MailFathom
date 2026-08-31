@@ -33,6 +33,15 @@ frontend/src/Client.App/dist/
 frontend/.playwright/
 .playwright-cli/
 
+# What the desktop shell's build writes. `frontend/src-tauri/target/` holds the compiled crate graph and the bundles
+# built from it, and it is named in full for the same reason: a bare `target/` is a directory name common enough to
+# catch something else. `frontend/src-tauri/gen/` is the access-control schemas Tauri derives from the configuration on
+# every build, which describe what the crate already states. `frontend/src-tauri/Cargo.lock` is committed rather than
+# ignored, because the shell is an application whose crate closure is reviewed and recorded, not a library resolving
+# afresh per build.
+frontend/src-tauri/target/
+frontend/src-tauri/gen/
+
 # What a documentation build writes beside its own configuration. `api/` is the reference generated from the XML
 # comments in `backend/src/`, and `_site/` is the rendered site when docfx is run without an output directory;
 # `scripts/build-docs-site.sh` writes under `artifacts/` instead, which is ignored above.
@@ -86,6 +95,10 @@ deploy/quadlet/config/*.json
 # directory, which is why the `.idea/` and `.vs/` patterns above did not match them.
 # None of these is tracked. Should one ever need to be, `git add -f` says so out loud, which is the
 # quieter failure of the two: the alternative leaves an empty file reappearing before every commit.
+# The `.claude` and `.codex` entries carry `**/` because a pattern holding a slash is otherwise
+# anchored to this file's directory, and the masking happens in whichever directory a session runs a
+# command from — `frontend/` and `frontend/src-tauri/` as much as the root, which is how the full gate
+# came to refuse a working tree over files no change had made.
 .bash_profile
 .bashrc
 .zshrc
@@ -97,15 +110,16 @@ deploy/quadlet/config/*.json
 .vscode
 .idea
 .mcp.json
-.claude/agents
-.claude/commands
-.claude/hooks
-.claude/output-styles
-.claude/routines
-.claude/workflows
-.claude/launch.json
-.claude/loop.md
-.claude/scheduled_tasks.json
-.codex/config.toml
-.claude/settings.json
+**/.claude/agents
+**/.claude/commands
+**/.claude/hooks
+**/.claude/output-styles
+**/.claude/routines
+**/.claude/skills
+**/.claude/workflows
+**/.claude/launch.json
+**/.claude/loop.md
+**/.claude/scheduled_tasks.json
+**/.codex/config.toml
+**/.claude/settings.json
 graphify-out/

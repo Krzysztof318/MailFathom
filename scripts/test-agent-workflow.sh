@@ -7953,10 +7953,15 @@ template_license_header() {
   printf '{{- /*\n%s\n*/ -}}\n' "$(license_header_lines)"
 }
 
+# Everything whose readers parse a `#` line as a comment: the workflows and the other YAML, the Helm
+# templates in the delimited form that keeps the header out of a rendered manifest, and the desktop
+# shell's `Cargo.toml`.
+#
 # `frontend/pnpm-lock.yaml` is excluded because it is the one YAML in the repository nobody wrote: pnpm
 # regenerates it whole from the three manifests above it, so a header placed at the top of it would
-# survive until the next dependency change and no further.
-every_yaml_file_carries_the_license_header() {
+# survive until the next dependency change and no further. `frontend/src-tauri/Cargo.lock` is the same
+# file for the crate graph and is not reached here at all, having no extension to match.
+every_hash_commented_file_carries_the_license_header() {
   local file expected actual failures=0
 
   while IFS= read -r file; do
@@ -7973,16 +7978,17 @@ every_yaml_file_carries_the_license_header() {
       failures=$(( failures + 1 ))
     fi
   done < <(git -C "$source_repository_root" ls-files -- \
-    '*.yml' '*.yaml' 'deploy/helm/mailfathom/templates/*.tpl' ':(exclude)frontend/pnpm-lock.yaml')
+    '*.yml' '*.yaml' '*.toml' 'deploy/helm/mailfathom/templates/*.tpl' ':(exclude)frontend/pnpm-lock.yaml')
 
   (( failures == 0 ))
 }
 
 # The documentation site's template and the client stack are the fourth place the analyzer cannot reach,
-# and they carry three more forms of the same three lines. A module — JavaScript or TypeScript — opens a
-# comment with `//`; a stylesheet has no line-comment syntax at all, so CSS's one block form is what
-# carries it there; and the client's one page is markup, where a comment is delimited rather than
-# per-line. The client's `.json` manifests carry none, because JSON has no comment syntax to put one in.
+# and they carry three more forms of the same three lines. A module — JavaScript, TypeScript, or the
+# desktop shell's Rust — opens a comment with `//`; a stylesheet has no line-comment syntax at all, so
+# CSS's one block form is what carries it there; and the client's one page is markup, where a comment is
+# delimited rather than per-line. The client's `.json` manifests carry none, because JSON has no comment
+# syntax to put one in.
 module_license_header() {
   license_header_lines | sed 's|^|// |'
 }
@@ -8015,7 +8021,7 @@ every_browser_asset_carries_the_license_header() {
       failures=$(( failures + 1 ))
     fi
   done < <(git -C "$source_repository_root" ls-files -- \
-    '*.js' '*.mjs' '*.cjs' '*.ts' '*.tsx' '*.css' '*.html')
+    '*.js' '*.mjs' '*.cjs' '*.ts' '*.tsx' '*.rs' '*.css' '*.html')
 
   (( failures == 0 ))
 }
@@ -8471,7 +8477,7 @@ run_test the_gates_decide_from_the_change_filters_ci_declares
 run_test workflow_scripts_use_flat_manual_layout
 run_test the_dependency_survey_refuses_what_would_write_without_being_asked
 run_test the_dependency_rewrite_encodes_a_hostile_version_into_a_pin_file
-run_test every_yaml_file_carries_the_license_header
+run_test every_hash_commented_file_carries_the_license_header
 run_test every_browser_asset_carries_the_license_header
 run_test every_container_unit_carries_the_license_header
 run_test the_editor_workspace_opens_the_service_and_the_repository

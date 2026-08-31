@@ -55,8 +55,16 @@ exactly as `Directory.Packages.props` and the `packages.lock.json` files are for
   [ADR 0016](../docs/decisions/0016-third-party-licence-obligations-per-artifact.md). `scripts/update-dependencies.sh`
   does not read this pin family yet, so a client pin is surveyed by hand until it does — noticing one is behind is a
   sentence in the report and an issue of its own, never a line in an unrelated diff.
-- `package.json`'s `version` field is inert. `<VersionPrefix>` in `Version.props` is the only application version number
-  in this repository, and `Client.App/vite.config.ts` is how it reaches the bundle.
+- `package.json`'s `version` field is inert, and so is `Cargo.toml`'s, which the desktop shell therefore omits.
+  `<VersionPrefix>` in `Version.props` is the only application version number in this repository:
+  `Client.App/vite.config.ts` is how it reaches the bundle, and `src-tauri/run-tauri.ts` is how it reaches the desktop
+  application, as a configuration patch the Tauri CLI merges rather than as a number committed anywhere.
+- The desktop shell's crate closure is pinned the same way, in `src-tauri/Cargo.toml` and the `Cargo.lock` committed
+  beside it. Cargo reads a bare `"2"` as a caret range, so a Tauri pin is written `"=2.11.5"` to be exact, and
+  `src-tauri/run-tauri.ts` hands Cargo `--locked` for the reason `--frozen-lockfile` is passed to pnpm — so a manifest
+  that has moved away from the lock file stops `pnpm desktop:dev` and `pnpm desktop:build` rather than being resolved
+  into a rewritten one. Nothing else holds that: a `cargo` command run by hand updates the lock file as Cargo always
+  does, and neither verification gate reaches the crate graph at all.
 
 Four things the client is often assumed to need are absent, and each stays absent until a change argues for it: a
 component library, which ADR 0021 excluded deliberately; a router; a state container; and a data-fetching library.

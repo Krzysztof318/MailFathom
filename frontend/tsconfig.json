@@ -1,8 +1,8 @@
 {
   // The workspace's own TypeScript files, which belong to neither package: ADR 0021 puts configuration and build files
-  // in TypeScript too, so `eslint.config.ts` is source that has to be type-checked like any other. It runs under Node,
-  // which is what `types` admits — and so does the browser suite under `tests/`, which drives a page rather than
-  // importing one, so it needs no DOM declaration and gets none.
+  // in TypeScript too, so `eslint.config.ts` and the desktop shell's `run-tauri.ts` are source that has to be
+  // type-checked like any other. They run under Node, which is what `types` admits — and so does the browser suite
+  // under `tests/`, which drives a page rather than importing one, so it needs no DOM declaration and gets none.
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "lib": ["ES2023"],
@@ -12,6 +12,7 @@
     "eslint.config.ts",
     "vitest.config.ts",
     "playwright.config.ts",
-    "tests"
+    "tests",
+    "src-tauri/run-tauri.ts"
   ]
 }
