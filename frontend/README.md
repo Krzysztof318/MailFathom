@@ -82,7 +82,8 @@ library is adopted with, and it adds nothing to the bundle and nothing to `THIRD
 | `<p>Reading accounts…</p>`             | a string in markup belongs in `en.ts`, with its Polish counterpart, and reaches the screen through `translate()` |
 | `<p>{'Reading accounts…'}</p>`         | the same, for a string used as a child rather than written as text                                               |
 | ``<p>{`Reading ${what}…`}</p>``        | a sentence assembled in markup cannot be reordered by a translator; it is one entry with a hole                  |
-| `<section aria-label="Accounts">`      | an attribute read out to somebody is a user-visible string                                                       |
+| `<img alt="Accounts" />`               | an attribute read out to somebody is a user-visible string                                                       |
+| `<img alt={'Accounts'} />`             | the same, in the braced form — each attribute is matched bare, braced, and as a template literal                 |
 
 `.config/typos.toml` excludes `pl.ts` from the spell check, because a dictionary of English has nothing true to say
 about Polish. Every other file in this workspace stays checked, `en.ts` included.

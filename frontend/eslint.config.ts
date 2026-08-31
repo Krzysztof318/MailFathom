@@ -13,6 +13,15 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
 import tseslint from 'typescript-eslint';
 
+// The attributes a browser reads out to somebody, which makes each of them a sentence rather than a setting. Written
+// once because the same list is matched in three shapes below, and a list that drifted between them would leave a hole
+// nobody could see by reading one of the three.
+const readOutAttribute =
+    'JSXAttribute[name.name=/^(alt|title|placeholder|aria-label|aria-description|aria-placeholder|aria-roledescription|aria-valuetext)$/]';
+
+const readOutAttributeMessage =
+    'This attribute is read out to somebody, so it is a user-visible string: put it in src/Client.App/src/localization/en.ts and pass translate() to it.';
+
 export default defineConfig(
     globalIgnores(['**/dist/**']),
     js.configs.recommended,
@@ -94,11 +103,23 @@ export default defineConfig(
                     message:
                         'A sentence assembled in markup cannot be reordered by a translator. Write it as one catalogue entry with a {name} hole and fill it through translate().',
                 },
+                // The same attribute in its three written forms, because a selector is matched against the syntax
+                // rather than against the value: `alt="…"` puts the literal directly under the attribute, while
+                // `alt={'…'}` and ``alt={`…`}`` put it one level down inside an expression container. A rule catching
+                // only the first would pass the two a person reaches for after being refused once. The step is
+                // deliberately not a descendant match: `aria-label={translate('shell.language')}` carries a string
+                // literal too, and it is the catalogue key rather than a sentence.
                 {
-                    selector:
-                        'JSXAttribute[name.name=/^(alt|title|placeholder|aria-label|aria-description|aria-placeholder|aria-roledescription|aria-valuetext)$/] > Literal',
-                    message:
-                        'This attribute is read out to somebody, so it is a user-visible string: put it in src/Client.App/src/localization/en.ts and pass translate() to it.',
+                    selector: `${readOutAttribute} > Literal`,
+                    message: readOutAttributeMessage,
+                },
+                {
+                    selector: `${readOutAttribute} > JSXExpressionContainer > Literal[value=/\\S/]`,
+                    message: readOutAttributeMessage,
+                },
+                {
+                    selector: `${readOutAttribute} > JSXExpressionContainer > TemplateLiteral`,
+                    message: readOutAttributeMessage,
                 },
             ],
         },
