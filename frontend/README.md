@@ -21,6 +21,11 @@ field is what says which version to install. `.npmrc` declares the registry thos
 leaving it to whatever a machine configured. [Local development](../docs/operations/local-development.md) has the
 prerequisites and how the verification gates run all of this.
 
+`pnpm dev` is also what the Aspire app host starts as its `mailfathom-client` resource, so one command brings up the
+database, the service, and this development server already pointed at the client surface — [the client
+resource](../docs/operations/local-development.md#the-client-resource) is that arrangement, including the environment
+variable it hands over and how to leave the client out of a run.
+
 ## Two packages, and the resolver is what separates them
 
 - **`src/Client.Backend/`** is everything that reaches the service: the request and response types, the session, the

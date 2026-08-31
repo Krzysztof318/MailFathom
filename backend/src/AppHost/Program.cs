@@ -455,20 +455,21 @@ if (runsIntegrationTests)
 }
 else
 {
-    // The four host sockets, each stated by the section that owns it and each on a free port this run found unless this
-    // checkout pinned one. Found here rather than left to the orchestrator, which allocates a port for the proxy it
-    // would put in front of a resource and refuses an endpoint that declares none while asking for no proxy — and no
-    // proxy is what keeps the socket a client reaches the socket Kestrel opened.
+    // The four host sockets and the client's own, each stated by the section that owns it and each on a free port this
+    // run found unless this checkout pinned one. Found here rather than left to the orchestrator, which allocates a
+    // port for the proxy it would put in front of a resource and refuses an endpoint that declares none while asking
+    // for no proxy — and no proxy is what keeps the socket a client reaches the socket Kestrel opened.
     //
-    // All four are found in one call whether or not any is pinned, because that is what makes them different from each
-    // other; a pinned value then replaces the one it was found for and the others stay where they were put. A second
-    // call would release these before choosing, and two sockets handed one number is a run that fails on whichever
-    // binds second.
-    var foundPorts = OrchestrationContract.FindFreePorts(4);
+    // All five are found in one call whether or not any is pinned, because that is what makes them different from each
+    // other; a pinned value then replaces the one it was found for and the others stay where they were put. The last
+    // one belongs to the client below, and is found here rather than beside it for that reason: a second call would
+    // release these before choosing, and two sockets handed one number is a run that fails on whichever binds second.
+    var foundPorts = OrchestrationContract.FindFreePorts(5);
     var mcpEndpointPort = PinnedPort(OrchestrationContract.PinnedMcpEndpointPortKey) ?? foundPorts[0];
     var healthEndpointsPort = PinnedPort(OrchestrationContract.PinnedHealthEndpointsPortKey) ?? foundPorts[1];
     var adminEndpointPort = foundPorts[2];
     var clientEndpointPort = PinnedPort(OrchestrationContract.PinnedClientEndpointPortKey) ?? foundPorts[3];
+    var clientPort = PinnedPort(OrchestrationContract.PinnedClientPortKey) ?? foundPorts[4];
 
     var mailAccountHost = builder
         .AddParameter("mail-account-host")
@@ -547,9 +548,8 @@ else
             env: "AdminEndpoint__Port")
         // The client surface's socket, declared exactly as the MCP endpoint's is. The normal app model enables it and
         // admits the password method so a client has a usable service on its first run; the credential itself is
-        // provisioned through the administrative API after the host reports startup readiness. No client is started
-        // beside it — the Uno one was withdrawn and the React one has not landed — so what this serves today is the
-        // surface itself, for whoever calls it by hand.
+        // provisioned through the administrative API after the host reports startup readiness. The client resource
+        // below is served its address, so a developer reaches this surface without typing a port anywhere.
         //
         // A socket of its own rather than the MCP endpoint's, though every surface's default port would have shared
         // one. What cannot be shared is the bind address: a wildcard beside a specific address on one port is two
@@ -576,6 +576,62 @@ else
         mailFathomHost.GetEndpoint(OrchestrationContract.HostAdminEndpointName),
         TimeProvider.System,
         provider.GetRequiredService<ILogger<DevelopmentCredentialProvisioningWorker>>()));
+
+    // The client, in the one topology it belongs to. What the app model reaches into the other stack with is a
+    // directory and a command: no package under frontend/ enters backend/MailFathom.slnx, no backend project references
+    // one, and MSBuild is never told the two are related — so a build of the service still restores nothing the client
+    // needs. The boundary the repository keeps is a compile-time one, and this is a process the orchestration starts
+    // beside another process.
+    //
+    // An executable rather than a project resource, because there is no project: the client is a Vite development
+    // server, and what starts it is the workspace's own `dev` script run from frontend/ by its package manager. The
+    // script forwards these arguments through the workspace filter to Vite unchanged, so the socket stated here is the
+    // socket the server binds rather than one it chose.
+    //
+    // It waits for nothing. A development server serves the page whether or not the service behind it has started, and
+    // waiting would trade a working page for a slower one; the client's own first request is what discovers the state
+    // of the service.
+    if (OrchestrationContract.ResolveClientEnabled(builder.Configuration[OrchestrationContract.ClientEnabledKey]))
+    {
+        builder
+            .AddExecutable(
+                OrchestrationContract.ClientResourceName,
+                OrchestrationContract.ClientPackageManagerCommand,
+                Path.Combine(builder.AppHostDirectory, OrchestrationContract.ClientWorkspaceDirectory),
+                OrchestrationContract.ClientDevelopmentServerScript,
+                OrchestrationContract.ClientDevelopmentServerHostArgument,
+                OrchestrationContract.DeveloperLoopbackAddress,
+                OrchestrationContract.ClientDevelopmentServerPortArgument,
+                clientPort.ToString(CultureInfo.InvariantCulture),
+                OrchestrationContract.ClientDevelopmentServerStrictPortArgument)
+            // Where the service is, handed to the development server's process rather than to a build. Vite exposes
+            // its own VITE_-prefixed environment on `import.meta.env`, so the page the server serves reads the port
+            // this run took without a property, a generated file, or a rebuild — which is what the React stack made
+            // possible and the WebAssembly one did not.
+            //
+            // CORS is not part of the join. The local topology leaves ClientEndpoint:Cors:AllowedOrigins unstated,
+            // which is the product default of every browser origin, so a page served under either loopback spelling is
+            // answered — naming one of them here is what made a tab opened as `localhost` look like an empty mailbox
+            // while the same tab opened as `127.0.0.1` worked.
+            .WithEnvironment(
+                OrchestrationContract.ClientServiceAddressVariable,
+                OrchestrationContract.ResolveDevelopmentServiceAddress(clientEndpointPort))
+            // Unproxied for the reason the host's sockets are: what the app model publishes is then what a browser
+            // connects to. On loopback, because a development build served against a developer's own machine is not
+            // something anything on a local network has any business loading.
+            .WithHttpEndpoint(
+                name: OrchestrationContract.ClientHttpEndpointName,
+                port: clientPort,
+                targetPort: clientPort,
+                isProxied: false)
+            // Aspire's default endpoint host is `localhost`, which resolves to the IPv6 loopback before the IPv4 one on
+            // an ordinary machine — and the development server binds only the address stated above. Left at the
+            // default, the dashboard would link a socket nothing answers on while the page was alive beside it.
+            .WithEndpoint(
+                OrchestrationContract.ClientHttpEndpointName,
+                endpoint => endpoint.TargetHost = OrchestrationContract.DeveloperLoopbackAddress,
+                createIfNotExists: false);
+    }
 }
 
 // Host is the startup project because it is the project resource the connection string is issued to; Infrastructure

@@ -219,13 +219,14 @@ named `local`, over implicit TLS on port 993, with its inbox as the default fold
 the AppHost's user secrets; leaving any of them unanswered leaves the application waiting rather than starting a host
 with no mailbox.
 
-Three resources come up, in dependency order. The `postgres` container starts first and has to report
+Four resources come up, three of them in dependency order. The `postgres` container starts first and has to report
 healthy; the `mailfathom-migrations` resource then applies every pending migration to it; and `mailfathom-host` waits
 for that run
 to complete before starting, which is why the schema gate that fails a fresh deployment on purpose never fires on a
 local run — the explicit schema step the deployments require is performed here by the orchestration, before the host
-looks. There is no client resource: the Uno Platform client this topology used to start was withdrawn, and what
-replaces it will be started however a React toolchain is started.
+looks. The fourth is `mailfathom-client`, which serves the client's development server and waits for none of them,
+since a development server serves the page whether or not the service behind it has started; it is
+[described below](#the-client-resource).
 Because the host runs in `Development`, it also publishes [the HTTP API document and the explorer](http-api-documentation.md)
 at `/openapi/v1.json` and `/scalar` on every port this run actually binds. Neither exists in any other environment, and
 neither is on a port of its own. The normal orchestration enables the MCP, administrative, and client surfaces, so the
@@ -256,11 +257,60 @@ and MailFathom refuses that variable outright, because each surface states where
 endpoint is published without ever reaching it. That is also why the resource carries no `WithHttpHealthCheck`, which
 derives its address from an HTTP endpoint this app model declares none of.
 
+### The client resource
+
+`mailfathom-client` is the client under `frontend/`, served on a socket of its own that the dashboard lists like any
+other endpoint. It is what makes one command bring up a MailFathom with a face on it rather than a service and a second
+terminal.
+
+It is an **executable** resource, because there is no project to make it a project one: the client is a Vite
+development server, and what starts it is the workspace's own `dev` script. The app model runs
+`pnpm dev --host 127.0.0.1 --port <the port this run took> --strictPort` with `frontend/` as the working directory —
+the command a developer would type, with the socket stated rather than chosen. `--strictPort` is what makes the number
+binding: Vite otherwise moves to the next free port, which would serve the page somewhere the dashboard never linked.
+
+Nothing about this is a reference. The app host holds a path and a command, MSBuild is never told the two stacks are
+related, and `backend/MailFathom.slnx` still names nothing under `frontend/` — so building or testing the service
+restores no JavaScript, and starting this resource is what pays for the client's own toolchain.
+
+**The client needs Node and pnpm, which the .NET SDK does not bring** — [Building and testing the
+client](#building-and-testing-the-client) is the same requirement stated for the verification gates. On a machine
+without them this resource fails on its own, naming the command it could not start, while PostgreSQL, the migrations,
+and the host still come up: nothing waits for the client. The orchestration installs nothing either, so a fresh
+checkout runs `pnpm install --frozen-lockfile` in `frontend/` once before the resource can start; a restore on every
+orchestration start would be seconds paid on every run for something that changes when the lock file does.
+
+To run the orchestration without it at all, state so in the app host's own user secrets, where the pinned ports live
+and for the same reason — it is a decision about one machine rather than about a checkout:
+
+```bash
+dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Client:Enabled" "false"
+```
+
+Its environment form leaves the client out of a single run: `Client__Enabled=false dotnet run --project
+backend/src/AppHost/AppHost.csproj`. A value that is neither `true` nor `false` fails the app host at startup naming the
+key, rather than being ignored and starting the resource the developer was avoiding.
+
+The `IntegrationTesting=true` switch that selects the ephemeral topology leaves the client out of it entirely, the way
+it decides every other resource there: a suite that tests the service would otherwise install a package graph on every
+run that no test reads.
+
+**What tells the client where the service is, is the process rather than the build.** The app model writes
+`VITE_MAILFATHOM_SERVICE_ADDRESS` into the development server's environment, holding the client surface's own origin —
+`http://127.0.0.1:<the port the client surface took>`, with no trailing separator, because the client appends its own
+`/api/client` prefix to it. Vite exposes every `VITE_`-prefixed variable of its process environment on
+`import.meta.env`, so the page reads the port this run took without a property, a generated file, or a rebuild;
+`frontend/src/Client.App/src/environment.d.ts` is where the client declares it. It is optional there, and deliberately:
+a bundle served from the deployment's own container image is fetched from the service it calls, so the origin it was
+loaded from is the answer.
+
+The dashboard publishes the client's endpoint under `127.0.0.1`, the same spelling the development server binds.
+Aspire's default endpoint host is `localhost`, which resolves to the IPv6 loopback before the IPv4 one on an ordinary
+machine; left at the default, the dashboard would link a socket nothing answers on while the page was alive beside it.
+
 ### The client surface
 
-There is no client resource in this app model. The Uno Platform head it used to start was withdrawn, and the client is
-being rebuilt in React; whatever starts the new one is decided with it. What the orchestration still brings up is the
-**surface a client calls**, which is the service's own and was never the client's.
+What the client calls is the **surface the service serves**, which is the service's own and was never the client's.
 
 **It is enabled by the normal orchestration.** The app model supplies its port and loopback bind and enables the
 password method, then provisions `test` / `test-password` through the ordinary administrative API — so password policy,
@@ -272,7 +322,8 @@ opened as the other. A deployment names the origin it actually serves.
 It is on `127.0.0.1`, because the only thing that calls it is something running on this machine, and that is also why
 it is a socket of its own rather than a share of the MCP endpoint's: a wildcard bind beside a specific one on a single
 port is two sockets the operating system grants only one of, so sharing would have published the client surface
-wherever the MCP endpoint is published.
+wherever the MCP endpoint is published. A run started with `Client:Enabled` false starts no client, and the surface and
+its Basic credential stay available for a client started by hand or for a direct request.
 
 ### Pinning a port
 
@@ -289,12 +340,14 @@ dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Ports:McpE
 dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Ports:HealthEndpoints" "8081"
 dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Ports:Postgres" "5432"
 dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Ports:ClientEndpoint" "8082"
+dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Ports:Client" "5173"
 ```
 
 `8080` and `8081` are the ports [the container image](container-image.md) publishes and `5432` is PostgreSQL's own, so
-those three values are what makes a local run answer where a deployment does; the last answers a different want.
-`Ports:ClientEndpoint` is a request written once against `/api/client`. Each key is read on its own, so pinning the MCP
-endpoint leaves the probes, the database, and the client surface on whatever the run takes. A value that is not a port
+those three values are what makes a local run answer where a deployment does; the last two answer a different want.
+`Ports:ClientEndpoint` is a request written once against `/api/client`, and `Ports:Client` is a bookmarked browser
+tab — `5173` is Vite's own default. Each key is read on its own, so pinning the MCP endpoint leaves the probes, the
+database, the client surface, and the client on whatever the run takes. A value that is not a port
 number between `1` and `65535` fails the app host at startup naming the key, rather than being ignored and leaving the
 address to move anyway.
 
@@ -302,8 +355,8 @@ That store is keyed by the `UserSecretsId` in `backend/src/AppHost/AppHost.cspro
 pinned there is pinned for **every checkout on the machine** — which is the collision above, taken deliberately for the
 address it buys. It is also loaded in the `Development` environment only, which is what the app host's only launch
 profile runs it in. The environment form of each key is what pins a port for one run: `Ports__McpEndpoint`,
-`Ports__HealthEndpoints`, `Ports__Postgres`, and `Ports__ClientEndpoint` are read after the store and therefore win
-over it.
+`Ports__HealthEndpoints`, `Ports__Postgres`, `Ports__ClientEndpoint`, and `Ports__Client` are read after the store and
+therefore win over it.
 
 ```bash
 Ports__McpEndpoint=8080 dotnet run --project backend/src/AppHost/AppHost.csproj
