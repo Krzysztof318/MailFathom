@@ -7,7 +7,7 @@ For background on ADRs, see <https://adr.github.io/>.
 ## How MailFathom uses ADRs
 
 1. Create or modify an ADR only after explicit owner approval for that documentation change. The `Protected paths` check enforces this rather than leaving it to a reviewer: `docs/decisions/` is a protected directory, so a pull request touching this directory fails that check unless the repository owner authored it. Propose a decision in an issue and let the approving change carry the record.
-2. Copy `docs/decisions/adr-template.md` to `docs/decisions/NNNN-title-with-dashes.md`, where `NNNN` is the next sequence number. The next one is `0022`. `0018`, `0019`, and `0020` were withdrawn with the Uno Platform client they decided about, and a number that has been used once is never reused, so the sequence continued past that gap rather than filling it.
+2. Copy `docs/decisions/adr-template.md` to `docs/decisions/NNNN-title-with-dashes.md`, where `NNNN` is the next sequence number. The next one is `0023`. `0018`, `0019`, and `0020` were withdrawn with the Uno Platform client they decided about, and a number that has been used once is never reused, so the sequence continued past that gap rather than filling it.
    1. Check existing branches and pull requests when possible so the sequence number does not collide.
    2. Use `docs/decisions/adr-short-template.md` only for small decisions whose trade-offs are already clear.
 3. Edit the new ADR.
@@ -39,3 +39,4 @@ For background on ADRs, see <https://adr.github.io/>.
 - [0016: Review a third-party licence against the artifact that would carry the component, treat a resolved-but-undistributed component as decided rather than pending, and let no build defeat a condition the licence attaches](0016-third-party-licence-obligations-per-artifact.md)
 - [0017: Select the content backend once per deployment, write the object before the unit of work that points at it, and name an object by the write that produced it](0017-object-storage-content-backend-consistency-and-object-identity.md)
 - [0021: Rebuild the client on React, TypeScript, and Tailwind CSS, ship a web bundle and a Tauri desktop application, and resolve the client's dependencies with pnpm](0021-client-stack-react-typescript-tailwind-tauri-and-pnpm.md)
+- [0022: Report a run's own consumption rather than a price, keep the deployment's remaining allowance private while naming when a refused period turns over, make cancelling stop the provider call and keep what arrived, and publish the answering endpoint by a name the operator chose](0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md)

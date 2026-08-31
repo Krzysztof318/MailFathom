@@ -159,4 +159,5 @@ the deployment at all.
 - **Producing a plan.** What a run retrieves and which blocks it composes is separate work.
 - **Rendering one.** The client's canvas and its block renderers are separate work again.
 - **What a run spent.** Cost, cancellation, and the events a run streams are properties of the run rather than of the
-  plan it produced.
+  plan it produced. What a run reports about each, and what a person is told when a spend ceiling refuses one, is
+  decided in [ADR 0022](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md).
