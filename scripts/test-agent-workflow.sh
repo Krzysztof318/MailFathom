@@ -4683,6 +4683,118 @@ obligation_index_names_a_test_the_change_left_alone() {
     '.tests[0].referencing_tests' "$output_file"
 }
 
+# The client's half of the tests section. Its edge is a path rather than a search — a test sits
+# beside the source and is named after it — so these contracts pin the lookup in both directions and
+# the three kinds a lookup must not be performed for.
+create_client_obligation_fixture() {
+  local fixture_root="$1"
+
+  rm -rf "$fixture_root"
+  mkdir -p \
+    "$fixture_root/frontend/src/Client.Backend/src" \
+    "$fixture_root/frontend/src/Client.App/src"
+
+  printf 'export const session = 1;\n' > "$fixture_root/frontend/src/Client.Backend/src/session.ts"
+  printf "import './session';\n" > "$fixture_root/frontend/src/Client.Backend/src/session.test.ts"
+  printf 'export const transport = 1;\n' > "$fixture_root/frontend/src/Client.Backend/src/transport.ts"
+  printf "export { session } from './session';\n" > "$fixture_root/frontend/src/Client.Backend/src/index.ts"
+  printf 'export const App = 1;\n' > "$fixture_root/frontend/src/Client.App/src/App.tsx"
+  printf 'declare const version: string;\n' > "$fixture_root/frontend/src/Client.App/src/environment.d.ts"
+  printf 'export default {};\n' > "$fixture_root/frontend/src/Client.App/vite.config.ts"
+}
+
+# A module whose sibling test exists and was left alone: the index names it, and names the package it
+# sits in rather than a test project of its own, because a client test lives inside the package it
+# covers.
+obligation_index_names_the_test_beside_a_client_source() {
+  local fixture_root="$test_directory/obligations-client-sibling"
+  local files_json="$test_directory/obligations-client-sibling-files.json"
+  local output_file="$test_directory/obligations-client-sibling.json"
+
+  create_client_obligation_fixture "$fixture_root"
+  printf '%s\n' '[{"filename":"frontend/src/Client.Backend/src/session.ts","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"}]' \
+    > "$files_json"
+
+  run_obligation_index "$fixture_root" "$files_json" "$output_file"
+
+  assert_json '[{"path":"frontend/src/Client.Backend/src/session.test.ts","changed_by_this_pull_request":false}]' \
+    '.tests[0].referencing_tests' "$output_file"
+  assert_json '"frontend/src/Client.Backend"' '.tests[0].expected_test_project' "$output_file"
+  assert_json '"session"' '.tests[0].type' "$output_file"
+}
+
+# The lookup answering no. `transport.ts` has no sibling, so the list is empty — and because the edge
+# is a lookup rather than a search, that empty list means the file does not exist rather than that a
+# name was too rare to match.
+obligation_index_reports_a_client_source_with_no_sibling_test() {
+  local fixture_root="$test_directory/obligations-client-missing"
+  local files_json="$test_directory/obligations-client-missing-files.json"
+  local output_file="$test_directory/obligations-client-missing.json"
+
+  create_client_obligation_fixture "$fixture_root"
+  printf '%s\n' '[{"filename":"frontend/src/Client.Backend/src/transport.ts","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"}]' \
+    > "$files_json"
+
+  run_obligation_index "$fixture_root" "$files_json" "$output_file"
+
+  assert_json '1' '.tests | length' "$output_file"
+  assert_json '[]' '.tests[0].referencing_tests' "$output_file"
+  assert_json '0' '.tests[0].referencing_test_count' "$output_file"
+}
+
+# The case a base-tree pass alone gets wrong, in the client's spelling: the change adds a component
+# and its test together, so the test is in the diff and nowhere else. `.tsx` is deliberate — a `.tsx`
+# source is covered by a `.tsx` test, and an index that looked only for `.test.ts` would miss it.
+obligation_index_credits_a_client_test_the_change_adds() {
+  local fixture_root="$test_directory/obligations-client-added"
+  local files_json="$test_directory/obligations-client-added-files.json"
+  local output_file="$test_directory/obligations-client-added.json"
+
+  create_client_obligation_fixture "$fixture_root"
+  printf '%s\n' '[{"filename":"frontend/src/Client.App/src/Accounts.tsx","status":"added","patch":"@@ -0,0 +1 @@\n+export const Accounts = 1;"},{"filename":"frontend/src/Client.App/src/Accounts.test.tsx","status":"added","patch":"@@ -0,0 +1 @@\n+import { Accounts } from \"./Accounts\";"}]' \
+    > "$files_json"
+
+  run_obligation_index "$fixture_root" "$files_json" "$output_file"
+
+  assert_json '[{"path":"frontend/src/Client.App/src/Accounts.test.tsx","changed_by_this_pull_request":true}]' \
+    '.tests[0].referencing_tests' "$output_file"
+}
+
+# Three kinds no test can exist for, and one path above a package's `src/`. An entry for any of them
+# would produce the same wrong finding on every change of that kind, which is the reason migrations
+# are left out of the service's half.
+obligation_index_leaves_out_client_paths_no_test_can_cover() {
+  local fixture_root="$test_directory/obligations-client-excluded"
+  local files_json="$test_directory/obligations-client-excluded-files.json"
+  local output_file="$test_directory/obligations-client-excluded.json"
+
+  create_client_obligation_fixture "$fixture_root"
+  printf '%s\n' '[{"filename":"frontend/src/Client.Backend/src/index.ts","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"},{"filename":"frontend/src/Client.App/src/environment.d.ts","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"},{"filename":"frontend/src/Client.Backend/src/session.test.ts","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"},{"filename":"frontend/src/Client.App/vite.config.ts","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"}]' \
+    > "$files_json"
+
+  run_obligation_index "$fixture_root" "$files_json" "$output_file"
+
+  assert_json '0' '.tests | length' "$output_file"
+}
+
+# The client's pin family owes the same register row a service pin does, and it is a pair of its own
+# so the trigger names what actually moved.
+obligation_index_reports_a_moved_client_pin_with_no_register_row() {
+  local fixture_root="$test_directory/obligations-client-pin"
+  local files_json="$test_directory/obligations-client-pin-files.json"
+  local output_file="$test_directory/obligations-client-pin.json"
+
+  create_client_obligation_fixture "$fixture_root"
+  printf '%s\n' '[{"filename":"frontend/src/Client.App/package.json","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"},{"filename":"frontend/pnpm-lock.yaml","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"}]' \
+    > "$files_json"
+
+  run_obligation_index "$fixture_root" "$files_json" "$output_file"
+
+  assert_json '1' '[.registers[] | select(.register == "THIRD_PARTY_LICENSES.md")] | length' "$output_file"
+  assert_json 'false' '.registers[0].register_changed' "$output_file"
+  assert_contains 'frontend/pnpm-lock.yaml' "$output_file"
+}
+
 obligation_index_maps_a_changed_path_to_the_page_that_describes_it() {
   local fixture_root="$test_directory/obligations-documentation"
   local files_json="$test_directory/obligations-documentation-files.json"
@@ -8276,6 +8388,11 @@ run_test closing_issues_report_each_issue_once
 run_test obligation_index_reports_a_changed_source_no_test_reaches
 run_test obligation_index_credits_a_test_the_change_adds
 run_test obligation_index_names_a_test_the_change_left_alone
+run_test obligation_index_names_the_test_beside_a_client_source
+run_test obligation_index_reports_a_client_source_with_no_sibling_test
+run_test obligation_index_credits_a_client_test_the_change_adds
+run_test obligation_index_leaves_out_client_paths_no_test_can_cover
+run_test obligation_index_reports_a_moved_client_pin_with_no_register_row
 run_test obligation_index_maps_a_changed_path_to_the_page_that_describes_it
 run_test obligation_index_credits_a_path_directly_under_a_double_star
 run_test obligation_index_ignores_a_marker_below_the_preamble

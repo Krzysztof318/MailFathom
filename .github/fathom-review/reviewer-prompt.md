@@ -4,8 +4,13 @@ HEAD SHA: {{HEAD_SHA}}
 SNAPSHOT TAKEN: {{SNAPSHOT_TAKEN}}
 REVIEW POSTURE: {{REVIEW_POSTURE}}
 
-You are reviewing a pull request in MailFathom, a .NET 10 clean-architecture modular
-monolith on its `0.x` line that serves a local copy of a mailbox over MCP.
+You are reviewing a pull request in MailFathom, which carries two stacks beside each other
+on its `0.x` line: a .NET 10 clean-architecture modular monolith under `backend/` that
+serves a local copy of a mailbox over MCP, and a React and TypeScript client under
+`frontend/` that reads it over the `/api/client` surface that service exposes. A change may
+reach either, both, or neither, and the rubric below says which rules each of those is
+judged against — a finding that judges a file by the other stack's rules is a wrong
+finding, exactly as one that applies general practice over a stated rule is.
 
 ## Where everything is
 
@@ -93,12 +98,21 @@ rule is a wrong finding, and so is one these files already reject.
   one is read, so start there when you cannot tell which file states a rule.
 - `.agents/skills/review-change/SKILL.md`. Its "Recurring findings" section is the
   distilled history of what review has actually caught here. Work through every category
-  the change reaches.
-- `backend/AGENTS.md`, `backend/src/AGENTS.md`, `backend/src/Infrastructure/AGENTS.md`,
-  `backend/tests/AGENTS.md`, and `docs/AGENTS.md` for the parts of the tree the change touches. A
-  nested file adds rules to the ones above it rather than replacing them. The .NET and C# conventions
-  live in `backend/AGENTS.md` and govern production and test code alike, so a change under
-  `backend/tests/` is judged against `backend/AGENTS.md` and `backend/tests/AGENTS.md` together.
+  the change reaches. Every one of them was measured on the service, which is where the
+  merged pull requests are, so a category is applied where the change reaches it and never
+  translated onto a client file it was never about.
+- The nested `AGENTS.md` files for the parts of the tree the change touches, each of which adds
+  rules to the ones above it rather than replacing them. Under `backend/`: `backend/AGENTS.md`,
+  `backend/src/AGENTS.md`, `backend/src/Infrastructure/AGENTS.md`, and `backend/tests/AGENTS.md` —
+  the .NET and C# conventions live in the first of those and govern production and test code alike,
+  so a change under `backend/tests/` is judged against `backend/AGENTS.md` and
+  `backend/tests/AGENTS.md` together. Under `frontend/`: `frontend/AGENTS.md` for the toolchain and
+  the suppression policy, the dependency and lock-file rules, and driving the running client;
+  `frontend/src/AGENTS.md` for the package boundary, the state model, module and component design,
+  and the UX, UI, accessibility, and performance obligations; and `frontend/tests/AGENTS.md` for the
+  client suite, which is reached from the root table rather than from the directory a test sits in,
+  because a client test sits beside the source it covers rather than under `frontend/tests/`.
+  `docs/AGENTS.md` for a page under `docs/`.
 - `.agents/skills/check-docs-licenses/SKILL.md` for MailFathom's own Apache-2.0 record
   and the third-party licensing rules, and `docs/operations/issue-tracking.md` for what
   an issue and its board placement have to carry.
@@ -321,6 +335,17 @@ a fourth records what it left out.
   the change touched, is worth reading the file for. It is not yet a finding.
   `referencing_test_count` is how many there are; when it exceeds the listed entries the
   type's name is a common word, and the list says less than usual about what covers it.
+  Both stacks have entries here and the two are derived differently, which changes what an
+  empty list means. A service entry comes from searching the test tree for the type's
+  name, so it over-reports: a test naming `Result` in passing is listed as covering it,
+  and `referencing_test_count` is the warning that the name says little. A client entry
+  comes from looking for the `.test.ts` or `.test.tsx` file beside the source, which is
+  where `frontend/tests/AGENTS.md` puts one, so it is a lookup rather than a search — an
+  empty list there means exactly that no such file exists, and `expected_test_project`
+  names the package it would sit in. A client source with no entry at all is one the index
+  does not cover rather than one that owes nothing: a test file, a `.d.ts` declaration, an
+  `index.ts` barrel, and anything above a package's `src/` are each left out because a test
+  for one is not a thing that can exist.
 - **`documentation`** — one entry per changed path, with the pages whose `describes:`
   marker covers it, each saying whether the change touched it. Open the page and read
   what it says about the behavior this change altered.

@@ -1442,19 +1442,42 @@ happens, so a stuck labelling run must not hold a review open or fail one.
 
 The prompt points the reviewer at this repository's own rules rather than at
 general review practice: root `AGENTS.md`, the nested `AGENTS.md` files under
-`backend/`, `backend/src/`, `backend/tests/`, and `docs/`, the recurring findings in the
-`review-change` skill, and the ADRs that govern the area the change touches. A
-finding names the rule it rests on in a field of its own,
+`backend/`, `backend/src/`, `backend/src/Infrastructure/`, `backend/tests/`,
+`frontend/`, `frontend/src/`, `frontend/tests/`, and `docs/`, the recurring
+findings in the `review-change` skill, and the ADRs that govern the area the
+change touches. A finding names the rule it rests on in a field of its own,
 and one that applies generic advice where this repository has stated a different
 rule is itself wrong.
 
-Beyond that contract it works through six rubrics — the repository's rules,
-security and privacy, reliability, performance, clean code, and what the change
-says about itself — each stated as the specific things reviews have caught here
-rather than as a category name, and each applied only where the change reaches
-it. The same prompt still rules out
-what the build already enforces, anything about backward compatibility or
-migration paths, and a request for tests that names no untested case, so the two
+**Which of those rules a file is judged against follows the stack it sits in**,
+which is the part the rubrics carry rather than the prompt. The service's
+boundaries, its type shape, its async and time conventions, and its email
+invariants are stated for `backend/`; the client's package boundary, its state
+and effect rules, its suppression policy, and its screen obligations are stated
+for `frontend/`; and the security, privacy, reliability, performance, and
+licensing rules that reach both are stated once, outside either. A finding that
+judges a `.tsx` file by a C# convention, or a `.cs` file by a React one, is the
+same wrong-rule failure as one that applies general practice over a stated rule,
+and it is the failure a mixed pull request is most exposed to. The recurring
+findings in the `review-change` skill are named as the service's own measured
+history for that reason: every category in them came from a merged pull request
+under `backend/`, so the prompt has the reviewer apply one where the change
+reaches it rather than translate it onto a client file it was never about.
+
+Beyond that contract it works through seven rubrics — the repository's rules,
+security and privacy, reliability, performance, clean code, the screen a person
+uses, and tests and documentation — each stated as the specific things reviews
+have caught here rather than as a category name, and each applied only where the
+change reaches it. Five of the seven are split by stack; *the screen a person
+uses* is the client's alone, and a change that renders nothing reaches none of
+it. What the change says about itself is a rubric of the reviewer's own, since a
+reader holding a fraction of the change cannot judge the body against it. The
+same prompt still rules out what a build already enforces — the analyzer set for
+the service, and `tsconfig.base.json`, `eslint.config.ts`, and Prettier for the
+client — anything about backward compatibility or migration paths, a request for
+tests that names no untested case, and a suggestion that the client adopt a
+component library, a router, a state container, or a data-fetching library, each
+of which is kept absent by a decision rather than by an oversight. So the two
 reviewers do not spend threads on findings this repository has already decided
 against.
 
@@ -1711,7 +1734,7 @@ would arrive under an `APPROVED` heading.
 ### What the change obliges elsewhere
 
 A whole class of defect here is invisible in a diff, because the defect *is* the
-absence of a second file from it: a `.cs` file that changed while no test
+absence of a second file from it: a source file that changed while no test
 followed it, a page that still describes the behavior the change replaced, a
 moved pin with no row in `THIRD_PARTY_LICENSES.md`. Each is a rule in
 `AGENTS.md`, and a reviewer reading only the diff cannot see any of them.
@@ -1727,13 +1750,43 @@ no `gh` stub at all.
 The two kinds of edge it follows are recorded differently, and which one applies
 turns on whether the repository's own rules already derive it.
 
-A production type to its test is **derived and never written down**. `AGENTS.md`
-requires one primary type per file with a matching file name, and
-`backend/tests/<Boundary>.UnitTests/` mirrors `backend/src/<Boundary>/`, so the mapping is
-already a rule the build enforces; a recorded copy could drift from it. The index
-searches the base tree and the tests the change itself adds, because a change
-that adds a class together with its test is the case where reporting a missing
-test would be most obviously wrong.
+A production file to its test is **derived and never written down**, and each
+stack states the rule the derivation reads, so the index follows two edges rather
+than one. In the service, `AGENTS.md` requires one primary type per file with a
+matching file name, and `backend/tests/<Boundary>.UnitTests/` mirrors
+`backend/src/<Boundary>/`, so the edge is that type name searched for across the
+test tree. In the client, `frontend/tests/AGENTS.md` puts the test beside the
+source and names it after it, so the edge is one path rather than a search:
+`session.ts` is covered by `session.test.ts` in the same directory and `App.tsx`
+by `App.test.tsx`. Both mappings are already rules; a recorded copy could drift
+from either. Either way the index reads the base tree *and* the tests the change
+itself adds, because a change that adds a file together with its test is the case
+where reporting a missing test would be most obviously wrong.
+
+The two are exact in different ways, and the report says which per entry because
+an empty list means a different thing in each. A type name is a search, so it
+over-reports — a test naming `Result` in passing is listed as covering it, which
+is what `referencing_test_count` warns about. A sibling path is a lookup, so an
+empty list under a client entry means precisely that no file of that name exists,
+and `expected_test_project` names the package it would sit in, since a client test
+lives inside the package it covers rather than in one of its own.
+
+Under the client, three kinds are left out for the reason migrations are left out
+of the service's half — a test for one is not a thing that can exist, so an index
+asking for one would produce the same wrong finding on every change of that kind:
+a test file itself, a `.d.ts` declaration, and an `index.ts` or `index.tsx`, which
+re-exports and is proven by whether its consumers still compile. So is anything
+above a package's own `src/`, which is where `vite.config.ts`, `vitest.setup.ts`,
+and `tsconfig.json` sit, so scoping the index to that directory excludes the
+build's configuration without naming any of it.
+
+Both stacks' pin families oblige `THIRD_PARTY_LICENSES.md`, as two register pairs
+rather than one, so the trigger names what actually moved:
+`backend/Directory.Packages.props` or a `packages.lock.json` for the service, and
+a `frontend` `package.json` or `frontend/pnpm-lock.yaml` for the client. The
+client's pair matters more than the symmetry suggests, because
+`scripts/update-dependencies.sh` does not read that family yet — so review is
+where a client pin missing its row is caught at all.
 
 A source path to the page that documents it is **declared**, because nothing
 derives it: documentation is written about configuration keys and behavior rather

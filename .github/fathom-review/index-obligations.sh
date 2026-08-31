@@ -6,7 +6,7 @@
 # Index the obligations a pull request triggers in the rest of the repository.
 #
 # `Fathom review` reads a change as a diff, and a whole class of defect here is invisible in one: a
-# `.cs` file that changed while no test followed it, a page under `docs/` that still describes the
+# source file that changed while no test followed it, a page under `docs/` that still describes the
 # behavior the change replaced, a moved pin with no row in `THIRD_PARTY_LICENSES.md`. The defect is
 # the *absence* of a second file from the diff, so a reviewer reading only the diff cannot see it.
 #
@@ -17,10 +17,20 @@
 #
 # The two kinds of edge it follows are recorded differently on purpose.
 #
-# A production type to its test is *derived*, never recorded. `AGENTS.md` requires one primary type
-# per file and a file name that matches it, and `backend/tests/<Boundary>.UnitTests/` mirrors
-# `backend/src/<Boundary>/`, so the mapping already exists as a rule the build enforces. A written-down copy
-# could drift from it; a derived one cannot.
+# A production file to its test is *derived*, never recorded, and each stack states the rule the
+# derivation reads. In the service, `AGENTS.md` requires one primary type per file and a file name
+# that matches it, and `backend/tests/<Boundary>.UnitTests/` mirrors `backend/src/<Boundary>/`, so
+# the edge is a type name searched for across the test tree. In the client,
+# `frontend/tests/AGENTS.md` puts the test beside the source and names it after it, so the edge is
+# one path rather than a search: `session.ts` is covered by `session.test.ts` in the same directory
+# and `App.tsx` by `App.test.tsx`. Both mappings already exist as rules; a written-down copy could
+# drift from one, and a derived one cannot.
+#
+# The two derivations are exact in different ways, and the section below says so per entry rather
+# than leaving the reviewer to assume. A type name is a *search*, so it over-reports — a test naming
+# `Result` in passing is listed as covering it — and `referencing_test_count` is the warning. A
+# sibling path is a *lookup*, so it is either there or it is not, and an empty list under a client
+# entry means exactly that no file with that name exists.
 #
 # A source path to the page that documents it is *declared*, because nothing derives it:
 # documentation is written about configuration keys and behavior rather than about type names, so no
@@ -202,6 +212,85 @@ while IFS= read -r source_path; do
   test_entry_count=$(( test_entry_count + 1 ))
 done < "$work_directory/changed-sources"
 
+# The client's half of the same section, into the same list and under the same ceiling, because what
+# bounds it is the reviewer's context rather than which stack an entry came from.
+#
+# Only `frontend/src/<package>/src/` is production source. A package's `vite.config.ts`,
+# `vitest.setup.ts`, and `tsconfig.json` sit above that directory, so scoping to it excludes the
+# build's own configuration without naming any of it. Three kinds inside it are excluded for the
+# reason migrations are excluded above — a test for one is not a thing that can exist, so an index
+# that asked for one would produce the same wrong finding on every change of that kind: a test file
+# itself, a `.d.ts` declaration, which carries no behavior to reach, and an `index.ts` or
+# `index.tsx`, which re-exports and is proven by whether its consumers still compile.
+grep -E '^frontend/src/[^/]+/src/.+\.(ts|tsx)$' "$work_directory/present-paths" \
+  | grep -vE '\.test\.(ts|tsx)$' \
+  | grep -vE '\.d\.ts$' \
+  | grep -vE '(^|/)index\.(ts|tsx)$' \
+  > "$work_directory/changed-client-sources" || true
+
+# The test beside a client source, as a lookup rather than a search. It is either in the base tree or
+# added by this change, and the second case is the one a base-tree pass alone would get wrong — a
+# change adding a module together with its test is exactly where reporting a missing test is most
+# obviously wrong. A candidate this change *removed* is neither: it is in the base tree and gone from
+# the branch, so it is skipped rather than listed as covering anything.
+sibling_tests_for_source() {
+  local source_path="$1"
+  local directory module_name candidate extension
+
+  directory="$(dirname "$source_path")"
+  module_name="$(basename "$source_path")"
+  module_name="${module_name%.tsx}"
+  module_name="${module_name%.ts}"
+
+  for extension in ts tsx; do
+    candidate="$directory/${module_name}.test.${extension}"
+
+    if grep -qxF "$candidate" "$work_directory/changed-paths" \
+      && ! grep -qxF "$candidate" "$work_directory/present-paths"; then
+      continue
+    fi
+
+    if [[ -f "$repository_root/$candidate" ]] \
+      || grep -qxF "$candidate" "$work_directory/present-paths"; then
+      printf '%s\n' "$candidate"
+    fi
+  done
+}
+
+while IFS= read -r source_path; do
+  [[ -n "$source_path" ]] || continue
+
+  if (( test_entry_count >= max_test_entries )); then
+    notes+=("The change touches more source files than the ${max_test_entries} this index covers, so the tests section is partial.")
+    break
+  fi
+
+  # The module rather than a type: a `.ts` file declares no single one, and what the file is named
+  # after is what `frontend/tests/AGENTS.md` names the test after and what `describe` states.
+  module_name="$(basename "$source_path")"
+  module_name="${module_name%.tsx}"
+  module_name="${module_name%.ts}"
+
+  # The package the test belongs to, which is what `backend/tests/<Boundary>.UnitTests` is for the
+  # service. A client test lives inside the package it covers rather than in one of its own, for the
+  # resolver reason `frontend/tests/AGENTS.md` gives.
+  client_package="$(cut -d'/' -f1-3 <<< "$source_path")"
+
+  sibling_tests_json="$(sibling_tests_for_source "$source_path" | with_changed_flag)"
+
+  jq -nc \
+    --arg path "$source_path" \
+    --arg type "$module_name" \
+    --arg status "$(jq -r --arg path "$source_path" 'map(select(.filename == $path)) | .[0].status // ""' "$files_json")" \
+    --arg project "$client_package" \
+    --argjson tests "$sibling_tests_json" \
+    '{path: $path, type: $type, status: $status, expected_test_project: $project,
+      referencing_test_count: ($tests | length), referencing_tests: $tests}' \
+    >> "$work_directory/tests.ndjson"
+
+  test_entry_count=$(( test_entry_count + 1 ))
+done < "$work_directory/changed-client-sources"
+
 # ---------------------------------------------------------------------------
 # Documentation
 # ---------------------------------------------------------------------------
@@ -331,6 +420,20 @@ fi
 
 emit_register 'a dependency pin moved in backend/Directory.Packages.props or a packages.lock.json' \
   'THIRD_PARTY_LICENSES.md' "$dependency_pins_changed"
+
+# The client's pin family, as a pair of its own rather than folded into the one above, so the trigger
+# names what actually moved. `frontend/AGENTS.md` puts the pin in each package's own `package.json`
+# and the resolution in `frontend/pnpm-lock.yaml`, and requires the same register row that a service
+# pin does under ADR 0016. `scripts/update-dependencies.sh` does not read this family yet, which is
+# what makes the review the place a client pin is caught at all.
+client_pins_changed='false'
+if grep -qE '^frontend/(src/[^/]+/)?package\.json$' "$work_directory/changed-paths" \
+  || grep -qxF 'frontend/pnpm-lock.yaml' "$work_directory/changed-paths"; then
+  client_pins_changed='true'
+fi
+
+emit_register 'a client dependency pin moved in a frontend package.json or in frontend/pnpm-lock.yaml' \
+  'THIRD_PARTY_LICENSES.md' "$client_pins_changed"
 
 exception_added='false'
 if jq -e '[.[] | select(.status == "added") | select(.filename | test("^backend/src/.*Exception\\.cs$"))] | length > 0' \

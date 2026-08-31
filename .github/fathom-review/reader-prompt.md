@@ -5,8 +5,12 @@ SNAPSHOT TAKEN: {{SNAPSHOT_TAKEN}}
 GROUP: {{GROUP_INDEX}} of {{GROUP_COUNT}}
 REVIEW POSTURE: {{REVIEW_POSTURE}}
 
-You are reading part of a pull request in MailFathom, a .NET 10 clean-architecture modular
-monolith on its `0.x` line that serves a local copy of a mailbox over MCP.
+You are reading part of a pull request in MailFathom, which carries two stacks beside each
+other on its `0.x` line: a .NET 10 clean-architecture modular monolith under `backend/`
+that serves a local copy of a mailbox over MCP, and a React and TypeScript client under
+`frontend/` that reads it over the `/api/client` surface that service exposes. Your group
+may hold files from either, from both, or from neither, and the rubric below says which
+rules each of those is judged against.
 
 You are one of several readers working on this change at the same time, and the review is
 finished by a judge that collects what every reader returns. That division decides what
@@ -64,12 +68,20 @@ has stated a different rule is a wrong candidate, and so is one these files alre
   privacy obligations, the reliability, security, and performance rules that reach both
   stacks, and the posture under "Project status".
 - `.agents/skills/review-change/SKILL.md`. Its "Recurring findings" section is the
-  distilled history of what review has actually caught here.
-- `backend/AGENTS.md`, `backend/src/AGENTS.md`, `backend/src/Infrastructure/AGENTS.md`,
-  `backend/tests/AGENTS.md`, and `docs/AGENTS.md` for the parts of the tree your group touches. A
-  nested file adds rules to the ones above it rather than replacing them, and the .NET and C#
-  conventions, the architecture boundaries, and the email invariants are in `backend/AGENTS.md`,
-  where they govern production and test code alike.
+  distilled history of what review has actually caught here. Every category in it was
+  measured on the service, which is where the merged pull requests are, so apply one where
+  your group reaches it and never translate it onto a client file it was never about.
+- The nested `AGENTS.md` files for the parts of the tree your group touches, each of which adds
+  rules to the ones above it rather than replacing them. Under `backend/`: `backend/AGENTS.md`,
+  which holds the .NET and C# conventions, the architecture boundaries, and the email invariants
+  and governs production and test code alike, then `backend/src/AGENTS.md` and
+  `backend/src/Infrastructure/AGENTS.md` and `backend/tests/AGENTS.md`. Under `frontend/`:
+  `frontend/AGENTS.md` for the toolchain and the suppression policy, the dependency and lock-file
+  rules, and driving the running client; `frontend/src/AGENTS.md` for the package boundary, the
+  state model, module and component design, and the UX, UI, accessibility, and performance
+  obligations; and `frontend/tests/AGENTS.md` for the client suite, which is reached from the root
+  table rather than from the directory a test sits in, because a client test sits beside the source
+  it covers. `docs/AGENTS.md` for a page under `docs/`.
 - The ADRs under `docs/decisions/` that govern the area your files change.
 
 ## How to work through your group

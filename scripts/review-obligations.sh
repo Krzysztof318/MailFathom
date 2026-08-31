@@ -116,17 +116,29 @@ fi
 printf 'Obligations this change triggers, against %s.\n' "$base_ref"
 
 printf '\nTests\n'
+# The two stacks are read differently and the sentences say which, because an empty list means a
+# different thing in each: the service's edge is a type name searched for across its test tree, so
+# nothing found may mean the name is simply not written there, while the client's is the sibling file
+# `frontend/tests/AGENTS.md` requires, so nothing found means that file does not exist.
 jq -r '
   if (.tests | length) == 0 then
-    "  No production file under backend/src/ changed."
+    "  No production file under backend/src/ or under a client package src/ changed."
   else
     .tests[]
-    | . as $entry
     | (.referencing_tests | map(select(.changed_by_this_pull_request))) as $touched
+    | (.path | startswith("frontend/")) as $client
     | if (.referencing_tests | length) == 0 then
-        "  \(.path)\n    Nothing under backend/tests/ names \(.type)."
+        if $client then
+          "  \(.path)\n    No \(.type).test.ts or \(.type).test.tsx sits beside it."
+        else
+          "  \(.path)\n    Nothing under backend/tests/ names \(.type)."
+        end
       elif ($touched | length) == 0 then
-        "  \(.path)\n    \(.referencing_test_count) test file(s) name \(.type) and this change touches none:\n"
+        (if $client then
+          "  \(.path)\n    The test beside it is not in this change:\n"
+        else
+          "  \(.path)\n    \(.referencing_test_count) test file(s) name \(.type) and this change touches none:\n"
+        end)
         + (.referencing_tests | map("      \(.path)") | join("\n"))
       else
         "  \(.path)\n    Covered: this change touches "

@@ -68,9 +68,10 @@ While reviewing the change, ask what it obliges elsewhere:
 bash scripts/review-obligations.sh
 ```
 
-That prints the tests naming each changed type, the pages whose `describes:`
-marker covers each changed path, and the registers whose trigger moved, each
-saying whether the change touched it. It is the same index `Fathom review` runs
+That prints the tests covering each changed source file, named for the service
+and sitting beside it for the client, the pages whose `describes:` marker covers
+each changed path, and the registers whose trigger moved, each saying whether the
+change touched it. It is the same index `Fathom review` runs
 on a pull request, reached through an adapter that hands it a local diff, so the
 answer is the one the pipeline will give rather than an approximation of it. It
 reports and never gates: nothing it prints is a finding until it is confirmed in
