@@ -146,6 +146,9 @@ about Polish. Every other file in this workspace stays checked, `en.ts` included
 `pnpm test` is the unit suite, and `vitest.config.ts` declares one Vitest project per package because the two are tested
 differently: `Client.Backend` is ordinary logic run without a DOM, and `Client.App` is components rendered into jsdom
 with React Testing Library. A test file sits beside the source it covers — the package boundary above is the reason.
+That one command also collects the suite's coverage, over both packages' `src/` whether or not a test imported the
+file, and prints a summary beside the results; the HTML report goes to `artifacts/coverage/client/` at the repository
+root. No threshold is enforced on the figure.
 
 `pnpm test:browser` is the other one. It runs `pnpm build`, serves `src/Client.App/dist/` with Vite's preview server,
 and drives it with Playwright, so what it proves is the bundle a deployment publishes rather than the source: the

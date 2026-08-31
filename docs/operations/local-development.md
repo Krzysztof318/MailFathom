@@ -916,7 +916,8 @@ Four things around those commands are worth knowing before they are discovered:
 - **`pnpm test` is the whole of the client suite.** It is Vitest, one project per package — `Client.Backend` without a
   DOM and `Client.App` in jsdom with React Testing Library — and a test file sits beside the source it covers rather
   than under `frontend/tests/`, which holds the suite's contract and no test. `frontend/tests/AGENTS.md` is that
-  contract.
+  contract. The same command collects coverage and enforces no threshold on it;
+  [the client's suite](#the-clients-suite) below is where that is decided.
 - **Nothing the service does for a client changed**, because none of it was the client's: the surface under
   `/api/client` is an endpoint of its own — [the client endpoint](client-endpoint.md) is the page — and `Host` serves
   whatever files an image carries beneath its web root. No current image carries any, so a deployment that switches
@@ -963,7 +964,11 @@ down, and why the version reaches it as a configuration patch rather than as a n
 
 ## Code coverage
 
-The full verification script collects and enforces coverage. To run only the
+Both stacks are measured and one of them is enforced. The service's figure is the repository's only coverage threshold,
+and everything down to [the client's suite](#the-clients-suite) below is about it; the client's is collected on every
+run of its suite and gates nothing.
+
+The full verification script collects and enforces the service's coverage. To run only the
 underlying coverage target after a Release build:
 
 ```bash
@@ -983,7 +988,24 @@ A third exclusion is applied by path rather than by attribute: `.config/CodeCove
 
 A fourth exclusion is about which projects the target *runs* rather than which assemblies it measures. `backend/tests/Benchmarks` sits under `backend/tests/` and is not a suite — it asserts nothing and its numbers gate nothing — so `.config/CodeCoverage.proj` names it as the one exception to the glob that finds test projects, and `.config/testconfig.json` excludes its assembly beside `SyntheticMail`'s. It stays in the check that every project under `backend/tests/` appears in `backend/MailFathom.slnx`, because a project missing from the solution is unbuilt, unanalyzed, and unformatted whether or not anything runs it.
 
-Raw Cobertura reports and TRX files are written under `artifacts/coverage/raw/`. The merged Cobertura and HTML reports are written under `artifacts/coverage/report/`. The verification records the two gates write sit beside them under `artifacts/verify/`; the whole directory is ignored, so nothing there is ever staged, and deleting any of it costs one repeated run.
+Raw Cobertura reports and TRX files are written under `artifacts/coverage/raw/`. The merged Cobertura and HTML reports are written under `artifacts/coverage/report/`. The client's report sits beside them under `artifacts/coverage/client/`. The verification records the two gates write sit beside all of it under `artifacts/verify/`; the whole directory is ignored, so nothing there is ever staged, and deleting any of it costs one repeated run.
+
+### The client's suite
+
+`pnpm test` collects its own coverage every time it runs, which is every time either verification gate or `CI` reaches
+the client stack. There is no second command and no flag: `frontend/vitest.config.ts` enables Vitest's v8 provider,
+which reads counters the runtime already keeps rather than instrumenting the module graph, so the figure costs a report
+rather than a slower suite. A text summary is printed where the run is read, and the HTML report is written to
+`artifacts/coverage/client/`.
+
+The measured scope is both packages' `src/` whether or not a test imported the file, so a module nobody covers sits at
+zero rather than going missing from the report. Declaration files and `Client.App/src/main.tsx` are excluded — the
+latter mounts React into the document and decides nothing, which is the argument that excludes `Host` and `AppHost`
+above — and Vitest drops the suite's own test files.
+
+**Nothing enforces it**, in either verification script or any workflow, and the 85% above stays the repository's only
+coverage threshold. `frontend/tests/AGENTS.md` § *Coverage* holds why a second one was refused rather than defaulted
+to.
 
 ## Integration tests
 

@@ -93,8 +93,9 @@ requires the branch to contain that freshly fetched base, and then runs the flow
 of each stack the change reaches. The server's is repository tools, the solution,
 a Release build, all unit tests through the aggregate 85% coverage target, and a
 verifying formatting pass; the client's is its own solution restored, both heads
-built, its unit suite run, and its own verifying formatting pass, with no coverage
-threshold because there is no client code measured yet. Whichever ran, it then
+built, its unit suite run, and its own verifying formatting pass. The client's
+suite reports its own coverage as it runs and no threshold is enforced on it, so
+the service's is the one figure either gate can fail on. Whichever ran, it then
 checks committed branch changes, staged changes, and unstaged changes for
 whitespace errors. Beside all of that it runs the workflow contract suite, where
 the change can have moved something it asserts. That chain stops at its own first failure; the suite is the
