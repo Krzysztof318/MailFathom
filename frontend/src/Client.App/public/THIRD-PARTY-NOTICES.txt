@@ -1,0 +1,39 @@
+Third-party notices for the MailFathom client bundle
+====================================================
+
+This file lists the third-party software redistributed inside the bundle beside it, and reproduces
+the notices those licences require. It covers the bundle alone. MailFathom's own terms are in
+LICENSE and NOTICE, which travel with every artifact this project publishes, and
+THIRD_PARTY_LICENSES.md in the repository is where every dependency's review is recorded.
+
+The bundle is minified and every module is merged into one chunk, so these notices are carried here
+as text rather than as a banner inside the code they belong to.
+
+--------------------------------------------------------------------------------
+
+react 19.2.8, react-dom 19.2.8, and scheduler 0.27.0
+https://github.com/facebook/react
+
+All three carry the same licence text:
+
+MIT License
+
+Copyright (c) Meta Platforms, Inc. and affiliates.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

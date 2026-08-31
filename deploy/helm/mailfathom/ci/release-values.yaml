@@ -80,9 +80,7 @@ spamScanning:
 
 # The client served as a page, which is the half of the choice the other two values documents do not render: with the
 # ingress below terminating TLS, the chart writes the switch and the clear-text permission together. Between this file
-# and the two beside it, both branches of `client.enabled` are rendered by the repository's own verification. No image
-# carries a bundle today, so a deployment shaped like this one would be refused at startup — what is asserted here is
-# what the chart renders, which is the part that has to keep working while the client is rebuilt.
+# and the two beside it, both branches of `client.enabled` are rendered by the repository's own verification.
 client:
   enabled: true
 

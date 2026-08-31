@@ -328,10 +328,8 @@ an environment block is visible to anything that can read `/proc` and cannot be 
 
 ## Serving the client
 
-**No image carries MailFathom's own client today.** The Uno Platform client whose bundle used to travel inside the
-image was withdrawn and the client is being rebuilt in React, so the value below fails at startup on every current
-release. It stays in the chart as the plumbing the rebuilt client lands against, and what the rest of this section
-describes is the contract it carries once an image has a bundle again:
+**The client travels inside the image**, so serving it renders no second workload, publishes no second host, and
+pulls nothing:
 
 ```yaml
 client:

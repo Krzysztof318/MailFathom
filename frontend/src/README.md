@@ -15,5 +15,5 @@ Nothing about the service moved when the Uno Platform client that stood here was
 HTTP API served beneath `/api/client`, which is a transport surface of its own with its own listener and its own
 credentials — [`client-endpoint.md`](../../docs/operations/client-endpoint.md) is the page — and the container image
 serves whatever bundle it carries beneath its web root, from a deployment setting rather than from anything a client
-build states. An image built today carries no bundle, so a deployment that switches the client application on is
-refused by name.
+build states. Every published image carries the bundle `deploy/docker/Dockerfile` builds from these packages, so the
+setting serves a page; an image built without that stage refuses it by name.

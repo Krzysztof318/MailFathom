@@ -30,9 +30,10 @@ step, and reports the two probes.
 scripts/quick-start-compose.sh
 ```
 
-**It ends with an address for a chat client and nothing for a browser.** No image carries MailFathom's own client
-today — the Uno Platform one was withdrawn and the React one has not landed — so the script prepares no client
-credential and writes no client switch, and says so in its closing report.
+**It ends with an address for a chat client and an address for a browser.** The client travels inside the image, so
+the script writes the two settings that serve it and pulls nothing extra; `--no-client` prepares the MCP endpoint alone.
+It provisions no credential to sign in with, because the client reads its own sample data and calls no route yet, and
+its closing report says so.
 
 The administrative endpoint is still served whether or not you would otherwise have asked for it, because the MCP key
 is minted over it and there is no other way to reach one. `--admin-endpoint off` together with `--mcp-authentication
@@ -526,10 +527,8 @@ reading a sentence saying it is not a release.
 
 ## The client
 
-**No image carries MailFathom's own client today.** The Uno Platform client whose bundle used to travel inside the
-image was withdrawn and the client is being rebuilt in React, so the variable below fails at startup on every current
-release. It stays in `.env` as the plumbing the rebuilt client lands against, and what the rest of this section
-describes is the contract it carries once an image has a bundle again:
+**The client travels inside the image**, so serving it is a variable in `.env` rather than anything to pull, and this
+deployment gains no second service for it:
 
 ```dotenv
 MAILFATHOM_CLIENT=true

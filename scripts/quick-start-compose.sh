@@ -7,10 +7,13 @@ set -euo pipefail
 
 ### Prepares a Docker Compose deployment to evaluate MailFathom with, asking for the mailbox it is to synchronize.
 #
-# What it ends with is an address a chat client connects to. It prepares no MailFathom client of its own: the Uno
-# Platform one whose bundle used to travel inside the image was withdrawn, the client is being rebuilt in React, and a
-# deployment that switched the page on against a current image would be refused at startup — so this prepares the MCP
-# endpoint, and the client surface waits for something to call it.
+# What it ends with is an address a chat client connects to and an address the MailFathom client answers on. The client
+# is served from the same image, so preparing it is two settings rather than anything to install.
+#
+# It provisions no credential to sign in to that page with, and that is the current client rather than an omission: the
+# React client reads its own sample data and calls no endpoint yet, so a password would be a record nothing can present.
+# The client surface it is served on is served behind `password` all the same, because it is a mail-reading endpoint and
+# what will call it is a browser. docs/operations/client-endpoint.md is what provisions one by hand.
 #
 # Usage:
 #   scripts/quick-start-compose.sh
@@ -52,8 +55,8 @@ readonly repository='Krzysztof318/MailFathom'
 readonly release_base="https://github.com/$repository/releases"
 readonly documentation_base='https://krzysztof318.github.io/MailFathom'
 
-# The port compose.yaml publishes, which every surface served on the container's own 8080 answers on: the MCP endpoint
-# and the client's routes.
+# The port compose.yaml publishes, which every surface served on the container's own 8080 answers on: the MCP endpoint,
+# the client's routes, and the page a browser downloads.
 readonly published_port='8080'
 
 # The administrative endpoint's own default port is 8080, which is the socket the MCP endpoint is already served on, and
@@ -81,6 +84,8 @@ prepares has no TLS, no backup, and credentials in files under this checkout.
                            Whether the administrative endpoint is served, and how. Served with a
                            generated key when the MCP endpoint requires one, which is minted through
                            it. Defaults to off, and off with an MCP key is refused.
+  --no-client              Prepare the MCP endpoint alone, without the client page or the surface it
+                           is served on.
   --no-legacy-tls          Leave the platform's own TLS policy in force, instead of the relaxation
                            that reaches a mail server offering only weak parameters.
   --version <version>      The release to deploy, for example 0.6.0. Defaults to the newest.
@@ -107,6 +112,7 @@ admin_endpoint='off'
 # Whether the line above is the default or the operator's own answer. The MCP key this script prepares is minted over
 # the administrative endpoint, so a default of `off` is corrected where it was asked for and an explicit one is refused.
 admin_endpoint_chosen='no'
+serve_client='yes'
 relax_tls_policy='yes'
 requested_version=''
 start_stack='yes'
@@ -131,6 +137,7 @@ while [[ $# -gt 0 ]]; do
       esac
       shift 2
       ;;
+    --no-client) serve_client='no'; shift ;;
     --no-legacy-tls) relax_tls_policy='no'; shift ;;
     --no-start) start_stack='no'; shift ;;
     --non-interactive) interactive='no'; shift ;;
@@ -393,6 +400,24 @@ if [[ "$admin_endpoint" == 'off' && "$mcp_authentication" == 'api-key' ]]; then
 fi
 
 if [[ "$interactive" == 'yes' ]]; then
+  if [[ "$serve_client" == 'yes' ]]; then
+    cat << TEXT
+
+The MailFathom client is the web interface onto the same mailbox, and it travels inside the image —
+so preparing it is two settings rather than anything to install. It is served at
+http://127.0.0.1:$published_port/, on the port above.
+
+It is early: what the page draws today is its own sample data rather than this deployment's mail, so
+nothing signs in to it yet and no credential is prepared for one. The surface it will call is served
+behind a password all the same, because it reads mail. Pass --no-client to prepare neither.
+
+Everything the page and that surface exchange crosses the same plain-HTTP hop everything else here
+does. On a port published to 127.0.0.1 that hop is this machine; it is reported at every startup, and
+it is the first thing to fix before anybody else reaches this deployment.
+
+TEXT
+  fi
+
   cat << TEXT
 
 The administrative endpoint is what mfctl talks to: synchronization state, what was changed, what a
@@ -547,9 +572,30 @@ JSON
   )
 fi
 
-# The client surface is deliberately left out of what this writes. Nothing calls it yet — the Uno Platform client was
-# withdrawn and the React one has not shipped — so serving it would be a mail-reading endpoint published for nobody.
-# docs/operations/client-endpoint.md is what turns it on by hand once something does.
+# The client's own surface, which is where the page a browser downloads is served from and what it will call back to. It
+# accepts one method and nothing else: an owner's username and password is the one credential a person can present from
+# a browser without an authorization server behind it, and an evaluation has none. The entry names the method and holds
+# no credential — a record is minted over the administrative endpoint, and this script mints none, because the page does
+# not sign in yet. No port is stated, because the endpoints share the container's 8080 and that is the socket
+# compose.yaml publishes. The origin list is empty for the same reason the endpoint below states one: the page this
+# deployment serves is same-origin, so an absent list — which is every browser origin — would open the mail-reading
+# surface to sites that have no business calling it.
+client_section=''
+if [[ "$serve_client" == 'yes' ]]; then
+  client_section=$(
+    cat << 'JSON'
+  "ClientEndpoint": {
+    "Enabled": true,
+    "Authentication": [
+      { "Method": "password" }
+    ],
+    "Cors": {
+      "AllowedOrigins": []
+    }
+  },
+JSON
+  )
+fi
 
 admin_section=''
 if [[ "$admin_endpoint" != 'off' ]]; then
@@ -620,6 +666,7 @@ cat > config/10-mailfathom.json << JSON
     ]
   },
 $admin_section
+$client_section
   "McpEndpoint": {
     "Enabled": true,
     "Authentication": $mcp_authentication_block,
@@ -641,6 +688,17 @@ cat > .env << ENV
 MAILFATHOM_IMAGE=ghcr.io/krzysztof318/mailfathom:$version
 MAILFATHOM_PULL_POLICY=missing
 ENV
+
+if [[ "$serve_client" == 'yes' ]]; then
+  cat >> .env << 'ENV'
+
+# Serves the client's page from the same listeners its surface answers on, and declares that this deployment accepts it
+# over a clear-text socket. The second half is a statement about the shape above: the port is published on 127.0.0.1, so
+# the hop the page and every credential cross is this machine. Put TLS in front before that port reaches a network —
+# MAILFATHOM_HTTP_BIND is what moves it.
+MAILFATHOM_CLIENT=true
+ENV
+fi
 
 chmod 644 .env
 
@@ -712,8 +770,12 @@ report_connection() {
 
   printf '\nWhich clients take which of those, by name: %s/users/mcp-clients.html\n' "$documentation_base" >&2
 
-  printf '\nThere is no MailFathom client to open: the Uno Platform one was withdrawn and the React one has\n' >&2
-  printf 'not shipped, so this deployment answers an assistant and nothing else.\n' >&2
+  if [[ "$serve_client" == 'yes' ]]; then
+    printf '\nThe MailFathom client answers at http://127.0.0.1:%s/ — open it in a browser.\n' "$published_port" >&2
+    printf 'It is early: the page draws its own sample data rather than this mailbox, and nothing signs in to\n' >&2
+    printf 'it yet, so no credential was prepared for one. %s/operations/client-endpoint.html\n' \
+      "$documentation_base" >&2
+  fi
 
   if [[ "$admin_endpoint" != 'off' ]]; then
     printf '\nThe administrative endpoint answers at http://127.0.0.1:%s/api/admin.\n' "$admin_port" >&2

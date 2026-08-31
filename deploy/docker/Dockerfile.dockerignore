@@ -16,10 +16,24 @@
 !/NuGet.config
 !/global.json
 
-# Nothing under frontend/ is re-included. The Uno Platform client whose browser head this image used to build was
-# withdrawn and the client is being rebuilt in React, so there is no client stage and no client build contract for a
-# context to carry. Neither is the product mark under assets/, which reached the context only because that build
-# rendered an application icon and a splash screen from it.
+# The client stack, for the stage that builds the bundle into the image. Its build contract is its own and sits under
+# frontend/ beside its sources, exactly as the service's sits under backend/ — neither stack's reaches the other, and a
+# context carrying one without the other would fail before its install. `pnpm-workspace.yaml` is what makes the two
+# package directories one workspace, `.npmrc` names the registry they resolve from, and `tsconfig.base.json` is what
+# both packages compile under; the two `tsconfig.json` files beside it come in with their own directories.
+!/frontend/src
+!/frontend/package.json
+!/frontend/pnpm-lock.yaml
+!/frontend/pnpm-workspace.yaml
+!/frontend/.npmrc
+!/frontend/tsconfig.base.json
+
+# The one script the client's build runs. `vite.config.ts` substitutes the declared version into the bundle and reads
+# it from here rather than from a literal of its own, so a context without this file fails that build.
+!/scripts/read-declared-version.sh
+
+# Nothing under assets/ is re-included. The product mark reached the context only because the withdrawn Uno Platform
+# build rendered an application icon and a splash screen from it; nothing the current client builds reads it.
 
 # The version both stacks report. `backend/Directory.Build.props` imports it from the repository root, so a context
 # that carried the build contract without this file would fail evaluation before the restore.
@@ -46,3 +60,9 @@
 # into the context would let a local build decide what the image contains.
 /backend/src/**/bin
 /backend/src/**/obj
+
+# The same for the client stack: pnpm's store and symlink farm, and the bundle a developer's own `pnpm build` wrote.
+# Both are large, both are restored or produced inside the stage above, and letting either into the context would let a
+# local build decide what the image serves.
+/frontend/**/node_modules
+/frontend/src/Client.App/dist

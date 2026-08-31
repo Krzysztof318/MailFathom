@@ -425,11 +425,8 @@ Removing one of those two volumes and not the other leaves the remaining one hol
 
 ## The client
 
-**No image carries MailFathom's own client today.** The Uno Platform client whose bundle used to travel inside the
-image was withdrawn and the client is being rebuilt in React, so the two lines below fail at startup on every current
-release. They stay in the unit as the plumbing the rebuilt client lands against, and what the rest of this section
-describes is the contract they carry once an image has a bundle again. They are commented out in
-`~/.config/containers/systemd/mailfathom.container`:
+**The client travels inside the image**, so serving it is two lines in the unit rather than a second container. They
+are commented out in `~/.config/containers/systemd/mailfathom.container`:
 
 ```ini
 Environment=ClientEndpoint__Application__Enabled=true

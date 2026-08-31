@@ -199,7 +199,7 @@ internal static class HostPipeline
     /// <remarks>
     /// The assertion is the same shape as the probe one below and exists for the same reason: an enabled setting whose
     /// subject is absent is a deployment somebody configured and nobody can use. A bundle is copied into the image at
-    /// build time rather than published by anything here, and no artifact this project publishes carries one today, so
+    /// build time rather than published by anything here, so an artifact built without that stage carries none, and
     /// enabling this is exactly the case an operator has to be told about at startup rather than through a page of
     /// 404s.
     /// </remarks>
@@ -211,7 +211,7 @@ internal static class HostPipeline
                 ClientEndpointOptions.SectionName,
                 typeof(ClientEndpointOptions),
                 [
-                    $"{ClientEndpointOptions.SectionName}:{nameof(ClientEndpointOptions.Application)}:{nameof(ClientApplicationOptions.Enabled)} is set, but this deployment carries no client to serve: '{ClientApplicationOptions.EntryDocument}' is absent from '{app.Environment.WebRootPath}'. No MailFathom release carries a client bundle today, so this setting has nothing to serve; leave it off.",
+                    $"{ClientEndpointOptions.SectionName}:{nameof(ClientEndpointOptions.Application)}:{nameof(ClientApplicationOptions.Enabled)} is set, but this deployment carries no client to serve: '{ClientApplicationOptions.EntryDocument}' is absent from '{app.Environment.WebRootPath}'. Every published MailFathom image carries one, so this is an artifact built without the client stage; use a published image, or leave the setting off.",
                 ]);
         }
 
