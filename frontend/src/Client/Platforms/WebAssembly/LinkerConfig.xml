@@ -1,5 +1,0 @@
-<linker>
-  <!-- The application assembly is kept whole: XAML and the MVUX generator reach types by name, which the trimmer
-       cannot see. Everything else the browser head restores is trimmed normally. -->
-  <assembly fullname="MailFathom.Client" />
-</linker>

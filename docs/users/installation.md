@@ -71,20 +71,19 @@ between the deployed database and one you operate, before the install command.
 
 The native process is the shape that brings no database at all.
 
-**MailFathom's own client travels inside the container image**, so the three container shapes can serve it as a page
-without installing anything else. It is off in each of them, and turning it on is one decision: `client.enabled` in the
-Helm chart, which derives the clear-text permission from the ingress it can see; `MAILFATHOM_CLIENT=true` in Compose,
-where one variable writes both settings; and, in Quadlet, uncommenting the two adjacent `Environment=` lines the unit
-carries, because a `.container` file has no variable to write two keys through.
+**No shape serves MailFathom's own client today.** The Uno Platform client whose bundle travelled inside the container
+image was withdrawn, and the client is being rebuilt in React, so no image carries a page and every shape here serves
+an assistant rather than a browser. Turning `client.enabled` on in the Helm chart, `MAILFATHOM_CLIENT=true` on in
+Compose, or the two adjacent `Environment=` lines on in the Quadlet unit is refused at startup, naming the setting.
+Each switch is kept because it is the deployment's rather than the client's, and each turns the next client on with no
+change to these assets.
 [Serving the client from the deployment](../operations/client-endpoint.md#serving-the-client-from-the-deployment) is
-the page. The native shape carries no bundle, because nothing outside the image builds one; a person running that shape
-downloads the desktop client from the release instead.
+the page.
 
-Signing in to it needs a credential, which no shape provisions on its own: there is no self-service and no default, so a
-username and password are written over [the administrative endpoint](../operations/admin-endpoint.md#owner-credentials)
-or they do not exist. The Compose quick start is the exception — it prepares the client and provisions that credential
-in the same run, and prints both — which is what makes it the shortest path from nothing to reading your own mail in a
-browser.
+What every shape *does* serve is the client **surface** under `/api/client`, which is an endpoint of its own and is
+what the next client will call. Signing in to it needs a credential no shape provisions on its own: there is no
+self-service and no default, so a username and password are written over
+[the administrative endpoint](../operations/admin-endpoint.md#owner-credentials) or they do not exist.
 
 ## What every shape needs
 

@@ -7,10 +7,10 @@ set -euo pipefail
 
 ### Prepares a Docker Compose deployment to evaluate MailFathom with, asking for the mailbox it is to synchronize.
 #
-# What it ends with is an address a chat client connects to, an address the MailFathom client answers on, and a user
-# name and password to sign in to it with. The client is served from the same image, so preparing it is two settings and
-# a credential rather than anything to install; the credential has no self-service and no default, so this provisions
-# one over the administrative endpoint and writes the password beside every other credential it generates.
+# What it ends with is an address a chat client connects to. It prepares no MailFathom client of its own: the Uno
+# Platform one whose bundle used to travel inside the image was withdrawn, the client is being rebuilt in React, and a
+# deployment that switched the page on against a current image would be refused at startup — so this prepares the MCP
+# endpoint, and the client surface waits for something to call it.
 #
 # Usage:
 #   scripts/quick-start-compose.sh
@@ -52,8 +52,8 @@ readonly repository='Krzysztof318/MailFathom'
 readonly release_base="https://github.com/$repository/releases"
 readonly documentation_base='https://krzysztof318.github.io/MailFathom'
 
-# The port compose.yaml publishes, which every surface served on the container's own 8080 answers on: the MCP endpoint,
-# the client's routes, and the page a browser downloads.
+# The port compose.yaml publishes, which every surface served on the container's own 8080 answers on: the MCP endpoint
+# and the client's routes.
 readonly published_port='8080'
 
 # The administrative endpoint's own default port is 8080, which is the socket the MCP endpoint is already served on, and
@@ -79,23 +79,17 @@ prepares has no TLS, no backup, and credentials in files under this checkout.
                            Whether the MCP endpoint requires a generated key. Defaults to api-key.
   --admin-endpoint <off|api-key|none>
                            Whether the administrative endpoint is served, and how. Served with a
-                           generated key when the client is prepared, which needs it to provision a
-                           credential. Defaults to off, and off with the client is refused.
-  --no-client              Prepare the MCP endpoint alone, without the client or its credential.
-  --client-user-name <name>
-                           What to sign in to the client as. Defaults to 'owner'.
+                           generated key when the MCP endpoint requires one, which is minted through
+                           it. Defaults to off, and off with an MCP key is refused.
   --no-legacy-tls          Leave the platform's own TLS policy in force, instead of the relaxation
                            that reaches a mail server offering only weak parameters.
   --version <version>      The release to deploy, for example 0.6.0. Defaults to the newest.
-  --no-start               Write the files and stop, without starting anything, applying a schema, or
-                           provisioning the client credential.
-  --non-interactive        Ask nothing. Every answer above has to be given, and neither the schema nor
-                           the client credential is applied.
+  --no-start               Write the files and stop, without starting anything or applying a schema.
+  --non-interactive        Ask nothing. Every answer above has to be given, and no schema is applied.
   --help                   Print this and exit.
 
 The mailbox password is read without echo and written straight to its file, so it reaches neither the
-shell history nor the process list. --password-file is the same thing for an unattended run. The
-client's own password is generated the same way and read from its file when it is provisioned.
+shell history nor the process list. --password-file is the same thing for an unattended run.
 
 Nothing is overwritten. An existing .env, configuration file, or secret stops the run naming the file.
 TEXT
@@ -110,12 +104,9 @@ account_id='primary'
 password_file=''
 mcp_authentication='api-key'
 admin_endpoint='off'
-# Whether the line above is the default or the operator's own answer. Two of the credentials this script prepares are
-# minted over the administrative endpoint, so a default of `off` is corrected where one of them was asked for and an
-# explicit one is refused.
+# Whether the line above is the default or the operator's own answer. The MCP key this script prepares is minted over
+# the administrative endpoint, so a default of `off` is corrected where it was asked for and an explicit one is refused.
 admin_endpoint_chosen='no'
-serve_client='yes'
-client_user_name='owner'
 relax_tls_policy='yes'
 requested_version=''
 start_stack='yes'
@@ -124,7 +115,7 @@ interactive='yes'
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --provider | --host | --port | --user-name | --display-name | --account-id | --password-file | \
-      --mcp-authentication | --admin-endpoint | --client-user-name | --version)
+      --mcp-authentication | --admin-endpoint | --version)
       [[ $# -ge 2 ]] || { printf '%s takes a value.\n' "$1" >&2; exit 1; }
       case "$1" in
         --provider) provider="$2" ;;
@@ -136,12 +127,10 @@ while [[ $# -gt 0 ]]; do
         --password-file) password_file="$2" ;;
         --mcp-authentication) mcp_authentication="$2" ;;
         --admin-endpoint) admin_endpoint="$2"; admin_endpoint_chosen='yes' ;;
-        --client-user-name) client_user_name="$2" ;;
         --version) requested_version="$2" ;;
       esac
       shift 2
       ;;
-    --no-client) serve_client='no'; shift ;;
     --no-legacy-tls) relax_tls_policy='no'; shift ;;
     --no-start) start_stack='no'; shift ;;
     --non-interactive) interactive='no'; shift ;;
@@ -367,15 +356,6 @@ case "$admin_endpoint" in
   *) printf 'The administrative endpoint takes off, api-key, or none, not %s.\n' "$admin_endpoint" >&2; exit 1 ;;
 esac
 
-# A username is what a credential is resolved by, and MailFathom holds it to a form that reads back unambiguously in a
-# refusal, a log line, and a sign-in prompt. Refusing it here rather than at the provisioning call is what keeps a run
-# from preparing a whole deployment before saying the name cannot be used.
-if [[ ! "$client_user_name" =~ ^[A-Za-z0-9._+@-]{1,128}$ ]]; then
-  printf 'A client user name is 1 to 128 letters, digits, or the characters %s: %s\n' \
-    "'.', '-', '_', '+', and '@'" "$client_user_name" >&2
-  exit 1
-fi
-
 if [[ "$interactive" == 'yes' ]]; then
   cat << TEXT
 
@@ -397,16 +377,15 @@ TEXT
   fi
 fi
 
-# Neither the MCP key nor the credential a person signs in to the client with is written into a file here: each is a
-# record the running deployment mints over the administrative endpoint. So switching that endpoint off while either is
-# asked for produces a deployment nothing can be provisioned for. An operator who asked for that combination is told; a
-# default that arrived at it is corrected, since nobody chose it.
-if [[ "$admin_endpoint" == 'off' ]] \
-  && { [[ "$mcp_authentication" == 'api-key' ]] || [[ "$serve_client" == 'yes' ]]; }; then
+# The MCP key is not written into a file here: it is a record the running deployment mints over the administrative
+# endpoint. So switching that endpoint off while a key is asked for produces a deployment nothing can be provisioned
+# for. An operator who asked for that combination is told; a default that arrived at it is corrected, since nobody
+# chose it.
+if [[ "$admin_endpoint" == 'off' && "$mcp_authentication" == 'api-key' ]]; then
   if [[ "$admin_endpoint_chosen" == 'yes' ]]; then
-    printf 'An MCP key and the credential a person signs in to the client with are both minted with mfctl\n' >&2
-    printf 'over the administrative endpoint, so --admin-endpoint off cannot be combined with either. Pass\n' >&2
-    printf '%s\n' '--admin-endpoint api-key, or ask for neither with --mcp-authentication none and --no-client.' >&2
+    printf 'An MCP key is minted with mfctl over the administrative endpoint, so\n' >&2
+    printf '%s\n' '--admin-endpoint off cannot be combined with it. Pass --admin-endpoint api-key, or ask for no' >&2
+    printf '%s\n' 'key at all with --mcp-authentication none.' >&2
     exit 1
   fi
 
@@ -414,26 +393,6 @@ if [[ "$admin_endpoint" == 'off' ]] \
 fi
 
 if [[ "$interactive" == 'yes' ]]; then
-  if [[ "$serve_client" == 'yes' ]]; then
-    cat << TEXT
-
-The MailFathom client is the web interface onto the same mailbox, and it travels inside the image —
-so preparing it is two settings rather than anything to install. It is served at
-http://127.0.0.1:$published_port/, on the port above, and it signs a person in with a user name and a
-password.
-
-There is no self-service and no default credential, so this script generates one and provisions it
-once the deployment is up. That takes the administrative endpoint below, which is why it is served
-here whether or not you would otherwise have asked for it. Pass --no-client to prepare the MCP
-endpoint alone.
-
-The password crosses the same plain-HTTP hop everything else here does. On a port published to
-127.0.0.1 that hop is this machine; it is reported at every startup, and it is the first thing to
-fix before anybody else reaches this deployment.
-
-TEXT
-  fi
-
   cat << TEXT
 
 The administrative endpoint is what mfctl talks to: synchronization state, what was changed, what a
@@ -445,15 +404,11 @@ as the mail it can dispose of.
 
 TEXT
 
-  # Neither an authenticated MCP endpoint nor the client has anywhere else to get its credential from: each is a record
-  # beside the owner, minted with `mfctl credential create`, so the endpoint mfctl talks to is a prerequisite rather
-  # than an extra. The validation above has already turned it on; this is where the operator is told why.
-  if [[ "$mcp_authentication" == 'api-key' && "$serve_client" == 'yes' ]]; then
-    printf 'It is on, because the MCP key and the client credential are both minted through it.\n\n' >&2
-  elif [[ "$mcp_authentication" == 'api-key' ]]; then
+  # An authenticated MCP endpoint has nowhere else to get its key from: it is a record beside the owner, minted with
+  # `mfctl credential create`, so the endpoint mfctl talks to is a prerequisite rather than an extra. The validation
+  # above has already turned it on; this is where the operator is told why.
+  if [[ "$mcp_authentication" == 'api-key' ]]; then
     printf 'It is on, because the MCP key you chose above is minted through it.\n\n' >&2
-  elif [[ "$serve_client" == 'yes' ]]; then
-    printf 'It is on, because the credential the client signs in with is minted through it.\n\n' >&2
   fi
 
   if [[ "$admin_endpoint" == 'off' ]] && confirm 'Serve the administrative endpoint as well?'; then
@@ -525,7 +480,6 @@ done
 
 readonly imap_password_name="imap-$account_id-password"
 readonly admin_key_name='admin-workstation-key'
-readonly client_password_name="client-$client_user_name-password"
 readonly schema_asset="mailfathom-schema-$version.sql"
 
 # compose.yaml publishes no port for the administrative endpoint and mounts no file that need not exist, and it is a
@@ -561,7 +515,6 @@ write_secret() {
 
 refuse_existing "secrets/mailfathom/$imap_password_name"
 [[ "$admin_endpoint" != 'api-key' ]] || refuse_existing "secrets/mailfathom/$admin_key_name"
-[[ "$serve_client" != 'yes' ]] || refuse_existing "secrets/$client_password_name"
 [[ "$relax_tls_policy" != 'yes' ]] || refuse_existing 'openssl-legacy.cnf'
 [[ "$writes_override" != 'yes' ]] || refuse_existing 'compose.override.yaml'
 
@@ -594,38 +547,9 @@ JSON
   )
 fi
 
-# The credential a person signs in to the client with. It is generated like every key above and, unlike them, it is
-# nothing the configuration refers to: what reads it is the person, and what holds it is the database once the
-# provisioning call below has run. So it stays in secrets/ beside the two database passwords rather than in
-# secrets/mailfathom/, which compose.yaml bind-mounts into the container: a file there would be readable by the
-# process a compromised MailFathom is, for no purpose, since nothing in the container ever reads this one.
-if [[ "$serve_client" == 'yes' ]]; then
-  write_secret "secrets/$client_password_name" "$(openssl rand -base64 33 | tr -d '\n')"
-fi
-
-# The client's own surface, which is where the page a browser downloads calls back to. It accepts one method and
-# nothing else: an owner's username and password is the one credential a person can present from a browser without an
-# authorization server behind it, and an evaluation has none. The entry names the method and holds no credential — the
-# record is minted over the administrative endpoint below. No port is stated, because the endpoints share the
-# container's 8080 and that is the socket compose.yaml publishes. The origin list is empty for the same reason the
-# endpoint below states one: the page this deployment serves is same-origin, so an absent list — which is every
-# browser origin — would open the mail-reading surface to sites that have no business calling it.
-client_section=''
-if [[ "$serve_client" == 'yes' ]]; then
-  client_section=$(
-    cat << 'JSON'
-  "ClientEndpoint": {
-    "Enabled": true,
-    "Authentication": [
-      { "Method": "password" }
-    ],
-    "Cors": {
-      "AllowedOrigins": []
-    }
-  },
-JSON
-  )
-fi
+# The client surface is deliberately left out of what this writes. Nothing calls it yet — the Uno Platform client was
+# withdrawn and the React one has not shipped — so serving it would be a mail-reading endpoint published for nobody.
+# docs/operations/client-endpoint.md is what turns it on by hand once something does.
 
 admin_section=''
 if [[ "$admin_endpoint" != 'off' ]]; then
@@ -696,7 +620,6 @@ cat > config/10-mailfathom.json << JSON
     ]
   },
 $admin_section
-$client_section
   "McpEndpoint": {
     "Enabled": true,
     "Authentication": $mcp_authentication_block,
@@ -718,17 +641,6 @@ cat > .env << ENV
 MAILFATHOM_IMAGE=ghcr.io/krzysztof318/mailfathom:$version
 MAILFATHOM_PULL_POLICY=missing
 ENV
-
-if [[ "$serve_client" == 'yes' ]]; then
-  cat >> .env << ENV
-
-# Serves the client's browser head from the same listeners its API answers on, and declares that this deployment
-# accepts it over a clear-text socket. The second half is a statement about the shape above: the port is published on
-# 127.0.0.1, so the hop the page and every credential cross is this machine. Put TLS in front before that port reaches
-# a network — MAILFATHOM_HTTP_BIND is what moves it.
-MAILFATHOM_CLIENT=true
-ENV
-fi
 
 chmod 644 .env
 
@@ -785,11 +697,6 @@ if [[ "$relax_tls_policy" == 'yes' ]]; then
   printf 'Wrote openssl-legacy.cnf, which this deployment reads its TLS parameters from.\n' >&2
 fi
 
-# What the closing report may claim about the client. It starts as a credential nobody has provisioned, because that is
-# what is true of every path that stops before the deployment answers — and reporting one that was never created is the
-# way this script would send somebody to a sign-in that refuses them.
-client_credential='pending'
-
 report_connection() {
   printf '\nThe MCP endpoint answers at http://127.0.0.1:%s/mcp, over the Streamable HTTP transport.\n' \
     "$published_port" >&2
@@ -805,20 +712,8 @@ report_connection() {
 
   printf '\nWhich clients take which of those, by name: %s/users/mcp-clients.html\n' "$documentation_base" >&2
 
-  if [[ "$serve_client" == 'yes' ]]; then
-    printf '\nThe MailFathom client answers at http://127.0.0.1:%s/ — open it in a browser.\n' "$published_port" >&2
-
-    if [[ "$client_credential" == 'provisioned' ]]; then
-      printf '  User name: %s\n' "$client_user_name" >&2
-      printf '  Password:  cat %s/secrets/%s\n' "$compose_directory" "$client_password_name" >&2
-      printf 'That password crosses an unencrypted hop, which the host reports at every startup.\n' >&2
-    else
-      printf 'Nothing signs in to it yet: no credential was provisioned. The password is already generated,\n' >&2
-      printf 'and provisioning it is one administrative call once the deployment answers:\n' >&2
-      printf '  cat %s/secrets/%s\n' "$compose_directory" "$client_password_name" >&2
-      printf '  %s/operations/client-endpoint.html\n' "$documentation_base" >&2
-    fi
-  fi
+  printf '\nThere is no MailFathom client to open: the Uno Platform one was withdrawn and the React one has\n' >&2
+  printf 'not shipped, so this deployment answers an assistant and nothing else.\n' >&2
 
   if [[ "$admin_endpoint" != 'off' ]]; then
     printf '\nThe administrative endpoint answers at http://127.0.0.1:%s/api/admin.\n' "$admin_port" >&2
@@ -840,9 +735,9 @@ report_what_an_evaluation_is_missing() {
 This is a deployment to evaluate MailFathom with. Before it is one anybody depends on:
 
   Transport   Both ports are published on 127.0.0.1 and MailFathom terminates no TLS, so a client on
-              another machine has nothing to connect to and nothing protecting it if it did. The
-              client's password crosses that hop readable, which the host says at every startup. Put
-              a TLS-terminating proxy in front, or configure McpEndpoint:Https.
+              another machine has nothing to connect to and nothing protecting it if it did. Every
+              credential presented crosses that hop readable, which the host says at every startup.
+              Put a TLS-terminating proxy in front, or configure McpEndpoint:Https.
               $documentation_base/operations/mcp-endpoint.html
 TEXT
 
@@ -987,73 +882,6 @@ if curl -fsS 'http://127.0.0.1:8081/health' > /dev/null 2>&1; then
   printf '\nMailFathom %s is running and ready.\n' "$version" >&2
 else
   printf '\nMailFathom %s started, and /health is not ready yet — the first synchronization is running.\n' "$version" >&2
-fi
-
-# The credential a person signs in to the client with, provisioned now rather than written into a file: it is the one
-# credential this deployment holds a record of instead of reading out of configuration, so the administrative endpoint
-# is the only thing that can create one. It runs here because both of its preconditions are met at exactly this point —
-# the schema is applied and the deployment answers.
-#
-# Neither the key nor the password reaches an argument. A command line is readable in the process table by anything on
-# this machine, which would undo the mode both files were written with, so each is handed to curl through a file inside
-# the temporary directory above — created by mktemp at 0700, and removed when this script exits.
-provision_client_credential() {
-  local admin_base="http://127.0.0.1:$admin_port/api/admin"
-  local curl_configuration="$work_directory/admin-curl.conf"
-  local owners_answer="$work_directory/owners.json"
-  local provisioning_body="$work_directory/credential.json"
-  local owner_id=''
-
-  : > "$curl_configuration"
-
-  if [[ "$admin_endpoint" == 'api-key' ]]; then
-    printf 'header = "Authorization: Bearer %s"\n' "$(cat "secrets/mailfathom/$admin_key_name")" \
-      > "$curl_configuration"
-  fi
-
-  if ! curl -fsS --config "$curl_configuration" --output "$owners_answer" "$admin_base/owners"; then
-    printf 'The administrative endpoint did not answer, so no credential was provisioned.\n' >&2
-    return 1
-  fi
-
-  # One owner is what this deployment records and therefore all the listing holds. Read with a pattern rather than with
-  # jq, which is not a dependency this script has: the answer carries owner identifiers and nothing else shaped like
-  # one. `grep -m 1` stops grep itself rather than having a pipeline close under it, which `set -o pipefail` would
-  # otherwise report as a failure of the read.
-  owner_id="$(grep -m 1 -oE \
-    '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}' "$owners_answer" || true)"
-
-  if [[ -z "$owner_id" ]]; then
-    printf 'The deployment records no owner yet, so no credential was provisioned.\n' >&2
-    return 1
-  fi
-
-  # The method is named rather than inferred from which fields are present, because the record shape is one for all four
-  # and the route decides what it needs from the name.
-  printf '{"method":"password","username":%s,"password":%s}' \
-    "$(json_string "$client_user_name")" \
-    "$(json_string "$(cat "secrets/$client_password_name")")" > "$provisioning_body"
-
-  if ! curl -fsS --config "$curl_configuration" --request POST \
-    --header 'Content-Type: application/json' --data-binary "@$provisioning_body" \
-    --output /dev/null "$admin_base/owners/$owner_id/credentials"; then
-    printf 'Provisioning the client credential was refused, so nothing signs in to the client yet.\n' >&2
-    return 1
-  fi
-
-  return 0
-}
-
-if [[ "$serve_client" == 'yes' ]]; then
-  printf 'Provisioning the credential to sign in to the client with.\n' >&2
-
-  if provision_client_credential; then
-    client_credential='provisioned'
-  else
-    client_credential='failed'
-    printf 'Everything else is prepared: %s/operations/client-endpoint.html says how to provision one by hand.\n' \
-      "$documentation_base" >&2
-  fi
 fi
 
 report_connection

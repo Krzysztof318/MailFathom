@@ -366,7 +366,7 @@ the MCP endpoint's grants come from, because the client reads the mail an agent 
 | `ClientEndpoint:Https:Redirect` | block | on | Same shape and rules as `McpEndpoint:Https:Redirect`; its socket is this surface's own `BindAddress` and `Port` | restart |
 | `ClientEndpoint:RateLimiting` | block | bounded | Same shape, defaults, and rules as [`McpEndpoint:RateLimiting`](#rate-limiting) above; applied whether or not it is written | restart |
 | `ClientEndpoint:RequestTimeout` | block | bounded | Same shape, defaults, and rules as [`McpEndpoint:RequestTimeout`](#request-timeout) above; applied whether or not it is written | restart |
-| `ClientEndpoint:Application:Enabled` | bool | `false` | Refused unless `ClientEndpoint:Enabled` is on. Serves the client's browser head from this endpoint's own listeners; the bundle travels inside the MailFathom container image, and a host started from anything else refuses at startup rather than answering 404s | restart |
+| `ClientEndpoint:Application:Enabled` | bool | `false` | Refused unless `ClientEndpoint:Enabled` is on. Serves a client bundle from this endpoint's own listeners. No release carries one today, the Uno Platform client having been withdrawn while its React replacement is written, so every host refuses this at startup rather than answering 404s | restart |
 | `ClientEndpoint:Application:AllowClearText` | bool | `false` | Required before the page is served over a socket this process opens in the clear, and refused where it is not — see [serving the page](#serving-the-page--clientendpointapplication) | restart |
 
 There is no `ClientCertificateProfiles` here: the trust question a certificate answers is a second one this surface does
@@ -374,8 +374,10 @@ not yet ask.
 
 ### Serving the page — `ClientEndpoint:Application`
 
-`ClientEndpoint:Application:Enabled` is the one setting that turns the client on, and what it adds is static files: the
-browser head's bundle, answered from the root of the listeners this endpoint already serves. Nothing else changes.
+`ClientEndpoint:Application:Enabled` is the one setting that turns the client on, and what it adds is static files: a
+client bundle, answered from the root of the listeners this endpoint already serves. No artifact this project publishes
+carries one today, so writing it fails at startup on every current host; it is the contract the rebuilt client lands
+against. Nothing else changes.
 The routes beneath `/api/client` are the same routes, judged by the same credentials and the same grants — the page
 holds none of its own, because a browser has to load the application before it can obtain one, and what that
 application then calls is authorized exactly as any other caller is. A deployment that leaves this off serves the

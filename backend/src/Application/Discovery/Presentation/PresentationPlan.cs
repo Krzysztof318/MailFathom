@@ -19,9 +19,8 @@ namespace MailFathom.Application.Discovery.Presentation;
 /// nobody wrote a renderer for.
 /// </para>
 /// <para>
-/// <strong>It is versioned apart from the application.</strong> A deployment and a client are updated separately — a
-/// browser bundle is served by the deployment, a desktop head is not — so a client will meet a plan produced by a
-/// service ahead of it. <see cref="SchemaVersion" /> says which revision of this contract the plan was written against,
+/// <strong>It is versioned apart from the application.</strong> A deployment and a client are updated separately, so a
+/// client will meet a plan produced by a service ahead of it. <see cref="SchemaVersion" /> says which revision of this contract the plan was written against,
 /// and each block carries the revision of its own type, so a client can draw the blocks it knows, say what it cannot,
 /// and keep the rest of the run. Without both, the only safe answer to one unfamiliar block would be to discard the
 /// whole thing.

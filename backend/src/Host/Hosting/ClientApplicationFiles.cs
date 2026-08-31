@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.StaticFiles;
 
 namespace MailFathom.Host.Hosting;
 
-/// <summary>Serves the client's browser head from the same origin as the surface it calls.</summary>
+/// <summary>Serves the client's bundle from the same origin as the surface it calls.</summary>
 /// <remarks>
 /// <para>
 /// The whole of what the composition root gains for the client, and deliberately no more. The bundle is a directory of
@@ -32,7 +32,7 @@ internal static class ClientApplicationFiles
     /// A file whose type nothing names is not served at all — <see cref="StaticFileOptions.ServeUnknownFileTypes" /> is
     /// left off, because guessing a type for anything that happens to be in the directory is how a static-file
     /// middleware serves something it should not. So each of these is here for a file the runtime actually fetches:
-    /// <c>.dat</c> is the globalization data the browser head reads to fold case and decode headers outside one
+    /// <c>.dat</c> is the globalization data a .NET WebAssembly bundle reads to fold case and decode headers outside one
     /// alphabet, and <c>.blat</c> and <c>.dat</c> together are what the .NET WebAssembly runtime ships its ICU and
     /// timezone data as. An absent mapping arrives as a page that loads and then fails on the first message from
     /// outside ASCII, which is exactly the kind of failure worth spending three lines to avoid.

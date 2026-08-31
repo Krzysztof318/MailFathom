@@ -71,15 +71,17 @@
   // calls. The entry says the surface accepts the method; which people can use it is what has been provisioned.
   //
   // The page itself is a separate switch, in the environment rather than here: MAILFATHOM_CLIENT in .env sets both
-  // ClientEndpoint:Application keys, because serving a browser head over a clear-text socket is a statement about this
+  // ClientEndpoint:Application keys, because serving a client page over a clear-text socket is a statement about this
   // deployment's shape and the two halves of it are one decision. The password crosses that hop readable, and the host
   // says so at every startup.
   //
   // It is commented out, like everything else here that costs anything: serving a mailbox to a browser is always
   // something an operator turned on, so a file copied verbatim serves the MCP endpoint and nothing else. Uncomment it
-  // beside MAILFATHOM_CLIENT=true in .env, and provision a credential to sign in with; scripts/quick-start-compose.sh
-  // does all three. The empty origin list is the same posture as the endpoint below and for the same reason: the page
-  // this deployment serves is same-origin, so no browser origin beyond it has any business calling the surface.
+  // and provision a credential to sign in with. No image carries a page to put in front of it today — the Uno Platform
+  // client was withdrawn and the React one has not shipped — so MAILFATHOM_CLIENT stays false and this endpoint serves
+  // its routes to whatever calls them. The empty origin list is the same posture as the endpoint below and for the
+  // same reason: the page this deployment serves is same-origin, so no browser origin beyond it has any business
+  // calling the surface.
   //
   // "ClientEndpoint": {
   //   "Enabled": true,

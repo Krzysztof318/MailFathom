@@ -119,35 +119,20 @@ jobs:
             exit 0
           fi
 
-          # Two kinds of file are dropped here rather than left to the configuration, and both for the
-          # same reason: `typos` applies its own binary detection and the exclusions in
-          # `.config/typos.toml` to the walk it does when it is given a directory, while a path named
-          # on the command line is read whether either of them says so or not. `--force-exclude`
-          # would change that, and `crate-ci/typos` passes no such flag through, so a list this step
-          # builds has to be a list of files worth reading.
+          # Images are dropped here rather than left to the configuration: `typos` applies its own
+          # binary detection and the exclusions in `.config/typos.toml` to the walk it does when it
+          # is given a directory, while a path named on the command line is read whether either of
+          # them says so or not. `--force-exclude` would change that, and `crate-ci/typos` passes no
+          # such flag through, so a list this step builds has to be a list of files worth reading.
           #
           # An image holds no prose, and a changed PNG handed over as a path arrives as a page of
           # corrections against compressed bytes nobody wrote. The formats are listed rather than
           # detected, because the question here is which files this repository carries that are not
           # written in words.
-          #
-          # The client's non-English resource tables are the other kind, and the question there is
-          # not whether the file is prose but which language it is in. Everything this repository
-          # writes is in English and what a person reads in the application is the one thing that
-          # rule is not about, so an English dictionary has nothing true to say about those tables:
-          # the Polish noun for a network address differs from the English one by two letters, which
-          # is a correction the checker offers and nobody wants. The English table beside them stays
-          # in the list, because it is the language the rest of the repository is written in.
-          # `.config/typos.toml` excludes the same paths from the whole-checkout fallback above.
           readable_paths=()
           for changed_path in "${changed_paths[@]}"; do
             case "${changed_path,,}" in
               *.png | *.jpg | *.jpeg | *.gif | *.ico | *.webp | *.woff | *.woff2 | *.pdf) continue ;;
-            esac
-
-            case "$changed_path" in
-              frontend/src/Client/Strings/en/*) ;;
-              frontend/src/Client/Strings/*/*.resw) continue ;;
             esac
 
             readable_paths+=("$changed_path")
@@ -156,7 +141,7 @@ jobs:
           changed_paths=("${readable_paths[@]}")
 
           if (( ${#changed_paths[@]} == 0 )); then
-            echo 'Every file this pull request changes is an image or a non-English resource table, so there is nothing to spell-check.'
+            echo 'Every file this pull request changes is an image, so there is nothing to spell-check.'
             echo 'files=' >> "$GITHUB_OUTPUT"
             exit 0
           fi

@@ -110,9 +110,9 @@ jobs:
   # A job of its own rather than a step of the build above, which is the one place this workflow and the client's
   # deliberately differ. What decides the shape is which of the two costs more: the setup a separate job pays, or the
   # pass itself sitting on the path a pull request waits on. Here that is 25 seconds of checkout, SDK, cache, and
-  # restore against a 155-second pass, so a job of its own moves the longer of the two off the critical path. In
-  # `build-test-frontend.yml` the proportions are inverted — a 26-second pass behind roughly 70 seconds of setup, most
-  # of it the `wasm-tools` workload — and the pass is a step there for exactly that reason.
+  # restore against a 155-second pass, so a job of its own moves the longer of the two off the critical path.
+  # `build-test-frontend.yml` runs no pass at all today, for the reason its own comment gives, and the decision above
+  # is the one whichever build lands there will be weighed against.
   #
   # Runner time is not what either decision spends. This repository is public and its minutes are free, so merging this
   # job into the one above would buy nothing and would cost 155 seconds on every pull request that reaches the service.

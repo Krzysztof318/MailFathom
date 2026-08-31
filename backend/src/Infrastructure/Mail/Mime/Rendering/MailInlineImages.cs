@@ -12,8 +12,8 @@ namespace MailFathom.Infrastructure.Mail.Mime.Rendering;
 /// <para>
 /// A <c>cid:</c> reference points at a part of the same message, so resolving one is a lookup rather than a fetch. The
 /// resolution happens here, before the body is walked, and what the document carries is the picture itself — which is
-/// what makes the default path need no request-interception API on any head, including the browser head where Uno
-/// documents that there is none.
+/// what makes the default path need no request-interception API in any client, including a browser-hosted one where
+/// there may be none to reach for.
 /// </para>
 /// <para>
 /// This is the one place a message's own octets are held in memory during a rendering, and it is bounded three times:

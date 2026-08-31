@@ -255,22 +255,26 @@ run_test() {
   fi
 }
 
-# The client is a second solution with a formatting pass of its own, so a contract about it needs a
-# client C# file the branch changed. It is added and removed inside one test rather than carried by
-# the fixture branch, because the contract below asserts the *whole* invocation log of a service-only
-# change — which is where the guarantee that a branch opening no client file pays nothing lives.
+# A contract about the client stack needs a change under `frontend/`, which is the whole of what makes
+# one: the stack carries no build today, so what the gates do with such a change is report that rather
+# than restore anything. It is added and removed inside one test rather than carried by the fixture
+# branch, because the contract below asserts the *whole* invocation log of a service-only change —
+# which is where the guarantee that a branch opening no client file pays nothing lives.
+#
+# One file rather than the directory, and it is added beside the placeholders `frontend/` already
+# tracks rather than replacing them: removing the directory would leave every later test running
+# against a tree missing two tracked files.
 add_client_change() {
-  mkdir -p "$repository_root/frontend/src/Client"
-  printf '<Solution />\n' > "$repository_root/frontend/MailFathom.Client.slnx"
-  printf 'namespace Fixture;\n' > "$repository_root/frontend/src/Client/Sample.cs"
+  mkdir -p "$repository_root/frontend/src"
+  printf 'fixture\n' > "$repository_root/frontend/src/Sample.txt"
   # Staged rather than left untracked, because the full gate refuses untracked files before it
   # decides anything and two of the contracts below run it.
-  git -C "$repository_root" add frontend
+  git -C "$repository_root" add frontend/src/Sample.txt
 }
 
 remove_client_change() {
-  git -C "$repository_root" rm --quiet --cached -r frontend
-  rm -rf "$repository_root/frontend"
+  git -C "$repository_root" rm --quiet --cached frontend/src/Sample.txt
+  rm -f "$repository_root/frontend/src/Sample.txt"
 }
 
 # A change no build reads runs neither stack's flow, which is the whole of what the change filters
@@ -326,8 +330,8 @@ verify_full_runs_no_stack_flow_for_a_change_no_build_reads() {
 # something only this script does.
 #
 # The whole log is asserted rather than a line of it, and that is what states the client's cost: a
-# branch that changed no file under `frontend/` neither restores nor loads the client solution, so
-# the run this contract describes is byte-for-byte what it was before the client stack existed.
+# branch that changed no file under `frontend/` reaches nothing of that stack at all, so the run this
+# contract describes is byte-for-byte what it was before the client stack existed.
 verify_fast_runs_restore_build_tests_and_formatting() {
   : > "$invocation_log"
 
@@ -341,58 +345,60 @@ verify_fast_runs_restore_build_tests_and_formatting() {
     "$invocation_log"
 }
 
-# The other half of the same decision. A branch that reaches both stacks runs both flows, each over
-# its own solution and formatted with the files that belong to it, and the client's restore is part
-# of its own branch rather than of the run: `dotnet format` needs a restored solution, and the
-# `--no-restore` above is only true of the service one, which this flow restored for its own build.
-verify_fast_runs_the_flow_of_each_stack_the_change_reaches() {
+# The other half of the same decision. A branch that reaches both stacks runs the service's flow and
+# says what it found of the client's — which is nothing, because that stack carries no build while the
+# React client is being written. What the contract holds is that the detection still fires: the run
+# names the client stack rather than passing over it in silence, and the invocation log stays the
+# service's alone because there is no client solution to restore.
+verify_fast_reports_the_client_stack_carrying_no_build() {
+  local loop_output="$test_directory/verify-fast-client-output"
+
   add_client_change
   : > "$invocation_log"
 
   (
     cd "$repository_root"
     "$scripts_directory/verify-fast.sh"
-  )
+  ) > "$loop_output" 2>&1
 
   remove_client_change
   assert_file_content \
-    $'restore backend/MailFathom.slnx --locked-mode\nbuild backend/MailFathom.slnx --configuration Release --no-restore\ntest --solution backend/MailFathom.slnx --configuration Release --no-build\nformat backend/MailFathom.slnx --no-restore --include backend/src/Sample.cs\nrestore frontend/MailFathom.Client.slnx --locked-mode\nbuild frontend/MailFathom.Client.slnx --configuration Release --no-restore\ntest --solution frontend/MailFathom.Client.slnx --configuration Release --no-build\nformat frontend/MailFathom.Client.slnx --no-restore --include frontend/src/Client/Sample.cs' \
+    $'restore backend/MailFathom.slnx --locked-mode\nbuild backend/MailFathom.slnx --configuration Release --no-restore\ntest --solution backend/MailFathom.slnx --configuration Release --no-build\nformat backend/MailFathom.slnx --no-restore --include backend/src/Sample.cs' \
     "$invocation_log"
+  assert_contains 'the client stack, which carries no build yet' "$loop_output"
 }
 
-# The full gate over the same branch, where the two stacks differ in one place and nowhere else: the
-# service solution is verified with the files the branch changed, because `--include` selects within
-# the workspace `dotnet format` loaded and the service workspace is several dozen projects, while the
-# client solution is verified whole — two projects, and the verdict the `Frontend` job of `CI` holds
-# a branch to. A client path in the service list would name no file that solution holds, which is
-# what the split exists for.
-verify_full_verifies_each_solution_the_change_reaches() {
+# The full gate over the same branch. The service solution is verified with the files the branch
+# changed, because `--include` selects within the workspace `dotnet format` loaded and the service
+# workspace is several dozen projects; the client stack is reported and nothing of it is restored,
+# which is the verdict the `Frontend` job of `CI` publishes while that stack carries no build. A
+# client path in the service list would name no file that solution holds, which is what the split
+# exists for and what keeps it worth asserting now.
+verify_full_reports_the_client_stack_carrying_no_build() {
+  local gate_output="$test_directory/verify-full-client-output"
+
   add_client_change
   : > "$invocation_log"
 
   (
     cd "$repository_root"
     "$scripts_directory/verify-full.sh"
-  )
+  ) > "$gate_output" 2>&1
 
   remove_client_change
   assert_contains \
     'format backend/MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic --include backend/src/Sample.cs' \
     "$invocation_log"
-  assert_contains 'build frontend/MailFathom.Client.slnx --configuration Release --no-restore' "$invocation_log"
-  assert_contains 'test --solution frontend/MailFathom.Client.slnx --configuration Release --no-build' "$invocation_log"
-  assert_contains \
-    'format frontend/MailFathom.Client.slnx --no-restore --verify-no-changes --verbosity diagnostic' \
-    "$invocation_log"
-  assert_excludes 'format frontend/MailFathom.Client.slnx --no-restore --verify-no-changes --verbosity diagnostic --include' \
-    "$invocation_log"
+  assert_contains 'the client stack, which carries no build yet' "$gate_output"
+  assert_excludes 'frontend/' "$invocation_log"
 }
 
-# A file above both stacks is the case neither filter owns alone. `global.json` pins the SDK the
-# service compiles with and the Uno SDK that chooses every client package, so a change to it moves
-# both and both flows run — which is the answer `ci.yml` gives it as well, through the same entry in
-# both of its filters.
+# A file above both stacks is the case neither filter owns alone. `global.json` pins the SDK, and it
+# is named by both filters, so a change to it reaches both stacks — which is the answer `ci.yml` gives
+# it as well. The service builds; the client stack is reported, because it carries no build yet.
 verify_full_runs_both_flows_for_a_change_above_both_stacks() {
+  local gate_output="$test_directory/verify-full-both-stacks-output"
+
   : > "$invocation_log"
   # Detached at the base, so `global.json` is the only path the change carries and each flow is
   # earned by it rather than by the C# file the fixture branch already holds.
@@ -403,14 +409,14 @@ verify_full_runs_both_flows_for_a_change_above_both_stacks() {
   (
     cd "$repository_root"
     "$scripts_directory/verify-full.sh"
-  )
+  ) > "$gate_output" 2>&1
 
   git -C "$repository_root" rm --quiet --force --cached global.json
   rm -f "$repository_root/global.json"
   git -C "$repository_root" checkout --quiet "$fixture_branch"
 
   assert_contains 'build backend/MailFathom.slnx --configuration Release --no-restore' "$invocation_log"
-  assert_contains 'build frontend/MailFathom.Client.slnx --configuration Release --no-restore' "$invocation_log"
+  assert_contains 'the client stack, which carries no build yet' "$gate_output"
 }
 
 # The fixture branch changes one C# file and nothing else, which is also the case the scoped
@@ -633,11 +639,10 @@ verify_fast_accepts_the_record_the_full_gate_wrote() {
   assert_file_content '' "$invocation_log"
 }
 
-# And it answers on a client change too, which it did not while the full gate read the service
-# solution alone. The gate now verifies the client solution whole, so a passing record says every
-# file in it is already formatted — which leaves the loop's repairing pass over a subset of those
-# files one possible outcome. The record therefore subsumes the loop in both stacks or in neither,
-# and there is no branch shape that has to read only its own.
+# And it answers on a client change too. Both gates read the same two path lists, so a change under
+# `frontend/` reaches the client stack in either of them and the record one wrote covers the other —
+# which stays true while that stack carries no build and is what makes the record a property of the
+# tree rather than of which stacks happened to have work in them.
 verify_fast_accepts_the_full_gate_record_for_a_client_change() {
   add_client_change
 
@@ -6660,10 +6665,10 @@ quick_start_serves_the_administrative_endpoint_on_a_port_of_its_own() {
   assert_contains '"127.0.0.1:8090:8090"' "$compose_directory/compose.override.yaml"
 
   # Off where nothing needs it, which is what keeps the published port the marker of a deliberate answer rather than of
-  # a run having happened. That is a run asking for neither credential the administrative endpoint mints: an MCP
-  # endpoint serving without one, and no client.
+  # a run having happened. That is a run asking for the one credential the administrative endpoint mints: an MCP
+  # endpoint serving without a key needs none.
   off_root="$(stage_quick_start_checkout 'quick-start-admin-off')"
-  run_quick_start "$off_root" --provider yahoo --mcp-authentication none --no-client > /dev/null 2>&1
+  run_quick_start "$off_root" --provider yahoo --mcp-authentication none > /dev/null 2>&1
 
   assert_excludes 'AdminEndpoint' "$off_root/deploy/compose/config/10-mailfathom.json"
 
@@ -6678,12 +6683,13 @@ quick_start_serves_the_administrative_endpoint_on_a_port_of_its_own() {
   assert_excludes '8090' "$off_root/deploy/compose/compose.override.yaml"
 }
 
-# The client is what makes the quick start end somewhere a person can look at their own mail, and every part of that is
-# a file this run wrote: the surface, the page, and the credential. Provisioning itself needs a running deployment and
-# is therefore not reachable here, which is exactly why the report must not claim a credential that was never created.
-quick_start_prepares_the_client_and_the_credential_to_sign_in_with() {
+# The quick start prepares no MailFathom client, and this is what holds it to that. The Uno Platform client whose
+# bundle travelled inside the image was withdrawn and the React one has not shipped, so a run that wrote the client
+# surface, the page setting, or a credential to sign in with would produce a deployment that refuses to start — the
+# host names `ClientEndpoint:Application:Enabled` when the entry document is absent. What it still ends with is the MCP
+# endpoint, and the report says which of the two a person is getting.
+quick_start_prepares_no_client_while_the_stack_carries_none() {
   local checkout_root compose_directory
-  local without_root
   local output_file="$test_directory/quick-start-client-log"
 
   checkout_root="$(stage_quick_start_checkout 'quick-start-client')"
@@ -6691,46 +6697,19 @@ quick_start_prepares_the_client_and_the_credential_to_sign_in_with() {
 
   run_quick_start "$checkout_root" --provider fastmail > "$output_file" 2>&1
 
-  assert_contains '"ClientEndpoint"' "$compose_directory/config/10-mailfathom.json"
-  assert_contains '{ "Method": "password" }' "$compose_directory/config/10-mailfathom.json"
-  assert_contains 'MAILFATHOM_CLIENT=true' "$compose_directory/.env"
+  assert_excludes 'ClientEndpoint' "$compose_directory/config/10-mailfathom.json"
+  assert_excludes 'MAILFATHOM_CLIENT' "$compose_directory/.env"
 
-  # The administrative endpoint follows the client rather than the other way round: provisioning a credential is an
-  # administrative operation and there is no other way to reach one.
-  assert_contains '"AdminEndpoint"' "$compose_directory/config/10-mailfathom.json"
-
-  if [[ ! -s "$compose_directory/secrets/client-owner-password" ]]; then
-    printf 'The client was prepared without a password to sign in to it with.\n' >&2
+  if compgen -G "$compose_directory/secrets/client-*-password" > /dev/null; then
+    printf 'A credential was generated for a client this deployment cannot serve.\n' >&2
     return 1
   fi
 
-  local password_mode
-  password_mode="$(stat --format '%a' "$compose_directory/secrets/client-owner-password")"
+  # Said rather than left out, because somebody who read the old report is looking for an address to open.
+  assert_contains 'no MailFathom client to open' "$output_file"
 
-  if [[ "$password_mode" != '444' ]]; then
-    printf 'The client password carries mode %s rather than the 444 every generated credential gets.\n' \
-      "$password_mode" >&2
-    return 1
-  fi
-
-  # Nothing in the container reads it, and secrets/mailfathom/ is bind-mounted into one. A copy there would be
-  # readable by the process a compromised MailFathom is, for no purpose at all.
-  if [[ -e "$compose_directory/secrets/mailfathom/client-owner-password" ]]; then
-    printf 'The client password was written into the directory the container mounts.\n' >&2
-    return 1
-  fi
-
-  # Nothing was started, so nothing was provisioned. A report claiming otherwise would send somebody to a sign-in that
-  # refuses them.
-  assert_contains 'no credential was provisioned' "$output_file"
-  assert_excludes "$(cat "$compose_directory/secrets/client-owner-password")" "$output_file"
-
-  # Asked for by name, the deployment is the one this script produced before the client existed.
-  without_root="$(stage_quick_start_checkout 'quick-start-client-off')"
-  run_quick_start "$without_root" --provider fastmail --no-client > /dev/null 2>&1
-
-  assert_excludes 'ClientEndpoint' "$without_root/deploy/compose/config/10-mailfathom.json"
-  assert_excludes 'MAILFATHOM_CLIENT' "$without_root/deploy/compose/.env"
+  # The MCP endpoint is still the whole point of the run, so the report has to arrive at one.
+  assert_contains '/mcp' "$output_file"
 }
 
 # A mail server the platform's own policy refuses is not something a first run can diagnose from the error it produces,
@@ -6766,13 +6745,12 @@ quick_start_prepares_the_tls_policy_a_legacy_mail_server_needs() {
   assert_excludes 'OPENSSL_CONF' "$strict_root/deploy/compose/compose.override.yaml"
 }
 
-# What a client presents to the MCP endpoint is a record beside an owner, and so is the username and password a person
-# signs in to the MailFathom client with — both minted over the administrative endpoint. So switching that endpoint off
-# while either is wanted describes a deployment nothing can ever be provisioned for. The default arrives at the
-# combination without anybody choosing it and is corrected; an operator who asked for it by name is refused, because
-# correcting a stated answer is the worse failure. One mechanism reads both credentials, so one contract covers it.
+# What a client presents to the MCP endpoint is a record beside an owner, minted over the administrative endpoint. So
+# switching that endpoint off while a key is wanted describes a deployment nothing can ever be provisioned for. The
+# default arrives at the combination without anybody choosing it and is corrected; an operator who asked for it by name
+# is refused, because correcting a stated answer is the worse failure.
 quick_start_serves_the_administrative_endpoint_wherever_a_credential_has_to_be_minted() {
-  local derived_root client_only_root refused_root
+  local derived_root unauthenticated_root refused_root
   local derived_log="$test_directory/quick-start-admin-derived-log"
   local refused_log="$test_directory/quick-start-admin-refused-log"
 
@@ -6783,13 +6761,12 @@ quick_start_serves_the_administrative_endpoint_wherever_a_credential_has_to_be_m
   assert_contains '"127.0.0.1:8090:8090"' "$derived_root/deploy/compose/compose.override.yaml"
   assert_contains 'mfctl credential create --method api-key' "$derived_log"
 
-  # The client's own credential derives it just as the MCP key does, so a run wanting only that one still gets the
-  # endpoint. Nothing else would be able to provision the password the report names.
-  client_only_root="$(stage_quick_start_checkout 'quick-start-admin-client-only')"
-  run_quick_start "$client_only_root" --provider yahoo --mcp-authentication none > /dev/null 2>&1
+  # And left alone where nothing has to be minted, which is what makes the derivation above a decision rather than a
+  # value every run happens to carry.
+  unauthenticated_root="$(stage_quick_start_checkout 'quick-start-admin-unauthenticated')"
+  run_quick_start "$unauthenticated_root" --provider yahoo --mcp-authentication none > /dev/null 2>&1
 
-  assert_contains '"Port": 8090' "$client_only_root/deploy/compose/config/10-mailfathom.json"
-  assert_contains '"127.0.0.1:8090:8090"' "$client_only_root/deploy/compose/compose.override.yaml"
+  assert_excludes 'AdminEndpoint' "$unauthenticated_root/deploy/compose/config/10-mailfathom.json"
 
   refused_root="$(stage_quick_start_checkout 'quick-start-admin-refused')"
 
@@ -6798,7 +6775,7 @@ quick_start_serves_the_administrative_endpoint_wherever_a_credential_has_to_be_m
     return 1
   fi
 
-  assert_contains '--no-client' "$refused_log"
+  assert_contains '--mcp-authentication none' "$refused_log"
 
   assert_contains '--admin-endpoint off cannot be' "$refused_log"
 
@@ -7118,7 +7095,7 @@ no_channel_builds_an_artifact_before_the_commit_has_verified() {
   # A derived list that derives nothing asserts nothing, and it would do so silently: the loops above
   # are vacuous the moment the `ref:` expression they read is spelled some other way. These three are
   # the floor rather than the coverage.
-  for job in schema-artifact cli-binaries desktop-client publish; do
+  for job in schema-artifact cli-binaries publish; do
     [[ "$release_consumers" == *" $job "* ]] ||
       failures+="release.yml: ${job} was not recognized as building from the released commit. "
     [[ "$nightly_consumers" == *" $job "* ]] ||
@@ -7905,22 +7882,23 @@ every_browser_asset_carries_the_license_header() {
 }
 
 # MailFathom.code-workspace is what a contributor opens, because the repository root is not a solution
-# directory: each stack owns its own solution and a root opened on its own loads neither. Two things
-# about that file are contracts rather than preferences, and both are asserted here because both fail
-# silently — as an editor that loads nothing rather than as a build that stops.
+# directory: the service owns its own solution and a root opened on its own loads nothing. Two things
+# about that file are contracts rather than preferences, and both fail silently — as an editor that
+# loads nothing rather than as a build that stops.
 #
-# The first is the order of the folders. The Uno Platform extension resolves its solution from
-# `workspace.workspaceFolders[0]` and from nowhere else, and where it finds none it scans that one
-# directory for project files without descending. So `frontend` has to be listed first; with `backend`
-# there instead the extension would find a solution naming no Uno project, report `Uno SDK not found`,
-# and leave the client unavailable in the editor. Nothing else notices, which is why this does.
+# The first is that every folder it names has something to open. `service` is where the solution is,
+# and `repository` is the root everything belonging to neither stack is read under. A `client` entry
+# would be a third, and there is deliberately none: the Uno Platform client was withdrawn and the
+# React one has not landed, so `frontend/` holds two placeholder directories and no solution, and an
+# entry pointing at it would open an editor folder with no project in it. Whatever the next client
+# needs from an editor arrives with the next client.
 #
 # The second is the licensing header. A `.code-workspace` is JSON with comments, so it carries the
 # module form of the three lines — the same `//` form a script under docfx/ uses — and no glob above
 # reaches it.
-the_editor_workspace_opens_the_client_first() {
+the_editor_workspace_opens_the_service_and_the_repository() {
   local workspace="$source_repository_root/MailFathom.code-workspace"
-  local expected actual first_folder
+  local expected actual folders
 
   if [[ ! -f "$workspace" ]]; then
     printf 'MailFathom.code-workspace is missing; it is the documented way to open this repository\n' >&2
@@ -7934,161 +7912,30 @@ the_editor_workspace_opens_the_client_first() {
     return 1
   fi
 
-  first_folder="$(awk '
+  folders="$(awk '
     /"folders"/ { in_folders = 1; next }
+    in_folders && /\]/ { exit }
     in_folders && /"path"/ {
       match($0, /"path"[[:space:]]*:[[:space:]]*"[^"]*"/)
       chunk = substr($0, RSTART, RLENGTH)
       sub(/.*:[[:space:]]*"/, "", chunk)
       sub(/"$/, "", chunk)
       print chunk
-      exit
     }
-  ' "$workspace")"
+  ' "$workspace" | paste -sd' ' -)"
 
-  if [[ "$first_folder" != "frontend" ]]; then
-    printf 'MailFathom.code-workspace lists "%s" first. The Uno Platform extension reads workspaceFolders[0], so frontend has to be\n' \
-      "$first_folder" >&2
+  if [[ "$folders" != 'backend .' ]]; then
+    printf 'MailFathom.code-workspace names the folders "%s" rather than the service and the repository root\n' \
+      "$folders" >&2
     return 1
   fi
 
-  if [[ ! -f "$source_repository_root/frontend/MailFathom.Client.slnx" ]] ||
-     [[ ! -f "$source_repository_root/backend/MailFathom.slnx" ]]; then
+  if [[ ! -f "$source_repository_root/backend/MailFathom.slnx" ]]; then
     printf 'MailFathom.code-workspace names a folder whose solution is not where it says\n' >&2
     return 1
   fi
 
   return 0
-}
-
-# What a published client head is optimized with. Three parts of one posture, each of which fails
-# silently rather than loudly, and `docs/operations/client-publishing.md` carries the reasoning.
-#
-# The browser head publishes trimmed, and `UnoXamlResourcesTrimming` is what lets Uno's pass drop the
-# styles of controls the application never names. Removing it costs payload and reports nothing, so the
-# property is asserted where it belongs: inside a property group conditioned on that one head.
-#
-# The desktop head is neither trimmed nor compiled ahead of time, and that used to be a licence
-# condition. `LibVLCSharp.dll` was in every publish of it, is LGPL-2.1-or-later, and had to stay
-# unmodified and separately replaceable — which `PublishTrimmed`, `PublishAot`, `PublishReadyToRun`, and
-# a single-file bundle each take away. It is now excluded from that publish, so none of the four is
-# forbidden any more and all four are still unset: what keeps them unset is a measurement nobody has
-# taken, which is #1226's question, and the assertion below holds the posture rather than the licence.
-# A change that genuinely wants one of them is a change to this contract with its reason, not a property
-# added quietly beside it.
-#
-# What is a licence condition is the exclusion itself, and the one thing that would break it.
-# `Uno.WinUI.Runtime.Skia.X11` declares `LibVLCSharp` unconditionally and nothing in that package calls
-# it, so `Client.csproj` names it directly with every asset excluded. `MediaPlayerElement` in
-# `UnoFeatures` is what would need it back: that feature adds `Uno.WinUI.MediaPlayer.Skia.X11`, whose own
-# assembly calls into the library, and a head built with both publishes the control without it and fails
-# at first playback with `FileNotFoundException: Could not load file or assembly 'LibVLCSharp'`, which no
-# build reports. So the two may not stand together, neither may be absent alone, and the LGPL notices
-# that used to travel with the artifact stay gone while the exclusion stands. Turning the feature on
-# restores all of it in one change; THIRD_PARTY_LICENSES.md carries what else it then owes.
-#
-# And none of it runs in front of a pull request. Both gates and the client's own required job build and
-# test the client solution and publish no head, because an ahead-of-time or trimmed publish is minutes a
-# required check may not spend.
-the_client_publishes_what_its_licences_allow() {
-  local project="$source_repository_root/frontend/src/Client/Client.csproj"
-  local failures='' trimming offenders file
-  local excluded='false' plays_media='false' features leftovers
-
-  # The property, and the head it is conditioned on. A property group whose condition does not name the
-  # browser head would apply it to the desktop one too, which is the case the licence above refuses.
-  trimming="$(awk '
-    /<PropertyGroup/ { inside = index($0, "net10.0-browserwasm") > 0; next }
-    /<\/PropertyGroup>/ { inside = 0; next }
-    /<UnoXamlResourcesTrimming>true<\/UnoXamlResourcesTrimming>/ { print inside ? "scoped" : "unscoped" }
-  ' "$project")"
-
-  if [[ "$trimming" != 'scoped' ]]; then
-    failures+="Client.csproj does not enable UnoXamlResourcesTrimming for net10.0-browserwasm alone (found: ${trimming:-nothing}). "
-  fi
-
-  # The exclusion and the one feature that would need the library back, in both directions.
-  if grep -qE '<PackageReference Include="LibVLCSharp"[^>]*ExcludeAssets="all"' "$project"; then
-    excluded='true'
-  fi
-
-  features="$(awk '/<UnoFeatures>/, /<\/UnoFeatures>/' "$project")"
-
-  if grep -qE '(MediaPlayerElement|MediaElement);' <<< "$features"; then
-    plays_media='true'
-  fi
-
-  if [[ "$excluded" == 'true' && "$plays_media" == 'true' ]]; then
-    failures+='Client.csproj excludes LibVLCSharp while UnoFeatures asks for MediaPlayerElement, which needs it: '
-    failures+='the control would publish without the library it calls and fail at first playback. '
-  fi
-
-  if [[ "$excluded" == 'false' && "$plays_media" == 'false' ]]; then
-    failures+='Client.csproj no longer excludes LibVLCSharp and no UnoFeature needs it, so the desktop publish '
-    failures+='carries an LGPL-2.1-or-later assembly nothing calls. '
-  fi
-
-  # The exclusion belongs to the head that resolves the package. Stated for the project, it would enter
-  # the browser head's restore for nothing.
-  if [[ "$excluded" == 'true' ]] &&
-    ! grep -B2 '<PackageReference Include="LibVLCSharp"' "$project" |
-      grep -qF "'\$(TargetFramework)' == 'net10.0-desktop'"; then
-    failures+='the LibVLCSharp exclusion is not scoped to net10.0-desktop. '
-  fi
-
-  # And the obligations that travelled with the assembly go with it: a notice naming a component the head
-  # no longer carries is an inaccuracy in something somebody downloads.
-  if [[ "$excluded" == 'true' ]]; then
-    leftovers="$(find "$source_repository_root/frontend/src/Client" -iname 'LGPL*' -o -iname 'THIRD-PARTY-NOTICES*' || true)"
-
-    if [[ -n "$leftovers" ]]; then
-      failures+="the excluded head still carries LGPL notices: $(tr '\n' ' ' <<< "$leftovers"). "
-    fi
-
-    if grep -qE 'LGPL-2\.1\.txt|THIRD-PARTY-NOTICES\.md' "$project"; then
-      failures+='Client.csproj still attaches an LGPL notice to the desktop publish. '
-    fi
-
-    # The notes the archives are downloaded from, which is where section 6's source offer had to be. Read as the
-    # `printf` lines that compose them rather than as the whole file, so the comment above them stays free to say
-    # what the offer was and why it went.
-    if grep -qE '^[[:space:]]*printf .*LGPL' "$source_repository_root/.github/workflows/release.yml"; then
-      failures+='release.yml still writes the LGPL source offer into the release notes. '
-    fi
-  fi
-
-  # The four properties, in the two build files a client project reads and in the two builds that produce
-  # an artifact. A comment naming one is not a setting, and every file here argues its own posture at length.
-  for file in \
-    'frontend/src/Client/Client.csproj' \
-    'frontend/Directory.Build.props' \
-    '.github/workflows/build-desktop-client.yml' \
-    'deploy/docker/Dockerfile'; do
-    offenders="$(grep -nE '(<|-p:)(PublishAot|PublishTrimmed|PublishReadyToRun|PublishSingleFile)' \
-      "$source_repository_root/$file" | grep -vE '^[0-9]+:[[:space:]]*#' || true)"
-
-    if [[ -n "$offenders" ]]; then
-      failures+="$file sets a publish property this posture leaves unset: $(tr '\n' ' ' <<< "$offenders"). "
-    fi
-  done
-
-  # No publish in front of a pull request. The client's heads are published by the container image build
-  # and by build-desktop-client.yml, and by nothing a required check waits for.
-  for file in \
-    'scripts/verify-fast.sh' \
-    'scripts/verify-full.sh' \
-    '.github/workflows/build-test-frontend.yml'; do
-    offenders="$(grep -nE 'dotnet[[:space:]]+publish' "$source_repository_root/$file" || true)"
-
-    if [[ -n "$offenders" ]]; then
-      failures+="$file publishes a head, which a required check may not spend the time on: $(tr '\n' ' ' <<< "$offenders"). "
-    fi
-  done
-
-  if [[ -n "$failures" ]]; then
-    printf '%s\n' "$failures" >&2
-    return 1
-  fi
 }
 
 # The Podman Quadlet sources under deploy/quadlet/. A systemd unit file is an INI document whose
@@ -8108,30 +7955,6 @@ every_container_unit_carries_the_license_header() {
       failures=$(( failures + 1 ))
     fi
   done < <(git -C "$source_repository_root" ls-files -- '*.container' '*.network' '*.volume' '*.pod')
-
-  (( failures == 0 ))
-}
-
-# XAML is the fifth place the analyzer cannot reach, and the first one outside the service stack: a
-# `.xaml` file is markup rather than C#, so IDE0073 never sees it, and XML's one comment form is what
-# carries the header there. It opens the file above the root element, because a XAML parser reads the
-# type of the root from the first element it meets and a comment is not one.
-markup_license_header() {
-  printf '<!--\n%s\n-->\n' "$(license_header_lines)"
-}
-
-every_xaml_file_carries_the_license_header() {
-  local file expected actual failures=0
-  expected="$(markup_license_header)"
-
-  while IFS= read -r file; do
-    actual="$(head -n 5 "$source_repository_root/$file")"
-
-    if [[ "$actual" != "$expected" ]]; then
-      printf '%s does not open with the license header\n' "$file" >&2
-      failures=$(( failures + 1 ))
-    fi
-  done < <(git -C "$source_repository_root" ls-files -- '*.xaml')
 
   (( failures == 0 ))
 }
@@ -8241,12 +8064,12 @@ no_tracked_text_file_carries_a_nul_byte() {
 }
 
 run_test verify_fast_runs_restore_build_tests_and_formatting
-run_test verify_fast_runs_the_flow_of_each_stack_the_change_reaches
+run_test verify_fast_reports_the_client_stack_carrying_no_build
 run_test verify_fast_runs_no_stack_flow_for_a_change_no_build_reads
 run_test verify_full_runs_no_stack_flow_for_a_change_no_build_reads
 run_test verify_full_runs_both_flows_for_a_change_above_both_stacks
 run_test verify_full_runs_tests_once_through_coverage
-run_test verify_full_verifies_each_solution_the_change_reaches
+run_test verify_full_reports_the_client_stack_carrying_no_build
 run_test verify_full_runs_workflow_contracts_for_a_change_beyond_csharp
 run_test verify_full_skips_workflow_contracts_for_a_csharp_only_change
 run_test verify_full_runs_workflow_contracts_when_the_branch_removed_a_path
@@ -8480,7 +8303,7 @@ run_test quick_start_refuses_a_mailbox_that_accepts_no_password
 run_test quick_start_authenticates_the_mcp_endpoint_unless_asked_otherwise
 run_test quick_start_serves_the_administrative_endpoint_on_a_port_of_its_own
 run_test quick_start_serves_the_administrative_endpoint_wherever_a_credential_has_to_be_minted
-run_test quick_start_prepares_the_client_and_the_credential_to_sign_in_with
+run_test quick_start_prepares_no_client_while_the_stack_carries_none
 run_test quick_start_prepares_the_tls_policy_a_legacy_mail_server_needs
 run_test quick_start_refuses_a_value_that_would_write_broken_configuration
 run_test quick_start_says_it_is_an_evaluation_rather_than_a_recommended_deployment
@@ -8507,9 +8330,7 @@ run_test the_dependency_rewrite_encodes_a_hostile_version_into_a_pin_file
 run_test every_yaml_file_carries_the_license_header
 run_test every_browser_asset_carries_the_license_header
 run_test every_container_unit_carries_the_license_header
-run_test every_xaml_file_carries_the_license_header
-run_test the_editor_workspace_opens_the_client_first
-run_test the_client_publishes_what_its_licences_allow
+run_test the_editor_workspace_opens_the_service_and_the_repository
 run_test every_shell_script_carries_the_license_header
 run_test every_skill_declares_its_license
 run_test no_tracked_text_file_carries_a_nul_byte

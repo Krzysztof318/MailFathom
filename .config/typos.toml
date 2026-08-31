@@ -50,23 +50,6 @@
 # be able to trust that it means one of them.
 
 [files]
-# The client's non-English resource tables, for the reason above. The negation is what keeps the
-# English one checked, and it has to come second: these are gitignore patterns, so the last one to
-# match a path decides. A language added to the client needs no edit here — it is excluded the day
-# its directory appears, and `en` goes on being read.
-#
-# This is half of the exclusion and `.github/workflows/typo-check.yml` carries the other half, which
-# is not one decision written twice but the two ways `typos` is reached. This field applies to the
-# walk it does when it is given a directory, which is the whole-checkout fallback that workflow
-# takes on a pull request too large to enumerate; a path named on the command line is read whether
-# any of this says so or not. `--force-exclude` is the flag that would make one statement cover
-# both, and `crate-ci/typos` passes none through, so that workflow's file-collection step drops the
-# same paths with the same pattern and says why there.
-extend-exclude = [
-  "frontend/src/Client/Strings/*/*.resw",
-  "!frontend/src/Client/Strings/en/*.resw",
-]
-
 # Hidden files are checked, which is not the default. Most of the prose that decides how this
 # repository works lives behind a leading dot — the workflows under `.github/`, the skills under
 # `.agents/`, `.editorconfig` — and skipping it would leave the check blind to the files a workflow

@@ -104,9 +104,6 @@
     - name: Local development
       href: local-development.md
       description: The SDK, the database, the package sources and lock files, and the commands a change is built, tested, and verified with.
-    - name: Publishing the client
-      href: client-publishing.md
-      description: Which of the client's heads is trimmed and which is compiled ahead of time, why Native AOT is impossible for one and declined for the other, and where each publish runs.
     - name: The HTTP API document
       href: http-api-documentation.md
       description: Where a development instance publishes the OpenAPI document and the API explorer, what the document contains, and why neither exists anywhere else.

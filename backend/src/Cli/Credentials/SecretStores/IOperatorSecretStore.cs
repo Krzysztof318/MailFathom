@@ -8,10 +8,8 @@ namespace MailFathom.Cli.Credentials.SecretStores;
 /// <remarks>
 /// <para>
 /// One port with two implementations — the Windows Credential Manager and the Secret Service through <c>libsecret</c> —
-/// and a third that reports having no store at all. The port is what
-/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0018-where-the-client-keeps-its-sign-in-credential.md">ADR 0018</see>
-/// asks of a command: the credential goes where the operating system holds a secret for one user, and nothing that
-/// reaches it here knows which platform answered.
+/// and a third that reports having no store at all. The credential goes where the operating system holds a secret for
+/// one user, and nothing that reaches it here knows which platform answered.
 /// </para>
 /// <para>
 /// Every member throws <see cref="SecretStoreUnavailable" /> when this machine has no such store, when the session

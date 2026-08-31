@@ -1,29 +1,8 @@
 # Client tests
 
 This directory holds the tests covering [`frontend/src/`](../src/README.md), the way `backend/tests/` holds the ones
-covering `backend/src/`. It carries one project, `Client.UnitTests`, covering both projects over there: it references
-the application through the plain `net10.0` target the single project publishes beside its heads, and `Client.Backend`
-directly, which targets that one framework and nothing else. No browser and no window is started to run it.
+covering `backend/src/`. It is empty today, for the reason that one is: the Uno Platform client both directories held
+was withdrawn, and the client is being rebuilt in React and JavaScript.
 
-The suite is xUnit.net v3 on Microsoft Testing Platform, the same framework and runner the service's suites use, so one
-`dotnet test` contract covers the repository:
-
-```bash
-dotnet test --solution frontend/MailFathom.Client.slnx
-```
-
-The structure rule is the repository's rather than this stack's: a test directory follows the structure of the code it
-covers, so `Client.UnitTests/Presentation/` covers `src/Client/Presentation/` and `Client.UnitTests/Backend/` covers
-`src/Client.Backend/`, exactly as `backend/tests/` mirrors `backend/src/`. The doubles those tests share live in
-`Client.UnitTests/TestDoubles/`, because they cover nothing themselves.
-
-What it asserts today is what a scaffold has to say for itself — that the client reports the product and version the
-build declares, that the MVUX model behind the only screen yields it, and that the languages the model offers are the
-ones the embedded configuration names, and that those cultures are exactly the ones a table under `src/Client/Strings/`
-is authored for and that every table holds the same keys —
-that the service graph the application composes resolves in full and builds every model a screen is drawn from,
-against the configuration the bundle actually ships as well as against one a test states —
-and the whole of what `Client.Backend` does
-against a stubbed transport: the wire contract, the four ways an exchange can fail, and the sign-in end to end with the
-one head-specific step stubbed at its port. `AGENTS.md` beside this file states what belongs here, how a feed is
-asserted, and what is deliberately left to a head that actually runs.
+What the suite here is run by, and what it asserts, is decided with the stack it covers rather than in advance of it.
+Until then the `Frontend` job of `CI` runs nothing.

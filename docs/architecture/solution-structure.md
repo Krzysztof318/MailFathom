@@ -1,14 +1,13 @@
 # Solution structure
 
-<!-- describes: backend/MailFathom.slnx, backend/Directory.Build.props, Version.props, backend/src/*/*.csproj, backend/tests/*/*.csproj, backend/tools/*/*.csproj, frontend/MailFathom.Client.slnx, frontend/Directory.Build.props, frontend/*/*/*.csproj, frontend/*/README.md, backend/src/Host/ServiceDefaultsExtensions.cs -->
+<!-- describes: backend/MailFathom.slnx, backend/Directory.Build.props, Version.props, backend/src/*/*.csproj, backend/tests/*/*.csproj, backend/tools/*/*.csproj, frontend/*/README.md, backend/src/Host/ServiceDefaultsExtensions.cs -->
 
 MailFathom uses a clean-architecture modular monolith. Dependencies point inward from adapters and hosts toward application and domain contracts.
 
 The service's solution lives under `backend/`: `backend/src/` holds the projects below and `backend/tests/` the suites
-that cover them. `frontend/` stands beside it with the same two directories and a solution of its own,
-`frontend/MailFathom.Client.slnx`, holding the Uno Platform client. What decides which of the two a file belongs to is
-the stack it is built by rather than what it is about — everything on this page except its last section describes
-`backend/`.
+that cover them. `frontend/` stands beside it with the same two directories and holds the client. What decides which of
+the two a file belongs to is the stack it is built by rather than what it is about — everything on this page except its
+last section describes `backend/`.
 
 The build contract moves down with the solution: `backend/MailFathom.slnx`, `backend/Directory.Build.props`, and
 `backend/Directory.Packages.props` sit beside `backend/src/` and govern it and nothing else. MSBuild walks up from a
@@ -17,11 +16,11 @@ project in the repository — a second stack's heads included, under a single `n
 and an `AssemblyName` prefix written for these boundaries. `backend/tools/` sits under the same root for the same
 reason: it is development tooling this solution references from its tests, and it ships nothing.
 
-Three files stay at the repository root, because each one genuinely governs every stack. `global.json` pins the SDK —
-and, in `msbuild-sdks`, the Uno SDK version every client package follows from — while `NuGet.config` decides which feeds
-a package may come from, and neither is a decision a stack may take twice. `Version.props` carries `<VersionPrefix>` and
-the two numeric assembly identities derived from it; each stack's own `Directory.Build.props` imports it, so a client
-and a server that ship together report one version rather than two that can drift.
+Three files stay at the repository root, because each one genuinely governs every stack. `global.json` pins the SDK and
+`NuGet.config` decides which feeds a package may come from, and neither is a decision a stack may take twice.
+`Version.props` carries `<VersionPrefix>` and the two numeric assembly identities derived from it; each stack's own
+`Directory.Build.props` imports it, so a client and a server that ship together report one version rather than two that
+can drift.
 
 ```mermaid
 flowchart TD
@@ -167,79 +166,27 @@ The coverage marker is asserted against a sample type declared beside its tests,
 
 ## The client stack
 
-`frontend/` holds two source projects and one test project, and `frontend/MailFathom.Client.slnx` is what builds them.
-`frontend/Directory.Build.props` and `frontend/Directory.Packages.props` are its own; the backend solution names no
-project here and neither build reads the other's files.
+**`frontend/` is empty, and this is what it means.** The Uno Platform client that stood there — two source projects, a
+unit suite, a solution, and a build contract of its own — was withdrawn: the platform did not work out for this
+project, and the client is being rebuilt in React and JavaScript. What was kept is the place rather than anything that
+was in it. [`frontend/src/`](https://github.com/Krzysztof318/MailFathom/blob/main/frontend/src/README.md) and
+[`frontend/tests/`](https://github.com/Krzysztof318/MailFathom/blob/main/frontend/tests/README.md) each hold a
+placeholder README and nothing else, so the new stack lands where the old one stood.
 
-- `src/Client` is an Uno Platform single project. One project carries every head the application runs as, chosen by
-  target framework: `net10.0-desktop` is the Skia desktop head that runs on Windows, Linux, and macOS, and
-  `net10.0-browserwasm` is the browser head. Its assembly is `MailFathom.Client`.
-- A third target framework, plain `net10.0`, builds no head. It exists so a unit-test project can reference the
-  application, since a test host is neither a browser nor a window.
-- `src/Client.Backend` is everything that reaches the service: the typed client, the wire records and their
-  source-generated readers, and the password sign-in that presents an owner's credential as an RFC 7617
-  `Authorization: Basic` header. It targets that plain `net10.0` alone and references no Uno package, which is the point
-  of it — the boundary between a view and a service call is a reference graph here rather than a convention, so a WinUI
-  type written in it does not compile. `Client` references it and it references nothing here.
-- The one part of signing in that a head cannot share is a port, `IOwnerCredentialStore`: where the credential outlives
-  the process. `Client.Backend` declares it and ships the implementation that keeps nothing, which is what the browser
-  head composes because every store a browser offers is scoped to the page's origin rather than to a person. The
-  desktop head's implementations live under `src/Client/Platforms/Desktop/Credentials/`, one per operating system —
-  the Credential Manager, the login keychain, and Secret Service over D-Bus — reached by source-generated P/Invoke, and
-  the Windows one is why the desktop head is the one place the application project sets `AllowUnsafeBlocks` for that
-  target framework. The browser head sets the same property for its own reason, which is the `[JSImport]` generator.
-- A published desktop head carries the repository's own `LICENSE` and `NOTICE` beside it, and those are the two files
-  this project attaches by hand. The project file attaches both to every `net10.0-desktop` publish and fails the build
-  when one is missing, so the attribution travels with the artifact rather than with the workflow that happens to
-  produce it. The permissive components inside that head oblige notices of their own, which the notice bundle carries
-  for every artifact at once rather than per publish; what the head no longer carries is a copyleft component and the
-  two files this project attached for that one alone.
-- What a published head is optimized with is conditioned per target framework in that same project file. The browser
-  head publishes trimmed and enables Uno's XAML resource trimming with it; the desktop head does neither, and since
-  the one copyleft component in its graph is excluded from the publish, what keeps it that way is a measurement nobody
-  has taken rather than a licence. [Publishing the client](../operations/client-publishing.md) carries the whole
-  posture.
-- `src/Client/Presentation/` holds every screen. The shell, the screen that asks which deployment this client reaches,
-  and `ClientRoutes` — where each route is named once — sit directly under it, while `Workspace/`, `Spaces/`, and
-  `Settings/` hold the frame the product's three spaces are shown inside, those spaces, and the settings screen.
-  Three directories sit beside them and are not screens. `Mailboxes/` is the tree of accounts and folders the frame
-  shows in its pane, which is what narrows the scope every space then reads; `Messages/` is the message list of whatever
-  place that scope names — a bounded window over the deployment's keyset-paged timeline, registered once for the run,
-  whose selection is written back into that same scope for every other space to read; `Threads/` is the conversation
-  that selection is in, registered once for the run as well, because a conversation is reached by naming one message
-  inside it — which a search result and a citation do as readily as a row of the list does — rather than only from the
-  list. Every screen carries an MVUX model
-  except the Discover and Cases pages, which have none yet because each is filled in by the parent that owns it. Every
-  screen is a route rather than content something swaps by hand, which is what makes the system back
-  gesture and the browser's history move through the client's own screens;
-  [the client sources](https://github.com/Krzysztof318/MailFathom/blob/main/frontend/src/README.md)
-  carries the composition and what travels between spaces.
-- `src/Client/Strings/` holds one string table per language the application is readable in, one directory per neutral
-  culture. Which of them are offered is `LocalizationConfiguration:Cultures` in the embedded `appsettings.json`, so a
-  language reaches a reader only where both the table and that list name it.
-- `tests/Client.UnitTests` covers both, referencing the application through its plain target and `Client.Backend`
-  directly, on the same xUnit.net v3 and Microsoft Testing Platform the service's suites use.
-- Almost no client package version is written in this repository. `UnoFeatures` in the project file names capabilities
-  rather than packages, and the Uno SDK resolves each to a package at the version its own pin decides, so a restore is
-  where those versions become readable. `Client.Backend` is the exception and pins one package by hand,
-  `Microsoft.Extensions.Http`, because a plain library resolves the typed-client registration as an ordinary package
-  rather than from a shared framework. Both it and the unit-test project record their closure in a committed
-  `packages.lock.json`; the application project carries none, because a WebAssembly target restores three packages the
-  .NET SDK versions from itself and `global.json` lets the SDK roll forward. `frontend/Directory.Build.props` names
-  them and says what a lock file there would have recorded instead.
+The repository's own shape around it was kept for the same reason. `CI` still runs a `Frontend` job, gated on a
+`frontend` path filter, calling `.github/workflows/build-test-frontend.yml`; a nightly and a release still wait on that
+job before they publish. All of it asserts nothing today and says so, and filling it in for the new stack is a change
+to that one workflow rather than a reconstruction of every caller. Both verification gates read the same two path
+lists and report the client stack the same way — [which stack a gate runs](../operations/agent-workflow.md#which-stack-a-gate-runs)
+is where that is decided.
 
-The client reaches MailFathom over the endpoints `Host` exposes and shares no type with it — its wire records and its
-password sign-in are its own, stated again at this end rather than referenced across the boundary. Which deployment it
-reaches is the composing head's to supply, through `IDeploymentAddressSource`: an installed head reads the `Deployment`
-section out of an embedded `appsettings.json`, and the browser head reads the origin it was served from, because the
-container image serves the bundle from the same origin as the surface it calls. One source belongs to neither head and
-is read in front of both: `BuildStatedDeploymentAddress` takes an address the build that produced the head stated,
-which is how a head an orchestration started — served by its own development server beside the service rather than by
-it — is pointed at the socket the service listens on. `frontend/src/AGENTS.md` states what governs a change there, and
-`frontend/tests/AGENTS.md` what governs one in its suite.
+**Nothing the service does for a client moved with it**, because none of it was Uno's. The client surface under
+`/api/client` is an endpoint of its own, with its own listener and its own credentials —
+[the client endpoint](../operations/client-endpoint.md) is the page — and `Host` still serves whatever files the image
+carries beneath its web root, from a deployment setting rather than from anything a client build states.
 
-That image is the one place the two stacks meet in a build, and it is a file copy rather than a reference. A stage of
-`deploy/docker/Dockerfile` publishes the browser head and copies its output into the runtime image's `wwwroot`; no
-project in either solution names one in the other, and `HostDependencyBoundaryTests` asserts the service assembly's
-reference list so that stays true. Serving those files is off unless a deployment turns it on —
-[the client endpoint](../operations/client-endpoint.md#serving-the-client-from-the-deployment) is the page.
+What did change is the image. `deploy/docker/Dockerfile` no longer builds a browser head into it, so a current image
+carries no bundle and a deployment that switches the client application on is refused at startup by name rather than
+serving a page of 404s. The boundary that made that a file copy rather than a reference is unchanged and still
+asserted: no project in either stack names one in the other, and `HostDependencyBoundaryTests` holds the service
+assembly's reference list to it.

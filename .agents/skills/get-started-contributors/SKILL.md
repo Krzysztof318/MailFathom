@@ -115,7 +115,8 @@ offer to go deeper on any one of them instead of expanding all six.
 
 3. **Where things live.** `backend/` holds the .NET stack: `backend/src/` holds the clean-architecture boundaries —
    `Domain`, `Application`, `Infrastructure`, `AI`, `Mcp`, `Host`, `Cli` — and `backend/tests/` mirrors them.
-   `frontend/` carries the same two directories for the Uno Platform client, which has a solution of its own.
+   `frontend/` carries the same two directories for the client, and nothing else: the Uno Platform client that stood
+   there was withdrawn and the React one has not landed, so each holds a placeholder README and no build.
    `docs/` states what the code *does*, and `docs/decisions/` holds the ADRs a change is written to be
    consistent with. `deploy/`, `scripts/`, and `backend/tools/` are
    the deployment assets, the gates, and the development utilities — `backend/tools/SyntheticMail` fills a mailbox to work
@@ -134,14 +135,8 @@ offer to go deeper on any one of them instead of expanding all six.
    the history. A new
    dependency, service, image, or copied sample also needs a row in `THIRD_PARTY_LICENSES.md` in the same pull request.
    `CONTRIBUTING.md` § *Licensing your contribution* is the whole of it. Say one more thing here, because it runs the
-   other way — what this repository hands *them*. Everything a restore of `backend/` brings is permissive. A restore of
-   the client stack under `frontend/` also brings four Uno Platform Studio packages the Uno SDK adds without any project
-   asking for them — `Uno.Sdk.Extras`, `Uno.UI.HotDesign`, `Uno.UI.App.Mcp`, and `Uno.Settings.DevServer` — and they are
-   not open source: the first carries an end-user licence agreement between Uno Platform and the person restoring it,
-   and the other three declare no licence at all. They are design-time tooling, no artifact carries them, and the
-   agreement is between that developer and Uno Platform rather than anything MailFathom passes on. The project decided
-   to keep them; `THIRD_PARTY_LICENSES.md` holds the decision and what is still unanswered. Say it before they restore
-   `frontend/`, not after.
+   other way — what this repository hands *them*: everything a restore brings is permissive, and `frontend/` restores
+   nothing at all.
 
 5. **The file header, and no name beside it.** Every file carries the same three lines naming the project, the licence,
    and the repository. In a C# file it is never typed — `scripts/verify-fast.sh` inserts it and `IDE0073` fails the

@@ -17,24 +17,6 @@
       "filter": "filter.yml",
       "namespaceLayout": "nested",
       "memberLayout": "separatePages"
-    },
-    {
-      "src": [
-        {
-          "files": [
-            "frontend/src/*/*.csproj"
-          ],
-          "src": ".."
-        }
-      ],
-      "dest": "api",
-      "filter": "filter.yml",
-      "namespaceLayout": "nested",
-      "memberLayout": "separatePages",
-      "properties": {
-        "TargetFramework": "net10.0"
-      },
-      "noRestore": true
     }
   ],
   "build": {

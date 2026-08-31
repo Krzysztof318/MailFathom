@@ -141,8 +141,14 @@ services:
       #ContentStorage__ObjectStorage__TrustAnchor__Name: mailfathom-object-storage-trust-anchor
       #ContentStorage__ObjectStorage__TrustAnchor__SecretReference: file:/etc/mailfathom/secrets/mailfathom-object-storage-trust-anchor
       # MailFathom's own client, served by the application as a page at the same address its client surface answers on.
-      # The bundle is inside the image, so this pulls nothing and starts no second container; what it needs beside it is
-      # ClientEndpoint:Enabled in ./config, since the page is served on that surface's listeners and calls them.
+      #
+      # **No image carries one today.** The Uno Platform client whose bundle used to travel inside the image was
+      # withdrawn and the client is being rebuilt in React, so setting the variable below to true against a current
+      # image is refused at startup, naming the setting. It is kept because it is the deployment's own switch rather
+      # than the client's, and it turns the next client on with no change here.
+      #
+      # What it needs beside it, once there is a page, is ClientEndpoint:Enabled in ./config, since the page is served
+      # on that surface's listeners and calls them.
       #
       # Both keys are one variable, and the second one is a statement about this deployment's shape rather than a
       # convenience. MailFathom refuses to serve the client over a clear-text socket, because the page and every token

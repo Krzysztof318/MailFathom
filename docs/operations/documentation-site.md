@@ -22,7 +22,7 @@ Everything under `docs/` except the architectural decision records, plus two thi
 | On the site | Where it comes from |
 | --- | --- |
 | The user guide, the operations pages, the feature pages, and the architecture pages | `docs/`, unchanged |
-| The API reference | Generated from the XML documentation comments in `backend/src/`, every project but `AppHost`, and in `frontend/src/` |
+| The API reference | Generated from the XML documentation comments in `backend/src/`, every project but `AppHost` |
 | The changelog | The repository-root `CHANGELOG.md`, published as it stands |
 | The landing page | `docs/index.md`, which exists for the site alone |
 
@@ -73,8 +73,8 @@ Two things are deliberately not published here:
   artifact to keep correct that no reader ever benefits from — the map exists precisely so that a whole-set fetch is
   never the way to an answer.
 - **No Markdown for the API reference.** It is generated from XML documentation comments into a thousand pages named
-  after types, and the map links its introduction like any other page. The types themselves are read from `backend/src/`
-  and `frontend/src/`.
+  after types, and the map links its introduction like any other page. The types themselves are read from
+  `backend/src/`.
 
 A link inside these artifacts follows the rule the rest of this page states, resolved for where the artifact sits. A
 page's Markdown source keeps its links exactly as written, because the sources mirror the tree the pages came from. A
@@ -230,10 +230,9 @@ scripts/build-docs-site.sh                 # artifacts/docs-site
 dotnet docfx serve artifacts/docs-site     # http://localhost:8080
 ```
 
-The build restores both solutions, because generating the API reference loads every project through MSBuild, and then
-runs docfx once. No workload is installed for the client, because docfx reads it through the plain `net10.0` reference
-target its own configuration names and never compiles a head — the Emscripten toolchain the browser head is built with
-is the client's build-time cost rather than this one's. Expect a few minutes the first time. While a page is being written,
+The build restores the service solution, because generating the API reference loads every project through MSBuild, and
+then runs docfx once. Nothing under `frontend/` is read: the client stack carries no build while the React client is
+being written. Expect a few minutes the first time. While a page is being written,
 `dotnet docfx docfx/docfx.json --serve` rebuilds and serves in one step instead — that shorter loop runs docfx alone,
 so the artifacts an agent reads are absent from what it serves; `scripts/write-docs-agent-artifacts.sh <directory>`
 writes them into an already-built version in a second, without rebuilding anything.
@@ -300,7 +299,7 @@ the repository's own Pages deployment — `actions/deploy-pages`, not a bot push
 repository.
 
 A pull request that changes `docs/` or the site definition builds `latest` and deploys nothing. A change under
-`backend/src/` or `frontend/src/` does not trigger it: an XML comment docfx dislikes is a warning rather than a failure, so the build would add minutes
+`backend/src/` does not trigger it: an XML comment docfx dislikes is a warning rather than a failure, so the build would add minutes
 to nearly every pull request the repository sees and catch nothing.
 
 Pages itself is enabled once, in the repository settings, with **Build and deployment → Source** set to **GitHub

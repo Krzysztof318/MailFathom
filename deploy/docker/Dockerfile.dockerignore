@@ -16,20 +16,10 @@
 !/NuGet.config
 !/global.json
 
-# The client stack, for the stage that publishes the browser head into the image. Its build contract is its own and
-# sits under frontend/ beside its sources, exactly as the service's sits under backend/ — neither stack's reaches the
-# other, and a context carrying one without the other would fail evaluation before its restore.
-!/frontend/src
-!/frontend/Directory.Build.props
-!/frontend/Directory.Packages.props
-
-# The product mark the client's build renders its application icon and splash screen from. It lives under assets/
-# rather than in the client project because every other surface that shows a mark points at the same two files, and
-# `Client.csproj` stages them into the intermediate output for the Uno resizetizer. A context without them fails the
-# client stage at its first copy. Only the two the build reads are re-included: the rest of that directory is
-# documentation artwork no image needs.
-!/assets/icon-1254.png
-!/assets/icon-900.png
+# Nothing under frontend/ is re-included. The Uno Platform client whose browser head this image used to build was
+# withdrawn and the client is being rebuilt in React, so there is no client stage and no client build contract for a
+# context to carry. Neither is the product mark under assets/, which reached the context only because that build
+# rendered an application icon and a splash screen from it.
 
 # The version both stacks report. `backend/Directory.Build.props` imports it from the repository root, so a context
 # that carried the build contract without this file would fail evaluation before the restore.
@@ -56,5 +46,3 @@
 # into the context would let a local build decide what the image contains.
 /backend/src/**/bin
 /backend/src/**/obj
-/frontend/src/**/bin
-/frontend/src/**/obj

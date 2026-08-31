@@ -100,96 +100,6 @@ RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
 
 
 ########################################################################################################################
-# Client: the browser head, published as static files. Runs once, on the build platform.
-########################################################################################################################
-
-# A stage of its own, and the one place in this repository where both stacks are built by one command. Nothing is
-# shared with the stage above: a separate solution, a separate build contract, separate package pins, and no project
-# reference in either direction — `backend/MailFathom.slnx` names nothing under frontend/ and `Host` references no
-# project there, which HostDependencyBoundaryTests asserts. What crosses is a directory of files, copied into the runtime image
-# below, which is why serving it costs the composition root a static-file middleware and nothing else.
-#
-# Pinned to BUILDPLATFORM for the same reason the stage above is, and more strongly: what comes out is WebAssembly and
-# JavaScript, which no architecture of the runtime image has anything to do with.
-FROM --platform=$BUILDPLATFORM ${DOTNET_SDK_IMAGE} AS client
-
-ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 \
-    DOTNET_NOLOGO=1 \
-    DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1 \
-    NUGET_XMLDOC_MODE=skip
-
-WORKDIR /source
-
-ARG IMAGE_REVISION=unknown
-ARG VERSION_SUFFIX=
-
-# Emscripten's compiler driver is a Python program, and the .NET WebAssembly workload ships no Python of its own on
-# Linux: it invokes whatever `python` is on the path. The SDK image has none, so the publish below fails while
-# compiling the runtime's own C sources with `unable to find python in $PATH` — a message about the toolchain rather
-# than about anything in this repository. `python-is-python3` is the alias, because the workload asks for `python` and
-# Ubuntu ships the interpreter as `python3`. Nothing of this reaches the runtime image, which is a chiseled base with
-# no package manager and no interpreter in it.
-RUN apt-get update \
-    && apt-get install --yes --no-install-recommends python3 python-is-python3 \
-    && rm -rf /var/lib/apt/lists/*
-
-# The browser head compiles the runtime's own native assets and SkiaSharp's through the Emscripten toolchain this
-# workload carries, and an SDK image ships no workload at all. Without this the publish fails at
-# `net10.0-browserwasm` with NETSDK1147, naming the workload rather than anything about this repository. It is
-# installed before the sources are copied so that editing a file does not reinstall it.
-RUN dotnet workload install wasm-tools
-
-# The client stack's own build contract, which sits under frontend/ beside its sources, and the two root files both
-# stacks share. The Uno SDK version is one of the pins in global.json, so the copy above is what fixes it here too.
-COPY NuGet.config global.json .editorconfig Version.props ./
-COPY .config/BannedSymbols.txt .config/
-COPY frontend/Directory.Build.props frontend/Directory.Packages.props frontend/
-COPY frontend/src/ frontend/src/
-
-# The product mark the application icon, the favicon, the web manifest's icons, and the splash screen are all
-# generated from. `Client.csproj` stages these two out of assets/ for the Uno resizetizer rather than carrying a copy
-# of the artwork beside the sources, so a context without them fails this copy before the publish reaches them.
-COPY assets/icon-1254.png assets/icon-900.png assets/
-
-# Locked, like every other restore in this repository. What it fixes here is `Client.Backend`'s closure: the
-# application project deliberately carries no lock file, because a WebAssembly target's restore graph is partly the
-# SDK's own, and locked mode passes over a project without one rather than failing on it.
-#
-# The configuration is stated here as well, and it is load-bearing rather than tidy. The Uno SDK decides whether Uno
-# Platform Studio's tooling — the designer and the App MCP, neither of which is open source and one of which forbids
-# distribution outright — enters the graph at all by reading `Optimize` **while restoring**, and a restore that was not
-# told the configuration is a Debug restore. A later Release publish then has those assemblies in its graph and copies
-# them into the bundle, which is an image shipping somebody else's proprietary code. The two properties beside it say
-# the same thing directly, so this does not depend on the SDK continuing to read that one property; frontend/src/AGENTS.md
-# is where the rule lives and THIRD_PARTY_LICENSES.md carries the verdict.
-RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
-    dotnet restore frontend/src/Client/Client.csproj \
-        --locked-mode \
-        -p:Configuration=Release \
-        -p:UnoDisableHotDesign=true \
-        -p:UnoDisableMCPSupport=true
-
-# The same two continuous-integration inputs the service is stamped with, so the page reports the version the process
-# behind it reports rather than a second number.
-RUN --mount=type=cache,target=/root/.nuget/packages,sharing=locked \
-    dotnet publish frontend/src/Client/Client.csproj \
-        --framework net10.0-browserwasm \
-        --configuration Release \
-        --no-restore \
-        -p:VersionSuffix="${VERSION_SUFFIX}" \
-        -p:SourceRevisionId="${IMAGE_REVISION}" \
-        -p:UnoDisableHotDesign=true \
-        -p:UnoDisableMCPSupport=true \
-        --output /client
-
-# The pre-compressed copies of every asset, which the publish writes beside the originals and this image has nothing to
-# serve them with: content negotiation is a reverse proxy's job here, and `Host` adds a static-file middleware and no
-# more. Keeping them would carry a second, compressed copy of the whole bundle in every layer, pull, and node for a
-# file nothing ever requests. A deployment that wants the bytes on the wire compressed enables it where TLS terminates.
-RUN find /client/wwwroot -type f \( -name '*.br' -o -name '*.gz' \) -delete
-
-
-########################################################################################################################
 # Runtime: the service.
 ########################################################################################################################
 
@@ -293,11 +203,11 @@ EXPOSE 8080 8081
 WORKDIR /app
 COPY --from=build --chown=root:root /app .
 
-# The client's browser head, under the web root the runtime resolves beneath the content root. It is copied
-# unconditionally and served only where ClientEndpoint:Application:Enabled says so, which is what makes an image that
-# serves no client cost its size and nothing else — no route, no middleware, and nothing reachable. Owned by root like
-# everything else here, so the process reads the page it serves and cannot rewrite it.
-COPY --from=client --chown=root:root /client/wwwroot ./wwwroot
+# No client bundle is copied here. The Uno Platform client this image used to carry was withdrawn and the client is
+# being rebuilt in React, so nothing under frontend/ is built and the web root stays empty. What is unchanged is the
+# service: `Host` still serves whatever the web root holds where ClientEndpoint:Application:Enabled says so, and
+# refuses to start when that setting is on and the entry document is absent — which is the refusal a deployment that
+# switches it on against this image gets, by name rather than as a page of 404s.
 
 # `app` is the unprivileged account the .NET base images define, and root owns everything under /app, so the process
 # cannot rewrite its own code even before a read-only root filesystem is imposed on it. The image needs no writable

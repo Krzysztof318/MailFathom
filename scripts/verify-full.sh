@@ -94,8 +94,9 @@ fi
 
 # Everything under `frontend/` is left out of this list, because it scopes the service solution's
 # `--include` and that selects within the workspace `dotnet format` loaded: a client path here would
-# name no file the service solution holds. The client's own formatting is verified over its whole
-# solution below, which is what the `Frontend` job of `CI` does and needs no list at all.
+# name no file the service solution holds. Nothing under `frontend/` is C# today either — the client
+# stack carries no build — and the exclusion stays because the next client is not the service's to
+# format.
 mapfile -t changed_service_csharp_files < <(printf '%s\n' "$changed_paths" | grep -E '\.cs$' | grep -Ev '^frontend/' | sort --unique)
 # Both lists feed the next two, because a path that was deleted decides as much as one that was
 # edited: the files under a removed `.editorconfig` are read against the rules above it from that
@@ -220,21 +221,12 @@ else
       fi
     fi
 
-    # The client stack's flow: the three commands the `Frontend` job of `CI` runs, and its verifying
-    # formatting pass. No coverage target, because `.config/CodeCoverage.proj` measures projects
-    # under `backend/src/` and there is no client code to measure yet — the client's suite runs and
-    # is not weighed against a threshold, exactly as it is in the pipeline.
-    #
-    # The formatting pass takes no `--include`, which is the one place the two stacks differ here.
-    # `dotnet format` loads the whole solution whatever the scope, and this one holds two projects
-    # against the service solution's several dozen, so scoping it would buy a fraction of a pass that
-    # has already been paid for by the build in front of it — while the whole-solution form is what
-    # `CI` verifies and therefore the verdict a branch is actually held to.
+    # The client stack's flow, which is nothing today and says so — exactly what the `Frontend` job of
+    # `CI` reports. The Uno Platform client was withdrawn and the client is being rebuilt in React, so
+    # `frontend/` holds two placeholder directories, no solution, and no build. The detection above is
+    # kept whole rather than deleted, because it is what the flow that replaces this is hung on.
     if [[ -n "$run_client_stack" ]]; then
-      dotnet restore frontend/MailFathom.Client.slnx --locked-mode
-      dotnet build frontend/MailFathom.Client.slnx --configuration Release --no-restore
-      dotnet test --solution frontend/MailFathom.Client.slnx --configuration Release --no-build
-      dotnet format frontend/MailFathom.Client.slnx --no-restore --verify-no-changes --verbosity diagnostic
+      printf 'This change reaches the client stack, which carries no build yet. See frontend/src/README.md.\n'
     fi
   )
   dotnet_chain_status=$?

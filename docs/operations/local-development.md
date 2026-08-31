@@ -1,6 +1,6 @@
 # Local development
 
-<!-- describes: scripts/**, global.json, MailFathom.code-workspace, .config/dotnet-tools.json, .config/typos.toml, .config/CodeCoverage.proj, .config/testconfig.json, frontend/MailFathom.Client.slnx, frontend/Directory.Packages.props, backend/src/AppHost/**, backend/src/Infrastructure/Persistence/MailFathomDbContextDesignTimeFactory.cs, .github/workflows/**, backend/tests/IntegrationTests/ProviderAdapters/**, backend/tests/IntegrationTests/ObjectStorage/**, backend/tools/** -->
+<!-- describes: scripts/**, global.json, MailFathom.code-workspace, .config/dotnet-tools.json, .config/typos.toml, .config/CodeCoverage.proj, .config/testconfig.json, backend/src/AppHost/**, backend/src/Infrastructure/Persistence/MailFathomDbContextDesignTimeFactory.cs, .github/workflows/**, backend/tests/IntegrationTests/ProviderAdapters/**, backend/tests/IntegrationTests/ObjectStorage/**, backend/tools/** -->
 
 Use the .NET SDK pinned in `global.json`. Test execution is configured for Microsoft Testing Platform through the repository-level `global.json` test runner setting.
 
@@ -12,43 +12,26 @@ Nothing has to be configured for a mail server that clears the distribution's de
 
 ## Opening the repository in an editor
 
-**The repository root is not a solution directory.** Each stack owns its own — `backend/MailFathom.slnx` and
-`frontend/MailFathom.Client.slnx` — so the root holds no `.sln`, no `.slnx`, and no `.csproj`, and `dotnet restore` run
-there fails with `MSB1003` for the same reason an editor opened there loads nothing.
+**The repository root is not a solution directory.** The service owns its own — `backend/MailFathom.slnx` — so the
+root holds no `.sln`, no `.slnx`, and no `.csproj`, and `dotnet restore` run there fails with `MSB1003` for the same
+reason an editor opened there loads nothing.
 
 Rider and Visual Studio open a solution rather than a directory, so neither notices. **VS Code opens a directory**, and
-opening the root gives an editor with no project loaded and one confusing error: the Uno Platform extension reports
-`Uno SDK not found`, which names the state it ended in rather than the step that failed. Its own log has the sequence —
-no solution in the opened folder, a scan of that folder that finds no project, then that message. The Uno SDK is not
-the problem; `global.json` names it and the package restores.
-
-Open `MailFathom.code-workspace` at the repository root instead:
+opening the root gives an editor with no project loaded. Open `MailFathom.code-workspace` at the repository root
+instead:
 
 ```bash
 code MailFathom.code-workspace
 ```
 
-It opens `frontend/`, `backend/`, and the repository itself as three folders, recommends the extensions both stacks
-need, and carries launch configurations for the client's two heads and for the Aspire app host with and without the
-client. `.vscode/` stays gitignored, so everything the repository decides is in that one file and everything a
-contributor decides stays theirs.
+It opens `backend/` and the repository itself as two folders, recommends the extensions the service needs, and carries
+a launch configuration for the Aspire app host. `.vscode/` stays gitignored, so everything the repository decides is in
+that one file and everything a contributor decides stays theirs.
 
-**The client is listed first, and that is a contract rather than a preference.** The Uno Platform extension resolves
-its solution from `workspace.workspaceFolders[0]` and from nowhere else; where it finds none it scans that one
-directory without descending. Listing `backend/` first would hand it a solution naming no Uno project, and client work
-would be unavailable in the editor with no indication of why. `scripts/test-agent-workflow.sh` asserts the order, so a
-future edit cannot quietly undo it. C# Dev Kit reads every folder regardless, and its Solution Explorer switches
-between the two solutions.
-
-Two things follow from the Uno extension's own behavior once it is loaded. It reports `Multiple (2) projects are
-loaded, select one using the UI in the status bar` — the client and its unit-test project — and picking
-`Client.csproj` there is what starts the Dev Server. And **signing in to Uno Platform Studio needs a desktop session**,
-which a headless server does not have. The Dev Server says so itself: *this application cannot run without an active
-X11 environment (the DISPLAY environment variable is not set); running in a container or in a Remote VS Code mode is
-not yet supported.* Signing in from an editor running on a machine with a display is the supported answer, and
-forwarding X11 to one — the sign-in window is an ordinary X client — is the other. Nothing about building, testing, or
-running the client depends on it: the licence gates two tools of the Uno App MCP and nothing else, and Hot Reload, the
-Toolkit, and the rest of the App MCP are free-tier.
+There is no `client` folder in it, and that is deliberate rather than an omission: the Uno Platform client was
+withdrawn, the client is being rebuilt in React, and `frontend/` holds two placeholder directories with no solution in
+them. It is read under the `repository` folder until the new stack arrives with whatever editor tooling it turns out to
+want. `scripts/test-agent-workflow.sh` asserts the folder list, so a folder pointing at nothing cannot land quietly.
 
 ## Commands
 
@@ -174,10 +157,9 @@ What does publish is `Release`, on an annotated version tag, and `Nightly`, on i
 start as part of a task, and neither has a local equivalent: they run `Build, test, and migrations` — the same
 workflow `CI` calls for a pull request, with its formatting pass turned off — then, for a release, the integration
 suite, and build nothing at all until both have passed. Each also runs `Build and test the client` against the same
-revision, with the same pass turned off, for the same reason and with the same standing: the image now carries the
-client's browser bundle, so a channel that published it without the client's own build having passed would ship a page
-nobody compiled. That covers everything a channel produces rather
-than the image alone: the schema script, the `mfctl` binaries, and the desktop client archives wait behind the same
+revision, with the same pass turned off, for the same reason and with the same standing — it asserts nothing while
+that stack carries no build, and the dependency is what makes it gate again the moment it does. That covers everything
+a channel produces rather than the image alone: the schema script and the `mfctl` binaries wait behind the same
 gate. `Repository contracts` runs on both channels as well, from the same definition `CI` calls, and it is the one gate
 whose standing differs between them: a release blocks its image on it, because a tree whose deployment contract no
 longer holds is not one to put a digest behind, and a nightly reports it beside a published image, because neither the
@@ -226,7 +208,7 @@ The AppHost's only launch profile is named `http` and sets `ASPIRE_ALLOW_UNSECUR
 local TLS listener and Aspire otherwise allocates `aspire-dashboard-https` against the ASP.NET development certificate.
 That certificate can be present in the user store and still untrusted by the OS; the profile must not require it.
 
-A browser head driven from a script uses `scripts/chromium-headless.sh`. Snap Chromium's `/usr/bin/chromium` wrapper
+A browser driven from a script uses `scripts/chromium-headless.sh`. Snap Chromium's `/usr/bin/chromium` wrapper
 calls `snap-confine`, which cannot change AppArmor profile from an unconfined process; the script starts the chrome
 binary on the snap mount instead, with `--headless` and a writable `--user-data-dir`.
 
@@ -236,13 +218,13 @@ named `local`, over implicit TLS on port 993, with its inbox as the default fold
 the AppHost's user secrets; leaving any of them unanswered leaves the application waiting rather than starting a host
 with no mailbox.
 
-Four resources come up, three of them in dependency order. The `postgres` container starts first and has to report
+Three resources come up, in dependency order. The `postgres` container starts first and has to report
 healthy; the `mailfathom-migrations` resource then applies every pending migration to it; and `mailfathom-host` waits
 for that run
 to complete before starting, which is why the schema gate that fails a fresh deployment on purpose never fires on a
 local run — the explicit schema step the deployments require is performed here by the orchestration, before the host
-looks. The fourth is `mailfathom-client`, which serves the browser head and waits for none of them, since a static file
-server has nothing to wait for; it is [described below](#the-client-resource).
+looks. There is no client resource: the Uno Platform client this topology used to start was withdrawn, and what
+replaces it will be started however a React toolchain is started.
 Because the host runs in `Development`, it also publishes [the HTTP API document and the explorer](http-api-documentation.md)
 at `/openapi/v1.json` and `/scalar` on every port this run actually binds. Neither exists in any other environment, and
 neither is on a port of its own. The normal orchestration enables the MCP, administrative, and client surfaces, so the
@@ -273,86 +255,23 @@ and MailFathom refuses that variable outright, because each surface states where
 endpoint is published without ever reaching it. That is also why the resource carries no `WithHttpHealthCheck`, which
 derives its address from an HTTP endpoint this app model declares none of.
 
-### The client resource
+### The client surface
 
-`mailfathom-client` is the browser head of the client under `frontend/`, served on a socket of its own that the
-dashboard lists like any other endpoint. It is what makes `aspire run` bring up a MailFathom with a face on it rather
-than a service and a second terminal.
+There is no client resource in this app model. The Uno Platform head it used to start was withdrawn, and the client is
+being rebuilt in React; whatever starts the new one is decided with it. What the orchestration still brings up is the
+**surface a client calls**, which is the service's own and was never the client's.
 
-The dashboard publishes that endpoint under `127.0.0.1`, the same loopback spelling the development server binds and
-the client surface admits through CORS. Aspire's default endpoint host is `localhost`; leaving that default in place
-would serve the page under a different browser origin even though both names reach the same machine, and the first
-client API request would be refused.
+**It is enabled by the normal orchestration.** The app model supplies its port and loopback bind and enables the
+password method, then provisions `test` / `test-password` through the ordinary administrative API — so password policy,
+hashing, ownership, and audit behavior are the same as for a credential an operator created. It does not write
+`ClientEndpoint:Cors:AllowedOrigins`, so the product default of every origin stands: `localhost` and `127.0.0.1` are two
+origins a browser treats as distinct, and a local run that named only one of them refused the first API call from a tab
+opened as the other. A deployment names the origin it actually serves.
 
-It is an **executable** resource rather than a project one, and the reason is the client's target frameworks rather
-than its directory. Aspire starts a project resource by running `dotnet run --project <path> --configuration Debug
---no-launch-profile`, and that argument list carries no framework — `ProjectResourceOptions` exposes a launch profile
-and nothing that selects a target. `frontend/src/Client/Client.csproj` declares three, so the command exits with
-`Your project targets multiple frameworks. Specify which framework to run using '--framework'.` before it builds
-anything, whichever launch profile is named. The app model therefore runs `dotnet run --framework net10.0-browserwasm
---no-launch-profile` in the client's own directory, which is the one shape that starts a head. The profiles in
-`frontend/src/Client/Properties/launchSettings.json` stay what an IDE reads; the first of them opens a browser window
-on every start, which an orchestration that already publishes the address does not need to do.
-
-Nothing about this is a reference. The app host holds a path and a command, MSBuild is never told the two projects are
-related, and `backend/MailFathom.slnx` still names no project under `frontend/` — so building or testing the service
-restores nothing the client needs. What the client's own build costs is paid by starting **this resource**: it needs
-the **`wasm-tools` workload**, which `dotnet workload install wasm-tools` provides, and it takes about a minute the
-first time it builds a bundle. The Uno SDK needs no installation of its own — `msbuild-sdks` in `global.json` pins it
-and NuGet restores it. On a machine without the workload this resource fails on its own, naming the workload the .NET
-SDK wants, while PostgreSQL, the migrations, and the host still start.
-
-To run the orchestration without it at all, state so in the app host's own user secrets, where the pinned ports live
-and for the same reason — it is a decision about one machine rather than about a checkout:
-
-```bash
-dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Client:Enabled" "false"
-```
-
-Its environment form leaves the client out of a single run: `Client__Enabled=false dotnet run --project
-backend/src/AppHost/AppHost.csproj`. A value that is neither `true` nor `false` fails the app host at startup naming
-the key, rather than being ignored and building the bundle the developer was avoiding.
-
-The `IntegrationTesting=true` switch that selects the ephemeral topology leaves the client out of it entirely, the way
-it decides every other resource there: a suite that tests the service would otherwise build a WebAssembly bundle on
-every run that no test reads.
-
-**What tells the head where the service is, is the build rather than the process.** The browser head resolves its
-deployment as the origin it was served from, which is exactly right where a deployment serves the bundle itself and
-wrong here: under `aspire run` the head is served by its own dev server on a socket of its own, so the origin it
-resolves is that socket rather than the host beside it. The app model cannot close that by handing over a value
-either — the head runs in a browser, which reads none of the process environment. What that process does do is build
-the bundle the browser downloads, so the address travels into the build: the resource is started with
-`--property:MailFathomDeploymentAddress=<origin>`, `frontend/src/Client/Client.csproj` turns that into a runtime host
-configuration option named `MailFathom.Client.DeploymentAddress`, the WebAssembly SDK carries the runtime configuration
-into the boot document the page fetches, and the client reads it back through `AppContext` before the head is asked to
-answer for itself. Nothing else states that property, so a bundle built anywhere else carries no such option and a head
-served from a deployment's own container image still resolves the origin it was fetched from.
-
-What the build states is not the last word, and that is deliberate: a deployment address somebody chose on the client's
-own first screen is kept per user and read before it. So an orchestrated head opens on the service beside it without
-anybody typing anything, and a developer who points that head at another deployment keeps pointing at it across
-restarts until they change it back. Clearing that choice is the platform's own settings store rather than anything
-here — a fresh browser profile, or clearing site data for the head's origin.
-
-The origin it is pointed at is the **client surface's own socket**, which this topology publishes beside the MCP
-endpoint's and the probes'. It is on `127.0.0.1`, because the only thing that calls it is a head served on this
-machine, and that is also why it is a socket rather than a share of the MCP endpoint's: a wildcard bind beside a
-specific one on a single port is two sockets the operating system grants only one of, so sharing would have published
-the client surface wherever the MCP endpoint is published.
-
-**The surface is enabled by the normal orchestration.** The app model supplies its port and loopback bind and enables
-the password method. It does not write `ClientEndpoint:Cors:AllowedOrigins`, so the product default of every origin
-stands: `localhost` and `127.0.0.1` are two origins a browser treats as distinct, and a local run that named only one
-of them refused the first API call from a tab opened as the other. A deployment names the origin it actually serves.
-The AppHost then provisions the credential above through the ordinary administrative API, so password policy, hashing,
-ownership, and audit behavior are the same as for a credential an operator created. A run started with `Client:Enabled`
-false starts no head, but the client API surface and its Basic credential remain available for a desktop head or a
-direct request.
-
-A **desktop** head takes the same property and reads the same key, so an orchestration could point one the same way.
-Started by hand it is given none, and reads `Deployment:Address` out of
-`frontend/src/Client/appsettings.development.json`, which only a Debug build reads.
+It is on `127.0.0.1`, because the only thing that calls it is something running on this machine, and that is also why
+it is a socket of its own rather than a share of the MCP endpoint's: a wildcard bind beside a specific one on a single
+port is two sockets the operating system grants only one of, so sharing would have published the client surface
+wherever the MCP endpoint is published.
 
 ### Pinning a port
 
@@ -369,23 +288,21 @@ dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Ports:McpE
 dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Ports:HealthEndpoints" "8081"
 dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Ports:Postgres" "5432"
 dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Ports:ClientEndpoint" "8082"
-dotnet user-secrets --project backend/src/AppHost/AppHost.csproj set "Ports:Client" "5000"
 ```
 
 `8080` and `8081` are the ports [the container image](container-image.md) publishes and `5432` is PostgreSQL's own, so
-those three values are what makes a local run answer where a deployment does; the last two answer a different want.
-`Ports:Client` is a browser tab that survives a restart of the orchestration, and `Ports:ClientEndpoint` is a request
-written once against `/api/client` — the browser head needs neither, since it is told where the service is by the build
-that produced it. Each key is read on its own, so pinning the MCP endpoint leaves the probes, the database, the client
-surface, and the head on whatever the run takes. A value that is not a port number
-between `1` and `65535` fails the app host at startup naming the key, rather than being ignored and leaving the address
-to move anyway.
+those three values are what makes a local run answer where a deployment does; the last answers a different want.
+`Ports:ClientEndpoint` is a request written once against `/api/client`. Each key is read on its own, so pinning the MCP
+endpoint leaves the probes, the database, and the client surface on whatever the run takes. A value that is not a port
+number between `1` and `65535` fails the app host at startup naming the key, rather than being ignored and leaving the
+address to move anyway.
 
 That store is keyed by the `UserSecretsId` in `backend/src/AppHost/AppHost.csproj`, which is one fixed identifier, so a port
 pinned there is pinned for **every checkout on the machine** — which is the collision above, taken deliberately for the
 address it buys. It is also loaded in the `Development` environment only, which is what the app host's only launch
 profile runs it in. The environment form of each key is what pins a port for one run: `Ports__McpEndpoint`,
-`Ports__HealthEndpoints`, `Ports__Postgres`, and `Ports__Client` are read after the store and therefore win over it.
+`Ports__HealthEndpoints`, `Ports__Postgres`, and `Ports__ClientEndpoint` are read after the store and therefore win
+over it.
 
 ```bash
 Ports__McpEndpoint=8080 dotnet run --project backend/src/AppHost/AppHost.csproj
@@ -849,7 +766,7 @@ Lock files close the gap central pinning leaves open. The 52 pins in `backend/Di
 
 Eighteen of the twenty projects carry one. `AppHost` and `IntegrationTests` do not, because `Aspire.AppHost.Sdk` adds `Aspire.Dashboard.Sdk.<rid>` and `Aspire.Hosting.Orchestration.<rid>` as references chosen from `NETCoreSdkRuntimeIdentifier`. That part of the graph describes the machine running restore rather than this repository, so a lock file written on Linux names packages a Windows, macOS, or Linux ARM64 developer never asks for, and locked mode there fails with `NU1004: A new package reference was found Aspire.Dashboard.Sdk.win-x64` before a build can start. `IntegrationTests` follows `AppHost` because it references the project and inherits those packages transitively, and a lock file cannot exclude a subtree. Both ship nowhere, and their versions stay pinned centrally like every other project's.
 
-The lock files are committed. Both verification scripts restore in locked mode, `scripts/run-integration-tests.sh` does the same for the integration project — where the flag still enforces the lock files of every project it references — and every job of `CI` that restores does it, on either stack's solution; the `Integration tests` workflow inherits it through the script it calls. A restore that would have to rewrite a lock file fails there instead:
+The lock files are committed. Both verification scripts restore in locked mode, `scripts/run-integration-tests.sh` does the same for the integration project — where the flag still enforces the lock files of every project it references — and every job of `CI` that restores does it; the `Integration tests` workflow inherits it through the script it calls. A restore that would have to rewrite a lock file fails there instead:
 
 ```text
 NU1004: The package reference Roslynator.Analyzers version has changed from [4.13.1, ) to [4.13.0, ).
@@ -866,7 +783,7 @@ Then read the resulting diff before committing it. A bump that moves one direct 
 
 ## Reading every pin against its upstream
 
-A version reaches a run from one of six files, in five syntaxes: the `PackageVersion` entries of both stacks, the tool versions in `.config/dotnet-tools.json`, the SDK floor and the `msbuild-sdks` entries in `global.json`, the `uses:` references in `.github/workflows/`, and the container image tags and digests the deployment assets and the AppHost carry. `scripts/update-dependencies.sh` reads all of them in one pass, against the upstream that publishes each and against the terms `THIRD_PARTY_LICENSES.md` recorded when that version was reviewed.
+A version reaches a run from one of five files, in five syntaxes: the `PackageVersion` entries in `backend/Directory.Packages.props`, the tool versions in `.config/dotnet-tools.json`, the SDK floor and any `msbuild-sdks` entries in `global.json`, the `uses:` references in `.github/workflows/`, and the container image tags and digests the deployment assets and the AppHost carry. `scripts/update-dependencies.sh` reads all of them in one pass, against the upstream that publishes each and against the terms `THIRD_PARTY_LICENSES.md` recorded when that version was reviewed.
 
 ```bash
 scripts/update-dependencies.sh                      # survey every pin and report; writes nothing
@@ -877,7 +794,7 @@ scripts/update-dependencies.sh --only nuget         # one family at a time: nuge
 
 Each pin comes back as `current`, `behind`, `ahead`, `moved`, or `unknown`, beside the licence identifier its upstream declares *now* and the identifiers the register records for it. A disagreement between those two is printed as a line to read rather than as a failure, which is the same contract [`scripts/review-obligations.sh`](agent-workflow.md#entry-points) carries: the licence is read from the upstream's own metadata and the register side is read out of prose by pattern, so a flag is a place to look and never a conclusion. `moved` belongs to a digest pin alone: two digests are either equal or they are not, and which of them is newer is not a question a digest can answer, so a difference is reported as a difference rather than ranked. The whole run exits zero whatever it found, and a family whose host does not answer is reported as `unresolved` rather than ending the survey.
 
-`--apply` rewrites four of the six: both `Directory.Packages.props`, `.config/dotnet-tools.json`, `global.json`'s `msbuild-sdks`, and the workflow references. It regenerates the lock files afterwards, with the `--force-evaluate` restore above, and only when a package version actually moved — a tool manifest and an action reference reach no project graph, so neither obliges one.
+`--apply` rewrites three of the five: `backend/Directory.Packages.props`, `.config/dotnet-tools.json`, and the workflow references, along with `global.json`'s `msbuild-sdks` whenever it declares any — it declares none today, the Uno SDK having left with the client it belonged to. It regenerates the lock files afterwards, with the `--force-evaluate` restore above, and only when a package version actually moved — a tool manifest and an action reference reach no project graph, so neither obliges one.
 
 Two families are surveyed and never rewritten:
 
@@ -892,73 +809,28 @@ Taking that judgement is the `update-dependencies` skill, which runs the survey 
 
 ## Building and testing the client
 
-The client under `frontend/` is a second .NET stack with a solution, build files, and lock files of its own. Three
-commands build and test it, and they are the ones every gate here runs against it:
+**There is nothing to build.** The Uno Platform client under `frontend/` was withdrawn — the platform did not work out
+for this project — and the client is being rebuilt in React and JavaScript. `frontend/src/` and `frontend/tests/` hold
+a placeholder README each and no solution, no project, and no lock file, so no command here restores or compiles
+anything of the client.
 
-```bash
-dotnet restore frontend/MailFathom.Client.slnx --locked-mode
-dotnet build frontend/MailFathom.Client.slnx --configuration Release --no-restore
-dotnet test --solution frontend/MailFathom.Client.slnx --configuration Release --no-build
-```
+What is still there is the shape the new stack lands in, and it is worth knowing before the first React commit rather
+than after it:
 
-Two things a service checkout does not need have to be present first. The **`wasm-tools` workload** supplies the
-Emscripten toolchain the browser head is compiled with — `dotnet workload install wasm-tools`, and
-`dotnet workload list` shows what a machine already carries. And the **Uno SDK** named in `msbuild-sdks` in
-`global.json` is what resolves every Uno package the client restores: a version is written there rather than in
-`frontend/Directory.Packages.props`, which pins the analyzers, the test framework, the one package `Client.Backend`
-references by hand, and `LibVLCSharp` — the last of those for a package the desktop head excludes rather than uses,
-because central package management wants a version on a direct reference whether or not its assets flow. Moving that
-one number moves
-around sixty packages at once, so regenerate the lock files in the same change and read the diff:
-
-```bash
-dotnet restore frontend/MailFathom.Client.slnx --force-evaluate
-```
-
-That restore also brings four packages nothing in this repository asks for and that are not open source, so this is
-where the fact belongs rather than only in the register. `Uno.Sdk.Extras`, `Uno.UI.HotDesign`, `Uno.UI.App.Mcp`, and
-`Uno.Settings.DevServer` are Uno Platform Studio's design-time tooling — the visual designer, the App MCP server an
-agent drives a running app through, and the settings channel between them. The Uno SDK adds `Uno.Sdk.Extras` and
-`Uno.Settings.DevServer` to any project it builds, and `Uno.UI.HotDesign` and `Uno.UI.App.Mcp` to a head whose
-`OutputType` is `Exe`. `Uno.Sdk.Extras` carries an end-user licence agreement between Uno Platform and whoever
-restores it, inside the package's own `LICENSE.md`; the other three declare no licence at all. The decision is taken and they stay: they run on a developer's machine, no artifact carries them — a Release
-build excludes the designer's and the MCP server's assets, and the other two are MSBuild and tools packages with
-nothing to reference — and the agreement binds the developer whose restore fetched them rather than being anything
-MailFathom passes on. `THIRD_PARTY_LICENSES.md` holds the verdict, the evidence behind it, and the one question still
-open with Uno.
-
-The unit-test project carries a lock file and the application project does not, which is the service stack's own
-exclusion arriving here for its own reason. The .NET SDK puts three packages into the restore graph of a WebAssembly
-target that this repository never asked for — `Microsoft.NET.ILLink.Tasks` and `Microsoft.NET.Sdk.WebAssembly.Pack` at
-the version of the runtime the SDK bundles, and `Microsoft.DotNet.HotReload.WebAssembly.Browser` in a Debug build at
-the SDK's own patch version. `global.json` rolls forward to the latest feature band by design, so all three move the
-day a machine or a runner installs a newer SDK, and a lock file naming them fails the next locked restore with
-`NU1004` having recorded nothing this repository decided. The unit-test project targets plain `net10.0`, compiles no
-head, and meets none of that. Locked mode passes over a project carrying no lock file rather than failing on it,
-exactly as it does for `AppHost` in the service solution, so the commands above need no flag for the difference.
-
-The desktop head runs on Windows, Linux, and macOS from the one `net10.0-desktop` target, so a `dotnet run` on a Linux
-machine starts the same application a Windows developer sees. The `net10.0` target in the same project builds no head
-and exists so the unit suite can reference the application.
-
-None of the three commands publishes a head, and neither does either verification gate. What a *published* head is
-trimmed and compiled with is decided per target framework in `frontend/src/Client/Client.csproj`, and
-[publishing the client](client-publishing.md) is the page that holds it — including why the desktop head is neither
-trimmed nor compiled ahead of time, and why Native AOT does not exist for the browser one at all.
-
-The commands above are for a client change worth running by itself. Both verification gates run the same three against
-this solution whenever the change reaches the client stack, decided from the changed paths rather than from whoever
-started the run, so an ordinary `bash scripts/verify-fast.sh` already builds and tests the client after a change under
-`frontend/` — and already needs the `wasm-tools` workload above to do it, failing rather than skipping on a machine
-that has none. A branch that stayed in `backend/` never loads this solution at all.
-[Which stack a gate runs](agent-workflow.md#which-stack-a-gate-runs) carries how that is decided and what keeps it in
-step with `ci.yml`.
-
-Formatting comes in the two halves the service's does, and is never a command to run by hand. The repairing half is
-`scripts/verify-fast.sh`, which formats the client C# files the branch changed; the verifying half is
-`scripts/verify-full.sh` and the `Verify formatting` step of the `Frontend` job, both over the whole solution rather
-than a file list, because `dotnet format` loads the whole workspace whatever the scope and this one holds two projects.
-`dotnet format` is never invoked by hand here for the reason it is never invoked by hand for the server.
+- **`CI` still runs a `Frontend` job**, gated on the `frontend` path filter, calling
+  `.github/workflows/build-test-frontend.yml`. That workflow keeps its `workflow_call` contract and one job, whose
+  steps report that the stack carries no build. Filling it in is a change to that file rather than to every caller.
+- **Both verification gates still read the same two path lists**, through `scripts/resolve-changed-stacks.sh`, so a
+  change under `frontend/` reaches the client stack in the fast loop and in the full gate exactly as it did — and each
+  prints that the stack carries no build rather than passing over it in silence.
+  [Which stack a gate runs](agent-workflow.md#which-stack-a-gate-runs) carries how that is decided and what keeps it in
+  step with `ci.yml`.
+- **The `wasm-tools` workload is no longer a prerequisite of anything here.** It was installed for the browser head,
+  and a machine set up for the service alone now builds and verifies everything this repository holds.
+- **Nothing the service does for a client changed**, because none of it was the client's: the surface under
+  `/api/client` is an endpoint of its own — [the client endpoint](client-endpoint.md) is the page — and `Host` serves
+  whatever files an image carries beneath its web root. No current image carries any, so a deployment that switches
+  the client application on is refused at startup by name.
 
 ## Code coverage
 
@@ -1166,7 +1038,7 @@ Each check reads as `<stack> / <question>`, and the stack in front is what makes
 - `Backend / Build and unit test the service` runs when the change touches production code, tests, the solution or SDK selection, shared build and package configuration, coverage tooling, or the workflow file. It restores `backend/MailFathom.slnx` in locked mode and repository-local tools, builds the solution in Release configuration, runs all unit-test projects through Microsoft Testing Platform with unique coverage prefixes, merges their Cobertura reports, and fails below 85% aggregate line coverage for the complete configured production scope. It uploads raw and merged coverage artifacts and TRX results even when the threshold fails.
 - `Backend / dotnet format` runs when the change touches `backend/src/**`, `backend/tests/**`, `.editorconfig`, the workflow file, the shared build files, `backend/Directory.Packages.props`, `backend/MailFathom.slnx`, or `global.json`. It restores `backend/MailFathom.slnx` in locked mode and verifies repository formatting without applying changes. The command runs its analyzer pass as well as its whitespace and style passes, so a centrally pinned analyzer version, a property set in a shared build file, a project added to the solution, or a different SDK can move its verdict without a single C# file changing; the trigger covers all four. `.config/**` and `NuGet.config` stay out, because they decide what the build rejects, restores, runs, and measures rather than how code is written. It is a job of its own rather than a step of the build above, which is where the two stacks deliberately differ: here the setup a separate job pays is about 25 seconds against a pass of about 155, so a job keeps the longer of the two off the path a pull request waits on, while the client's proportions are inverted and its pass is a step. Runner minutes are free on a public repository, so the trade is wall-clock against wall-clock, decided the same way in both places from opposite measurements. The second half of the reason is this list: a job reports its own conclusion here and a step reports none.
 - `Backend / Pending model changes` runs when the change touches `backend/src/**`, `.config/dotnet-tools.json`, the workflow file, or `backend/Directory.Packages.props`. It restores in locked mode, restores local tools, builds `backend/src/Host` in Release configuration, and runs `dotnet ef migrations has-pending-model-changes`, which fails when the EF Core model has moved without a migration recording it. The command opens no connection — it compares the compiled model against the committed model snapshot — so no database is provisioned for this job. Production code is the only thing that can move the model, which is why tests and documentation are not triggers; `backend/Directory.Packages.props` is one because raising the EF Core version can change what the generator emits for an unchanged model. `Persistence__TextSearchConfiguration` is deliberately left unset, so a migration generated under a non-default configuration fails here by design rather than by accident.
-- `Frontend / Build, format, and unit test the client` is the client stack's half of the same required check, and it calls `build-test-frontend.yml` the way `Backend` calls the server's workflow. Its name says all three of what it does because a step publishes no conclusion of its own: the formatting pass inside it would otherwise be invisible in this list, which is how it comes to be read as not having run. It runs when the change touches `frontend/**`, that workflow file, `ci.yml`, or one of the four repository-wide files the client build still reads — `global.json`, which pins both the SDK and the Uno SDK that chooses every Uno package version, `Version.props`, `NuGet.config`, and `.editorconfig`, whose style rules become build failures through `EnforceCodeStyleInBuild` — or `.config/`, which holds the banned-symbol list and the test-runner configuration the client's build contract links into every project. It carries the draft exemption the server's build carries and for the same reason: it installs the `wasm-tools` workload, restores `frontend/MailFathom.Client.slnx` in locked mode, builds every target framework the solution declares — `net10.0-desktop`, `net10.0-browserwasm`, and the plain `net10.0` reference target — in Release configuration, and runs the client's unit suite against that build. Compiling the browser head means compiling native WebAssembly assets through Emscripten, which is minutes rather than seconds. The desktop head is built on the same Linux runner because `net10.0-desktop` is one target framework for Windows, Linux, and macOS alike, so nothing about the compilation differs by runner. It then verifies the client solution's formatting with `dotnet format --verify-no-changes`, which `scripts/verify-full.sh` runs in the same whole-solution form and whose repairing half is in `scripts/verify-fast.sh`; a step of this job rather than a job of its own, because a second job would spend roughly 70 seconds on a checkout, an SDK, the `wasm-tools` workload, and a restore to run a pass that costs 26, while the server's equivalent is a separate job because its own measurements point the other way. `run-format` is the one input `CI` passes this workflow, and it carries one exemption: the step is skipped on a push to `main`, for the reason [`CI` after a merge to `main`](#ci-after-a-merge-to-main) gives about the server's job. `Release` and `Nightly` pass the same input as `false` to both workflows, on the same argument. No coverage threshold, though — there is no client code to measure yet. This job's filter names no path under `backend/` and the three the server's jobs use name none under `frontend/`, which is what keeps a change to one stack from costing anything in the other; `scripts/test-agent-workflow.sh` asserts that disjointness rather than leaving it to a review.
+- `Frontend / Client stack, which carries no build yet` is the client stack's half of the same required check, and it calls `build-test-frontend.yml` the way `Backend` calls the server's workflow. **It asserts nothing today.** The Uno Platform client it built was withdrawn and the React one has not landed, so the job checks nothing out, installs nothing, and reports that there is nothing under `frontend/` to restore, build, test, or format. It is kept called rather than deleted because that is what makes filling it in a change to one workflow: the filter, this job, the aggregate below, and the release and nightly callers all stay where they are. It still runs when the change touches `frontend/**`, that workflow file, `ci.yml`, or one of the four repository-wide files a client build reads — `global.json`, `Version.props`, `NuGet.config`, and `.editorconfig` — or `.config/`, and it keeps the draft exemption the server's build carries, because both are what the job that replaces it will want. `run-format` is the one input `CI` passes this workflow, and it carries one exemption: it is `false` on a push to `main`, for the reason [`CI` after a merge to `main`](#ci-after-a-merge-to-main) gives about the server's job, and `Release` and `Nightly` pass it as `false` to both workflows on the same argument. This job's filter names no path under `backend/` and the three the server's jobs use name none under `frontend/`, which is what keeps a change to one stack from costing anything in the other; `scripts/test-agent-workflow.sh` asserts that disjointness rather than leaving it to a review.
 - `Workflow contracts` runs `scripts/test-agent-workflow.sh`, and it is one of the two jobs that read the part of the repository the build, formatting, and model jobs cannot. Both live in `repository-contracts.yml`, which `CI` calls as `Repository contracts` and which `Nightly` and `Release` call as well against the revision they publish, so a channel asserts them from one definition rather than from a copy. What this one covers is the workflows, the verification scripts, the fathom-review helpers, the skills, the licensing header outside the solution, and the two page contracts under `docs/` — the `describes:` marker every page carries, and the fixed notice a page whose steps happen in somebody else's product opens with. It has no trigger condition of any kind — no path filter, no draft exemption, no event condition, no switch its caller can turn off — so it runs beside the expensive jobs rather than after them, on a push to `main` as well as on a pull request, and on both publication channels. It checks the repository out shallowly with `persist-credentials: false` and runs the suite; nothing else is provisioned, because the suite fakes `dotnet` with a symlink to itself, builds the Git repositories it tests under a temporary directory, and reaches no network. The whole job takes about twenty seconds on a GitHub-hosted runner, of which the suite itself is fifteen. It takes longer than that under `scripts/verify-full.sh` on a developer machine, which is a different measurement rather than a contradiction: there it competes with whatever else that machine is doing, and the gate is one run of many rather than the one that decides a merge. That is also why the local gate narrows — it skips the suite for a branch that only added or edited C# files — while this job asks nothing and runs always: a skipped run costs a verdict that arrives minutes later, and there is no later here. [Entry points](agent-workflow.md#entry-points) describes the suite itself and the local gate that runs it as well.
 - `Helm chart` is the second job in `repository-contracts.yml`, and it runs `scripts/render-helm-manifests.sh`. It is the one of the two a change can fail to reach, so it is the one its caller switches: `CI` turns it on when the change touches `deploy/helm/**`, that script, or `ci.yml`, and a publication leaves it at its default because a publication skips nothing. It lints the chart with `helm lint --strict` against every `deploy/helm/mailfathom/ci/*-values.yaml`, renders each of them with `helm template`, and compares the rendering against the manifests committed under `ci/golden/`. The deployment contract is one of the four public surfaces [ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md) names, and before this job it was verified for the first time inside `Publish Helm chart` — after the release had already pushed the image, and with re-tagging a release meaning a registry deletion first. Committing what each values document renders is what puts the second half in the diff: a template edit that still renders but produces a different object is otherwise invisible in a review of the templates alone. Helm is the runner image's preinstalled copy, which is what the release run uses too, and the rendering is normalized before it is compared so that the Helm version deciding the whitespace between documents cannot decide the verdict. The job installs nothing, restores nothing, reaches no cluster and no network, and costs seconds rather than the minutes an SDK, a restore, and a build cost. `Publish Helm chart` keeps its own lint and render, which asks a different question rather than repeating this one: that one renders the packaged chart against the digest the release just published, and this one holds the chart in the released tree against the manifests committed beside it. [Deploying to Kubernetes](deployment-kubernetes.md#verification) describes running the same script by hand and regenerating the manifests.
 - `Required CI` is this workflow's one required status check, and the only conclusion the ruleset reads from it. It depends on the four things `ci.yml` declares — `Detect changes`, and the three called workflows behind `Backend`, `Frontend`, and `Repository contracts` — runs under `if: always()` so a cancelled or skipped dependency cannot skip it in turn, and reads their results: `Detect changes` and `Repository contracts` must have succeeded, and `Backend` and `Frontend` must have either succeeded or been skipped. `failure` and `cancelled` fail it. `Repository contracts` is held to the stricter rule because the contract suite inside it has no way to skip on the events this job runs for: a path filter and a draft exemption are what produce a legitimate `skipped`, and it has neither, so the conclusion could only come from a job that failed to start. Its chart job does skip on a change reaching no chart file, and a called workflow whose remaining job succeeded reports `success`, so that complete answer arrives here as one. This job itself does not run on a push to `main`, for the reason [`CI` after a merge to `main`](#ci-after-a-merge-to-main) gives.
@@ -1221,16 +1093,16 @@ fork.
 
 ### `CI` after a merge to `main`
 
-`CI` runs on every push to `main` as well, and runs very nearly what a pull request gets — with one difference in the other direction: nothing here is narrowed by what the merge touched. Six of its eight jobs execute, and all six execute unconditionally: `Detect changes`, then `Backend / Build and unit test the service`, `Backend / Pending model changes`, the client build behind `Frontend`, and both jobs behind `Repository contracts`. `Backend / dotnet format` and `Required CI` are the two that never run here, and the `Verify formatting` step inside the client's job is skipped with them.
+`CI` runs on every push to `main` as well, and runs very nearly what a pull request gets — with one difference in the other direction: nothing here is narrowed by what the merge touched. Six of its eight jobs execute, and all six execute unconditionally: `Detect changes`, then `Backend / Build and unit test the service`, `Backend / Pending model changes`, the job behind `Frontend`, and both jobs behind `Repository contracts`. `Backend / dotnet format` and `Required CI` are the two that never run here.
 
 Each absence has its own reason, and neither of them is cost.
 
-- `dotnet format` is a property of the files a change wrote, which is exactly what the pull request that wrote them answered. It is also the one verdict here that two changes merging without seeing each other cannot break. The client's `Verify formatting` step is exempt on the same argument and by the same route: `CI` passes `run-format` to both workflows, so one rule about one kind of verdict is written once and applied to both stacks. `Release` and `Nightly` are exempt on it too, and pass the same input as `false`, which is what makes this a rule about the verdict rather than about the event — a tag and a nightly are downstream of the push this paragraph exempts, and no commit reaches either without having been a pull request. The model check is not: one pull request can move the EF Core model while another adds a migration, and neither run sees both, which is why that job stays.
+- `dotnet format` is a property of the files a change wrote, which is exactly what the pull request that wrote them answered. It is also the one verdict here that two changes merging without seeing each other cannot break. The client's own formatting pass is exempt on the same argument and by the same route — `CI` passes `run-format` to both workflows, so one rule about one kind of verdict is written once and applied to both stacks — and today that input reaches a job which formats nothing. `Release` and `Nightly` are exempt on it too, and pass the same input as `false`, which is what makes this a rule about the verdict rather than about the event — a tag and a nightly are downstream of the push this paragraph exempts, and no commit reaches either without having been a pull request. The model check is not: one pull request can move the EF Core model while another adds a migration, and neither run sees both, which is why that job stays.
 - `Required CI` exists to be the `main` ruleset's one required check, and a ruleset evaluates a pull request. On a push nothing waits for a conclusion and every job it aggregates reports one on its own, so a further name in front of the same results would add a check rather than an answer. The run's own conclusion is what a push reports through. On every event the ruleset does read, the job still runs under exactly that name.
 
 `Repository contracts` runs here for the reason the model check does, applied to the half of the repository the build cannot see. What the suite asserts is a property of the whole tree — a licensing header in every `.yml`, `.sh`, Helm template, Quadlet unit source, documentation-site asset, and `SKILL.md`, a `describes:` marker covering every page under `docs/`, a table-of-contents entry behind every published page and a page behind every entry — and each of those invariants spans files that different changes own. Two pull requests can therefore each be sound over the tree they were verified against and break one over the tree their merges produce: one deletes a page while the other adds the entry naming it, or one renames a directory while the other writes a marker pattern that no longer resolves. That tree is the one no pull-request run was ever shown, and this is the only run that sees it.
 
-The `push` trigger carries no path filter either, and nothing narrows it inside the run. The `pull_request` reason does not reach here: that one protects a required check, because a run GitHub never instantiated reports no conclusion and a pull request would wait on it forever, and nothing waits on a push run. What decides this trigger is what the run is asked. A push is asked whether `main` is green, and a run that verified the part of the tree this merge happened to touch has not answered that: two changes that never saw each other are exactly what a merge produces, and the paths one of them moved say nothing about which half of the tree the pair broke. The contract suite has been read this way since it existed — it takes the whole tree at once, and `docs/`, `deploy/`, `scripts/`, `.agents/`, `.claude/`, and the repository-root Markdown files are its subject matter rather than paths it can be told to ignore — and the argument holds no less for a solution that two merges can leave uncompilable while each pull request compiled. So a merge costs a full build, a full client build, a coverage run, and both contract jobs, whatever it moved.
+The `push` trigger carries no path filter either, and nothing narrows it inside the run. The `pull_request` reason does not reach here: that one protects a required check, because a run GitHub never instantiated reports no conclusion and a pull request would wait on it forever, and nothing waits on a push run. What decides this trigger is what the run is asked. A push is asked whether `main` is green, and a run that verified the part of the tree this merge happened to touch has not answered that: two changes that never saw each other are exactly what a merge produces, and the paths one of them moved say nothing about which half of the tree the pair broke. The contract suite has been read this way since it existed — it takes the whole tree at once, and `docs/`, `deploy/`, `scripts/`, `.agents/`, `.claude/`, and the repository-root Markdown files are its subject matter rather than paths it can be told to ignore — and the argument holds no less for a solution that two merges can leave uncompilable while each pull request compiled. So a merge costs a full build, a coverage run, and both contract jobs, whatever it moved.
 
 Why run any of it, when the `main` ruleset requires a branch to be current with `main` before it merges and the run therefore normally repeats a verdict. Three things, and each of them is also why the run is not narrowed. The repository admin role bypasses the ruleset when merging, for the reason [Code owners](#code-owners) gives. `Nightly` and `Release` do gate the commit they publish, so a broken `main` is caught before anything reaches a registry — but without this run the earliest it is *reported* is that night's publication failing its own gate, which names a scheduled run at 02:00 rather than the merge that broke it. And *is `main` green right now* becomes a fact with a run behind it rather than one inferred from whichever pull request closed last.
 
@@ -1306,7 +1178,7 @@ GitHub does not let the author of a pull request approve it. Every pull request 
 
 Both expensive jobs restore from a cached `~/.nuget/packages` keyed on `backend/Directory.Packages.props`, `global.json`, `NuGet.config`, `.config/dotnet-tools.json`, and every `packages.lock.json`. Those files decide the versions, the permitted sources, and the resolved transitive closure, which together are the whole of what restore downloads, so a changed pin or a changed source policy misses the cache rather than resolving against a stale package set.
 
-The client build keys its own entry the same way, on `frontend/Directory.Packages.props`, `global.json`, `NuGet.config`, and the client's lock files. It is a separate key rather than a share of the one above because the two graphs barely overlap: one key spanning both would evict the whole cache on every change to either stack, which is the cost the stacks were separated to avoid.
+The client's job caches nothing, because it restores nothing: it carries no build while the React stack is being written. When it has one, it keys an entry of its own rather than sharing the one above — two graphs that barely overlap under one key would evict the whole cache on every change to either stack, which is the cost the stacks were separated to avoid.
 
 The workflow uses the SDK pinned in `global.json`, cancels superseded runs for the same pull request, requests read-only repository permissions, and avoids credentials or service-specific secrets.
 

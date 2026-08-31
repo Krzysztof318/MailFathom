@@ -65,12 +65,11 @@ if change_reaches_client_stack "${touched_paths[@]}"; then
   run_client_stack='yes'
 fi
 
-# One list per solution, because `--include` selects within the workspace `dotnet format` loaded: a
-# client file handed to the service solution matches nothing there, and the reverse matches nothing
-# either. Everything outside `frontend/` belongs to the service list, which is where a `.cs` file
-# above both stacks was already going.
+# `--include` selects within the workspace `dotnet format` loaded, so this names the files the service
+# solution actually holds. Everything outside `frontend/` belongs to it, which is where a `.cs` file
+# above both stacks was already going, and `frontend/` holds no C# at all while the client stack
+# carries no build.
 mapfile -t changed_service_csharp_files < <(printf '%s\n' "$changed_paths" | grep -E '\.cs$' | grep -Ev '^frontend/' | sort --unique)
-mapfile -t changed_client_csharp_files < <(printf '%s\n' "$changed_paths" | grep -E '^frontend/.+\.cs$' | sort --unique)
 
 # The full gate builds, tests, and verifies the formatting this loop repairs, in whichever stacks
 # this change reaches, so a green run of it over this content leaves nothing here to find. The
@@ -119,24 +118,12 @@ if [[ -n "$run_service_stack" ]]; then
   fi
 fi
 
-# The client stack's flow, over its own solution because it shares none with the service. One command
-# builds every target framework the solution declares — `net10.0-desktop`, `net10.0-browserwasm`, and
-# the plain `net10.0` reference target the unit suite references the application through — which is
-# what the `Frontend` job of `CI` builds and the same three commands it runs.
-#
-# The whole of it is conditional rather than paid up front, which is what keeps this loop costing a
-# branch that stayed in `backend/` exactly what it cost before the client existed. A machine set up
-# for the service alone has no `wasm-tools` workload and cannot compile the browser head, so this
-# flow fails there rather than skipping quietly; `docs/operations/local-development.md` names the
-# workload beside the client's own commands for that reason.
+# The client stack's flow, which is nothing today and says so. The Uno Platform client was withdrawn
+# and the client is being rebuilt in React, so `frontend/` holds two placeholder directories, no
+# solution, and no build — exactly what the `Frontend` job of `CI` reports. The detection above is
+# kept whole rather than deleted, because it is what the flow that replaces this is hung on.
 if [[ -n "$run_client_stack" ]]; then
-  dotnet restore frontend/MailFathom.Client.slnx --locked-mode
-  dotnet build frontend/MailFathom.Client.slnx --configuration Release --no-restore
-  dotnet test --solution frontend/MailFathom.Client.slnx --configuration Release --no-build
-
-  if ((${#changed_client_csharp_files[@]} > 0)); then
-    dotnet format frontend/MailFathom.Client.slnx --no-restore --include "${changed_client_csharp_files[@]}"
-  fi
+  printf 'This change reaches the client stack, which carries no build yet. See frontend/src/README.md.\n'
 fi
 
 # A change no build reads — documentation, a skill, a deployment asset — runs neither flow and says

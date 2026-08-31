@@ -206,7 +206,6 @@ public sealed class OrchestrationContractTests
             OrchestrationContract.PinnedHealthEndpointsPortKey,
             OrchestrationContract.PinnedPostgresPortKey,
             OrchestrationContract.PinnedClientEndpointPortKey,
-            OrchestrationContract.PinnedClientPortKey,
         ];
 
         // Assert
@@ -260,58 +259,6 @@ public sealed class OrchestrationContractTests
 
         // Assert
         Assert.Empty(ports);
-    }
-
-    /// <summary>Nothing stated starts the client, which is what makes one command bring up a MailFathom with a face on it.</summary>
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    [InlineData("   ")]
-    public void ResolveClientEnabled_NothingStated_StartsTheClient(string? statedValue)
-    {
-        // Act
-        var clientEnabled = OrchestrationContract.ResolveClientEnabled(statedValue);
-
-        // Assert
-        Assert.True(clientEnabled);
-    }
-
-    /// <summary>A developer who stated a value gets it, which is how a machine without the WebAssembly workload runs the rest.</summary>
-    [Theory]
-    [InlineData("false", false)]
-    [InlineData("False", false)]
-    [InlineData("  false  ", false)]
-    [InlineData("true", true)]
-    [InlineData("TRUE", true)]
-    public void ResolveClientEnabled_ValueStated_ReturnsIt(string statedValue, bool expectedClientEnabled)
-    {
-        // Act
-        var clientEnabled = OrchestrationContract.ResolveClientEnabled(statedValue);
-
-        // Assert
-        Assert.Equal(expectedClientEnabled, clientEnabled);
-    }
-
-    /// <summary>A value that is not a boolean fails the run naming the key, rather than starting what it was asked not to.</summary>
-    /// <remarks>
-    /// The whole reason a developer states this key is that building a WebAssembly bundle costs them something, so
-    /// reading an unrecognized value as the default would spend exactly what they were avoiding and say nothing.
-    /// </remarks>
-    [Theory]
-    [InlineData("0")]
-    [InlineData("1")]
-    [InlineData("no")]
-    [InlineData("yes")]
-    [InlineData("off")]
-    [InlineData("disabled")]
-    public void ResolveClientEnabled_ValueIsNotABoolean_FailsNamingTheKey(string statedValue)
-    {
-        // Act
-        var failure = Assert.Throws<InvalidOperationException>(
-            () => OrchestrationContract.ResolveClientEnabled(statedValue));
-
-        // Assert
-        Assert.Contains(OrchestrationContract.ClientEnabledKey, failure.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -432,26 +379,10 @@ public sealed class OrchestrationContractTests
         Assert.True(IPAddress.IsLoopback(address!));
     }
 
-    /// <summary>The dashboard, the development server, and the baked-in service address share one loopback host.</summary>
-    [Fact]
-    public void ResolveDevelopmentClientNetwork_NormalTopology_UsesOneLoopbackHostAcrossTheBrowserAndService()
-    {
-        // Arrange
-        const int clientPort = 5000;
-        const int clientEndpointPort = 8082;
-
-        // Act
-        var network = OrchestrationContract.ResolveDevelopmentClientNetwork(clientPort, clientEndpointPort);
-
-        // Assert
-        Assert.Equal("http://127.0.0.1:5000", network.ClientOrigin);
-        Assert.Equal("http://127.0.0.1:8082/", network.ServiceAddress);
-        Assert.Equal("127.0.0.1", network.PublishedClientHost);
-    }
-
     /// <summary>
-    /// The product default of every origin is what a local tab opened as either loopback spelling needs. Writing one
-    /// origin here is what made a preflight from the other spelling look like an empty mailbox.
+    /// The product default of every origin is what a client served from this machine needs, whichever loopback
+    /// spelling its address carries. Writing one origin here is what made a preflight from the other spelling look
+    /// like an empty mailbox.
     /// </summary>
     [Fact]
     public void Program_TheNormalClientTopology_LeavesTheClientCorsOriginsUnstated()
@@ -462,28 +393,6 @@ public sealed class OrchestrationContractTests
         // Act, Assert
         Assert.DoesNotContain("ClientEndpoint__Cors__AllowedOrigins", program, StringComparison.Ordinal);
         Assert.DoesNotContain("AdminEndpoint__Cors__AllowedOrigins", program, StringComparison.Ordinal);
-    }
-
-    /// <summary>The name the deployment address travels into the client's build under has to be one MSBuild will carry.</summary>
-    /// <remarks>
-    /// It is passed as <c>--property:&lt;name&gt;=&lt;value&gt;</c>, and MSBuild takes a property name to be a letter
-    /// or an underscore followed by letters, digits, underscores, or hyphens. A name outside that is not refused: the
-    /// command line is accepted, the property never comes into being, the condition guarding the item in
-    /// <c>frontend/src/Client/Client.csproj</c> is false, and the head is built with no address at all — which arrives
-    /// as a client calling its own development server rather than as anything the run said.
-    /// </remarks>
-    [Fact]
-    public void ClientDeploymentAddressProperty_IsANameMsBuildAcceptsAsAProperty()
-    {
-        // Act
-        var name = OrchestrationContract.ClientDeploymentAddressProperty;
-
-        // Assert
-        Assert.NotEmpty(name);
-        Assert.True(char.IsAsciiLetter(name[0]) || name[0] == '_');
-        Assert.All(name[1..], character => Assert.True(
-            char.IsAsciiLetterOrDigit(character) || character is '_' or '-',
-            $"'{character}' is not a character an MSBuild property name may carry."));
     }
 
     private static string IdentifierOf(string prefix) =>

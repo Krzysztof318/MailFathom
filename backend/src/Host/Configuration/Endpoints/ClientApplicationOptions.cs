@@ -6,18 +6,18 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace MailFathom.Host.Configuration.Endpoints;
 
-/// <summary>Whether this deployment serves the MailFathom client's browser head, and over what.</summary>
+/// <summary>Whether this deployment serves the MailFathom client's bundle, and over what.</summary>
 /// <remarks>
 /// <para>
-/// The bundle travels inside the container image and is served by the client endpoint's own listeners, which is what
-/// makes the page and the surface it calls one origin: the head carries no address, resolves every route against
+/// A bundle travels inside the container image and is served by the client endpoint's own listeners, which is what
+/// makes the page and the surface it calls one origin: the bundle carries no address, resolves every route against
 /// whatever served it, and a deployment therefore configures nothing on the client's side at all. What that removes is
 /// the configuration question rather than the authorization one — a browser is an untrusted client wherever it was
 /// served from, so a deployment whose endpoint requires a credential still requires one from the page.
 /// </para>
 /// <para>
-/// Off unless a deployment says otherwise. An image carrying the bundle costs the bundle's size and nothing else, and a
-/// deployment that wants only the server never publishes a page it did not ask for.
+/// Off unless a deployment says otherwise, and no image carries a bundle today: the Uno Platform client was withdrawn
+/// and the client is being rebuilt in React, so this refuses at startup on every current artifact.
 /// </para>
 /// <para>
 /// <see cref="AllowClearText" /> is the one setting here that is not a switch, and it exists because this hop is a
@@ -37,10 +37,10 @@ namespace MailFathom.Host.Configuration.Endpoints;
 internal sealed class ClientApplicationOptions
 {
     /// <summary>The file every request that matched no route falls back to, and what a present bundle is recognized by.</summary>
-    /// <remarks>The browser head's entry document. Its presence is what separates an image carrying a bundle from one built without it, which is a distinction worth making at startup rather than as a page of 404s.</remarks>
+    /// <remarks>The bundle's entry document. Its presence is what separates an image carrying a bundle from one built without it, which is a distinction worth making at startup rather than as a page of 404s.</remarks>
     public const string EntryDocument = "index.html";
 
-    /// <summary>Gets or sets whether the client's browser head is served from this deployment.</summary>
+    /// <summary>Gets or sets whether the client's bundle is served from this deployment.</summary>
     /// <remarks>Served on the client endpoint's listeners and nowhere else, so it needs that endpoint enabled: same origin is the whole design, and a page served where the surface it calls is not would be a client that starts and cannot read a message.</remarks>
     public bool Enabled { get; set; }
 
