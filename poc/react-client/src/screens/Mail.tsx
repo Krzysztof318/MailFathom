@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { aiFilters, folders, messages, threadComposer, threads } from "../data";
+import { aiFilters, folders, messages, threadComposer, threadFor } from "../data";
 import { Card, Chip, Label, PaneHeader } from "../components/shell";
 
 function Folders({ active, onSelect }: { active: string; onSelect: (folder: string) => void }) {
@@ -120,7 +120,7 @@ function MessageList({
 }
 
 function Reader({ threadId }: { threadId: string }) {
-  const thread = threads[threadId];
+  const thread = threadFor(threadId);
 
   return (
     <>
@@ -223,7 +223,7 @@ export function Mail({
     return (
       <div className="flex min-h-0 flex-1 flex-col">
         <PaneHeader
-          title={threads[threadId].subject}
+          title={threadFor(threadId).subject}
           onBack={onBack}
           action={<span className="text-xs text-muted">Odpowiedz</span>}
         />

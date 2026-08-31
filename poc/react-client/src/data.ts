@@ -153,15 +153,6 @@ export const evidenceDocument = {
 
 export type Folder = { name: string; count?: number };
 
-export const folders: Folder[] = [
-  { name: "Wszystkie", count: 12 },
-  { name: "Odebrane", count: 8 },
-  { name: "Ważne", count: 3 },
-  { name: "Wysłane" },
-  { name: "Szkice", count: 2 },
-  { name: "Archiwum" },
-];
-
 export const aiFilters = ["Wymaga decyzji", "Zobowiązania", "Terminy w tym tygodniu"];
 
 export type Message = {
@@ -175,7 +166,7 @@ export type Message = {
   hintStrong?: boolean;
 };
 
-export const messages: Message[] = [
+const demoMessages: Message[] = [
   {
     id: "aneks",
     from: "Anna Kowalska",
@@ -197,6 +188,80 @@ export const messages: Message[] = [
   { id: "opinia", from: "Jacek Wrona", subject: "Opinia prawna — limit waloryzacji", time: "24.08" },
 ];
 
+const syntheticSenders = [
+  "Anna Kowalska",
+  "Piotr Zieliński",
+  "Marta Nowak",
+  "Jacek Wrona",
+  "Tomasz Bąk",
+  "Ewa Lis",
+  "Rafał Sowa",
+  "Katarzyna Dąb",
+  "Michał Orzeł",
+  "Finanse",
+  "Sekretariat",
+  "Dział prawny",
+];
+
+const syntheticSubjects = [
+  "Potwierdzenie odbioru aneksu",
+  "Re: kalkulacja waloryzacji",
+  "Faktura korygująca 07/2026",
+  "Zapytanie o termin płatności",
+  "Protokół odbioru etapu",
+  "Re: harmonogram na wrzesień",
+  "Zestawienie kosztów utrzymania",
+  "Aktualizacja danych rejestrowych",
+  "Re: opinia w sprawie SLA",
+  "Wniosek o przedłużenie umowy",
+  "Podsumowanie kwartału",
+  "Re: dostęp do systemu",
+  "Zgłoszenie krytyczne — czas reakcji",
+  "Załącznik do korespondencji",
+  "Re: propozycja stawek na 2027",
+  "Notatka ze spotkania",
+  "Prośba o akceptację kosztorysu",
+];
+
+const syntheticHints = [
+  "Wymaga decyzji w tym tygodniu",
+  "Zobowiązanie po naszej stronie",
+  "Termin: koniec miesiąca",
+  undefined,
+  undefined,
+  "Odpowiedź oczekiwana",
+];
+
+/** 24.08.2026 counting backwards, so the list reads as a real descending timeline. */
+function syntheticDate(index: number) {
+  const day = new Date(Date.UTC(2026, 7, 24) - Math.floor(index / 3) * 86_400_000);
+  return `${String(day.getUTCDate()).padStart(2, "0")}.${String(day.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/**
+ * Filler so the list is long enough to judge scrolling, density and render cost.
+ * Generated rather than written out, and deterministic, so every run is the same list.
+ */
+const syntheticMessages: Message[] = Array.from({ length: 195 }, (_, index) => ({
+  id: `syn-${index}`,
+  from: syntheticSenders[index % syntheticSenders.length],
+  org: index % 4 === 0 ? "Contoso" : undefined,
+  subject: syntheticSubjects[index % syntheticSubjects.length],
+  time: syntheticDate(index),
+  hint: syntheticHints[index % syntheticHints.length],
+}));
+
+export const messages: Message[] = [...demoMessages, ...syntheticMessages];
+
+export const folders: Folder[] = [
+  { name: "Wszystkie", count: messages.length },
+  { name: "Odebrane", count: messages.length },
+  { name: "Ważne", count: 3 },
+  { name: "Wysłane" },
+  { name: "Szkice", count: 2 },
+  { name: "Archiwum" },
+];
+
 export type Attachment = { kind: string; name: string; size: string };
 
 export type Thread = {
@@ -212,7 +277,7 @@ export type Thread = {
   attachments: Attachment[];
 };
 
-export const threads: Record<string, Thread> = {
+const demoThreads: Record<string, Thread> = {
   aneks: {
     id: "aneks",
     subject: "Aneks do umowy — podpisy",
@@ -291,6 +356,33 @@ export const threads: Record<string, Thread> = {
     attachments: [{ kind: "PDF", name: "Opinia.pdf", size: "310 kB" }],
   },
 };
+
+/**
+ * Every row in the list opens. The four scripted threads carry the demo; a
+ * generated one gets a thread derived from its own row, so scrolling far down
+ * and tapping is a real interaction rather than a dead end.
+ */
+export function threadFor(id: string): Thread {
+  const scripted = demoThreads[id];
+  if (scripted) return scripted;
+
+  const message = messages.find((candidate) => candidate.id === id) ?? messages[0];
+  const surname = message.from.split(" ").pop()!.toLowerCase();
+
+  return {
+    id,
+    subject: message.subject,
+    sender: `${message.from} <${surname}@contoso.example>`,
+    meta: `${message.time} · wątek: 1 wiadomość`,
+    state: [
+      { label: "Ustalenia", value: "Brak ustaleń w tym wątku" },
+      { label: "Otwarte pytanie", value: message.hint ?? "Brak" },
+      { label: "Zobowiązanie", value: message.hint ? "Po naszej stronie" : "Brak" },
+    ],
+    intro: `Dzień dobry,\nw nawiązaniu do sprawy „${message.subject}" przesyłam komplet informacji. Proszę o potwierdzenie, czy zakres jest zgodny z ustaleniami.`,
+    attachments: [],
+  };
+}
 
 export const threadComposer = {
   placeholder: "Zapytaj o wątek albo przygotuj odpowiedź…",
