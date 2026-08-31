@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import { resolveCredentialEntry, type CredentialEntryRefusal } from './credentialEntry';
+import { longestCredentialPart, resolveCredentialEntry, type CredentialEntryRefusal } from './credentialEntry';
 
 function refusal(userName: string, password: string): CredentialEntryRefusal | 'resolved' {
     const result = resolveCredentialEntry(userName, password);
@@ -43,4 +43,24 @@ describe('resolveCredentialEntry', () => {
     it('refuses a colon in the user name, which the deployment would split at the wrong place', () => {
         expect(refusal('own:er', 'open sesame')).toBe('userNameHasColon');
     });
+
+    it.each([
+        ['a user name', 'u'.repeat(longestCredentialPart + 1), 'open sesame'],
+        ['a password', 'owner', 'p'.repeat(longestCredentialPart + 1)],
+    ])('refuses %s past the bound rather than presenting one nobody typed', (_, userName, password) => {
+        // The bound is here rather than on the input alone, because `maxLength` truncates a paste in silence — and a
+        // password one character shorter than the one somebody was given is refused by the deployment and read back
+        // as a wrong password.
+        expect(refusal(userName, password)).toBe('tooLong');
+    });
+
+    it.each([
+        ['a user name', 'u'.repeat(longestCredentialPart), 'open sesame'],
+        ['a password', 'owner', 'p'.repeat(longestCredentialPart)],
+    ])(
+        'composes %s exactly as long as the bound, which is what makes it a bound rather than a limit',
+        (_, userName, password) => {
+            expect(refusal(userName, password)).toBe('resolved');
+        },
+    );
 });

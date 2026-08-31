@@ -8,7 +8,18 @@
 // what is this module's is that there is exactly one implementation of RFC 7617 in the client to review.
 
 /** Why what somebody typed is not a credential this client will present. */
-export type CredentialEntryRefusal = 'incomplete' | 'userNameHasColon';
+export type CredentialEntryRefusal = 'incomplete' | 'userNameHasColon' | 'tooLong';
+
+/**
+ * The most of either half this client will present.
+ *
+ * The bound is here rather than on the two inputs alone, because an input's `maxLength` truncates a paste without
+ * saying so — and a password silently shortened is a credential different from the one somebody was given, refused by
+ * the deployment and reported as a wrong password. That is the failure `userNameHasColon` refuses by name, and this
+ * refuses it the same way. A credential is a name and a password rather than a document, and the value composed from
+ * them travels on every request this client makes.
+ */
+export const longestCredentialPart = 256;
 
 /** The finished header value for what somebody typed, or why there is none. */
 export type CredentialEntryResult =
@@ -23,12 +34,16 @@ export type CredentialEntryResult =
  * depending on what a client guessed.
  *
  * @param userName The owner's user name, which the scheme's own grammar refuses a colon inside.
- * @param password The password beside it, which may carry anything including a colon.
+ * @param password The password beside it, which may carry anything including a colon, up to the bound above.
  * @returns The finished header value, or the refusal naming why there is none.
  */
 export function resolveCredentialEntry(userName: string, password: string): CredentialEntryResult {
     if (userName.length === 0 || password.length === 0) {
         return { outcome: 'refused', refusal: 'incomplete' };
+    }
+
+    if (userName.length > longestCredentialPart || password.length > longestCredentialPart) {
+        return { outcome: 'refused', refusal: 'tooLong' };
     }
 
     // The separator is a colon and the scheme has no way to escape one, so a user name carrying it would be split by

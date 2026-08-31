@@ -13,6 +13,7 @@ import {
     type DeploymentEntryResult,
     type SignInRefusal,
 } from '@mailfathom/client-backend';
+import { SecondaryButton } from '../controls/SecondaryButton';
 import type { DeploymentTransport } from '../deployment/sendToDeployment';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
@@ -28,33 +29,62 @@ import type { CredentialLifetime } from './credentialStore';
 // What is decided here is only what a person sees; the address rule and the credential's own encoding each belong to
 // the module that owns them.
 
+/** What the screen has to say before anybody types, which is about the previous session rather than about this one. */
+export type SignInNotice = 'credentialNoLongerAccepted' | 'passwordNotRemoved';
+
+const notices: Readonly<Record<SignInNotice, MessageKey>> = {
+    credentialNoLongerAccepted: 'signIn.noLongerAccepted',
+    passwordNotRemoved: 'signIn.notRemoved',
+};
+
 /** Everything this screen can be stopped by, whether it was decided here, by the deployment, or by the wire. */
 type SignInScreenRefusal = DeploymentEntryRefusal | CredentialEntryRefusal | SignInRefusal | ClientFailureReason;
 
-/** Which control a refusal is about, so the field that has to change is the one marked as needing it. */
-type RefusedControl = 'address' | 'userName' | 'nothing';
+/** Which controls a refusal is about, so the fields that have to change are the ones marked as needing it. */
+type RefusedControl = 'address' | 'userName' | 'password';
+
+interface Refusal {
+    readonly message: MessageKey;
+
+    /**
+     * The controls this refusal is about, and only those.
+     *
+     * A refusal about the user name alone announces the password valid, because telling somebody that a field they
+     * filled in correctly is wrong is worse than saying nothing about it. A refusal about neither — the deployment's
+     * own configuration, or the wire — marks nothing at all.
+     */
+    readonly controls: readonly RefusedControl[];
+}
 
 // One lookup, exhaustive by its own type, so a refusal added to any of the four sets fails to compile here until this
-// screen says what it reads as and which control it belongs to.
-const refusals: Readonly<Record<SignInScreenRefusal, { message: MessageKey; control: RefusedControl }>> = {
-    blank: { message: 'connect.blank', control: 'address' },
-    malformed: { message: 'connect.malformed', control: 'address' },
-    clearTextRefused: { message: 'connect.clearTextRefused', control: 'address' },
+// screen says what it reads as and which controls it belongs to.
+const refusals: Readonly<Record<SignInScreenRefusal, Refusal>> = {
+    blank: { message: 'connect.blank', controls: ['address'] },
+    malformed: { message: 'connect.malformed', controls: ['address'] },
+    clearTextRefused: { message: 'connect.clearTextRefused', controls: ['address'] },
 
-    incomplete: { message: 'signIn.incomplete', control: 'userName' },
-    userNameHasColon: { message: 'signIn.userNameHasColon', control: 'userName' },
+    incomplete: { message: 'signIn.incomplete', controls: ['userName', 'password'] },
+    userNameHasColon: { message: 'signIn.userNameHasColon', controls: ['userName'] },
+    tooLong: { message: 'signIn.tooLong', controls: ['userName', 'password'] },
 
-    credentialRefused: { message: 'signIn.credentialRefused', control: 'userName' },
-    basicNotOffered: { message: 'signIn.basicNotOffered', control: 'nothing' },
+    credentialRefused: { message: 'signIn.credentialRefused', controls: ['userName', 'password'] },
+    basicNotOffered: { message: 'signIn.basicNotOffered', controls: [] },
 
-    // A deployment that answered a credential with either of these has said something about the grant rather than about
-    // the password, so neither marks a control: retyping a password changes nothing about a permission an owner is
-    // missing. They are named because the set is closed by its own type rather than because this screen expects one.
-    unauthenticated: { message: 'signIn.credentialRefused', control: 'userName' },
-    unauthorized: { message: 'signIn.grantMissing', control: 'nothing' },
-    unavailable: { message: 'connect.unavailable', control: 'nothing' },
-    unreadable: { message: 'connect.unreadable', control: 'nothing' },
+    // `unauthenticated` is the answer `credentialRefused` already is — a 401 whose challenge did not prove MailFathom
+    // wrote it — so it reads as a refused credential and marks both halves of one. `unauthorized` is the one that says
+    // something about the grant rather than about the password, and it marks nothing: retyping a password changes
+    // nothing about a permission an owner is missing. Both are named because the set is closed by its own type rather
+    // than because this screen expects either.
+    unauthenticated: { message: 'signIn.credentialRefused', controls: ['userName', 'password'] },
+    unauthorized: { message: 'signIn.grantMissing', controls: [] },
+    unavailable: { message: 'connect.unavailable', controls: [] },
+    unreadable: { message: 'connect.unreadable', controls: [] },
 };
+
+// What "nothing answered" reads as where there is no address on the screen. `connect.unavailable` asks somebody to
+// check an address and check that the deployment is running, and neither half is theirs to act on when the origin that
+// served this page is the deployment — so the same outcome takes the sentence that fits the shape it is rendered in.
+const silentDeployment: Refusal = { message: 'signIn.deploymentSilent', controls: [] };
 
 const lifetimeMessages: Readonly<Record<CredentialLifetime, MessageKey>> = {
     untilSignedOut: 'signIn.keptUntilSignedOut',
@@ -64,20 +94,16 @@ const lifetimeMessages: Readonly<Record<CredentialLifetime, MessageKey>> = {
 
 const fieldStyle = 'rounded-md border border-line bg-panel px-3 py-2 text-text';
 
-// The most of either half a person may type. A credential is a name and a password rather than a document, and the
-// value composed from them travels on every request this client makes.
-const longestCredentialPart = 256;
-
 export function SignIn({
     deployment,
     lifetime,
-    credentialNoLongerAccepted,
+    notice,
     send,
     onSignedIn,
 }: {
     readonly deployment: DeploymentAddress | null;
     readonly lifetime: CredentialLifetime;
-    readonly credentialNoLongerAccepted: boolean;
+    readonly notice: SignInNotice | null;
     readonly send: DeploymentTransport;
     readonly onSignedIn: (deployment: DeploymentAddress, authorization: string) => void;
 }) {
@@ -90,7 +116,9 @@ export function SignIn({
     const [refusal, setRefusal] = useState<SignInScreenRefusal | null>(null);
     const address = useRef<HTMLInputElement>(null);
     const name = useRef<HTMLInputElement>(null);
+    const submit = useRef<HTMLButtonElement>(null);
     const attempt = useRef<AbortController | null>(null);
+    const started = useRef(false);
 
     // The view changed, so focus is placed rather than left wherever the previous screen had it, on the first thing
     // this form is asking to have filled. Moving focus is an imperative browser API, which is what an effect is for.
@@ -98,8 +126,28 @@ export function SignIn({
         (address.current ?? name.current)?.focus();
     }, []);
 
-    const shown = refusal === null ? null : refusals[refusal];
+    // An attempt disables the control that started it, and the browser drops focus to the document when it does — so
+    // an attempt that ends leaves the refusal announced with focus nowhere and somebody reading by keyboard tabbing in
+    // from the top of the page. Focus goes back to that control, and it is placed here rather than where the attempt
+    // ended because a disabled element cannot take focus: this runs after the render that re-enabled it.
+    //
+    // The ref is what separates an attempt that ended from the first render, and it survives `StrictMode` invoking
+    // this twice because both invocations read the same `presenting`.
+    useEffect(() => {
+        if (presenting) {
+            started.current = true;
+
+            return;
+        }
+
+        if (started.current) {
+            submit.current?.focus();
+        }
+    }, [presenting]);
+
+    const shown = refusal === null ? null : shownFor(refusal, deployment);
     const describedBy = (hint: string): string => (shown === null ? hint : `sign-in-refusal ${hint}`);
+    const marks = (control: RefusedControl): boolean => shown?.controls.includes(control) === true;
 
     async function present(): Promise<void> {
         const reached: DeploymentEntryResult =
@@ -121,16 +169,20 @@ export function SignIn({
             return;
         }
 
-        const attempted = new AbortController();
-        attempt.current = attempted;
+        const running = new AbortController();
+        attempt.current = running;
 
         setRefusal(null);
         setPresenting(true);
 
         // An abandoned attempt has no answer, whatever the wire eventually said: the screen is already back where the
         // person left it, and reporting a refusal here would be this attempt overwriting what they did next.
+        //
+        // Focus returns to the control that started the attempt, because starting one disabled that control and the
+        // browser dropped focus to the document when it did. Without this the refusal is announced with focus nowhere,
+        // and somebody reading by keyboard tabs in from the top of the page to reach the field it named.
         const stopped = (reason: SignInScreenRefusal): void => {
-            if (attempted.signal.aborted) {
+            if (running.signal.aborted) {
                 return;
             }
 
@@ -143,9 +195,9 @@ export function SignIn({
         // reason there are two requests here. An address that arrived from the edge is not: the origin that served
         // this client is the deployment, and there is nothing about it left to establish.
         if (deployment === null) {
-            const greeting = await reachDeployment(reached.deployment, send(attempted.signal));
+            const greeting = await reachDeployment(reached.deployment, send(running.signal));
 
-            if (attempted.signal.aborted) {
+            if (running.signal.aborted) {
                 return;
             }
 
@@ -164,10 +216,10 @@ export function SignIn({
 
         const answer = await signIn(
             { baseAddress: reached.deployment.baseAddress, authorization: credential.authorization },
-            send(attempted.signal),
+            send(running.signal),
         );
 
-        if (attempted.signal.aborted) {
+        if (running.signal.aborted) {
             return;
         }
 
@@ -190,7 +242,8 @@ export function SignIn({
 
     // A deployment that accepts the connection and never answers would otherwise hold the screen on `signIn.presenting`
     // with the only control on it disabled, which is a state nobody can leave. Abandoning frees the connection as well
-    // as the screen, which is why it aborts the request rather than only ignoring what it says.
+    // as the screen, which is why it aborts the request rather than only ignoring what it says. Focus goes back to the
+    // control this one stood beside, placed by the effect above, since this one is about to leave the document.
     function abandon(): void {
         attempt.current?.abort();
         attempt.current = null;
@@ -204,11 +257,11 @@ export function SignIn({
                 <p className="text-sm">{translate('signIn.explanation')}</p>
             </div>
 
-            {credentialNoLongerAccepted ? (
+            {notice === null ? null : (
                 <p className="text-warning" role="status">
-                    {translate('signIn.noLongerAccepted')}
+                    {translate(notices[notice])}
                 </p>
-            ) : null}
+            )}
 
             <form
                 className="flex flex-col gap-5"
@@ -227,7 +280,7 @@ export function SignIn({
                                 // The refusal joins the hint rather than replacing it, so somebody reading the field
                                 // hears why it was refused and what it wants, in that order, without moving off it.
                                 aria-describedby={describedBy('sign-in-address-hint')}
-                                aria-invalid={shown?.control === 'address'}
+                                aria-invalid={marks('address')}
                                 autoComplete="off"
                                 className={fieldStyle}
                                 id="sign-in-address"
@@ -266,17 +319,19 @@ export function SignIn({
                     </>
                 ) : null}
 
+                {/* Neither field carries a `maxLength`, deliberately: it truncates a paste without saying so, and a
+                    password silently shortened is refused by the deployment and read back as a wrong password.
+                    `resolveCredentialEntry` refuses what is too long by name instead. */}
                 <div className="flex flex-col gap-2">
                     <label className="text-sm font-medium text-text" htmlFor="sign-in-user-name">
                         {translate('signIn.userName')}
                     </label>
                     <input
                         aria-describedby={describedBy('sign-in-kept')}
-                        aria-invalid={shown?.control === 'userName'}
+                        aria-invalid={marks('userName')}
                         autoComplete="username"
                         className={fieldStyle}
                         id="sign-in-user-name"
-                        maxLength={longestCredentialPart}
                         ref={name}
                         spellCheck={false}
                         type="text"
@@ -294,11 +349,10 @@ export function SignIn({
                     </label>
                     <input
                         aria-describedby={describedBy('sign-in-kept')}
-                        aria-invalid={shown?.control === 'userName'}
+                        aria-invalid={marks('password')}
                         autoComplete="current-password"
                         className={fieldStyle}
                         id="sign-in-password"
-                        maxLength={longestCredentialPart}
                         type="password"
                         value={password}
                         onChange={(event) => {
@@ -312,19 +366,14 @@ export function SignIn({
                     <button
                         className="rounded-md bg-accent px-4 py-2 font-medium text-on-accent transition disabled:opacity-60"
                         disabled={presenting}
+                        ref={submit}
                         type="submit"
                     >
                         {translate('signIn.submit')}
                     </button>
 
                     {presenting ? (
-                        <button
-                            className="rounded-md border border-line bg-panel px-4 py-2 font-medium text-text-soft transition hover:bg-hover"
-                            type="button"
-                            onClick={abandon}
-                        >
-                            {translate('signIn.abandon')}
-                        </button>
+                        <SecondaryButton label={translate('signIn.abandon')} shape="form" onActivate={abandon} />
                     ) : null}
                 </div>
             </form>
@@ -342,4 +391,9 @@ export function SignIn({
             )}
         </section>
     );
+}
+
+/** What a refusal reads as on the shape this screen is actually rendering. */
+function shownFor(refusal: SignInScreenRefusal, deployment: DeploymentAddress | null): Refusal {
+    return refusal === 'unavailable' && deployment !== null ? silentDeployment : refusals[refusal];
 }

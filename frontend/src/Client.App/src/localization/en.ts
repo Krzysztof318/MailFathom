@@ -44,11 +44,15 @@ export const en = {
     'signIn.incomplete': 'Type the user name and the password your deployment gave you.',
     'signIn.userNameHasColon':
         'A user name cannot contain a colon, which is what separates it from the password when it is sent.',
+    'signIn.tooLong': 'That user name or password is longer than this client will present. Check what was pasted in.',
     'signIn.credentialRefused': 'The user name or the password is not accepted by this deployment.',
     'signIn.basicNotOffered':
         'This deployment does not accept a user name and a password. Whoever runs it has to enable that before you can sign in here.',
     'signIn.grantMissing': 'This deployment accepted the credential, but it is allowed to read no mail.',
+    'signIn.deploymentSilent': 'The deployment did not answer. Try again in a moment.',
     'signIn.noLongerAccepted': 'This deployment has stopped accepting the password that was kept. Sign in again.',
+    'signIn.notRemoved':
+        'Signing out did not remove the password from this machine’s credential store, so it is still kept there. Remove it in the store itself, or sign in and out again.',
     'signIn.keptUntilSignedOut':
         'Your password is kept in this machine’s keychain until you sign out. Signing out is what removes it.',
     'signIn.keptUntilTheTabCloses':

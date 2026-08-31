@@ -9,6 +9,7 @@ import {
     type DeploymentAddress,
     type MailAccountDirectory,
 } from '@mailfathom/client-backend';
+import { SecondaryButton } from './controls/SecondaryButton';
 import { forgetDeployment, storeDeployment, type AdoptedDeployment } from './deployment/adoptedDeployment';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { useLocalization } from './localization/useLocalization';
@@ -19,7 +20,9 @@ import { LanguageChoice, ThemeChoice } from './shell/Preferences';
 import { Space } from './shell/Space';
 import { SpaceNavigation } from './shell/SpaceNavigation';
 import type { CredentialStore } from './signIn/credentialStore';
-import { SignIn } from './signIn/SignIn';
+import { SignIn, type SignInNotice } from './signIn/SignIn';
+import { emptyWorkspace } from './workspace/useWorkspace';
+import { useWorkspace } from './workspace/useWorkspace';
 
 // The frame Discover, Mail, and Cases are held in, and the only thing in the client that survives moving between them.
 // It is one tree laid out two ways by the width it is given — a rail beside a workspace, or bottom navigation under a
@@ -44,11 +47,12 @@ export function App({
     readonly send: DeploymentTransport;
 }) {
     const space = useSpace();
+    const { revise } = useWorkspace();
     const [adopted, setAdopted] = useState(deployment);
     const [authorization, setAuthorization] = useState(signedInWith);
     const [accounts, setAccounts] = useState<ClientResult<MailAccountDirectory> | null>(null);
     const [attempt, setAttempt] = useState(0);
-    const [credentialNoLongerAccepted, setCredentialNoLongerAccepted] = useState(false);
+    const [notice, setNotice] = useState<SignInNotice | null>(null);
     const baseAddress = adopted === null ? null : adopted.deployment.baseAddress;
     const workspace = useRef<HTMLDivElement>(null);
     const focusedFor = useRef(authorization);
@@ -96,7 +100,7 @@ export function App({
             // kept goes with it: a stored password the service refuses is a password nothing will make work again.
             if (answer.outcome === 'failed' && answer.failure.reason === 'unauthenticated') {
                 void credentials.forget({ baseAddress });
-                setCredentialNoLongerAccepted(true);
+                setNotice('credentialNoLongerAccepted');
                 setAuthorization(null);
                 setAccounts(null);
 
@@ -126,19 +130,31 @@ export function App({
         }
 
         void credentials.keep(reached, presented);
-        setCredentialNoLongerAccepted(false);
+        setNotice(null);
         setAccounts(null);
         setAuthorization(presented);
     }
 
+    // Everything this session held goes with the credential, including what the person carried between the spaces:
+    // the question in the intent field and the mailbox it was scoped to are theirs rather than the machine's, and a
+    // client that kept them would show the next person what the last one was asking about.
+    //
+    // A store that would not delete is reported rather than swallowed. The screen has already said that signing out is
+    // what removes the password, so a refused deletion leaves it on the machine for the next start to read back while
+    // the person believes they signed out.
     function signOut(): void {
-        if (adopted !== null) {
-            void credentials.forget(adopted.deployment);
-        }
-
-        setCredentialNoLongerAccepted(false);
+        setNotice(null);
         setAccounts(null);
         setAuthorization(null);
+        revise(emptyWorkspace);
+
+        if (adopted !== null) {
+            void credentials.forget(adopted.deployment).then((removed) => {
+                if (!removed) {
+                    setNotice('passwordNotRemoved');
+                }
+            });
+        }
     }
 
     function pointSomewhereElse(): void {
@@ -150,9 +166,9 @@ export function App({
     if (baseAddress === null || authorization === null) {
         return (
             <SignInScreen
-                credentialNoLongerAccepted={credentialNoLongerAccepted}
                 deployment={adopted === null ? null : adopted.deployment}
                 lifetime={credentials.lifetime}
+                notice={notice}
                 send={send}
                 onSignedIn={signedIn}
             />
@@ -199,13 +215,13 @@ export function App({
 function SignInScreen({
     deployment,
     lifetime,
-    credentialNoLongerAccepted,
+    notice,
     send,
     onSignedIn,
 }: {
     readonly deployment: DeploymentAddress | null;
     readonly lifetime: CredentialStore['lifetime'];
-    readonly credentialNoLongerAccepted: boolean;
+    readonly notice: SignInNotice | null;
     readonly send: DeploymentTransport;
     readonly onSignedIn: (reached: DeploymentAddress, authorization: string) => void;
 }) {
@@ -225,9 +241,9 @@ function SignInScreen({
                 </header>
 
                 <SignIn
-                    credentialNoLongerAccepted={credentialNoLongerAccepted}
                     deployment={deployment}
                     lifetime={lifetime}
+                    notice={notice}
                     send={send}
                     onSignedIn={onSignedIn}
                 />
@@ -244,13 +260,7 @@ function ChosenDeployment({ address, onChange }: { readonly address: string; rea
     return (
         <p className="flex items-center gap-2 text-sm text-muted">
             {translate('deployment.reachedAt', { address })}
-            <button
-                type="button"
-                onClick={onChange}
-                className="rounded-md border border-line px-2 py-0.5 text-sm text-text-soft transition hover:bg-hover"
-            >
-                {translate('deployment.change')}
-            </button>
+            <SecondaryButton label={translate('deployment.change')} onActivate={onChange} />
         </p>
     );
 }
@@ -260,13 +270,5 @@ function ChosenDeployment({ address, onChange }: { readonly address: string; rea
 function SignOut({ onSignOut }: { readonly onSignOut: () => void }) {
     const { translate } = useLocalization();
 
-    return (
-        <button
-            type="button"
-            onClick={onSignOut}
-            className="rounded-md border border-line bg-panel px-2 py-1 text-sm text-text-soft transition hover:bg-hover"
-        >
-            {translate('shell.signOut')}
-        </button>
-    );
+    return <SecondaryButton label={translate('shell.signOut')} onActivate={onSignOut} />;
 }

@@ -94,8 +94,8 @@ describe('a credential kept for the run', () => {
         const store = await credentialStore();
 
         await store.keep(deployment, authorization);
-        await store.forget(deployment);
 
+        expect(await store.forget(deployment)).toBe(true);
         expect(await store.read(deployment)).toBeNull();
     });
 
@@ -153,12 +153,23 @@ describe('a credential kept in the keychain', () => {
         const asked = shellAnswering({ keychain_reachable: true, forget_credential: true });
         const store = await credentialStore();
 
-        await store.forget(deployment);
-
+        expect(await store.forget(deployment)).toBe(true);
         expect(asked.at(-1)).toEqual({
             command: 'forget_credential',
             argument: { deployment: deployment.baseAddress },
         });
+    });
+
+    it.each([
+        ['a keychain that would not delete the entry', false],
+        ['a keychain that could not be reached at all', new Error('the keychain is locked')],
+    ])('reports the credential as still kept where the shell answered with %s', async (_, answer) => {
+        shellAnswering({ keychain_reachable: true, forget_credential: answer });
+        const store = await credentialStore();
+
+        // The screen has already said that signing out is what removes the password, so a deletion nobody performed
+        // has to be reported: the entry outlives uninstalling the application, and the next start reads it back.
+        expect(await store.forget(deployment)).toBe(false);
     });
 
     it('asks for the credential again where the keychain refuses, rather than failing the screen', async () => {

@@ -24,7 +24,15 @@ export interface CredentialStore {
 
     keep(deployment: DeploymentAddress, authorization: string): Promise<void>;
 
-    forget(deployment: DeploymentAddress): Promise<void>;
+    /**
+     * Removes what was kept for this deployment, answering whether it is gone.
+     *
+     * `false` is a store that would not delete — a locked keychain, a Secret Service that stopped answering — and it
+     * has to be answered rather than swallowed: the screen has already promised that signing out is what removes the
+     * password, so a refused deletion that reported nothing would leave the credential in the store for the next start
+     * to read back while the person believes they signed out.
+     */
+    forget(deployment: DeploymentAddress): Promise<boolean>;
 }
 
 /**
@@ -71,11 +79,7 @@ function keptForTheRun(lifetime: CredentialLifetime): CredentialStore {
             return Promise.resolve();
         },
 
-        forget: (deployment) => {
-            removeStorage(entryFor(deployment));
-
-            return Promise.resolve();
-        },
+        forget: (deployment) => Promise.resolve(removeStorage(entryFor(deployment))),
     };
 }
 
@@ -95,7 +99,10 @@ function keptInTheKeychain(): CredentialStore {
         },
 
         forget: async (deployment) => {
-            await shellAnswers('forget_credential', { deployment: deployment.baseAddress });
+            // The shell's own answer, because this is the one operation whose failure a person has to be told about:
+            // the entry outlives uninstalling the application, so a deletion nobody performed is a password left on
+            // the machine.
+            return (await shellAnswers('forget_credential', { deployment: deployment.baseAddress })) === true;
         },
     };
 }
@@ -132,10 +139,15 @@ function writeStorage(entry: string, value: string): void {
     }
 }
 
-function removeStorage(entry: string): void {
+/** Whether the entry is gone, which storage that refused every write answers as truthfully as one that held it. */
+function removeStorage(entry: string): boolean {
     try {
         window.sessionStorage.removeItem(entry);
+
+        return true;
     } catch {
-        // Storage that refuses a write refuses a removal too, and there is then nothing kept in it to remove.
+        // Storage that refuses a removal refused the write that would have put something there, so nothing is kept
+        // under this name either way — which is the outcome asked for rather than a failure to report.
+        return true;
     }
 }

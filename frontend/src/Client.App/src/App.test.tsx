@@ -97,9 +97,16 @@ function storeKeeping(lifetime: CredentialLifetime = 'untilTheTabCloses'): Recor
         forget: (deployment) => {
             kept.delete(deployment.baseAddress);
 
-            return Promise.resolve();
+            return Promise.resolve(true);
         },
     };
+}
+
+/** A store that holds the credential and will not give it up, which is a locked keychain from the client's side. */
+function storeRefusingToForget(): RecordingStore {
+    const store = storeKeeping('untilSignedOut');
+
+    return { ...store, forget: () => Promise.resolve(false) };
 }
 
 // What `main.tsx` resolves at the edge and hands down. The origin that served the client is the case a web head is in,
@@ -420,6 +427,42 @@ describe('App sign-in', () => {
         expect(screen.getByRole('textbox', { name: 'User name' })).toBeDefined();
         expect(screen.queryByRole('navigation', { name: 'Spaces' })).toBeNull();
         expect([...credentials.kept]).toEqual([]);
+    });
+
+    it('clears what the person carried between the spaces when somebody signs out', async () => {
+        renderApp(servedFrom, null, deploymentAnswering(), storeKeeping());
+        signIn();
+        await framed();
+
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Ask your mail' }), {
+            target: { value: 'the renewal Nordwind sent' },
+        });
+        fireEvent.change(screen.getByRole('combobox', { name: 'Mailbox in scope' }), { target: { value: 'work' } });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+        signIn();
+        await framed();
+
+        // The next person to sign in on this machine reads their own empty screen rather than the last one's question
+        // and the mailbox it was scoped to.
+        expect(screen.getByRole('searchbox', { name: 'Ask your mail' })).toHaveProperty('value', '');
+        expect(screen.getByRole('combobox', { name: 'Mailbox in scope' })).toHaveProperty('value', '');
+    });
+
+    it('says the password is still on the machine when the store would not remove it', async () => {
+        renderApp(servedFrom, null, deploymentAnswering(), storeRefusingToForget());
+        signIn();
+        await framed();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+
+        // Signing out told them the password would be removed, so a store that refused has to say so rather than let
+        // the next start read it back while they believe it is gone.
+        expect(
+            await screen.findByText(
+                'Signing out did not remove the password from this machine’s credential store, so it is still kept there. Remove it in the store itself, or sign in and out again.',
+            ),
+        ).toBeDefined();
     });
 
     it('places focus on the credential where the deployment is already known', () => {

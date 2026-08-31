@@ -136,11 +136,19 @@ question is answered again rather than reworded.
 
 - `frontend/src/Client.App/vitest.setup.ts` unmounts what a test rendered, after every test. Nothing else may rely on
   the document surviving between tests.
-- That file also puts `localStorage` back. Node publishes a Web Storage implementation of its own, and the jsdom window
-  this project runs in is the worker's global object — so Node's getter is the one on it and it answers `undefined`
-  unless the process was started with `--localstorage-file`, which makes a browser API read as absent. jsdom's own
-  storage is there under another name and is reinstated under the right one. A test that writes to it clears it
-  afterwards: the store is one per file, not one per test.
+- That file also puts both `localStorage` and `sessionStorage` back, and it puts them back for two different reasons.
+  Node publishes a Web Storage implementation of its own, and the jsdom window this project runs in is the worker's
+  global object — so Node's getters are the ones on it. `localStorage` answers `undefined` unless the process was
+  started with `--localstorage-file`, which makes a browser API read as absent; `sessionStorage` answers a store
+  belonging to the worker rather than to the document, which is worse, because it is present, it works, and it is
+  shared by every file that worker runs. jsdom's own two are there under other names and are reinstated under the
+  right ones. **A test that writes to either clears it afterwards**, and that holds for the pair rather than for
+  `localStorage` alone: each store is one per file, not one per test, so a credential kept by one test is still there
+  when the next one renders.
+- The rule above is why an application test supplies a `CredentialStore` rather than writing to storage: what is kept
+  is then a map the test holds, and nothing has to be cleared. Storage itself is asserted where it is the subject — the
+  store's own test — and the bound the web head's keeping actually has is the browser suite's, a second tab being a
+  second document and jsdom having one.
 - A file that reassigns a module-level double sets it back to its default in a `beforeEach`, so the order tests run in
   cannot decide what one of them sees.
 - Vitest runs files in parallel workers, so a test shares nothing with another file: no fixture written at module

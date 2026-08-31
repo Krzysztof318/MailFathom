@@ -112,21 +112,26 @@ test('asks for a credential before any mail, and opens the frame once one is acc
 });
 
 test('sends the password as one Basic header the bundle composed, on every request it makes', async ({ page }) => {
-    const presented = new Set<string>();
+    const presented: [string, string | undefined][] = [];
 
     page.on('request', (request) => {
-        const authorization = request.headers()['authorization'];
+        const address = new URL(request.url());
 
-        if (authorization !== undefined) {
-            presented.add(authorization);
+        if (address.pathname.startsWith('/api/client/')) {
+            presented.push([address.pathname, request.headers()['authorization']]);
         }
     });
 
     await openSignedIn(page);
 
-    // Only the built bundle answers this: the encoding runs through the browser's own `TextEncoder` and `btoa` after
+    // Every request on the client surface rather than the set of distinct values: a read that stopped carrying the
+    // credential would leave the set unchanged, because the sign-in request already put the one value in it. Only the
+    // built bundle answers this at all — the encoding runs through the browser's own `TextEncoder` and `btoa` after
     // the bundler has been over it, and what a screen sends is not what a component was handed in jsdom.
-    expect([...presented]).toStrictEqual([expectedAuthorization]);
+    expect(presented.length).toBeGreaterThan(0);
+    for (const [route, authorization] of presented) {
+        expect(authorization, `no credential on ${route}`).toBe(expectedAuthorization);
+    }
 });
 
 test('stays signed in across a reload, and asks again in a tab that was not signed in', async ({ page, context }) => {
@@ -284,8 +289,14 @@ test('signs in at the narrowest width a supported head presents', async ({ page 
     await expect(page.getByLabel('Password')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
 
-    const document = await boxOf(page.locator('body'));
-    expect(document.width).toBeLessThanOrEqual(320);
+    // The document's own overflow rather than the body's box: `body` is a block element with no width rule, so its
+    // used width is the viewport's whatever a child inside it does, and an assertion on it could not fail.
+    // Asked as an expression rather than as a function, because this suite is compiled without a DOM declaration on
+    // purpose — `tsconfig.json` says why — and a closure naming `document` would be the one thing that changes.
+    const overflowing = await page.evaluate<boolean>(
+        'document.documentElement.scrollWidth > document.documentElement.clientWidth',
+    );
+    expect(overflowing).toBe(false);
 });
 
 test('opens again in the theme that was chosen, after the page is loaded afresh', async ({ page }) => {

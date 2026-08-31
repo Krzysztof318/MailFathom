@@ -58,8 +58,9 @@ Nothing is published for macOS, and neither Android nor iOS is a head this proje
   [the client surface](client-endpoint.md) exactly as the web head does, and it needs one to be running and reachable
   before it can sign in.
 - **It keeps the password in the machine's own credential store.** Signing in once is enough: the shell hands the
-  credential to the Keychain on macOS, the Credential Manager on Windows, and the session's Secret Service on Linux,
-  filed under the address of the deployment it was given for, and signing out removes it. What is stored is one value
+  credential to the Credential Manager on Windows and to the session's Secret Service on Linux — the two stores the two
+  published heads have — filed under the address of the deployment it was given for, and signing out removes it. Where
+  the store refuses the removal, the client says so rather than reporting a sign-out that did not happen. What is stored is one value
   and the client keeps no copy of it beside that. A machine offering no such store — a Linux session running no keyring
   daemon is the usual case — is told so on the sign-in screen and asked for the password again the next time the
   application opens, rather than having it written somewhere less safe instead.
