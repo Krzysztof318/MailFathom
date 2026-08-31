@@ -9,10 +9,10 @@ import {
     type ClientFailureReason,
     type DeploymentAddress,
     type DeploymentEntryRefusal,
-    type MailFathomTransport,
 } from '@mailfathom/client-backend';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import type { DeploymentTransport } from './sendToDeployment';
 
 // The screen somebody meets when nothing has told the client where its deployment is. It collects an address and
 // proves something MailFathom-shaped answers at it; the credential presented against it afterwards is another screen's.
@@ -42,7 +42,7 @@ export function ConnectDeployment({
     send,
     onReached,
 }: {
-    readonly send: MailFathomTransport;
+    readonly send: DeploymentTransport;
     readonly onReached: (deployment: DeploymentAddress) => void;
 }) {
     const { translate } = useLocalization();
@@ -51,6 +51,7 @@ export function ConnectDeployment({
     const [reaching, setReaching] = useState(false);
     const [refusal, setRefusal] = useState<ConnectRefusal | null>(null);
     const address = useRef<HTMLInputElement>(null);
+    const attempt = useRef<AbortController | null>(null);
 
     // The view changed, so focus is placed rather than left wherever the previous screen had it. Moving focus is an
     // imperative browser API, which is what an effect is for.
@@ -66,11 +67,21 @@ export function ConnectDeployment({
             return;
         }
 
+        const attempted = new AbortController();
+        attempt.current = attempted;
+
         setRefusal(null);
         setReaching(true);
 
-        const greeting = await reachDeployment(resolved.deployment, send);
+        const greeting = await reachDeployment(resolved.deployment, send(attempted.signal));
 
+        // An abandoned attempt has no answer, whatever the wire eventually said: the screen is already back where the
+        // person left it, and reporting a failure here would be this attempt overwriting what they did next.
+        if (attempted.signal.aborted) {
+            return;
+        }
+
+        attempt.current = null;
         setReaching(false);
 
         if (greeting.outcome === 'failed') {
@@ -80,6 +91,15 @@ export function ConnectDeployment({
         }
 
         onReached(resolved.deployment);
+    }
+
+    // A deployment that accepts the connection and never answers would otherwise hold the screen on `connect.reaching`
+    // with the only control on it disabled, which is a state nobody can leave. Abandoning frees the connection as well
+    // as the screen, which is why it aborts the request rather than only ignoring what it says.
+    function abandon(): void {
+        attempt.current?.abort();
+        attempt.current = null;
+        setReaching(false);
     }
 
     return (
@@ -143,13 +163,25 @@ export function ConnectDeployment({
                     </p>
                 </div>
 
-                <button
-                    className="self-start rounded-md bg-fathom-600 px-4 py-2 font-medium text-white disabled:opacity-60"
-                    disabled={reaching}
-                    type="submit"
-                >
-                    {translate('connect.submit')}
-                </button>
+                <div className="flex items-center gap-3">
+                    <button
+                        className="rounded-md bg-fathom-600 px-4 py-2 font-medium text-white disabled:opacity-60"
+                        disabled={reaching}
+                        type="submit"
+                    >
+                        {translate('connect.submit')}
+                    </button>
+
+                    {reaching ? (
+                        <button
+                            className="rounded-md bg-fathom-800/40 px-4 py-2 font-medium text-fathom-200"
+                            type="button"
+                            onClick={abandon}
+                        >
+                            {translate('connect.abandon')}
+                        </button>
+                    ) : null}
+                </div>
             </form>
 
             {reaching ? <p role="status">{translate('connect.reaching')}</p> : null}

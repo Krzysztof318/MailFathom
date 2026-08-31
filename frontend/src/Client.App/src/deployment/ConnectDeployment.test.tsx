@@ -19,13 +19,21 @@ const nothingThere: MailFathomTransport = () => Promise.reject(new TypeError('Fa
 const somethingElse: MailFathomTransport = () =>
     Promise.resolve({ status: 200, body: '<!doctype html><title>Sign in</title>', headers: {} });
 
-function renderScreen(send: MailFathomTransport): { reached: DeploymentAddress[] } {
+// The screen is handed a transport per attempt rather than one transport, because giving up on an attempt is what
+// abandons it. Collecting the signals it was given is how a test sees whether an attempt was actually called off,
+// which is the difference between the screen ignoring an answer and the request being cancelled.
+function renderScreen(send: MailFathomTransport): { reached: DeploymentAddress[]; attempts: AbortSignal[] } {
     const reached: DeploymentAddress[] = [];
+    const attempts: AbortSignal[] = [];
 
     render(
         <LocalizationProvider>
             <ConnectDeployment
-                send={send}
+                send={(abandoned) => {
+                    attempts.push(abandoned);
+
+                    return send;
+                }}
                 onReached={(deployment) => {
                     reached.push(deployment);
                 }}
@@ -33,7 +41,7 @@ function renderScreen(send: MailFathomTransport): { reached: DeploymentAddress[]
         </LocalizationProvider>,
     );
 
-    return { reached };
+    return { reached, attempts };
 }
 
 function type(entry: string): void {
@@ -136,6 +144,27 @@ describe('ConnectDeployment', () => {
         connect();
 
         expect(screen.getByRole('status').textContent).toBe('Reaching the deployment…');
+    });
+
+    it('lets an attempt that never answers be given up on, rather than holding the screen on it', () => {
+        const { attempts } = renderScreen(() => new Promise(() => undefined));
+
+        type('mail.example.test');
+        connect();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Stop trying' }));
+
+        // Back where the person left it: no attempt is reported as running, the address can be corrected and tried
+        // again, and the request the abandoned attempt started was cancelled rather than left on the wire.
+        expect(screen.queryByRole('status')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Connect' }).hasAttribute('disabled')).toBe(false);
+        expect(attempts.map((abandoned) => abandoned.aborted)).toEqual([true]);
+    });
+
+    it('offers nothing to give up on before an attempt has been started', () => {
+        renderScreen(reachable);
+
+        expect(screen.queryByRole('button', { name: 'Stop trying' })).toBeNull();
     });
 
     it('takes the deployment once it answers as one, under the scheme the client supplied', async () => {

@@ -10,11 +10,11 @@ import {
     type DeploymentAddress,
     type MailAccount,
     type MailAccountDirectory,
-    type MailFathomTransport,
     type MailSynchronizationState,
 } from '@mailfathom/client-backend';
 import { forgetDeployment, storeDeployment, type AdoptedDeployment } from './deployment/adoptedDeployment';
 import { ConnectDeployment } from './deployment/ConnectDeployment';
+import type { DeploymentTransport } from './deployment/sendToDeployment';
 import type { MessageKey } from './localization/en';
 import { isOfferedLocale, localeNames, locales, type Locale } from './localization/locale';
 import { useLocalization } from './localization/useLocalization';
@@ -46,7 +46,7 @@ export function App({
     send,
 }: {
     readonly deployment: AdoptedDeployment | null;
-    readonly send: MailFathomTransport;
+    readonly send: DeploymentTransport;
 }) {
     const { translate } = useLocalization();
     const [adopted, setAdopted] = useState(deployment);

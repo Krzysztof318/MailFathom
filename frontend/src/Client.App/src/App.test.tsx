@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientResponse, MailFathomTransport } from '@mailfathom/client-backend';
 import { App } from './App';
 import type { AdoptedDeployment } from './deployment/adoptedDeployment';
+import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { LocalizationProvider } from './localization/Localization';
 import { localeNames, locales, readStoredLocale } from './localization/locale';
 
@@ -41,13 +42,13 @@ const servedFrom: AdoptedDeployment = {
     chosen: false,
 };
 
-const nothingSent: MailFathomTransport = () => Promise.reject(new Error('This screen reaches no deployment.'));
+const nothingSent: DeploymentTransport = () => () => Promise.reject(new Error('This screen reaches no deployment.'));
 
 // The application is mounted the way `main.tsx` mounts it, `StrictMode` included. Nothing reads a message without the
 // provider above it, and a test that supplied its own would be proving a second arrangement — and the mode is half of
 // that arrangement rather than a detail of it: it invokes every effect twice on mount, which is the difference between
 // a screen that behaves and one that behaves the first time it is run.
-function renderApp(deployment: AdoptedDeployment | null = servedFrom, send: MailFathomTransport = nothingSent): void {
+function renderApp(deployment: AdoptedDeployment | null = servedFrom, send: DeploymentTransport = nothingSent): void {
     render(
         <StrictMode>
             <LocalizationProvider>
@@ -171,7 +172,7 @@ describe('App', () => {
 describe('App deployment', () => {
     // A deployment that is there and wants a credential, which is what every deployment somebody runs answers a client
     // that has not signed in yet. The challenge is what says the answer came from MailFathom.
-    const reachable: MailFathomTransport = () =>
+    const reachable: DeploymentTransport = () => () =>
         Promise.resolve({ status: 401, body: '', headers: { 'www-authenticate': 'Bearer realm="MailFathom"' } });
 
     beforeEach(() => {

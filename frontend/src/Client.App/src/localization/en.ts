@@ -25,6 +25,7 @@ export const en = {
         'Your password is encoded rather than encrypted, on every request. Anybody between this client and the deployment can read it. Leave this off unless the network between them is yours.',
     'connect.submit': 'Connect',
     'connect.reaching': 'Reaching the deployment…',
+    'connect.abandon': 'Stop trying',
     'connect.blank': 'Name the deployment that holds your mail.',
     'connect.malformed': 'That is not an address. Name the host it answers on, and a port where it uses one.',
     'connect.clearTextRefused':

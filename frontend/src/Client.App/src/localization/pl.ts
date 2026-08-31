@@ -24,6 +24,7 @@ export const pl: Catalogue = {
         'Twoje hasło jest kodowane, a nie szyfrowane, przy każdym żądaniu. Każdy, kto znajduje się między tym klientem a wdrożeniem, może je odczytać. Zostaw tę opcję wyłączoną, chyba że sieć między nimi należy do Ciebie.',
     'connect.submit': 'Połącz',
     'connect.reaching': 'Łączenie z wdrożeniem…',
+    'connect.abandon': 'Przerwij próbę',
     'connect.blank': 'Podaj wdrożenie, które przechowuje Twoją pocztę.',
     'connect.malformed': 'To nie jest adres. Podaj host, na którym wdrożenie odpowiada, oraz port, jeśli go używa.',
     'connect.clearTextRefused':

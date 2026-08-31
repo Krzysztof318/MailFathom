@@ -8,9 +8,22 @@ import { longestResponseBody, type MailFathomTransport } from '@mailfathom/clien
 // client is here — which is what makes the boundary a resolution error rather than a convention, and it is the whole
 // of what this module is.
 
+/**
+ * The transport for one attempt, which the signal abandons when the person waiting on it gives up.
+ *
+ * A transport is bound to a signal rather than handed one per request because abandoning is a property of the attempt
+ * a screen started, not of a message inside it — and because `AbortSignal` is a browser API, which
+ * `MailFathomTransport` may not name for the reason this module exists at all.
+ */
+export type DeploymentTransport = (abandoned: AbortSignal) => MailFathomTransport;
+
 /** Puts one request on the wire, and reports what came back without deciding anything about it. */
-export const sendToDeployment: MailFathomTransport = async (request) => {
-    const response = await fetch(request.path, { method: request.method, headers: { ...request.headers } });
+export const sendToDeployment: DeploymentTransport = (abandoned) => async (request) => {
+    const response = await fetch(request.path, {
+        method: request.method,
+        headers: { ...request.headers },
+        signal: abandoned,
+    });
 
     return {
         status: response.status,
