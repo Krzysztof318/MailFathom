@@ -233,6 +233,42 @@ public sealed class PersonalDataAnalyzerHealthCheckTests
         await probe.DidNotReceive().VerifyAvailableAsync(Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// The other way an outage ends is the last owner scanned for personal data stopping, which flips the probe back to
+    /// ready without the analyzer having answered. An operator watching the Error record would otherwise have nothing
+    /// saying the instance is back in traffic, and would go on reading a log that ends at the refusal.
+    /// </summary>
+    [Fact]
+    public async Task CheckHealthAsync_TheLastOwnerScannedStoppingDuringAnOutage_LogsTheInstanceIsReadyAgain()
+    {
+        // Arrange
+        using var loggerFactory = new RecordingLoggerFactory();
+        var probe = Substitute.For<IPersonalDataAnalyzerProbe>();
+        probe.VerifyAvailableAsync(Arg.Any<CancellationToken>()).ThrowsAsync(NotReached());
+
+        var postures = Substitute.For<ISensitiveContentPostures>();
+        var scanned = true;
+        postures.RunsForAnyOwner(SensitiveContentScannerKind.Pii).Returns(_ => scanned);
+
+        var check = new PersonalDataAnalyzerHealthCheck(
+            probe,
+            postures,
+            loggerFactory.CreateLogger<PersonalDataAnalyzerHealthCheck>());
+
+        // Act
+        var refused = await check.CheckHealthAsync(new HealthCheckContext(), TestContext.Current.CancellationToken);
+        scanned = false;
+        var ready = await check.CheckHealthAsync(new HealthCheckContext(), TestContext.Current.CancellationToken);
+        await check.CheckHealthAsync(new HealthCheckContext(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(HealthStatus.Unhealthy, refused.Status);
+        Assert.Equal(HealthStatus.Healthy, ready.Status);
+        Assert.Equal(
+            [LogLevel.Error, LogLevel.Information],
+            loggerFactory.Records.Select(record => record.Level));
+    }
+
     /// <summary>The three decisions that make this check what it is, asserted where a registration can lose one silently.</summary>
     [Fact]
     public void Registration_Always_IsUnhealthyOnFailureAndReachesTheReadinessProbeAlone()

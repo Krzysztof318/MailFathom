@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.Embeddings;
+using MailFathom.Application.SensitiveContent.Egress;
 
 namespace MailFathom.Application.UnitTests.TestDoubles;
 
@@ -37,18 +38,34 @@ internal sealed class ScriptedTextEmbeddingGenerator : ITextEmbeddingGenerator
     /// <summary>Gets or sets a token observed on every call, so a test can cancel from inside the provider.</summary>
     public CancellationTokenSource? CancelOnCall { get; set; }
 
+    /// <summary>Gets or sets the guard the real adapter scans a batch through, or <see langword="null" /> to send it unscanned.</summary>
+    /// <remarks>
+    /// The provider adapter guards its passages at
+    /// <see cref="SensitiveContentEgressPoint.HostedEmbeddingInput" /> before any endpoint is reached, so whose posture
+    /// a batch left under is decided here rather than by the caller. A test about that has to set this; one about
+    /// batching, budgets, or failures leaves it null and the double behaves as it always did.
+    /// </remarks>
+    public SensitiveContentEgressGuard? EgressGuard { get; set; }
+
     /// <summary>Gets the batches this generator was asked for, in order.</summary>
     public IReadOnlyList<IReadOnlyList<string>> RequestedBatches => this.requestedBatches;
 
     /// <inheritdoc />
-    public Task<IReadOnlyList<EmbeddingVector>> GenerateAsync(
+    public async Task<IReadOnlyList<EmbeddingVector>> GenerateAsync(
         IReadOnlyList<string> passages,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(passages);
         cancellationToken.ThrowIfCancellationRequested();
 
-        this.requestedBatches.Add(passages);
+        var sent = this.EgressGuard is { } egressGuard
+            ? await egressGuard.GuardAllAsync(
+                SensitiveContentEgressPoint.HostedEmbeddingInput,
+                passages,
+                cancellationToken)
+            : passages;
+
+        this.requestedBatches.Add(sent);
         this.CancelOnCall?.Cancel();
 
         if (this.Failure is { } failure && this.requestedBatches.Count == this.FailingCallNumber)
@@ -56,9 +73,9 @@ internal sealed class ScriptedTextEmbeddingGenerator : ITextEmbeddingGenerator
             throw new EmbeddingGenerationFailedException("scripted", failure);
         }
 
-        IReadOnlyList<EmbeddingVector> vectors = [.. passages.Select(this.Place)];
+        IReadOnlyList<EmbeddingVector> vectors = [.. sent.Select(this.Place)];
 
-        return Task.FromResult(vectors);
+        return vectors;
     }
 
     /// <summary>Places a passage at a point derived from its own text, so the same passage always lands identically.</summary>

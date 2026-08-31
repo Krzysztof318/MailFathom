@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Emails.Threads;
@@ -28,6 +29,7 @@ public sealed class EmailThreadContexts
 {
     private readonly IEmailThreadReader threadReader;
     private readonly MailboxScope readableScope;
+    private readonly MailOwnerId actingOwner;
     private readonly SensitiveContentEgressGuard egressGuard;
     private readonly Dictionary<EmailThreadId, AssembledThread> assembled = [];
 
@@ -53,6 +55,7 @@ public sealed class EmailThreadContexts
 
         this.threadReader = threadReader;
         this.readableScope = scopeResolver.ReadableScope([], [], JunkMailInclusion.Included);
+        this.actingOwner = scopeResolver.Owner;
         this.egressGuard = egressGuard;
     }
 
@@ -67,7 +70,7 @@ public sealed class EmailThreadContexts
             return already;
         }
 
-        using var actingFor = this.egressGuard.ActingFor(this.readableScope.Owner);
+        using var actingFor = this.egressGuard.ActingFor(this.actingOwner);
 
         var read = await this.threadReader.ReadEmailsAsync(threadId, this.readableScope, cancellationToken);
         var wasCutShort = read.Count > IEmailThreadReader.MaximumAssembledEmails;

@@ -125,8 +125,13 @@ internal sealed partial class PersonalDataAnalyzerHealthCheck : IHealthCheck
         if (!this.postures.RunsForAnyOwner(SensitiveContentScannerKind.Pii))
         {
             // Forgotten rather than recorded as available, so an owner who switches the scanner on after an outage
-            // began meets a check that reports that outage instead of one holding a verdict about nobody's mail.
-            this.Observed(AnalyzerAvailability.Unobserved);
+            // began meets a check that reports that outage instead of one holding a verdict about nobody's mail. The
+            // transition out of an outage is still written: the probe flips to ready here, and an operator whose log
+            // ends at the Error record would otherwise have nothing saying the instance is back in traffic.
+            if (this.Observed(AnalyzerAvailability.Unobserved) is AnalyzerAvailability.Unavailable)
+            {
+                this.LogAnalyzerNoLongerAsked();
+            }
 
             return HealthCheckResult.Healthy(
                 "No owner's mail is scanned for personal data, so nothing on this instance asks the analyzer.");
@@ -142,7 +147,7 @@ internal sealed partial class PersonalDataAnalyzerHealthCheck : IHealthCheck
         }
         catch (Exception failure)
         {
-            if (this.Observed(AnalyzerAvailability.Unavailable))
+            if (this.Observed(AnalyzerAvailability.Unavailable) is not AnalyzerAvailability.Unavailable)
             {
                 this.LogAnalyzerUnavailable(failure);
             }
@@ -151,7 +156,7 @@ internal sealed partial class PersonalDataAnalyzerHealthCheck : IHealthCheck
                 "The personal-data analyzer did not answer, so every read, derived write, and egress the scanner guards is being refused.");
         }
 
-        if (this.Observed(AnalyzerAvailability.Available))
+        if (this.Observed(AnalyzerAvailability.Available) is not AnalyzerAvailability.Available)
         {
             this.LogAnalyzerAvailable();
         }
@@ -159,20 +164,21 @@ internal sealed partial class PersonalDataAnalyzerHealthCheck : IHealthCheck
         return HealthCheckResult.Healthy("The personal-data analyzer answers for every category the scanner is switched on for.");
     }
 
-    /// <summary>Records what this scrape saw, and reports whether it changed what the previous one saw.</summary>
-    /// <remarks>The first observation of either kind is a transition, so an instance that comes up with no analyzer says so once rather than staying silent because nothing changed.</remarks>
-    private bool Observed(AnalyzerAvailability availability)
+    /// <summary>Records what this scrape saw, and reports what the previous one had seen.</summary>
+    /// <remarks>
+    /// The previous value rather than a changed flag, because the caller decides what a transition is worth saying:
+    /// arriving at unavailability and leaving it are two different records, and leaving it because nobody's mail is
+    /// scanned any more is a third. The first observation of any kind is a transition, so an instance that comes up
+    /// with no analyzer says so once rather than staying silent because nothing changed.
+    /// </remarks>
+    private AnalyzerAvailability Observed(AnalyzerAvailability availability)
     {
         lock (this.mutex)
         {
-            if (this.lastObserved == availability)
-            {
-                return false;
-            }
-
+            var previous = this.lastObserved;
             this.lastObserved = availability;
 
-            return true;
+            return previous;
         }
     }
 
@@ -192,4 +198,10 @@ internal sealed partial class PersonalDataAnalyzerHealthCheck : IHealthCheck
         Level = LogLevel.Information,
         Message = "The personal-data analyzer answers for every category the scanner is switched on for, so this instance reports ready.")]
     private partial void LogAnalyzerAvailable();
+
+    /// <summary>Reports the other way an outage ends: nobody's mail is scanned for personal data any more, so the analyzer is not asked.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "No owner's mail is scanned for personal data any more, so this instance reports ready without asking the analyzer. The outage recorded above no longer holds it out of traffic, and it says nothing about whether the analyzer has recovered.")]
+    private partial void LogAnalyzerNoLongerAsked();
 }

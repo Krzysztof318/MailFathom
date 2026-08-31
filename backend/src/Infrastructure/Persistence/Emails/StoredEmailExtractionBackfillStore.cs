@@ -46,6 +46,18 @@ internal sealed class StoredEmailExtractionBackfillStore(
     private IReadOnlyList<OwnerSensitiveContentPosture> RebuiltTowards =>
         field ??= options.RebuildsStaleDerivedData && derivationGuard.IsActive ? derivationGuard.Current : [];
 
+    /// <summary>Gets what mail whose owner the roster no longer names is re-derived towards, and nothing where no rebuild runs.</summary>
+    /// <remarks>
+    /// Gated on the same switch as the rostered postures, so a walk that is not rebuilding carries no fallback either
+    /// and goes on clearing the cursor's stamp rather than recording one it never walked under.
+    /// </remarks>
+    private SensitiveContentDerivationStamp? UnrosteredRebuiltTowards =>
+        this.RebuiltTowards.Count == 0 ? null : derivationGuard.StampForUnrostered;
+
+    /// <summary>Gets the one stamp this run's cursor records, over every posture the walk is judging mail against.</summary>
+    private SensitiveContentDerivationStamp? RebuildComposite =>
+        SensitiveContentDerivationStamp.Across(this.RebuiltTowards, this.UnrosteredRebuiltTowards);
+
     /// <inheritdoc />
     /// <remarks>
     /// A position reached while any owner's sensitive-content configuration was different is discarded rather than
@@ -69,7 +81,7 @@ internal sealed class StoredEmailExtractionBackfillStore(
             return null;
         }
 
-        if (SensitiveContentDerivationStamp.Across(this.RebuiltTowards) is { } current
+        if (this.RebuildComposite is { } current
             && !string.Equals(recorded.Stamp, current.Value, StringComparison.Ordinal))
         {
             return null;
@@ -178,7 +190,7 @@ internal sealed class StoredEmailExtractionBackfillStore(
                 Name = BackfillPositionEntity.StoredEmailExtractionName,
                 LastProcessedStoredEmailId = position.Value,
                 UpdatedAt = recordedAt,
-                SensitiveContentStamp = SensitiveContentDerivationStamp.Across(this.RebuiltTowards)?.Value,
+                SensitiveContentStamp = this.RebuildComposite?.Value,
             });
 
             return;
@@ -190,7 +202,7 @@ internal sealed class StoredEmailExtractionBackfillStore(
         // The cursor and the configuration it was reached under move together. A walk that is not rebuilding still
         // advances the position past rows a rebuild has to revisit, so it clears the stamp rather than leaving one a
         // later rebuild would read as everything behind here being done under that configuration.
-        storedPosition.SensitiveContentStamp = SensitiveContentDerivationStamp.Across(this.RebuiltTowards)?.Value;
+        storedPosition.SensitiveContentStamp = this.RebuildComposite?.Value;
     }
 
     /// <inheritdoc />
@@ -217,8 +229,9 @@ internal sealed class StoredEmailExtractionBackfillStore(
     /// One branch per owner, unioned, rather than one predicate over a set of pairs: a row is stale against its own
     /// owner's stamp alone, and comparing it against every stamp in force would call a message fresh because somebody
     /// else's posture happens to match the configuration it was actually written under. Each branch is an equality on
-    /// the owner column beside an inequality on the stamp, so PostgreSQL walks the same index a per-owner read walks,
-    /// and a deployment serving one owner produces the single predicate it produced before any of this existed.
+    /// the owner column beside an inequality on the stamp, so PostgreSQL walks the same index a per-owner read walks.
+    /// A deployment serving one owner produces that owner's branch beside the unrostered one, which is two rather than
+    /// the one predicate the base commit issued — and <c>Outstanding</c> concatenates the never-derived rows on top.
     /// </para>
     /// <para>
     /// One further branch covers the rows whose owner the roster does not name — mail still stored for somebody a
@@ -293,7 +306,7 @@ internal sealed class StoredEmailExtractionBackfillStore(
         var derived = outstanding.Where(email => email.SearchDocument != null
             && email.SearchDocument.TextSource != ExtractedEmailTextSource.BodyNotExtracted);
 
-        return neverDerived.Concat(StaleFor(derived, rebuiltTowards, derivationGuard.StampForUnrostered));
+        return neverDerived.Concat(StaleFor(derived, rebuiltTowards, this.UnrosteredRebuiltTowards));
     }
 
     /// <summary>Asks both stages that stand in front of the cut about one email, through the predicates they own.</summary>

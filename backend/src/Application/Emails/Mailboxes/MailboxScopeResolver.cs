@@ -184,9 +184,11 @@ public sealed class MailboxScopeResolver
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no owner.</exception>
     /// <remarks>
     /// Published here rather than read from the catalog by each use case, so the owner a read narrows to and the owner
-    /// its content is scanned under are one answer. It is the same value <see cref="ReadableScope" /> puts on the scope
-    /// it returns, and it is available before that scope is — which is what a use case needs, since a search reaches a
-    /// model provider with its query text before it has a page to narrow.
+    /// its content is scanned under are one answer. It is the owner the unit of work is acting for whatever scope was
+    /// resolved, which is why a use case reads it here rather than off the scope: a caller who owns no served account
+    /// resolves to <see cref="MailboxScope.NothingReadable" />, whose own owner names nobody, and the difference
+    /// decides whose posture that run's text is scanned under. It is also available before any scope is — what a use
+    /// case needs, since a search reaches a model provider with its query text before it has a page to narrow.
     /// </remarks>
     public MailOwnerId Owner => this.accountCatalog.Owner;
 

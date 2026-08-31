@@ -8,7 +8,10 @@ using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.SensitiveContent;
+using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Emails;
 using MailFathom.TestSupport;
@@ -436,6 +439,75 @@ public sealed class StoredEmailEmbeddingGeneratorTests
         Assert.Equal(run.InputCharacterCount, ledger.ConsumedByPeriodAndOwner[(PeriodStart, SyntheticMailOwner.Another)]);
         Assert.False(ledger.ConsumedByPeriodAndOwner.ContainsKey((PeriodStart, SyntheticMailOwner.Deployment)));
     }
+
+    /// <summary>
+    /// The passages leaving for a hosted provider are scanned under the posture of the owner whose message they were
+    /// cut from rather than the deployment's. Nothing else says so: the generator opens its scope from the ownership it
+    /// read, and one naming the wrong owner would publish one person's body text judged by another person's answer,
+    /// while one naming nobody would fail only on a deployment that scans somebody.
+    /// </summary>
+    [Fact]
+    public async Task EmbedAsync_TwoOwnersScannedDifferently_SendsEachOwnersPassagesUnderTheirOwnPosture()
+    {
+        // Arrange
+        const string marker = "AKIAEXAMPLEKEY";
+
+        var scannedOwnersMessage = StoredEmailId.Create(Guid.CreateVersion7());
+        var scanner = new MarkerSensitiveContentScanner(
+            marker,
+            SensitiveContentScannerKind.Secrets,
+            TimeProvider.System);
+        var plan = SensitiveContentPlan.Create(
+            SensitiveContentScanBounds.Default,
+            [
+                SensitiveContentScannerPlan.Create(
+                    scanner.Scanner,
+                    [MarkerSensitiveContentScanner.Category],
+                    []),
+            ]);
+        using var permits = new SensitiveContentScanConcurrency(plan.Bounds.MaximumConcurrentScans);
+
+        var postures = FixedSensitiveContentPostures.Of(
+            SensitiveContentPosture.ScanningNothing,
+            (SyntheticMailOwner.Another, SensitiveContentPosture.Scanning(
+                [scanner.Scanner],
+                new SensitiveContentRedactor(plan, [scanner], TimeProvider.System, permits),
+                SensitiveContentScreeningPolicy.ScreeningNothing(),
+                SensitiveContentDerivationStamp.Compute(plan, [scanner]))));
+
+        var store = new InMemoryEmailEmbeddingStore();
+        store.AddPassages(Message, PassageCarrying(marker));
+        store.AddPassages(scannedOwnersMessage, PassageCarrying(marker));
+
+        var egressGuard = new SensitiveContentEgressGuard(
+            postures,
+            new RecordingSensitiveContentEgressTelemetry(),
+            TimeProvider.System);
+        var provider = new ScriptedTextEmbeddingGenerator(CreateIdentity(), maximumPassagesPerCall: 8)
+        {
+            EgressGuard = egressGuard,
+        };
+        var generator = CreateGenerator(
+            store,
+            provider,
+            ownership: new StubMailOwnership().Owns(scannedOwnersMessage, SyntheticMailOwner.Another),
+            egressGuard: egressGuard);
+
+        // Act
+        await generator.EmbedAsync(Message, CreateProfile(), TestContext.Current.CancellationToken);
+        await generator.EmbedAsync(scannedOwnersMessage, CreateProfile(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Contains(marker, Assert.Single(provider.RequestedBatches[0]), StringComparison.Ordinal);
+        Assert.DoesNotContain(marker, Assert.Single(provider.RequestedBatches[1]), StringComparison.Ordinal);
+    }
+
+    private static IReadOnlyList<EmailChunkAwaitingEmbedding> PassageCarrying(string marker) =>
+    [
+        new EmailChunkAwaitingEmbedding(
+            EmailChunkId.Create(Guid.CreateVersion7()),
+            $"the key is {marker}, in a message somebody sent"),
+    ];
 
     private static IReadOnlyList<EmailChunkAwaitingEmbedding> CreatePassages(int count) =>
         [.. Enumerable.Range(0, count).Select(ordinal => new EmailChunkAwaitingEmbedding(

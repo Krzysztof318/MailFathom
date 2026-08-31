@@ -362,11 +362,11 @@ public sealed class StoredEmailExtractionBackfillTests
         // Assert
         Assert.Equal(2, result.ExtractedEmailCount);
         await mimeReader.Received(1).ReadMetadataAsync(
-            Arg.Any<RemoteEmailContent>(),
+            Arg.Is<RemoteEmailContent>(content => content!.OccurrenceId.Uid == ImapUid.Create(1)),
             SyntheticMailOwner.Deployment,
             Arg.Any<CancellationToken>());
         await mimeReader.Received(1).ReadMetadataAsync(
-            Arg.Any<RemoteEmailContent>(),
+            Arg.Is<RemoteEmailContent>(content => content!.OccurrenceId.Uid == ImapUid.Create(2)),
             SyntheticMailOwner.Another,
             Arg.Any<CancellationToken>());
     }

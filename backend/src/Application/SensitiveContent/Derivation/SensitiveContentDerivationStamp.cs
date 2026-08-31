@@ -92,7 +92,11 @@ public readonly record struct SensitiveContentDerivationStamp
 
     /// <summary>Computes the one stamp a walk over every owner's mail is re-deriving towards.</summary>
     /// <param name="postures">What every owner this deployment serves has their mail scanned under, ordered by owner.</param>
-    /// <returns>The composite, or <see langword="null" /> where no owner's mail is scanned at all.</returns>
+    /// <param name="unrostered">
+    /// What mail whose owner the roster no longer names is judged against, which is the deployment's own posture, and
+    /// <see langword="null" /> where nothing scans it.
+    /// </param>
+    /// <returns>The composite, or <see langword="null" /> where no mail this walk covers is scanned at all.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="postures" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// <para>
@@ -106,12 +110,19 @@ public readonly record struct SensitiveContentDerivationStamp
     /// the same one. Owners whose mail nothing scans are in the digest as well, by their identifier alone, because an
     /// owner who switched their scanner off since the cursor was written is exactly the case that has to discard it.
     /// </para>
+    /// <para>
+    /// The fallback is digested beside them because the walk judges mail against it: rows belonging to an owner this
+    /// deployment has stopped serving are stale exactly when the deployment's own posture moved, and that move is
+    /// invisible in the rostered stamps whenever every rostered owner had already asked for at least as much.
+    /// </para>
     /// </remarks>
-    public static SensitiveContentDerivationStamp? Across(IReadOnlyList<OwnerSensitiveContentPosture> postures)
+    public static SensitiveContentDerivationStamp? Across(
+        IReadOnlyList<OwnerSensitiveContentPosture> postures,
+        SensitiveContentDerivationStamp? unrostered)
     {
         ArgumentNullException.ThrowIfNull(postures);
 
-        if (!postures.Any(posture => posture.Posture.Stamp is not null))
+        if (unrostered is null && !postures.Any(posture => posture.Posture.Stamp is not null))
         {
             return null;
         }
@@ -126,6 +137,8 @@ public readonly record struct SensitiveContentDerivationStamp
             CanonicalDigest.AppendText(digest, posture.Owner.ToString());
             CanonicalDigest.AppendText(digest, posture.Posture.Stamp?.Value ?? string.Empty);
         }
+
+        CanonicalDigest.AppendText(digest, unrostered?.Value ?? string.Empty);
 
         return new SensitiveContentDerivationStamp(Convert.ToHexStringLower(digest.GetHashAndReset()));
     }
