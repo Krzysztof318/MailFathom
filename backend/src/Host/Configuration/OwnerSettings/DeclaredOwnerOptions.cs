@@ -5,6 +5,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.SensitiveContent;
 
 namespace MailFathom.Host.Configuration.OwnerSettings;
 
@@ -12,9 +13,10 @@ namespace MailFathom.Host.Configuration.OwnerSettings;
 /// <remarks>
 /// <para>
 /// It is the file's half of what <see cref="OwnerAccountOptions" /> is the row's half of. The content is the same
-/// property — the owner's mail-account declarations — and the two properties in front of it are the relational
-/// envelope a file has to state because nothing about a file could derive one: the identifier every mail account,
-/// every stored message, and every job of theirs hangs on, and the label an administrator tells owners apart by.
+/// pair of properties — the owner's mail-account declarations and what they ask to have their mail scanned for — and
+/// the two properties in front of them are the relational envelope a file has to state because nothing about a file
+/// could derive one: the identifier every mail account, every stored message, and every job of theirs hangs on, and the
+/// label an administrator tells owners apart by.
 /// </para>
 /// <para>
 /// The identifier is the operator's rather than MailFathom's. Nothing in a file can generate one that would be the
@@ -55,4 +57,12 @@ internal sealed class DeclaredOwnerOptions
     /// and so an adoption materializes what the file supplied under the name the document already uses.
     /// </remarks>
     public List<MailSynchronizationAccountOptions> MailAccounts { get; set; } = [];
+
+    /// <summary>Gets what this owner's mail is scanned for, within what the deployment provides.</summary>
+    /// <remarks>
+    /// The same block an adopted record carries, judged by the same rules, so an operator writing a posture into the
+    /// file and an owner writing one into their own record are refused for the same reasons in the same words. A
+    /// deployment that states nothing here scans this owner's mail exactly as it scans everybody's.
+    /// </remarks>
+    public OwnerSensitiveContentOptions SensitiveContent { get; } = new();
 }

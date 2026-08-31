@@ -7,6 +7,7 @@ using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Mail;
 using MailFathom.Infrastructure.Mail.Mime;
 using MailFathom.Infrastructure.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
 
@@ -194,7 +195,7 @@ public sealed class EmailBodyTextExtractionTests
 
         // Act
         var result = await CreateReader(new EmailMimeExtractionOptions())
-            .ReadMetadataAsync(content, CancellationToken.None);
+            .ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         Assert.NotNull(result.Metadata);
@@ -432,7 +433,7 @@ public sealed class EmailBodyTextExtractionTests
 
         // Act
         var result = await CreateReader(new EmailMimeExtractionOptions())
-            .ReadMetadataAsync(content, CancellationToken.None);
+            .ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         Assert.Equal(EmailMimeExtractionOutcome.Extracted, result.Outcome);
@@ -454,7 +455,7 @@ public sealed class EmailBodyTextExtractionTests
             options.MaxExtractedTextCharacters = bound;
         }
 
-        var result = await CreateReader(options).ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader(options).ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         Assert.Equal(EmailMimeExtractionOutcome.Extracted, result.Outcome);
         Assert.NotNull(result.Metadata);

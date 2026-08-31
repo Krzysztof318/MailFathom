@@ -153,6 +153,8 @@ public sealed class MailboxSearchReader
 
         using var read = this.readTelemetry.BeginRead(MailboxReadOperation.SearchMailbox, cancellationToken);
 
+        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.Owner);
+
         var window = await this.SearchWindowAsync(request, cancellationToken);
         var matches = await this.GuardedAsync(window.Matches, cancellationToken);
 

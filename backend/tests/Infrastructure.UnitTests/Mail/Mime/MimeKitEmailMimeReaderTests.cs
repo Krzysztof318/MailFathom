@@ -11,6 +11,7 @@ using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Infrastructure.Mail.Dkim;
 using MailFathom.Infrastructure.Mail.Mime;
 using MailFathom.Infrastructure.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using NSubstitute;
 using Xunit;
 
@@ -38,7 +39,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "Dzień dobry.");
 
         // Act
-        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader().ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var metadata = AssertExtracted(result);
@@ -72,7 +73,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "Body");
 
         // Act
-        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader().ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var metadata = AssertExtracted(result);
@@ -104,7 +105,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "--mixed--");
 
         // Act
-        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader().ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var attachments = AssertExtracted(result).Attachments;
@@ -137,7 +138,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "--mixed--");
 
         // Act
-        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader().ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var attachments = AssertExtracted(result).Attachments;
@@ -167,7 +168,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "--signed--");
 
         // Act
-        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader().ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var attachments = AssertExtracted(result).Attachments;
@@ -200,7 +201,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "--encrypted--");
 
         // Act
-        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader().ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var attachments = AssertExtracted(result).Attachments;
@@ -232,7 +233,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "--encrypted--");
 
         // Act
-        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader().ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var attachments = AssertExtracted(result).Attachments;
@@ -261,7 +262,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "SGVsbG8sIHdvcmxkIQ==");
 
         // Act
-        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader().ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var attachments = AssertExtracted(result).Attachments;
@@ -296,7 +297,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "--signed--");
 
         // Act
-        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader().ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var attachments = AssertExtracted(result).Attachments;
@@ -325,7 +326,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "--related--");
 
         // Act
-        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader().ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var attachments = AssertExtracted(result).Attachments;
@@ -342,7 +343,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "<html><head><style>.header{background:url(cid:logo@example.test)}</style></head><body></body></html>");
 
         // Act
-        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader().ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var attachments = AssertExtracted(result).Attachments;
@@ -361,7 +362,7 @@ public sealed class MimeKitEmailMimeReaderTests
         var content = CreateRelatedMessageWithHtmlBody(htmlBody);
 
         // Act
-        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader().ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var attachments = AssertExtracted(result).Attachments;
@@ -381,7 +382,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "Body");
 
         // Act
-        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader().ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var participant = Assert.Single(AssertExtracted(result).Participants);
@@ -395,6 +396,7 @@ public sealed class MimeKitEmailMimeReaderTests
         // Act
         var result = await CreateReader().ReadMetadataAsync(
             CreateRelatedMessageWithEmbeddedImage(imageDispositionHeader: null),
+            SyntheticMailOwner.Deployment,
             CancellationToken.None);
 
         // Assert
@@ -410,6 +412,7 @@ public sealed class MimeKitEmailMimeReaderTests
         // Act
         var result = await CreateReader().ReadMetadataAsync(
             CreateRelatedMessageWithEmbeddedImage("Content-Disposition: attachment; filename=\"logo.png\""),
+            SyntheticMailOwner.Deployment,
             CancellationToken.None);
 
         // Assert
@@ -452,7 +455,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "--outer--");
 
         // Act
-        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader().ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var attachments = AssertExtracted(result).Attachments;
@@ -482,7 +485,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "--outer--");
 
         // Act
-        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader().ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var attachments = AssertExtracted(result).Attachments;
@@ -510,7 +513,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "--mixed--");
 
         // Act
-        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader().ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var attachments = AssertExtracted(result).Attachments;
@@ -543,7 +546,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "--parts--");
 
         // Act
-        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader().ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         Assert.Equal(expectedAttachmentCount, AssertExtracted(result).Attachments.AttachmentCount);
@@ -572,7 +575,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "--mixed--");
 
         // Act
-        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader().ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var attachment = Assert.Single(AssertExtracted(result).Attachments.Attachments);
@@ -601,7 +604,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "--mixed--");
 
         // Act
-        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader().ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var attachment = Assert.Single(AssertExtracted(result).Attachments.Attachments);
@@ -630,7 +633,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "--mixed--");
 
         // Act
-        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader().ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         Assert.Null(Assert.Single(AssertExtracted(result).Attachments.Attachments).FileName);
@@ -668,7 +671,7 @@ public sealed class MimeKitEmailMimeReaderTests
             ]);
 
         // Act
-        var result = await reader.ReadMetadataAsync(content, CancellationToken.None);
+        var result = await reader.ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         Assert.Equal(EmailMimeExtractionOutcome.PartCountLimitExceeded, result.Outcome);
@@ -694,7 +697,7 @@ public sealed class MimeKitEmailMimeReaderTests
             });
 
         // Act
-        var result = await reader.ReadMetadataAsync(CreateDeeplyNestedMessage(nestingDepth: 4), CancellationToken.None);
+        var result = await reader.ReadMetadataAsync(CreateDeeplyNestedMessage(nestingDepth: 4), SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         Assert.Equal(EmailMimeExtractionOutcome.NestingDepthLimitExceeded, result.Outcome);
@@ -713,7 +716,7 @@ public sealed class MimeKitEmailMimeReaderTests
             localSenderVerifier: null);
 
         // Act
-        var result = await reader.ReadMetadataAsync(CreateDeeplyNestedMessage(nestingDepth: 3), CancellationToken.None);
+        var result = await reader.ReadMetadataAsync(CreateDeeplyNestedMessage(nestingDepth: 3), SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         Assert.Equal(EmailMimeExtractionOutcome.Extracted, result.Outcome);
@@ -726,7 +729,7 @@ public sealed class MimeKitEmailMimeReaderTests
     public async Task ReadMetadataAsync_ContentThatIsNotAMessage_ReportsAFailureWithoutThrowing(byte[] rawMime)
     {
         // Act
-        var result = await CreateReader().ReadMetadataAsync(MimeFixtures.RawContent(rawMime), CancellationToken.None);
+        var result = await CreateReader().ReadMetadataAsync(MimeFixtures.RawContent(rawMime), SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         Assert.NotEqual(EmailMimeExtractionOutcome.Extracted, result.Outcome);
@@ -750,7 +753,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "SGVsbG8sIHdvcmxk");
 
         // Act
-        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader().ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         Assert.NotNull(result);
@@ -768,7 +771,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "Body");
 
         // Act
-        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader().ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         Assert.Equal(MimeFixtures.OccurrenceId, AssertExtracted(result).OccurrenceId);
@@ -788,7 +791,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "Body");
 
         // Act
-        var result = await CreateReader("mx.example.test").ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader("mx.example.test").ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var authentication = AssertExtracted(result).SenderAuthentication;
@@ -810,7 +813,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "Body");
 
         // Act
-        var result = await CreateReader("mx.example.test").ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader("mx.example.test").ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var authentication = AssertExtracted(result).SenderAuthentication;
@@ -836,7 +839,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "Body");
 
         // Act
-        var result = await CreateReader().ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader().ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var authentication = AssertExtracted(result).SenderAuthentication;
@@ -857,7 +860,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "Body");
 
         // Act
-        var result = await CreateReader("mx.example.test").ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader("mx.example.test").ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         Assert.Equal(
@@ -879,7 +882,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "Body");
 
         // Act
-        var result = await CreateReader("mx.example.test").ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader("mx.example.test").ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var metadata = AssertExtracted(result);
@@ -905,7 +908,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "Body");
 
         // Act
-        var result = await CreateReader("mx.example.test").ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader("mx.example.test").ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         Assert.Equal(
@@ -925,7 +928,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "Body");
 
         // Act
-        var result = await CreateReader("mx.example.test").ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader("mx.example.test").ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var authentication = AssertExtracted(result).SenderAuthentication;
@@ -952,7 +955,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "Body");
 
         // Act
-        var result = await CreateReader("mx.example.test", verifier).ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader("mx.example.test", verifier).ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var authentication = AssertExtracted(result).SenderAuthentication;
@@ -977,7 +980,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "Body");
 
         // Act
-        var result = await CreateReader("mx.example.test", verifier).ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader("mx.example.test", verifier).ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var authentication = AssertExtracted(result).SenderAuthentication;
@@ -1003,7 +1006,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "Body");
 
         // Act
-        var result = await CreateReader("mx.example.test", verifier).ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader("mx.example.test", verifier).ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var authentication = AssertExtracted(result).SenderAuthentication;
@@ -1030,7 +1033,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "Body");
 
         // Act
-        await CreateReader("mx.example.test", verifier).ReadMetadataAsync(content, CancellationToken.None);
+        await CreateReader("mx.example.test", verifier).ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         await verifier.Received(1).VerifyAsync(
@@ -1053,7 +1056,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "Body");
 
         // Act
-        await CreateReader(trustedAuthorityIdentifier: null, verifier).ReadMetadataAsync(content, CancellationToken.None);
+        await CreateReader(trustedAuthorityIdentifier: null, verifier).ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         await verifier.Received(1).VerifyAsync(
@@ -1074,7 +1077,7 @@ public sealed class MimeKitEmailMimeReaderTests
             "Body");
 
         // Act
-        var result = await CreateReader("mx.example.test").ReadMetadataAsync(content, CancellationToken.None);
+        var result = await CreateReader("mx.example.test").ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
 
         // Assert
         var authentication = AssertExtracted(result).SenderAuthentication;

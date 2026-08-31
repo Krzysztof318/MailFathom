@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Persistence;
-using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Emails.Extraction;
@@ -83,10 +82,9 @@ public interface IStoredEmailExtractionBackfillStore
         StoredEmailId position,
         CancellationToken cancellationToken);
 
-    /// <summary>Counts the stored emails whose derived text was written under a different sensitive-content configuration.</summary>
-    /// <param name="current">The configuration a derived row written now would carry.</param>
+    /// <summary>Counts the stored emails whose derived text was written under something other than their owner's posture.</summary>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
-    /// <returns>How many stored emails a rebuild towards <paramref name="current" /> would re-derive.</returns>
+    /// <returns>How many stored emails a rebuild would re-derive.</returns>
     /// <remarks>
     /// <para>
     /// Answered by the walk's own store rather than by a reader of its own, so the number an operator is shown and the
@@ -95,11 +93,14 @@ public interface IStoredEmailExtractionBackfillStore
     /// </para>
     /// <para>
     /// It counts whether or not the rebuild is switched on, because that is the question it exists to answer: an
-    /// operator who has just enabled a scanner needs to know how much of their mailbox the switch does not reach before
-    /// they decide whether to spend the re-derivation.
+    /// operator who has just enabled a scanner, or whose owner has, needs to know how much of the mail already stored
+    /// the switch does not reach before deciding whether to spend the re-derivation.
+    /// </para>
+    /// <para>
+    /// The postures are read by the store rather than supplied, because each row is judged against its own owner's and
+    /// no single value describes the answer. A count summed by a caller over one owner at a time would be the same
+    /// number reached through several round trips.
     /// </para>
     /// </remarks>
-    Task<int> CountEmailsWithStaleDerivedDataAsync(
-        SensitiveContentDerivationStamp current,
-        CancellationToken cancellationToken);
+    Task<int> CountEmailsWithStaleDerivedDataAsync(CancellationToken cancellationToken);
 }

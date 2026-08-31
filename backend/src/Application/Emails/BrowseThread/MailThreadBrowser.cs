@@ -123,6 +123,8 @@ public sealed class MailThreadBrowser
 
         using var read = this.readTelemetry.BeginRead(MailboxReadOperation.ReadEmailThread, cancellationToken);
 
+        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.Owner);
+
         var pageSize = MailboxQueryPageSize.FromRequested(request.PageSize);
         var fingerprint = EmailThreadCursor.FingerprintOf(request.ThreadId);
         var boundary = ContinuationBoundary(request.Cursor, fingerprint);

@@ -17,6 +17,7 @@
   <ItemGroup>
     <Compile Include="..\shared\LargeSyntheticMessage.cs" Link="LargeSyntheticMessage.cs" />
     <Compile Include="..\shared\NoTrustedAuthentication.cs" Link="NoTrustedAuthentication.cs" />
+    <Compile Include="..\shared\SyntheticMailOwner.cs" Link="SyntheticMailOwner.cs" />
   </ItemGroup>
 
   <ItemGroup>

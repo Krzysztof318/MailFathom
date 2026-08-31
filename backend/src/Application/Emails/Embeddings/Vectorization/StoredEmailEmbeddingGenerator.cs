@@ -5,6 +5,7 @@
 using MailFathom.Application.Access;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 
@@ -56,6 +57,7 @@ public sealed class StoredEmailEmbeddingGenerator
     private readonly EmbeddingSpendGate spendGate;
     private readonly EmbeddingRequestPacer requestPacer;
     private readonly IMailOwnership ownership;
+    private readonly SensitiveContentEgressGuard egressGuard;
 
     /// <summary>Initializes a new generator of one message's embeddings.</summary>
     /// <param name="embeddingStore">Reads which passages lack a vector, and writes the vectors that answer.</param>
@@ -64,6 +66,7 @@ public sealed class StoredEmailEmbeddingGenerator
     /// <param name="spendGate">Says whether the period still admits a request, and is charged for the ones it does.</param>
     /// <param name="requestPacer">Holds a call back until this deployment is allowed to send its next one.</param>
     /// <param name="ownership">Names the owner whose mail this message is, so the spend is bounded and charged for them.</param>
+    /// <param name="egressGuard">States whose mail the passages are, so the adapter that sends them scans under that owner's posture.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
     public StoredEmailEmbeddingGenerator(
         IEmailEmbeddingStore embeddingStore,
@@ -71,7 +74,8 @@ public sealed class StoredEmailEmbeddingGenerator
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
         EmbeddingSpendGate spendGate,
         EmbeddingRequestPacer requestPacer,
-        IMailOwnership ownership)
+        IMailOwnership ownership,
+        SensitiveContentEgressGuard egressGuard)
     {
         ArgumentNullException.ThrowIfNull(embeddingStore);
         ArgumentNullException.ThrowIfNull(textEmbeddingGenerator);
@@ -79,6 +83,7 @@ public sealed class StoredEmailEmbeddingGenerator
         ArgumentNullException.ThrowIfNull(spendGate);
         ArgumentNullException.ThrowIfNull(requestPacer);
         ArgumentNullException.ThrowIfNull(ownership);
+        ArgumentNullException.ThrowIfNull(egressGuard);
 
         this.embeddingStore = embeddingStore;
         this.textEmbeddingGenerator = textEmbeddingGenerator;
@@ -86,6 +91,7 @@ public sealed class StoredEmailEmbeddingGenerator
         this.spendGate = spendGate;
         this.requestPacer = requestPacer;
         this.ownership = ownership;
+        this.egressGuard = egressGuard;
     }
 
     /// <summary>Embeds whatever of one message is not yet embedded under one generation.</summary>
@@ -168,6 +174,10 @@ public sealed class StoredEmailEmbeddingGenerator
             var billedCharacterCount = CountBilledCharacters(profile, passages);
 
             await this.requestPacer.WaitForSlotAsync(cancellationToken);
+
+            // The passages are this owner's mail on its way to a provider, and the adapter that sends them guards each
+            // one several layers below here. This is where the answer to whose mail it is exists, so it is stated here.
+            using var actingFor = this.egressGuard.ActingFor(owner.Value);
 
             IReadOnlyList<EmbeddingVector> vectors;
             try

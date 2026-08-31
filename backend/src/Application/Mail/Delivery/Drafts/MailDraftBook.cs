@@ -120,7 +120,7 @@ public sealed class MailDraftBook
         // Before the write, so a refused draft leaves neither a record nor a message nor a copy in the mailbox — and
         // asked on every revision rather than on the first one alone, because a revision is a new message and because a
         // draft written before the screen was switched on would otherwise carry its way past it one edit at a time.
-        if (await this.screening.FindRefusalAsync(composed.RawMime, cancellationToken) is { } screened)
+        if (await this.screening.FindRefusalAsync(account.Owner, composed.RawMime, cancellationToken) is { } screened)
         {
             throw MailDraftRefusedException.ContentRefused(screened);
         }

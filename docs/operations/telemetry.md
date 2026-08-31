@@ -447,7 +447,7 @@ neither would otherwise be a duration with nothing under it.
 | Span | Where it is opened | What it carries |
 | --- | --- | --- |
 | `rank_mailbox_search` | Inside `search_mailbox`, and inside an answering run's own retrieval | The same two tags the reads above carry, with the count being the candidates the ranking scored rather than the window returned |
-| `scan_sensitive_content` | Wherever a read guards a payload before publishing it | `mailfathom.sensitive_content.egress_point`, `…texts` as how many texts the operation scanned, and `…outcome` as `succeeded`, `refused`, `cancelled`, or `failed` |
+| `scan_sensitive_content` | Wherever a read guards a payload before publishing it | `mailfathom.sensitive_content.egress_point`, `…texts` as how many texts the operation scanned, `…outcome` as `succeeded`, `refused`, `cancelled`, or `failed`, and `mailfathom.owner` as whose mail was being published |
 
 The ranking's count is deliberately the ranking's rather than the read's. A hybrid search asks each side for four times
 the window so the fusion has agreement to observe, so a call returning ten matches having scored eighty candidates —
@@ -1090,18 +1090,26 @@ mail would be reading it exactly backwards — nothing was transmitted, and noth
 that produces it: everywhere else a finding is redacted and the operation continues. Both of its tags are written
 whatever stopped the act, and an act stopped because the analyzed ceiling cut the text reads `not_scanned` in each —
 a value rather than an absent tag, because a series missing one dimension is a second series and a query summing this
-counter by scanner would silently drop every length refusal. Which findings stop an act is the operator's, and
-[`SensitiveContent:ScreenOutgoingMailFor`](configuration-ai.md#sensitivecontent) is where it is written.
+counter by scanner would silently drop every length refusal. Which findings stop an act is the operator's floor and the
+owner's to tighten: [`SensitiveContent:ScreenOutgoingMailFor`](configuration-ai.md#sensitivecontent) is where the floor
+is written, and [each owner's own posture](../features/sensitive-content-scanning.md#each-owners-own-posture) is what
+may add to it.
 
 The findings are split by category rather than totalled because which kind of material a mailbox is producing is what
 decides whether a category list is right, and a total says only that the feature is switched on. The omitted count is
 recorded only when the ceiling actually cut something: a zero on every guarded text would make the series say the
 ceiling is in play on ordinary mail, which is the one question that instrument exists to answer. All six read zero on a
-deployment with both switches off, because nothing is constructed there.
+deployment where nothing is switched on for anybody, because nothing is constructed there.
+
+**Whose mail an operation published is on the span alone**, as `mailfathom.owner`. Postures differ between the people
+one deployment serves, so a scan that cannot be attributed to one of them cannot be read against what that person asked
+for — and the same identifier on a counter incremented once per guarded text would be an unbounded dimension, which is
+what every closed tag here exists to avoid. The attribute is absent rather than zero where no owner was resolved.
 
 Nothing published here is mail or derived from it. The three tags are MailFathom's own closed sets, and the values are
 counts and durations — never a rule's match, a position, a message identity, or any part of what was found, each of
-which would put the credential in the telemetry written to prove it never left.
+which would put the credential in the telemetry written to prove it never left. The owner identifier on the span is the
+deployment's own configured value and names a person no more than a mail account alias does.
 [Sensitive-content scanning](../features/sensitive-content-scanning.md#the-guarded-egress-points) names the points
 themselves and what a refusal does to each.
 

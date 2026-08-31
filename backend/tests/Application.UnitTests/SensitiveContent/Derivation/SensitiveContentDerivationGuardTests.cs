@@ -27,11 +27,73 @@ public sealed class SensitiveContentDerivationGuardTests
 
         // Act
         var stored = await derivation.Guard.GuardAsync(
+            ScanningSensitiveContentDerivation.Owner,
             $"the key is {Marker} and it works",
             TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal("the key is [redacted:CloudKey] and it works", stored);
+    }
+
+    /// <summary>
+    /// A derived row belongs to one owner, so what redacted it and what it is stamped with are that owner's. The owner
+    /// who asked for nothing has their text stored as it was read and their rows carry no stamp, which is what a later
+    /// walk reads to decide whose mail a posture change made stale.
+    /// </summary>
+    [Fact]
+    public async Task GuardAsync_TwoOwnersOfOneDeployment_RedactsAndStampsEachUnderTheirOwnPosture()
+    {
+        // Arrange
+        using var derivation = ScanningSensitiveContentDerivation.Finding(Marker, this.timeProvider);
+
+        var guard = new SensitiveContentDerivationGuard(
+            FixedSensitiveContentPostures.Of(
+                SensitiveContentPosture.ScanningNothing,
+                (SyntheticMailOwner.Deployment, derivation.Postures.ForOwner(SyntheticMailOwner.Deployment))),
+            new RecordingSensitiveContentDerivationTelemetry(),
+            this.timeProvider);
+
+        // Act
+        var scanned = await guard.GuardAsync(
+            SyntheticMailOwner.Deployment,
+            $"the key is {Marker}",
+            TestContext.Current.CancellationToken);
+        var unscanned = await guard.GuardAsync(
+            SyntheticMailOwner.Another,
+            $"the key is {Marker}",
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("the key is [redacted:CloudKey]", scanned);
+        Assert.Equal($"the key is {Marker}", unscanned);
+        Assert.NotNull(guard.StampFor(SyntheticMailOwner.Deployment));
+        Assert.Null(guard.StampFor(SyntheticMailOwner.Another));
+    }
+
+    /// <summary>The walk that re-derives stale rows reads every owner from here, each beside their own stamp.</summary>
+    [Fact]
+    public void Current_ADeploymentServingTwoOwners_ReportsBothOfThemBesideWhatTheirRowsAreWrittenUnder()
+    {
+        // Arrange
+        using var derivation = ScanningSensitiveContentDerivation.Finding(Marker, this.timeProvider);
+
+        var guard = new SensitiveContentDerivationGuard(
+            FixedSensitiveContentPostures.Of(
+                SensitiveContentPosture.ScanningNothing,
+                (SyntheticMailOwner.Deployment, derivation.Postures.ForOwner(SyntheticMailOwner.Deployment)),
+                (SyntheticMailOwner.Another, SensitiveContentPosture.ScanningNothing)),
+            new RecordingSensitiveContentDerivationTelemetry(),
+            this.timeProvider);
+
+        // Act
+        var current = guard.Current;
+
+        // Assert
+        Assert.Equal(
+            [SyntheticMailOwner.Deployment, SyntheticMailOwner.Another],
+            current.Select(owner => owner.Owner));
+        Assert.NotNull(current[0].Posture.Stamp);
+        Assert.Null(current[1].Posture.Stamp);
     }
 
     /// <summary>A row's stamp is what makes a later configuration change answerable rather than silent.</summary>
@@ -42,7 +104,7 @@ public sealed class SensitiveContentDerivationGuardTests
         using var derivation = ScanningSensitiveContentDerivation.Finding(Marker, this.timeProvider);
 
         // Act
-        var stamp = derivation.Guard.Stamp;
+        var stamp = derivation.Guard.StampFor(ScanningSensitiveContentDerivation.Owner);
 
         // Assert
         Assert.True(derivation.Guard.IsActive);
@@ -58,11 +120,14 @@ public sealed class SensitiveContentDerivationGuardTests
         var guard = ScanningSensitiveContentDerivation.Inactive();
 
         // Act
-        var stored = await guard.GuardAsync($"the key is {Marker}", TestContext.Current.CancellationToken);
+        var stored = await guard.GuardAsync(
+            ScanningSensitiveContentDerivation.Owner,
+            $"the key is {Marker}",
+            TestContext.Current.CancellationToken);
 
         // Assert
         Assert.False(guard.IsActive);
-        Assert.Null(guard.Stamp);
+        Assert.Null(guard.StampFor(ScanningSensitiveContentDerivation.Owner));
         Assert.Equal($"the key is {Marker}", stored);
     }
 
@@ -75,7 +140,10 @@ public sealed class SensitiveContentDerivationGuardTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(() =>
-            derivation.Guard.GuardAsync("whatever the message said", TestContext.Current.CancellationToken));
+            derivation.Guard.GuardAsync(
+                ScanningSensitiveContentDerivation.Owner,
+                "whatever the message said",
+                TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(SensitiveContentScannerKind.Secrets, refusal.Scanner);
@@ -91,7 +159,10 @@ public sealed class SensitiveContentDerivationGuardTests
 
         // Act
         await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(() =>
-            derivation.Guard.GuardAsync("whatever the message said", TestContext.Current.CancellationToken));
+            derivation.Guard.GuardAsync(
+                ScanningSensitiveContentDerivation.Owner,
+                "whatever the message said",
+                TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(SensitiveContentScannerKind.Secrets, Assert.Single(derivation.Telemetry.Refused));
@@ -107,7 +178,10 @@ public sealed class SensitiveContentDerivationGuardTests
         derivation.Scanner.WhileScanning = () => this.timeProvider.Advance(TimeSpan.FromMilliseconds(250));
 
         // Act
-        await derivation.Guard.GuardAsync($"{Marker} and {Marker}", TestContext.Current.CancellationToken);
+        await derivation.Guard.GuardAsync(
+            ScanningSensitiveContentDerivation.Owner,
+            $"{Marker} and {Marker}",
+            TestContext.Current.CancellationToken);
 
         // Assert
         var derived = Assert.Single(derivation.Telemetry.Derived);
@@ -124,19 +198,36 @@ public sealed class SensitiveContentDerivationGuardTests
 
     /// <summary>A stamp on a row promises the text beside it went through a redaction, so neither travels alone.</summary>
     [Fact]
-    public void Constructor_AStampWithoutARedactor_IsRefused()
+    public void StampFor_AnOwnerNothingScans_IsAbsentBesideTheRedactionThatIsAbsentToo()
     {
         // Arrange
-        var stamp = SensitiveContentDerivationStamp.Create(new string('a', SensitiveContentDerivationStamp.Length));
+        var guard = ScanningSensitiveContentDerivation.Inactive();
 
         // Act
-        var refusal = Assert.Throws<ArgumentException>(() => new SensitiveContentDerivationGuard(
-            redactor: null,
-            stamp,
-            new RecordingSensitiveContentDerivationTelemetry(),
-            this.timeProvider));
+        var stamp = guard.StampFor(ScanningSensitiveContentDerivation.Owner);
 
         // Assert
-        Assert.Equal("stamp", refusal.ParamName);
+        Assert.Null(stamp);
+        Assert.False(guard.IsActive);
+        Assert.Empty(guard.Current);
+    }
+
+    /// <summary>The guard is composed from the postures alone, so a deployment cannot hand it one without the other.</summary>
+    [Fact]
+    public void Constructor_WithoutItsCollaborators_IsRefused()
+    {
+        // Act, Assert
+        Assert.Throws<ArgumentNullException>(() => new SensitiveContentDerivationGuard(
+            null!,
+            new RecordingSensitiveContentDerivationTelemetry(),
+            this.timeProvider));
+        Assert.Throws<ArgumentNullException>(() => new SensitiveContentDerivationGuard(
+            FixedSensitiveContentPostures.ScanningNothing(),
+            null!,
+            this.timeProvider));
+        Assert.Throws<ArgumentNullException>(() => new SensitiveContentDerivationGuard(
+            FixedSensitiveContentPostures.ScanningNothing(),
+            new RecordingSensitiveContentDerivationTelemetry(),
+            null!));
     }
 }

@@ -24,7 +24,6 @@ public sealed class SensitiveContentOptionsTests
         // Assert
         Assert.False(settings.Secrets.Enabled);
         Assert.False(settings.Pii.Enabled);
-        Assert.False(settings.IsAnyScannerEnabled);
     }
 
     [Fact]
@@ -39,19 +38,47 @@ public sealed class SensitiveContentOptionsTests
         Assert.Equal(SensitiveContentScanBounds.Default.MaximumConcurrentScans, settings.MaximumConcurrentScans);
     }
 
+    /// <summary>The secrets scanner runs inside this process, so every deployment can serve an owner who asks for it.</summary>
+    [Fact]
+    public void ProvidedScanners_ADeploymentWithNoAnalyzerAddress_ProvidesTheSecretsScannerAlone()
+    {
+        // Act
+        var settings = new SensitiveContentOptions();
+
+        // Assert
+        Assert.Equal([SensitiveContentScannerKind.Secrets], settings.ProvidedScanners);
+        Assert.False(settings.ProvidesPersonalDataScanner);
+    }
+
+    /// <summary>Standing the analyzer up is what makes the personal-data scanner available, whoever switches it on.</summary>
     [Theory]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    [InlineData(true, true)]
-    public void IsAnyScannerEnabled_EitherSwitchOn_IsTrue(bool secrets, bool personalData)
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ProvidedScanners_AConfiguredAnalyzer_ProvidesBothWhicheverWayTheSwitchReads(bool switchedOn)
     {
         // Arrange
-        var settings = new SensitiveContentOptions();
-        settings.Secrets.Enabled = secrets;
-        settings.Pii.Enabled = personalData;
+        var settings = new SensitiveContentOptions { PersonalDataAnalyzer = { Endpoint = "http://analyzer:3000" } };
+        settings.Pii.Enabled = switchedOn;
 
         // Act, Assert
-        Assert.True(settings.IsAnyScannerEnabled);
+        Assert.Equal(
+            [SensitiveContentScannerKind.Secrets, SensitiveContentScannerKind.Pii],
+            settings.ProvidedScanners);
+        Assert.True(settings.ProvidesPersonalDataScanner);
+    }
+
+    /// <summary>An address no request could be composed from provides nothing, so a record asking for that scanner is refused.</summary>
+    [Theory]
+    [InlineData("presidio-analyzer:3000")]
+    [InlineData("ftp://analyzer:3000")]
+    [InlineData("   ")]
+    public void ProvidedScanners_AnAddressNothingCouldBeAskedAt_ProvidesTheSecretsScannerAlone(string endpoint)
+    {
+        // Arrange
+        var settings = new SensitiveContentOptions { PersonalDataAnalyzer = { Endpoint = endpoint } };
+
+        // Act, Assert
+        Assert.Equal([SensitiveContentScannerKind.Secrets], settings.ProvidedScanners);
     }
 
     [Fact]

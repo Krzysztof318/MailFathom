@@ -81,7 +81,7 @@ Kestrel's own default address.
 | Probe | Path | Consults | A failure means |
 |---|---|---|---|
 | Startup | `/started` | The host's own startup gates: every secret reference the deployment's own sections carry resolved, the database schema verified, every owner the deployment serves reconciled against the rows it holds and their own mailboxes' secrets resolved with them, and — only where its own switch is on — the spam scanner naming the corpus it scores under | The process has not finished coming up; the grace period continues |
-| Readiness | `/health` | The dependencies a request needs: the database, each declared AI provider, and — only where its own switch is on — the personal-data analyzer and the object-storage bucket, or, where no endpoint is configured, whether stored content points into one anyway | The instance stops receiving traffic; it is not restarted |
+| Readiness | `/health` | The dependencies a request needs: the database, each declared AI provider, and — only where something actually runs against it — the personal-data analyzer and the object-storage bucket, or, where no endpoint is configured, whether stored content points into one anyway | The instance stops receiving traffic; it is not restarted |
 | Liveness | `/alive` | Process-local state only | The container is restarted |
 
 One endpoint cannot answer all three, because the three have different consequences. Wiring liveness to the readiness
@@ -104,12 +104,17 @@ Neither check calls a provider to find out; each reports the outcome of the last
 health scrape from spending an operator's money. [Chat generation](../features/chat-generation.md#provider-health-is-tracked-per-provider)
 records the states and what each asks of an operator.
 
-**The personal-data analyzer is the opposite case.** With `SensitiveContent:Pii` switched on the
+**The personal-data analyzer is the opposite case.** Where the personal-data scanner runs for anybody the deployment
+serves — the deployment's own switch, or [an owner who asked for
+it](../features/sensitive-content-scanning.md#each-owners-own-posture) — the
 scanner fails closed, so an instance whose analyzer cannot answer refuses every read, derived write, and egress that
 scanner guards — it is not serving a narrower service, it is serving nothing the scanner covers. So the
 `personal-data-analyzer` check reports **unhealthy**, `/health` answers `503`, and the instance leaves the load balancer.
 It never reaches the liveness probe: restarting this process cannot start the container beside it, and doing so would
 turn one sidecar's outage into a restart loop.
+
+The check is skipped entirely where no owner's posture runs that scanner, which is what keeps a deployment carrying a
+leftover analyzer address from reporting itself unready over a scanner nobody is running.
 
 Like the database check and unlike the two above it, this one reaches its dependency on each scrape. The analyzer is a
 container with a lifetime of its own — it may become ready after MailFathom and may stop answering long afterwards — so a

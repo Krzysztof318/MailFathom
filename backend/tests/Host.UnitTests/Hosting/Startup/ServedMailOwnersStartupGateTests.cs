@@ -9,6 +9,7 @@ using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.OwnerSettings;
+using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Owners;
@@ -1096,7 +1097,8 @@ public sealed class ServedMailOwnersStartupGateTests
         services.AddScoped(_ => documents ?? Substitute.For<IOwnerSettingsDocumentReader>());
         services.AddSingleton(new OwnerAccountDocumentBinder(
             new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
-            new FakeTimeProvider()));
+            new FakeTimeProvider(),
+            Options.Create(new SensitiveContentOptions())));
         services.AddSingleton(SecretValidator());
 
         return new ServedMailOwnersStartupGate(

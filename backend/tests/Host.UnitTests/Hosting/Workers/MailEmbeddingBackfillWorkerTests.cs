@@ -529,6 +529,7 @@ public sealed class MailEmbeddingBackfillWorkerTests
         services.AddScoped<EmbeddingSpendGate>();
         services.AddScoped<OptimisticConcurrencyRetryPolicy>();
         services.AddSingleton<IMailOwnership>(new StubMailOwnership());
+        services.AddSingleton(SensitiveContentEgressGuards.Inactive());
         services.AddScoped<StoredEmailEmbeddingGenerator>();
         services.AddScoped<StoredEmailEmbeddingBackfill>();
         services.AddScoped<EmbeddingGenerationUpkeep>();

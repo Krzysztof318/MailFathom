@@ -70,7 +70,6 @@ using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
-using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Actions;
 using MailFathom.Application.Spam.Gating;
@@ -782,40 +781,28 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MailAccountFreshnessReader>();
         services.AddScoped<MailFolderDirectoryReader>();
         // The guard every egress point calls, registered for every deployment rather than only where a scanner is
-        // switched on. What is conditional is the redaction behind it: with both switches off the provider hands over
-        // no redactor, no detector is constructed, and every call returns its argument. Registering it conditionally
-        // instead would put a null check and a second code path into each consumer, which is how two of them end up
-        // disagreeing about what an unguarded egress looks like.
+        // switched on. What is conditional is the redaction behind it, and it is conditional per owner rather than per
+        // deployment: the guard asks the postures for the owner the flow is acting for, and an owner nothing scans for
+        // meets a posture that holds no redactor, constructs no detector, and returns each argument unchanged.
+        // Registering it conditionally instead would put a null check and a second code path into each consumer, which
+        // is how two of them end up disagreeing about what an unguarded egress looks like.
         services.AddSingleton<ISensitiveContentEgressTelemetry, SensitiveContentEgressTelemetry>();
         // A singleton for the reason every other instrument here is one: what it counts is a fact about the process, and
         // a scoped instance would create a meter per request.
         services.AddSingleton<IDerivedWorkGateTelemetry, DerivedWorkGateTelemetry>();
-        services.AddSingleton(provider => new SensitiveContentEgressGuard(
-            provider.GetService<SensitiveContentRedactor>(),
-            provider.GetRequiredService<ISensitiveContentEgressTelemetry>(),
-            provider.GetRequiredService<TimeProvider>()));
-        // Its refusing counterpart, registered on the same terms and inert in the same two ways: no redactor where both
-        // switches are off, and a policy that stops nothing where the deployment named no scanner to stop an act with.
-        // A consumer therefore calls it unconditionally and never asks whether screening exists.
-        services.AddSingleton(provider => new SensitiveContentEgressScreen(
-            provider.GetService<SensitiveContentRedactor>(),
-            provider.GetService<SensitiveContentScreeningPolicy>()
-                ?? SensitiveContentScreeningPolicy.ScreeningNothing(),
-            provider.GetRequiredService<ISensitiveContentEgressTelemetry>(),
-            provider.GetRequiredService<TimeProvider>()));
+        services.AddSingleton<SensitiveContentEgressGuard>();
+        // Its refusing counterpart, registered on the same terms and inert in the same two ways for the same owner: no
+        // redactor where nothing is switched on for them, and a policy that stops nothing where neither the deployment
+        // nor that owner named a scanner to stop an act with. A consumer therefore calls it unconditionally and never
+        // asks whether screening exists.
+        services.AddSingleton<SensitiveContentEgressScreen>();
 
-        // Its counterpart on the way in, registered on the same terms and for the same reasons. The stamp is composed
-        // here rather than held by the redactor, because it is the derived store's question rather than the redaction's:
-        // what a row has to record is which detectors, revisions, categories, and suppressions produced its text, and
-        // that answer is fixed for the life of a process the moment the plan and the scanners are resolved.
+        // Its counterpart on the way in, registered on the same terms and for the same reasons. The stamp a row records
+        // is the owner's rather than the deployment's, because what a row has to record is which detectors, revisions,
+        // categories, and suppressions produced its text — so a message of an owner who switched a scanner on carries a
+        // different stamp from one belonging to an owner who did not, and each is answerable on its own.
         services.AddSingleton<ISensitiveContentDerivationTelemetry, SensitiveContentDerivationTelemetry>();
-        services.AddSingleton(provider => new SensitiveContentDerivationGuard(
-            provider.GetService<SensitiveContentRedactor>(),
-            provider.GetService<SensitiveContentPlan>() is { } plan
-                ? SensitiveContentDerivationStamp.Compute(plan, provider.GetServices<ISensitiveContentScanner>())
-                : null,
-            provider.GetRequiredService<ISensitiveContentDerivationTelemetry>(),
-            provider.GetRequiredService<TimeProvider>()));
+        services.AddSingleton<SensitiveContentDerivationGuard>();
         services.AddScoped<MailboxTimelineReader>();
         services.AddScoped<MailTimelineBrowser>();
         services.AddScoped<MailThreadBrowser>();
@@ -1215,10 +1202,11 @@ public static class ServiceCollectionExtensions
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// <para>
-    /// Called only where the <c>Secrets</c> switch is on, so with it off no expression is compiled and the scanner does
-    /// not exist. What the scanner declares it can find is registered by <see cref="AddSensitiveContentCatalogs" />
-    /// whatever the switch says, for the reason stated there — so the corpus behind the declaration is read on every
-    /// start, and what the switch decides is whether anything scans with it rather than whether it is assembled.
+    /// Called by every deployment, because this detector runs in this process and needs nothing deployed beside it, so
+    /// any owner may switch it on for their own mail whatever the deployment's own switch says. Registering it
+    /// constructs nothing: the corpus is compiled when the first posture that runs this scanner resolves it, and a
+    /// deployment nobody asked for scanning on resolves none. What the scanner declares it can find is registered by
+    /// <see cref="AddSensitiveContentCatalogs" /> separately, for the reason stated there.
     /// </para>
     /// <para>
     /// The scanner is a singleton, because the corpus is compiled once and the scanner holds it.
@@ -1270,14 +1258,18 @@ public static class ServiceCollectionExtensions
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="services" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// <para>
-    /// Called only where the <c>Pii</c> switch is on, which is what keeps an opt-in nobody took from opening anything:
-    /// with it off no client is registered, no analyzer address is read, and none of the three descriptors below exists.
-    /// The composed <see cref="PersonalDataAnalyzerProfile" /> is the host's to register, because where the analyzer is
-    /// comes from configuration this project does not bind.
+    /// Called only where the deployment stood an analyzer up, which is what keeps an opt-in nobody took from opening
+    /// anything: with no address configured no client is registered, and none of the three descriptors below exists.
+    /// It is the address rather than the <c>Pii</c> switch that gates this, because an owner may switch that scanner on
+    /// for their own mail and no roster exists while services are being registered — so what is registered is what the
+    /// deployment can provide, and which owners meet it is their postures. The composed
+    /// <see cref="PersonalDataAnalyzerProfile" /> is the host's to register, because where the analyzer is comes from
+    /// configuration this project does not bind.
     /// </para>
     /// <para>
     /// The probe is registered beside the scanner rather than always, because it answers for a client this deployment
-    /// only opens where the switch is on: a probe without a scanner would report on an analyzer nothing reaches. The
+    /// only opens where an analyzer was configured: a probe without a scanner would report on an analyzer nothing
+    /// reaches. Whether any owner's mail is actually scanned with it is the readiness check's own first question. The
     /// catalog is neither here nor conditional, for the reason <see cref="AddSensitiveContentCatalogs" /> gives.
     /// </para>
     /// </remarks>

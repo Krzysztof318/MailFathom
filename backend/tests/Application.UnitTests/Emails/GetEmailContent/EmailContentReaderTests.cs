@@ -1501,20 +1501,26 @@ public sealed class EmailContentReaderTests
                     [MarkerSensitiveContentScanner.Category],
                     []),
             ]);
-        using var redactor = new SensitiveContentRedactor(plan, [scanner], TimeProvider.System);
+        using var permits = new SensitiveContentScanConcurrency(plan.Bounds.MaximumConcurrentScans);
+
+        var postures = FixedSensitiveContentPostures.ForEveryOwner(
+            SensitiveContentPosture.Scanning(
+                [scanner.Scanner],
+                new SensitiveContentRedactor(plan, [scanner], TimeProvider.System, permits),
+                SensitiveContentScreeningPolicy.ScreeningNothing(),
+                SensitiveContentDerivationStamp.Compute(plan, [scanner])));
         var summary = SyntheticEmailSummaries.Create();
         var reader = ReaderOver(
             summary,
             RendererReturning(RenderingOf(plainText: body)),
             egressGuard: new SensitiveContentEgressGuard(
-                redactor,
+                postures,
                 new RecordingSensitiveContentEgressTelemetry(),
                 TimeProvider.System));
         var derivedReader = new RedactingEmailMimeReader(
             MimeReaderYielding(body),
             new SensitiveContentDerivationGuard(
-                redactor,
-                SensitiveContentDerivationStamp.Compute(plan, [scanner]),
+                postures,
                 new RecordingSensitiveContentDerivationTelemetry(),
                 TimeProvider.System));
 
@@ -1524,6 +1530,7 @@ public sealed class EmailContentReaderTests
             TestContext.Current.CancellationToken);
         var derived = await derivedReader.ReadMetadataAsync(
             RemoteContentOf(),
+            SyntheticMailOwner.Deployment,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -2002,7 +2009,7 @@ public sealed class EmailContentReaderTests
     {
         var reader = Substitute.For<IEmailMimeReader>();
 
-        reader.ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<CancellationToken>())
+        reader.ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(new ExtractedEmailMetadata(
                 call.Arg<RemoteEmailContent>()!.OccurrenceId,
                 Subject: "Subject",

@@ -176,6 +176,8 @@ public sealed class EmailContentReader
 
         using var read = this.readTelemetry.BeginRead(MailboxReadOperation.ReadEmailContent, cancellationToken);
 
+        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.Owner);
+
         // One instance per read, because a call routinely names several messages of one exchange: assembling per email
         // would read that conversation, order it, and scan its subjects once for each of them.
         var threads = new EmailThreadContexts(this.threadReader, this.scopeResolver, this.egressGuard);

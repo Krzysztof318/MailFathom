@@ -4,6 +4,7 @@
 
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Mail;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 
 namespace MailFathom.Application.Emails.Extraction;
@@ -48,9 +49,10 @@ public sealed class SenderTrustEvaluatingEmailMimeReader : IEmailMimeReader
     /// <inheritdoc />
     public async Task<EmailMimeExtractionResult> ReadMetadataAsync(
         RemoteEmailContent content,
+        MailOwnerId owner,
         CancellationToken cancellationToken)
     {
-        var extraction = await this.inner.ReadMetadataAsync(content, cancellationToken);
+        var extraction = await this.inner.ReadMetadataAsync(content, owner, cancellationToken);
 
         // A message nobody could parse establishes no author to judge, and reaches storage with the columns the envelope
         // alone supports — which is the unknown answer, and the same one it already carries.

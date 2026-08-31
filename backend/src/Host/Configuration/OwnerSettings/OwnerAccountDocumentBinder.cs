@@ -6,9 +6,11 @@ using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using System.Text.Json;
+using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Infrastructure.Persistence.Owners;
 using MailFathom.Infrastructure.Persistence.Settings;
 using Microsoft.Extensions.Configuration.Json;
+using Microsoft.Extensions.Options;
 
 namespace MailFathom.Host.Configuration.OwnerSettings;
 
@@ -33,11 +35,16 @@ namespace MailFathom.Host.Configuration.OwnerSettings;
 /// <para>
 /// Nothing here composes a configuration layer over the deployment's. The record is bound from the document alone, so
 /// no value in it shadows a setting the deployment made, and an owner-level setting is only ever a property the record
-/// declares.
+/// declares. The deployment's own section reaches this for one purpose and no other: to say what a record may ask for.
+/// A scanning posture is refused here when it would switch off what the deployment requires or reach for an analyzer
+/// the deployment never stood up, which is a rule about the record rather than a value composed over it.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this binder.")]
-internal sealed class OwnerAccountDocumentBinder(PersistedSecretMaterial secretMaterial, TimeProvider timeProvider)
+internal sealed class OwnerAccountDocumentBinder(
+    PersistedSecretMaterial secretMaterial,
+    TimeProvider timeProvider,
+    IOptions<SensitiveContentOptions> sensitiveContent)
 {
     /// <summary>Binds an owner's document and judges the record it produces.</summary>
     /// <param name="json">The owner's document, as the JSON object their row holds.</param>
@@ -224,11 +231,13 @@ internal sealed class OwnerAccountDocumentBinder(PersistedSecretMaterial secretM
 
         Validator.TryValidateObject(owner, new ValidationContext(owner), refusals, validateAllProperties: true);
 
-        // The rule the bound graph cannot reach, supplied its clock here for the reason the deployment's own section
-        // supplies one through a custom validator: a record judged by every rule but this one would accept a
-        // synchronization bound that the identical declaration in configuration refuses at startup.
+        // The rules the bound graph cannot reach, each supplied what it needs from outside the record for the reason
+        // the deployment's own section supplies a clock through a custom validator: a record judged by every rule but
+        // these would accept a synchronization bound that the identical declaration in configuration refuses at
+        // startup, and a scanning posture the deployment could not honour.
         refusals.AddRange(owner.FindSynchronizationWindowErrors(
             DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime)));
+        refusals.AddRange(owner.FindSensitiveContentErrors(sensitiveContent.Value));
 
         return refusals.Count > 0
             ? OwnerAccountBinding.Refused([.. refusals.Select(refusal => refusal.ErrorMessage ?? "The owner record is invalid.")])

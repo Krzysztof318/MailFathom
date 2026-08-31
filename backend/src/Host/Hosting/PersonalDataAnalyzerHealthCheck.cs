@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
@@ -23,6 +24,12 @@ namespace MailFathom.Host.Hosting;
 /// answer refuses every read, derived write, and egress the scanner guards, so it is not serving a narrower service —
 /// it is serving nothing the scanner covers. Reporting anything better would keep an instance in the load balancer to
 /// answer requests it has already decided to refuse.
+/// </para>
+/// <para>
+/// <b>It asks whether anybody is scanned for before it asks the analyzer.</b> The scanner is switched on per owner, so
+/// a deployment that stood the analyzer up without scanning its own owners' mail with it is not made unready by that
+/// analyzer's silence — nothing is being refused — while one where a single owner switched it on for their own mail is.
+/// Registration cannot decide this, because it happens before the roster the answer is composed from exists.
 /// </para>
 /// <para>
 /// It carries the readiness tag alone and must never reach the liveness probe. Restarting this process cannot start a
@@ -52,29 +59,34 @@ internal sealed partial class PersonalDataAnalyzerHealthCheck : IHealthCheck
 
     private readonly Lock mutex = new();
     private readonly IPersonalDataAnalyzerProbe probe;
+    private readonly ISensitiveContentPostures postures;
     private readonly ILogger<PersonalDataAnalyzerHealthCheck> logger;
 
     private AnalyzerAvailability lastObserved = AnalyzerAvailability.Unobserved;
 
     /// <summary>Initializes a new personal-data analyzer health check.</summary>
     /// <param name="probe">Asks the configured analyzer whether it can answer for every switched-on category.</param>
+    /// <param name="postures">Says whether anybody's mail is scanned for personal data at all.</param>
     /// <param name="logger">Reports the two transitions this check exists to make visible.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public PersonalDataAnalyzerHealthCheck(
         IPersonalDataAnalyzerProbe probe,
+        ISensitiveContentPostures postures,
         ILogger<PersonalDataAnalyzerHealthCheck> logger)
     {
         ArgumentNullException.ThrowIfNull(probe);
+        ArgumentNullException.ThrowIfNull(postures);
         ArgumentNullException.ThrowIfNull(logger);
 
         this.probe = probe;
+        this.postures = postures;
         this.logger = logger;
     }
 
     /// <summary>What this check has established about the analyzer so far.</summary>
     private enum AnalyzerAvailability
     {
-        /// <summary>No scrape has reached the analyzer yet.</summary>
+        /// <summary>No scrape has reached the analyzer yet, or none has needed to.</summary>
         Unobserved = 0,
 
         /// <summary>The last scrape got an answer for every switched-on category.</summary>
@@ -110,6 +122,16 @@ internal sealed partial class PersonalDataAnalyzerHealthCheck : IHealthCheck
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
+        if (!this.postures.RunsForAnyOwner(SensitiveContentScannerKind.Pii))
+        {
+            // Forgotten rather than recorded as available, so an owner who switches the scanner on after an outage
+            // began meets a check that reports that outage instead of one holding a verdict about nobody's mail.
+            this.Observed(AnalyzerAvailability.Unobserved);
+
+            return HealthCheckResult.Healthy(
+                "No owner's mail is scanned for personal data, so nothing on this instance asks the analyzer.");
+        }
+
         try
         {
             await this.probe.VerifyAvailableAsync(cancellationToken);

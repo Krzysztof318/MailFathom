@@ -27,6 +27,7 @@ public sealed class OutgoingMailScreeningsTests
 
         // Act
         var refusal = await screening.FindRefusalAsync(
+            ScanningSensitiveContentEgress.Owner,
             MimeOf($"the key is {Marker}"),
             TestContext.Current.CancellationToken);
 
@@ -47,6 +48,7 @@ public sealed class OutgoingMailScreeningsTests
 
         // Act
         var refusal = await screening.FindRefusalAsync(
+            ScanningSensitiveContentEgress.Owner,
             MimeOf($"the key is {Marker}"),
             TestContext.Current.CancellationToken);
 
@@ -66,6 +68,7 @@ public sealed class OutgoingMailScreeningsTests
 
         // Act
         var refusal = await screening.FindRefusalAsync(
+            ScanningSensitiveContentEgress.Owner,
             MimeOf("an ordinary message"),
             TestContext.Current.CancellationToken);
 

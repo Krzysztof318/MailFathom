@@ -319,7 +319,12 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
                 }
 
                 roster.Add(new MailOwnerRecord(owner, label, DocumentWrittenAtRuntime: false));
-                served.Add((index, new ServedMailOwner(owner, label, MailOwnerAccountSource.OwnerDeclaration, declaration.MailAccounts)));
+                served.Add((index, new ServedMailOwner(
+                    owner,
+                    label,
+                    MailOwnerAccountSource.OwnerDeclaration,
+                    declaration.MailAccounts,
+                    SensitiveContent: declaration.SensitiveContent)));
 
                 continue;
             }
@@ -340,7 +345,12 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
 
             served.Add((index, record.DocumentWrittenAtRuntime
                 ? await this.ServeFromTheOwnDocumentAsync(scope, record with { DisplayName = label }, cancellationToken)
-                : new ServedMailOwner(owner, label, MailOwnerAccountSource.OwnerDeclaration, declaration.MailAccounts)));
+                : new ServedMailOwner(
+                    owner,
+                    label,
+                    MailOwnerAccountSource.OwnerDeclaration,
+                    declaration.MailAccounts,
+                    SensitiveContent: declaration.SensitiveContent)));
         }
 
         return [.. served.OrderBy(entry => entry.Index).Select(entry => entry.Owner)];
@@ -383,7 +393,8 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
             record.DisplayName,
             MailOwnerAccountSource.OwnerDocument,
             bound.MailAccounts,
-            bound.SpamClassification);
+            bound.SpamClassification,
+            bound.SensitiveContent);
     }
 
     /// <summary>Refuses an owner whose own mail accounts carry a secret or a trust anchor this deployment cannot use.</summary>

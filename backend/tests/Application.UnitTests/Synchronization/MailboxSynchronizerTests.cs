@@ -1707,7 +1707,7 @@ public sealed class MailboxSynchronizerTests
         // Assert
         Assert.Equal(1, result.StoredEmailCount);
         Assert.Equal(0, result.UnreadableMimeEmailCount);
-        await mimeReader.Received(1).ReadMetadataAsync(content, CancellationToken.None);
+        await mimeReader.Received(1).ReadMetadataAsync(content, SyntheticMailOwner.Deployment, CancellationToken.None);
         await session.Received(1).FetchEmailContentWithoutSettingSeenAsync(occurrence, 1024, CancellationToken.None);
     }
 
@@ -1734,7 +1734,7 @@ public sealed class MailboxSynchronizerTests
         var extracted = CreateExtractedMetadata(occurrence);
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
-            .ReadMetadataAsync(content, Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(content, Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(EmailMimeExtractionResult.Extracted(extracted)));
         var synchronizer = CreateSynchronizer(
             sessionFactory,
@@ -1786,7 +1786,7 @@ public sealed class MailboxSynchronizerTests
         var content = new RemoteEmailContent(occurrence, new ReadOnlyMemory<byte>([1, 2, 3]));
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
-            .ReadMetadataAsync(content, Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(content, Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(EmailMimeExtractionResult.MalformedContent()));
         var synchronizer = CreateSynchronizer(
             sessionFactory,
@@ -1844,7 +1844,7 @@ public sealed class MailboxSynchronizerTests
         var readableContent = new RemoteEmailContent(readableOccurrence, new ReadOnlyMemory<byte>([2]));
         var mimeReader = CreateMimeReaderThatExtractsEverything();
         mimeReader
-            .ReadMetadataAsync(unreadableContent, Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(unreadableContent, Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(CreateFailedExtraction(unreadableOutcome)));
         var synchronizer = CreateSynchronizer(
             sessionFactory,
@@ -1925,7 +1925,7 @@ public sealed class MailboxSynchronizerTests
         // Assert
         Assert.Equal(1, result.SkippedOversizedEmailCount);
         Assert.Equal(0, result.UnreadableMimeEmailCount);
-        await mimeReader.DidNotReceiveWithAnyArgs().ReadMetadataAsync(default!, CancellationToken.None);
+        await mimeReader.DidNotReceiveWithAnyArgs().ReadMetadataAsync(default!, default, CancellationToken.None);
     }
 
     /// <summary>Settings that put the folder every arrival test synchronizes inside classification's scope.</summary>
@@ -2043,7 +2043,7 @@ public sealed class MailboxSynchronizerTests
 
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
-            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(
                 CreateExtractedMetadata(call.Arg<RemoteEmailContent>()!.OccurrenceId) with
                 {
@@ -2802,7 +2802,7 @@ public sealed class MailboxSynchronizerTests
     {
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
-            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(
                 EmailMimeExtractionResult.Extracted(CreateExtractedMetadata(call.Arg<RemoteEmailContent>()!.OccurrenceId))));
 

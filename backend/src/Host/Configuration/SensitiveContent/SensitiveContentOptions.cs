@@ -107,12 +107,28 @@ internal sealed class SensitiveContentOptions : IValidatableObject
     /// </remarks>
     public bool RebuildStaleDerivedData { get; set; }
 
-    /// <summary>Gets whether this deployment scans anything at all.</summary>
+    /// <summary>Gets whether this deployment stood the analyzer the personal-data scanner reaches up.</summary>
     /// <remarks>
-    /// This is what the composition root registers on. With both switches off no plan is composed, no redactor exists,
-    /// and no detector is constructed, so an opt-in nobody took costs nothing on any path.
+    /// Configuring an address is what makes that scanner available — to the deployment itself, and to an owner who
+    /// switches it on for their own mail — and it is deliberately a different question from whether <see cref="Pii" />
+    /// is on. The address is parsed rather than merely present, because the composition root builds the analyzer client
+    /// from it and an address no request could be composed from provides nothing.
     /// </remarks>
-    public bool IsAnyScannerEnabled => this.Secrets.Enabled || this.Pii.Enabled;
+    public bool ProvidesPersonalDataScanner =>
+        Uri.TryCreate(this.PersonalDataAnalyzer.Endpoint, UriKind.Absolute, out var analyzer)
+        && (analyzer.Scheme == Uri.UriSchemeHttp || analyzer.Scheme == Uri.UriSchemeHttps);
+
+    /// <summary>Gets every scanner this deployment stands behind, whether or not it scans its owners' mail with one.</summary>
+    /// <remarks>
+    /// This is what the composition root registers detectors on, because which of them run over one owner's mail is
+    /// that owner's posture and no roster exists while services are being registered. The secrets scanner is always
+    /// among them: it runs inside this process and needs nothing deployed beside it. Registering a detector constructs
+    /// none, so a deployment nobody asked for scanning on still compiles no expression and opens no client.
+    /// </remarks>
+    public IReadOnlyList<SensitiveContentScannerKind> ProvidedScanners =>
+        this.ProvidesPersonalDataScanner
+            ? [SensitiveContentScannerKind.Secrets, SensitiveContentScannerKind.Pii]
+            : [SensitiveContentScannerKind.Secrets];
 
     /// <summary>Finds the scanner options one switch is configured by.</summary>
     /// <param name="scanner">The switch to read.</param>

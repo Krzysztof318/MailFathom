@@ -7,6 +7,7 @@ using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.SensitiveContent;
 using Microsoft.Extensions.Primitives;
 
 namespace MailFathom.Host.Configuration.OwnerSettings;
@@ -174,7 +175,7 @@ internal sealed class ServedMailOwners : IDeploymentMailOwnerSource
     /// <remarks>
     /// The whole bound record rather than the accounts alone, because everything of an owner's the roster publishes
     /// comes from one document: a second parameter per settings block would leave a caller free to publish an owner's
-    /// mailboxes from the committed record and their spam posture from somewhere else.
+    /// mailboxes from the committed record and their spam or scanning posture from somewhere else.
     /// </remarks>
     internal void OwnerDocumentPublished(
         MailOwnerId owner,
@@ -206,7 +207,8 @@ internal sealed class ServedMailOwners : IDeploymentMailOwnerSource
                     displayName,
                     MailOwnerAccountSource.OwnerDocument,
                     [.. record.MailAccounts],
-                    record.SpamClassification);
+                    record.SpamClassification,
+                    record.SensitiveContent);
 
                 this.resolvedOwners = owners.Any(candidate => candidate.Owner == owner)
                     ? [.. owners.Select(candidate => candidate.Owner == owner ? published : candidate)]

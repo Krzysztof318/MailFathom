@@ -9,6 +9,7 @@ using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.OwnerSettings;
 using MailFathom.Host.Configuration.OwnerSettings.Administration;
+using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Infrastructure.Persistence.Owners;
 using MailFathom.Infrastructure.Secrets;
 using MailFathom.Infrastructure.Secrets.Database;
@@ -109,7 +110,8 @@ internal sealed class OwnerRecordDeployment
             this.Store,
             new OwnerAccountDocumentBinder(
                 new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
-                new FakeTimeProvider(Today)),
+                new FakeTimeProvider(Today),
+                Options.Create(new SensitiveContentOptions())),
             SecretValidation.OverRegisteredSchemes(),
             this.servedOwners,
             configured);

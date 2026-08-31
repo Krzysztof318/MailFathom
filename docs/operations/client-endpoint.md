@@ -953,8 +953,11 @@ reference to it.
 the same rules a configuration file is, checked for two mail accounts declared under one identifier, checked that every
 account in it belongs to this owner, and put through the same mail-synchronization validators a start applies —
 including the walk that resolves every credential the record names, so a reference that reaches nothing is refused here
-rather than committed and then refusing the whole deployment's next start. A refusal names what to correct and carries
-nothing that was supplied as a secret. A record another writer moved on in the meantime — the owner from a second
+rather than committed and then refusing the whole deployment's next start. What the record asks about [scanning this
+owner's mail](configuration-sources.md#what-an-owner-may-say-about-scanning-their-own-mail) is judged here too: an owner
+may switch a scanner on for their own mail and never off, and asking for the personal-data scanner where the deployment
+stood no analyzer up is refused at the write rather than left to fail closed on the next message. A refusal names what
+to correct — for a scanning one, the deployment setting behind it — and carries nothing that was supplied as a secret. A record another writer moved on in the meantime — the owner from a second
 device, or an administrator — is refused as superseded rather than overwritten, so the client re-reads and composes the
 change again.
 

@@ -8,6 +8,7 @@ using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Emails;
 using MailFathom.TestSupport;
@@ -461,7 +462,8 @@ public sealed class StoredEmailEmbeddingGeneratorTests
         IEmailEmbeddingStore store,
         ITextEmbeddingGenerator textEmbeddingGenerator,
         EmbeddingSpendGate? spendGate = null,
-        IMailOwnership? ownership = null)
+        IMailOwnership? ownership = null,
+        SensitiveContentEgressGuard? egressGuard = null)
     {
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>())
@@ -476,7 +478,8 @@ public sealed class StoredEmailEmbeddingGeneratorTests
                 new FakeTimeProvider()),
             spendGate ?? CreateSpendGate(new InMemoryEmbeddingSpendLedger(), EmbeddingSpendBudget.Unbounded),
             EmbeddingRequestPacer.Create(maxRequestsPerMinute: 0, new FakeTimeProvider()),
-            ownership ?? new StubMailOwnership());
+            ownership ?? new StubMailOwnership(),
+            egressGuard ?? SensitiveContentEgressGuards.Inactive());
     }
 
     private static EmbeddingSpendGate CreateSpendGate(

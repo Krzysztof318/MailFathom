@@ -4,9 +4,11 @@
 
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.Spam.Gating;
 using MailFathom.CodeCoverage;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Mutations;
 using MailFathom.Infrastructure.Persistence.Entities;
@@ -27,21 +29,22 @@ internal sealed class StoredEmailExtractionBackfillStore(
     StoredEmailExtractionBackfillOptions options)
     : IStoredEmailExtractionBackfillStore
 {
-    /// <summary>Gets the stamp a rebuilding walk judges a stored document against, or nothing where it rebuilds none.</summary>
+    /// <summary>Gets what every owner's mail is re-derived towards while a rebuild is switched on, and nothing otherwise.</summary>
     /// <remarks>
-    /// Both halves are required: an operator who asked for a rebuild on a deployment that scans nothing has asked for
+    /// Both halves are required: an operator who asked for a rebuild on a deployment that scans nobody has asked for
     /// every derived row to be re-derived back to the text it already holds, which is a full re-extraction of the
-    /// mailbox for no change at all. Reading the guard rather than the switch alone is what makes that a no-op.
+    /// mailbox for no change at all. Reading the postures rather than the switch alone is what makes that a no-op.
     /// </remarks>
-    private SensitiveContentDerivationStamp? RebuiltTowards =>
-        options.RebuildsStaleDerivedData ? derivationGuard.Stamp : null;
+    private IReadOnlyList<OwnerSensitiveContentPosture> RebuiltTowards =>
+        options.RebuildsStaleDerivedData && derivationGuard.IsActive ? derivationGuard.Current : [];
 
     /// <inheritdoc />
     /// <remarks>
-    /// A position reached under a different sensitive-content configuration is discarded rather than resumed from. The
-    /// walk skips a message it cannot re-read — one whose raw MIME is gone, or that parses for no reader — and such a
-    /// row keeps its old stamp forever, so a cursor left where the previous configuration's walk finished would sit past
-    /// every message the new one has to revisit.
+    /// A position reached while any owner's sensitive-content configuration was different is discarded rather than
+    /// resumed from. The walk skips a message it cannot re-read — one whose raw MIME is gone, or that parses for no
+    /// reader — and such a row keeps its old stamp forever, so a cursor left where the previous walk finished would sit
+    /// past every message the new one has to revisit. It is one composite over every owner because the cursor is one
+    /// walk over everybody's mail: one owner switching a scanner on is enough to put rows behind it back in the walk.
     /// </remarks>
     public async Task<StoredEmailId?> FindResumePositionAsync(CancellationToken cancellationToken)
     {
@@ -58,7 +61,8 @@ internal sealed class StoredEmailExtractionBackfillStore(
             return null;
         }
 
-        if (this.RebuiltTowards is { } current && !string.Equals(recorded.Stamp, current.Value, StringComparison.Ordinal))
+        if (SensitiveContentDerivationStamp.Across(this.RebuiltTowards) is { } current
+            && !string.Equals(recorded.Stamp, current.Value, StringComparison.Ordinal))
         {
             return null;
         }
@@ -94,7 +98,8 @@ internal sealed class StoredEmailExtractionBackfillStore(
         [
             .. candidates.Select(candidate => new StoredEmailAwaitingExtraction(
                 StoredEmailId.Create(candidate.Id),
-                candidate.ToOccurrenceId())),
+                candidate.ToOccurrenceId(),
+                MailOwnerId.Create(candidate.OwnerId))),
         ];
     }
 
@@ -129,7 +134,7 @@ internal sealed class StoredEmailExtractionBackfillStore(
             storedEmail,
             metadata,
             timeProvider.GetUtcNow(),
-            derivationGuard.Stamp,
+            derivationGuard.StampFor(MailOwnerId.Create(storedEmail.OwnerId)),
             cancellationToken);
 
         // Cut from the same extraction, so an email this walk reaches arrives at the same state a newly synchronized
@@ -166,7 +171,7 @@ internal sealed class StoredEmailExtractionBackfillStore(
                 Name = BackfillPositionEntity.StoredEmailExtractionName,
                 LastProcessedStoredEmailId = position.Value,
                 UpdatedAt = recordedAt,
-                SensitiveContentStamp = this.RebuiltTowards?.Value,
+                SensitiveContentStamp = SensitiveContentDerivationStamp.Across(this.RebuiltTowards)?.Value,
             });
 
             return;
@@ -178,28 +183,51 @@ internal sealed class StoredEmailExtractionBackfillStore(
         // The cursor and the configuration it was reached under move together. A walk that is not rebuilding still
         // advances the position past rows a rebuild has to revisit, so it clears the stamp rather than leaving one a
         // later rebuild would read as everything behind here being done under that configuration.
-        storedPosition.SensitiveContentStamp = this.RebuiltTowards?.Value;
+        storedPosition.SensitiveContentStamp = SensitiveContentDerivationStamp.Across(this.RebuiltTowards)?.Value;
     }
 
     /// <inheritdoc />
-    public Task<int> CountEmailsWithStaleDerivedDataAsync(
-        SensitiveContentDerivationStamp current,
-        CancellationToken cancellationToken)
+    public Task<int> CountEmailsWithStaleDerivedDataAsync(CancellationToken cancellationToken)
     {
-        var currentStamp = current.Value;
-
         // The same conditions the walk selects on — a message that is not tombstoned and whose raw MIME is stored —
-        // beside a document that holds derived body text whose stamp is not the current one. A message with no document
+        // beside a document that holds derived body text whose stamp is not its own owner's. A message with no document
         // at all is left out here and is not: it has never been derived, so it holds no under-redacted text, and it is
         // already outstanding for the reason the backfill has always existed.
-        return dbContext.StoredEmails
+        var derived = dbContext.StoredEmails
             .AsNoTracking()
             .Where(StoredEmailTombstone.IsNotTombstoned)
             .Where(email => email.ContentAvailability == StoredEmailContentAvailability.Available
                 && email.SearchDocument != null
-                && email.SearchDocument.TextSource != ExtractedEmailTextSource.BodyNotExtracted
-                && email.SearchDocument.SensitiveContentStamp != currentStamp)
-            .CountAsync(cancellationToken);
+                && email.SearchDocument.TextSource != ExtractedEmailTextSource.BodyNotExtracted);
+
+        return StaleFor(derived, derivationGuard.Current).CountAsync(cancellationToken);
+    }
+
+    /// <summary>Narrows a set of derived rows to the ones written under something other than their own owner's posture.</summary>
+    /// <remarks>
+    /// One branch per owner, unioned, rather than one predicate over a set of pairs: a row is stale against its own
+    /// owner's stamp alone, and comparing it against every stamp in force would call a message fresh because somebody
+    /// else's posture happens to match the configuration it was actually written under. Each branch is an equality on
+    /// the owner column beside an inequality on the stamp, so PostgreSQL walks the same index a per-owner read walks,
+    /// and a deployment serving one owner produces the single predicate it produced before any of this existed.
+    /// </remarks>
+    private static IQueryable<StoredEmailEntity> StaleFor(
+        IQueryable<StoredEmailEntity> derived,
+        IReadOnlyList<OwnerSensitiveContentPosture> postures)
+    {
+        // An owner whose mail nothing scans has no stamp to be stale against: their derived rows carry none and are
+        // exactly what a deployment that scans nobody writes, so nothing about them is outstanding.
+        var branches = postures
+            .Where(posture => posture.Posture.Stamp is not null)
+            .Select(posture => (Owner: posture.Owner.Value, Stamp: posture.Posture.Stamp!.Value.Value))
+            .Select(posture => derived.Where(email =>
+                email.OwnerId == posture.Owner
+                && email.SearchDocument!.SensitiveContentStamp != posture.Stamp))
+            .ToArray();
+
+        return branches.Length == 0
+            ? derived.Take(0)
+            : branches.Skip(1).Aggregate(branches[0], (stale, branch) => stale.Concat(branch));
     }
 
     /// <summary>Selects the messages this walk still owes work on, under the configuration it is walking for.</summary>
@@ -207,10 +235,10 @@ internal sealed class StoredEmailExtractionBackfillStore(
     /// <para>
     /// Two shapes rather than one predicate carrying a flag, because they are two different questions and the deployment
     /// asking each is different. Without a rebuild the walk owes work only where extraction never ran, which is the
-    /// original question and the query a deployment that scans nothing goes on issuing unchanged. With one it also owes
-    /// work where the derived text was written under a configuration this deployment no longer runs — including the
-    /// absent stamp, which is a document derived before any scanner was switched on and is exactly the case an operator
-    /// enabling one late is asking about.
+    /// original question and the query a deployment that scans nobody goes on issuing unchanged. With one it also owes
+    /// work where the derived text was written under a configuration that message's own owner no longer runs —
+    /// including the absent stamp, which is a document derived before any scanner was switched on and is exactly the
+    /// case an operator or an owner enabling one late is asking about.
     /// </para>
     /// <para>
     /// A document recording that extraction never ran is left out of the rebuilding branch, because re-reading it
@@ -226,16 +254,18 @@ internal sealed class StoredEmailExtractionBackfillStore(
             .Where(StoredEmailTombstone.IsNotTombstoned)
             .Where(email => email.ContentAvailability == StoredEmailContentAvailability.Available);
 
-        if (this.RebuiltTowards is not { } current)
+        var neverDerived = outstanding.Where(email => email.SearchDocument == null);
+        var rebuiltTowards = this.RebuiltTowards;
+
+        if (rebuiltTowards.Count == 0)
         {
-            return outstanding.Where(email => email.SearchDocument == null);
+            return neverDerived;
         }
 
-        var currentStamp = current.Value;
+        var derived = outstanding.Where(email => email.SearchDocument != null
+            && email.SearchDocument.TextSource != ExtractedEmailTextSource.BodyNotExtracted);
 
-        return outstanding.Where(email => email.SearchDocument == null
-            || (email.SearchDocument.TextSource != ExtractedEmailTextSource.BodyNotExtracted
-                && email.SearchDocument.SensitiveContentStamp != currentStamp));
+        return neverDerived.Concat(StaleFor(derived, rebuiltTowards));
     }
 
     /// <summary>Asks both stages that stand in front of the cut about one email, through the predicates they own.</summary>

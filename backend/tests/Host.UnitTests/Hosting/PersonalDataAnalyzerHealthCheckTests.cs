@@ -25,7 +25,10 @@ public sealed class PersonalDataAnalyzerHealthCheckTests
     {
         // Arrange
         var probe = Substitute.For<IPersonalDataAnalyzerProbe>();
-        var check = new PersonalDataAnalyzerHealthCheck(probe, NullLogger<PersonalDataAnalyzerHealthCheck>.Instance);
+        var check = new PersonalDataAnalyzerHealthCheck(
+            probe,
+            ScanningForPersonalData(),
+            NullLogger<PersonalDataAnalyzerHealthCheck>.Instance);
 
         // Act
         var result = await check.CheckHealthAsync(new HealthCheckContext(), TestContext.Current.CancellationToken);
@@ -141,6 +144,7 @@ public sealed class PersonalDataAnalyzerHealthCheckTests
         using var loggerFactory = new RecordingLoggerFactory();
         var check = new PersonalDataAnalyzerHealthCheck(
             Substitute.For<IPersonalDataAnalyzerProbe>(),
+            ScanningForPersonalData(),
             loggerFactory.CreateLogger<PersonalDataAnalyzerHealthCheck>());
 
         // Act
@@ -187,6 +191,7 @@ public sealed class PersonalDataAnalyzerHealthCheckTests
 
         var check = new PersonalDataAnalyzerHealthCheck(
             probe,
+            ScanningForPersonalData(),
             loggerFactory.CreateLogger<PersonalDataAnalyzerHealthCheck>());
 
         // Act
@@ -202,6 +207,30 @@ public sealed class PersonalDataAnalyzerHealthCheckTests
         Assert.Equal(
             [LogLevel.Error, LogLevel.Information],
             loggerFactory.Records.Select(record => record.Level));
+    }
+
+    /// <summary>
+    /// The scanner is switched on per owner, so an analyzer nobody's mail is scanned by guards nothing and its silence
+    /// refuses nothing. Reporting unready over it would take an instance out of traffic for a dependency no request on
+    /// it uses, which is the state a deployment reaches by standing the analyzer up before anybody has opted in.
+    /// </summary>
+    [Fact]
+    public async Task CheckHealthAsync_NoOwnerScannedForPersonalData_IsHealthyWithoutAskingTheAnalyzer()
+    {
+        // Arrange
+        var probe = Substitute.For<IPersonalDataAnalyzerProbe>();
+        probe.VerifyAvailableAsync(Arg.Any<CancellationToken>()).ThrowsAsync(NotReached());
+        var check = new PersonalDataAnalyzerHealthCheck(
+            probe,
+            Substitute.For<ISensitiveContentPostures>(),
+            NullLogger<PersonalDataAnalyzerHealthCheck>.Instance);
+
+        // Act
+        var result = await check.CheckHealthAsync(new HealthCheckContext(), TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(HealthStatus.Healthy, result.Status);
+        await probe.DidNotReceive().VerifyAvailableAsync(Arg.Any<CancellationToken>());
     }
 
     /// <summary>The three decisions that make this check what it is, asserted where a registration can lose one silently.</summary>
@@ -226,9 +255,15 @@ public sealed class PersonalDataAnalyzerHealthCheckTests
         // Act, Assert
         Assert.Throws<ArgumentNullException>(() => new PersonalDataAnalyzerHealthCheck(
             null!,
+            ScanningForPersonalData(),
             NullLogger<PersonalDataAnalyzerHealthCheck>.Instance));
         Assert.Throws<ArgumentNullException>(() => new PersonalDataAnalyzerHealthCheck(
             Substitute.For<IPersonalDataAnalyzerProbe>(),
+            null!,
+            NullLogger<PersonalDataAnalyzerHealthCheck>.Instance));
+        Assert.Throws<ArgumentNullException>(() => new PersonalDataAnalyzerHealthCheck(
+            Substitute.For<IPersonalDataAnalyzerProbe>(),
+            ScanningForPersonalData(),
             null!));
     }
 
@@ -244,6 +279,15 @@ public sealed class PersonalDataAnalyzerHealthCheckTests
         var probe = Substitute.For<IPersonalDataAnalyzerProbe>();
         probe.VerifyAvailableAsync(Arg.Any<CancellationToken>()).ThrowsAsync(failure);
 
-        return new PersonalDataAnalyzerHealthCheck(probe, logger);
+        return new PersonalDataAnalyzerHealthCheck(probe, ScanningForPersonalData(), logger);
+    }
+
+    /// <summary>The postures of a deployment where at least one owner's mail is scanned for personal data.</summary>
+    private static ISensitiveContentPostures ScanningForPersonalData()
+    {
+        var postures = Substitute.For<ISensitiveContentPostures>();
+        postures.RunsForAnyOwner(SensitiveContentScannerKind.Pii).Returns(true);
+
+        return postures;
     }
 }

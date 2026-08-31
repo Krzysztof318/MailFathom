@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Text;
+using MailFathom.Application.SensitiveContent;
 using MailFathom.Host.Configuration.SensitiveContent;
 using Microsoft.Extensions.Configuration;
 using Xunit;
@@ -184,7 +185,6 @@ public sealed class SensitiveContentOptionsBindingTests
         // Assert
         Assert.False(settings.Secrets.Enabled);
         Assert.False(settings.Pii.Enabled);
-        Assert.False(settings.IsAnyScannerEnabled);
         Assert.Equal(new SensitiveContentOptions().MaximumAnalyzedCharacters, settings.MaximumAnalyzedCharacters);
     }
 
@@ -219,27 +219,31 @@ public sealed class SensitiveContentOptionsBindingTests
     }
 
     /// <summary>
-    /// The composition root reads the section a second time, before a container exists, to decide whether a plan, a
-    /// redactor, and the detectors behind them are registered at all. A switch that reached the options graph and not
-    /// this read would validate at startup and then construct nothing.
+    /// The composition root reads the section a second time, before a container exists, to decide which detectors are
+    /// registered at all. An analyzer address that reached the options graph and not this read would validate at
+    /// startup and then leave an owner switching that scanner on with nothing behind it.
     /// </summary>
-    [Theory]
-    [InlineData("SensitiveContent:Secrets:Enabled")]
-    [InlineData("SensitiveContent:Pii:Enabled")]
-    public void Get_AConfiguredSwitch_ReachesTheDecisionCompositionRegistersOn(string key)
+    [Fact]
+    public void Get_AConfiguredAnalyzer_ReachesTheDecisionCompositionRegistersOn()
     {
         // Arrange
-        var configuration = ConfigurationFrom(new Dictionary<string, string?> { [key] = "true" });
+        var configuration = ConfigurationFrom(new Dictionary<string, string?>
+        {
+            ["SensitiveContent:PersonalDataAnalyzer:Endpoint"] = "http://presidio-analyzer:3000",
+        });
 
         // Act
         var settings = configuration.GetSection(SensitiveContentOptions.SectionName).Get<SensitiveContentOptions>();
 
         // Assert
-        Assert.True(settings!.IsAnyScannerEnabled);
+        Assert.Equal(
+            [SensitiveContentScannerKind.Secrets, SensitiveContentScannerKind.Pii],
+            settings!.ProvidedScanners);
     }
 
+    /// <summary>A deployment that deployed no analyzer still provides the scanner that runs inside this process.</summary>
     [Fact]
-    public void Get_AnUnconfiguredDeployment_RegistersNothing()
+    public void Get_AnUnconfiguredDeployment_ProvidesTheSecretsScannerAlone()
     {
         // Act
         var settings = ConfigurationFrom([])
@@ -247,7 +251,9 @@ public sealed class SensitiveContentOptionsBindingTests
             .Get<SensitiveContentOptions>();
 
         // Assert
-        Assert.False((settings ?? new SensitiveContentOptions()).IsAnyScannerEnabled);
+        Assert.Equal(
+            [SensitiveContentScannerKind.Secrets],
+            (settings ?? new SensitiveContentOptions()).ProvidedScanners);
     }
 
     /// <summary>The screened scanners are read from configuration in the order the operator wrote them.</summary>

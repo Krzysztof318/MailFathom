@@ -30,7 +30,7 @@ public sealed class SensitiveContentPlanMapperTests
     public void Map_BothSwitchesOff_ComposesNoPlan()
     {
         // Act
-        var plan = SensitiveContentPlanMapper.Map(new SensitiveContentOptions(), [SecretsCatalog]);
+        var plan = SensitiveContentPlanMapper.Map(new SensitiveContentOptions(), [SecretsCatalog], []);
 
         // Assert
         Assert.Null(plan);
@@ -45,7 +45,7 @@ public sealed class SensitiveContentPlanMapperTests
         settings.Secrets.Enabled = true;
 
         // Act
-        var plan = SensitiveContentPlanMapper.Map(settings, [SecretsCatalog]);
+        var plan = SensitiveContentPlanMapper.Map(settings, [SecretsCatalog], SwitchedOn(settings));
 
         // Assert
         var scanner = Assert.Single(plan!.Scanners);
@@ -64,7 +64,7 @@ public sealed class SensitiveContentPlanMapperTests
         settings.Secrets.Categories.Add("GenericHighEntropy");
 
         // Act
-        var plan = SensitiveContentPlanMapper.Map(settings, [SecretsCatalog]);
+        var plan = SensitiveContentPlanMapper.Map(settings, [SecretsCatalog], SwitchedOn(settings));
 
         // Assert
         var scanner = Assert.Single(plan!.Scanners);
@@ -81,7 +81,7 @@ public sealed class SensitiveContentPlanMapperTests
         settings.Secrets.Categories.Add("cloudkey");
 
         // Act
-        var plan = SensitiveContentPlanMapper.Map(settings, [SecretsCatalog]);
+        var plan = SensitiveContentPlanMapper.Map(settings, [SecretsCatalog], SwitchedOn(settings));
 
         // Assert
         var scanner = Assert.Single(plan!.Scanners);
@@ -101,7 +101,7 @@ public sealed class SensitiveContentPlanMapperTests
         });
 
         // Act
-        var plan = SensitiveContentPlanMapper.Map(settings, [SecretsCatalog]);
+        var plan = SensitiveContentPlanMapper.Map(settings, [SecretsCatalog], SwitchedOn(settings));
 
         // Assert
         var scanner = Assert.Single(plan!.Scanners);
@@ -125,7 +125,7 @@ public sealed class SensitiveContentPlanMapperTests
         });
 
         // Act
-        var plan = SensitiveContentPlanMapper.Map(settings, [SecretsCatalog]);
+        var plan = SensitiveContentPlanMapper.Map(settings, [SecretsCatalog], SwitchedOn(settings));
 
         // Assert
         var scanner = Assert.Single(plan!.Scanners);
@@ -142,7 +142,7 @@ public sealed class SensitiveContentPlanMapperTests
         settings.Pii.Enabled = true;
 
         // Act
-        var plan = SensitiveContentPlanMapper.Map(settings, [PersonalDataCatalog, SecretsCatalog]);
+        var plan = SensitiveContentPlanMapper.Map(settings, [PersonalDataCatalog, SecretsCatalog], SwitchedOn(settings));
 
         // Assert
         Assert.Equal(
@@ -163,7 +163,7 @@ public sealed class SensitiveContentPlanMapperTests
         settings.Secrets.Enabled = true;
 
         // Act
-        var plan = SensitiveContentPlanMapper.Map(settings, [SecretsCatalog]);
+        var plan = SensitiveContentPlanMapper.Map(settings, [SecretsCatalog], SwitchedOn(settings));
 
         // Assert
         Assert.Equal(4_096, plan!.Bounds.MaximumAnalyzedCharacters);
@@ -180,15 +180,15 @@ public sealed class SensitiveContentPlanMapperTests
         settings.Pii.Enabled = true;
 
         // Act, Assert
-        Assert.Throws<InvalidOperationException>(() => SensitiveContentPlanMapper.Map(settings, [SecretsCatalog]));
+        Assert.Throws<InvalidOperationException>(() => SensitiveContentPlanMapper.Map(settings, [SecretsCatalog], SwitchedOn(settings)));
     }
 
     [Fact]
     public void Map_WithoutSettingsOrCatalogs_IsRejected()
     {
         // Act, Assert
-        Assert.Throws<ArgumentNullException>(() => SensitiveContentPlanMapper.Map(null!, [SecretsCatalog]));
-        Assert.Throws<ArgumentNullException>(() => SensitiveContentPlanMapper.Map(new SensitiveContentOptions(), null!));
+        Assert.Throws<ArgumentNullException>(() => SensitiveContentPlanMapper.Map(null!, [SecretsCatalog], []));
+        Assert.Throws<ArgumentNullException>(() => SensitiveContentPlanMapper.Map(new SensitiveContentOptions(), null!, []));
     }
 
     /// <summary>The scanner and its startup probe read one profile, so every configured value reaches both or neither.</summary>
@@ -248,18 +248,33 @@ public sealed class SensitiveContentPlanMapperTests
         Assert.Equal(0.4, profile.MinimumConfidence);
     }
 
-    /// <summary>Startup validation refuses both of these first, so reaching either means the two passes disagree.</summary>
+    /// <summary>
+    /// The profile follows the address rather than the switch, because an owner may switch the scanner on for their own
+    /// mail while the deployment left it off, and the client it would then reach is registered before any roster exists.
+    /// </summary>
     [Fact]
-    public void MapAnalyzerProfile_ConfigurationStartupValidationRefuses_IsRefusedHereToo()
+    public void MapAnalyzerProfile_ADeploymentThatStoodTheAnalyzerUpWithTheSwitchOff_ComposesTheProfileAnyway()
     {
         // Arrange
         var scannerOff = new SensitiveContentOptions();
         scannerOff.PersonalDataAnalyzer.Endpoint = "http://presidio-analyzer:3000";
+
+        // Act
+        var profile = SensitiveContentPlanMapper.MapAnalyzerProfile(scannerOff);
+
+        // Assert
+        Assert.Equal(new Uri("http://presidio-analyzer:3000"), profile.Endpoint);
+    }
+
+    /// <summary>Without an address there is nothing to compose, whoever asked for the scanner.</summary>
+    [Fact]
+    public void MapAnalyzerProfile_ADeploymentWithNoAnalyzerAddress_IsRefused()
+    {
+        // Arrange
         var noAddress = new SensitiveContentOptions();
         noAddress.Pii.Enabled = true;
 
         // Act, Assert
-        Assert.Throws<InvalidOperationException>(() => SensitiveContentPlanMapper.MapAnalyzerProfile(scannerOff));
         Assert.Throws<InvalidOperationException>(() => SensitiveContentPlanMapper.MapAnalyzerProfile(noAddress));
         Assert.Throws<ArgumentNullException>(() => SensitiveContentPlanMapper.MapAnalyzerProfile(null!));
     }
@@ -275,10 +290,10 @@ public sealed class SensitiveContentPlanMapperTests
         var settings = new SensitiveContentOptions();
         settings.Secrets.Enabled = true;
         settings.Pii.Enabled = true;
-        var plan = SensitiveContentPlanMapper.Map(settings, [SecretsCatalog, PersonalDataCatalog])!;
+        var plan = SensitiveContentPlanMapper.Map(settings, [SecretsCatalog, PersonalDataCatalog], SwitchedOn(settings))!;
 
         // Act
-        var policy = SensitiveContentPlanMapper.MapScreeningPolicy(settings, plan);
+        var policy = SensitiveContentPlanMapper.MapScreeningPolicy(plan, SensitiveContentPlanMapper.ScreeningScannersOf(settings));
 
         // Assert
         Assert.True(policy.RefusesAnything);
@@ -297,10 +312,10 @@ public sealed class SensitiveContentPlanMapperTests
         var settings = new SensitiveContentOptions { ScreenOutgoingMailFor = ["Secrets", "pii"] };
         settings.Secrets.Enabled = true;
         settings.Pii.Enabled = true;
-        var plan = SensitiveContentPlanMapper.Map(settings, [SecretsCatalog, PersonalDataCatalog])!;
+        var plan = SensitiveContentPlanMapper.Map(settings, [SecretsCatalog, PersonalDataCatalog], SwitchedOn(settings))!;
 
         // Act
-        var policy = SensitiveContentPlanMapper.MapScreeningPolicy(settings, plan);
+        var policy = SensitiveContentPlanMapper.MapScreeningPolicy(plan, SensitiveContentPlanMapper.ScreeningScannersOf(settings));
 
         // Assert
         Assert.Equal(SensitiveContentScannerKind.Secrets, policy.StoppedBy(FindingOf("CloudKey")));
@@ -314,10 +329,10 @@ public sealed class SensitiveContentPlanMapperTests
         // Arrange
         var settings = new SensitiveContentOptions { ScreenOutgoingMailFor = [] };
         settings.Secrets.Enabled = true;
-        var plan = SensitiveContentPlanMapper.Map(settings, [SecretsCatalog])!;
+        var plan = SensitiveContentPlanMapper.Map(settings, [SecretsCatalog], SwitchedOn(settings))!;
 
         // Act
-        var policy = SensitiveContentPlanMapper.MapScreeningPolicy(settings, plan);
+        var policy = SensitiveContentPlanMapper.MapScreeningPolicy(plan, SensitiveContentPlanMapper.ScreeningScannersOf(settings));
 
         // Assert
         Assert.False(policy.RefusesAnything);
@@ -331,14 +346,23 @@ public sealed class SensitiveContentPlanMapperTests
         // Arrange
         var settings = new SensitiveContentOptions { ScreenOutgoingMailFor = ["Pii"] };
         settings.Secrets.Enabled = true;
-        var plan = SensitiveContentPlanMapper.Map(settings, [SecretsCatalog, PersonalDataCatalog])!;
+        var plan = SensitiveContentPlanMapper.Map(settings, [SecretsCatalog, PersonalDataCatalog], SwitchedOn(settings))!;
 
         // Act
-        var policy = SensitiveContentPlanMapper.MapScreeningPolicy(settings, plan);
+        var policy = SensitiveContentPlanMapper.MapScreeningPolicy(plan, SensitiveContentPlanMapper.ScreeningScannersOf(settings));
 
         // Assert
         Assert.False(policy.RefusesAnything);
     }
+
+    /// <summary>The scanners this deployment switched on for every owner, which is what its own posture runs.</summary>
+    /// <remarks>
+    /// Which scanners run is an argument to the mapper rather than a reading of the section, because an owner's record
+    /// can switch one on that the deployment left off. What these tests are about is everything else the section
+    /// decides, so each of them passes the deployment's own answer.
+    /// </remarks>
+    private static IReadOnlyList<SensitiveContentScannerKind> SwitchedOn(SensitiveContentOptions settings) =>
+        [.. Enum.GetValues<SensitiveContentScannerKind>().Where(scanner => settings.For(scanner).Enabled)];
 
     private static SensitiveContentFinding FindingOf(string category) =>
         SensitiveContentFinding.Create(

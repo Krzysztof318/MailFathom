@@ -541,7 +541,10 @@ public sealed class TelemetrySurfaceContractTests
 
         foreach (var egressPoint in Enum.GetValues<SensitiveContentEgressPoint>())
         {
-            using var guarded = Egress.BeginGuardedOperation(egressPoint, CancellationToken.None);
+            using var guarded = Egress.BeginGuardedOperation(
+                egressPoint,
+                SyntheticMailOwner.Deployment,
+                CancellationToken.None);
             guarded.TextGuarded();
             guarded.Completed();
         }

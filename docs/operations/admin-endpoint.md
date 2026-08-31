@@ -1244,9 +1244,11 @@ each one with the value it would take, since two of them file mail and mark it r
 
 **A record is committed whole or not at all, over the version it was read at.** A candidate is bound strictly against
 the same rules a configuration file is, checked for two mail accounts declared under one identifier, checked that every
-account in it belongs to the owner whose record it is, and put through the same mail-synchronization validators a start
-applies — and a candidate failing any of those is refused with what to correct rather than committed and discovered at
-the next restart. A record another writer moved on in the meantime is refused as superseded, so nothing silently
+account in it belongs to the owner whose record it is, put through the same mail-synchronization validators a start
+applies, and judged for [what it asks about scanning that owner's
+mail](configuration-sources.md#what-an-owner-may-say-about-scanning-their-own-mail) — and a candidate failing any of
+those is refused with what to correct rather than committed and discovered at the next restart. A scanning refusal
+names the deployment setting behind it and never quotes the record. A record another writer moved on in the meantime is refused as superseded, so nothing silently
 overwrites a change made from the client or from another terminal.
 
 **Nothing here reports a secret.** A record is handed over with every password, token, and client secret replaced by the

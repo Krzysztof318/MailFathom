@@ -110,6 +110,8 @@ public sealed class MailTimelineBrowser
 
         using var read = this.readTelemetry.BeginRead(MailboxReadOperation.ListMailboxTimeline, cancellationToken);
 
+        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.Owner);
+
         var sortedList = this.SortedList(request);
         var pageSize = MailboxQueryPageSize.FromRequested(request.PageSize);
         var pageDirection = DefinedPageDirection(request.PageDirection);

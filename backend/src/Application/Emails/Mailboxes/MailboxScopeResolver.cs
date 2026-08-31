@@ -5,6 +5,7 @@
 using MailFathom.Application.Access;
 using MailFathom.Application.Accounts;
 using MailFathom.Application.Folders;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 
@@ -178,6 +179,16 @@ public sealed class MailboxScopeResolver
             .RestrictedTo(this.folderParticipation.FoldersVisibleToTools)
             .WithJunkMail(junkMail, this.junkFolders.JunkFolders);
     }
+
+    /// <summary>Gets the owner this unit of work is acting for, whose mail every scope resolved here narrows to.</summary>
+    /// <exception cref="PrincipalNotAuthorizedException">Thrown when the work in hand is acting for no owner.</exception>
+    /// <remarks>
+    /// Published here rather than read from the catalog by each use case, so the owner a read narrows to and the owner
+    /// its content is scanned under are one answer. It is the same value <see cref="ReadableScope" /> puts on the scope
+    /// it returns, and it is available before that scope is — which is what a use case needs, since a search reaches a
+    /// model provider with its query text before it has a page to narrow.
+    /// </remarks>
+    public MailOwnerId Owner => this.accountCatalog.Owner;
 
     /// <summary>Reports whether a tool may read one email, given the mailbox it was stored from.</summary>
     /// <param name="accountId">The account the email was read from.</param>

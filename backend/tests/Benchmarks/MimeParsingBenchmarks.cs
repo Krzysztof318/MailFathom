@@ -33,5 +33,5 @@ public class MimeParsingBenchmarks
     /// <returns>What the extraction produced, returned so nothing about it can be optimized away.</returns>
     [Benchmark]
     public Task<EmailMimeExtractionResult> ReadMetadata() =>
-        this.reader.ReadMetadataAsync(this.content, CancellationToken.None);
+        this.reader.ReadMetadataAsync(this.content, SyntheticMailOwner.Deployment, CancellationToken.None);
 }

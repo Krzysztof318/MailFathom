@@ -28,23 +28,33 @@ internal static class SensitiveContentPlanMapper
     private static readonly SensitiveContentScannerKind[] DefaultScreeningScanners =
         [SensitiveContentScannerKind.Secrets];
 
-    /// <summary>Composes the plan a configuration describes.</summary>
+    /// <summary>Composes the plan one set of switched-on scanners describes.</summary>
     /// <param name="settings">The bound section, already judged by <see cref="SensitiveContentDeclarationRules" />.</param>
     /// <param name="catalogs">Every catalog the registered scanners declare.</param>
-    /// <returns>The plan, or <see langword="null" /> when both switches are off.</returns>
+    /// <param name="switchedOn">Which scanners this plan runs, which is one owner's answer rather than the section's.</param>
+    /// <returns>The plan, or <see langword="null" /> when nothing is switched on.</returns>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     /// <remarks>
+    /// <para>
     /// Nothing switched on is not a failure. It is the default state of the product, and returning nothing is what lets
-    /// the composition root register no redactor rather than one that would fail at first use.
+    /// a posture hold no redaction rather than one that would fail at first use.
+    /// </para>
+    /// <para>
+    /// Which scanners run is an argument while what each of them looks for is read from the section, and the split is
+    /// the whole of what an owner may decide: a scanner switched on for one owner looks for the categories the
+    /// deployment named, because what a scanner detects is one answer for the machine it runs on.
+    /// </para>
     /// </remarks>
     public static SensitiveContentPlan? Map(
         SensitiveContentOptions settings,
-        IEnumerable<ISensitiveContentCatalog> catalogs)
+        IEnumerable<ISensitiveContentCatalog> catalogs,
+        IReadOnlyCollection<SensitiveContentScannerKind> switchedOn)
     {
         ArgumentNullException.ThrowIfNull(settings);
         ArgumentNullException.ThrowIfNull(catalogs);
+        ArgumentNullException.ThrowIfNull(switchedOn);
 
-        if (!settings.IsAnyScannerEnabled)
+        if (switchedOn.Count == 0)
         {
             return null;
         }
@@ -52,7 +62,7 @@ internal static class SensitiveContentPlanMapper
         var declared = catalogs as IReadOnlyList<ISensitiveContentCatalog> ?? [.. catalogs];
 
         var scanners = Enum.GetValues<SensitiveContentScannerKind>()
-            .Where(scanner => settings.For(scanner).Enabled)
+            .Where(switchedOn.Contains)
             .Select(scanner => MapScanner(scanner, settings.For(scanner), declared))
             .ToArray();
 
@@ -64,60 +74,69 @@ internal static class SensitiveContentPlanMapper
             scanners);
     }
 
-    /// <summary>Composes what a deployment refuses to let leave in a message it is about to send or file.</summary>
+    /// <summary>Reads which scanners stop an outgoing message on a deployment that named none.</summary>
     /// <param name="settings">The bound section, already judged by <see cref="SensitiveContentOptions.Validate" />.</param>
-    /// <param name="plan">The plan the same settings composed, which decides which categories a named scanner covers.</param>
-    /// <returns>The policy every screened act is judged by, which screens nothing where nothing was named.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <returns>The scanners the deployment screens every owner's outgoing mail for, which may be none.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="settings" /> is <see langword="null" />.</exception>
     /// <remarks>
-    /// An absent key takes the default and a written empty list takes nothing, which is the distinction the key is
-    /// typed as an array to preserve. An entry that names no scanner is unreachable here, because startup validation
-    /// refuses it before anything is composed; one reaching this anyway is dropped rather than guessed at.
+    /// Published rather than folded into the composition below, because two things ask it: the policy an act is judged
+    /// by, and the rule that refuses an owner naming fewer scanners in their own record than the deployment requires.
+    /// An entry that names no scanner is unreachable here, because startup validation refuses it before anything reads
+    /// this; one arriving anyway is dropped rather than guessed at.
     /// </remarks>
-    public static SensitiveContentScreeningPolicy MapScreeningPolicy(
-        SensitiveContentOptions settings,
-        SensitiveContentPlan plan)
+    public static IReadOnlyList<SensitiveContentScannerKind> ScreeningScannersOf(SensitiveContentOptions settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
-        ArgumentNullException.ThrowIfNull(plan);
 
-        var named = settings.ScreenOutgoingMailFor is { } configured
-            ? configured
+        return settings.ScreenOutgoingMailFor is { } configured
+            ? [.. configured
                 .Select(scanner => Enum.TryParse<SensitiveContentScannerKind>(scanner, ignoreCase: true, out var kind)
                     ? kind
                     : (SensitiveContentScannerKind?)null)
                 .Where(kind => kind is not null)
-                .Select(kind => kind!.Value)
-                .ToArray()
+                .Select(kind => kind!.Value)]
             : DefaultScreeningScanners;
+    }
 
-        return SensitiveContentScreeningPolicy.Create(plan, named);
+    /// <summary>Composes what one owner's outgoing message may not carry out of this deployment.</summary>
+    /// <param name="plan">The posture's plan, which decides which categories a named scanner covers.</param>
+    /// <param name="screeningScanners">The scanners whose findings stop the act, deployment and owner composed.</param>
+    /// <returns>The policy every screened act is judged by, which screens nothing where nothing was named.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <remarks>
+    /// An absent key takes the default and a written empty list takes nothing, which is the distinction both keys are
+    /// typed as arrays to preserve. What arrives here is already the union of the two answers, so a scanner the
+    /// deployment named cannot be missing from one owner's policy.
+    /// </remarks>
+    public static SensitiveContentScreeningPolicy MapScreeningPolicy(
+        SensitiveContentPlan plan,
+        IReadOnlyList<SensitiveContentScannerKind> screeningScanners)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(screeningScanners);
+
+        return SensitiveContentScreeningPolicy.Create(plan, screeningScanners);
     }
 
     /// <summary>Composes the profile the personal-data analyzer is reached under.</summary>
     /// <param name="settings">The bound section, already judged by <see cref="SensitiveContentOptions.Validate" />.</param>
     /// <returns>The profile the scanner and the readiness probe both read.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="settings" /> is <see langword="null" />.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when the personal-data scanner is not switched on, or names no analyzer address.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when the configuration names no analyzer address.</exception>
     /// <remarks>
-    /// Called only where that scanner is switched on, so an absent address here is a defect rather than a configuration
-    /// error to report: startup validation refuses that combination before anything is composed, and reaching this with one
-    /// means the two passes disagree.
+    /// Called only where the deployment stated an address, which is what makes the personal-data scanner available at
+    /// all — to the deployment itself and to any owner who switches it on for their own mail. An absent address here is
+    /// therefore a defect rather than a configuration error to report: the composition root registers nothing that
+    /// reaches this without one, and reaching it with none means the two passes disagree.
     /// </remarks>
     public static PersonalDataAnalyzerProfile MapAnalyzerProfile(SensitiveContentOptions settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
 
-        if (!settings.Pii.Enabled)
-        {
-            throw new InvalidOperationException(
-                "The personal-data analyzer profile was composed for a deployment whose configuration does not switch that scanner on.");
-        }
-
         if (!Uri.TryCreate(settings.PersonalDataAnalyzer.Endpoint, UriKind.Absolute, out var endpoint))
         {
             throw new InvalidOperationException(
-                "The personal-data scanner is switched on and the validated configuration carries no analyzer address, which startup validation refuses.");
+                "The personal-data analyzer profile was composed for a deployment whose validated configuration carries no analyzer address.");
         }
 
         return PersonalDataAnalyzerProfile.Create(

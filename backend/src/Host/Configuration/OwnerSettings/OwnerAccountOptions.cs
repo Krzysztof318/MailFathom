@@ -6,6 +6,7 @@ using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.Rules;
+using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.Spam;
 
 namespace MailFathom.Host.Configuration.OwnerSettings;
@@ -20,11 +21,13 @@ namespace MailFathom.Host.Configuration.OwnerSettings;
 /// </para>
 /// <para>
 /// What belongs in it is whatever is that owner's own rather than the deployment's. Today that is their mail-account
-/// declarations and how their own mail is classified as spam; the mail rules, the trusted senders, and the scanning
-/// posture join them as each moves out of the deployment's section, and each arrives as a property here rather than as
-/// a second document. What never belongs in it is a value the deployment set: there is no owner configuration layer, so
-/// nothing here shadows a deployment setting, and a property that would need to is a deployment setting somebody put in
-/// the wrong document.
+/// declarations, how their own mail is classified as spam, and what they ask to have it scanned for; the mail rules and
+/// the trusted senders join them as each moves out of the deployment's section, and each arrives as a property here
+/// rather than as a second document. What never belongs in it is a value the deployment set: there is no owner
+/// configuration layer, so nothing here shadows a deployment setting, and a property that would need to is a deployment
+/// setting somebody put in the wrong document. The scanning block is the worked example of the difference — it can
+/// switch a scanner on for this owner's mail and can neither switch off what the deployment requires nor move the
+/// analyzer the deployment stood up.
 /// </para>
 /// <para>
 /// The envelope is not repeated here. The owner's identifier, the label they are told apart by, the version, and the
@@ -52,6 +55,14 @@ internal sealed class OwnerAccountOptions : IValidatableObject
     /// no key here shadows one of theirs.
     /// </remarks>
     public OwnerSpamClassificationOptions SpamClassification { get; set; } = new();
+
+    /// <summary>Gets what this owner asks to have their own mail scanned for, within what the deployment provides.</summary>
+    /// <remarks>
+    /// A record that says nothing here reads the deployment's own posture, which is what every owner read before this
+    /// block existed. What it may say is judged against the deployment rather than on its own, so the rule lives beside
+    /// that section rather than in this type — <see cref="FindSensitiveContentErrors" /> is where it is asked.
+    /// </remarks>
+    public OwnerSensitiveContentOptions SensitiveContent { get; } = new();
 
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) => this.FindRefusals();
@@ -86,4 +97,17 @@ internal sealed class OwnerAccountOptions : IValidatableObject
     /// </remarks>
     internal IEnumerable<ValidationResult> FindSynchronizationWindowErrors(DateOnly today) =>
         OwnerMailAccountRules.FindSynchronizationWindowErrors(this.MailAccounts, today);
+
+    /// <summary>Finds everything about the scanning block this deployment could not serve.</summary>
+    /// <param name="deployment">The deployment's own <c>SensitiveContent</c> section, which an owner may only tighten.</param>
+    /// <returns>One result per refusal, empty when the block is one this deployment can serve.</returns>
+    /// <remarks>
+    /// Asked by whoever supplies the deployment's section, for the reason the synchronization window is asked that way:
+    /// the answer depends on something outside the record, and a record judged by every rule but this one would accept
+    /// a posture the composition could not honour.
+    /// </remarks>
+    internal IEnumerable<ValidationResult> FindSensitiveContentErrors(SensitiveContentOptions deployment) =>
+        OwnerSensitiveContentRules
+            .FindRefusals(this.SensitiveContent, deployment, OwnerSensitiveContentOptions.BlockName)
+            .Select(refusal => new ValidationResult(refusal, [nameof(this.SensitiveContent)]));
 }

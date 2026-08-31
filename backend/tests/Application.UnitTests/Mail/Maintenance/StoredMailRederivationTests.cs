@@ -461,7 +461,7 @@ public sealed class StoredMailRederivationTests
     {
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
-            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(
                 MetadataOf(call.Arg<RemoteEmailContent>()!.OccurrenceId, bodyText))));
 
@@ -477,7 +477,7 @@ public sealed class StoredMailRederivationTests
         var mimeReader = Substitute.For<IEmailMimeReader>();
 
         mimeReader
-            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
                 var occurrenceId = call.Arg<RemoteEmailContent>()!.OccurrenceId;

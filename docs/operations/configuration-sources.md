@@ -149,6 +149,7 @@ Owners are the top-level `Accounts` collection. It is **not** `MailSynchronizati
 | `Accounts:<n>:Id` | Yes | The identifier every mail account, every stored message, and every job of this owner hangs on, written as a UUID |
 | `Accounts:<n>:DisplayName` | Yes | The label an administrator tells owners apart by, at most 128 characters and unique across the deployment |
 | `Accounts:<n>:MailAccounts` | No | The mail accounts this owner owns, each declared exactly as one in `MailSynchronization:Accounts` is |
+| `Accounts:<n>:SensitiveContent` | No | What this owner wants their own mail scanned for, on top of what the deployment requires — [below](#what-an-owner-may-say-about-scanning-their-own-mail) |
 
 A declared owner states no settings of their own beyond their mailboxes. Everything else about them — how their mail is
 classified included — is read from the deployment's own sections until their document is written, which is what
@@ -157,6 +158,50 @@ classified included — is read from the deployment's own sections until their d
 An owner declaring no mailbox is an ordinary state rather than an unfinished one: an owner exists before their first mailbox does, and one whose last mailbox is withdrawn is still an owner. Binding is strict, so a property nothing binds — a `DisplayNames` where `DisplayName` belongs — fails the start naming it rather than leaving the host running on a default.
 
 At most **256** owners may be declared. A file past that was generated rather than written, which is worth stopping for on its own.
+
+### What an owner may say about scanning their own mail
+
+`Accounts:<n>:SensitiveContent` is the owner's half of [sensitive-content
+scanning](../features/sensitive-content-scanning.md#each-owners-own-posture). It is content of the owner's record rather
+than an overlay on the deployment's `SensitiveContent` section: the two are composed, and what is in force over that
+owner's mail is the stricter of them.
+
+```json
+{
+  "Accounts": [
+    {
+      "Id": "3f2b8c14-6d5a-4e9f-8b70-1c2d3e4f5a60",
+      "DisplayName": "alex",
+      "SensitiveContent": {
+        "Secrets": { "Enabled": true },
+        "ScreenOutgoingMailFor": ["Secrets", "Pii"]
+      }
+    }
+  ]
+}
+```
+
+| Key | Required | What it is |
+| --- | --- | --- |
+| `Accounts:<n>:SensitiveContent:Secrets:Enabled` | No | Switches the secret scanner on over this owner's mail. Unset reads the deployment's answer |
+| `Accounts:<n>:SensitiveContent:Pii:Enabled` | No | The same for the personal-data scanner, which the deployment must have configured an analyzer address for |
+| `Accounts:<n>:SensitiveContent:ScreenOutgoingMailFor:<n>` | No | Which scanners' findings stop **this owner's** outgoing mail. Read as their whole answer rather than as an addition, so it names at least what the deployment screens for |
+
+**Only tightening is accepted, and a loosening is refused where it is written** — at this file's own start and at a
+record write alike, because the two are one block arriving by two routes. Three refusals, each naming the deployment
+setting behind it and never the record's own text:
+
+- `false` against a scanner the deployment switched on. The obligation belongs to whoever holds the mail, so an owner
+  may switch a scanner on for their own and never off.
+- `true` for the personal-data scanner where `SensitiveContent:PersonalDataAnalyzer:Endpoint` names no address. Nothing
+  could scan for it, and only an operator can state that key — so this is refused at the write rather than left to fail
+  closed on the owner's next message.
+- A `ScreenOutgoingMailFor` naming fewer scanners than `SensitiveContent:ScreenOutgoingMailFor` does. An owner may add
+  to that list and never take from it; removing the key altogether takes the deployment's list as it stands.
+
+Everything else about scanning stays the deployment's: the analyzer's address, the analyzed ceiling, the per-scan
+timeout, the process-wide scan concurrency — one budget every owner shares — and the rebuild switch. A record naming one
+of them binds nothing and is refused as a property nothing binds, like any other.
 
 ### The identifier is yours to generate
 

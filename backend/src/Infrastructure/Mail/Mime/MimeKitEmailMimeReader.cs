@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Mail;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Infrastructure.Mail.Dkim;
@@ -79,6 +80,7 @@ internal sealed class MimeKitEmailMimeReader : IEmailMimeReader
     /// <inheritdoc />
     public async Task<EmailMimeExtractionResult> ReadMetadataAsync(
         RemoteEmailContent content,
+        MailOwnerId owner,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(content);

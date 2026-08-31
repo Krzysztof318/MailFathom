@@ -66,7 +66,7 @@ internal sealed partial class StaleDerivedDataStartupReport : IHostedService
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A report that cannot read the count says so and lets the host start; it decides nothing.")]
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (this.derivationGuard.Stamp is not { } current)
+        if (!this.derivationGuard.IsActive)
         {
             return;
         }
@@ -79,7 +79,7 @@ internal sealed partial class StaleDerivedDataStartupReport : IHostedService
 
             staleEmailCount = await scope.ServiceProvider
                 .GetRequiredService<IStoredEmailExtractionBackfillStore>()
-                .CountEmailsWithStaleDerivedDataAsync(current, cancellationToken);
+                .CountEmailsWithStaleDerivedDataAsync(cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

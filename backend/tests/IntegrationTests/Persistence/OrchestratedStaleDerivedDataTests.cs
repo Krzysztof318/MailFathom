@@ -6,6 +6,7 @@ using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Derivation;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Application.Spam.Gating;
 using MailFathom.Domain.Emails;
@@ -15,6 +16,7 @@ using MailFathom.Infrastructure.Persistence;
 using MailFathom.Infrastructure.Persistence.Emails;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.IntegrationTests.Orchestration;
+using MailFathom.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -46,25 +48,16 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
     private static readonly SensitiveContentDerivationStamp OlderStamp =
         SensitiveContentDerivationStamp.Create(new string('0', SensitiveContentDerivationStamp.Length));
 
-    /// <summary>The redaction behind every guard this class builds, which nothing here reaches.</summary>
+    /// <summary>The permits every redaction this class builds runs under, which nothing here reaches.</summary>
     /// <remarks>
-    /// One per test class rather than one per guard, because it owns the concurrency permits of a whole deployment and
+    /// One per test class rather than one per posture, because they are the concurrency budget of a whole deployment and
     /// what is under test is the walk's predicate rather than anything a scanner does.
     /// </remarks>
-    private readonly SensitiveContentRedactor redactor = new(
-        SensitiveContentPlan.Create(
-            SensitiveContentScanBounds.Default,
-            [
-                SensitiveContentScannerPlan.Create(
-                    SensitiveContentScannerKind.Secrets,
-                    [SensitiveContentCategory.Create("ProviderToken")],
-                    []),
-            ]),
-        [],
-        TimeProvider.System);
+    private readonly SensitiveContentScanConcurrency concurrency =
+        new(SensitiveContentScanBounds.Default.MaximumConcurrentScans);
 
     /// <inheritdoc />
-    public void Dispose() => this.redactor.Dispose();
+    public void Dispose() => this.concurrency.Dispose();
 
     [Fact]
     public async Task GetEmailsAwaitingExtractionAsync_ARebuildingWalk_SelectsWhatOlderAndAbsentStampsMarkAndNothingCurrent()
@@ -80,7 +73,7 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
         var notRebuilding = await this.SelectAsync(services, rebuildsStaleDerivedData: false, cancellationToken);
         var staleCount = await services.InScopeAsync(
             (scope, token) => this.StoreIn(scope, rebuildsStaleDerivedData: false)
-                .CountEmailsWithStaleDerivedDataAsync(CurrentStamp, token),
+                .CountEmailsWithStaleDerivedDataAsync(token),
             cancellationToken);
 
         // Assert
@@ -194,7 +187,7 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
         var rebuilding = await this.SelectAsync(services, rebuildsStaleDerivedData: true, cancellationToken);
         var staleCount = await services.InScopeAsync(
             (scope, token) => this.StoreIn(scope, rebuildsStaleDerivedData: false)
-                .CountEmailsWithStaleDerivedDataAsync(CurrentStamp, token),
+                .CountEmailsWithStaleDerivedDataAsync(token),
             cancellationToken);
         var countedWithoutTheExclusion = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailFathomDbContext>().EmailSearchDocuments
@@ -340,7 +333,11 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
         },
         cancellationToken);
 
-    /// <summary>Builds the walk's store as a deployment with a scanner switched on would resolve it.</summary>
+    /// <summary>Builds the walk's store as a deployment with a scanner switched on for its owner would resolve it.</summary>
+    /// <remarks>
+    /// The posture belongs to the owner this suite's mail belongs to, because the walk judges each row against its own
+    /// owner's stamp: a posture stated for anybody else would leave every row of this owner's fresh.
+    /// </remarks>
     private StoredEmailExtractionBackfillStore StoreIn(
         IServiceProvider scope,
         bool rebuildsStaleDerivedData,
@@ -353,8 +350,7 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
             timeProvider,
             scope.GetRequiredService<EmailChunkWriter>(),
             new SensitiveContentDerivationGuard(
-                this.redactor,
-                stamp ?? CurrentStamp,
+                this.PosturesScanning(stamp ?? CurrentStamp),
                 new SensitiveContentDerivationTelemetry(),
                 timeProvider),
             scope.GetRequiredService<DerivedWorkGate>(),
@@ -362,6 +358,28 @@ public sealed class OrchestratedStaleDerivedDataTests(MailFathomOrchestrationFix
             {
                 RebuildsStaleDerivedData = rebuildsStaleDerivedData,
             });
+    }
+
+    /// <summary>The postures of a deployment scanning this suite's owner's mail towards one stamp.</summary>
+    private FixedSensitiveContentPostures PosturesScanning(SensitiveContentDerivationStamp stamp)
+    {
+        var plan = SensitiveContentPlan.Create(
+            SensitiveContentScanBounds.Default,
+            [
+                SensitiveContentScannerPlan.Create(
+                    SensitiveContentScannerKind.Secrets,
+                    [SensitiveContentCategory.Create("ProviderToken")],
+                    []),
+            ]);
+
+        return FixedSensitiveContentPostures.Of(
+            SensitiveContentPosture.ScanningNothing,
+            (SyntheticMailAccount.Owner,
+                SensitiveContentPosture.Scanning(
+                    [SensitiveContentScannerKind.Secrets],
+                    new SensitiveContentRedactor(plan, [], TimeProvider.System, this.concurrency),
+                    SensitiveContentScreeningPolicy.ScreeningNothing(),
+                    stamp)));
     }
 
     /// <summary>Inserts one stored email whose MIME nothing could read, indexed on its envelope alone.</summary>

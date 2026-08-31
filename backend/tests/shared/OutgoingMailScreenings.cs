@@ -31,8 +31,7 @@ internal static class OutgoingMailScreenings
         new(
             new PlainTextOutgoingMailTextReader(),
             new SensitiveContentEgressScreen(
-                redactor: null,
-                SensitiveContentScreeningPolicy.ScreeningNothing(),
+                FixedSensitiveContentPostures.ScanningNothing(),
                 new RecordingSensitiveContentEgressTelemetry(),
                 TimeProvider.System));
 

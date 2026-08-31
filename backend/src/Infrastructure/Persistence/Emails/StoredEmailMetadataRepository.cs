@@ -84,7 +84,7 @@ internal sealed class StoredEmailMetadataRepository(
                 entity,
                 extractedMetadata,
                 timeProvider.GetUtcNow(),
-                derivationGuard.Stamp,
+                derivationGuard.StampFor(MailOwnerId.Create(entity.OwnerId)),
                 cancellationToken);
         }
         else
@@ -97,7 +97,7 @@ internal sealed class StoredEmailMetadataRepository(
                 entity,
                 metadata.Subject,
                 timeProvider.GetUtcNow(),
-                derivationGuard.Stamp,
+                derivationGuard.StampFor(MailOwnerId.Create(entity.OwnerId)),
                 cancellationToken);
         }
 

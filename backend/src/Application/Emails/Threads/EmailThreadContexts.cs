@@ -67,6 +67,8 @@ public sealed class EmailThreadContexts
             return already;
         }
 
+        using var actingFor = this.egressGuard.ActingFor(this.readableScope.Owner);
+
         var read = await this.threadReader.ReadEmailsAsync(threadId, this.readableScope, cancellationToken);
         var wasCutShort = read.Count > IEmailThreadReader.MaximumAssembledEmails;
         var visible = read.Take(IEmailThreadReader.MaximumAssembledEmails).ToArray();

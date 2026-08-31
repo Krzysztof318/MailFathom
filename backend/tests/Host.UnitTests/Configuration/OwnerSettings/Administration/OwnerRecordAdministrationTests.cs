@@ -11,11 +11,13 @@ using MailFathom.Host.Configuration.Administration;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.OwnerSettings;
 using MailFathom.Host.Configuration.OwnerSettings.Administration;
+using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Owners;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -1116,7 +1118,8 @@ public sealed class OwnerRecordAdministrationTests
                 this.Store,
                 new OwnerAccountDocumentBinder(
                     new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
-                    new FakeTimeProvider(Today)),
+                    new FakeTimeProvider(Today),
+                    Options.Create(new SensitiveContentOptions())),
                 SecretValidation.OverRegisteredSchemes(),
                 this.ServedOwners,
                 new ConfiguredOwnerSettings(settings, this.ServedOwners));

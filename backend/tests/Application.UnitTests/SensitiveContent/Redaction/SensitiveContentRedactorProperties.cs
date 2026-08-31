@@ -125,9 +125,10 @@ public sealed class SensitiveContentRedactorProperties
 
     private static async Task<RedactedText> RedactAsync((string First, string Second, string Text) input)
     {
-        using var redactor = Redactor(input.First, input.Second);
+        using var permits = new SensitiveContentScanConcurrency(Plan.Bounds.MaximumConcurrentScans);
 
-        return await redactor.RedactAsync(input.Text, TestContext.Current.CancellationToken);
+        return await Redactor(input.First, input.Second, permits)
+            .RedactAsync(input.Text, TestContext.Current.CancellationToken);
     }
 
     /// <summary>Builds the redactor of a deployment scanning for two literals, on a clock nothing here advances.</summary>
@@ -136,7 +137,10 @@ public sealed class SensitiveContentRedactorProperties
     /// per-scan budget is timed on it, so a real one would let a loaded machine report a detector that answered as one
     /// that did not.
     /// </remarks>
-    private static SensitiveContentRedactor Redactor(string first, string second)
+    private static SensitiveContentRedactor Redactor(
+        string first,
+        string second,
+        SensitiveContentScanConcurrency permits)
     {
         var timeProvider = new FakeTimeProvider(ScannedAt);
 
@@ -146,6 +150,7 @@ public sealed class SensitiveContentRedactorProperties
                 new MarkerSensitiveContentScanner(first, SensitiveContentScannerKind.Secrets, timeProvider),
                 new MarkerSensitiveContentScanner(second, SensitiveContentScannerKind.Pii, timeProvider),
             ],
-            timeProvider);
+            timeProvider,
+            permits);
     }
 }

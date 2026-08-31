@@ -313,6 +313,7 @@ public sealed class ProviderChatModelClientTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        using var actingFor = egress.ActingForOwner();
         using var provider = ScriptedProvider.Answering(Completion("an answer", "stop"));
         var client = provider.ClientOver(ChatDeclarations.Plan(), egressGuard: egress.Guard);
 
@@ -337,6 +338,7 @@ public sealed class ProviderChatModelClientTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Unavailable(TimeProvider.System);
+        using var actingFor = egress.ActingForOwner();
         using var provider = ScriptedProvider.Answering(Completion("never reached", "stop"));
         var client = provider.ClientOver(ChatDeclarations.Plan(), egressGuard: egress.Guard);
 

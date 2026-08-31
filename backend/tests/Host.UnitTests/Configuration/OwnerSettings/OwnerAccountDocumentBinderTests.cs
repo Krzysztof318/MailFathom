@@ -6,10 +6,12 @@ using System.Globalization;
 using System.Text;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.OwnerSettings;
+using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.Spam;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Owners;
 using MailFathom.Infrastructure.Persistence.Settings;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
@@ -481,8 +483,67 @@ public sealed class OwnerAccountDocumentBinderTests
         return $$"""{"MailAccounts":[],{{string.Join(",", pairs)}}}""";
     }
 
-    private static OwnerAccountDocumentBinder CreateBinder() =>
-        new(new PersistedSecretMaterial(DeclaredSecretScheme.Registered), new FakeTimeProvider(Today));
+    /// <summary>An owner switching on a scanner the deployment left off is the record this block exists for.</summary>
+    [Fact]
+    public void Bind_ARecordSwitchingOnAScannerTheDeploymentLeftOff_BindsWhatItAsksFor()
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind("""{"SensitiveContent":{"Secrets":{"Enabled":true}}}""");
+
+        // Assert
+        Assert.True(binding.IsBound);
+        Assert.True(binding.Owner!.SensitiveContent.Secrets.Enabled);
+    }
+
+    /// <summary>
+    /// The write is where a loosening is stopped, so whoever wrote the record learns which deployment switch refused it
+    /// rather than finding their mail scanned anyway and their own record describing something else.
+    /// </summary>
+    [Fact]
+    public void Bind_ARecordSwitchingOffAScannerTheDeploymentRequires_IsRefusedNamingTheSetting()
+    {
+        // Arrange
+        var deployment = new SensitiveContentOptions();
+        deployment.Secrets.Enabled = true;
+        var binder = CreateBinder(deployment);
+
+        // Act
+        var binding = binder.Bind("""{"SensitiveContent":{"Secrets":{"Enabled":false}}}""");
+
+        // Assert
+        Assert.False(binding.IsBound);
+        Assert.Contains(
+            binding.Refusals,
+            refusal => refusal.Contains("SensitiveContent:Secrets:Enabled", StringComparison.Ordinal));
+    }
+
+    /// <summary>Asking for a scanner this deployment stood up no analyzer for is refused here rather than at the first message.</summary>
+    [Fact]
+    public void Bind_ARecordAskingForThePersonalDataScannerWithNoAnalyzer_IsRefusedNamingTheDeploymentSetting()
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind("""{"SensitiveContent":{"Pii":{"Enabled":true}}}""");
+
+        // Assert
+        Assert.False(binding.IsBound);
+        Assert.Contains(
+            binding.Refusals,
+            refusal => refusal.Contains("PersonalDataAnalyzer:Endpoint", StringComparison.Ordinal));
+    }
+
+    /// <summary>Builds the binder, over a deployment that scans nothing unless a test says otherwise.</summary>
+    /// <param name="deployment">The deployment's own scanning section, which a record's scanning block is judged against.</param>
+    private static OwnerAccountDocumentBinder CreateBinder(SensitiveContentOptions? deployment = null) =>
+        new(
+            new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
+            new FakeTimeProvider(Today),
+            Options.Create(deployment ?? new SensitiveContentOptions()));
 
     private static string DocumentDeclaring(
         params (string AccountId, string DisplayName)[] accounts) =>

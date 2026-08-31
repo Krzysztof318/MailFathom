@@ -31,6 +31,7 @@
          builds one: the inactive guard names the scanning deployment in its own documentation. -->
     <Compile Include="..\shared\MarkerSensitiveContentScanner.cs" Link="MarkerSensitiveContentScanner.cs" />
     <Compile Include="..\shared\RecordingSensitiveContentEgressTelemetry.cs" Link="RecordingSensitiveContentEgressTelemetry.cs" />
+    <Compile Include="..\shared\FixedSensitiveContentPostures.cs" Link="FixedSensitiveContentPostures.cs" />
     <Compile Include="..\shared\SensitiveContentEgressGuards.cs" Link="SensitiveContentEgressGuards.cs" />
     <Compile Include="..\shared\ScanningSensitiveContentEgress.cs" Link="ScanningSensitiveContentEgress.cs" />
 
