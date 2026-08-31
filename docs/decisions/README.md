@@ -7,7 +7,7 @@ For background on ADRs, see <https://adr.github.io/>.
 ## How MailFathom uses ADRs
 
 1. Create or modify an ADR only after explicit owner approval for that documentation change. The `Protected paths` check enforces this rather than leaving it to a reviewer: `docs/decisions/` is a protected directory, so a pull request touching this directory fails that check unless the repository owner authored it. Propose a decision in an issue and let the approving change carry the record.
-2. Copy `docs/decisions/adr-template.md` to `docs/decisions/NNNN-title-with-dashes.md`, where `NNNN` is the next sequence number. The next one is `0024`. `0018`, `0019`, and `0020` were withdrawn with the Uno Platform client they decided about, and a number that has been used once is never reused, so the sequence continued past that gap rather than filling it.
+2. Copy `docs/decisions/adr-template.md` to `docs/decisions/NNNN-title-with-dashes.md`, where `NNNN` is the next sequence number. The next one is `0025`. `0018`, `0019`, and `0020` were withdrawn with the Uno Platform client they decided about, and a number that has been used once is never reused, so the sequence continued past that gap rather than filling it.
    1. Check existing branches and pull requests when possible so the sequence number does not collide.
    2. Use `docs/decisions/adr-short-template.md` only for small decisions whose trade-offs are already clear.
 3. Edit the new ADR.
@@ -41,3 +41,4 @@ For background on ADRs, see <https://adr.github.io/>.
 - [0021: Rebuild the client on React, TypeScript, and Tailwind CSS, ship a web bundle and a Tauri desktop application, and resolve the client's dependencies with pnpm](0021-client-stack-react-typescript-tailwind-tauri-and-pnpm.md)
 - [0022: Report a run's own consumption rather than a price, keep the deployment's remaining allowance private while naming when a refused period turns over, make cancelling stop the provider call and keep what arrived, and publish the answering endpoint by a name the operator chose](0022-what-an-ai-run-reports-about-cost-cancellation-and-the-model.md)
 - [0023: Keep the finished Basic header in the operating system's keychain on the desktop head and for the tab alone on the web head, ask the shell rather than the platform, and say so on the screen where nothing may be kept](0023-where-the-client-keeps-the-credential-it-signs-in-with.md)
+- [0024: Draw mail as the closed document tree the service already reduces it to, in the client's own document with no frame and no sanitizer, and let a remote picture be a request nothing on either side remembers](0024-rendering-mail-in-the-client-as-a-closed-document-tree.md)
