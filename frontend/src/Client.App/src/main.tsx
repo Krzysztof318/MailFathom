@@ -5,6 +5,8 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { adoptedDeployment } from './deployment/adoptedDeployment';
+import { sendToDeployment } from './deployment/sendToDeployment';
 import { LocalizationProvider } from './localization/Localization';
 import './styles.css';
 
@@ -14,10 +16,13 @@ if (container === null) {
     throw new Error('index.html carries no #root element for the client to mount into.');
 }
 
+// The edge of the application, and the one place the deployment this run belongs to is resolved. It arrives below as a
+// value, which is what keeps the difference between a client served by its deployment and a client somebody pointed at
+// one out of every screen underneath.
 createRoot(container).render(
     <StrictMode>
         <LocalizationProvider>
-            <App />
+            <App deployment={adoptedDeployment()} send={sendToDeployment} />
         </LocalizationProvider>
     </StrictMode>,
 );

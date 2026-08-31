@@ -9,10 +9,20 @@ export interface ClientRequest {
     readonly headers: Readonly<Record<string, string>>;
 }
 
-/** What came back, reduced to the two things this package reads. */
+/** What came back, reduced to the three things this package reads. */
 export interface ClientResponse {
     readonly status: number;
     readonly body: string;
+
+    /**
+     * The response headers, under lower-case names.
+     *
+     * A refusal is the one answer this package reads a header off: it carries the protection space the deployment
+     * challenges for, which is what tells a client it reached MailFathom rather than something else refusing it. The
+     * names arrive lower-cased because HTTP field names are case-insensitive, and a lookup that had to try three
+     * spellings would be a lookup that misses the fourth.
+     */
+    readonly headers: Readonly<Record<string, string>>;
 }
 
 /**
@@ -23,3 +33,35 @@ export interface ClientResponse {
  * indirection exists rather than a layer added in case a second transport ever appears.
  */
 export type MailFathomTransport = (request: ClientRequest) => Promise<ClientResponse>;
+
+/**
+ * The most of one answer a transport reads before it gives up on it, in bytes.
+ *
+ * It is the backstop rather than the bound an operation works to: each of those is far tighter and
+ * belongs beside the thing it describes, and this is what keeps a body from being buffered whole
+ * before any of them can apply. It matters most where the client is asking an address it has not
+ * trusted yet whether MailFathom is what answers there — the answer at that point is from a stranger,
+ * and a stranger that replies with a gigabyte should cost this client a cancelled read rather than
+ * the memory.
+ *
+ * A transport that has to stop reading answers with an empty body, which every operation already
+ * refuses as unreadable. That is the accurate outcome and it needs no reason of its own: an answer
+ * this client would not read in full is one it cannot act on either way.
+ */
+export const longestResponseBody = 1_048_576;
+
+/**
+ * Puts one request on the wire, answering `null` where nothing answered at all.
+ *
+ * Every operation goes through this rather than calling the transport directly, because a connection refused, a name
+ * that does not resolve, a certificate the client will not accept, and an answer cut short all arrive as a rejected
+ * promise rather than as a status — and an operation that let one through would hand a screen an exception where its
+ * whole contract is that an expected failure is a value.
+ */
+export async function send(transport: MailFathomTransport, request: ClientRequest): Promise<ClientResponse | null> {
+    try {
+        return await transport(request);
+    } catch {
+        return null;
+    }
+}

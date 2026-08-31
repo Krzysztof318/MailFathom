@@ -135,6 +135,15 @@ target: a difference between the heads is a CSS one — a safe-area inset, a poi
 concern that belongs to the shell rather than to the application. A screen that cannot be written without knowing which
 head it is running on is a design that has not been finished, and taking that branch is what turns one client into two.
 
+**Which deployment the client belongs to is the worked example of that**, and it is where the branch would have been
+most tempting: a web bundle is served by its deployment and a desktop shell is served by nothing. What resolves it is
+one rule about addresses rather than a question about heads — `Client.App/src/deployment/adoptedDeployment.ts` reads
+the address somebody named, else the one that served the client, and takes the second only where it is an address this
+client may address at all. A shell loaded from a scheme of its own resolves to nothing there and meets the connect
+screen; a page served by its deployment resolves to that deployment and meets none. Both answers are addresses, which
+is why neither case has to know about the other, and it is why `main.tsx` is where the resolution happens: the edge
+supplies a value, and no screen underneath asks where it came from.
+
 **What a screen adapts to instead is the width it has been given and what the pointer can do.** Those two are the whole
 of it, and the refusal above is not an instruction to adapt to nothing: a window is resized far more often than a head
 is changed, and one head produces both shapes anyway. A half-width window on a desktop gets the composition a

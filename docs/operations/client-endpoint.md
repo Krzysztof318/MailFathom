@@ -87,6 +87,14 @@ answering the port, which contract it speaks, and what the rest of the surface w
 sign-in be built and proven end to end before a screen exists — a client that reached here with a token it had just been
 issued knows the token works.
 
+It has a second reader, holding nothing at all. A person naming their deployment in the client types a host, and the
+client asks here before it sends anything to that address, so a mistyped one is reported as an address that answers as
+nothing rather than as a sign-in that failed. Wherever the endpoint requires a credential — which is every deployment
+that configured one — such a caller is refused, and the refusal is itself the answer: every MailFathom surface
+challenges under the `MailFathom` protection space, and this endpoint's CORS policy names `WWW-Authenticate` among the
+headers a browser may read. A deployment that requires none answers the body instead, and `service` is what the client
+reads out of it.
+
 **It names no credential**, which is the one way it differs from what
 [`GET /api/admin/session`](admin-endpoint.md) answers. That surface's reader is `mfctl` in an operator's own hands, and
 the deployment's configured name for the credential that authenticated is what tells them which of their own entries let

@@ -2,16 +2,16 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { mailAccountsRoute, routeFor, type ClientSession, type MailFathomTransport } from '@mailfathom/client-backend';
+import { clientRoutePrefix, mailAccountsRoute, type MailFathomTransport } from '@mailfathom/client-backend';
 
-// What the proving screen reads through. Signing in and reaching a running deployment are separate work, so the
-// transport answers from a canned body here: it is what proves the workspace, the package boundary, the build, and the
-// styling end to end without a service behind it.
+// What the proving screen reads its mail through. The deployment the client belongs to is resolved for real now, and
+// reaching one is a real request; what is still canned here is everything behind a credential, because signing in is
+// separate work and nothing composes a credential yet. This module goes when that work lands.
+//
+// The answer is matched on the route rather than on a whole address, because which deployment the client is pointed at
+// is no longer this module's to know.
 
-export const stubSession: ClientSession = {
-    baseAddress: 'https://mailfathom.invalid',
-    authorization: 'Basic stub-credential-that-is-never-sent',
-};
+export const stubAuthorization = 'Basic stub-credential-that-is-never-sent';
 
 const stubAccounts = JSON.stringify({
     synchronizationEnabled: true,
@@ -42,7 +42,7 @@ const stubAccounts = JSON.stringify({
 
 export const stubTransport: MailFathomTransport = (request) =>
     Promise.resolve(
-        request.path === routeFor(stubSession, mailAccountsRoute)
-            ? { status: 200, body: stubAccounts }
-            : { status: 404, body: '' },
+        request.path.endsWith(`${clientRoutePrefix}${mailAccountsRoute}`)
+            ? { status: 200, body: stubAccounts, headers: {} }
+            : { status: 404, body: '', headers: {} },
     );

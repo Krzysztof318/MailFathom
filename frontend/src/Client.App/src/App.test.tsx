@@ -2,42 +2,79 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+import { StrictMode } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ClientRequest, ClientResponse, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
+import type { ClientRequest, ClientResponse, MailFathomTransport } from '@mailfathom/client-backend';
 import { App } from './App';
+import type { AdoptedDeployment } from './deployment/adoptedDeployment';
+import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { LocalizationProvider } from './localization/Localization';
 import { localeNames, locales, readStoredLocale } from './localization/locale';
 
-// The screen reads through the transport this module supplies, so replacing the module is how the network boundary is
-// faked here: what is under test stays the real request, the real parsing, and the real failure mapping, and only the
-// answer they are given is the test's. A screen that takes its transport as a prop needs none of this.
-const stub = vi.hoisted((): { session: ClientSession; answer: MailFathomTransport } => ({
-    session: { baseAddress: 'https://mail.example.invalid', authorization: 'Basic dGVzdA==' },
-    answer: () => Promise.resolve({ status: 200, body: '' }),
+// The screen reads its mail through the transport this module supplies, so replacing the module is how that network
+// boundary is faked here: what is under test stays the real request, the real parsing, and the real failure mapping,
+// and only the answer they are given is the test's. A screen that takes its transport as a prop needs none of this,
+// which is why the deployment the client is pointed at arrives as one below.
+const stub = vi.hoisted((): { answer: MailFathomTransport } => ({
+    answer: () => Promise.resolve({ status: 200, body: '', headers: {} }),
 }));
 
 vi.mock('./stubMailFathom', () => ({
-    stubSession: stub.session,
+    stubAuthorization: 'Basic dGVzdA==',
     stubTransport: ((request: ClientRequest) => stub.answer(request)) satisfies MailFathomTransport,
 }));
 
-function answering(response: ClientResponse): void {
-    stub.answer = () => Promise.resolve(response);
+type Answer = Omit<ClientResponse, 'headers'>;
+
+function answering(response: Answer): void {
+    stub.answer = () => Promise.resolve({ ...response, headers: {} });
 }
 
-function directory(synchronizationEnabled: boolean, accounts: readonly unknown[]): ClientResponse {
+function directory(synchronizationEnabled: boolean, accounts: readonly unknown[]): Answer {
     return { status: 200, body: JSON.stringify({ synchronizationEnabled, accounts }) };
 }
 
-// The application is mounted the way `main.tsx` mounts it. Nothing reads a message without the provider above it, and
-// a test that supplied its own would be proving a second arrangement.
-function renderApp(): void {
+// What `main.tsx` resolves at the edge and hands down. The origin that served the client is the case a web head is in,
+// and it is the default here because the screens below are about mail rather than about where the deployment is.
+const servedFrom: AdoptedDeployment = {
+    deployment: { baseAddress: 'https://mail.example.invalid' },
+    chosen: false,
+};
+
+const nothingSent: DeploymentTransport = () => () => Promise.reject(new Error('This screen reaches no deployment.'));
+
+// The application is mounted the way `main.tsx` mounts it, `StrictMode` included. Nothing reads a message without the
+// provider above it, and a test that supplied its own would be proving a second arrangement — and the mode is half of
+// that arrangement rather than a detail of it: it invokes every effect twice on mount, which is the difference between
+// a screen that behaves and one that behaves the first time it is run.
+function renderApp(deployment: AdoptedDeployment | null = servedFrom, send: DeploymentTransport = nothingSent): void {
     render(
-        <LocalizationProvider>
-            <App />
-        </LocalizationProvider>,
+        <StrictMode>
+            <LocalizationProvider>
+                <App deployment={deployment} send={send} />
+            </LocalizationProvider>
+        </StrictMode>,
     );
+}
+
+function chose(baseAddress: string): AdoptedDeployment {
+    return { deployment: { baseAddress }, chosen: true };
+}
+
+// Which deployments were reached, in the order they were first reached. `StrictMode` invokes the effect that reads the
+// accounts twice on mount, as React does in development and as `main.tsx` therefore does here, so a repeat of the
+// address already being read is the mode rather than the screen — what these tests are about is which address that is.
+function deploymentsAsked(asked: string[]): string[] {
+    return [...new Set(asked)];
+}
+
+function recordingWhatIsAsked(asked: string[]): void {
+    stub.answer = (request) => {
+        asked.push(request.path);
+
+        return Promise.resolve({ ...directory(true, [workAccount]), headers: {} });
+    };
 }
 
 const workAccount = {
@@ -129,6 +166,113 @@ describe('App', () => {
 
         expect(await screen.findByText('The accounts could not be read: unauthenticated.')).toBeDefined();
         expect(screen.queryByRole('list')).toBeNull();
+    });
+});
+
+describe('App deployment', () => {
+    // A deployment that is there and wants a credential, which is what every deployment somebody runs answers a client
+    // that has not signed in yet. The challenge is what says the answer came from MailFathom.
+    const reachable: DeploymentTransport = () => () =>
+        Promise.resolve({ status: 401, body: '', headers: { 'www-authenticate': 'Bearer realm="MailFathom"' } });
+
+    beforeEach(() => {
+        answering(directory(true, [workAccount]));
+    });
+
+    afterEach(() => {
+        window.localStorage.clear();
+        document.documentElement.removeAttribute('lang');
+    });
+
+    it('reads from the deployment it was pointed at, rather than from one written into the client', async () => {
+        const asked: string[] = [];
+        recordingWhatIsAsked(asked);
+
+        renderApp(chose('https://elsewhere.example.invalid'));
+        await screen.findAllByRole('listitem');
+
+        expect(deploymentsAsked(asked)).toEqual(['https://elsewhere.example.invalid/api/client/accounts']);
+    });
+
+    it('asks for an address when nothing has said where the deployment is', () => {
+        renderApp(null);
+
+        expect(screen.getByRole('textbox', { name: 'Deployment address' })).toBeDefined();
+        expect(screen.queryByRole('list')).toBeNull();
+    });
+
+    it('offers to be pointed elsewhere once somebody named the deployment themselves', async () => {
+        renderApp(chose('https://mail.example.invalid'));
+        await screen.findAllByRole('listitem');
+
+        expect(screen.getByRole('button', { name: 'Point somewhere else' })).toBeDefined();
+    });
+
+    it('offers nothing to change where the origin that served the client is the deployment', async () => {
+        renderApp();
+        await screen.findAllByRole('listitem');
+
+        expect(screen.queryByRole('button', { name: 'Point somewhere else' })).toBeNull();
+    });
+
+    it('asks for an address again, and shows no mail, once it is pointed somewhere else', async () => {
+        renderApp(chose('https://mail.example.invalid'));
+        await screen.findAllByRole('listitem');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else' }));
+
+        expect(screen.getByRole('textbox', { name: 'Deployment address' })).toBeDefined();
+        expect(screen.queryByRole('list')).toBeNull();
+    });
+
+    it('leaves focus where the document opened it when the deployment was already known', async () => {
+        renderApp();
+        await screen.findAllByRole('listitem');
+
+        // A cold start is not a view change. `main.tsx` mounts under `StrictMode`, so every effect runs twice here as
+        // it does under `pnpm dev`, and a guard that only survives one invocation would have pulled focus by now.
+        expect(document.activeElement).toBe(document.body);
+    });
+
+    it('puts focus at the start of the mail once the deployment has been named, rather than leaving it behind', async () => {
+        renderApp(null, reachable);
+
+        fireEvent.change(screen.getByRole('textbox', { name: 'Deployment address' }), {
+            target: { value: 'mail.example.test' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+        await screen.findAllByRole('listitem');
+
+        expect(document.activeElement?.contains(screen.getByRole('list'))).toBe(true);
+    });
+
+    it('puts focus back in the address when it is pointed somewhere else', async () => {
+        renderApp(chose('https://mail.example.invalid'));
+        await screen.findAllByRole('listitem');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else' }));
+
+        expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Deployment address' }));
+    });
+
+    it('reads the next deployment with a session of its own, and never the one before it again', async () => {
+        const asked: string[] = [];
+        recordingWhatIsAsked(asked);
+
+        renderApp(chose('https://first.example.invalid'), reachable);
+        await screen.findAllByRole('listitem');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else' }));
+        fireEvent.change(screen.getByRole('textbox', { name: 'Deployment address' }), {
+            target: { value: 'second.example.invalid' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+        await screen.findAllByRole('listitem');
+
+        expect(deploymentsAsked(asked)).toEqual([
+            'https://first.example.invalid/api/client/accounts',
+            'https://second.example.invalid/api/client/accounts',
+        ]);
     });
 });
 

@@ -14,6 +14,12 @@ describe('routeFor', () => {
     it('puts the client prefix between the base address and the route', () => {
         expect(routeFor(session, '/accounts')).toBe('https://mail.example.invalid/api/client/accounts');
     });
+
+    it('composes a route for a deployment nobody has signed in to, which is what an address is asked with', () => {
+        expect(routeFor({ baseAddress: 'https://mail.example.invalid' }, '/session')).toBe(
+            'https://mail.example.invalid/api/client/session',
+        );
+    });
 });
 
 describe('headersFor', () => {
