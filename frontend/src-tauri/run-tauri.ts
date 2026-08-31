@@ -29,11 +29,23 @@ import { run } from '@tauri-apps/cli';
 const desktopShell = import.meta.dirname;
 const repositoryRoot = resolve(desktopShell, '../..');
 
-// Invoked through `bash` rather than executed directly, so that a Windows machine building the desktop head resolves
-// the script through Git Bash instead of asking the operating system to run a file it has no interpreter for.
-const declaredVersion = execFileSync('bash', [resolve(repositoryRoot, 'scripts/read-declared-version.sh')], {
-    encoding: 'utf8',
-}).trim();
+// `MAILFATHOM_VERSION` is how a publication hands the number in rather than letting it be resolved a second time.
+// `build-desktop-client.yml` is given a version its caller already resolved — a release's, or a nightly's identifier,
+// which `Version.props` alone cannot produce — and a build that resolved its own would name the bundles something
+// other than what the release attaching them says. Everywhere else the variable is unset and the declared version is
+// read here, which is the only number a development build could mean.
+//
+// The fallback is invoked through `bash` rather than executed directly, so that a Windows machine building the desktop
+// head resolves the script through Git Bash instead of asking the operating system to run a file it has no interpreter
+// for.
+const passedVersion = process.env['MAILFATHOM_VERSION']?.trim() ?? '';
+
+const declaredVersion =
+    passedVersion.length > 0
+        ? passedVersion
+        : execFileSync('bash', [resolve(repositoryRoot, 'scripts/read-declared-version.sh')], {
+              encoding: 'utf8',
+          }).trim();
 
 // Asking the operating system for port zero is what makes the answer free rather than merely unused a moment ago.
 // The port is released again before Vite binds it, which leaves a window another process could take it in; the Vite

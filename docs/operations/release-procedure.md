@@ -254,7 +254,7 @@ rather than automated. Nothing here pushes a tag on the owner's behalf.
 
 ## What a release publishes, and what it needs to
 
-Four artifacts leave one run, and a failure in the first three leaves the release incomplete rather than
+Five artifacts leave one run, and a failure in the first three leaves the release incomplete rather than
 half-published:
 
 | Artifact | Where | Depends on |
@@ -263,8 +263,9 @@ half-published:
 | The Helm chart | `ghcr.io/krzysztof318/charts/mailfathom` | the image's digest |
 | `mailfathom-schema-<version>.sql` | the GitHub release's assets | nothing else the release produces |
 | `mfctl-<version>-<rid>` for `linux-x64`, `linux-arm64`, `win-x64`, and `win-arm64`, plus one `.sha256` covering all of them | the GitHub release's assets | nothing else the release produces |
+| The desktop client as a `.deb`, an `.rpm`, and an NSIS installer, plus one `.sha256` covering all three | the GitHub release's assets | nothing else the release produces |
 
-The column names what each artifact needs from the other three. What all four need is the same and comes before any of
+The column names what each artifact needs from the others. What all five need is the same and comes before any of
 them: the tag assertion, then the build, unit-test, and migration checks, then the integration suite, and the client
 stack's own gate beside them. **No artifact is built until every one of those has passed**, so a commit a unit test
 rejects costs the gate that rejected it rather than several `dotnet publish` invocations and a schema generation beside
@@ -289,14 +290,16 @@ provenance attestation, so the checksum file the build takes over exactly the pu
 verifies a download against, and it is the whole of what the release offers for that.
 [The administrative endpoint](admin-endpoint.md#getting-the-command) is where an operator is told so and how to check.
 
-No client is published as a download. The web client travels inside the container image, built by a stage of the
-image's own build and served from a deployment setting, so a release attaches no client archive: what an operator
-installs is the image. A desktop head is not built or attached here either — the Uno Platform one this release used to
-attach was withdrawn, and the Tauri replacement has not shipped. The client stack's gate is still called and still
+The client is published twice, in two shapes an operator chooses between rather than a shape a release picks. The web
+client travels inside the container image, built by a stage of the image's own build and served from a deployment
+setting, so nothing about it is attached here: what an operator installs is the image. The desktop client is attached —
+a `.deb` and an `.rpm` for Linux and an NSIS installer for Windows, built on their own runners because a Tauri head
+links against the platform's own WebView and does not cross-compile, and covered by one checksum file like the command
+binaries. It gates nothing, on exactly the terms the command binaries do not, and
+[the desktop client](desktop-client.md) is the page. The client stack's gate is called before either shape is built and
 blocks the image, and what it asserts is everything the full gate asks the client — the linter, the type check, both
 packages' unit suites, and the build — plus the browser suite, which builds the bundle and drives it, so a release
-cannot be cut over a client that does not hold up or does not load. The release notes still say there is no download to
-whoever is looking for one.
+cannot be cut over a client that does not hold up or does not load.
 
 The chart is published **after** the image and **against the digest it produced**, because a chart names the image it
 deploys: before pushing, the run renders the packaged chart against that digest and refuses to publish one that would

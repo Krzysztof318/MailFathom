@@ -67,25 +67,31 @@ never in a component.
 the application calls into Rust nowhere, so granting the webview a permission would be granting reach nothing asked
 for. The first command to exist is what adds both.
 
-| What                                                                | Where it is decided                                                                   |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Product name, application identifier, window title and minimum size | `src-tauri/tauri.conf.json`                                                           |
-| The version the application reports                                 | `<VersionPrefix>` in `Version.props`, merged in by `src-tauri/run-tauri.ts`           |
-| Which crates the shell links, and at which versions                 | `src-tauri/Cargo.toml`, resolved into the committed `Cargo.lock`                      |
-| The icon every bundle carries                                       | `src-tauri/icons/`, generated from `assets/icon-1254.png` with `pnpm exec tauri icon` |
+| What                                                                | Where it is decided                                                                                                      |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Product name, application identifier, window title and minimum size | `src-tauri/tauri.conf.json`                                                                                              |
+| The version the application reports                                 | `<VersionPrefix>` in `Version.props`, merged in by `src-tauri/run-tauri.ts`                                              |
+| Which crates the shell links, and at which versions                 | `src-tauri/Cargo.toml`, resolved into the committed `Cargo.lock`                                                         |
+| The icon every bundle carries                                       | `src-tauri/icons/`, generated from `assets/icon-1254.png` with `pnpm exec tauri icon`                                    |
+| The terms every bundle installs beside the application              | `bundle.resources` in `src-tauri/tauri.conf.json`, which takes the repository's own `LICENSE` and `NOTICE`               |
+| What a Linux package declares it needs                              | `bundle.linux.deb.depends` in `src-tauri/tauri.conf.json`; the `rpm` names none, per `docs/operations/desktop-client.md` |
 
 **The version is never typed into a manifest.** `tauri.conf.json` carries no `version` and neither does `Cargo.toml`;
 `run-tauri.ts` reads `scripts/read-declared-version.sh` and hands the answer to the Tauri CLI as a configuration
 patch, which is how the image gets its tag and the chart its `appVersion`. So `pnpm desktop:build` stamps the same
 number the service reports, and `cargo build` run on its own produces `0.0.0` rather than a number that looks right
-and is not.
+and is not. A publication is the one caller that hands the number in instead, through `MAILFATHOM_VERSION`: a release
+and a nightly resolve the commit and the version once, and a nightly's identifier is not in `Version.props` for a
+build to find.
 
 **The bundle formats are chosen rather than defaulted.** Tauri's own default is every format the host can produce, so
-`bundle.targets` names four instead: `deb` and `rpm`, because a native package is what a Linux user installs and
-removes through their own package manager and those are the two families that covers; `appimage`, because everything
-outside those two families otherwise has no answer; and `nsis` on Windows, because it installs per user without
-administrator rights and one Windows installer is enough. An `msi` is deliberately absent. macOS is not built at all,
-which is why `icons/` carries no `.icns`.
+`bundle.targets` names three instead: `deb` and `rpm`, because a native package is what a Linux user installs and
+removes through their own package manager and those are the two families that covers; and `nsis` on Windows, because
+it installs per user without administrator rights and one Windows installer is enough. An `msi` is deliberately
+absent, and so is an `appimage` — that format packages the host's own GTK and WebKitGTK shared objects into the
+artifact, several of them LGPL-2.1-or-later, which `THIRD_PARTY_LICENSES.md` decides against redistributing where the
+two native packages depend on the distribution's copies and carry none of it. macOS is not built at all, which is why
+`icons/` carries no `.icns`.
 
 **The development port is reserved rather than fixed.** `pnpm desktop:dev` starts the Vite development server and
 loads it in the shell, so a change to a screen reloads in the desktop window exactly as it does in a browser tab —

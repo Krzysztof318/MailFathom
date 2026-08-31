@@ -255,6 +255,26 @@ jobs:
       ref: ${{ needs.decide.outputs.revision }}
       version: ${{ needs.decide.outputs.version }}
 
+  # The client as something somebody downloads and runs, built from the same revision and left on the run: a nightly is
+  # not a release and has nothing to attach to, so whoever tries a nightly image takes the desktop client from the run
+  # that produced it. It gates nothing, on the same terms as the command binaries above, and what it buys this channel
+  # is that a break in either desktop toolchain is found on a nightly rather than during a release.
+  desktop-client:
+    name: Desktop client
+    needs:
+      - decide
+      # The channel's gate and its own stack's, on the same terms the command binaries wait for the first of them: a
+      # commit either one rejects is not worth two platform builds.
+      - verify
+      - verify-client
+    if: needs.decide.outputs.publish == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-desktop-client.yml
+    with:
+      ref: ${{ needs.decide.outputs.revision }}
+      version: ${{ needs.decide.outputs.version }}
+
   publish:
     name: Publish
     needs:

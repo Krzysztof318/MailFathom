@@ -79,8 +79,13 @@ and each is refused over a clear-text socket until the deployment states that so
 [Serving the client from the deployment](../operations/client-endpoint.md#serving-the-client-from-the-deployment) is
 the page.
 
-What every shape *does* serve is the client **surface** under `/api/client`, which is an endpoint of its own and is
-what the next client will call. Signing in to it needs a credential no shape provisions on its own: there is no
+**The other way to have the client is to install it**, which no shape here decides: every release attaches the desktop
+client as a `.deb` and an `.rpm` for Linux and an NSIS installer for Windows, and it reaches a deployment over the
+network like any other client. [The desktop client](../operations/desktop-client.md) is what each installer does, what
+none of them does, and how a download is verified — nothing published there is signed.
+
+What every shape *does* serve, page or no page, is the client **surface** under `/api/client`, which is an endpoint of
+its own and is what both heads call. Signing in to it needs a credential no shape provisions on its own: there is no
 self-service and no default, so a username and password are written over
 [the administrative endpoint](../operations/admin-endpoint.md#owner-credentials) or they do not exist.
 
