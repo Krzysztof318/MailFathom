@@ -69,5 +69,39 @@ export default defineConfig(
         files: ['src/Client.App/**/*.{ts,tsx}'],
         extends: [reactHooks.configs.flat.recommended, reactRefresh.configs.vite],
     },
+    {
+        // Every user-visible string leaves the component that shows it, which is the one rule that decides whether a
+        // third language is a catalogue or a sweep through every screen written before it. A literal in markup is
+        // refused here rather than noticed in review, because review is exactly what stops catching it once there are
+        // enough screens to read. `no-restricted-syntax` is what states it: `Intl` and the catalogues are the whole of
+        // the mechanism, so there is no plugin to install for this and nothing joins the bundle.
+        files: ['src/Client.App/**/*.tsx'],
+        rules: {
+            'no-restricted-syntax': [
+                'error',
+                {
+                    selector: 'JSXText[value=/\\S/]',
+                    message:
+                        'A user-visible string belongs in src/Client.App/src/localization/en.ts, with its Polish counterpart, and reaches the screen through translate().',
+                },
+                {
+                    selector: ':matches(JSXElement, JSXFragment) > JSXExpressionContainer > Literal[value=/\\S/]',
+                    message:
+                        'A user-visible string belongs in src/Client.App/src/localization/en.ts and reaches the screen through translate(); a number is written with Intl under the active locale.',
+                },
+                {
+                    selector: ':matches(JSXElement, JSXFragment) > JSXExpressionContainer > TemplateLiteral',
+                    message:
+                        'A sentence assembled in markup cannot be reordered by a translator. Write it as one catalogue entry with a {name} hole and fill it through translate().',
+                },
+                {
+                    selector:
+                        'JSXAttribute[name.name=/^(alt|title|placeholder|aria-label|aria-description|aria-placeholder|aria-roledescription|aria-valuetext)$/] > Literal',
+                    message:
+                        'This attribute is read out to somebody, so it is a user-visible string: put it in src/Client.App/src/localization/en.ts and pass translate() to it.',
+                },
+            ],
+        },
+    },
     prettier,
 );
