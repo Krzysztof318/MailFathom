@@ -184,5 +184,23 @@ inside the bundle, so what is asserted about the network today is that the clien
 
 ## Coverage
 
-Nothing collects coverage of this suite and no threshold is enforced on it. What that costs, and what a number over
-this stack would be worth, is a decision of its own rather than something to settle by adding a collector here.
+**Every `pnpm test` collects it, and nothing is enforced on it.** `frontend/vitest.config.ts` turns the v8 provider on
+for both projects, so the figure arrives with the run that already had to happen rather than behind a flag somebody has
+to remember — the same rule that makes `pnpm test` the whole of how this suite runs applies to what measures it. A text
+summary goes to the terminal, where a verification gate and a CI job both print it, and an HTML report to
+`artifacts/coverage/client/` at the repository root, which `.gitignore` covers along with everything else written there.
+
+**What is measured is both packages' `src/`, whether or not a test imported it.** A module nobody covers is the one the
+number exists to show, so it sits at zero in the report instead of being absent from it. Two things are left out and
+neither is a gap: a declaration file states types and runs nothing, and `main.tsx` mounts React into the document and
+decides nothing — the client's counterpart to `Host` and `AppHost`, which the service excludes for the same reason.
+Vitest drops this suite's own test files.
+
+**Nothing gates on the figure, in either verification script or any workflow**, and the value that would be easiest to
+add is the one deliberately absent: a threshold. The service enforces 85% and `docs/operations/agent-workflow.md`
+§ _The mutation score is read, never enforced_ records what that stopped buying — a number above 95 for months, saying
+that a line ran rather than that anything asserted its result, which a test executing a branch and checking nothing
+raises exactly as far as one that pins the answer down. A second enforced number over a suite this size would inherit
+that before earning anything. So the figure is read the way the integration report and the mutation score are read: as
+a place to look, never as a bar to clear. What it is good for is the file sitting at zero and the branch nobody
+reaches; what it cannot tell you is whether the tests above it assert anything, and no threshold would fix that.
