@@ -133,9 +133,9 @@ jobs:
 
   # The client stack's half of the same gate, against the same commit and with the same one switch turned off. It is a
   # second job rather than a switch on the one above because the two stacks share no solution, no build contract, and
-  # no package pins. What it asserts today is the browser suite: the bundle is built and driven in a real browser, which
-  # is the client check no other job can make. The linter, the type check, and the unit suites join it there and block
-  # this release from the same call rather than from a change here.
+  # no package pins. What it asserts is everything `scripts/verify-full.sh` asks the client — the linter, the type
+  # check, both packages' unit suites, and the build — plus the browser suite, which is the client check no other job
+  # can make. All of it blocks this release from that one call rather than from a change here.
   verify-client:
     name: Build and test the client
     needs:
@@ -218,9 +218,8 @@ jobs:
       # Reached through `schema-artifact` already, and named anyway: what gates a publication is the sort of thing that
       # has to be readable off the job that publishes rather than followed through another job's dependencies.
       - integration-tests
-      # The client's own gate, which is where a client that does not compile is answered rather than twenty minutes
-      # into a multi-platform image build. It asserts nothing while the client stack carries no build; the dependency
-      # is what makes it gate again the moment it does.
+      # The client's own gate, which is where a client that does not lint, type-check, test, or build is answered
+      # rather than twenty minutes into a multi-platform image build.
       - verify-client
       # Nothing above reaches this one, because it produces no artifact for a publishing job to inherit the dependency
       # through. It is named for what it holds rather than for what it builds: the chart this release goes on to

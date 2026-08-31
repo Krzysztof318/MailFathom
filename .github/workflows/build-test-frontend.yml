@@ -4,11 +4,16 @@
 
 name: Build and test the frontend
 
-# The client stack's half of the required check. What it asserts today is the browser suite and nothing else: the Uno
-# Platform client this workflow used to compile was withdrawn, the React client's build and unit suite are #1400's to
-# put back, and #1404 decided that the one check that cannot be run anywhere else runs here. So the job below builds
-# the bundle and drives it in a real browser, and the linter, the type check, and the unit suites join it beside those
-# steps rather than replacing them.
+# The client stack's half of the required check, and it asks the client exactly what `scripts/verify-full.sh` asks it,
+# in the same order: the linter, the type check, both packages' unit suites, the formatting pass, and the build. The
+# browser suite is the one step that has no counterpart in either local gate — #1404 decided it runs here because it
+# cannot affordably run anywhere else — and it sits last because it is the only step that downloads a browser.
+#
+# **The linting is held at the service's severity rather than at a lower one.** `frontend/eslint.config.ts` is to the
+# client what `TreatWarningsAsErrors` and the analyzer set are to the server: every rule reports as an error and
+# `pnpm lint` refuses a warning through `--max-warnings 0`. A type error and a formatting difference fail the job the
+# same way. A client held to less than the service would make the repository's standard a property of which language a
+# file happens to be written in.
 #
 # **Why a browser check is gated on a pull request rather than left local or deferred to a nightly.** What it covers is
 # what jsdom structurally cannot answer — the built bundle rather than the source, a real document with a history, and
@@ -24,7 +29,7 @@ name: Build and test the frontend
 # The two inputs keep the contract every caller already sends. `ref` is what lets a release and a nightly check the
 # revision they resolved once rather than whatever a ref points at by the time the job starts, and `run-format` is the
 # switch every caller passes to both stacks: formatting is the one verdict a pull request settles for good, so it is
-# asked there and on no publication. `run-format` is read by nothing here until the formatting pass #1400 owns lands.
+# asked there and on no publication.
 on:
   workflow_call:
     inputs:
@@ -43,8 +48,8 @@ permissions:
   contents: read
 
 jobs:
-  build-and-check-client-in-a-browser:
-    name: Build the client and check it in a real browser
+  check-build-and-test-the-client:
+    name: Check, build, and test the client
     runs-on: ubuntu-latest
     steps:
       # A full checkout rather than a shallow one, because the client's build reads `Version.props` through
@@ -82,6 +87,26 @@ jobs:
       - name: Restore the client workspace
         run: pnpm --dir frontend install --frozen-lockfile
 
+      # The four checks the full gate runs before it builds, in the order it runs them, and ahead of the browser steps
+      # because none of them needs a browser: a lint violation is answered here without the 300 MB download below. The
+      # type check is the closest thing the client has to the Release build, because Vite strips types rather than
+      # checking them, and the unit suites run behind it for the reason `dotnet test` runs behind `dotnet build`.
+      - name: Lint the client
+        run: pnpm --dir frontend run lint
+
+      - name: Type-check the client
+        run: pnpm --dir frontend run typecheck
+
+      - name: Run both packages' unit suites
+        run: pnpm --dir frontend run test
+
+      # Verifying rather than repairing, which is what the same pass does in the full gate and the opposite of what it
+      # does in the fast loop. `run-format` is what makes it a pull request's question: a publication checks a revision
+      # whose formatting some pull request already settled.
+      - name: Verify the client's formatting
+        if: inputs.run-format
+        run: pnpm --dir frontend run format:check
+
       # Which browser build Playwright downloads is decided by the Playwright version, which the lock file pins, so the
       # same key covers both. Without this the browser is fetched on every run of every client change.
       - name: Cache the browser Playwright downloads
@@ -95,8 +120,9 @@ jobs:
       - name: Install the browser
         run: pnpm --dir frontend exec playwright install --with-deps chromium
 
-      # Builds the bundle and drives it. Nothing is uploaded afterwards, by design rather than by omission: a trace or
-      # a screenshot of a client is personal data the moment this drives a real deployment instead of the stubbed
-      # transport, so a failure is read from this log and reproduced locally rather than downloaded from a run.
-      - name: Check the built client in a real browser
+      # `pnpm test:browser` is `pnpm build` and then Playwright, so this is the build step as well as the browser one
+      # and nothing here builds the bundle twice. Nothing is uploaded afterwards, by design rather than by omission: a
+      # trace or a screenshot of a client is personal data the moment this drives a real deployment instead of the
+      # stubbed transport, so a failure is read from this log and reproduced locally rather than downloaded from a run.
+      - name: Build the client and check it in a real browser
         run: pnpm --dir frontend run test:browser

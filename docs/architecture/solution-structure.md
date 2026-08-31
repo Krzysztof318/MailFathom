@@ -191,10 +191,11 @@ Node process joins any deployment shape.
 
 The repository's own shape around it was kept when the old client went. `CI` still runs a `Frontend` job, gated on a
 `frontend` path filter, calling `.github/workflows/build-test-frontend.yml`; a nightly and a release still wait on that
-job before they publish. What that workflow asserts today is the browser suite, which is gated on a pull request
-because a break only a browser can see is otherwise found the morning after a merge; the linter, the type check, and
-the unit suites join it there. Both verification gates already run the client's flow, and deliberately not the browser
-suite — [which stack a gate runs](../operations/agent-workflow.md#which-stack-a-gate-runs) is where both are decided.
+job before they publish. What that workflow asserts is everything the full gate asks the client — the linter, the
+type check, both packages' unit suites, the formatting pass, and the build — plus the browser suite, which is gated on
+a pull request because a break only a browser can see is otherwise found the morning after a merge. Both verification
+gates run the same client flow, and deliberately not the browser suite —
+[which stack a gate runs](../operations/agent-workflow.md#which-stack-a-gate-runs) is where both are decided.
 
 **Nothing the service does for a client moved with it**, because none of it was Uno's. The client surface under
 `/api/client` is an endpoint of its own, with its own listener and its own credentials —

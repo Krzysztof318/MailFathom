@@ -406,27 +406,31 @@ verify_full_runs_the_client_flow_for_a_change_under_frontend() {
   assert_excludes 'frontend/' "$invocation_log"
 }
 
-# A file above both stacks is the case neither filter owns alone. `global.json` pins the SDK, and it
-# is named by both filters, so a change to it reaches both stacks — which is the answer `ci.yml` gives
-# it as well. Both flows run, neither having a path of its own in the change to earn it.
+# A file above both stacks is the case neither filter owns alone. `.editorconfig` is read by both — it
+# becomes a build failure through `EnforceCodeStyleInBuild` for the service, and Prettier reads its
+# client section rather than restating it — so a change to it is named by both filters, which is the
+# answer `ci.yml` gives it as well. Both flows run, neither having a path of its own in the change to
+# earn it. `global.json` is deliberately not the example any more: it pins the .NET SDK, the client
+# stack reads nothing from it, and both filters stopped agreeing about it when the client gained a
+# build of its own.
 verify_full_runs_both_flows_for_a_change_above_both_stacks() {
   local gate_output="$test_directory/verify-full-both-stacks-output"
 
   : > "$invocation_log"
   : > "$client_invocation_log"
-  # Detached at the base, so `global.json` is the only path the change carries and each flow is
+  # Detached at the base, so `.editorconfig` is the only path the change carries and each flow is
   # earned by it rather than by the C# file the fixture branch already holds.
   git -C "$repository_root" checkout --quiet --detach origin/main
-  printf '{}\n' > "$repository_root/global.json"
-  git -C "$repository_root" add global.json
+  printf 'root = true\n' > "$repository_root/.editorconfig"
+  git -C "$repository_root" add .editorconfig
 
   (
     cd "$repository_root"
     "$scripts_directory/verify-full.sh"
   ) > "$gate_output" 2>&1
 
-  git -C "$repository_root" rm --quiet --force --cached global.json
-  rm -f "$repository_root/global.json"
+  git -C "$repository_root" rm --quiet --force --cached .editorconfig
+  rm -f "$repository_root/.editorconfig"
   git -C "$repository_root" checkout --quiet "$fixture_branch"
 
   assert_contains 'build backend/MailFathom.slnx --configuration Release --no-restore' "$invocation_log"
@@ -7841,6 +7845,35 @@ the_gates_decide_from_the_change_filters_ci_declares() {
   fi
 }
 
+# The client's job in `CI` and the client's flow in `scripts/verify-full.sh` ask the same five questions,
+# and this is what holds them to it: a lint violation, a type error, or a formatting difference has to
+# fail in both places rather than in whichever of the two somebody remembered to teach. What the gate
+# runs is asserted above by `verify_full_runs_the_client_flow_for_a_change_under_frontend` against the
+# whole invocation log; this reads the workflow against the same list. No separate build step is looked
+# for because `pnpm test:browser` builds the bundle before it drives it, which is also why the job does
+# not build it twice.
+the_client_job_runs_every_check_the_full_gate_runs() {
+  local workflow="$source_repository_root/.github/workflows/build-test-frontend.yml"
+  local commands client_script failures=''
+
+  commands="$(grep -oE 'pnpm --dir frontend run [a-z:]+' "$workflow")"
+
+  for client_script in 'lint' 'typecheck' 'test' 'format:check' 'test:browser'; do
+    grep -qxF "pnpm --dir frontend run $client_script" <<< "$commands" ||
+      failures+="build-test-frontend.yml runs no 'pnpm --dir frontend run $client_script' step. "
+  done
+
+  # Formatting is the one verdict no publication asks for, so the one step that has to sit behind the
+  # switch every caller already sends. Without this the input would be declared, passed, and ignored.
+  grep -q 'if: inputs.run-format' "$workflow" ||
+    failures+='build-test-frontend.yml runs its formatting pass unconditionally rather than behind run-format. '
+
+  if [[ -n "$failures" ]]; then
+    printf '%s\n' "$failures" >&2
+    return 1
+  fi
+}
+
 workflow_scripts_use_flat_manual_layout() {
   [[ -x "$source_repository_root/scripts/inspect-workspace.sh" ]]
   [[ -x "$source_repository_root/scripts/assert-release-tag.sh" ]]
@@ -8604,6 +8637,7 @@ run_test the_runtime_image_carries_the_client_bundle_and_no_node
 run_test the_required_check_aggregates_every_job_in_ci
 run_test the_stacks_change_filters_name_no_path_in_each_other
 run_test the_gates_decide_from_the_change_filters_ci_declares
+run_test the_client_job_runs_every_check_the_full_gate_runs
 run_test workflow_scripts_use_flat_manual_layout
 run_test the_dependency_survey_refuses_what_would_write_without_being_asked
 run_test the_dependency_rewrite_encodes_a_hostile_version_into_a_pin_file

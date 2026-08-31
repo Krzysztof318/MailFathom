@@ -67,8 +67,8 @@ fi
 
 # `--include` selects within the workspace `dotnet format` loaded, so this names the files the service
 # solution actually holds. Everything outside `frontend/` belongs to it, which is where a `.cs` file
-# above both stacks was already going, and `frontend/` holds no C# at all while the client stack
-# carries no build.
+# above both stacks was already going, and `frontend/` holds no C# at all — it is React, TypeScript,
+# and the desktop shell's Rust crate, none of which this pass can open.
 mapfile -t changed_service_csharp_files < <(printf '%s\n' "$changed_paths" | grep -E '\.cs$' | grep -Ev '^frontend/' | sort --unique)
 
 # The full gate builds, tests, and verifies the formatting this loop repairs, in whichever stacks

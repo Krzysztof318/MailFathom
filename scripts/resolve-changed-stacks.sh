@@ -39,18 +39,21 @@ service_stack_filter=(
 )
 
 # `ci.yml`'s `frontend:` filter. It names nothing under `backend/` and the list above names nothing
-# under `frontend/`, which is what makes a change to one stack cost nothing in the other; the six
-# entries they share are the files above both stacks, and a change to one of those runs both flows
-# because it genuinely moves both.
+# under `frontend/`, which is what makes a change to one stack cost nothing in the other; the three
+# entries they share are the files above both stacks that both genuinely read, and a change to one of
+# those runs both flows. `scripts/read-declared-version.sh` is in this list and not in the one above
+# because the two stacks read `Version.props` by different routes: MSBuild imports it for the service,
+# while `frontend/src/Client.App/vite.config.ts` and `frontend/src-tauri/run-tauri.ts` shell out to that
+# script, so the client is the one stack build it can break. `scripts/build-schema-artifact.sh` and
+# `scripts/build-winget-manifests.sh` read it too and are not why it is here: neither belongs to a
+# stack, and the publication channels that run them filter nothing.
 client_stack_filter=(
   'frontend/**'
-  '.config/**'
   '.editorconfig'
   '.github/workflows/build-test-frontend.yml'
   '.github/workflows/ci.yml'
-  'NuGet.config'
   'Version.props'
-  'global.json'
+  'scripts/read-declared-version.sh'
 )
 
 # Whether any of the paths after `--` is matched by any of the patterns before it. Two forms occur in
