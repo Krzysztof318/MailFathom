@@ -166,19 +166,25 @@ The coverage marker is asserted against a sample type declared beside its tests,
 
 ## The client stack
 
-**`frontend/` is empty, and this is what it means.** The Uno Platform client that stood there — two source projects, a
-unit suite, a solution, and a build contract of its own — was withdrawn: the platform did not work out for this
-project, and the client is being rebuilt in React and JavaScript. What was kept is the place rather than anything that
-was in it. [`frontend/src/`](https://github.com/Krzysztof318/MailFathom/blob/main/frontend/src/README.md) and
-[`frontend/tests/`](https://github.com/Krzysztof318/MailFathom/blob/main/frontend/tests/README.md) each hold a
-placeholder README and nothing else, so the new stack lands where the old one stood.
+**`frontend/` is a pnpm workspace of React and TypeScript.** The Uno Platform client that stood there — two source
+projects, a unit suite, a solution, and a build contract of its own — was withdrawn: the platform did not work out for
+this project. What replaced it is two packages under `frontend/src/`, described in
+[`frontend/README.md`](https://github.com/Krzysztof318/MailFathom/blob/main/frontend/README.md), and the split between them
+is the same one Uno's was, carried over because it was never about the platform:
 
-The repository's own shape around it was kept for the same reason. `CI` still runs a `Frontend` job, gated on a
+- `Client.Backend` is everything that reaches the service. It declares no React and no DOM-typed dependency, so an
+  import of either fails to resolve rather than being caught in review.
+- `Client.App` is the application, and it depends on `Client.Backend`. Nothing depends on `Client.App`.
+
+`frontend/tests/` still holds a placeholder README, because the client's suite is written with the screens it covers.
+What the workspace builds is a directory of static files under `frontend/src/Client.App/dist/` and nothing else, so no
+Node process joins any deployment shape.
+
+The repository's own shape around it was kept when the old client went. `CI` still runs a `Frontend` job, gated on a
 `frontend` path filter, calling `.github/workflows/build-test-frontend.yml`; a nightly and a release still wait on that
-job before they publish. All of it asserts nothing today and says so, and filling it in for the new stack is a change
-to that one workflow rather than a reconstruction of every caller. Both verification gates read the same two path
-lists and report the client stack the same way — [which stack a gate runs](../operations/agent-workflow.md#which-stack-a-gate-runs)
-is where that is decided.
+job before they publish. That workflow asserts nothing yet and says so, and filling it in for this stack is a change to
+that one file rather than a reconstruction of every caller. Both verification gates already run the client's flow —
+[which stack a gate runs](../operations/agent-workflow.md#which-stack-a-gate-runs) is where that is decided.
 
 **Nothing the service does for a client moved with it**, because none of it was Uno's. The client surface under
 `/api/client` is an endpoint of its own, with its own listener and its own credentials —

@@ -94,9 +94,8 @@ fi
 
 # Everything under `frontend/` is left out of this list, because it scopes the service solution's
 # `--include` and that selects within the workspace `dotnet format` loaded: a client path here would
-# name no file the service solution holds. Nothing under `frontend/` is C# today either — the client
-# stack carries no build — and the exclusion stays because the next client is not the service's to
-# format.
+# name no file the service solution holds. The client stack holds no C# at all — it is React and
+# TypeScript, formatted by its own flow below — so the exclusion is what keeps the two apart.
 mapfile -t changed_service_csharp_files < <(printf '%s\n' "$changed_paths" | grep -E '\.cs$' | grep -Ev '^frontend/' | sort --unique)
 # Both lists feed the next two, because a path that was deleted decides as much as one that was
 # edited: the files under a removed `.editorconfig` are read against the rules above it from that
@@ -221,12 +220,22 @@ else
       fi
     fi
 
-    # The client stack's flow, which is nothing today and says so — exactly what the `Frontend` job of
-    # `CI` reports. The Uno Platform client was withdrawn and the client is being rebuilt in React, so
-    # `frontend/` holds two placeholder directories, no solution, and no build. The detection above is
-    # kept whole rather than deleted, because it is what the flow that replaces this is hung on.
+    # The client stack's flow, which is the fast loop's four steps with the formatting pass verifying
+    # instead of repairing, and the build added — the same difference this gate has from that loop on the
+    # service side. `pnpm build` is what proves the stack still produces the directory of static files an
+    # image serves, which nothing else here would notice breaking, because the type check reads the source
+    # and never the bundle.
     if [[ -n "$run_client_stack" ]]; then
-      printf 'This change reaches the client stack, which carries no build yet. See frontend/src/README.md.\n'
+      if ! command -v pnpm > /dev/null 2>&1; then
+        printf 'This change reaches the client stack, which needs Node and pnpm on the path. See docs/operations/local-development.md.\n' >&2
+        exit 1
+      fi
+
+      pnpm --dir frontend install --frozen-lockfile
+      pnpm --dir frontend run lint
+      pnpm --dir frontend run typecheck
+      pnpm --dir frontend run format:check
+      pnpm --dir frontend run build
     fi
   )
   dotnet_chain_status=$?

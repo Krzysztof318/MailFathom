@@ -39,7 +39,7 @@ MailFathom is developed and run on Linux.
 
 [`docs/operations/local-development.md`](docs/operations/local-development.md) is the full setup: tool versions and install commands, running the app model, development secrets, and the migration workflow. Read it once before your first change.
 
-**`frontend/` carries no build today.** The Uno Platform client that stood there was withdrawn and the client is being rebuilt in React, so `frontend/src/` and `frontend/tests/` hold a placeholder README each and nothing restores, builds, or tests there. Everything the commands below fetch is the server's solution, which is Apache-2.0 and permissive throughout.
+**`frontend/` needs Node and pnpm rather than the .NET SDK.** It is a pnpm workspace of React and TypeScript, and [`frontend/README.md`](frontend/README.md) is its page; the commands below fetch the server's solution alone, which is Apache-2.0 and permissive throughout.
 
 ## From a clone to a green run
 

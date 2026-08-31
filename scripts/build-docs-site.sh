@@ -25,8 +25,8 @@ set -euo pipefail
 # documentation. It is not locked, unlike the verification scripts: this script also runs against older release tags,
 # where the lock files record what that tag pinned, and a lock file is only a claim about its own commit.
 #
-# One solution is restored, because the reference documents the service alone. The client stack carries no build — the
-# Uno Platform client was withdrawn and the React one has not landed — so `frontend/` holds nothing docfx can read.
+# One solution is restored, because the reference documents the service alone. The client is React and TypeScript, so
+# `frontend/` holds nothing docfx can read.
 #
 # **A link docfx cannot resolve fails the build.** A relative link between two published pages is rewritten to the page
 # it points at, and one that resolves to nothing is left as written — which reaches a reader as a 404 rather than as a

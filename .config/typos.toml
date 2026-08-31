@@ -50,6 +50,17 @@
 # be able to trust that it means one of them.
 
 [files]
+# `frontend/pnpm-lock.yaml` is the transitive closure the client's direct pins resolve to, written by pnpm and read by
+# nobody. It is thousands of package names and integrity hashes rather than prose, and a dictionary reads a base64
+# digest the way it reads any other run of letters — so a correction against it would be a correction against data,
+# and no spelling in it is a decision anybody made. It is excluded whole rather than word by word, because a word
+# admitted in the vocabulary below is admitted everywhere.
+#
+# This governs the walk `typos` does when it is given a directory. A path named on the command line is read whether
+# this says so or not — `--force-exclude` would change that and `crate-ci/typos` passes no such flag — which is the
+# same asymmetry `.github/workflows/typo-check.yml` argues about images where it builds its file list.
+extend-exclude = ['frontend/pnpm-lock.yaml']
+
 # Hidden files are checked, which is not the default. Most of the prose that decides how this
 # repository works lives behind a leading dot — the workflows under `.github/`, the skills under
 # `.agents/`, `.editorconfig` — and skipping it would leave the check blind to the files a workflow

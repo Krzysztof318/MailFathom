@@ -1,6 +1,6 @@
 # Local development
 
-<!-- describes: scripts/**, global.json, MailFathom.code-workspace, .config/dotnet-tools.json, .config/typos.toml, .config/CodeCoverage.proj, .config/testconfig.json, backend/src/AppHost/**, backend/src/Infrastructure/Persistence/MailFathomDbContextDesignTimeFactory.cs, .github/workflows/**, backend/tests/IntegrationTests/ProviderAdapters/**, backend/tests/IntegrationTests/ObjectStorage/**, backend/tools/** -->
+<!-- describes: scripts/**, global.json, MailFathom.code-workspace, .config/dotnet-tools.json, .config/typos.toml, .config/CodeCoverage.proj, .config/testconfig.json, backend/src/AppHost/**, backend/src/Infrastructure/Persistence/MailFathomDbContextDesignTimeFactory.cs, .github/workflows/**, backend/tests/IntegrationTests/ProviderAdapters/**, backend/tests/IntegrationTests/ObjectStorage/**, backend/tools/**, frontend/package.json, frontend/pnpm-workspace.yaml, frontend/.npmrc, frontend/tsconfig.base.json, frontend/tsconfig.json, frontend/eslint.config.ts -->
 
 Use the .NET SDK pinned in `global.json`. Test execution is configured for Microsoft Testing Platform through the repository-level `global.json` test runner setting.
 
@@ -809,24 +809,41 @@ Taking that judgement is the `update-dependencies` skill, which runs the survey 
 
 ## Building and testing the client
 
-**There is nothing to build.** The Uno Platform client under `frontend/` was withdrawn — the platform did not work out
-for this project — and the client is being rebuilt in React and JavaScript. `frontend/src/` and `frontend/tests/` hold
-a placeholder README each and no solution, no project, and no lock file, so no command here restores or compiles
-anything of the client.
+**The client needs Node and pnpm, which the .NET SDK does not bring.** `frontend/` is a pnpm workspace of React and
+TypeScript, so a machine that only has the SDK builds the service and fails the client's half of either verification
+gate by name. Install the Node version `frontend/package.json` names in `engines`, then pnpm globally — corepack no
+longer ships with Node, which is why `packageManager` in that manifest states the pnpm version the lock file was
+written by rather than leaving it to a shim. The registry those packages come from is declared in `frontend/.npmrc` rather than left to whatever a machine configured, for the reason `NuGet.config` clears its inherited source list.
 
-What is still there is the shape the new stack lands in, and it is worth knowing before the first React commit rather
-than after it:
+Every command runs from `frontend/`, and `frontend/README.md` is the page for the workspace itself — its two packages,
+what separates them, and how that separation is reproduced.
 
-- **`CI` still runs a `Frontend` job**, gated on the `frontend` path filter, calling
-  `.github/workflows/build-test-frontend.yml`. That workflow keeps its `workflow_call` contract and one job, whose
-  steps report that the stack carries no build. Filling it in is a change to that file rather than to every caller.
-- **Both verification gates still read the same two path lists**, through `scripts/resolve-changed-stacks.sh`, so a
-  change under `frontend/` reaches the client stack in the fast loop and in the full gate exactly as it did — and each
-  prints that the stack carries no build rather than passing over it in silence.
+```bash
+cd frontend
+pnpm install --frozen-lockfile   # restore, refusing to rewrite pnpm-lock.yaml
+pnpm build                       # the static bundle, into src/Client.App/dist/
+pnpm dev                         # the development server
+pnpm typecheck                   # both packages
+pnpm lint                        # every rule an error, no warning tolerated
+pnpm format                      # rewrite; pnpm format:check reports instead
+```
+
+`--frozen-lockfile` is to pnpm what `--locked-mode` is to `dotnet restore`: a manifest whose pins moved without the
+lock file being regenerated fails here rather than resolving to something nobody reviewed. Regenerate it by running
+`pnpm install` without the flag, as part of the change that moved the pin.
+
+Four things around those commands are worth knowing before they are discovered:
+
+- **Both verification gates run this flow**, through `scripts/resolve-changed-stacks.sh`, for any change that reaches
+  the client stack. The fast loop restores, lints, type-checks, and formats — repairing, the way `dotnet format` does
+  there — and the full gate runs the same steps with the formatting pass verifying instead, and the build after them.
   [Which stack a gate runs](agent-workflow.md#which-stack-a-gate-runs) carries how that is decided and what keeps it in
   step with `ci.yml`.
-- **The `wasm-tools` workload is no longer a prerequisite of anything here.** It was installed for the browser head,
-  and a machine set up for the service alone now builds and verifies everything this repository holds.
+- **`CI`'s `Frontend` job asserts nothing yet.** It is gated on the `frontend` path filter and calls
+  `.github/workflows/build-test-frontend.yml`, which keeps its `workflow_call` contract and one job that reports rather
+  than builds. Filling it in for this stack is a change to that file rather than to every caller.
+- **There is no client test suite yet**, so `frontend/tests/` holds a placeholder README and no command above runs one.
+  It is written with the screens it covers.
 - **Nothing the service does for a client changed**, because none of it was the client's: the surface under
   `/api/client` is an endpoint of its own — [the client endpoint](client-endpoint.md) is the page — and `Host` serves
   whatever files an image carries beneath its web root. No current image carries any, so a deployment that switches
