@@ -1,13 +1,35 @@
 ## What to look for
 
-Six rubrics. Apply each one the change actually reaches, and say nothing about the
+Seven rubrics. Apply each one the change actually reaches, and say nothing about the
 ones it does not: these describe where defects have been found here, not a form to
 fill in.
+
+**Which rules a file is judged against follows the stack it sits in.** `backend/` is the
+.NET solution and `frontend/` is the pnpm workspace of React and TypeScript, and each
+carries its own `AGENTS.md` files, its own toolchain, and its own answer to questions the
+other also asks. So a rule stated for one of them supports no finding against a file in
+the other: a C# convention applied to a `.tsx` file and a React rule applied to a `.cs`
+file are the same wrong-rule failure, and it is the one this rubric is most exposed to now
+that a pull request can carry both. Where a rubric below is split, what stands under **The
+service** holds for `backend/` and what stands under **The client** for `frontend/`;
+everything outside those two headings holds wherever the change reaches. A file in neither
+tree — under `docs/`, `deploy/`, `scripts/`, `.github/`, or at the root — reaches the
+unsplit paragraphs alone, and the last rubric not at all.
 
 ### The repository's rules
 
 `AGENTS.md` is a contract, so breaking it is a defect even where the code would run
-correctly. Give these the same weight as a wrong result:
+correctly. Give these the same weight as a wrong result.
+
+Two hold in either stack. A dependency, service, image, or copied sample the change
+introduces needs a row in `THIRD_PARTY_LICENSES.md` recording its exposure and the version
+the graph resolves. And every file that is not C# carries the licensing header by hand, in
+the form its own readers parse — three `// ` lines opening a `.ts`, `.tsx`, `.js`, `.mjs`,
+or `.cjs` module, one `/* … */` block opening a `.css` file, one `<!-- … -->` comment
+opening an `.html` document, `# ` lines in a `.yml` file or under a `.sh` shebang — because
+no formatter writes one there and neither gate reports its absence.
+
+#### The service
 
 - **Boundaries.** `Domain` depends on no framework. `Application` depends only on
   `Domain` and owns its ports. `Infrastructure` keeps EF Core entities, MailKit types,
@@ -40,14 +62,67 @@ correctly. Give these the same weight as a wrong result:
   original as `InnerException`. `null` never encodes more than one state.
 - **Ownership.** A type that owns a resource implements the disposal contract that
   matches it and never disposes a dependency the container owns.
-- **Documentation and licensing.** Public types and members documented, XML
-  documentation that still matches the signature and behavior it describes, and a row
-  in `THIRD_PARTY_LICENSES.md` for every dependency, service, image, or copied sample
-  the change introduces, recording its exposure and the version the graph resolves.
+- **Documentation.** Public types and members documented, with XML documentation that
+  still matches the signature and behavior it describes.
 - **Email invariants.** `(account, folder, UIDVALIDITY, UID)` is the remote occurrence
   identity, retrieval never sets `\Seen`, synchronization and outbox work is
   idempotent, an MCP read is served locally and never triggers a synchronous IMAP
   fetch, and every public query is keyset-paginated and bounded.
+
+#### The client
+
+- **What the client is, and is not.** It reads one person's own mail from a deployment
+  that person controls, over `/api/client` and nothing else. It is not where a rule is
+  evaluated, a message is parsed, a credential is composed, or a permission is judged —
+  each of those is the service's, and a client that re-derives one is a second
+  implementation that will disagree with the first. A screen that appears to need one
+  needs a route that answers it instead.
+- **The package boundary.** `Client.Backend` owns the wire — the routes, the request and
+  response shapes, the session, the failure model, and the parsing that turns a body into
+  a type — and is the only place in the client that knows a status code, a header name, or
+  a path. `Client.App` owns what a person sees and receives values that are already
+  correct. Three things cross in neither direction: React, the DOM, or a browser API into
+  `Client.Backend`, which is why an operation takes a `MailFathomTransport` rather than
+  calling `fetch`; an unvalidated value out of it; and a component, a hook, or a rendering
+  decision into it, since a type it publishes says what the service said and never how a
+  screen will show it. `Client.App` imports `@mailfathom/client-backend` and never a path
+  inside it.
+- **The two heads.** Nothing in this tree branches on a platform. No `if (isDesktop)`, no
+  per-head component, and no module chosen by target: a difference between the web bundle
+  and the Tauri application is a CSS one or a shell concern, and taking that branch is what
+  turns one client into two.
+- **Failures.** An expected failure is a `ClientResult` value rather than an exception, and
+  it carries one of the four `ClientFailureReason` members, which exist because a screen
+  does something different with each. A new operation reuses them; a fifth member for the
+  same four outcomes is the defect, and a genuinely new outcome is argued in the change
+  that adds it.
+- **State.** Store the smallest thing that cannot be computed, and compute the rest during
+  render rather than storing it beside its source and keeping the two in step. One owner
+  per piece of state, at the lowest component that renders everything reading it. An effect
+  synchronizes with something outside React — a subscription, a timer, an imperative
+  browser API, a request going out — and is the wrong answer when it computes, copies, or
+  reconciles: an effect that sets state from props, keeps a second value in step with a
+  first, or exists so that something runs *after* something else is a render-cycle bug
+  waiting for a slow machine.
+- **Naming.** The vocabulary the service already uses — `MailAccount`,
+  `synchronizationState`, `behind` — and never the mechanism: no `data`, `item`, `info`,
+  `handler`, `manager`, `utils`, or `helpers`, and no component named for where it sits on
+  the screen when it has a name for what it shows. A boolean reads as an assertion and a
+  function as what it does.
+- **Suppressions.** `tsconfig.base.json`, `eslint.config.ts`, and `--max-warnings 0` are
+  argued rather than default, so relaxing one to make a file pass moves that file's problem
+  onto every file and is a decision with an issue of its own. A suppression is arguable
+  only where the checker is provably wrong about that line, and is then written as narrowly
+  as the tool allows with its reason above it: `// eslint-disable-next-line` naming the
+  rule, or `@ts-expect-error` — never `@ts-ignore` — with the sentence saying what the
+  compiler cannot see. `any`, a cast asserting something the code has not checked, `!` on a
+  value the type says may be absent, a file-level `/* eslint-disable */`, and a bare
+  `eslint-disable` naming no rule are each refused outright.
+- **Dependencies.** An exact version in the package's own `package.json`, never a range,
+  with `pnpm-lock.yaml` regenerated by pnpm in the same change — both gates install
+  `--frozen-lockfile` and fail on a manifest and a lock file that disagree. A second
+  registry source is a supply-chain decision rather than a line added to make an install
+  work.
 
 ### Security and privacy
 
@@ -71,6 +146,24 @@ access, deletion, and export constraints of the mail it was derived from.
   on a key alone is the most serious kind there is.
 - Options are validated at startup, so unsafe or misspelled configuration fails fast
   instead of binding a default.
+
+**The client is on the far side of that boundary rather than inside it**, so four of those
+rules take a shape of their own there:
+
+- A response body is untrusted input at a trust boundary. Every field is checked before it
+  becomes a value the application may render, and every collection carries a bound checked
+  during the walk rather than after it — a route that can answer with a mailbox-sized
+  collection is called with the window the screen shows, and an answer larger than what was
+  asked for is refused rather than rendered.
+- The credential arrives as a finished header value and nothing in the client composes one.
+  Nothing logs it, puts it in a URL, hands it to anything but a request on the client
+  surface, or stores it where another origin can read it.
+- Mail is untrusted text on a screen exactly as it is in a parser. A body rendered as HTML,
+  a link whose scheme came from a server value unchecked, or an attachment name written
+  into a path are each the injection this rule exists for.
+- A capture of a signed-in client — a screenshot, a snapshot, a trace, a console log, a
+  response body — is somebody's mail, and so is a fixture drawn from a real mailbox.
+  Neither belongs in this tree, in a pull request, or in an issue.
 
 **When the pull request carries the `security` label.** Read the `labels` of
 `pull-request.json` before the first pass. That label is this project's statement that the
@@ -121,6 +214,8 @@ that in the summary rather than deciding either way about what it asked for.
 
 ### Reliability
 
+#### The service
+
 - Every external call is bounded by a timeout, and its failure is sorted into caller
   cancellation, shutdown, timeout, authentication failure, or transient transport
   failure rather than collapsed into one outcome.
@@ -131,7 +226,25 @@ that in the summary rather than deciding either way about what it asked for.
   under an explicit concurrency limit with backpressure, and state a crash could
   duplicate or lose is durable.
 
+#### The client
+
+- A request cancels or is discarded. A screen that starts a read and unmounts, or starts a
+  second read before the first answers, must not render the older answer: the ordering is
+  not guaranteed, and the failure arrives looking like a rendering defect rather than a
+  race.
+- A failure is sorted into the four reasons the screen acts on differently rather than
+  collapsed into one, and a status the service can answer with that nothing maps is the
+  same defect as an unhandled failure mode in the service.
+- Repeating a request is the person's to ask for, through the way out the failure offers.
+  A client that retries on its own is a retry nested inside whatever the service already
+  does.
+
 ### Performance
+
+Measure before optimizing, in either stack. A micro-optimization with no measurement
+behind it is not a finding, and neither is a cost you cannot demonstrate.
+
+#### The service
 
 - Work is proportional to the input: a database projection rather than a full entity, a
   streamed MIME body rather than one buffered twice, no large `bytea` tracked by EF
@@ -140,10 +253,27 @@ that in the summary rather than deciding either way about what it asked for.
 - A sequence is enumerated once. A query that is filtered, counted, and read again is
   materialized first, and a lazily evaluated query is never handed to a caller that
   will iterate it more than once.
-- Measure before optimizing. A micro-optimization with no measurement behind it is not
-  a finding, and neither is a cost you cannot demonstrate.
+
+#### The client
+
+- The mailbox this client has to render holds 214 000 messages, so a list that can exceed
+  200 rows is windowed. A list whose length is bounded by something the screen itself chose
+  — an account list, a folder list — is never windowed regardless of the number.
+- No render-blocking work during render or in an effect. Sorting, parsing, grouping, or
+  measuring a whole collection before the first paint is what makes a screen appear frozen;
+  do it where the data arrives, memoize it against the data, or ask the service for the
+  shape the screen needs.
+- `memo`, `useMemo`, and `useCallback` answer a measurement and never a suspicion. Each
+  costs a comparison on every render and keeps its inputs alive, and a dependency array
+  that is wrong buys a stale screen — a correctness defect — in exchange for nothing.
 
 ### Clean code
+
+A comment explains why the code must behave this way and never narrates a readable
+statement, and a misleading name is renamed rather than annotated. No abstraction without
+a current testing, protocol, or replacement need. Both hold in either stack.
+
+#### The service
 
 - A method reads as one sequence of decisions: guard clauses instead of nesting, a
   named private method instead of a comment announcing the next stage, and blank lines
@@ -152,28 +282,135 @@ that in the summary rather than deciding either way about what it asked for.
   only where the body does something a query cannot express. A pipeline never carries a
   side effect, and a chain that stops reading as one sentence is broken into a named
   local or a named method.
-- A comment explains why the code must behave this way and never narrates a readable
-  statement, and a misleading name is renamed rather than annotated.
-- No abstraction without a current testing, protocol, or replacement need, no
-  inheritance used only to share implementation, and no collaborator hidden behind a
+- No inheritance used only to share implementation, and no collaborator hidden behind a
   service locator or static mutable state.
 
+#### The client
+
+- A component is one thing a reader can name. When naming it needs "and", it is two
+  components; when it renders a list, the row is its own component, because the row is what
+  gains state, a keyboard path, and a test.
+- A prop travels at most one component that does not read it. A second such hop means the
+  tree is wrong rather than that context is needed. And a prop is the value rather than the
+  container it came from: a component taking a whole account to read one field of it cannot
+  be rendered from anything else and cannot be tested without building one.
+- Files that change together sit together, in a directory named for the screen. Imports go
+  one way — a screen may reach what is shared and what is shared never reaches a screen —
+  and a barrel that exists only to save an import line makes every consumer depend on
+  everything behind it.
+- A component's body reads top to bottom as what is on the screen. A computation, a
+  decision with more than one branch, or a mapping from a service value to something a
+  person reads is a named function or constant above the component rather than an
+  expression inside the markup: a ternary choosing between two elements is markup, and a
+  chain choosing between four is a function returning one.
+
+### The screen a person uses
+
+This rubric is the client's alone. A change that renders nothing reaches none of it, and
+saying so is not required — but a screen is not proven by compiling, and every rule here is
+invisible in a diff that type-checks.
+
+- **Nothing waits in silence.** Every surface that waits says it is waiting, from the
+  moment the wait starts, in the place the answer will appear. A screen that looks finished
+  while a read is in flight is a screen a person acts on twice.
+- **Every failure says what failed and offers the way out.** The four failure reasons are
+  four different sentences and four different next steps — signing in again, saying the
+  grant is missing, retrying, and reporting a defect. "Something went wrong" is none of
+  them, and neither is a status code on a screen.
+- **Every screen has its five states, each designed rather than defaulted**: loading,
+  empty, partial, error, and offline. Empty says why it is empty and what would fill it,
+  partial says which part is missing, and offline is distinguishable from an empty answer.
+- **No state is reachable that a person cannot leave.** Every dialog closes, every flow can
+  be abandoned, and every error state offers something other than reloading the page. A
+  destructive action is confirmed and the confirmation names what it will do — which
+  message, which account, how many.
+- **Focus is placed deliberately whenever a view changes.** Opening a dialog moves focus
+  into it and traps it there, closing returns focus to what opened it, and navigating puts
+  focus at the start of the new content. Focus left on a removed element is where keyboard
+  and screen-reader use silently stops working.
+- **Nothing shifts under a reader's cursor.** Content arriving later occupies space
+  reserved for it; a row that moves as the list loads is how somebody opens the wrong
+  message.
+- **No literal colour, spacing, radius, or type size outside the token layer**, which is
+  Tailwind's theme plus the `@theme` block in `Client.App/src/styles.css`. An
+  arbitrary-value utility — `text-[#0048e0]`, `p-[13px]`, `text-[15px]` — is what this rule
+  refuses, and a value that needs one is a token missing from the theme. Duration and
+  easing are the same drift as a hexadecimal colour.
+- **A repeated structure has one shape, stated once.** The second screen needing a card, a
+  list row, a section header, or a page title uses the first one's component rather than a
+  similar arrangement of utilities. This is the one rule here that is invisible in review
+  by construction, because each diff is fine on its own.
+- **`prefers-reduced-motion` is honoured**, and motion is removed under it rather than
+  shortened; a transition that conveys meaning still conveys it without the movement.
+- **Semantic elements before ARIA.** A `button` is a button, a link navigates, a heading is
+  a heading in order, a list is a list, and a wrong role is worse than no role.
+- **Every action has a keyboard path**, in an order that follows the screen; nothing is
+  reachable only by hover. Focus is always visible, and an outline removed without
+  something at least as visible in its place is refused.
+- **Every control has an accessible name that says what it does**, not what it looks like.
+  An icon-only control carries a label, a meaningful image carries alternative text, and a
+  decorative one is hidden from the accessibility tree. The bar is that a test can find a
+  control by its role and its name — a test reaching for a CSS selector is the symptom of a
+  screen that has none.
 
 ### Tests and documentation
 
-A behavior change carries unit tests, and `backend/tests/AGENTS.md` states what they must look
-like: no real clock, no real delay, no wall-clock ordering, no test that cannot fail,
-and a fake that preserves the ordering and identity guarantees of what it replaces.
-Durable documentation is updated in the same change set, and prose that describes a
-validator, a guarantee, or an ownership rule the code does not implement is a defect in
-the documentation.
+A behavior change carries unit tests. Durable documentation is updated in the same change
+set, and prose that describes a validator, a guarantee, or an ownership rule the code does
+not implement is a defect in the documentation.
+
+**The service.** `backend/tests/AGENTS.md` states what a test must look like: no real
+clock, no real delay, no wall-clock ordering, no test that cannot fail, and a fake that
+preserves the ordering and identity guarantees of what it replaces.
+
+**The client.** `frontend/tests/AGENTS.md` answers the same questions again rather than
+translating those answers, so read it rather than reasoning from the service's:
+
+- A test sits beside the source it covers and is named after it — `mailAccounts.test.ts`
+  beside `mailAccounts.ts`, `App.test.tsx` beside `App.tsx` — because the package boundary
+  is what a test outside the package would have to reach through. Nothing lives under
+  `frontend/tests/`, which holds the contract and no test.
+- A test asserts what a person sees and does: queried by role first and then by the text
+  they would read, never by a class name, a `data-testid`, or a position in the tree, and
+  never through hooks, the value a `useState` holds, the props passed downwards, or whether
+  a component re-rendered. A refactor that changes nothing on the screen must rewrite no
+  test. Tailwind class names are styling and are asserted nowhere.
+- `Client.Backend` is pure functions over values, so thin coverage of request construction,
+  response parsing, the failure model, and the session has no excuse: every status, every
+  shape a body can arrive in, and every shape it must be refused in is reachable for
+  nothing. `Client.App` is covered through rendering and interaction as far as jsdom
+  reaches, which is not as far as layout — element size, position, overflow, scrolling, and
+  focus rings are outside what a test here may claim.
+- `MailFathomTransport` is the network boundary and the only thing a read fakes. Nothing
+  patches `fetch`, starts a server, or adds a request-interception package, and an
+  application test never `vi.mock`s a module of `Client.Backend` — faking the parsing and
+  the failure mapping leaves a test asserting that a screen renders whatever it was handed.
+- A component that reads the current time takes it from its caller; where it genuinely
+  cannot, the clock is fixed with `vi.useFakeTimers()` and released in an `afterEach` of
+  the same file. Randomness is passed in or stubbed and restored. Nothing sleeps —
+  `await screen.findBy*` waits on the document rather than on a duration.
+- A claim that needs real layout, real navigation, a real exchange, or a running deployment
+  belongs in the Playwright harness rather than in this suite. Moving it there is the
+  answer; dropping it is not.
 
 ## What is not a finding here
 
-- Anything the build already enforces: formatting, `.editorconfig` severities, the `CA`
-  and `IDE` set, Roslynator, the xUnit analyzers, the banned symbols in
-  `.config/BannedSymbols.txt`, and the threading analyzers. `Required CI` fails on those
-  already, and repeating them costs a thread to resolve for nothing.
+- Anything a tool already enforces. In the service that is formatting, the
+  `.editorconfig` severities, the `CA` and `IDE` set, Roslynator, the xUnit analyzers, the
+  banned symbols in `.config/BannedSymbols.txt`, and the threading analyzers, all of which
+  `Required CI` fails on. In the client it is `tsconfig.base.json`, the lint set in
+  `eslint.config.ts` — which `pnpm lint` runs at `--max-warnings 0`, so a warning is
+  already a failure — and Prettier, which reads `.editorconfig` for whitespace and quote
+  style; both verification gates run all three for a change reaching `frontend/`, before
+  the pull request exists. Repeating one of them costs a thread to resolve for nothing.
+- A request that the client adopt a component library, a router, a state container, or a
+  data-fetching library. All four are absent deliberately, and adopting one is a decision
+  with its own issue and its own licence review rather than a review suggestion. The
+  finding in that neighbourhood runs the other way: a change that adds one without that
+  argument is taking a decision in a diff.
+- A coverage number, threshold, or collector for the client suite. Nothing measures
+  coverage there, and whether anything should is a decision of its own. Naming the specific
+  untested behavior remains a finding; asking for a percentage does not.
 - Backward compatibility, migration paths, deprecation shims, versioning machinery, or
   obsolete markers. `AGENTS.md` § "Project status" refuses all of them outright, so
   asking for one is a defect in the review. What that section does ask for is the
