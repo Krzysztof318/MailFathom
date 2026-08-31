@@ -264,14 +264,21 @@ Every key means exactly what the same-named key of
 the `0.1` to `1000` range both thresholds are judged against, which stays the deployment's. A record stating none of it
 classifies that owner's mail not at all, which is the same answer a deployment that configured nothing gives.
 
+**`UseScanner` is the one exception, and it asks rather than decides.** Whether a scanner exists at all is read from the
+deployment's own section when the host starts — that is what constructs the daemon conversation and what refuses to
+start without an address for it. An owner switching `UseScanner` on where the deployment registered no scanner is not
+refused and does not fail the start; their mail is classified by the deterministic stage alone, as it would be with the
+key off. What the key decides for an owner is whether a scanner the deployment *has* is consulted for their mail.
+
 **A record may hold only what is that owner's.** The daemon's address, the per-scan bounds, the scan concurrency, the
 classification wait, and the run batch sizes are what the process holds open or spends rather than a judgement about
 anybody's mailbox, so a record naming one of them is refused at the write, naming the key. So is a threshold outside the
 permitted range, naming the range; a scanned folder that is not a usable alias; a scanner asked for with `Enabled` false;
-an action asked for with `Enabled` false; and, once filing is switched on, a junk destination none of **that owner's**
-accounts maps — a folder only somebody else's account carries is refused exactly as one nobody maps, because MailFathom
-creates neither. A destination named with filing off is judged by nothing, exactly as the deployment's own key is: what
-is refused is a folder something would file into.
+an action asked for with `Enabled` false; and, once filing is switched on, a junk destination **any** of that owner's
+accounts fails to map — every one of them has to map it, exactly as every configured account has to map the
+deployment's own, because MailFathom creates a folder on nobody's server. A folder only somebody else's account carries
+is therefore refused exactly as one nobody maps. A destination named with filing off is judged by nothing, exactly as
+the deployment's own key is: what is refused is a folder something would file into.
 
 ## Changing a persisted setting
 

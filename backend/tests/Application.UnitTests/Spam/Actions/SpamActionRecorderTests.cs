@@ -82,22 +82,24 @@ public sealed class SpamActionRecorderTests
         await occurrences.DidNotReceive().FindAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>());
     }
 
-    /// <summary>What happens to junk is the mailbox owner's decision, so the switches read are that owner's own.</summary>
+    /// <summary>What happens to junk is the mailbox owner's decision, so the switches read are the owner the caller named.</summary>
     /// <remarks>
-    /// The identity this whole per-owner split exists for. Nothing else here would notice a recorder that forwarded a
-    /// constant owner: on a roster of several, a filing would then move mail and set <c>\Seen</c> on one person's mail
-    /// server under another person's switches.
+    /// The identity this whole per-owner split exists for, and it is driven with an owner <see cref="Account" /> does
+    /// not carry so that the forwarded parameter is separable from the account's own owner. A recorder reading a
+    /// constant, or taking the owner off the occurrence, answers with the settings arranged for nobody and files
+    /// nothing — which on a roster of several is mail moved and marked read on one person's server under another
+    /// person's switches.
     /// </remarks>
     [Fact]
     public async Task RecordAsync_AVerdictForOneOwner_ReadsThatOwnersActionSettings()
     {
         // Arrange
         this.MapMirroredJunk("Junk");
-        var recorder = this.Recorder(FilingAndMarkingRead());
+        var recorder = this.Recorder(FilingAndMarkingRead(), actingFor: SyntheticMailOwner.Another);
 
         // Act
-        await recorder.RecordAsync(
-            Account.Owner,
+        var result = await recorder.RecordAsync(
+            SyntheticMailOwner.Another,
             SpamVerdictOf(SpamVerdict.Spam),
             SpamActionPosture.Acting,
             TestContext.Current.CancellationToken);
@@ -105,8 +107,8 @@ public sealed class SpamActionRecorderTests
         // Assert
         var settingsReader = this.settingsReader!;
 
-        settingsReader.Received().ActionsFor(Account.Owner);
-        settingsReader.DidNotReceive().ActionsFor(SyntheticMailOwner.Another);
+        settingsReader.Received().ActionsFor(SyntheticMailOwner.Another);
+        Assert.Equal(SpamActionOutcome.Requested, result.Outcome);
     }
 
     [Theory]
@@ -629,18 +631,23 @@ public sealed class SpamActionRecorderTests
         this.Recorder(settings, ReaderOf(occurrence));
 
     /// <summary>Builds the recorder over a reader that answers with these settings for one owner and with nothing for anybody else.</summary>
+    /// <param name="settings">The switches the acting owner has set.</param>
+    /// <param name="occurrences">Where the message sits, defaulting to an unread occurrence in the inbox.</param>
+    /// <param name="actingFor">The owner those switches belong to, defaulting to the one this class's account carries.</param>
     /// <remarks>
-    /// Configured per owner rather than for any owner, so a recorder forwarding a constant, the deployment's sole owner,
-    /// or nobody at all reads as no action taken and fails the test that expected one — on a roster of several that is a
-    /// filing performed on one person's mail server under another person's switches.
+    /// Configured per owner rather than for any owner, so a recorder forwarding a constant reads as no action taken and
+    /// fails the test that expected one. Separating that constant from the account's own owner needs
+    /// <paramref name="actingFor" /> as well, since every other test here drives the account's owner and the two values
+    /// are otherwise one.
     /// </remarks>
     private SpamActionRecorder Recorder(
         SpamActionSettings settings,
-        ISpamActionOccurrenceReader? occurrences = null)
+        ISpamActionOccurrenceReader? occurrences = null,
+        MailOwnerId? actingFor = null)
     {
         var settingsReader = Substitute.For<ISpamActionSettingsReader>();
         settingsReader.ActionsFor(Arg.Any<MailOwnerId>()).Returns(SpamActionSettings.None);
-        settingsReader.ActionsFor(Account.Owner).Returns(settings);
+        settingsReader.ActionsFor(actingFor ?? Account.Owner).Returns(settings);
         this.settingsReader = settingsReader;
 
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();

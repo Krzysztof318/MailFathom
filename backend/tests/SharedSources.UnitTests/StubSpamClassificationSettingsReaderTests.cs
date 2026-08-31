@@ -24,10 +24,28 @@ public sealed class StubSpamClassificationSettingsReaderTests
             [MailFolderAlias.Create("INBOX")]);
 
         // Act
-        var reader = new StubSpamClassificationSettingsReader(settings);
+        var reader = new StubSpamClassificationSettingsReader(settings, MailAccountId.Create("primary"));
 
         // Assert
         Assert.Same(settings, reader.SettingsFor(MailOwnerId.Create(Guid.NewGuid())));
+    }
+
+    /// <summary>A posture that classifies beside a scope naming nobody is a pairing the deployed reader cannot produce.</summary>
+    /// <remarks>
+    /// The gate reads the scope rather than the posture, so a test built that way would believe it had switched
+    /// classification on while every message was admitted unscored — and it would pass, over a pipeline nothing gated.
+    /// </remarks>
+    [Fact]
+    public void Constructor_AnEnabledPostureNamingNoAccount_Throws()
+    {
+        // Arrange
+        var settings = SpamClassificationSettings.Create(
+            isEnabled: true,
+            usesScanner: false,
+            [MailFolderAlias.Create("INBOX")]);
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>(() => new StubSpamClassificationSettingsReader(settings));
     }
 
     [Fact]

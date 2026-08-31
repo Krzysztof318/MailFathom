@@ -180,8 +180,14 @@ and the `Scanner` block are the deployment's, because each of them is what the p
 a judgement about anybody's mailbox — an owner record naming one is refused. The bounds a threshold is judged against,
 `0.1` to `1000`, are the deployment's too and apply to an owner's value unchanged.
 
+**An owner's `UseScanner` asks for the deployment's scanner rather than deciding that one exists.** Whether any scanner
+is registered is read from this section alone, at startup, so an owner switching the key on where the deployment
+registered none is neither refused nor a failed start: their mail is classified by the deterministic stage, exactly as
+it would be with the key off. Everything else in the eight means the same for an owner as it does here.
+
 `UseScanner` and the `Scanner` block are read once, at startup: whether a scanner exists at all decides what is
-constructed and whether the host refuses to start without a daemon, which a reload cannot revisit. Everything else in
+constructed and whether the host refuses to start without a daemon, which a reload cannot revisit. That is this
+section's key; the paragraph above is what an owner's own copy of it can and cannot do. Everything else in
 this section is read per classification.
 
 `ClassificationWait` bounds the ordering rather than a scan. Wherever classification is on, a message it covers is not
