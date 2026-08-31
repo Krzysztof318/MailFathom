@@ -13,6 +13,28 @@ export const pl: Catalogue = {
     'shell.title': 'MailFathom',
     'shell.language': 'Język',
 
+    'connect.title': 'Wskaż temu klientowi swój MailFathom',
+    'connect.explanation':
+        'Podaj wdrożenie, które przechowuje Twoją pocztę. Wszystko, co ten klient odczytuje, i wszystko, co w nim wpiszesz, trafia tam i nigdzie indziej.',
+    'connect.address': 'Adres wdrożenia',
+    'connect.addressHint':
+        'Host, na którym wdrożenie odpowiada, oraz port, jeśli go używa — na przykład mailfathom.example.com albo mailfathom.example.com:8443.',
+    'connect.clearText': 'Łącz się z tym wdrożeniem zwykłym protokołem HTTP',
+    'connect.clearTextExplanation':
+        'Twoje hasło jest kodowane, a nie szyfrowane, przy każdym żądaniu. Każdy, kto znajduje się między tym klientem a wdrożeniem, może je odczytać. Zostaw tę opcję wyłączoną, chyba że sieć między nimi należy do Ciebie.',
+    'connect.submit': 'Połącz',
+    'connect.reaching': 'Łączenie z wdrożeniem…',
+    'connect.blank': 'Podaj wdrożenie, które przechowuje Twoją pocztę.',
+    'connect.malformed': 'To nie jest adres. Podaj host, na którym wdrożenie odpowiada, oraz port, jeśli go używa.',
+    'connect.clearTextRefused':
+        'Ten adres używa zwykłego protokołu HTTP, a ten klient nie wyśle nim hasła, dopóki na to nie zezwolisz.',
+    'connect.unavailable': 'Nic tam nie odpowiedziało. Sprawdź adres oraz to, czy wdrożenie jest uruchomione.',
+    'connect.unreadable': 'Coś tam odpowiedziało, ale nie jako MailFathom.',
+    'connect.refused': 'Wdrożenie odrzuciło żądanie.',
+
+    'deployment.reachedAt': 'Odczyt z {address}',
+    'deployment.change': 'Wskaż inne wdrożenie',
+
     'accounts.reading': 'Odczytywanie kont…',
     'accounts.refreshing': 'To wdrożenie odświeża lokalną kopię tych kont.',
     'accounts.notRefreshing': 'To wdrożenie nie odświeża lokalnej kopii tych kont.',

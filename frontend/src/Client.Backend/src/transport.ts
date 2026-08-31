@@ -9,10 +9,20 @@ export interface ClientRequest {
     readonly headers: Readonly<Record<string, string>>;
 }
 
-/** What came back, reduced to the two things this package reads. */
+/** What came back, reduced to the three things this package reads. */
 export interface ClientResponse {
     readonly status: number;
     readonly body: string;
+
+    /**
+     * The response headers, under lower-case names.
+     *
+     * A refusal is the one answer this package reads a header off: it carries the protection space the deployment
+     * challenges for, which is what tells a client it reached MailFathom rather than something else refusing it. The
+     * names arrive lower-cased because HTTP field names are case-insensitive, and a lookup that had to try three
+     * spellings would be a lookup that misses the fourth.
+     */
+    readonly headers: Readonly<Record<string, string>>;
 }
 
 /**
@@ -23,3 +33,19 @@ export interface ClientResponse {
  * indirection exists rather than a layer added in case a second transport ever appears.
  */
 export type MailFathomTransport = (request: ClientRequest) => Promise<ClientResponse>;
+
+/**
+ * Puts one request on the wire, answering `null` where nothing answered at all.
+ *
+ * Every operation goes through this rather than calling the transport directly, because a connection refused, a name
+ * that does not resolve, a certificate the client will not accept, and an answer cut short all arrive as a rejected
+ * promise rather than as a status — and an operation that let one through would hand a screen an exception where its
+ * whole contract is that an expected failure is a value.
+ */
+export async function send(transport: MailFathomTransport, request: ClientRequest): Promise<ClientResponse | null> {
+    try {
+        return await transport(request);
+    } catch {
+        return null;
+    }
+}

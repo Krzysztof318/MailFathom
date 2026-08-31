@@ -91,7 +91,7 @@ question is answered again rather than reworded.
 - **The network boundary is `MailFathomTransport`, and it is the only thing a read fakes.** It is a function the caller
   supplies, so a test hands one over and nothing patches `fetch`, starts a server, or adds an HTTP mocking package.
 - Prefer a component that takes its transport, or the value already read through one, from its caller. Where a
-  component reaches for its own — `App` does today, from `stubMailFathom` — the module supplying it is replaced with
+  component reaches for its own — `App` does today for mail, from `stubMailFathom` — the module supplying it is replaced with
   `vi.mock`, and that is read as the seam being wrong rather than as the pattern to copy.
 - **Never `vi.mock` a module of `Client.Backend` from an application test.** The parsing and the failure mapping are
   part of what the screen is being proven against; faking them leaves a test that asserts a screen renders whatever it
@@ -162,9 +162,12 @@ the answer; dropping it is not, and neither is asserting it in jsdom where it wo
 - **The same rule about what a test asserts holds**, and this suite has no exemption from it: a role first, then the
   text a person would read. Playwright's `getByRole` is the same query React Testing Library's is. No CSS selector, no
   `data-testid`, no coordinate, and no assertion on a class name.
-- **The service is not started and no credential is used.** The bundle carries `stubMailFathom`, so what the client
-  reads is a canned body and the suite proves the screen rather than a deployment. Driving a real deployment is the
-  agent's own work with `@playwright/cli`, which `frontend/AGENTS.md` covers, and it is not this suite.
+- **The service is not started and no credential is used.** The bundle carries `stubMailFathom`, so the mail the client
+  reads is a canned body and the suite proves the screen rather than a deployment. What is not stubbed is reaching a
+  deployment at all, and the preview server is the reason that costs nothing here: it serves the bundle from a loopback
+  origin, which the client adopts as its deployment without asking anybody, so the connect screen never opens and
+  nothing is sent. Driving a real deployment is the agent's own work with `@playwright/cli`, which
+  `frontend/AGENTS.md` covers, and it is not this suite.
 - **Nothing here retries.** A check that passes on a second attempt has reported that the client is flaky rather than
   that it works.
 - **A failure keeps its trace and its screenshot in `frontend/.playwright/`, which Git ignores and nothing uploads.**
@@ -179,8 +182,9 @@ the answer; dropping it is not, and neither is asserting it in jsdom where it wo
 
 Two things it does not cover yet, because the client does not have them. There is no router, so the only navigation
 there is to check is the browser's own — leaving the client and coming back to it — and an in-application back gesture
-is asserted here on the day one exists. And nothing goes over the wire to a service, because the transport is stubbed
-inside the bundle, so what is asserted about the network today is that the client reaches its own origin and no other.
+is asserted here on the day one exists. And nothing goes over the wire to a service, because the mail is stubbed inside
+the bundle and the origin serving it is the deployment it is pointed at, so what is asserted about the network today is
+that the client reaches its own origin and no other.
 
 ## Coverage
 

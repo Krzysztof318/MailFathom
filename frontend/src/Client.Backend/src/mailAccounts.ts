@@ -4,7 +4,7 @@
 
 import { failed, failureReasonForStatus, read, type ClientResult } from './failure';
 import { headersFor, routeFor, type ClientSession } from './session';
-import type { MailFathomTransport } from './transport';
+import { send, type MailFathomTransport } from './transport';
 
 /** The route the owner's accounts are served at, relative to the client prefix. */
 export const mailAccountsRoute = '/accounts';
@@ -44,11 +44,15 @@ export async function readMailAccounts(
     session: ClientSession,
     transport: MailFathomTransport,
 ): Promise<ClientResult<MailAccountDirectory>> {
-    const response = await transport({
+    const response = await send(transport, {
         method: 'GET',
         path: routeFor(session, mailAccountsRoute),
         headers: headersFor(session),
     });
+
+    if (response === null) {
+        return failed('unavailable', null);
+    }
 
     if (response.status !== 200) {
         return failed(failureReasonForStatus(response.status), response.status);

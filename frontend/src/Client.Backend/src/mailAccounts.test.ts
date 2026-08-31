@@ -27,11 +27,14 @@ const directoryBody = JSON.stringify({
 
 // The transport is the network boundary and the whole of what a test here fakes: it is a function the caller supplies,
 // so nothing has to intercept a global or stand up a server to decide what came back.
-function answering(response: ClientResponse): MailFathomTransport {
-    return () => Promise.resolve(response);
+// This operation reads no header off an answer, so the tests below name none and each helper supplies the empty set.
+type Answer = Omit<ClientResponse, 'headers'>;
+
+function answering(response: Answer): MailFathomTransport {
+    return () => Promise.resolve({ ...response, headers: {} });
 }
 
-function recording(response: ClientResponse): { transport: MailFathomTransport; requests: ClientRequest[] } {
+function recording(response: Answer): { transport: MailFathomTransport; requests: ClientRequest[] } {
     const requests: ClientRequest[] = [];
 
     return {
@@ -39,7 +42,7 @@ function recording(response: ClientResponse): { transport: MailFathomTransport; 
         transport: (request) => {
             requests.push(request);
 
-            return Promise.resolve(response);
+            return Promise.resolve({ ...response, headers: {} });
         },
     };
 }
@@ -114,6 +117,12 @@ describe('readMailAccounts', () => {
         const result = await readMailAccounts(session, answering({ status, body: '' }));
 
         expect(result).toEqual({ outcome: 'failed', failure: { reason, status } });
+    });
+
+    it('reports a connection that never answered as one to try again, rather than throwing at the screen', async () => {
+        const result = await readMailAccounts(session, () => Promise.reject(new TypeError('Failed to fetch')));
+
+        expect(result).toEqual({ outcome: 'failed', failure: { reason: 'unavailable', status: null } });
     });
 
     // Every shape below is an answer the service could not have meant, and each is refused rather than read as a
