@@ -110,8 +110,13 @@ question is answered again rather than reworded.
 - `LocalizationProvider` is mounted above whatever is rendered, the way `main.tsx` mounts it. `useLocalization` throws
   without it rather than falling back to English, so a test that forgets it fails loudly instead of proving a screen
   against an arrangement the application does not use.
-- What language a test runs in is decided by what it writes to `navigator.languages` and to storage before rendering.
-  Both are put back afterwards, for the reason the next section gives about a fake clock.
+- What language a unit test runs in is decided by what it writes to `navigator.languages` and to storage before
+  rendering. Both are put back afterwards, for the reason the next section gives about a fake clock.
+- **A Polish sentence is never written out in the browser suite.** That suite's files are spell-checked and the Polish
+  catalogue is the one file excluded from it, so a copy of its wording there is both a string to keep in step with the
+  catalogue and a word for the check to object to. Assert the English sentence being _gone_ and `<html lang>` naming
+  the other language instead — which is the stronger assertion anyway, being about the switch rather than about one
+  translation.
 
 ## Time and randomness
 

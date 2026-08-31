@@ -62,3 +62,23 @@ test('renders again when the browser goes back to it', async ({ page }) => {
     await expect(page.getByRole('heading', clientHeading)).toBeVisible();
     await expect(page.getByRole('listitem')).toHaveCount(3);
 });
+
+test('opens again in the language that was chosen, after the page is loaded afresh', async ({ page }) => {
+    await page.goto('/');
+
+    const accountsAreRefreshing = page.getByText('This deployment refreshes the local copy of these accounts.');
+    await expect(accountsAreRefreshing).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+
+    await page.getByRole('combobox', { name: 'Language' }).selectOption('pl');
+    await page.reload();
+
+    // The whole of what the unit suite cannot answer about this: it proves the choice was written, and only a real
+    // document loaded a second time proves a later run reads it back. The assertion is the English sentence being gone
+    // and the document declaring the other language, rather than the Polish sentence being present — the catalogue is
+    // the one file in this repository deliberately not in English, and a second copy of its wording here would be a
+    // string to keep in step with it and a word for the spell check to object to.
+    await expect(accountsAreRefreshing).toHaveCount(0);
+    await expect(page.locator('html')).toHaveAttribute('lang', 'pl');
+    await expect(page.getByRole('listitem')).toHaveCount(3);
+});
