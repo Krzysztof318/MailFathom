@@ -3925,6 +3925,21 @@
         ],
         "type": "object"
       },
+      "OwnerAdoptableClassificationSettingResponse": {
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "value"
+        ],
+        "type": "object"
+      },
       "OwnerAdoptableMailAccountResponse": {
         "properties": {
           "accountId": {
@@ -3942,6 +3957,12 @@
       },
       "OwnerAdoptionPreviewResponse": {
         "properties": {
+          "classification": {
+            "items": {
+              "$ref": "#/components/schemas/OwnerAdoptableClassificationSettingResponse"
+            },
+            "type": "array"
+          },
           "configurationPath": {
             "type": [
               "null",
@@ -3983,7 +4004,8 @@
           "source",
           "readFromConfiguration",
           "configurationPath",
-          "mailAccounts"
+          "mailAccounts",
+          "classification"
         ],
         "type": "object"
       },

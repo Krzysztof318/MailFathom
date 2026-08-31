@@ -80,7 +80,7 @@ internal sealed class SpamClassificationOptions : IValidatableObject
     /// it after this long, and says so through <c>mailfathom.spam.derived_work.admissions</c>.
     /// </remarks>
     [Range(typeof(TimeSpan), "00:00:01", "7.00:00:00")]
-    public TimeSpan ClassificationWait { get; set; } = SpamClassificationSettings.DefaultMaximumClassificationWait;
+    public TimeSpan ClassificationWait { get; set; } = SpamClassificationScope.DefaultMaximumClassificationWait;
 
     /// <summary>Gets or sets how many stored occurrences one batch of an on-demand run classifies and commits.</summary>
     /// <remarks>

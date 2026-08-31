@@ -58,6 +58,9 @@ public sealed class SpamActionRecorderTests
     private readonly IAuthoredDeleteEmailDispositionReader dispositions =
         Substitute.For<IAuthoredDeleteEmailDispositionReader>();
 
+    /// <summary>The reader the recorder last asked, kept so a test can assert whose switches were read.</summary>
+    private ISpamActionSettingsReader? settingsReader;
+
     /// <summary>Arranges the answer every test shares, so a test that cares about it overrides it afterwards.</summary>
     public SpamActionRecorderTests() => this.dispositions
         .GetAuthoredDeleteDisposition(Arg.Any<MailAccountId>())
@@ -77,6 +80,33 @@ public sealed class SpamActionRecorderTests
         Assert.Equal(SpamActionOutcome.NoActionConfigured, result.Outcome);
         Assert.Equal(0, this.records.OpenedRecordCount);
         await occurrences.DidNotReceive().FindAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>What happens to junk is the mailbox owner's decision, so the switches read are that owner's own.</summary>
+    /// <remarks>
+    /// The identity this whole per-owner split exists for. Nothing else here would notice a recorder that forwarded a
+    /// constant owner: on a roster of several, a filing would then move mail and set <c>\Seen</c> on one person's mail
+    /// server under another person's switches.
+    /// </remarks>
+    [Fact]
+    public async Task RecordAsync_AVerdictForOneOwner_ReadsThatOwnersActionSettings()
+    {
+        // Arrange
+        this.MapMirroredJunk("Junk");
+        var recorder = this.Recorder(FilingAndMarkingRead());
+
+        // Act
+        await recorder.RecordAsync(
+            Account.Owner,
+            SpamVerdictOf(SpamVerdict.Spam),
+            SpamActionPosture.Acting,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var settingsReader = this.settingsReader!;
+
+        settingsReader.Received().ActionsFor(Account.Owner);
+        settingsReader.DidNotReceive().ActionsFor(SyntheticMailOwner.Another);
     }
 
     [Theory]
@@ -598,12 +628,20 @@ public sealed class SpamActionRecorderTests
         SpamActionOccurrence occurrence) =>
         this.Recorder(settings, ReaderOf(occurrence));
 
+    /// <summary>Builds the recorder over a reader that answers with these settings for one owner and with nothing for anybody else.</summary>
+    /// <remarks>
+    /// Configured per owner rather than for any owner, so a recorder forwarding a constant, the deployment's sole owner,
+    /// or nobody at all reads as no action taken and fails the test that expected one — on a roster of several that is a
+    /// filing performed on one person's mail server under another person's switches.
+    /// </remarks>
     private SpamActionRecorder Recorder(
         SpamActionSettings settings,
         ISpamActionOccurrenceReader? occurrences = null)
     {
         var settingsReader = Substitute.For<ISpamActionSettingsReader>();
-        settingsReader.ActionsFor(Arg.Any<MailOwnerId>()).Returns(settings);
+        settingsReader.ActionsFor(Arg.Any<MailOwnerId>()).Returns(SpamActionSettings.None);
+        settingsReader.ActionsFor(Account.Owner).Returns(settings);
+        this.settingsReader = settingsReader;
 
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
         sessionFactory.BeginSessionAsync(Arg.Any<CancellationToken>()).Returns(_ => new CommittingSession());

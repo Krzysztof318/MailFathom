@@ -173,7 +173,7 @@ described below.
 | `SpamClassification:Actions:JunkFolder` | string | `role:Junk` | A folder alias, or a role written as `role:<name>`; every configured account has to map it once filing is on | reload |
 | `SpamClassification:Actions:Threshold` | double | unset | 0.1 – 1000; unset acts on every spam verdict, and a value judges what a scanner scored | reload |
 
-**Six of those keys are one owner's decision and the rest are the deployment's.** `Enabled`, `UseScanner`,
+**Eight of those keys are one owner's decision and the rest are the deployment's.** `Enabled`, `UseScanner`,
 `ScannedFolders`, `ScannerThreshold`, and the four settings under `Actions` are what an owner decides about their own
 mail, and are the whole of what their record may carry. `ClassificationWait`, `RunBatchSize`, `MaxRunBatchesPerPass`,
 and the `Scanner` block are the deployment's, because each of them is what the process holds open or spends rather than

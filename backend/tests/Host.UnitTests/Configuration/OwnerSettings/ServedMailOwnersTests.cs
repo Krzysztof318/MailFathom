@@ -141,8 +141,9 @@ public sealed class ServedMailOwnersTests
 
     /// <summary>A committed record decides how that owner's mail is classified, so the roster carries the block beside the mailboxes.</summary>
     /// <remarks>
-    /// The whole of what makes a document actually take over: a row still answering with no block would be read from the
-    /// deployment's section, so a commit switching classification off would go on classifying that owner's mail.
+    /// The whole of what makes a document actually take over: a row still answering with no block reads as classification
+    /// off for that owner, which is not what a record stating a posture says either — a commit switching the scanner on
+    /// would go on classifying nothing.
     /// </remarks>
     [Fact]
     public void OwnerDocumentPublished_ARecordCarryingAClassificationBlock_ServesThatOwnerFromIt()

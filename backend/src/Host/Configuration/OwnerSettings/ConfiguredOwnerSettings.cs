@@ -43,6 +43,12 @@ internal sealed class ConfiguredOwnerSettings(IConfiguration configuration, Serv
     private const string MailAccountsProperty = nameof(OwnerAccountOptions.MailAccounts);
 
     /// <summary>The settings of the deployment's classification section that are an owner's own to hold.</summary>
+    /// <remarks>
+    /// Matched case-insensitively, because a configuration key keeps whatever casing the operator wrote it in and every
+    /// reader that acts on one compares it that way. A section written as <c>"enabled"</c> in JSON or as
+    /// <c>SPAMCLASSIFICATION__ENABLED</c> in the environment decides an owner's classification exactly as the spelling
+    /// here does, so an ordinal comparison would drop their posture at the one act that cannot be undone.
+    /// </remarks>
     private static readonly string[] OwnPostureSettings =
     [
         nameof(OwnerSpamClassificationOptions.Enabled),
@@ -137,15 +143,19 @@ internal sealed class ConfiguredOwnerSettings(IConfiguration configuration, Serv
     public IReadOnlyList<MailSynchronizationAccountOptions> DeclaredFor(MailOwnerId owner) =>
         this.SectionFor(owner)?.Get<List<MailSynchronizationAccountOptions>>() ?? [];
 
-    /// <summary>States the changes that would materialize one owner's configured declarations into their record.</summary>
+    /// <summary>States the changes that would materialize everything a configuration source decides for one owner into their record.</summary>
     /// <param name="owner">The owner asked about.</param>
-    /// <returns>One change per configuration key the section supplies, empty when no configuration source reaches this owner.</returns>
+    /// <returns>
+    /// One change per configuration key the two sections supply — the owner's mail accounts and the classification
+    /// posture <see cref="ClassificationAdoptionFor" /> reports — empty when no configuration source reaches this owner.
+    /// </returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
     /// <remarks>
-    /// The section's keys are taken relative to it and re-rooted at the record's own collection, so
+    /// The mail-account section's keys are taken relative to it and re-rooted at the record's own collection, so
     /// <c>Accounts:1:MailAccounts:0:Host</c> and <c>MailSynchronization:Accounts:0:Host</c> both become
     /// <c>MailAccounts:0:Host</c> — which is the one property an owner's record holds mailboxes under, whichever of the
-    /// two sections the operator had been writing in.
+    /// two sections the operator had been writing in. The posture is re-rooted the same way, at the record's own
+    /// classification block, and moves for the reason stated on the method that reads it.
     /// </remarks>
     public IReadOnlyList<ConfigurationEdit> AdoptionEditsFor(MailOwnerId owner)
     {
@@ -165,6 +175,17 @@ internal sealed class ConfiguredOwnerSettings(IConfiguration configuration, Serv
             .. this.ClassificationAdoptionEdits(),
         ];
     }
+
+    /// <summary>States the classification posture an adoption would commit into one owner's record.</summary>
+    /// <param name="owner">The owner asked about.</param>
+    /// <returns>One change per posture key the deployment's section supplies, empty when no configuration source reaches this owner.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
+    /// <remarks>
+    /// Published beside the accounts rather than left inside the adoption, because two of these settings act on the
+    /// owner's own mail server and an adoption cannot be undone: what an operator confirms has to name them.
+    /// </remarks>
+    public IReadOnlyList<ConfigurationEdit> ClassificationAdoptionFor(MailOwnerId owner) =>
+        this.SectionFor(owner) is null ? [] : [.. this.ClassificationAdoptionEdits()];
 
     /// <summary>States the changes that would carry the deployment's classification posture into an owner's record.</summary>
     /// <remarks>
@@ -187,7 +208,7 @@ internal sealed class ConfiguredOwnerSettings(IConfiguration configuration, Serv
             .Where(setting => !string.IsNullOrEmpty(setting.Key) && setting.Value is not null)
             .Where(setting => OwnPostureSettings.Contains(
                 setting.Key.Split(':')[0],
-                StringComparer.Ordinal))
+                StringComparer.OrdinalIgnoreCase))
             .OrderBy(setting => setting.Key, StringComparer.Ordinal)
             .Select(setting => ConfigurationEdit.SetTo(
                 $"{OwnerSpamClassificationOptions.RecordProperty}:{setting.Key}",

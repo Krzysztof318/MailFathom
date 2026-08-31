@@ -124,12 +124,39 @@ internal static class AdoptOwnerCommand
             context.Console.WriteLine($"  from {path}");
         }
 
+        WriteClassification(context, preview);
+
         context.Console.WriteNotice(
             "Once adopted, these mail accounts are decided by this owner's record. Editing the configuration they came "
             + "from will no longer change what the deployment reads for them; 'mfctl owner account' is what changes "
             + "them afterwards. Every other owner goes on being read from the files. Remove the declarations this "
             + "adoption copied: a section no served owner reads is still resolved before any record, and the next "
             + "start refuses rather than reading it.");
+    }
+
+    /// <summary>Names the classification posture the adoption would commit beside the mailboxes.</summary>
+    /// <remarks>
+    /// Written out setting by setting rather than summarized, because two of them file mail and mark it read on this
+    /// owner's own mail server, and the adoption cannot be undone. A deployment stating no posture prints nothing
+    /// rather than an empty heading.
+    /// </remarks>
+    private static void WriteClassification(CliContext context, OwnerAdoptionPreview preview)
+    {
+        var posture = preview.Classification ?? [];
+
+        if (posture.Count == 0)
+        {
+            return;
+        }
+
+        context.Console.WriteLine(
+            "It would also commit this deployment's spam classification posture into their record, which decides what "
+            + "happens to their junk from then on:");
+
+        foreach (var setting in posture)
+        {
+            context.Console.WriteLine($"  {setting.Path} = {setting.Value}");
+        }
     }
 
     private static bool Agreed(CliContext context, OwnerAdoptionPreview preview, bool confirmedUpFront)

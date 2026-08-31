@@ -27,6 +27,15 @@ namespace MailFathom.Application.Spam;
 /// </remarks>
 public sealed record SpamClassificationScope
 {
+    /// <summary>The wait a verdict is allowed when an operator names none.</summary>
+    /// <remarks>
+    /// Long enough that an ordinary classification backlog drains inside it and short enough that a wedged scanner
+    /// delays the index by a visible amount rather than an unbounded one. Nothing is lost by the release: a message let
+    /// through unclassified is chunked and embedded like any other, and a verdict that arrives afterwards is what a
+    /// later reading of the gate acts on.
+    /// </remarks>
+    public static readonly TimeSpan DefaultMaximumClassificationWait = TimeSpan.FromMinutes(15);
+
     private SpamClassificationScope(
         IReadOnlyList<MailAccountId> classifyingAccounts,
         IReadOnlyList<MailFolderIdentity> classifiedFolders,
@@ -38,10 +47,7 @@ public sealed record SpamClassificationScope
     }
 
     /// <summary>Gets the scope of a deployment no owner of which classifies anything.</summary>
-    public static SpamClassificationScope None { get; } = new(
-        [],
-        [],
-        SpamClassificationSettings.DefaultMaximumClassificationWait);
+    public static SpamClassificationScope None { get; } = new([], [], DefaultMaximumClassificationWait);
 
     /// <summary>Gets the accounts whose owner has classification switched on, in a normalized order.</summary>
     /// <remarks>
@@ -60,6 +66,13 @@ public sealed record SpamClassificationScope
     public IReadOnlyList<MailFolderIdentity> ClassifiedFolders { get; }
 
     /// <summary>Gets how long a message may wait on a verdict before derived work runs for it unclassified.</summary>
+    /// <remarks>
+    /// The bound that keeps ordering classification ahead of chunking, embedding, and rule evaluation from turning a
+    /// wedged scanner into an index that quietly stops filling. A message still inside it is waiting rather than
+    /// failing, which is a distinction the gate has to make: a rule that released only what had failed would never
+    /// release anything sitting in a backlog, and a backlog deep enough to matter is exactly where that decides whether
+    /// the index stops.
+    /// </remarks>
     public TimeSpan MaximumClassificationWait { get; }
 
     /// <summary>Composes the deployment's scope from the owners that classify and the folders they classify over.</summary>
@@ -77,7 +90,7 @@ public sealed record SpamClassificationScope
         ArgumentNullException.ThrowIfNull(classifyingAccounts);
         ArgumentNullException.ThrowIfNull(classifiedFolders);
 
-        var wait = maximumClassificationWait ?? SpamClassificationSettings.DefaultMaximumClassificationWait;
+        var wait = maximumClassificationWait ?? DefaultMaximumClassificationWait;
 
         if (wait <= TimeSpan.Zero)
         {

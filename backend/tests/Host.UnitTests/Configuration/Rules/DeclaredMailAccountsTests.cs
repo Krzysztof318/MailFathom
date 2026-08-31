@@ -191,28 +191,38 @@ public sealed class DeclaredMailAccountsTests
     /// <remarks>
     /// The overload exists so that a scanned folder or a junk destination in somebody's record resolves within their own
     /// accounts and nowhere else. Reading it differently from the deployment's would let a record be accepted for a
-    /// folder the same mapping refuses in a file, or the reverse.
+    /// folder the same mapping refuses in a file, or the reverse — so the comparison is against the key reading, which
+    /// is a separate implementation, rather than against the bound overload this one is what implements.
     /// </remarks>
     [Fact]
     public void ReadFrom_OneOwnersOwnDeclarations_AnswersAsTheDeploymentsAreRead()
     {
         // Arrange
+        var configuration = Configuration(new Dictionary<string, string?>
+        {
+            ["MailSynchronization:Accounts:0:AccountId"] = "  alex-work  ",
+            ["MailSynchronization:Accounts:0:Folders:0:Alias"] = "quarantine",
+            ["MailSynchronization:Accounts:0:Folders:0:RemotePath"] = "Quarantine",
+            ["MailSynchronization:Accounts:0:RuleActions:Delete"] = "true",
+            ["MailSynchronization:Accounts:1:AccountId"] = "   ",
+        });
         List<MailSynchronizationAccountOptions> accounts =
         [
             new MailSynchronizationAccountOptions
             {
                 AccountId = "  alex-work  ",
                 Folders = [new MailFolderMappingOptions { Alias = "quarantine", RemotePath = "Quarantine" }],
+                RuleActions = new MailRuleActionPermissionOptions { Delete = true },
             },
             new MailSynchronizationAccountOptions { AccountId = "   " },
         ];
 
         // Act
         var fromOwner = DeclaredMailAccounts.ReadFrom(accounts);
-        var fromDeployment = DeclaredMailAccounts.ReadFrom(new MailSynchronizationOptions { Accounts = accounts });
+        var fromConfiguration = DeclaredMailAccounts.ReadFrom(configuration);
 
         // Assert
-        Assert.Equal(Describe(fromDeployment), Describe(fromOwner));
+        Assert.Equal(Describe(fromConfiguration), Describe(fromOwner));
         Assert.Equal(["alex-work"], Identifiers(fromOwner));
     }
 

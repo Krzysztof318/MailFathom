@@ -258,6 +258,11 @@ internal sealed class OwnerRecordAdministration(
     /// <returns>The preview, or <see langword="null" /> when this deployment holds no such owner.</returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller's grant omits <see cref="MailFathomPermission.AdminRead" />.</exception>
+    /// <remarks>
+    /// The mailboxes are not the whole of what the adoption commits, so the preview names the classification posture
+    /// beside them. Two of those settings act on the owner's own mail server and the adoption is one-way, which is why
+    /// an operator confirming one is shown what it would switch on rather than only where their mailboxes came from.
+    /// </remarks>
     internal async Task<OwnerAdoptionPreview?> ReadAdoptableAsync(
         MailOwnerId owner,
         CancellationToken cancellationToken)
@@ -282,7 +287,8 @@ internal sealed class OwnerRecordAdministration(
                 .. configured.DeclaredFor(owner).Select(account => new OwnerAdoptableMailAccount(
                     MailSynchronizationOptions.TryReadAccountId(account.AccountId) ?? string.Empty,
                     account.DisplayName)),
-            ]);
+            ],
+            [.. configured.ClassificationAdoptionFor(owner).Select(OwnerAdoptableClassificationSetting.For)]);
     }
 
     /// <summary>Moves one owner's mail accounts out of this deployment's files and into their own record.</summary>

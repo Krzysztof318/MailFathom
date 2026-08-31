@@ -268,8 +268,10 @@ classifies that owner's mail not at all, which is the same answer a deployment t
 classification wait, and the run batch sizes are what the process holds open or spends rather than a judgement about
 anybody's mailbox, so a record naming one of them is refused at the write, naming the key. So is a threshold outside the
 permitted range, naming the range; a scanned folder that is not a usable alias; a scanner asked for with `Enabled` false;
-an action asked for with `Enabled` false; and a junk destination none of **that owner's** accounts maps — a folder only
-somebody else's account carries is refused exactly as one nobody maps, because MailFathom creates neither.
+an action asked for with `Enabled` false; and, once filing is switched on, a junk destination none of **that owner's**
+accounts maps — a folder only somebody else's account carries is refused exactly as one nobody maps, because MailFathom
+creates neither. A destination named with filing off is judged by nothing, exactly as the deployment's own key is: what
+is refused is a folder something would file into.
 
 ## Changing a persisted setting
 

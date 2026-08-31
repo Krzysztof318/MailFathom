@@ -49,6 +49,7 @@ using MailFathom.Infrastructure.Resilience;
 using MailFathom.Infrastructure.Secrets.Discovery;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using MailFathom.Infrastructure.Spam;
+using MailFathom.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
@@ -466,7 +467,7 @@ internal sealed class OrchestratedMailFathomServices : IAsyncDisposable
         // supply it: infrastructure registers the classifier, the classifier asks this what the operator decided, and a
         // composition without it would fail to resolve rather than behave like a deployment that classifies nothing.
         builder.Services.AddSingleton<ISpamClassificationSettingsReader>(
-            new FixedSpamClassificationSettingsReader(
+            new StubSpamClassificationSettingsReader(
                 spamClassification ?? SpamClassificationSettings.Disabled,
                 SyntheticMailAccount.AccountId));
 

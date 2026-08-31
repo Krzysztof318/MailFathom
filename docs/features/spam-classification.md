@@ -517,10 +517,13 @@ configuration source; an owner whose document has been written states the same p
 - whether classification runs at all;
 - whether a configured scanner is consulted after the deterministic stage;
 - which folder aliases are classified, defaulting to whichever alias each account maps to its inbox;
-- the threshold a scanner's score is judged against, defaulting to the scanner's own;
-- how wide one pass of a classification run is: how many messages a batch commits, and how many batches one account run
-  takes before it leaves the rest to the next. Neither is a schedule — how often a pass happens is the account's own
-  synchronization interval.
+- the threshold a scanner's score is judged against, defaulting to the scanner's own.
+
+What neither of them decides is how wide one pass of a classification run is: how many messages a batch commits, and how
+many batches one account run takes before it leaves the rest to the next. Both are the deployment's for every owner,
+because they bound what one pass of the process spends rather than what happens to anybody's mail, and neither is a
+schedule — how often a pass happens is the account's own synchronization interval. So is how long a message may wait on
+a verdict before derived work runs for it unclassified.
 
 Two blocks sit below it. `SpamClassification:Scanner` holds the daemon's address and bounds and is read only where the
 scanner is switched on, and it is the deployment's for every owner. `SpamClassification:Actions` holds the two switches,

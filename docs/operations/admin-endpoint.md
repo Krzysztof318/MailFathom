@@ -223,8 +223,8 @@ what it was never granted is what the record exists to make visible.
 | `POST /api/admin/owners/{ownerId}/record` | `mailfathom.admin.configuration.write` | Takes that record back edited and commits it as one change against the version it was opened over. |
 | `POST /api/admin/owners/{ownerId}/record/mail-accounts` | `mailfathom.admin.configuration.write` | Declares one more mailbox in the record, from the mail-account block the body carries. |
 | `POST /api/admin/owners/{ownerId}/record/mail-accounts/removal` | `mailfathom.admin.configuration.write` | Stops the record declaring one mailbox, named by the identifier it was declared under. It withdraws no mail: everything already stored for that account stays where it is. |
-| `GET /api/admin/owners/{ownerId}/record/adoption` | `mailfathom.admin.read` | Reports what adopting that owner would copy out of this deployment's files — the configuration path behind their mail accounts, and each account it would move — and writes nothing. |
-| `POST /api/admin/owners/{ownerId}/record/adoption` | `mailfathom.admin.configuration.write` | Copies those accounts into the owner's own record and marks the row as theirs. **This is the one route that moves one person's mailboxes out of a deployment's files and into its database.** |
+| `GET /api/admin/owners/{ownerId}/record/adoption` | `mailfathom.admin.read` | Reports what adopting that owner would copy out of this deployment's files — the configuration path behind their mail accounts, each account it would move, and each classification setting it would commit with them — and writes nothing. |
+| `POST /api/admin/owners/{ownerId}/record/adoption` | `mailfathom.admin.configuration.write` | Copies those accounts and that posture into the owner's own record and marks the row as theirs. **This is the one route that moves one person's mailboxes out of a deployment's files and into its database.** |
 | `POST /api/admin/owners/{ownerId}/secrets` | `mailfathom.admin.configuration.write` | Seals the material carried in the body under the active data-encryption key and answers only with its `database:<uuid>` reference. Sending the same declared name for that owner rotates the existing row and returns the same reference. It refuses when the owner does not exist or the deployment configures no data-encryption key ring. |
 | `GET /api/admin/owners/{ownerId}/credentials` | `mailfathom.admin.read` | Reads one owner's [credentials](#owner-credentials), each with its method, what it grants, whether it still authenticates, and when its material was last replaced. It publishes what each is resolved by, except where that value is derived from the secret. |
 | `POST /api/admin/owners/{ownerId}/credentials` | `mailfathom.admin.credentials.write` | Provisions one of the four methods, from what that method needs. **This is one of the two routes that mint a way into somebody's mail**, and the one that answers with a minted key where the method mints one. It answers `409` where the value the credential resolves by is already taken across the deployment, and where the owner already holds the hundred credentials one owner may. |
@@ -1224,6 +1224,10 @@ Adopting Alex (3f1d...) would move 2 mail accounts into their own record:
   work (Work mailbox)
   family (Family mailbox)
   from MailSynchronization:Accounts
+It would also commit this deployment's spam classification posture into their record, which decides what happens to
+their junk from then on:
+  SpamClassification:Actions:MoveToJunkFolder = true
+  SpamClassification:Enabled = true
 Move these 2 mail accounts into this owner's record, so the configuration stops deciding them? [y/N]
 ```
 
@@ -1231,6 +1235,12 @@ The preview is read from the deployment and the adoption is a separate request, 
 the deployment reports rather than what the command guessed; `--yes` is how a scripted adoption states the agreement
 instead. An owner recorded through `mfctl owner add` was never read from a file and needs no adoption, and the preview
 says so.
+
+**The mailboxes are not the whole of what moves.** An adoption carries the classification posture the deployment's
+`SpamClassification` section decides for that owner into their record beside their accounts, because leaving it behind
+would switch somebody's spam protection off on the strength of an administrative act about where their settings live.
+Only the keys an owner's record may hold travel — the engine settings stay the deployment's — and the preview names
+each one with the value it would take, since two of them file mail and mark it read on that owner's own mail server.
 
 **A record is committed whole or not at all, over the version it was read at.** A candidate is bound strictly against
 the same rules a configuration file is, checked for two mail accounts declared under one identifier, checked that every

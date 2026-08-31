@@ -330,6 +330,11 @@ public sealed class OwnerAccountDocumentBinderTests
     }
 
     /// <summary>What the engine costs is the deployment's, so a record reaching for one of its settings is refused.</summary>
+    /// <remarks>
+    /// The key is one the deployment's own section really binds, so this fails if the owner's type ever grows it — which
+    /// is the shape the refusal exists against. An invented name would only prove what
+    /// <see cref="Bind_PropertyNothingBinds_IsRefused" /> already proves about any unknown property.
+    /// </remarks>
     [Fact]
     public void Bind_ADocumentStatingADeploymentOnlyClassificationSetting_IsRefused()
     {
@@ -338,12 +343,12 @@ public sealed class OwnerAccountDocumentBinderTests
 
         // Act
         var binding = binder.Bind("""
-            { "MailAccounts": [], "SpamClassification": { "Enabled": true, "ScanConcurrency": 4 } }
+            { "MailAccounts": [], "SpamClassification": { "Enabled": true, "ClassificationWait": "00:30:00" } }
             """);
 
         // Assert
         Assert.False(binding.IsBound);
-        Assert.Contains(binding.Refusals, refusal => refusal.Contains("ScanConcurrency", StringComparison.Ordinal));
+        Assert.Contains(binding.Refusals, refusal => refusal.Contains("ClassificationWait", StringComparison.Ordinal));
     }
 
     /// <summary>An owner writing outside the range the deployment permits is refused at the write, naming the range.</summary>

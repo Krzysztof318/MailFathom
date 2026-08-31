@@ -802,6 +802,37 @@ public sealed class OwnerRecordAdministrationTests
         Assert.Equal(["configured"], preview.MailAccounts.Select(account => account.AccountId));
     }
 
+    /// <summary>The posture moves with the mailboxes, so the preview names it: two of its settings act on that owner's own mail server.</summary>
+    /// <remarks>
+    /// An adoption cannot be undone, and an operator shown only a section path and a list of mailboxes would be
+    /// committing a filing and a marking without either being named. The engine settings beside them stay the
+    /// deployment's, so a preview naming one would be naming something the adoption does not carry.
+    /// </remarks>
+    [Fact]
+    public async Task ReadAdoptableAsync_ADeploymentStatingAClassificationPosture_NamesWhatItWouldCommit()
+    {
+        // Arrange
+        var configuration = DeploymentSectionDeclaring("configured");
+
+        configuration["SpamClassification:Enabled"] = "true";
+        configuration["SpamClassification:Actions:MoveToJunkFolder"] = "true";
+        configuration["SpamClassification:ClassificationWait"] = "01:00:00";
+
+        var harness = new RecordHarness(MailFathomPermission.AdminRead, configuration);
+        harness.Holding(SyntheticMailOwner.Deployment, EmptyRecord, version: 1);
+        harness.Roster(Serving(SyntheticMailOwner.Deployment, MailOwnerAccountSource.DeploymentSection));
+
+        // Act
+        var preview = await harness.Records.ReadAdoptableAsync(
+            SyntheticMailOwner.Deployment,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            ["SpamClassification:Actions:MoveToJunkFolder=true", "SpamClassification:Enabled=true"],
+            preview!.Classification.Select(setting => $"{setting.Path}={setting.Value}"));
+    }
+
     /// <summary>An owner whose record is already their own has nothing to adopt, which is a preview offering nothing rather than an absent one.</summary>
     [Fact]
     public async Task ReadAdoptableAsync_AnOwnerWhoseRecordIsAlreadyTheirOwn_OffersNothingToAdopt()

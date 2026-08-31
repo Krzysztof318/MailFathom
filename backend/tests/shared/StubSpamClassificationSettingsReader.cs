@@ -28,8 +28,7 @@ internal sealed class StubSpamClassificationSettingsReader(
         ? SpamClassificationScope.Create(
             accounts,
             accounts.SelectMany(account => settings.ScannedFolderAliases
-                .Select(alias => new MailFolderIdentity(account, alias))),
-            settings.MaximumClassificationWait)
+                .Select(alias => new MailFolderIdentity(account, alias))))
         : SpamClassificationScope.None;
 
     /// <inheritdoc />

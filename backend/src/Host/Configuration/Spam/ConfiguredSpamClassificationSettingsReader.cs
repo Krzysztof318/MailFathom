@@ -43,10 +43,18 @@ internal sealed class ConfiguredSpamClassificationSettingsReader(
 {
     /// <inheritdoc />
     /// <remarks>
-    /// Composed from the same per-owner reading <see cref="SettingsFor" /> answers with, so the walk that narrows a
-    /// table and the arrival that asks about one message cannot disagree about whose mail is classified. A deployment
-    /// whose roster is not settled yet classifies nothing, which is the answer every path takes before the startup gate
-    /// has run.
+    /// <para>
+    /// Composed from the same per-owner reading <see cref="SettingsFor(MailOwnerId)" /> answers with, so the walk that
+    /// narrows a table and the arrival that asks about one message cannot disagree about whose mail is classified. A
+    /// deployment whose roster is not settled yet classifies nothing, which is the answer every path takes before the
+    /// startup gate has run.
+    /// </para>
+    /// <para>
+    /// The deployment's section is read once for the whole scope rather than per owner. Every setting in it reloads, so
+    /// a reload landing part way through would otherwise judge one configuration-served owner under the old section and
+    /// the next under the new one, and one walk would then withhold one owner's junk and admit another's from a single
+    /// setting.
+    /// </para>
     /// </remarks>
     public SpamClassificationScope ScopeInForce
     {
@@ -57,10 +65,12 @@ internal sealed class ConfiguredSpamClassificationSettingsReader(
                 return SpamClassificationScope.None;
             }
 
+            var deployment = deploymentOptions.CurrentValue;
+
             var classifying = owners
-                .Select(owner => new { Owner = owner, Settings = this.SettingsFor(owner.Owner) })
+                .Select(served => new { Served = served, Settings = this.SettingsFor(served, deployment) })
                 .Where(entry => entry.Settings.IsEnabled)
-                .Select(entry => new { entry.Settings, Folders = this.FoldersOf(entry.Owner).ToArray() })
+                .Select(entry => new { entry.Settings, Folders = this.FoldersOf(entry.Served).ToArray() })
                 .ToArray();
 
             return SpamClassificationScope.Create(
@@ -69,7 +79,7 @@ internal sealed class ConfiguredSpamClassificationSettingsReader(
                 classifying.SelectMany(entry => entry.Folders
                     .Where(folder => entry.Settings.Covers(folder.Identity.Alias))
                     .Select(static folder => folder.Identity)),
-                deploymentOptions.CurrentValue.ClassificationWait);
+                deployment.ClassificationWait);
         }
     }
 
@@ -82,40 +92,44 @@ internal sealed class ConfiguredSpamClassificationSettingsReader(
             throw new ArgumentException("A classification posture is read for a named owner.", nameof(owner));
         }
 
-        if (this.Served(owner) is not { } served)
-        {
-            return SpamClassificationSettings.Disabled;
-        }
+        return this.Served(owner) is { } served
+            ? this.SettingsFor(served, deploymentOptions.CurrentValue)
+            : SpamClassificationSettings.Disabled;
+    }
 
-        var wait = deploymentOptions.CurrentValue.ClassificationWait;
+    /// <summary>Reads one owner's settings from the roster entry that already names them.</summary>
+    /// <remarks>
+    /// Takes the entry rather than the identifier because <see cref="ScopeInForce" /> holds it already, and searching
+    /// the roster again per owner would make composing the scope quadratic in a roster that may hold
+    /// <see cref="DeclaredOwners.MaximumDeclaredOwners" /> entries — a cost every stored message pays, because the
+    /// derived-work gate reads the scope once per message a synchronization run stores.
+    /// </remarks>
+    private SpamClassificationSettings SettingsFor(ServedMailOwner served, SpamClassificationOptions deployment)
+    {
         var accounts = this.AccountDeclarationsOf(served);
 
         return served.ReadFromConfiguration
-            ? Compose(deploymentOptions.CurrentValue, accounts, wait)
-            : Compose(served.SpamClassification ?? new OwnerSpamClassificationOptions(), accounts, wait);
+            ? Compose(deployment, accounts)
+            : Compose(served.SpamClassification ?? new OwnerSpamClassificationOptions(), accounts);
     }
 
     /// <summary>Builds one owner's settings out of the deployment's section, which is what still reaches them.</summary>
     private static SpamClassificationSettings Compose(
         SpamClassificationOptions deployment,
-        IReadOnlyList<MailSynchronizationAccountOptions> accounts,
-        TimeSpan wait) => SpamClassificationSettings.Create(
+        IReadOnlyList<MailSynchronizationAccountOptions> accounts) => SpamClassificationSettings.Create(
         deployment.Enabled,
         deployment.UseScanner,
         ScannedAliasesOf(deployment.ScannedFolders, accounts),
-        deployment.ScannerThreshold,
-        wait);
+        deployment.ScannerThreshold);
 
     /// <summary>Builds one owner's settings out of the block their own document carries.</summary>
     private static SpamClassificationSettings Compose(
         OwnerSpamClassificationOptions record,
-        IReadOnlyList<MailSynchronizationAccountOptions> accounts,
-        TimeSpan wait) => SpamClassificationSettings.Create(
+        IReadOnlyList<MailSynchronizationAccountOptions> accounts) => SpamClassificationSettings.Create(
         record.Enabled,
         record.UseScanner,
         ScannedAliasesOf(record.ScannedFolders, accounts),
-        record.ScannerThreshold,
-        wait);
+        record.ScannerThreshold);
 
     /// <summary>Reads the aliases a posture names, or the owner's own accounts' inbox aliases where it names none.</summary>
     /// <remarks>

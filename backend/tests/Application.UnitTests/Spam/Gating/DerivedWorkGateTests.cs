@@ -18,7 +18,7 @@ public sealed class DerivedWorkGateTests
 {
     private static readonly DateTimeOffset Now = new(2026, 8, 13, 10, 0, 0, TimeSpan.Zero);
 
-    private static readonly TimeSpan Wait = TimeSpan.FromMinutes(15);
+    private static readonly TimeSpan Wait = SpamClassificationScope.DefaultMaximumClassificationWait;
 
     private static readonly MailAccountId Primary = MailAccountId.Create("primary");
 
@@ -93,6 +93,29 @@ public sealed class DerivedWorkGateTests
 
         // Assert
         Assert.Equal(DerivedWorkAdmission.Admitted, admission);
+    }
+
+    /// <summary>Classification is each owner's own, so one owner's posture never withholds another owner's mail.</summary>
+    /// <remarks>
+    /// The per-account half of the gate, and the one thing that can prove it: with the account guard replaced by the
+    /// deployment-wide switch, this message would be withheld as junk on the strength of a verdict recorded before its
+    /// owner switched classification off, and its chunking, embedding, and rule evaluation would stop for good.
+    /// </remarks>
+    [Fact]
+    public void Admit_MailOfAnAccountThatDoesNotClassify_IsAdmittedWhateverWasRecordedAboutIt()
+    {
+        // Arrange
+        var gate = Gate(
+            Enabled(Inbox),
+            StubJunkMailFolderCatalog.Naming(new MailFolderIdentity(Primary, Junk)),
+            Secondary);
+
+        // Act
+        var admission = gate.Admit(Occurrence(Junk, Now, verdict: SpamVerdict.Spam));
+
+        // Assert
+        Assert.Equal(DerivedWorkAdmission.Admitted, admission);
+        Assert.True(admission.PermitsDerivedWork());
     }
 
     /// <summary>A verdict withholds wherever the message sits, which is what an operator who scores without filing gets.</summary>
@@ -273,8 +296,7 @@ public sealed class DerivedWorkGateTests
             isEnabled: true,
             usesScanner: false,
             scope,
-            scannerThreshold: null,
-            Wait);
+            scannerThreshold: null);
 
     private static DerivedWorkCandidate Occurrence(
         MailFolderAlias folderAlias,
@@ -282,11 +304,15 @@ public sealed class DerivedWorkGateTests
         SpamVerdict? verdict) =>
         new(Primary, folderAlias, storedAt, StoredEmailContentAvailability.Available, verdict);
 
+    /// <summary>Builds the gate over the accounts whose owners classify, which is every account unless a test says otherwise.</summary>
     private static DerivedWorkGate Gate(
         SpamClassificationSettings settings,
-        StubJunkMailFolderCatalog junkFolders) =>
+        StubJunkMailFolderCatalog junkFolders,
+        params MailAccountId[] classifyingAccounts) =>
         new(
-            new StubSpamClassificationSettingsReader(settings, Primary, Secondary),
+            new StubSpamClassificationSettingsReader(
+                settings,
+                classifyingAccounts.Length > 0 ? classifyingAccounts : [Primary, Secondary]),
             junkFolders,
             new FakeTimeProvider(Now));
 }

@@ -39,7 +39,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
 
     /// <summary>The bound on the ordering is the operator's, and it is what stops a wedged scanner stopping the index.</summary>
     [Fact]
-    public void SettingsFor_AClassificationWaitConfigured_CarriesItToTheGate()
+    public void ScopeInForce_AClassificationWaitConfigured_CarriesItToTheGate()
     {
         // Arrange
         var reader = ReaderFor(
@@ -47,15 +47,15 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
             AccountMapping("inbox", "Inbox"));
 
         // Act
-        var settings = reader.SettingsFor(SyntheticMailOwner.Deployment);
+        var scope = reader.ScopeInForce;
 
         // Assert
-        Assert.Equal(TimeSpan.FromHours(2), settings.MaximumClassificationWait);
+        Assert.Equal(TimeSpan.FromHours(2), scope.MaximumClassificationWait);
     }
 
     /// <summary>An operator who named no wait gets one anyway, because a wait of none would release every message.</summary>
     [Fact]
-    public void SettingsFor_NoClassificationWaitConfigured_TakesTheDefaultWait()
+    public void ScopeInForce_NoClassificationWaitConfigured_TakesTheDefaultWait()
     {
         // Arrange
         var reader = ReaderFor(
@@ -63,12 +63,12 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
             AccountMapping("inbox", "Inbox"));
 
         // Act
-        var settings = reader.SettingsFor(SyntheticMailOwner.Deployment);
+        var scope = reader.ScopeInForce;
 
         // Assert
         Assert.Equal(
-            SpamClassificationSettings.DefaultMaximumClassificationWait,
-            settings.MaximumClassificationWait);
+            SpamClassificationScope.DefaultMaximumClassificationWait,
+            scope.MaximumClassificationWait);
     }
 
     /// <summary>An operator who wrote no folders at all asked for none, which the default must not quietly overrule.</summary>
@@ -216,7 +216,7 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
 
     /// <summary>The wait bounds how long the index may be held back, which is the process's cost rather than one owner's choice.</summary>
     [Fact]
-    public void SettingsFor_AnOwnerReadFromTheirOwnDocument_StillTakesTheDeploymentsClassificationWait()
+    public void ScopeInForce_EveryOwnerReadFromTheirOwnDocument_StillTakesTheDeploymentsClassificationWait()
     {
         // Arrange
         var reader = new ConfiguredSpamClassificationSettingsReader(
@@ -231,10 +231,10 @@ public sealed class ConfiguredSpamClassificationSettingsReaderTests
                 AccountMapping("inbox", "Inbox"))));
 
         // Act
-        var settings = reader.SettingsFor(SyntheticMailOwner.Another);
+        var scope = reader.ScopeInForce;
 
         // Assert
-        Assert.Equal(TimeSpan.FromHours(3), settings.MaximumClassificationWait);
+        Assert.Equal(TimeSpan.FromHours(3), scope.MaximumClassificationWait);
     }
 
     /// <summary>The scope a walk narrows by is composed per owner, so one owner's decision reaches a query spanning owners.</summary>

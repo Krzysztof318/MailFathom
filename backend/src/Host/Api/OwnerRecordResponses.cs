@@ -158,6 +158,7 @@ internal sealed record StoredSecretProvisionedResponse(string SecretReference)
 /// <param name="ReadFromConfiguration">Whether a configuration source still supplies them, which is whether there is an adoption to perform at all.</param>
 /// <param name="ConfigurationPath">The configuration path that stops deciding them once the adoption commits, and nothing where no source supplies them.</param>
 /// <param name="MailAccounts">The mail accounts the adoption would move, empty where the source supplies none.</param>
+/// <param name="Classification">The classification posture the adoption would commit beside them, empty where the deployment states none.</param>
 /// <remarks>The flag is published beside the source name rather than left to be derived from it, because whether there is anything to adopt is the question a caller acts on and reading it out of a name would make an enumeration member's spelling part of the contract.</remarks>
 internal sealed record OwnerAdoptionPreviewResponse(
     Guid Owner,
@@ -166,7 +167,8 @@ internal sealed record OwnerAdoptionPreviewResponse(
     string Source,
     bool ReadFromConfiguration,
     string? ConfigurationPath,
-    IReadOnlyList<OwnerAdoptableMailAccountResponse> MailAccounts)
+    IReadOnlyList<OwnerAdoptableMailAccountResponse> MailAccounts,
+    IReadOnlyList<OwnerAdoptableClassificationSettingResponse> Classification)
 {
     /// <summary>Describes an adoption preview.</summary>
     /// <param name="preview">The preview as the administration read it.</param>
@@ -183,7 +185,8 @@ internal sealed record OwnerAdoptionPreviewResponse(
             preview.Source.ToString(),
             preview.HasSomethingToAdopt,
             preview.ConfigurationPath,
-            [.. preview.MailAccounts.Select(OwnerAdoptableMailAccountResponse.For)]);
+            [.. preview.MailAccounts.Select(OwnerAdoptableMailAccountResponse.For)],
+            [.. preview.Classification.Select(OwnerAdoptableClassificationSettingResponse.For)]);
     }
 }
 
@@ -202,6 +205,24 @@ internal sealed record OwnerAdoptableMailAccountResponse(string AccountId, strin
         ArgumentNullException.ThrowIfNull(account);
 
         return new OwnerAdoptableMailAccountResponse(account.AccountId, account.DisplayName);
+    }
+}
+
+/// <summary>One classification setting an adoption would commit into an owner's record.</summary>
+/// <param name="Path">The path the setting is written at in the record, rooted at its own classification block.</param>
+/// <param name="Value">The value it takes, which is what the deployment's section states today.</param>
+/// <remarks>Nothing under the deployment's scanner block is here, so this reports what would be decided about the owner's mail without disclosing where the daemon is or what reaches it.</remarks>
+internal sealed record OwnerAdoptableClassificationSettingResponse(string Path, string Value)
+{
+    /// <summary>Describes one adoptable posture setting.</summary>
+    /// <param name="setting">The setting as the preview reported it.</param>
+    /// <returns>The response entry.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="setting" /> is <see langword="null" />.</exception>
+    internal static OwnerAdoptableClassificationSettingResponse For(OwnerAdoptableClassificationSetting setting)
+    {
+        ArgumentNullException.ThrowIfNull(setting);
+
+        return new OwnerAdoptableClassificationSettingResponse(setting.Path, setting.Value);
     }
 }
 

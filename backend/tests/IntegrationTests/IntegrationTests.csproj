@@ -31,6 +31,7 @@
     <Compile Include="..\shared\SyntheticMailOwner.cs" Link="SyntheticMailOwner.cs" />
     <Compile Include="..\shared\SyntheticServedAccount.cs" Link="SyntheticServedAccount.cs" />
     <Compile Include="..\shared\StubMailFolderMappings.cs" Link="StubMailFolderMappings.cs" />
+    <Compile Include="..\shared\StubSpamClassificationSettingsReader.cs" Link="StubSpamClassificationSettingsReader.cs" />
     <!-- The provider contract tests compose the adapters by hand, so they build the guard those adapters take. -->
     <Compile Include="..\shared\MarkerSensitiveContentScanner.cs" Link="MarkerSensitiveContentScanner.cs" />
     <Compile Include="..\shared\RecordingSensitiveContentEgressTelemetry.cs" Link="RecordingSensitiveContentEgressTelemetry.cs" />
