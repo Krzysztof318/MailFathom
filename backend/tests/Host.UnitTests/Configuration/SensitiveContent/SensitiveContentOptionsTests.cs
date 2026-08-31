@@ -223,6 +223,52 @@ public sealed class SensitiveContentOptionsTests
     }
 
     /// <summary>
+    /// An address alone stands the analyzer up, for the owners who may switch the scanner on for their own mail, so the
+    /// block beside it is judged whether or not this deployment scans with it. Left unjudged, the profile the
+    /// composition root builds from these keys would throw out of the first posture that resolved it, taking every
+    /// scanning path down with nothing naming the key that did it.
+    /// </summary>
+    [Fact]
+    public void Validate_AMalformedAnalyzerLanguageUnderAScannerOnlyOwnersRun_IsReported()
+    {
+        // Arrange
+        var settings = new SensitiveContentOptions();
+        settings.Secrets.Enabled = true;
+        settings.PersonalDataAnalyzer.Endpoint = "http://presidio-analyzer:3000";
+        settings.PersonalDataAnalyzer.Languages.Add("polish");
+
+        // Act
+        var results = settings.Validate(new ValidationContext(settings)).ToArray();
+
+        // Assert
+        Assert.False(settings.Pii.Enabled);
+        Assert.True(settings.ProvidesPersonalDataScanner);
+
+        var result = Assert.Single(results);
+        Assert.Contains("'polish'", result.ErrorMessage!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An address nothing could be built from under a switched-off scanner stands nothing up and describes no
+    /// protection, so it is left where it is rather than refusing a start over a setting that decides nothing.
+    /// </summary>
+    [Fact]
+    public void Validate_AnUnusableAnalyzerAddressUnderASwitchedOffScanner_ReportsNothing()
+    {
+        // Arrange
+        var settings = new SensitiveContentOptions();
+        settings.PersonalDataAnalyzer.Endpoint = "presidio-analyzer:3000";
+        settings.PersonalDataAnalyzer.Languages.Add("polish");
+
+        // Act
+        var results = settings.Validate(new ValidationContext(settings)).ToArray();
+
+        // Assert
+        Assert.False(settings.ProvidesPersonalDataScanner);
+        Assert.Empty(results);
+    }
+
+    /// <summary>
     /// The ceiling is counted after deduplication, as the profile counts it. A repeat is one language asked once, so a
     /// list an operator produced by merging two configuration sources must not be refused for a length the analyzer
     /// never sees.

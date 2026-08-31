@@ -120,6 +120,20 @@ public sealed class OwnerSensitiveContentRulesTests
         Assert.Contains("Pii", refusal, StringComparison.Ordinal);
     }
 
+    /// <summary>The refusal is what an administrator and a start both read, so its noun agrees with the count it reports.</summary>
+    [Fact]
+    public void FindRefusals_AnOwnerScreeningForSeveralUnknownScanners_CountsThemAsEntries()
+    {
+        // Arrange
+        var owner = new OwnerSensitiveContentOptions { ScreenOutgoingMailFor = ["Sekrety", "Dane"] };
+
+        // Act
+        var refusal = Assert.Single(OwnerSensitiveContentRules.FindRefusals(owner, new SensitiveContentOptions(), Path));
+
+        // Assert
+        Assert.Contains("names 2 entries", refusal, StringComparison.Ordinal);
+    }
+
     /// <summary>The list is the owner's whole answer, so one naming fewer scanners than the deployment stops mail for is a narrowing.</summary>
     [Fact]
     public void FindRefusals_AnOwnerScreeningForFewerScannersThanTheDeployment_IsRefusedNamingWhatIsMissing()

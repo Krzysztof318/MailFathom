@@ -34,9 +34,17 @@ internal sealed class StoredEmailExtractionBackfillStore(
     /// Both halves are required: an operator who asked for a rebuild on a deployment that scans nobody has asked for
     /// every derived row to be re-derived back to the text it already holds, which is a full re-extraction of the
     /// mailbox for no change at all. Reading the postures rather than the switch alone is what makes that a no-op.
+    /// <para>
+    /// Read once and held for the life of this store, which is one run: an owner switching a scanner on mid-run must not
+    /// change what the walk in flight is selecting or what it stamps its cursor with. Were it re-read, the rows already
+    /// behind the cursor would stay derived under the weaker posture while the cursor recorded the stricter composite,
+    /// and the next run would read that agreement as everything behind the position being done. The deployment's own
+    /// posture needs no such capture, being restart-scoped and therefore fixed for the life of the process; only an
+    /// owner's record moves under a run.
+    /// </para>
     /// </remarks>
     private IReadOnlyList<OwnerSensitiveContentPosture> RebuiltTowards =>
-        options.RebuildsStaleDerivedData && derivationGuard.IsActive ? derivationGuard.Current : [];
+        field ??= options.RebuildsStaleDerivedData && derivationGuard.IsActive ? derivationGuard.Current : [];
 
     /// <inheritdoc />
     /// <remarks>

@@ -111,7 +111,9 @@ internal static class OwnerSensitiveContentRules
             // Counted rather than quoted. The entries are an owner's own text, reaching an administrator's refusal and
             // every log of it, so one carrying a newline would put a forged line there and one carrying personal data
             // would put that there — and this same sentence is what a start reports when it reads the record back.
-            yield return $"{key} names {unknown.Length} entry this deployment has no scanner for, and every entry is "
+            var counted = unknown.Length == 1 ? "1 entry" : $"{unknown.Length} entries";
+
+            yield return $"{key} names {counted} this deployment has no scanner for, and every entry is "
                 + $"one of the scanners it can switch on: {string.Join(", ", accepted)}.";
 
             yield break;

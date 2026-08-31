@@ -205,18 +205,26 @@ internal sealed class SensitiveContentOptions : IValidatableObject
     private static bool IsLanguageCode(string language) =>
         language is { Length: 2 } && language.All(char.IsAsciiLetterLower);
 
-    /// <summary>Finds what is wrong with the analyzer block, which only a switched-on personal-data scanner reads.</summary>
+    /// <summary>Finds what is wrong with the analyzer block, which every deployment standing the scanner up reads.</summary>
     /// <remarks>
-    /// Nothing here judges an analyzer address left behind under a scanner nobody runs, for the reason nothing judges a
-    /// category list in that state: it describes no protection, so refusing to start over it would be refusing over a
-    /// comment. What is refused is the reverse — the scanner on with nowhere to ask — because that deployment would fail
-    /// every operation the scanner guards while its own configuration read as protection in force.
+    /// Judged whenever this deployment stands the analyzer up, which an address alone is enough to do: the composition
+    /// root builds the client and the analyzer profile from these keys as soon as <see cref="ProvidesPersonalDataScanner" />
+    /// holds, whether the deployment scans its own mail with the scanner or only offers it to an owner who switches it
+    /// on. Leaving them unjudged in that state would let a start that reads as protection in force fail every operation
+    /// the scanner guards, with nothing naming the key that did it.
+    /// <para>
+    /// What stays unjudged is an address nothing could be built from under a scanner nobody runs, for the reason nothing
+    /// judges a category list in that state: it describes no protection and stands nothing up, so refusing to start over
+    /// it would be refusing over a comment. The absent-address refusal below is reachable only under
+    /// <see cref="Pii" />.<see cref="SensitiveContentScannerOptions.Enabled" /> for the same reason — a deployment
+    /// providing the scanner has an address by definition.
+    /// </para>
     /// </remarks>
     private IEnumerable<ValidationResult> FindAnalyzerErrors()
     {
         var analyzerKey = $"{SectionName}:{nameof(this.PersonalDataAnalyzer)}";
 
-        if (!this.Pii.Enabled)
+        if (!this.Pii.Enabled && !this.ProvidesPersonalDataScanner)
         {
             yield break;
         }

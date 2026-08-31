@@ -47,12 +47,17 @@ public sealed class SensitiveContentScanConcurrencyTests
         held.Dispose();
         var second = Record.Exception(held.Dispose);
 
-        using var granted = await concurrency.AcquireAsync(TestContext.Current.CancellationToken);
+        var granted = await concurrency.AcquireAsync(TestContext.Current.CancellationToken);
         var stillBounded = concurrency.AcquireAsync(TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(second);
         Assert.False(stillBounded.IsCompleted);
+
+        granted.Dispose();
+
+        using var served = await stillBounded;
+        Assert.NotNull(served);
     }
 
     /// <summary>A budget of no scans at all is a deployment that scans nothing rather than one that scans without bound.</summary>

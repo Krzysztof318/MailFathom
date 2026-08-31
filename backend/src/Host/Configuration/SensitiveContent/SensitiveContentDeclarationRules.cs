@@ -28,8 +28,8 @@ namespace MailFathom.Host.Configuration.SensitiveContent;
 /// deployment with it. A scanner this section switched on is judged too, whether or not the deployment can provide it,
 /// so a switch on with nothing behind it is still answered here rather than by the endpoint rule alone. Whether a
 /// scanner has a detector behind it at all is asked only of the ones this section switched on, because that is a
-/// question about this process's own registrations rather than about what an operator wrote, and asking it of a
-/// scanner nobody runs would refuse a start over a service graph nothing was going to use.
+/// question about this process's own registrations rather than about what an operator wrote, and a switch that is off
+/// promises no protection for what stands behind it to fall short of.
 /// </para>
 /// </remarks>
 internal static class SensitiveContentDeclarationRules
@@ -75,9 +75,10 @@ internal static class SensitiveContentDeclarationRules
 
         if (registered.Count != 1)
         {
-            // Reported only where this section runs the scanner. A deployment that runs none registers no catalog
-            // either — a validator judging a candidate configuration is handed exactly what the process holds — so
-            // asking this of a scanner nobody runs would refuse every such start over a detector nothing wanted.
+            // Reported only where this section runs the scanner. Both catalogs are registered on every deployment, and
+            // AddSensitiveContentCatalogs states why it is deliberately unconditional, so this asks about this process's
+            // own detectors rather than about anything an operator wrote. A switch that is off promises no protection,
+            // so what stands behind it decides nothing about whether this start is sound.
             if (switchedOn)
             {
                 yield return registered.Count == 0

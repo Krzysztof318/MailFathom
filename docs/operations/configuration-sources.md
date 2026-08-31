@@ -256,7 +256,7 @@ This deployment serves 3 owners: 2 read from configuration and 1 from their own 
 and then one line per owner whose source is not their file:
 
 ```
-The owner labelled morgan is read from their own document; no configuration source reaches their mail accounts. Change them with mfctl.
+The owner labelled morgan is read from their own document; no configuration source reaches their mail accounts or the scanning posture declared beside them. Change them with mfctl.
 ```
 
 An owner the database holds and no file declares is served from their own record where they have one, which is what an owner recorded through [`mfctl owner add`](admin-endpoint.md#owners-and-their-records) always has: nothing in a file reaches them, and a deployment that held a row it never served would be one where recording somebody did nothing. They are served after every owner a file names, because the roster's order is the operator's own reading of their configuration and an owner outside it has no place in that order to take.
