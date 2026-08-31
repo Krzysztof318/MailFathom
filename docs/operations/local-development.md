@@ -895,9 +895,10 @@ not be found. That is a missing development package every time, never a Rust or 
 | Arch | `webkit2gtk-4.1 base-devel curl wget file openssl appmenu-gtk-module libappindicator-gtk3 librsvg xdotool` |
 | Windows | The **Microsoft C++ Build Tools** with the *Desktop development with C++* workload, and **WebView2**, which Windows 10 1803 and later already carry — install the Evergreen Bootstrapper on anything older |
 
-Two more things a Windows machine needs, and neither is Tauri's: **Git Bash on the path**, because both builds read
-the declared version by running `scripts/read-declared-version.sh`, and the **MSVC Rust toolchain** rather than the
-GNU one, which is what `rustup` installs there by default.
+One more thing a Windows machine needs, and it is not Tauri's: **Git Bash on the path**, because both builds read the
+declared version by running `scripts/read-declared-version.sh`. The toolchain half needs nothing done — `rustup`
+already defaults to the MSVC ABI there, which is the one the C++ Build Tools above serve; a machine that was switched
+to the GNU host triple at some point is the case to notice, because that is the deviation rather than the default.
 
 `frontend/README.md` is where the shell itself is described — what it owns, where each of its decisions is written
 down, and why the version reaches it as a configuration patch rather than as a number in a manifest.

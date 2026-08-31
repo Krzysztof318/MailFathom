@@ -18,8 +18,8 @@ pnpm test:browser                # build the bundle and drive it in a real brows
 pnpm format                      # rewrite; pnpm format:check reports instead
 ```
 
-The two `desktop:` commands need a Rust toolchain and the platform's WebView development packages, which the other
-five do not. [Local development](../docs/operations/local-development.md) has them and names the failure a missing one
+The two `desktop:` commands need a Rust toolchain and the platform's WebView development packages; none of the others
+does. [Local development](../docs/operations/local-development.md) has them and names the failure a missing one
 produces.
 
 `packageManager` in `package.json` names the pnpm version this lock file was written by, and `engines` the Node
