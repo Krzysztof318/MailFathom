@@ -4795,6 +4795,25 @@ obligation_index_reports_a_moved_client_pin_with_no_register_row() {
   assert_contains 'frontend/pnpm-lock.yaml' "$output_file"
 }
 
+# The desktop shell's crates are the client's second pin family and owe the same row. They are the
+# case the npm trigger cannot see — a bump to `tauri` touches no `package.json` and no
+# `pnpm-lock.yaml` — and the closure behind them is the larger of the two the register carries.
+obligation_index_reports_a_moved_desktop_crate_pin_with_no_register_row() {
+  local fixture_root="$test_directory/obligations-crate-pin"
+  local files_json="$test_directory/obligations-crate-pin-files.json"
+  local output_file="$test_directory/obligations-crate-pin.json"
+
+  create_client_obligation_fixture "$fixture_root"
+  printf '%s\n' '[{"filename":"frontend/src-tauri/Cargo.toml","status":"modified","patch":"@@ -1 +1,2 @@\n+# changed"},{"filename":"frontend/src-tauri/Cargo.lock","status":"modified","patch":"@@ -1 +1,2 @@\n+# changed"}]' \
+    > "$files_json"
+
+  run_obligation_index "$fixture_root" "$files_json" "$output_file"
+
+  assert_json '1' '[.registers[] | select(.register == "THIRD_PARTY_LICENSES.md")] | length' "$output_file"
+  assert_json 'false' '.registers[0].register_changed' "$output_file"
+  assert_contains 'Cargo.toml' "$output_file"
+}
+
 obligation_index_maps_a_changed_path_to_the_page_that_describes_it() {
   local fixture_root="$test_directory/obligations-documentation"
   local files_json="$test_directory/obligations-documentation-files.json"
@@ -7890,6 +7909,28 @@ jobs:
       - uses: owner/action-extras@v1
 WORKFLOW
 
+  # The client's two manifests. `some-package` and `some-package-extras` share a prefix for the same reason the two
+  # NuGet identifiers above do, and the crate manifest carries both shapes a Cargo pin is written in — the bare string
+  # and the table the Tauri CLI rewrites it to.
+  cat > "$fixture/package.json" << 'MANIFEST'
+{
+  "dependencies": {
+    "some-package": "1.0.0"
+  },
+  "devDependencies": {
+    "some-package-extras": "1.0.0"
+  }
+}
+MANIFEST
+
+  cat > "$fixture/Cargo.toml" << 'CARGO'
+[build-dependencies]
+some-crate-build = "=1.0.0"
+
+[dependencies]
+some-crate = { version = "=1.0.0", features = [] }
+CARGO
+
   outcome="$(
     set -uo pipefail
     source <(
@@ -7907,6 +7948,10 @@ WORKFLOW
       && printf 'nuget-moved\n'
     rewrite_pin actions 'owner/action@v1' 'v1' "$hostile" '' \
       && printf 'actions-moved\n'
+    rewrite_pin npm 'some-package' '1.0.0' "$hostile" "$fixture/package.json" \
+      && printf 'npm-moved\n'
+    rewrite_pin crates 'some-crate' '1.0.0' "$hostile" "$fixture/Cargo.toml" \
+      && printf 'crates-moved\n'
     # The same rewrite a second time changes nothing, and the answer has to be that nothing moved rather than that
     # `sed` opened the file.
     rewrite_pin nuget 'Some.Package' '1.0.0' "$hostile" "$fixture/Directory.Packages.props" \
@@ -7915,6 +7960,8 @@ WORKFLOW
 
   local expected='nuget-moved
 actions-moved
+npm-moved
+crates-moved
 nuget-refused-a-second-time'
 
   if [[ "$outcome" != "$expected" ]]; then
@@ -7951,6 +7998,32 @@ nuget-refused-a-second-time'
   if ! grep -qF 'uses: owner/action-extras@v1' "$fixture/workflows/ci.yml"; then
     printf 'an action sharing the rewritten one'"'"'s prefix was rewritten too:\n%s\n' \
       "$(cat "$fixture/workflows/ci.yml")" >&2
+    return 1
+  fi
+
+  # `jq --arg` encodes for JSON, so the version arrives escaped rather than verbatim — the assertion is that the value
+  # reads back as itself, which is what `jq -r` answers.
+  if [[ "$(jq -r '.dependencies["some-package"]' "$fixture/package.json")" != "$hostile" ]]; then
+    printf 'the client pin was not written back verbatim:\n%s\n' "$(cat "$fixture/package.json")" >&2
+    return 1
+  fi
+
+  if [[ "$(jq -r '.devDependencies["some-package-extras"]' "$fixture/package.json")" != '1.0.0' ]]; then
+    printf 'a client pin sharing the rewritten one'"'"'s prefix was rewritten too:\n%s\n' \
+      "$(cat "$fixture/package.json")" >&2
+    return 1
+  fi
+
+  if ! grep -qF "some-crate = { version = \"=$hostile\", features = [] }" "$fixture/Cargo.toml"; then
+    printf 'the crate pin was not written back verbatim:\n%s\n' "$(cat "$fixture/Cargo.toml")" >&2
+    return 1
+  fi
+
+  # The build dependency is written in the other shape and shares the rewritten crate's prefix, so it covers both
+  # halves of the same pattern at once.
+  if ! grep -qF 'some-crate-build = "=1.0.0"' "$fixture/Cargo.toml"; then
+    printf 'a crate sharing the rewritten one'"'"'s prefix was rewritten too:\n%s\n' \
+      "$(cat "$fixture/Cargo.toml")" >&2
     return 1
   fi
 }
@@ -8454,6 +8527,7 @@ run_test obligation_index_reports_a_client_source_with_no_sibling_test
 run_test obligation_index_credits_a_client_test_the_change_adds
 run_test obligation_index_leaves_out_client_paths_no_test_can_cover
 run_test obligation_index_reports_a_moved_client_pin_with_no_register_row
+run_test obligation_index_reports_a_moved_desktop_crate_pin_with_no_register_row
 run_test obligation_index_maps_a_changed_path_to_the_page_that_describes_it
 run_test obligation_index_credits_a_path_directly_under_a_double_star
 run_test obligation_index_ignores_a_marker_below_the_preamble

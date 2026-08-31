@@ -1,6 +1,6 @@
 ---
 name: update-dependencies
-description: Use when the task in front of you is to move dependency pins — packages, tools, SDKs, GitHub Action references, or container images — or to find out which of them are behind and whether any changed licence.
+description: Use when the task in front of you is to move dependency pins — packages in either stack, Rust crates, tools, SDKs, GitHub Action references, or container images — or to find out which of them are behind and whether any changed licence.
 license: Apache-2.0
 metadata:
   author: Krzysztof Kasprowicz
@@ -32,7 +32,8 @@ own. Noticing one while doing something else is worth a sentence in the report, 
    scripts/update-dependencies.sh
    ```
 
-   It takes about a minute and reaches nuget.org, the .NET release index, GitHub, and three registries. Read the whole
+   It takes about a minute and reaches nuget.org, registry.npmjs.org, crates.io, the .NET release index, GitHub, and
+   three container registries. Read the whole
    report, including the rows that came back `current` — a licence that moved under a pin nobody has to bump is exactly
    what this exists to catch, and it is reported on a `current` row like any other.
 
@@ -47,7 +48,9 @@ own. Noticing one while doing something else is worth a sentence in the report, 
    scripts/update-dependencies.sh --apply
    ```
 
-   It rewrites the pins it can write mechanically and regenerates both stacks' lock files. Then take out again anything
+   It rewrites the pins it can write mechanically and regenerates whichever of the three lock files those pins belong
+   to — `packages.lock.json` through a `--force-evaluate` restore, `frontend/pnpm-lock.yaml` through pnpm, and
+   `frontend/src-tauri/Cargo.lock` through `cargo update` named crate by crate. Then take out again anything
    step 2 decided not to move — `--apply` moves every behind pin it can, and it is not the place the decision was made.
    Read the lock diff before anything else: a bump moving one direct version and forty transitive ones is a different
    change from one moving only itself, and that difference is visible nowhere else.
@@ -57,6 +60,11 @@ own. Noticing one while doing something else is worth a sentence in the report, 
    used for, what its terms oblige, which of them a distribution has to discharge — so the version is not the only thing
    in it that can stop being true. A row that names a transitive package the bump removed, or an argument that rested on
    the old version's behaviour, is the part a search-and-replace would leave standing.
+
+   **A client pin costs a census as well as a row.** § *The client's two dependency closures* records each of the
+   client's two graphs as a count — how many packages under which terms, and every one carrying a condition — and a pin
+   that moved resolved a new graph. Re-run that section's enumeration commands and write what they printed; the script
+   says so when it moves one, and nothing else will.
 
 6. **`$review-change`, `$check-docs-licenses`, `$finish-change`**, as any other task. Never touch `CHANGELOG.md`.
 

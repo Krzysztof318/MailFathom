@@ -1785,10 +1785,13 @@ build's configuration without naming any of it.
 Both stacks' pin families oblige `THIRD_PARTY_LICENSES.md`, as two register pairs
 rather than one, so the trigger names what actually moved:
 `backend/Directory.Packages.props` or a `packages.lock.json` for the service, and
-a `frontend` `package.json` or `frontend/pnpm-lock.yaml` for the client. The
-client's pair matters more than the symmetry suggests, because
-`scripts/update-dependencies.sh` does not read that family yet — so review is
-where a client pin missing its row is caught at all.
+a `frontend` `package.json`, `frontend/pnpm-lock.yaml`,
+`frontend/src-tauri/Cargo.toml`, or `frontend/src-tauri/Cargo.lock` for the
+client. `scripts/update-dependencies.sh` now reads both of the client's families
+too, so a pin behind its upstream is caught before review; what review still
+catches alone is the half no survey computes — the census the register records
+for each of the client's two closures, which a moved pin invalidates without
+changing a line of any manifest.
 
 A source path to the page that documents it is **declared**, because nothing
 derives it: documentation is written about configuration keys and behavior rather

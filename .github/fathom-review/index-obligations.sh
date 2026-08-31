@@ -421,18 +421,22 @@ fi
 emit_register 'a dependency pin moved in backend/Directory.Packages.props or a packages.lock.json' \
   'THIRD_PARTY_LICENSES.md' "$dependency_pins_changed"
 
-# The client's pin family, as a pair of its own rather than folded into the one above, so the trigger
-# names what actually moved. `frontend/AGENTS.md` puts the pin in each package's own `package.json`
-# and the resolution in `frontend/pnpm-lock.yaml`, and requires the same register row that a service
-# pin does under ADR 0016. `scripts/update-dependencies.sh` does not read this family yet, which is
-# what makes the review the place a client pin is caught at all.
+# The client's pin families, as a pair of their own rather than folded into the one above, so the
+# trigger names what actually moved. `frontend/AGENTS.md` puts the npm pin in each package's own
+# `package.json` and the resolution in `frontend/pnpm-lock.yaml`; the desktop shell's two crate pins
+# sit in `frontend/src-tauri/Cargo.toml` with the resolution in `Cargo.lock` beside it. Both require
+# the same register row a service pin does under ADR 0016, and both oblige one thing a service pin
+# does not: the register records each of those graphs as a census, and `scripts/update-dependencies.sh`
+# rewrites pins without recomputing one. So the survey catches a pin that is behind and the review
+# catches a census that no longer describes what the lock file resolves.
 client_pins_changed='false'
 if grep -qE '^frontend/(src/[^/]+/)?package\.json$' "$work_directory/changed-paths" \
-  || grep -qxF 'frontend/pnpm-lock.yaml' "$work_directory/changed-paths"; then
+  || grep -qxF 'frontend/pnpm-lock.yaml' "$work_directory/changed-paths" \
+  || grep -qE '^frontend/src-tauri/Cargo\.(toml|lock)$' "$work_directory/changed-paths"; then
   client_pins_changed='true'
 fi
 
-emit_register 'a client dependency pin moved in a frontend package.json or in frontend/pnpm-lock.yaml' \
+emit_register 'a client dependency pin moved in a frontend package.json, in frontend/pnpm-lock.yaml, or in the desktop shell'"'"'s Cargo.toml or Cargo.lock' \
   'THIRD_PARTY_LICENSES.md' "$client_pins_changed"
 
 exception_added='false'

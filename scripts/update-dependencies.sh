@@ -12,9 +12,10 @@ set -euo pipefail
 #   scripts/update-dependencies.sh                      survey every pin and report; writes nothing
 #   scripts/update-dependencies.sh --apply              and rewrite the pins that can be written mechanically
 #   scripts/update-dependencies.sh --apply --verify     and then run scripts/verify-full.sh over the result
-#   scripts/update-dependencies.sh --only <family>      restrict to one of: nuget, tools, sdk, actions, images
+#   scripts/update-dependencies.sh --only <family>      restrict to one of: nuget, npm, crates, tools, sdk, actions,
+#                                                       images
 #
-# A version reaches a run from one of six files, in five syntaxes, and nothing until now read them together. The
+# A version reaches a run from one of eight files, in seven syntaxes, and nothing until now read them together. The
 # question this answers is the one no tooling here answers otherwise: which pins are behind, and did any of them change
 # licence since somebody reviewed it. Dependabot version updates were removed deliberately in #304/#305 and are not
 # coming back — the pull request they produced carried a version number while the work that costs something, reading
@@ -43,17 +44,26 @@ set -euo pipefail
 # What `--apply` does instead is print, for every pin it moved, the register lines that name the version it moved from,
 # by line number, so the prose edit is guided rather than searched for.
 #
-# Network access is required, to nuget.org, to the .NET release index, to GitHub through `gh`, and to the three
-# registries the images live in. Anything that does not resolve is reported as `unresolved` beside the pin rather than
-# failing the run, because a survey that stops at the first unreachable host is worth less than a partial one.
+# The client's two families are read exactly like the service's and cost the register one thing more, which is why the
+# report says so rather than leaving it to be discovered. Each of them is recorded there as a direct pin beside a census
+# of the closure it resolves to — § *The client's two dependency closures* — and a census is a count this script cannot
+# recompute from a manifest. So a moved client pin obliges the census as well as the row, and re-running the two
+# enumeration commands that section names is part of the prose edit rather than a step after it.
+#
+# Network access is required, to nuget.org, to the .NET release index, to registry.npmjs.org, to crates.io, to GitHub
+# through `gh`, and to the three registries the images live in. Anything that does not resolve is reported as
+# `unresolved` beside the pin rather than failing the run, because a survey that stops at the first unreachable host is
+# worth less than a partial one.
 
-readonly usage='Usage: scripts/update-dependencies.sh [--apply] [--verify] [--only nuget|tools|sdk|actions|images]'
+readonly usage='Usage: scripts/update-dependencies.sh [--apply] [--verify] [--only nuget|npm|crates|tools|sdk|actions|images]'
 
 # Ordered longest first, because a shorter alternative that is a prefix of a longer one would otherwise win: without it
 # `Apache-2.0` in a register row reads as no match at all and `BSD-3-Clause` reads as `BSD`. `PostgreSQL License` sits
 # ahead of the bare `PostgreSQL` for the same reason — the register writes the licence's full name where a package's own
-# metadata declares the SPDX identifier, and both have to resolve to the same thing.
-readonly licence_pattern='Apache-2\.0|BSD-3-Clause|BSD-2-Clause|PostgreSQL License|AGPL-[0-9.]+(-or-later|-only)?|LGPL-[0-9.]+(-or-later|-only)?|NOASSERTION|PostgreSQL|MPL-2\.0|CC-BY-[0-9.]+|Unicode|MS-PL|MIT|ISC|CC0'
+# metadata declares the SPDX identifier, and both have to resolve to the same thing. `MIT-0` sits ahead of `MIT` on that
+# rule too: it is a different grant, and reading one as the other would report a package the register never reviewed as
+# already recorded.
+readonly licence_pattern='Apache-2\.0|BlueOak-1\.0\.0|BSD-3-Clause|BSD-2-Clause|PostgreSQL License|AGPL-[0-9.]+(-or-later|-only)?|LGPL-[0-9.]+(-or-later|-only)?|NOASSERTION|PostgreSQL|Unlicense|MPL-2\.0|CC-BY-[0-9.]+|Unicode|MS-PL|MIT-0|MIT|ISC|CC0|Zlib|0BSD'
 
 readonly register_file='THIRD_PARTY_LICENSES.md'
 readonly global_json='global.json'
@@ -61,6 +71,8 @@ readonly tool_manifest='.config/dotnet-tools.json'
 readonly workflow_directory='.github/workflows'
 readonly backend_pins='backend/Directory.Packages.props'
 readonly backend_solution='backend/MailFathom.slnx'
+readonly client_workspace='frontend'
+readonly desktop_manifest='frontend/src-tauri/Cargo.toml'
 
 apply_pins='false'
 run_verification='false'
@@ -73,7 +85,7 @@ while [[ $# -gt 0 ]]; do
     --only)
       shift
       case "${1:-}" in
-        nuget | tools | sdk | actions | images) selected_family="$1" ;;
+        nuget | npm | crates | tools | sdk | actions | images) selected_family="$1" ;;
         *)
           printf 'Unknown family %s.\n%s\n' "${1:-<missing>}" "$usage" >&2
           exit 1
@@ -204,6 +216,46 @@ github_licence() {
   [[ -z "$spdx" ]] && printf 'unresolved' || printf '%s' "$spdx"
 }
 
+# The version and the licence in one request rather than two. `/<name>/latest` answers with the whole manifest of the
+# version the registry's `latest` tag points at, so both columns come from the same document and cannot describe two
+# different releases. A scoped name carries a slash that would otherwise open a second path segment, so it is encoded;
+# nothing else in an npm name needs escaping, the registry accepting only lowercase letters, digits, and `-._~`.
+npm_latest() {
+  local package_name="$1" manifest
+  local encoded="${package_name/\//%2f}"
+
+  manifest="$(fetch "https://registry.npmjs.org/$encoded/latest")" || true
+
+  # A name the registry does not serve answers `"Not Found"`, which is valid JSON and would otherwise reach `jq` as a
+  # string with no fields — reported as an empty version rather than as the miss it is.
+  if [[ -z "$manifest" ]] || ! jq -e 'type == "object" and has("version")' > /dev/null 2>&1 <<< "$manifest"; then
+    printf 'unresolved\tunresolved'
+    return
+  fi
+
+  printf '%s\t%s' \
+    "$(jq -r '.version' <<< "$manifest")" \
+    "$(jq -r 'if (.license | type) == "string" then .license else "undeclared" end' <<< "$manifest")"
+}
+
+# crates.io refuses a request without a User-Agent, and `max_stable_version` is the crate's own answer to "what would a
+# caret range take today" rather than a sort this script would have to repeat. The licence is read from that version's
+# own entry, because a crate may relicense between releases and the pinned one's terms are not the question.
+crate_latest() {
+  local crate_name="$1" document version
+
+  document="$(fetch --user-agent 'mailfathom-update-dependencies (https://github.com/Krzysztof318/MailFathom)' \
+    "https://crates.io/api/v1/crates/$crate_name")" || true
+  [[ -n "$document" ]] || { printf 'unresolved\tunresolved'; return; }
+
+  version="$(jq -r '.crate.max_stable_version // empty' <<< "$document" 2> /dev/null)" || true
+  [[ -n "$version" ]] || { printf 'unresolved\tunresolved'; return; }
+
+  printf '%s\t%s' "$version" \
+    "$(jq -r --arg version "$version" \
+      'first(.versions[] | select(.num == $version) | .license) // "undeclared"' <<< "$document")"
+}
+
 # `--paginate` is insurance rather than a fix. Measured across every action this repository pins, this endpoint returns
 # the whole matching set in one response and carries no `Link` header — `github/codeql-action` answers with 403 refs and
 # `crate-ci/typos` with 355 — so the flag costs one request today exactly as its absence did. It is here because the
@@ -293,6 +345,47 @@ survey_nuget_pins() {
     done < <(grep -oE '<PackageVersion Include="[^"]+" Version="[^"]+"' "$pin_file" \
       | sed -E 's|<PackageVersion Include="([^"]+)" Version="([^"]+)"|\1\t\2|')
   done
+}
+
+# Every exact version the client workspace declares, from the root manifest and from each package's own. A workspace
+# link is written as `workspace:*` and a package this repository publishes nothing of has no upstream to read, so the
+# selection is on the value looking like a version rather than on a list of names to skip: this repository floats no
+# pin, which makes "starts with a digit" the whole of the distinction.
+survey_npm_pins() {
+  local manifest package_name pinned latest licence recorded
+
+  for manifest in "$client_workspace/package.json" "$client_workspace"/src/*/package.json; do
+    [[ -f "$manifest" ]] || continue
+
+    while IFS=$'\t' read -r package_name pinned; do
+      [[ -n "$package_name" ]] || continue
+
+      IFS=$'\t' read -r latest licence <<< "$(npm_latest "$package_name")"
+      recorded="$(register_recorded_licences "$package_name")"
+
+      record 'npm' "$package_name" "$pinned" "$latest" "$licence" "$recorded" "$manifest" "$manifest"
+    done < <(jq -r '((.dependencies // {}) + (.devDependencies // {}))
+      | to_entries[] | select(.value | test("^[0-9]")) | "\(.key)\t\(.value)"' "$manifest")
+  done
+}
+
+# The desktop shell's direct crates. Both are written as `=<version>` because Cargo reads a bare `"2"` as a caret range
+# and this repository floats no pin, so the leading `=` is part of the syntax rather than part of the version. The Tauri
+# CLI rewrites either entry to the table form on any `dev` or `build`, which is why both shapes are read.
+survey_crate_pins() {
+  local crate_name pinned latest licence recorded
+
+  [[ -f "$desktop_manifest" ]] || return 0
+
+  while IFS=$'\t' read -r crate_name pinned; do
+    [[ -n "$crate_name" ]] || continue
+
+    IFS=$'\t' read -r latest licence <<< "$(crate_latest "$crate_name")"
+    recorded="$(register_recorded_licences "$crate_name")"
+
+    record 'crates' "$crate_name" "$pinned" "$latest" "$licence" "$recorded" "$desktop_manifest" "$desktop_manifest"
+  done < <(grep -oE '^[A-Za-z0-9_-]+ = (\{ *version = )?"=[^"]+"' "$desktop_manifest" \
+    | sed -E 's|^([A-Za-z0-9_-]+) = (\{ *version = )?"=([^"]+)"|\1\t\3|')
 }
 
 survey_tool_manifest() {
@@ -636,6 +729,8 @@ report() {
 
     case "$family" in
       nuget) heading='Package pins' ;;
+      npm) heading='Client package pins' ;;
+      crates) heading='Desktop crate pins' ;;
       tools) heading='Tool manifest' ;;
       sdk) heading='MSBuild SDK pins' ;;
       sdk-floor) heading='.NET SDK floor — surveyed, never rewritten' ;;
@@ -696,7 +791,7 @@ rewrite_pin() {
   local -a touched=()
 
   case "$family" in
-    nuget | tools | sdk) touched=("$source") ;;
+    nuget | npm | crates | tools | sdk) touched=("$source") ;;
     actions) mapfile -t touched < <(grep -rlF "uses: $component" "$workflow_directory" 2> /dev/null || true) ;;
     *) return 1 ;;
   esac
@@ -708,6 +803,22 @@ rewrite_pin() {
   case "$family" in
     nuget)
       sed -i -E "s#(<PackageVersion Include=\"$(as_pattern "$component")\" Version=\")$(as_pattern "$pinned")(\")#\1$(as_replacement "$latest")\2#" "$source"
+      ;;
+    npm)
+      # Whichever of the two tables declares it, and only that one: a manifest naming a package in both would be a
+      # defect of its own, and writing the key into a table that does not have it would create one here.
+      temporary="$work_directory/client-manifest.json"
+      jq --indent 2 --arg name "$component" --arg version "$latest" \
+        'if .dependencies[$name]? then .dependencies[$name] = $version else . end
+         | if .devDependencies[$name]? then .devDependencies[$name] = $version else . end' \
+        "$source" > "$temporary"
+      mv "$temporary" "$source"
+      ;;
+    crates)
+      # Three groups rather than two, because the optional `{ version = ` between the name and the pin is one of them.
+      sed -i -E \
+        "s#(^$(as_pattern "$component") = (\{ *version = )?\"=)$(as_pattern "$pinned")(\")#\1$(as_replacement "$latest")\3#" \
+        "$source"
       ;;
     tools)
       temporary="$work_directory/tools.json"
@@ -735,7 +846,7 @@ rewrite_pin() {
 }
 
 apply_moved_pins() {
-  local family component pinned latest source applied=0 skipped=0 packages_moved='false'
+  local family component pinned latest source applied=0 skipped=0
 
   if [[ ! -s "$moved" ]]; then
     printf '\nNothing is behind. No pin was rewritten.\n'
@@ -757,11 +868,6 @@ apply_moved_pins() {
       printf '  rewritten   %-48s %s -> %s\n' "$component" "$pinned" "$latest"
       printf '%s\t%s\t%s\t%s\t%s\n' "$family" "$component" "$pinned" "$latest" "$source" >> "$rewritten"
       applied=$((applied + 1))
-      # Only a package version changes what a restore resolves. A tool manifest is restored on its own and an action
-      # reference reaches no project, so neither obliges a lock file and neither is worth a four-minute restore.
-      case "$family" in
-        nuget | sdk) packages_moved='true' ;;
-      esac
     else
       printf '  failed      %-48s %s -> %s\n' "$component" "$pinned" "$latest"
       skipped=$((skipped + 1))
@@ -770,44 +876,106 @@ apply_moved_pins() {
 
   printf '\n%d rewritten, %d left for a person.\n' "$applied" "$skipped"
 
-  if [[ "$packages_moved" == 'true' ]]; then
-    regenerate_lock_files
-  fi
+  regenerate_lock_files
+}
+
+# The tool a family's lock file belongs to, or nothing where the family has none. A tool manifest is restored on its own
+# and an action reference reaches no project, so neither obliges a lock file and neither is worth waiting for one.
+lock_tool_for() {
+  case "$1" in
+    nuget | sdk) printf 'dotnet' ;;
+    npm) printf 'pnpm' ;;
+    crates) printf 'cargo' ;;
+  esac
 }
 
 # Central pinning fixes the direct versions and the committed lock files fix the transitive closure those versions
-# resolve to, so the two are one decision recorded in two places and both move in the same change. Restore runs in
-# locked mode everywhere it is gated, which is what makes a stale lock file fail with NU1004 rather than resolve
-# something nobody reviewed.
+# resolve to, so the two are one decision recorded in two places and both move in the same change. Every gated install
+# runs in a locked mode, which is what makes a stale lock file fail — NU1004 for the service, a frozen-lockfile refusal
+# for the client — rather than resolve something nobody reviewed.
+#
+# Read from what `--apply` actually wrote rather than from what moved, so a family whose rewrite failed does not send
+# its tool looking for a change that is not there. Each ecosystem's tool is required only when that ecosystem moved,
+# which is why none of the three is among the commands the run refuses to start without: a survey answers on a machine
+# that has never built this repository.
 regenerate_lock_files() {
-  local solution
+  local family component pinned latest source solution crate
+  local -a moved_crates=()
+  local dotnet_moved='false' pnpm_moved='false'
+
+  [[ -s "$rewritten" ]] || return 0
+
+  while IFS=$'\t' read -r family component pinned latest source; do
+    case "$(lock_tool_for "$family")" in
+      dotnet) dotnet_moved='true' ;;
+      pnpm) pnpm_moved='true' ;;
+      cargo) moved_crates+=("$component") ;;
+    esac
+  done < "$rewritten"
+
+  if [[ "$dotnet_moved" != 'true' && "$pnpm_moved" != 'true' ]] && ((${#moved_crates[@]} == 0)); then
+    return 0
+  fi
 
   printf '\n== Regenerating the lock files ==\n'
 
-  # Only this path needs the SDK, which is why it is not among the commands the run refuses to start without: a survey
-  # answers on a machine that has never restored this repository.
-  if ! command -v dotnet > /dev/null 2>&1; then
-    printf '\nThe pins are written and the lock files are not: dotnet is not on the path.\n' >&2
-    exit 1
+  if [[ "$dotnet_moved" == 'true' ]]; then
+    require_lock_tool 'dotnet'
+
+    for solution in "$backend_solution"; do
+      [[ -f "$solution" ]] || continue
+
+      printf '  %s\n' "$solution"
+
+      if ! dotnet restore "$solution" --force-evaluate; then
+        printf '\nThe restore of %s failed. The pins are written; the lock files are not.\n' "$solution" >&2
+        exit 1
+      fi
+    done
   fi
 
-  for solution in "$backend_solution"; do
-    [[ -f "$solution" ]] || continue
+  if [[ "$pnpm_moved" == 'true' ]]; then
+    require_lock_tool 'pnpm'
 
-    printf '  %s\n' "$solution"
+    printf '  %s/pnpm-lock.yaml\n' "$client_workspace"
 
-    if ! dotnet restore "$solution" --force-evaluate; then
-      printf '\nThe restore of %s failed. The pins are written; the lock files are not.\n' "$solution" >&2
+    # The lock file and nothing else. A full install would also write `node_modules`, which is a machine's own state
+    # rather than part of the change, and a survey has no business creating one.
+    if ! pnpm --dir "$client_workspace" install --lockfile-only; then
+      printf '\nThe pnpm resolution failed. The pins are written; the lock file is not.\n' >&2
       exit 1
     fi
-  done
+  fi
+
+  if ((${#moved_crates[@]} > 0)); then
+    require_lock_tool 'cargo'
+
+    printf '  %s\n' "${desktop_manifest%/*}/Cargo.lock"
+
+    # Named crate by crate rather than as one bare `cargo update`, which would re-resolve all four hundred and rewrite
+    # a closure the register records as a census somebody read. What is wanted here is the lock agreeing with the pin
+    # that moved and nothing else moving with it.
+    for crate in "${moved_crates[@]}"; do
+      if ! cargo update --manifest-path "$desktop_manifest" --package "$crate"; then
+        printf '\nThe Cargo resolution of %s failed. The pins are written; the lock file is not.\n' "$crate" >&2
+        exit 1
+      fi
+    done
+  fi
+}
+
+require_lock_tool() {
+  command -v "$1" > /dev/null 2>&1 && return 0
+
+  printf '\nThe pins are written and the lock files are not: %s is not on the path.\n' "$1" >&2
+  exit 1
 }
 
 # Read from what `--apply` wrote rather than from what the survey found behind, and reached only after it ran. The
 # register records the versions this repository carries, so a pin nothing rewrote obliges it nothing: naming one here
 # would send a reader to edit a row that is still true.
 report_register_obligations() {
-  local family component pinned latest source lines
+  local family component pinned latest source lines client_moved='false'
 
   [[ -s "$rewritten" ]] || return 0
 
@@ -821,7 +989,19 @@ report_register_obligations() {
     # without its reference. Nothing else in a component name carries an `@`.
     lines="$(register_lines_naming "${component%@*}" "$pinned")"
     printf '  %-52s %s:%s\n' "${component%@*} $pinned" "$register_file" "$lines"
+
+    case "$family" in
+      npm | crates) client_moved='true' ;;
+    esac
   done < "$rewritten"
+
+  if [[ "$client_moved" == 'true' ]]; then
+    printf '\n'
+    printf '%s\n' 'A client pin moved, so the closure behind it resolved again. The register records each of the two'
+    printf '%s\n' 'closures as a census — how many packages, under which terms, and which of them carry a condition — and'
+    printf '%s\n' 'nothing above recomputes one. Re-run the enumeration commands in § How the inventory is produced and'
+    printf '%s\n' 'read the result against § The client'"'"'s two dependency closures before calling the row done.'
+  fi
 }
 
 ### The run.
@@ -829,6 +1009,8 @@ report_register_obligations() {
 printf 'Reading every pin in %s against its upstream.\n' "$repository_root"
 
 selected 'nuget' && survey_nuget_pins
+selected 'npm' && survey_npm_pins
+selected 'crates' && survey_crate_pins
 selected 'tools' && survey_tool_manifest
 selected 'sdk' && survey_sdk_pins
 selected 'actions' && survey_action_references

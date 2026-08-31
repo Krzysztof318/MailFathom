@@ -52,9 +52,13 @@ exactly as `Directory.Packages.props` and the `packages.lock.json` files are for
 - `.npmrc` declares the registry, for the reason `NuGet.config` clears its inherited source list. Adding a second source
   is a supply-chain decision with a licence review, never a line added to make an install work.
 - A new package needs an entry in `THIRD_PARTY_LICENSES.md`, per artifact, under
-  [ADR 0016](../docs/decisions/0016-third-party-licence-obligations-per-artifact.md). `scripts/update-dependencies.sh`
-  does not read this pin family yet, so a client pin is surveyed by hand until it does — noticing one is behind is a
-  sentence in the report and an issue of its own, never a line in an unrelated diff.
+  [ADR 0016](../docs/decisions/0016-third-party-licence-obligations-per-artifact.md). Name it by its **package
+  identifier** — `react-dom`, not _ReactDOM_ — because that is what a manifest, a registry, and the survey all read.
+  `scripts/update-dependencies.sh --only npm` reads this family and `--only crates` the one below, so noticing a pin is
+  behind is a sentence in the report and an issue of its own, never a line in an unrelated diff.
+- A pin that moves costs the register a second thing the service's does not. Both client closures are recorded there as
+  a census as well as a row — § _The client's two dependency closures_ — and nothing recomputes one, so re-run that
+  section's enumeration commands in the same change and write what they printed.
 - `package.json`'s `version` field is inert, and so is `Cargo.toml`'s, which the desktop shell therefore omits.
   `<VersionPrefix>` in `Version.props` is the only application version number in this repository:
   `Client.App/vite.config.ts` is how it reaches the bundle, and `src-tauri/run-tauri.ts` is how it reaches the desktop
@@ -64,7 +68,8 @@ exactly as `Directory.Packages.props` and the `packages.lock.json` files are for
   `src-tauri/run-tauri.ts` hands Cargo `--locked` for the reason `--frozen-lockfile` is passed to pnpm — so a manifest
   that has moved away from the lock file stops `pnpm desktop:dev` and `pnpm desktop:build` rather than being resolved
   into a rewritten one. Nothing else holds that: a `cargo` command run by hand updates the lock file as Cargo always
-  does, and neither verification gate reaches the crate graph at all.
+  does, and neither verification gate reaches the crate graph at all. `scripts/update-dependencies.sh --only crates`
+  reads both pins against crates.io and against the terms the register recorded for them.
 
 Four things the client is often assumed to need are absent, and each stays absent until a change argues for it: a
 component library, which ADR 0021 excluded deliberately; a router; a state container; and a data-fetching library.
