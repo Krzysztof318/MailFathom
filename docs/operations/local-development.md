@@ -1,6 +1,6 @@
 # Local development
 
-<!-- describes: scripts/**, global.json, MailFathom.code-workspace, .config/dotnet-tools.json, .config/typos.toml, .config/CodeCoverage.proj, .config/testconfig.json, backend/src/AppHost/**, backend/src/Infrastructure/Persistence/MailFathomDbContextDesignTimeFactory.cs, .github/workflows/**, backend/tests/IntegrationTests/ProviderAdapters/**, backend/tests/IntegrationTests/ObjectStorage/**, backend/tools/**, frontend/package.json, frontend/pnpm-workspace.yaml, frontend/.npmrc, frontend/tsconfig.base.json, frontend/tsconfig.json, frontend/eslint.config.ts, frontend/vitest.config.ts, frontend/playwright.config.ts -->
+<!-- describes: scripts/**, global.json, MailFathom.code-workspace, .config/dotnet-tools.json, .config/typos.toml, .config/CodeCoverage.proj, .config/testconfig.json, backend/src/AppHost/**, backend/src/Infrastructure/Persistence/MailFathomDbContextDesignTimeFactory.cs, .github/workflows/**, backend/tests/IntegrationTests/ProviderAdapters/**, backend/tests/IntegrationTests/ObjectStorage/**, backend/tools/**, frontend/package.json, frontend/pnpm-workspace.yaml, frontend/.npmrc, frontend/tsconfig.base.json, frontend/tsconfig.json, frontend/eslint.config.ts, frontend/vitest.config.ts, frontend/playwright.config.ts, frontend/src-tauri/** -->
 
 Use the .NET SDK pinned in `global.json`. Test execution is configured for Microsoft Testing Platform through the repository-level `global.json` test runner setting.
 
@@ -863,6 +863,44 @@ Four things around those commands are worth knowing before they are discovered:
   `/api/client` is an endpoint of its own — [the client endpoint](client-endpoint.md) is the page — and `Host` serves
   whatever files an image carries beneath its web root. No current image carries any, so a deployment that switches
   the client application on is refused at startup by name.
+
+### Building the desktop head
+
+The commands above need Node and pnpm and nothing else. The desktop head needs **a Rust toolchain and the platform's
+WebView development packages as well**, because ADR 0021 chose Tauri, which links the shell in Rust and renders in the
+WebView the operating system supplies rather than in one MailFathom ships. A contributor who only touches a screen
+never installs either: `pnpm build` produces the web bundle without them, and only the two commands below reach the
+crate graph.
+
+```bash
+cd frontend
+pnpm desktop:dev     # the shell around the development server, at http://localhost:5173
+pnpm desktop:build   # the release application and the installers named in tauri.conf.json
+```
+
+**Rust comes from [`rustup`](https://rustup.rs/)**, on the stable channel, and the shell builds on the 2024 edition —
+so a toolchain older than Rust 1.85 refuses `frontend/src-tauri/Cargo.toml` before it reaches a dependency. Nothing
+pins the Rust version the way `global.json` pins the SDK: `Cargo.lock` fixes the crate closure, and the compiler is
+whatever stable a machine has.
+
+**The WebView packages are the part that fails obscurely.** Tauri's build reads them through `pkg-config`, so a
+machine without them stops in a `-sys` crate rather than in anything named after a browser — the error names
+`glib-sys`, `gobject-sys`, `javascriptcore-rs-sys`, or `webkit2gtk-sys`, and says a package configuration file could
+not be found. That is a missing development package every time, never a Rust or a Tauri defect.
+
+| Platform | What to install |
+| --- | --- |
+| Debian and Ubuntu | `libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev` |
+| Fedora | `webkit2gtk4.1-devel openssl-devel curl wget file libappindicator-gtk3-devel librsvg2-devel libxdo-devel gcc gcc-c++ make` |
+| Arch | `webkit2gtk-4.1 base-devel curl wget file openssl appmenu-gtk-module libappindicator-gtk3 librsvg xdotool` |
+| Windows | The **Microsoft C++ Build Tools** with the *Desktop development with C++* workload, and **WebView2**, which Windows 10 1803 and later already carry — install the Evergreen Bootstrapper on anything older |
+
+Two more things a Windows machine needs, and neither is Tauri's: **Git Bash on the path**, because both builds read
+the declared version by running `scripts/read-declared-version.sh`, and the **MSVC Rust toolchain** rather than the
+GNU one, which is what `rustup` installs there by default.
+
+`frontend/README.md` is where the shell itself is described — what it owns, where each of its decisions is written
+down, and why the version reaches it as a configuration patch rather than as a number in a manifest.
 
 ## Code coverage
 

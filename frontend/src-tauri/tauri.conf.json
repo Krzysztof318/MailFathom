@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "MailFathom",
+  "identifier": "io.github.krzysztof318.mailfathom",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../src/Client.App/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "MailFathom",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 480,
+        "minHeight": 640
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["deb", "rpm", "appimage", "nsis"],
+    "category": "Productivity",
+    "shortDescription": "A brain for your mail — self-hosted, AI-native, and yours alone.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.ico"
+    ]
+  }
+}

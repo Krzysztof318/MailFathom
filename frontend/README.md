@@ -1,19 +1,26 @@
 # The client workspace
 
-`frontend/` is a [pnpm](https://pnpm.io/) workspace holding the two packages the MailFathom client is split into. It
-shares no build file and no configuration file with the service under `backend/`; the two meet only over the HTTP API
-served beneath `/api/client`, which [the client endpoint](../docs/operations/client-endpoint.md) describes.
+`frontend/` is a [pnpm](https://pnpm.io/) workspace holding the two packages the MailFathom client is split into, and
+`src-tauri/` beside them holding the desktop shell that wraps what they build. It shares no build file and no
+configuration file with the service under `backend/`; the two meet only over the HTTP API served beneath
+`/api/client`, which [the client endpoint](../docs/operations/client-endpoint.md) describes.
 
 ```bash
 pnpm install --frozen-lockfile   # restore, refusing to rewrite pnpm-lock.yaml
 pnpm dev                         # the development server
 pnpm build                       # the static bundle, into src/Client.App/dist/
+pnpm desktop:dev                 # the desktop shell around that server, rebuilt as the shell changes
+pnpm desktop:build               # the desktop application and its installers
 pnpm typecheck                   # both packages and eslint.config.ts, under the strict set below
 pnpm lint                        # every rule an error, no warning tolerated
 pnpm test                        # both packages' suites, once, non-interactively
 pnpm test:browser                # build the bundle and drive it in a real browser
 pnpm format                      # rewrite; pnpm format:check reports instead
 ```
+
+The two `desktop:` commands need a Rust toolchain and the platform's WebView development packages, which the other
+five do not. [Local development](../docs/operations/local-development.md) has them and names the failure a missing one
+produces.
 
 `packageManager` in `package.json` names the pnpm version this lock file was written by, and `engines` the Node
 version the toolchain is run under. Corepack no longer ships with Node, so `pnpm` comes from a global install and that
@@ -41,6 +48,44 @@ beside it:
 `Client.Backend` therefore names no HTTP API of its own. It publishes a `MailFathomTransport` — a function from a
 request to a response — and `Client.App` supplies the adapter that calls one. That is the boundary's consequence
 rather than an abstraction kept in case a second transport appears.
+
+## The desktop shell, and why it is not a third package
+
+`src-tauri/` is a Rust crate rather than a workspace package, and it sits beside `src/` rather than inside it because
+it is not application source: `frontend/src/` is TypeScript throughout and holds what both heads render, while the
+shell holds what only one of them has. It owns the window, the application identity, and the installers — nothing
+else. A screen is written once and reaches the web head and the desktop head unchanged, which is the property ADR 0021
+chose Tauri for; a platform difference that genuinely exists belongs here or in one stated rule in `styles.css`, and
+never in a component.
+
+`src/main.rs` is the whole of it. There is no library target beside it, no command registered, and no capability file:
+the application calls into Rust nowhere, so granting the webview a permission would be granting reach nothing asked
+for. The first command to exist is what adds both.
+
+| What                                                                | Where it is decided                                                                   |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Product name, application identifier, window title and minimum size | `src-tauri/tauri.conf.json`                                                           |
+| The version the application reports                                 | `<VersionPrefix>` in `Version.props`, merged in by `src-tauri/run-tauri.ts`           |
+| Which crates the shell links, and at which versions                 | `src-tauri/Cargo.toml`, resolved into the committed `Cargo.lock`                      |
+| The icon every bundle carries                                       | `src-tauri/icons/`, generated from `assets/icon-1254.png` with `pnpm exec tauri icon` |
+
+**The version is never typed into a manifest.** `tauri.conf.json` carries no `version` and neither does `Cargo.toml`;
+`run-tauri.ts` reads `scripts/read-declared-version.sh` and hands the answer to the Tauri CLI as a configuration
+patch, which is how the image gets its tag and the chart its `appVersion`. So `pnpm desktop:build` stamps the same
+number the service reports, and `cargo build` run on its own produces `0.0.0` rather than a number that looks right
+and is not.
+
+**The bundle formats are chosen rather than defaulted.** Tauri's own default is every format the host can produce, so
+`bundle.targets` names four instead: `deb` and `rpm`, because a native package is what a Linux user installs and
+removes through their own package manager and those are the two families that covers; `appimage`, because everything
+outside those two families otherwise has no answer; and `nsis` on Windows, because it installs per user without
+administrator rights and one Windows installer is enough. An `msi` is deliberately absent. macOS is not built at all,
+which is why `icons/` carries no `.icns`.
+
+`pnpm desktop:dev` starts the Vite development server and points the shell at `http://localhost:5173`, so a change to
+a screen reloads in the desktop window exactly as it does in a browser tab. That address is Vite's default port, and a
+second development server already holding it moves to another one — at which point the window stays blank until the
+first is stopped.
 
 ## TypeScript only, at the strictest setting
 

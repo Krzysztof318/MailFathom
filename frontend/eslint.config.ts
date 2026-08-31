@@ -23,7 +23,10 @@ const readOutAttributeMessage =
     'This attribute is read out to somebody, so it is a user-visible string: put it in src/Client.App/src/localization/en.ts and pass translate() to it.';
 
 export default defineConfig(
-    globalIgnores(['**/dist/**']),
+    // `dist/` is what the client build writes, and `src-tauri/target/` and `src-tauri/gen/` are what the desktop
+    // shell's build writes; none of the three is source, and the crate target directory alone is larger than
+    // everything this workspace actually holds.
+    globalIgnores(['**/dist/**', 'src-tauri/target/**', 'src-tauri/gen/**']),
     js.configs.recommended,
     {
         // Type-aware linting, which reads the `tsconfig.json` nearest each file: one per package, and the workspace's

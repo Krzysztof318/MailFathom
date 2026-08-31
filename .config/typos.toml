@@ -1,3 +1,7 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
 # Configuration for `typos`, which the `Typo check` workflow is the only thing to run.
 #
 # It sits here rather than at the repository root, beside the other files that decide what a check

@@ -1,0 +1,28 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+# The desktop head's crate, and the third toolchain ADR 0021 accepted when it chose Tauri.
+#
+# It carries no `version`. Tauri falls back to this one only when the configuration names none, and `run-tauri.ts`
+# always merges `<VersionPrefix>` from `Version.props` in, so a number written here would be a second declaration free
+# to disagree with the one the service reports. Cargo defaults an omitted version to `0.0.0`, which is what a build
+# run without that wrapper is then honestly labelled.
+#
+# Both pins are exact. Cargo reads a bare `"2"` as a caret range, and this repository floats no pin in either stack:
+# `Cargo.lock` beside this file fixes the closure the way `pnpm-lock.yaml` and the `packages.lock.json` files do, and
+# the manifest states what was reviewed rather than what was compatible.
+#
+# The empty `features` lists are the Tauri CLI's, not a style choice: it rewrites both entries to the table form on
+# every `dev` and `build` because it owns which Tauri features a given command needs. Written any other way, the first
+# desktop build leaves a modified manifest behind and the full gate refuses the working tree.
+[package]
+name = "mailfathom-desktop"
+edition = "2024"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "=2.6.3", features = [] }
+
+[dependencies]
+tauri = { version = "=2.11.5", features = [] }
