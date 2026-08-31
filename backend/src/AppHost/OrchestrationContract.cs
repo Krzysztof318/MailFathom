@@ -286,6 +286,79 @@ public static class OrchestrationContract
     /// <summary>The EF Core migration tool resource.</summary>
     public const string MigrationsResourceName = "mailfathom-migrations";
 
+    /// <summary>The MailFathom client resource, which serves the client beside the service it calls.</summary>
+    /// <remarks>
+    /// <para>
+    /// An executable resource, because the client is a Vite development server started by the workspace's package
+    /// manager rather than anything MSBuild builds. A project resource would need a project, and no project under
+    /// <c>frontend/</c> enters <c>backend/MailFathom.slnx</c> — what the app model reaches into the other stack with is
+    /// a directory and a command.
+    /// </para>
+    /// <para>
+    /// Present only in a developer's topology. The integration suite starts this same app model to test the service,
+    /// and a development server there would install a package graph on every run that no test reads.
+    /// </para>
+    /// </remarks>
+    public const string ClientResourceName = "mailfathom-client";
+
+    /// <summary>The client workspace's directory, relative to the app host's own.</summary>
+    /// <remarks>
+    /// A path rather than a reference, which is the whole of what the app model asks of the other stack: MSBuild is
+    /// never told the two are related, so <c>backend/MailFathom.slnx</c> still names nothing under <c>frontend/</c> and
+    /// building or testing the service restores no JavaScript. What the app host holds is a directory it starts a
+    /// process in.
+    /// </remarks>
+    public const string ClientWorkspaceDirectory = "../../../frontend";
+
+    /// <summary>The command the client's development server is started through.</summary>
+    /// <remarks>
+    /// The workspace's own package manager, which <c>frontend/package.json</c> declares under <c>packageManager</c>,
+    /// and the one thing this resource needs that the .NET SDK does not bring. A machine without it fails on this
+    /// resource alone — nothing waits for the client — while PostgreSQL, the migrations, and the host still start.
+    /// </remarks>
+    public const string ClientPackageManagerCommand = "pnpm";
+
+    /// <summary>The workspace script that starts the client's development server.</summary>
+    /// <remarks>
+    /// The script <c>frontend/package.json</c> declares, run from the workspace root rather than from the application
+    /// package, so what the orchestration starts is the command a developer would type. It forwards the arguments below
+    /// through the workspace filter to Vite unchanged.
+    /// </remarks>
+    public const string ClientDevelopmentServerScript = "dev";
+
+    /// <summary>The argument the client's development server takes the address it binds from.</summary>
+    public const string ClientDevelopmentServerHostArgument = "--host";
+
+    /// <summary>The argument the client's development server takes the port it binds from.</summary>
+    public const string ClientDevelopmentServerPortArgument = "--port";
+
+    /// <summary>The argument that makes the development server fail rather than move when its port is taken.</summary>
+    /// <remarks>
+    /// Vite otherwise looks for the next free port, which would serve the client somewhere the app model never
+    /// published — so the dashboard would link a socket nothing answers on while the page was alive elsewhere. Failing
+    /// says which port was wanted, which is the answer a pinned port needs.
+    /// </remarks>
+    public const string ClientDevelopmentServerStrictPortArgument = "--strictPort";
+
+    /// <summary>The endpoint the client's development server serves the page on.</summary>
+    public const string ClientHttpEndpointName = "http";
+
+    /// <summary>The environment variable the client reads the service's client surface address from.</summary>
+    /// <remarks>
+    /// <para>
+    /// Handed to the development server's own process rather than to a build, which is what the React stack made
+    /// possible: Vite exposes every <c>VITE_</c>-prefixed variable of its process environment on
+    /// <c>import.meta.env</c>, so the address a run took reaches the page the server serves without a property, a
+    /// generated file, or a rebuild. <c>frontend/src/Client.App/src/environment.d.ts</c> is where the client declares
+    /// it.
+    /// </para>
+    /// <para>
+    /// The prefix is Vite's own boundary rather than a convention: a variable without it is deliberately withheld from
+    /// the bundle, so renaming this to something unprefixed would leave the page reading nothing.
+    /// </para>
+    /// </remarks>
+    public const string ClientServiceAddressVariable = "VITE_MAILFATHOM_SERVICE_ADDRESS";
+
     /// <summary>The address a developer's own machine serves the service's own surfaces on.</summary>
     /// <remarks>
     /// Loopback, because a development run authenticates nobody on the MCP and administrative surfaces and its client
@@ -617,6 +690,27 @@ public static class OrchestrationContract
     /// </remarks>
     public const string PinnedClientEndpointPortKey = "Ports:ClientEndpoint";
 
+    /// <summary>The configuration key a developer states the client's development server port under to pin it.</summary>
+    /// <remarks>Read the way <see cref="PinnedMcpEndpointPortKey" /> is. Pinning it is what a bookmarked browser tab wants; leaving it unset is what lets a second checkout serve a client of its own.</remarks>
+    public const string PinnedClientPortKey = "Ports:Client";
+
+    /// <summary>The configuration key a developer states <see langword="false" /> under to run the orchestration without the client.</summary>
+    /// <remarks>
+    /// <para>
+    /// Starting the client needs Node and <see cref="ClientPackageManagerCommand" />, which the .NET SDK does not
+    /// bring. That is a fact about one machine rather than about this repository, so it is stated where the pinned
+    /// ports are — the app host's own user secrets, out of every checkout — and its environment form,
+    /// <c>Client__Enabled</c>, is what leaves the client out of a single run.
+    /// </para>
+    /// <para>
+    /// Read from configuration rather than from the argument list, unlike <see cref="IntegrationTestingArgument" />,
+    /// and the difference is what each one decides. The argument selects a topology, so an ambient value could divert
+    /// an ordinary run onto the ephemeral database; this removes one resource from a topology already selected, which
+    /// is a thing a developer who set it meant and a thing no other run is harmed by.
+    /// </para>
+    /// </remarks>
+    public const string ClientEnabledKey = "Client:Enabled";
+
     /// <summary>The fixed configuration a normal local run supplies beside its interactive mailbox values.</summary>
     /// <remarks>
     /// Every listener is restricted to loopback because the MCP and administrative surfaces deliberately authenticate
@@ -749,6 +843,45 @@ public static class OrchestrationContract
 
         return port;
     }
+
+    /// <summary>Reads whether this run starts the client, from the value configuration holds under <see cref="ClientEnabledKey" />.</summary>
+    /// <param name="statedValue">The value configuration holds under that key, or <see langword="null" /> when it holds none.</param>
+    /// <returns><see langword="true" /> unless the developer stated otherwise, which is what makes one command bring up a working MailFathom.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when a stated value is not a boolean.</exception>
+    /// <remarks>
+    /// A stated value that is not a boolean is refused rather than ignored, for the reason an unusable pinned port is:
+    /// a developer who wrote <c>0</c> or <c>no</c> asked for the client to stay out of the run, and starting it anyway
+    /// would run a toolchain they were avoiding while nothing said why.
+    /// </remarks>
+    public static bool ResolveClientEnabled(string? statedValue)
+    {
+        if (string.IsNullOrWhiteSpace(statedValue))
+        {
+            return true;
+        }
+
+        var statedBoolean = statedValue.Trim();
+
+        if (!bool.TryParse(statedBoolean, out var clientEnabled))
+        {
+            throw new InvalidOperationException(
+                $"{ClientEnabledKey} is '{statedBoolean}', which is not true or false. State one of those, or leave it unset to start the client with the rest of the orchestration.");
+        }
+
+        return clientEnabled;
+    }
+
+    /// <summary>Composes the address the running client reaches the service's client surface at.</summary>
+    /// <param name="clientEndpointPort">The port this run serves the client surface on.</param>
+    /// <returns>The origin that surface answers on, with no trailing separator.</returns>
+    /// <remarks>
+    /// No trailing separator, because the client appends its own route prefix to this value: a base address ending in
+    /// one would compose <c>//api/client</c>, which the surface does not serve. Loopback for the reason
+    /// <see cref="DeveloperLoopbackAddress" /> gives, and it is the same address the surface binds, so the page reaches
+    /// the socket Kestrel opened rather than a spelling that resolves elsewhere.
+    /// </remarks>
+    public static string ResolveDevelopmentServiceAddress(int clientEndpointPort) =>
+        $"http://{DeveloperLoopbackAddress}:{clientEndpointPort.ToString(CultureInfo.InvariantCulture)}";
 
     /// <summary>Finds free TCP ports for the sockets the orchestration publishes without a proxy in front of them.</summary>
     /// <param name="count">How many ports the caller needs, which is how many sockets it declares.</param>

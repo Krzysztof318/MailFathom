@@ -206,6 +206,7 @@ public sealed class OrchestrationContractTests
             OrchestrationContract.PinnedHealthEndpointsPortKey,
             OrchestrationContract.PinnedPostgresPortKey,
             OrchestrationContract.PinnedClientEndpointPortKey,
+            OrchestrationContract.PinnedClientPortKey,
         ];
 
         // Assert
@@ -362,11 +363,12 @@ public sealed class OrchestrationContractTests
 
     /// <summary>The address the client and the service are wired together on is one nothing outside this machine reaches.</summary>
     /// <remarks>
-    /// The one property of that constant the compiler cannot state. Three things are built from it — the socket the
-    /// client's development server binds, the endpoint Aspire publishes, and the address the head is built to call —
-    /// so a value that stopped being loopback would publish a Debug WebAssembly bundle to every interface of a
-    /// developer's machine without any of the three disagreeing about it. CORS is not the fourth: the local topology
-    /// leaves <c>ClientEndpoint:Cors:AllowedOrigins</c> unstated, which is the product default of every origin.
+    /// The one property of that constant the compiler cannot state. Four things are built from it — the sockets the
+    /// host binds, the socket the client's development server binds, the endpoint Aspire publishes for it, and the
+    /// address the client is handed — so a value that stopped being loopback would serve a development build to every
+    /// interface of a developer's machine without any of the four disagreeing about it. CORS is not the fifth: the
+    /// local topology leaves <c>ClientEndpoint:Cors:AllowedOrigins</c> unstated, which is the product default of every
+    /// origin.
     /// </remarks>
     [Fact]
     public void DeveloperLoopbackAddress_IsAnAddressOnlyThisMachineReaches()
@@ -393,6 +395,126 @@ public sealed class OrchestrationContractTests
         // Act, Assert
         Assert.DoesNotContain("ClientEndpoint__Cors__AllowedOrigins", program, StringComparison.Ordinal);
         Assert.DoesNotContain("AdminEndpoint__Cors__AllowedOrigins", program, StringComparison.Ordinal);
+    }
+
+    /// <summary>One command brings up a working MailFathom, so a checkout that states nothing gets the client.</summary>
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ResolveClientEnabled_NothingStated_StartsTheClient(string? statedValue)
+    {
+        // Act
+        var clientEnabled = OrchestrationContract.ResolveClientEnabled(statedValue);
+
+        // Assert
+        Assert.True(clientEnabled);
+    }
+
+    /// <summary>A machine without the client's toolchain leaves it out of every run, which is what the key is for.</summary>
+    [Theory]
+    [InlineData("false", false)]
+    [InlineData("False", false)]
+    [InlineData(" false ", false)]
+    [InlineData("true", true)]
+    public void ResolveClientEnabled_ValueStated_IsTheAnswerTheDeveloperWrote(string statedValue, bool expected)
+    {
+        // Act
+        var clientEnabled = OrchestrationContract.ResolveClientEnabled(statedValue);
+
+        // Assert
+        Assert.Equal(expected, clientEnabled);
+    }
+
+    /// <summary>A developer who wrote something else asked for the client to stay out, so the run says why rather than starting it.</summary>
+    [Theory]
+    [InlineData("0")]
+    [InlineData("1")]
+    [InlineData("no")]
+    [InlineData("off")]
+    [InlineData("disabled")]
+    public void ResolveClientEnabled_ValueIsNotABoolean_FailsNamingTheKey(string statedValue)
+    {
+        // Act
+        var failure = Assert.Throws<InvalidOperationException>(
+            () => OrchestrationContract.ResolveClientEnabled(statedValue));
+
+        // Assert
+        Assert.Contains(OrchestrationContract.ClientEnabledKey, failure.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>The address the client is handed is the surface's own origin, and the client appends its route prefix to it.</summary>
+    /// <remarks>
+    /// The trailing separator is the whole of what this establishes and nothing states it twice: the client composes a
+    /// request as the base address followed by <c>/api/client</c>, so a value ending in one would ask for a path the
+    /// surface does not serve — and the refusal would arrive as a route that does not exist rather than as an address
+    /// that was composed wrongly.
+    /// </remarks>
+    [Fact]
+    public void ResolveDevelopmentServiceAddress_TheClientSurfacePort_IsALoopbackOriginWithNoTrailingSeparator()
+    {
+        // Act
+        var address = OrchestrationContract.ResolveDevelopmentServiceAddress(8082);
+
+        // Assert
+        var parsed = new Uri(address, UriKind.Absolute);
+
+        Assert.Equal(OrchestrationContract.DeveloperLoopbackAddress, parsed.Host, StringComparer.Ordinal);
+        Assert.Equal(8082, parsed.Port);
+        Assert.Equal(Uri.UriSchemeHttp, parsed.Scheme, StringComparer.Ordinal);
+        Assert.False(address.EndsWith('/'));
+    }
+
+    /// <summary>The variable is one Vite will actually hand to the page rather than one it withholds.</summary>
+    /// <remarks>
+    /// Vite exposes only the prefixed part of its process environment on <c>import.meta.env</c>, deliberately, so a
+    /// name that lost the prefix would be written by the app model, carried by the development server, and read by
+    /// nothing — a client that reported no service rather than a run that failed.
+    /// </remarks>
+    [Fact]
+    public void ClientServiceAddressVariable_IsPrefixedSoTheDevelopmentServerExposesIt()
+    {
+        // Assert
+        Assert.StartsWith("VITE_", OrchestrationContract.ClientServiceAddressVariable, StringComparison.Ordinal);
+    }
+
+    /// <summary>The client is started from the workspace root rather than from a package inside it, and by path alone.</summary>
+    /// <remarks>
+    /// A relative path is what keeps the two stacks apart: the app model holds a directory it starts a process in, so
+    /// an absolute one taken from a machine, or a path that reached inside a package, would be the point at which the
+    /// boundary stopped being a directory and a command.
+    /// </remarks>
+    [Fact]
+    public void ClientWorkspaceDirectory_IsTheWorkspaceRootStatedRelativeToTheAppHost()
+    {
+        // Act
+        var directory = OrchestrationContract.ClientWorkspaceDirectory;
+
+        // Assert
+        Assert.False(Path.IsPathRooted(directory));
+        Assert.EndsWith("/frontend", directory, StringComparison.Ordinal);
+    }
+
+    /// <summary>The client is composed once, in the topology it belongs to, so a suite run starts no development server.</summary>
+    /// <remarks>
+    /// The integration suite starts this same app model, and the resource is added inside the branch that run does not
+    /// take. Nothing in the type system says so, and a second block copied into the ephemeral branch would install a
+    /// package graph on every suite run that no test reads — so what is asserted is that exactly one block composes it
+    /// and exactly one reads the switch in front of it.
+    /// </remarks>
+    [Fact]
+    public void Program_TheClientResource_IsComposedOnceBehindTheSwitchThatSelectsIt()
+    {
+        // Arrange
+        var program = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Build", "Program.cs"));
+
+        // Act
+        var resources = program.Split(nameof(OrchestrationContract.ClientResourceName)).Length - 1;
+        var switches = program.Split(nameof(OrchestrationContract.ClientEnabledKey)).Length - 1;
+
+        // Assert
+        Assert.Equal(1, resources);
+        Assert.Equal(1, switches);
     }
 
     private static string IdentifierOf(string prefix) =>
