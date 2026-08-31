@@ -329,10 +329,11 @@ Publication runs the gates instead, in an order that spends the cheap ones first
 2. **The client stack's build and browser suite, and the repository contracts**, both against the same commit and both
    beside the gate above rather than behind it: the two solutions share no project, and the contract suite installs
    nothing and answers in twenty seconds, so putting either in sequence would delay a verdict without sharpening one.
-   The client's gate blocks the push on both channels, and what it asserts is the browser suite: the client's bundle is
-   built and driven in a real browser, so a publication cannot carry a client that does not load. The image build below
-   compiles that bundle again on its own, which is what makes the dependency worth as much as the assertion — a client
-   that does not build is an image that does not build. The contract gate — the licensing headers, the page contracts, and the chart rendered against the
+   The client's gate blocks the push on both channels, and what it asserts is everything the full gate asks the client
+   — the linter, the type check, both packages' unit suites, and the build — plus the browser suite, which builds the
+   bundle and drives it, so a publication cannot carry a client that does not hold up or does not load. The image build
+   below compiles that bundle again on its own, which is what makes the dependency worth as much as the assertion — a
+   client that does not build is an image that does not build. The contract gate — the licensing headers, the page contracts, and the chart rendered against the
    manifests committed beside it — blocks a release and reports on a nightly, which is the same difference the
    vulnerability scan draws and for the same reason: a release is one claim about one commit, and a nightly exists to
    be tried.

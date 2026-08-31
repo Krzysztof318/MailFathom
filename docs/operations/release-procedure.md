@@ -293,9 +293,10 @@ No client is published as a download. The web client travels inside the containe
 image's own build and served from a deployment setting, so a release attaches no client archive: what an operator
 installs is the image. A desktop head is not built or attached here either — the Uno Platform one this release used to
 attach was withdrawn, and the Tauri replacement has not shipped. The client stack's gate is still called and still
-blocks the image, and what it asserts is the browser suite: the bundle is built and driven in a real browser, so a
-release cannot be cut over a client that does not load. The release notes still say there is no download to whoever is
-looking for one.
+blocks the image, and what it asserts is everything the full gate asks the client — the linter, the type check, both
+packages' unit suites, and the build — plus the browser suite, which builds the bundle and drives it, so a release
+cannot be cut over a client that does not hold up or does not load. The release notes still say there is no download to
+whoever is looking for one.
 
 The chart is published **after** the image and **against the digest it produced**, because a chart names the image it
 deploys: before pushing, the run renders the packaged chart against that digest and refuses to publish one that would

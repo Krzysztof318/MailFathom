@@ -149,21 +149,25 @@ jobs:
               - 'backend/Directory.Packages.props'
             # The client stack, which shares no solution, no build contract, and no package pins with the server —
             # so this filter names nothing under `backend/` and the three above name nothing under `frontend/`, which
-            # is what makes a change to one stack cost nothing in the other. What it does name beside `frontend/**` is
-            # everything above both stacks a client build reads: the SDK pin in `global.json`, the version both stacks
-            # stamp from `Version.props`, the feeds `NuGet.config` permits, the style rules `.editorconfig` turns into
-            # build failures, and `.config/`, which holds the banned-symbol list and the test-runner configuration.
-            # The list is kept whole while the client stack carries no build, because it is what the job it gates will
-            # read again and `scripts/resolve-changed-stacks.sh` is held to it either way.
+            # is what makes a change to one stack cost nothing in the other. Beside `frontend/**` it names exactly the
+            # files above both stacks that a client run actually reads: `Version.props`, which the bundle stamps its
+            # version from, and `scripts/read-declared-version.sh`, which is how `vite.config.ts` reads it; and
+            # `.editorconfig`, whose client section Prettier reads rather than restating, so a change there moves the
+            # formatting verdict on files nothing else touched.
+            #
+            # `global.json`, `NuGet.config`, and `.config/` were named here while the client stack carried no build of
+            # its own, on the argument that the job this gates would read them once it had one. It has one now and it
+            # reads none of them: the SDK floor, the NuGet feeds, the banned-symbol list, and the .NET test-runner
+            # configuration are the server's, and the client's own Node floor, registry, lint rules, and test
+            # configuration are all under `frontend/`. Naming them would spend a browser download and a bundle build on
+            # a change that cannot move either.
             frontend:
               - 'frontend/**'
-              - '.config/**'
               - '.editorconfig'
               - '.github/workflows/build-test-frontend.yml'
               - '.github/workflows/ci.yml'
-              - 'NuGet.config'
               - 'Version.props'
-              - 'global.json'
+              - 'scripts/read-declared-version.sh'
             # The chart, the values documents it is verified with, the manifests those render, and the script that
             # renders them. Nothing outside `deploy/helm/` reaches a rendering: the chart declares no dependency and
             # takes no version from the build — `helm package --app-version` supplies that at release time — so a
@@ -180,7 +184,7 @@ jobs:
   #
   # It is named after the stack it gates rather than after the act of gating, which is the whole of what
   # `Backend` buys over the `Verify` this job used to be called. A check arrives at a reader as one line —
-  # `Backend / dotnet format`, `Frontend / Client stack, which carries no build yet` — and that line is
+  # `Backend / dotnet format`, `Frontend / Check, build, and test the client` — and that line is
   # where a skipped job is either read as work the change could not reach or misread as a stack nobody
   # verified. Under the old name the two stacks were not comparable at a glance: `Verify` said which
   # question was asked and never which half of the repository it was asked about, so a client-only change
@@ -216,11 +220,11 @@ jobs:
   # draft — with both asked in the job's own condition rather than one of them passed inward, because there is a single
   # job on the other side and nothing for a switch to select between.
   #
-  # What that workflow asserts today is the browser suite: it builds the client's bundle and drives it in a real
-  # browser, which is the one check the client's own unit suite structurally cannot make. The linter, the type check,
-  # and the unit suites join it there under #1400. The draft exemption is kept for the reason the server's build has
-  # one — this is now an expensive job, downloading a browser and building a bundle — and the `frontend` filter above
-  # is what keeps a change that cannot reach the client from paying either cost.
+  # What that workflow asserts is everything `scripts/verify-full.sh` asks the client — the linter, the type check,
+  # both packages' unit suites, the formatting pass, and the build — plus the browser suite, which is the one check the
+  # client's own unit suite structurally cannot make. The draft exemption is kept for the reason the server's build has
+  # one — this is an expensive job, downloading a browser and building a bundle — and the `frontend` filter above is
+  # what keeps a change that cannot reach the client from paying either cost.
   frontend:
     name: Frontend
     needs:

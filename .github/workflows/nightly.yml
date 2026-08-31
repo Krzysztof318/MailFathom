@@ -178,9 +178,9 @@ jobs:
 
   # The client stack's half of the same gate, against the same revision and with the same one switch turned off. It is
   # a second job rather than a switch on the one above because the two stacks share no solution, no build contract,
-  # and no package pins. What it asserts today is the browser suite: the bundle is built and driven in a real browser,
-  # which is the client check no other job can make. The linter, the type check, and the unit suites join it there and
-  # gate this publication from the same call rather than from a change here.
+  # and no package pins. What it asserts is everything `scripts/verify-full.sh` asks the client — the linter, the type
+  # check, both packages' unit suites, and the build — plus the browser suite, which is the client check no other job
+  # can make. All of it gates this publication from that one call rather than from a change here.
   verify-client:
     name: Build and test the client
     needs:
@@ -260,9 +260,8 @@ jobs:
     needs:
       - decide
       - verify
-      # The client's own gate, which is where a client that does not compile is answered rather than twenty minutes
-      # into a multi-platform image build. It asserts nothing while the client stack carries no build; the dependency
-      # is what makes it gate again the moment it does.
+      # The client's own gate, which is where a client that does not lint, type-check, test, or build is answered
+      # rather than twenty minutes into a multi-platform image build.
       - verify-client
     if: needs.decide.outputs.publish == 'true'
     permissions:

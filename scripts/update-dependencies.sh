@@ -975,7 +975,7 @@ require_lock_tool() {
 # register records the versions this repository carries, so a pin nothing rewrote obliges it nothing: naming one here
 # would send a reader to edit a row that is still true.
 report_register_obligations() {
-  local family component pinned latest source lines client_moved='false'
+  local family component pinned latest source lines component_name client_moved='false'
 
   [[ -s "$rewritten" ]] || return 0
 
@@ -986,9 +986,14 @@ report_register_obligations() {
 
   while IFS=$'\t' read -r family component pinned latest source; do
     # An action is recorded above as the whole `owner/repo@ref` a workflow writes, and the register names the action
-    # without its reference. Nothing else in a component name carries an `@`.
-    lines="$(register_lines_naming "${component%@*}" "$pinned")"
-    printf '  %-52s %s:%s\n' "${component%@*} $pinned" "$register_file" "$lines"
+    # without its reference. That family is the only one where an `@` separates anything: in a scoped npm name it opens
+    # the scope and is the first character, so `%@*` would strip `@eslint/js` to nothing and hand
+    # `register_lines_naming` an empty pattern — which matches most of the register instead of the row the pin moved on.
+    component_name="$component"
+    [[ "$family" == 'actions' ]] && component_name="${component%@*}"
+
+    lines="$(register_lines_naming "$component_name" "$pinned")"
+    printf '  %-52s %s:%s\n' "$component_name $pinned" "$register_file" "$lines"
 
     case "$family" in
       npm | crates) client_moved='true' ;;

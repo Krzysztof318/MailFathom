@@ -196,12 +196,26 @@ deleting the last source file of a project moves what a solution builds as surel
 as editing one does, so both gates read `list_removed_or_renamed_paths` as well
 before they decide.
 
-Six entries appear in both filters, and that is the answer rather than an
-overlap to resolve: `global.json` pins the SDK, `.editorconfig` becomes a build
-failure through `EnforceCodeStyleInBuild`, and `Version.props`, `NuGet.config`,
-`.config/`, and `ci.yml` itself are read above both stacks. A change to one of
-those reaches both flows because it genuinely moves both. Neither filter names a path in
-the other stack's directory, and
+Three entries appear in both filters, and that is the answer rather than an
+overlap to resolve: `.editorconfig` becomes a build failure through
+`EnforceCodeStyleInBuild` for the service and is what Prettier reads its client
+section from, `Version.props` is the version both stacks stamp, and `ci.yml`
+itself decides whether either job runs. A change to one of those reaches both
+flows because it genuinely moves both.
+
+Four files sit above both stacks and belong to one filter anyway, which is the
+same argument read the other way. `scripts/read-declared-version.sh` is the
+client's alone: `frontend/src/Client.App/vite.config.ts` and
+`frontend/src-tauri/run-tauri.ts` shell out to it for the number a bundle stamps,
+while MSBuild imports `Version.props` directly, so the client is the one stack
+build it can break. It is read outside both stacks as well — by
+`scripts/build-schema-artifact.sh` and `scripts/build-winget-manifests.sh` — and
+that is not what puts it here: neither belongs to a stack, and the publication
+channels that run them narrow nothing by path. `global.json`,
+`NuGet.config`, and `.config/` are the server's alone — the SDK floor, the
+permitted feeds, the banned-symbol list, and the .NET test-runner configuration —
+and the client stack reads none of them. Neither filter names a path in the other
+stack's directory, and
 `the_stacks_change_filters_name_no_path_in_each_other` asserts that too, which is
 what makes a change to one stack cost nothing in the other.
 
@@ -219,8 +233,16 @@ Three things follow that are worth knowing before they are discovered.
   the build —
   `verify_fast_runs_the_client_flow_for_a_change_under_frontend` and
   `verify_full_runs_the_client_flow_for_a_change_under_frontend` hold both to it,
-  each by comparing the whole of what the flow invoked. Neither gate touches the
-  service solution for it, and both need Node and pnpm on the path.
+  each by comparing the whole of what the flow invoked. `CI`'s `Frontend` job runs
+  the same commands in the same order: the four checks ahead of the browser steps,
+  and then the build as the first half of `pnpm test:browser`, which is what drives
+  the bundle rather than a separate step in front of it.
+  `the_client_job_runs_every_check_the_full_gate_runs` holds the workflow to the
+  same list — so a lint violation, a type error, or a formatting difference fails
+  in both places at one severity rather than in whichever of the two somebody
+  remembered to teach. Neither gate touches the service solution for the client,
+  and both need Node and pnpm on the path: a machine set up for the service alone
+  fails the gate by name rather than skipping the stack.
   [Building and testing the client](local-development.md#building-and-testing-the-client)
   carries what those commands are.
 - **A change no build reads runs no solution.** Documentation, a skill, a
