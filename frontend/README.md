@@ -55,6 +55,39 @@ maximum as a named entry with its reason, and there is one.
 A lint violation is a build failure. `pnpm lint` runs with `--max-warnings 0`, so a rule the plugins ship as a warning
 still fails — which is what `TreatWarningsAsErrors` and the analyzer set are to the service half of this repository.
 
+## Two languages, and no library for them
+
+`Client.App` is localized in English and Polish. English is the default and the fallback. A first run with no choice
+stored reads what the browser or the operating system says the person prefers, narrowed to a language a catalogue was
+written for; the control in the header overrides that, the choice survives a restart of either head, and changing it
+rewrites the screen without anything restarting.
+
+The mechanism is `src/Client.App/src/localization/` and it depends on nothing. `Intl` — which every engine both heads
+render in already carries — formats dates, numbers, relative times, lists, and plural categories, so what was left to
+own is a catalogue, a lookup, and a `{name}` hole to fill. That is less than the configuration an internationalization
+library is adopted with, and it adds nothing to the bundle and nothing to `THIRD_PARTY_LICENSES.md`.
+
+- `en.ts` declares the keys and `pl.ts` is annotated with the type it exports, so a key one language carries and the
+  other does not fails `pnpm typecheck` rather than reaching a screen. The unit suite asserts the same parity at run
+  time.
+- `locale.ts` resolves which language a run opens in and stores an explicit choice; `Localization.tsx` holds the
+  provider and `useLocalization.ts` the hook a screen reads through. Nothing else in `Client.App` reads either
+  directly.
+
+**A user-visible string written into a component fails `pnpm lint`**, on `no-restricted-syntax` selectors in
+`eslint.config.ts`. Each can be reproduced by writing the offending line and running that command:
+
+| Write this in a `Client.App` component | What it reports                                                                                                  |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `<p>Reading accounts…</p>`             | a string in markup belongs in `en.ts`, with its Polish counterpart, and reaches the screen through `translate()` |
+| `<p>{'Reading accounts…'}</p>`         | the same, for a string used as a child rather than written as text                                               |
+| ``<p>{`Reading ${what}…`}</p>``        | a sentence assembled in markup cannot be reordered by a translator; it is one entry with a hole                  |
+| `<img alt="Accounts" />`               | an attribute read out to somebody is a user-visible string                                                       |
+| `<img alt={'Accounts'} />`             | the same, in the braced form — each attribute is matched bare, braced, and as a template literal                 |
+
+`.config/typos.toml` excludes `pl.ts` from the spell check, because a dictionary of English has nothing true to say
+about Polish. Every other file in this workspace stays checked, `en.ts` included.
+
 ## The two suites
 
 `pnpm test` is the unit suite, and `vitest.config.ts` declares one Vitest project per package because the two are tested

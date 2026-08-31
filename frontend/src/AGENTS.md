@@ -41,7 +41,7 @@ It is the only place in the client that knows a status code, a header name, or a
 **`Client.App` owns everything a person sees**, and it receives values that are already correct. A screen never parses,
 never reads a status code, and never learns why a call failed from anything but `ClientFailureReason`.
 
-Three things may never cross, in either direction:
+Four things may never cross, in either direction:
 
 - **No React, no DOM, and no browser API into `Client.Backend`.** It declares neither, which is why `readMailAccounts`
   takes a `MailFathomTransport` instead of calling `fetch`: the adapter that calls one is the application's, and the
@@ -53,6 +53,9 @@ Three things may never cross, in either direction:
 - **No component, no hook, and no rendering decision into `Client.Backend`.** A type it publishes describes what the
   service said, never how a screen will show it — a label, a colour, a sort order, and a relative time are the
   application's.
+- **No catalogue, no locale, and no localization dependency into `Client.Backend`.** Language is a rendering decision
+  by the rule above: that package answers with the closed sets — a `ClientFailureReason`, a `MailSynchronizationState` —
+  and what each is called in a language is the screen's, named by a table in it.
 
 ## Reaching `/api/client`
 
@@ -146,6 +149,31 @@ rather than dropped. Nothing is hidden by width alone — a control that disappe
 somewhere a reader can still get to, or it was not needed at the wide width either. The number is the narrowest
 viewport a supported head presents rather than a threshold anybody measured a failure at, and a window dragged narrower
 than any phone is where the client is allowed to scroll.
+
+## The two languages
+
+The client reads in English and in Polish, and the mechanism that makes it so is described in
+[`frontend/README.md`](../README.md). What that page cannot state is what a person writing a screen owes it. The lint
+rule catches a string written into markup and nothing else, so everything below is held by whoever writes the screen.
+
+- **A user-visible string is a catalogue entry, however it reaches the screen.** A default prop, a value a helper
+  returns, a message assembled before it is rendered — each is a sentence somebody reads, and the lint rule sees none
+  of them.
+- **A sentence is one entry with `{name}` holes, never fragments joined at the call site.** Word order, agreement, and
+  where a value falls in a sentence all differ between languages, and a sentence assembled from pieces can be
+  translated in only the order English happens to use.
+- **A key is added to every catalogue in the change that adds it.** The compiler refuses a key one language declares
+  and another does not, so what is left to a person is that the second entry is a translation rather than the English
+  copied across to satisfy the type.
+- **Nothing branches on the language.** No per-locale component and no `if (locale === 'pl')`, for the reason nothing
+  branches on a head: a difference between languages is a catalogue entry or an option handed to `Intl`. A screen that
+  cannot be written without knowing which language it is in is a screen whose copy has not been finished.
+- **A date, a number, a relative time, a list, or a plural is formatted by `Intl` under the active locale.** None of
+  that is spelled into a catalogue — a month name, a decimal separator, or a hand-written plural form there is a second
+  copy of something the platform already knows and gets right in every language. `Intl.PluralRules` is what selects a
+  form when a screen first counts something, which Polish needs and English hides.
+- **The list of languages is the one thing never translated.** Each is named in its own language, so somebody who has
+  landed in one they cannot read finds their own.
 
 ## UX: nothing waits in silence, and nothing waits without a way out
 

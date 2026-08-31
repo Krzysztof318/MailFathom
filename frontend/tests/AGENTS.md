@@ -99,6 +99,25 @@ question is answered again rather than reworded.
 - No mock service worker, no request-interception package, and no local HTTP server. A real exchange belongs to the
   browser suite below.
 
+## A localized screen
+
+- **Assert the words, not a key.** A test reads what a person reads, so it queries the sentence the catalogue carries.
+  Writing that sentence out is the clearer form where it is short and English; importing the entry out of `en.ts` or
+  `pl.ts` is the clearer form where the point of the test is that the _other_ language reached the screen.
+- **A formatted value is asserted by asking `Intl` the same question the screen asked it.** The machine's own time zone
+  decides what a date reads as, so an expectation spelled out by hand would be an expectation about the machine rather
+  than about the locale reaching the formatter — and it would fail on a runner in another zone.
+- `LocalizationProvider` is mounted above whatever is rendered, the way `main.tsx` mounts it. `useLocalization` throws
+  without it rather than falling back to English, so a test that forgets it fails loudly instead of proving a screen
+  against an arrangement the application does not use.
+- What language a unit test runs in is decided by what it writes to `navigator.languages` and to storage before
+  rendering. Both are put back afterwards, for the reason the next section gives about a fake clock.
+- **A Polish sentence is never written out in the browser suite.** That suite's files are spell-checked and the Polish
+  catalogue is the one file excluded from it, so a copy of its wording there is both a string to keep in step with the
+  catalogue and a word for the check to object to. Assert the English sentence being _gone_ and `<html lang>` naming
+  the other language instead — which is the stronger assertion anyway, being about the switch rather than about one
+  translation.
+
 ## Time and randomness
 
 - A component that reads the current time takes it from its caller. That is the first answer and the one to reach for,
@@ -115,6 +134,11 @@ question is answered again rather than reworded.
 
 - `frontend/src/Client.App/vitest.setup.ts` unmounts what a test rendered, after every test. Nothing else may rely on
   the document surviving between tests.
+- That file also puts `localStorage` back. Node publishes a Web Storage implementation of its own, and the jsdom window
+  this project runs in is the worker's global object — so Node's getter is the one on it and it answers `undefined`
+  unless the process was started with `--localstorage-file`, which makes a browser API read as absent. jsdom's own
+  storage is there under another name and is reinstated under the right one. A test that writes to it clears it
+  afterwards: the store is one per file, not one per test.
 - A file that reassigns a module-level double sets it back to its default in a `beforeEach`, so the order tests run in
   cannot decide what one of them sees.
 - Vitest runs files in parallel workers, so a test shares nothing with another file: no fixture written at module

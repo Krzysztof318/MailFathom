@@ -56,10 +56,17 @@
 # and no spelling in it is a decision anybody made. It is excluded whole rather than word by word, because a word
 # admitted in the vocabulary below is admitted everywhere.
 #
+# `frontend/src/Client.App/src/localization/pl.ts` is the fourth kind the header describes: the client's Polish
+# catalogue, which is the one part of this repository deliberately not written in English. Every English word admitted
+# in the vocabulary below is admitted everywhere, so entering Polish spellings there would stop them being caught in
+# the English prose that is the rest of this repository — the file is excluded whole instead. `en.ts` beside it stays
+# checked, being the language everything else here is written in.
+#
 # This governs the walk `typos` does when it is given a directory. A path named on the command line is read whether
 # this says so or not — `--force-exclude` would change that and `crate-ci/typos` passes no such flag — which is the
-# same asymmetry `.github/workflows/typo-check.yml` argues about images where it builds its file list.
-extend-exclude = ['frontend/pnpm-lock.yaml']
+# same asymmetry `.github/workflows/typo-check.yml` argues about images where it builds its file list. So a pull
+# request that changes the Polish catalogue has it read anyway, and what this entry governs is every other run.
+extend-exclude = ['frontend/pnpm-lock.yaml', 'frontend/src/Client.App/src/localization/pl.ts']
 
 # Hidden files are checked, which is not the default. Most of the prose that decides how this
 # repository works lives behind a leading dot — the workflows under `.github/`, the skills under
