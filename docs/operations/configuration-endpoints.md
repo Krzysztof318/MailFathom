@@ -375,9 +375,9 @@ not yet ask.
 ### Serving the page — `ClientEndpoint:Application`
 
 `ClientEndpoint:Application:Enabled` is the one setting that turns the client on, and what it adds is static files: a
-client bundle, answered from the root of the listeners this endpoint already serves. No artifact this project publishes
-carries one today, so writing it fails at startup on every current host; it is the contract the rebuilt client lands
-against. Nothing else changes.
+client bundle, answered from the root of the listeners this endpoint already serves. Every published image carries
+one, so writing it serves a page; an artifact built without the client stage is the one host that still fails at
+startup, and the refusal names the setting. Nothing else changes.
 The routes beneath `/api/client` are the same routes, judged by the same credentials and the same grants — the page
 holds none of its own, because a browser has to load the application before it can obtain one, and what that
 application then calls is authorized exactly as any other caller is. A deployment that leaves this off serves the
