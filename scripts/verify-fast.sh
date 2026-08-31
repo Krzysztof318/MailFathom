@@ -124,7 +124,8 @@ fi
 #
 # The lint is the client's `TreatWarningsAsErrors`: every rule reports as an error and `--max-warnings 0`
 # refuses a warning too, so there is no severity below failing. The type check is the closest thing the
-# client has to the Release build, because Vite's build strips types rather than checking them.
+# client has to the Release build, because Vite's build strips types rather than checking them, and
+# `pnpm test` runs behind it for the same reason `dotnet test` runs behind the build above.
 #
 # The formatting pass repairs rather than reports, exactly as `dotnet format` does above, and for the same
 # reason: this loop is where a file is rewritten and the full gate is where the same question is asked
@@ -138,6 +139,7 @@ if [[ -n "$run_client_stack" ]]; then
   pnpm --dir frontend install --frozen-lockfile
   pnpm --dir frontend run lint
   pnpm --dir frontend run typecheck
+  pnpm --dir frontend run test
   pnpm --dir frontend run format
 fi
 

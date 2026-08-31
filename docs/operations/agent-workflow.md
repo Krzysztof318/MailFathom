@@ -212,8 +212,9 @@ Three things follow that are worth knowing before they are discovered.
   whole invocation log rather than a line of it.
 - **A branch that did change something there runs the client's own flow.** The
   loop restores the pnpm workspace in locked mode and runs its lint, its type
-  check, and a repairing formatting pass; the full gate runs the same three with
-  the formatting pass verifying instead, and adds the build —
+  check, its suite through `pnpm test`, and a repairing formatting pass; the full
+  gate runs the same four with the formatting pass verifying instead, and adds
+  the build —
   `verify_fast_runs_the_client_flow_for_a_change_under_frontend` and
   `verify_full_runs_the_client_flow_for_a_change_under_frontend` hold both to it,
   each by comparing the whole of what the flow invoked. Neither gate touches the

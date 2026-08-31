@@ -176,7 +176,12 @@ is the same one Uno's was, carried over because it was never about the platform:
   import of either fails to resolve rather than being caught in review.
 - `Client.App` is the application, and it depends on `Client.Backend`. Nothing depends on `Client.App`.
 
-`frontend/tests/` still holds a placeholder README, because the client's suite is written with the screens it covers.
+The suite is Vitest, run by `pnpm test` as one Vitest project per package: `Client.Backend` without a DOM, and
+`Client.App` in jsdom with React Testing Library. A test file sits beside the source it covers, because a component
+test has to import a component neither package publishes and a test tree beside `src/` could reach one only by
+crossing the boundary above — so `frontend/tests/` holds the contract governing those tests and no test, and
+[`frontend/tests/AGENTS.md`](https://github.com/Krzysztof318/MailFathom/blob/main/frontend/tests/AGENTS.md) is it.
+
 What the workspace builds is a directory of static files under `frontend/src/Client.App/dist/` and nothing else, so no
 Node process joins any deployment shape.
 

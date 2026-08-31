@@ -376,7 +376,7 @@ verify_fast_runs_the_client_flow_for_a_change_under_frontend() {
     $'restore backend/MailFathom.slnx --locked-mode\nbuild backend/MailFathom.slnx --configuration Release --no-restore\ntest --solution backend/MailFathom.slnx --configuration Release --no-build\nformat backend/MailFathom.slnx --no-restore --include backend/src/Sample.cs' \
     "$invocation_log"
   assert_file_content \
-    $'--dir frontend install --frozen-lockfile\n--dir frontend run lint\n--dir frontend run typecheck\n--dir frontend run format' \
+    $'--dir frontend install --frozen-lockfile\n--dir frontend run lint\n--dir frontend run typecheck\n--dir frontend run test\n--dir frontend run format' \
     "$client_invocation_log"
 }
 
@@ -401,7 +401,7 @@ verify_full_runs_the_client_flow_for_a_change_under_frontend() {
     'format backend/MailFathom.slnx --no-restore --verify-no-changes --verbosity diagnostic --include backend/src/Sample.cs' \
     "$invocation_log"
   assert_file_content \
-    $'--dir frontend install --frozen-lockfile\n--dir frontend run lint\n--dir frontend run typecheck\n--dir frontend run format:check\n--dir frontend run build' \
+    $'--dir frontend install --frozen-lockfile\n--dir frontend run lint\n--dir frontend run typecheck\n--dir frontend run test\n--dir frontend run format:check\n--dir frontend run build' \
     "$client_invocation_log"
   assert_excludes 'frontend/' "$invocation_log"
 }
