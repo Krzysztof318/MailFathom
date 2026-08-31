@@ -111,6 +111,10 @@ export async function reachDeployment(
 
 /** The release a session body reports, or `null` where the body was not one MailFathom answers with. */
 function versionReported(body: string): string | null {
+    if (body.length > longestSessionBody) {
+        return null;
+    }
+
     let parsed: unknown;
 
     try {
@@ -173,6 +177,14 @@ const longestEntry = 320;
 // The longest release string read out of a session answer. It is a version rather than prose, and a bound here is what
 // keeps an answer from an address nobody has trusted yet from becoming an unbounded string the client carries around.
 const longestVersion = 64;
+
+// The longest session answer read at all. This is the one answer in the client that arrives from an address nobody has
+// trusted yet — the whole point of asking is that the client does not know what is there — so the bound is applied
+// before the body is expanded rather than to what parsing it produced. It names a product, a release, and the caller's
+// own grant out of a published set, which is a few hundred bytes; anything past this is not a session answer, whatever
+// it turns out to be. `longestResponseBody` is the transport's backstop behind it, and this is the bound that says what
+// *this* route may answer with.
+const longestSessionBody = 4096;
 
 const defaultPorts: Readonly<Record<'http' | 'https', string>> = { http: '80', https: '443' };
 

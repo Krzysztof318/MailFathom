@@ -35,6 +35,22 @@ export interface ClientResponse {
 export type MailFathomTransport = (request: ClientRequest) => Promise<ClientResponse>;
 
 /**
+ * The most of one answer a transport reads before it gives up on it, in bytes.
+ *
+ * It is the backstop rather than the bound an operation works to: each of those is far tighter and
+ * belongs beside the thing it describes, and this is what keeps a body from being buffered whole
+ * before any of them can apply. It matters most where the client is asking an address it has not
+ * trusted yet whether MailFathom is what answers there — the answer at that point is from a stranger,
+ * and a stranger that replies with a gigabyte should cost this client a cancelled read rather than
+ * the memory.
+ *
+ * A transport that has to stop reading answers with an empty body, which every operation already
+ * refuses as unreadable. That is the accurate outcome and it needs no reason of its own: an answer
+ * this client would not read in full is one it cannot act on either way.
+ */
+export const longestResponseBody = 1_048_576;
+
+/**
  * Puts one request on the wire, answering `null` where nothing answered at all.
  *
  * Every operation goes through this rather than calling the transport directly, because a connection refused, a name

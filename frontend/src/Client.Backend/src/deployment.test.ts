@@ -164,6 +164,9 @@ describe('reachDeployment', () => {
         ['another product answering in JSON', sessionBody('Something else', '0.8.0')],
         ['a session body naming no release', sessionBody('MailFathom', null)],
         ['a release longer than a release is', sessionBody('MailFathom', 'v'.repeat(65))],
+        // Refused on its size before it is parsed at all, which is the order that matters: this is the one answer the
+        // client reads from an address nobody has trusted yet.
+        ['a body longer than a session answer is', sessionBody('MailFathom', '0.8.0').padEnd(4097, ' ')],
         ['a page rather than an answer', '<!doctype html><title>Sign in</title>'],
         ['an array', '[]'],
         ['nothing', ''],

@@ -19,4 +19,4 @@ export {
     type MailSynchronizationState,
 } from './mailAccounts';
 export { clientRoutePrefix, headersFor, routeFor, type ClientSession, type DeploymentAddress } from './session';
-export type { ClientRequest, ClientResponse, MailFathomTransport } from './transport';
+export { longestResponseBody, type ClientRequest, type ClientResponse, type MailFathomTransport } from './transport';
