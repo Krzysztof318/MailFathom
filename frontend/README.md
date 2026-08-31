@@ -82,10 +82,13 @@ outside those two families otherwise has no answer; and `nsis` on Windows, becau
 administrator rights and one Windows installer is enough. An `msi` is deliberately absent. macOS is not built at all,
 which is why `icons/` carries no `.icns`.
 
-`pnpm desktop:dev` starts the Vite development server and points the shell at `http://localhost:5173`, so a change to
-a screen reloads in the desktop window exactly as it does in a browser tab. That address is Vite's default port, and a
-second development server already holding it moves to another one — at which point the window stays blank until the
-first is stopped.
+**The development port is reserved rather than fixed.** `pnpm desktop:dev` starts the Vite development server and
+loads it in the shell, so a change to a screen reloads in the desktop window exactly as it does in a browser tab —
+and `run-tauri.ts` asks the operating system for a free port before either half starts, hands it to Vite and to
+`devUrl` together, and `tauri.conf.json` therefore names no address. Vite's default port would be wrong here on any
+machine running two of these at once: the second server moves to the next free port while the shell that started it
+goes on loading the first, and the window then renders the other run's client rather than failing. `pnpm dev` on its
+own is unaffected and keeps both the default port and the freedom to move.
 
 ## TypeScript only, at the strictest setting
 

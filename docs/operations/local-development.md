@@ -874,7 +874,7 @@ crate graph.
 
 ```bash
 cd frontend
-pnpm desktop:dev     # the shell around the development server, at http://localhost:5173
+pnpm desktop:dev     # the shell around the development server, on a port reserved for that run
 pnpm desktop:build   # the release application and the installers named in tauri.conf.json
 ```
 

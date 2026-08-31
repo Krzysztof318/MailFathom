@@ -23,7 +23,18 @@ const declaredVersion = execFileSync(
     },
 ).trim();
 
+// The desktop shell starts this server itself and then loads it, so it reserves the port and names it here rather than
+// leaving Vite to pick one: `src-tauri/run-tauri.ts` has the whole of why, and the short version is that two runs on
+// one machine would otherwise leave one window loading the other run's client. `strictPort` is what makes a port that
+// was taken in between a refusal to start rather than a silent move to the next one. `pnpm dev` on its own sets
+// nothing, keeps Vite's default, and keeps its freedom to move — a second browser tab is not a second window pointed
+// at the wrong server.
+const desktopDevelopmentPort = process.env['MAILFATHOM_DEV_PORT'];
+
 export default defineConfig({
+    ...(desktopDevelopmentPort === undefined
+        ? {}
+        : { server: { port: Number(desktopDevelopmentPort), strictPort: true } }),
     plugins: [react(), tailwindcss()],
     define: {
         __MAILFATHOM_VERSION__: JSON.stringify(declaredVersion),
