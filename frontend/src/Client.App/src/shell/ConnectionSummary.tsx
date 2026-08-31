@@ -78,13 +78,21 @@ export function ConnectionSummary({
         return (
             <Line tone="attention">
                 {translate('accounts.failed', { reason: translate(failureLabels[accounts.failure.reason]) })}
-                <button
-                    type="button"
-                    onClick={reread}
-                    className="rounded-md border border-line px-2 py-0.5 text-sm text-text-soft transition hover:bg-hover"
-                >
-                    {translate('connection.retry')}
-                </button>
+
+                {/* Reading again is the way out of exactly one of the four failures. A refused credential, a missing
+                    grant, and an answer this client cannot parse each repeat identically on a second attempt, so
+                    offering the button there hands somebody an action that cannot work and says nothing about why.
+                    Their next steps — signing in again, saying the grant is missing, reporting a defect — are actions
+                    this frame has nowhere to send anybody to yet, and each arrives with the screen that can. */}
+                {accounts.failure.reason === 'unavailable' && (
+                    <button
+                        type="button"
+                        onClick={reread}
+                        className="rounded-md border border-line px-2 py-0.5 text-sm text-text-soft transition hover:bg-hover"
+                    >
+                        {translate('connection.retry')}
+                    </button>
+                )}
             </Line>
         );
     }

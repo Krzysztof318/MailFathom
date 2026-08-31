@@ -99,6 +99,16 @@ describe('ConnectionSummary', () => {
         expect(screen.getByRole('button', { name: 'Try again' })).toBeDefined();
     });
 
+    it.each(['unauthenticated', 'unauthorized', 'unreadable'] as const)(
+        'still says what failed at a %s failure, and offers no second attempt that would repeat it',
+        (reason) => {
+            renderSummary({ outcome: 'failed', failure: { reason, status: 401 } });
+
+            expect(screen.getByText(/The accounts could not be read:/)).toBeDefined();
+            expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+        },
+    );
+
     it('puts no status code on the screen', () => {
         renderSummary({ outcome: 'failed', failure: { reason: 'unavailable', status: 503 } });
 
