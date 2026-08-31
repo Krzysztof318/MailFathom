@@ -125,6 +125,7 @@ internal static class AdoptOwnerCommand
         }
 
         WriteClassification(context, preview);
+        WriteSensitiveContent(context, preview);
 
         context.Console.WriteNotice(
             "Once adopted, these mail accounts are decided by this owner's record. Editing the configuration they came "
@@ -154,6 +155,31 @@ internal static class AdoptOwnerCommand
             + "happens to their junk from then on:");
 
         foreach (var setting in posture)
+        {
+            context.Console.WriteLine($"  {setting.Path} = {setting.Value}");
+        }
+    }
+
+    /// <summary>Names the scanning block the adoption would commit beside the mailboxes.</summary>
+    /// <remarks>
+    /// Written out for the same reason the classification posture is: it decides whether this owner's mail is scanned
+    /// before it is stored, indexed, or published, and a handover that left it behind would switch a scanner off over
+    /// their mail with nothing saying so. A declaration stating none prints nothing rather than an empty heading.
+    /// </remarks>
+    private static void WriteSensitiveContent(CliContext context, OwnerAdoptionPreview preview)
+    {
+        var scanning = preview.SensitiveContent ?? [];
+
+        if (scanning.Count == 0)
+        {
+            return;
+        }
+
+        context.Console.WriteLine(
+            "It would also commit the scanning posture their declaration states into their record, which decides what "
+            + "their mail is scanned for from then on:");
+
+        foreach (var setting in scanning)
         {
             context.Console.WriteLine($"  {setting.Path} = {setting.Value}");
         }

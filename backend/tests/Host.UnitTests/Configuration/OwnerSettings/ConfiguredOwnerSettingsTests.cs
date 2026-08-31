@@ -280,6 +280,52 @@ public sealed class ConfiguredOwnerSettingsTests
             edits.Select(edit => $"{edit.Path}={edit.Value}"));
     }
 
+    /// <summary>
+    /// The scanning block moves with the mailboxes for the reason the classification posture does, and with more at
+    /// stake: a handover that left it behind would stop scanning that owner's mail — permanently, since no
+    /// configuration source reaches an adopted owner afterwards — on the strength of an administrative act about where
+    /// their settings live, with nothing having said so.
+    /// </summary>
+    [Fact]
+    public void AdoptionEditsFor_ADeclarationScanningTheirMail_CarriesThatBlockIntoTheRecord()
+    {
+        // Arrange
+        var declared = DeclaredOwnerPair();
+        declared["Accounts:0:SensitiveContent:Secrets:Enabled"] = "true";
+        declared["Accounts:0:SensitiveContent:ScreenOutgoingMailFor:0"] = "Secrets";
+
+        var reading = Reading(declared, Serving(Alex, MailOwnerAccountSource.OwnerDeclaration));
+
+        // Act
+        var edits = reading.AdoptionEditsFor(Alex);
+
+        // Assert
+        Assert.Equal(
+            [
+                "MailAccounts:0:AccountId=alex-work",
+                "SensitiveContent:ScreenOutgoingMailFor:0=Secrets",
+                "SensitiveContent:Secrets:Enabled=true",
+            ],
+            edits.Select(edit => $"{edit.Path}={edit.Value}"));
+    }
+
+    /// <summary>The block another owner declared is theirs, and an adoption that carried it would scan one person's mail on another's answer.</summary>
+    [Fact]
+    public void SensitiveContentAdoptionFor_AnotherOwnersDeclaredBlock_IsNotCarried()
+    {
+        // Arrange
+        var declared = DeclaredOwnerPair();
+        declared["Accounts:1:SensitiveContent:Secrets:Enabled"] = "true";
+
+        var reading = Reading(declared, Serving(Alex, MailOwnerAccountSource.OwnerDeclaration));
+
+        // Act
+        var carried = reading.SensitiveContentAdoptionFor(Alex);
+
+        // Assert
+        Assert.Empty(carried);
+    }
+
     [Fact]
     public void AdoptionEditsFor_AnOwnerNoConfigurationSourceReaches_StatesNoChanges()
     {

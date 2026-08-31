@@ -691,7 +691,7 @@ public static class ServiceCollectionExtensions
             DnsDkimPublicKeyRecordResolver.CreateLookupClient(),
             provider.GetRequiredService<DkimPublicKeyRecordCache>(),
             provider.GetRequiredService<TimeProvider>()));
-        services.AddScoped(provider =>
+        services.AddScoped<IEmailMimeReader>(provider =>
         {
             // The local verification is handed to the parse only where this deployment verifies for itself, so a
             // deployment that switched it off makes no lookup rather than making one whose result is discarded. Where
@@ -703,7 +703,7 @@ public static class ServiceCollectionExtensions
                     provider.GetRequiredService<TimeProvider>())
                 : null;
 
-            IEmailMimeReader reader = new MachineAuthorshipEvaluatingEmailMimeReader(
+            var reader = new MachineAuthorshipEvaluatingEmailMimeReader(
                 new SenderTrustEvaluatingEmailMimeReader(
                     new MimeKitEmailMimeReader(
                         extractionOptions,
@@ -712,9 +712,14 @@ public static class ServiceCollectionExtensions
                     provider.GetRequiredService<ISenderTrustPolicyReader>()),
                 provider.GetRequiredService<MachineAuthorshipProfile>());
 
-            return provider.GetRequiredService<SensitiveContentDerivationGuard>() is { IsActive: true } guard
-                ? new RedactingEmailMimeReader(reader, guard)
-                : reader;
+            // Wrapped whatever the postures say today, because they change while a scope is open: an owner committing a
+            // record that switches a provided scanner on flips the guard's answer, and a synchronization or backfill
+            // scope that had decided at construction would go on writing that owner's mail unredacted and unstamped for
+            // the rest of its run. The decorator asks per owner per call and is inert — no detector, no permit, no
+            // stamp — for an owner nothing scans, so a deployment scanning nobody pays a delegating call and nothing else.
+            return new RedactingEmailMimeReader(
+                reader,
+                provider.GetRequiredService<SensitiveContentDerivationGuard>());
         });
         // Beside the metadata reader and separate from it, because it parses only the header block and needs none of the
         // structural limits a body walk is bounded by: the parser stops at the blank line that ends the headers.

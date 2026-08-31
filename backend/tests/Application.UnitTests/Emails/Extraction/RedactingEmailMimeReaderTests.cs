@@ -220,6 +220,42 @@ public sealed class RedactingEmailMimeReaderTests
             extraction.Metadata!.RedactedUnder);
     }
 
+    /// <summary>
+    /// This decorator is the outermost of the extraction chain and receives the owner first-hand, and nothing below it
+    /// re-checks — so forwarding that argument rather than resolving a posture of its own is its whole claim. The same
+    /// body read for two owners is what states it: one scanned, one not, and a reader asking about anybody but its
+    /// argument answers the same way for both.
+    /// </summary>
+    [Fact]
+    public async Task ReadMetadataAsync_TwoOwnersScannedDifferently_RedactsAndStampsOnlyTheOneWhoAskedForIt()
+    {
+        // Arrange
+        using var derivation = ScanningSensitiveContentDerivation.FindingForOneOwner(
+            SyntheticMailOwner.Another,
+            Marker,
+            this.timeProvider);
+        var reader = new RedactingEmailMimeReader(
+            ReaderYielding($"before {Marker} after", $"before {Marker} after"),
+            derivation.Guard);
+
+        // Act
+        var scanned = await reader.ReadMetadataAsync(
+            Content(),
+            SyntheticMailOwner.Another,
+            TestContext.Current.CancellationToken);
+        var unscanned = await reader.ReadMetadataAsync(
+            Content(),
+            SyntheticMailOwner.Deployment,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.DoesNotContain(Marker, scanned.Metadata!.Text.OriginalText, StringComparison.Ordinal);
+        Assert.Equal(derivation.Guard.StampFor(SyntheticMailOwner.Another), scanned.Metadata.RedactedUnder);
+
+        Assert.Equal($"before {Marker} after", unscanned.Metadata!.Text.OriginalText);
+        Assert.Null(unscanned.Metadata.RedactedUnder);
+    }
+
     /// <summary>A message with no body to redact is still derived under a posture, and a row left unstamped would be outstanding for ever.</summary>
     [Fact]
     public async Task ReadMetadataAsync_AMessageWithNoTextToRedact_IsStampedJustTheSame()

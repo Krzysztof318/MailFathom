@@ -63,6 +63,32 @@ public sealed class OwnerSensitiveContentPosturesTests : IDisposable
         Assert.False(askedForNothing.IsActive);
     }
 
+    /// <summary>
+    /// A record may say <c>false</c> where the deployment says <c>true</c> — the read-back drops the rule that would
+    /// refuse it, so an operator who tightened the deployment after a record was written leaves exactly this pair — and
+    /// the composition is the only thing that stops it narrowing anything. Were an explicit <c>false</c> to win rather
+    /// than be ignored alongside an absent switch, that owner's mail would be stored, chunked, embedded, and retrieved
+    /// unredacted on the strength of their own record.
+    /// </summary>
+    [Fact]
+    public void ForOwner_ARecordDecliningAScannerTheDeploymentRequires_StillRunsItOverTheirMail()
+    {
+        // Arrange
+        var deployment = new SensitiveContentOptions();
+        deployment.Secrets.Enabled = true;
+        var declined = new OwnerSensitiveContentOptions();
+        declined.Secrets.Enabled = false;
+
+        var postures = this.PosturesOver(deployment, (SyntheticMailOwner.Deployment, declined));
+
+        // Act
+        var posture = postures.ForOwner(SyntheticMailOwner.Deployment);
+
+        // Assert
+        Assert.Equal([SensitiveContentScannerKind.Secrets], posture.Scanners);
+        Assert.True(posture.IsActive);
+    }
+
     /// <summary>An owner tightens by adding to what the deployment requires, and what it requires stays in force.</summary>
     [Fact]
     public void ForOwner_AnOwnerTighteningWhatTheDeploymentRequires_RunsBothScannersOverTheirMail()

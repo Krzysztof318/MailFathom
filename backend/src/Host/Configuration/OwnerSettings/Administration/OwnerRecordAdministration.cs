@@ -288,7 +288,8 @@ internal sealed class OwnerRecordAdministration(
                     MailSynchronizationOptions.TryReadAccountId(account.AccountId) ?? string.Empty,
                     account.DisplayName)),
             ],
-            [.. configured.ClassificationAdoptionFor(owner).Select(OwnerAdoptableClassificationSetting.For)]);
+            [.. configured.ClassificationAdoptionFor(owner).Select(OwnerAdoptableRecordSetting.For)],
+            [.. configured.SensitiveContentAdoptionFor(owner).Select(OwnerAdoptableRecordSetting.For)]);
     }
 
     /// <summary>Moves one owner's mail accounts out of this deployment's files and into their own record.</summary>

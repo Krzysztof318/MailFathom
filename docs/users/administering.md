@@ -664,6 +664,11 @@ own record. It shows what it would move and asks first, and after it there is no
 that person's mailboxes, and `mfctl owner account add` and `mfctl owner account remove` are what change them. Everyone
 else goes on being read from the files exactly as before.
 
+Whatever else your files decide about that one owner moves with the mailboxes: the spam classification posture, and the
+[`SensitiveContent`](../features/sensitive-content-scanning.md) block if their declaration states one. The preview names
+each of those settings beside the accounts, because an adoption that left one behind would switch it off for that person
+and no file would reach them to switch it back on.
+
 ```console
 $ mfctl owner adopt --owner 3f1d...
 Adopting Alex (3f1d...) would move 2 mail accounts into their own record:

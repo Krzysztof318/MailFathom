@@ -356,30 +356,47 @@ public sealed class ServiceCollectionExtensionsTests : IDisposable
         Assert.IsType<RedactingEmailMimeReader>(scope.ServiceProvider.GetRequiredService<IEmailMimeReader>());
     }
 
-    /// <summary>The control the case above rests on: with both switches off the message is read exactly as it arrived.</summary>
+    /// <summary>
+    /// The control the case above rests on: with nobody's mail scanned the message is read exactly as it arrived, and
+    /// the row it produces carries no posture.
+    /// </summary>
+    /// <remarks>
+    /// Asserted through the reading rather than against the resolved type, because the decorator is now wrapped
+    /// whatever the postures say: they change while a scope is open, so a scope that decided at construction would go
+    /// on writing an owner's mail unredacted for the rest of its run after that owner switched a scanner on. What the
+    /// decorator being inert means is therefore a claim about the text and the stamp, which is what this states.
+    /// </remarks>
     [Fact]
-    public void AddInfrastructure_WithoutAScanner_ResolvesAMimeReaderThatRedactsNothing()
+    public async Task AddInfrastructure_WithoutAScanner_ResolvesAMimeReaderThatRedactsNothing()
     {
         // Arrange
+        var policies = Substitute.For<ISenderTrustPolicyReader>();
+        policies.GetTrustPolicy(Arg.Any<MailAccountId>()).Returns(SenderTrustPolicy.Create([], [], []));
+
         var services = new ServiceCollection();
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<ISensitiveContentPostures>(FixedSensitiveContentPostures.ScanningNothing());
         services.AddSingleton(new EmailMimeExtractionOptions());
         services.AddSingleton(Substitute.For<ITrustedAuthenticationAuthorityReader>());
-        services.AddSingleton(Substitute.For<ISenderTrustPolicyReader>());
+        services.AddSingleton(policies);
         services.AddSingleton(MachineAuthorshipProfile.Standard);
 
-        // Act
         services.AddInfrastructure(
             _ => new PostgresConnectionSettings("Host=localhost;Database=mailfathom", null, null),
             PostgresTextSearchConfiguration.Default,
             MailAnsweringBudget.Default);
 
-        // Assert
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
 
-        Assert.IsNotType<RedactingEmailMimeReader>(scope.ServiceProvider.GetRequiredService<IEmailMimeReader>());
+        // Act
+        var extraction = await scope.ServiceProvider
+            .GetRequiredService<IEmailMimeReader>()
+            .ReadMetadataAsync(OrdinaryMessage(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(extraction.Metadata?.RedactedUnder);
+        Assert.Contains("body", extraction.Metadata?.Text.OriginalText ?? string.Empty, StringComparison.Ordinal);
     }
 
     /// <summary>

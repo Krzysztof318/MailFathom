@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Configuration;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.Spam;
 
 namespace MailFathom.Host.Configuration.OwnerSettings;
@@ -146,16 +147,17 @@ internal sealed class ConfiguredOwnerSettings(IConfiguration configuration, Serv
     /// <summary>States the changes that would materialize everything a configuration source decides for one owner into their record.</summary>
     /// <param name="owner">The owner asked about.</param>
     /// <returns>
-    /// One change per configuration key the two sections supply — the owner's mail accounts and the classification
-    /// posture <see cref="ClassificationAdoptionFor" /> reports — empty when no configuration source reaches this owner.
+    /// One change per configuration key the sections supply — the owner's mail accounts, the classification posture
+    /// <see cref="ClassificationAdoptionFor" /> reports, and the scanning block
+    /// <see cref="SensitiveContentAdoptionFor" /> reports — empty when no configuration source reaches this owner.
     /// </returns>
     /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
     /// <remarks>
     /// The mail-account section's keys are taken relative to it and re-rooted at the record's own collection, so
     /// <c>Accounts:1:MailAccounts:0:Host</c> and <c>MailSynchronization:Accounts:0:Host</c> both become
     /// <c>MailAccounts:0:Host</c> — which is the one property an owner's record holds mailboxes under, whichever of the
-    /// two sections the operator had been writing in. The posture is re-rooted the same way, at the record's own
-    /// classification block, and moves for the reason stated on the method that reads it.
+    /// two sections the operator had been writing in. The posture and the scanning block are re-rooted the same way,
+    /// each at the record's own block, and move for the reason stated on the methods that read them.
     /// </remarks>
     public IReadOnlyList<ConfigurationEdit> AdoptionEditsFor(MailOwnerId owner)
     {
@@ -173,6 +175,7 @@ internal sealed class ConfiguredOwnerSettings(IConfiguration configuration, Serv
                 .OrderBy(setting => setting.Key, StringComparer.Ordinal)
                 .Select(setting => ConfigurationEdit.SetTo($"{MailAccountsProperty}:{setting.Key}", setting.Value!)),
             .. this.ClassificationAdoptionEdits(),
+            .. this.SensitiveContentAdoptionEdits(owner),
         ];
     }
 
@@ -186,6 +189,41 @@ internal sealed class ConfiguredOwnerSettings(IConfiguration configuration, Serv
     /// </remarks>
     public IReadOnlyList<ConfigurationEdit> ClassificationAdoptionFor(MailOwnerId owner) =>
         this.SectionFor(owner) is null ? [] : [.. this.ClassificationAdoptionEdits()];
+
+    /// <summary>States the scanning block an adoption would commit into one owner's record.</summary>
+    /// <param name="owner">The owner asked about.</param>
+    /// <returns>One change per scanning key their declaration states, empty where it states none.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
+    /// <remarks>
+    /// Published beside the accounts for the reason the classification posture is: what an operator confirms in an act
+    /// that cannot be undone has to name everything that stops being read from the file.
+    /// </remarks>
+    public IReadOnlyList<ConfigurationEdit> SensitiveContentAdoptionFor(MailOwnerId owner) =>
+        [.. this.SensitiveContentAdoptionEdits(owner)];
+
+    /// <summary>States the changes that would carry an owner's declared scanning block into their record.</summary>
+    /// <remarks>
+    /// <para>
+    /// It moves with the mailboxes for the reason the classification posture does: an owner served from a declaration
+    /// has their mail scanned on that declaration's terms, and a handover leaving the block behind would switch a
+    /// scanner off over their mail on the strength of an administrative act about where their settings live — silently,
+    /// and permanently, since no configuration source reaches an adopted owner afterwards.
+    /// </para>
+    /// <para>
+    /// Only a declared owner has such a block. The sole owner a deployment serves from its own mail section states no
+    /// scanning of their own and reads the deployment's section, which goes on reaching them as the floor every
+    /// composition starts from, so there is nothing there for an adoption to carry.
+    /// </para>
+    /// </remarks>
+    private IEnumerable<ConfigurationEdit> SensitiveContentAdoptionEdits(MailOwnerId owner) =>
+        (this.DeclaredEntryFor(owner)?.GetSection(OwnerSensitiveContentOptions.BlockName))
+            ?.AsEnumerable(makePathsRelative: true)
+            .Where(setting => !string.IsNullOrEmpty(setting.Key) && setting.Value is not null)
+            .OrderBy(setting => setting.Key, StringComparer.Ordinal)
+            .Select(setting => ConfigurationEdit.SetTo(
+                $"{OwnerSensitiveContentOptions.BlockName}:{setting.Key}",
+                setting.Value!))
+        ?? [];
 
     /// <summary>States the changes that would carry the deployment's classification posture into an owner's record.</summary>
     /// <remarks>
@@ -227,7 +265,11 @@ internal sealed class ConfiguredOwnerSettings(IConfiguration configuration, Serv
     /// correspond — a shape only a source changing under the read produces, and one where no key can be trusted.
     /// </para>
     /// </remarks>
-    private IConfigurationSection? DeclaredSectionFor(MailOwnerId owner)
+    private IConfigurationSection? DeclaredSectionFor(MailOwnerId owner) =>
+        this.DeclaredEntryFor(owner)?.GetSection(nameof(DeclaredOwnerOptions.MailAccounts));
+
+    /// <summary>Finds the whole declaration entry one owner is written in, which holds their mailboxes and their scanning block.</summary>
+    private IConfigurationSection? DeclaredEntryFor(MailOwnerId owner)
     {
         var declared = DeclaredOwners.ReadFrom(configuration);
         var entries = configuration.GetSection(DeclaredOwnerOptions.SectionName).GetChildren().ToArray();
@@ -241,6 +283,6 @@ internal sealed class ConfiguredOwnerSettings(IConfiguration configuration, Serv
             .Zip(declared)
             .FirstOrDefault(candidate => DeclaredOwners.TryReadIdentifier(candidate.Second.Id) == owner.Value);
 
-        return entry.First?.GetSection(nameof(DeclaredOwnerOptions.MailAccounts));
+        return entry.First;
     }
 }
