@@ -39,6 +39,12 @@ At most 256 owners may be declared. Declaring any owner refuses a non-empty `Mai
 owners may name a mail account alike, and only one owner may be served while the MCP endpoint, the client endpoint, or
 the administrative endpoint is enabled.
 
+A declared owner states nothing here beyond their mailboxes. How their mail is classified as spam is theirs to decide,
+but while a configuration source still reaches them it is read from the deployment's
+[`SpamClassification`](configuration-ai.md#spamclassification) section; the block that lets them decide it for
+themselves is [in their own record](configuration-sources.md#one-owners-own-classification-posture), which an adoption
+writes.
+
 ## `Secrets`
 
 | Key | Type | Default | Constraint | Change |

@@ -390,7 +390,7 @@ public sealed class MailFolderParticipationOptionsTests
         var options = OptionsFor(CreateAccount());
 
         // Act, Assert
-        Assert.Equal([MailFolderAlias.Create("INBOX")], ConfiguredMailFolders.InboxAliasesOf(options));
+        Assert.Equal([MailFolderAlias.Create("INBOX")], ConfiguredMailFolders.InboxAliasesOf(options.Accounts));
     }
 
     /// <summary>A server presenting the inbox under another name is configured by role, and the default scope follows the role.</summary>
@@ -406,7 +406,7 @@ public sealed class MailFolderParticipationOptionsTests
         }));
 
         // Act, Assert
-        Assert.Equal([MailFolderAlias.Create("PRIMARY-MAIL")], ConfiguredMailFolders.InboxAliasesOf(options));
+        Assert.Equal([MailFolderAlias.Create("PRIMARY-MAIL")], ConfiguredMailFolders.InboxAliasesOf(options.Accounts));
     }
 
     private static MailSynchronizationOptions OptionsFor(MailSynchronizationAccountOptions account) =>

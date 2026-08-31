@@ -31,7 +31,7 @@ public sealed class MailSynchronizationSettingsSnapshotTests
         var reload = settings.GetReloadToken();
 
         // Act
-        owners.OwnerDocumentPublished(Owner, "owner", [changed], 2);
+        owners.OwnerDocumentPublished(Owner, "owner", new OwnerAccountOptions { MailAccounts = [changed] }, 2);
         var current = settings.Current;
 
         // Assert

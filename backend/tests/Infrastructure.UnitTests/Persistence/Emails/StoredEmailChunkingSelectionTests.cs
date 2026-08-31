@@ -290,16 +290,12 @@ public sealed class StoredEmailChunkingSelectionTests
         Assert.Single(selected.AsEnumerable());
     }
 
-    private static DerivedWorkAdmissionTerms ClassificationOff { get; } = new(
-        IsApplied: false,
-        [],
-        [],
-        Now);
+    private static DerivedWorkAdmissionTerms ClassificationOff { get; } = new([], [], [], Now);
 
     private static DerivedWorkAdmissionTerms ClassificationOn { get; } = new(
-        IsApplied: true,
+        [MailAccountId.Create("work")],
         [],
-        [MailFolderAlias.Create("INBOX")],
+        [WorkInbox],
         Now - TimeSpan.FromMinutes(15));
 
     private static IQueryable<StoredEmailEntity> Emails(params StoredEmailEntity[] emails) => emails.AsQueryable();

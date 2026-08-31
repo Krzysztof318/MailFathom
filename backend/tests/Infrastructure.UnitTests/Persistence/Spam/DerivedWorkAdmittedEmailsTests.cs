@@ -27,9 +27,11 @@ public sealed class DerivedWorkAdmittedEmailsTests
 
     private static readonly DateTimeOffset WaitedLongEnough = Now - TimeSpan.FromHours(1);
 
-    private static readonly MailFolderIdentity WorkJunk = new(
-        MailAccountId.Create("work"),
-        MailFolderAlias.Create("JUNK"));
+    private static readonly MailAccountId Work = MailAccountId.Create("work");
+
+    private static readonly MailFolderIdentity WorkJunk = new(Work, MailFolderAlias.Create("JUNK"));
+
+    private static readonly MailFolderIdentity WorkInbox = new(Work, MailFolderAlias.Create("INBOX"));
 
     [Fact]
     public void Admitting_ClassificationSwitchedOff_LeavesTheQueryAsItWas()
@@ -37,9 +39,9 @@ public sealed class DerivedWorkAdmittedEmailsTests
         // Arrange
         var emails = Emails(Email("work", "JUNK", Now, verdict: SpamVerdict.Spam));
         var terms = new DerivedWorkAdmissionTerms(
-            IsApplied: false,
+            [],
             [WorkJunk],
-            [MailFolderAlias.Create("INBOX")],
+            [WorkInbox],
             WaitedLongEnough);
 
         // Act
@@ -179,6 +181,30 @@ public sealed class DerivedWorkAdmittedEmailsTests
         Assert.Empty(admitted.AsEnumerable());
     }
 
+    /// <summary>The walk spans owners, so mail of an owner who classifies nothing passes every clause unscored.</summary>
+    /// <remarks>
+    /// The isolation this feature turns on: one owner switching classification on must not hold another owner's mail out
+    /// of the index waiting on a verdict nothing will ever reach it, and must not withhold a message somebody else's
+    /// server already filed as junk under a name their own account happens to share.
+    /// </remarks>
+    [Fact]
+    public void Admitting_MailOfAnOwnerWhoseAccountDoesNotClassify_LetsItThroughUnscored()
+    {
+        // Arrange
+        var emails = Emails(
+            Email("home", "INBOX", Now, verdict: null),
+            Email("home", "INBOX", Now, SpamVerdict.Spam),
+            Email("work", "INBOX", Now, verdict: null));
+
+        // Act
+        var admitted = DerivedWorkAdmittedEmails.Admitting(emails, Terms());
+
+        // Assert
+        Assert.Equal(
+            [null, SpamVerdict.Spam],
+            admitted.AsEnumerable().Select(email => email.SpamClassification?.Verdict));
+    }
+
     [Fact]
     public void Admitting_NoTerms_Throws()
     {
@@ -190,9 +216,9 @@ public sealed class DerivedWorkAdmittedEmailsTests
     }
 
     private static DerivedWorkAdmissionTerms Terms(params MailFolderIdentity[] junkFolders) => new(
-        IsApplied: true,
+        [Work],
         junkFolders,
-        [MailFolderAlias.Create("INBOX")],
+        [WorkInbox],
         Now - TimeSpan.FromMinutes(15));
 
     private static IQueryable<StoredEmailEntity> Emails(params StoredEmailEntity[] emails) => emails.AsQueryable();

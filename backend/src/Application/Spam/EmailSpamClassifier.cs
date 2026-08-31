@@ -9,6 +9,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.Spam.Gating;
 using MailFathom.Application.Spam.Scanning;
 using MailFathom.Application.Spam.Signals;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Spam;
 
@@ -60,7 +61,7 @@ public sealed class EmailSpamClassifier
     /// <param name="headerReader">Reads the spam-relevant headers out of that content.</param>
     /// <param name="junkFolders">Answers whether the occurrence's folder is its account's junk folder.</param>
     /// <param name="deterministicClassifier">Reaches a verdict from what the message already carried.</param>
-    /// <param name="settingsReader">Answers what the operator decided.</param>
+    /// <param name="settingsReader">Answers what the occurrence's owner decided about their own mail.</param>
     /// <param name="classificationStore">Records the classification.</param>
     /// <param name="chunkStore">Removes the passages and vectors of a message the verdict calls junk.</param>
     /// <param name="gateTelemetry">Counts what a junk verdict had to remove, without describing any of it.</param>
@@ -113,7 +114,8 @@ public sealed class EmailSpamClassifier
         this.scanner = scanner;
     }
 
-    /// <summary>Classifies one occurrence.</summary>
+    /// <summary>Classifies one occurrence, on the terms its owner decided for their own mail.</summary>
+    /// <param name="owner">The owner whose mailbox the occurrence belongs to, whose posture decides everything below.</param>
     /// <param name="emailId">The occurrence to classify.</param>
     /// <param name="mode">What to do about an occurrence that already carries a classification.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
@@ -121,11 +123,12 @@ public sealed class EmailSpamClassifier
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="mode" /> is not a defined member.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when every allowed commit attempt conflicted.</exception>
     /// <remarks>
-    /// The order of the checks is the order of what they cost. Whether classification is on at all is free, the scope
+    /// The order of the checks is the order of what they cost. Whether this owner classifies at all is free, the scope
     /// and the existing record are one lookup each, and only then is content read — so an occurrence outside the scope
     /// costs no read of its mail, which is the property that keeps a switched-off feature free.
     /// </remarks>
     public async Task<SpamClassificationResult> ClassifyAsync(
+        MailOwnerId owner,
         StoredEmailId emailId,
         SpamClassificationMode mode,
         CancellationToken cancellationToken)
@@ -138,7 +141,7 @@ public sealed class EmailSpamClassifier
                 "A classification either leaves an existing record alone or replaces it.");
         }
 
-        var settings = this.settingsReader.Settings;
+        var settings = this.settingsReader.SettingsFor(owner);
 
         if (!settings.IsEnabled)
         {

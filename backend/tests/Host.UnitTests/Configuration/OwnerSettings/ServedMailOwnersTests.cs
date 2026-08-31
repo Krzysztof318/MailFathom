@@ -8,6 +8,7 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Failures;
 using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Configuration.OwnerSettings;
+using MailFathom.Host.Configuration.Spam;
 using MailFathom.TestSupport;
 using Xunit;
 
@@ -131,11 +132,40 @@ public sealed class ServedMailOwnersTests
         servedOwners.Resolved([Serving(SyntheticMailOwner.Deployment, "owner")]);
 
         // Act
-        servedOwners.OwnerDocumentPublished(SyntheticMailOwner.Deployment, "owner", [newer], 3);
-        servedOwners.OwnerDocumentPublished(SyntheticMailOwner.Deployment, "owner", [older], 2);
+        servedOwners.OwnerDocumentPublished(SyntheticMailOwner.Deployment, "owner", new OwnerAccountOptions { MailAccounts = [newer] }, 3);
+        servedOwners.OwnerDocumentPublished(SyntheticMailOwner.Deployment, "owner", new OwnerAccountOptions { MailAccounts = [older] }, 2);
 
         // Assert
         Assert.Same(newer, Assert.Single(servedOwners.Owners).MailAccounts.Single());
+    }
+
+    /// <summary>A committed record decides how that owner's mail is classified, so the roster carries the block beside the mailboxes.</summary>
+    /// <remarks>
+    /// The whole of what makes a document actually take over: a row still answering with no block reads as classification
+    /// off for that owner, which is not what a record stating a posture says either — a commit switching the scanner on
+    /// would go on classifying nothing.
+    /// </remarks>
+    [Fact]
+    public void OwnerDocumentPublished_ARecordCarryingAClassificationBlock_ServesThatOwnerFromIt()
+    {
+        // Arrange
+        var servedOwners = new ServedMailOwners();
+        var classification = new OwnerSpamClassificationOptions { Enabled = true, UseScanner = true };
+
+        servedOwners.Resolved([Serving(SyntheticMailOwner.Deployment, "owner")]);
+
+        // Act
+        servedOwners.OwnerDocumentPublished(
+            SyntheticMailOwner.Deployment,
+            "owner",
+            new OwnerAccountOptions { SpamClassification = classification },
+            2);
+
+        // Assert
+        var served = Assert.Single(servedOwners.Owners);
+
+        Assert.False(served.ReadFromConfiguration);
+        Assert.Same(classification, served.SpamClassification);
     }
 
     /// <summary>Two owner-document writes cannot validate and publish against the same runtime roster.</summary>

@@ -7,6 +7,7 @@ using MailFathom.Application.Jobs.Payloads;
 using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Actions;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -154,7 +155,7 @@ public sealed class EmailSpamClassificationHandlerTests
         SpamClassificationSettings? settings = null)
     {
         var settingsReader = Substitute.For<ISpamClassificationSettingsReader>();
-        settingsReader.Settings.Returns(settings ?? SettingsCovering(Inbox));
+        settingsReader.SettingsFor(Arg.Any<MailOwnerId>()).Returns(settings ?? SettingsCovering(Inbox));
 
         var sessionFactory = this.harness.CommittingSessions();
         var commitPolicy = this.harness.CommitPolicyOver(sessionFactory);

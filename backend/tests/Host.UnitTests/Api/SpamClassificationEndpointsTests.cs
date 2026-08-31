@@ -8,6 +8,7 @@ using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Actions;
 using MailFathom.Application.Spam.History;
 using MailFathom.Application.Spam.Runs;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -437,7 +438,7 @@ public sealed class SpamClassificationEndpointsTests
     private static ISpamClassificationSettingsReader SettingsReader(SpamClassificationSettings settings)
     {
         var reader = Substitute.For<ISpamClassificationSettingsReader>();
-        reader.Settings.Returns(settings);
+        reader.SettingsFor(Arg.Any<MailOwnerId>()).Returns(settings);
 
         return reader;
     }

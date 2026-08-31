@@ -202,6 +202,7 @@ public sealed class OrchestratedSpamScannerTests(MailFathomOrchestrationFixture 
         // Act
         var result = await services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<EmailSpamClassifier>().ClassifyAsync(
+                SyntheticMailAccount.Owner,
                 storedEmailId,
                 SpamClassificationMode.Reclassify,
                 token),

@@ -25,21 +25,33 @@ internal static class ConfiguredMailFolders
     /// identity for it here would attach one folder's decision to a name no operator wrote.
     /// </remarks>
     internal static IEnumerable<ConfiguredFolder> Of(MailSynchronizationOptions settings) =>
-        (settings.Accounts ?? [])
+        Of(settings.Accounts ?? []);
+
+    /// <summary>Reads one set of account declarations as the pair of identity and participation the ports answer with.</summary>
+    /// <param name="accounts">The declarations, which may be one owner's own rather than the whole deployment's.</param>
+    /// <returns>One entry per usable configured folder.</returns>
+    /// <remarks>
+    /// The overload a decision about one owner's own mailboxes is read through. An owner's folders are theirs, so a
+    /// question asked about them has to be asked of their accounts and of no others — and asking it the same way the
+    /// deployment's own section is read is what keeps one answer to *which folder plays which part*.
+    /// </remarks>
+    internal static IEnumerable<ConfiguredFolder> Of(IEnumerable<MailSynchronizationAccountOptions> accounts) =>
+        accounts
             .SelectMany(account => account.EffectiveFolders.Select(folder => new { account.AccountId, Folder = folder }))
             .Select(static configured => ConfiguredFolder.TryRead(configured.AccountId, configured.Folder))
             .OfType<ConfiguredFolder>();
 
-    /// <summary>Reads the aliases every account maps to its inbox, which is the scope classification defaults to.</summary>
-    /// <param name="settings">The snapshot the folders are read from.</param>
+    /// <summary>Reads the aliases one set of accounts maps to its inbox, which is the scope classification defaults to.</summary>
+    /// <param name="accounts">The declarations, which may be one owner's own rather than the whole deployment's.</param>
     /// <returns>One alias per account that maps a folder to the inbox role.</returns>
     /// <remarks>
-    /// Read beside the folder mappings because the default has to follow them: an operator whose server presents the
-    /// inbox under another name configures the role, and the default scope has to be the alias that role resolved to
-    /// rather than the literal text INBOX.
+    /// Read beside the folder mappings because the default has to follow them: whoever's server presents the inbox
+    /// under another name configures the role, and the default scope has to be the alias that role resolved to rather
+    /// than the literal text INBOX.
     /// </remarks>
-    internal static IEnumerable<MailFolderAlias> InboxAliasesOf(MailSynchronizationOptions settings) =>
-        Of(settings)
+    internal static IEnumerable<MailFolderAlias> InboxAliasesOf(
+        IEnumerable<MailSynchronizationAccountOptions> accounts) =>
+        Of(accounts)
             .Where(static folder => folder.SpecialUse is MailFolderSpecialUse.Inbox)
             .Select(static folder => folder.Identity.Alias);
 }

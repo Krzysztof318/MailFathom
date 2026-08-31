@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Configuration;
 using MailFathom.Domain.Access;
 
 namespace MailFathom.Host.Configuration.OwnerSettings.Administration;
@@ -13,6 +14,7 @@ namespace MailFathom.Host.Configuration.OwnerSettings.Administration;
 /// <param name="Source">Where their mail accounts are read from today, which is what the adoption changes.</param>
 /// <param name="ConfigurationPath">The colon-delimited section their declarations are written in, or <see langword="null" /> when no configuration source reaches them.</param>
 /// <param name="MailAccounts">The mail accounts the adoption would materialize, named as an operator recognizes them.</param>
+/// <param name="Classification">The classification posture the adoption would commit beside them, empty when the deployment states none.</param>
 /// <remarks>
 /// The section is the part an operator weighs, exactly as the deployment's own adoption names the file behind each
 /// setting: it is what stops deciding this owner's mailboxes once the adoption commits, and it is where somebody would
@@ -25,7 +27,8 @@ internal sealed record OwnerAdoptionPreview(
     long Version,
     MailOwnerAccountSource Source,
     string? ConfigurationPath,
-    IReadOnlyList<OwnerAdoptableMailAccount> MailAccounts)
+    IReadOnlyList<OwnerAdoptableMailAccount> MailAccounts,
+    IReadOnlyList<OwnerAdoptableClassificationSetting> Classification)
 {
     /// <summary>Gets whether there is an adoption to perform at all.</summary>
     /// <remarks>False for an owner whose record is already their own, which is the repeat of an adoption that has run.</remarks>
@@ -41,3 +44,30 @@ internal sealed record OwnerAdoptionPreview(
 /// something a preview should not be repeating into a terminal.
 /// </remarks>
 internal sealed record OwnerAdoptableMailAccount(string AccountId, string DisplayName);
+
+/// <summary>One classification setting an adoption would commit into the owner's record.</summary>
+/// <param name="Path">The path the setting is written at in the record, rooted at its own classification block.</param>
+/// <param name="Value">The value it takes, which is what the deployment's section states today.</param>
+/// <remarks>
+/// The value is here because the setting name alone does not say what an operator is agreeing to: filing named without
+/// its value reads the same whether it is about to be switched on or off, and two of these settings write to that
+/// owner's mail server. Nothing under the section's scanner block reaches this type, so no daemon address and no
+/// credential is repeated into a terminal by previewing an adoption.
+/// </remarks>
+internal sealed record OwnerAdoptableClassificationSetting(string Path, string Value)
+{
+    /// <summary>Describes one posture change an adoption would commit.</summary>
+    /// <param name="edit">The change as the adoption composed it.</param>
+    /// <returns>The preview entry.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="edit" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="edit" /> removes the setting rather than stating a value for it.</exception>
+    /// <remarks>An adoption states values and removes nothing, so a change carrying no value cannot arrive here and is refused rather than rendered as an empty setting.</remarks>
+    internal static OwnerAdoptableClassificationSetting For(ConfigurationEdit edit)
+    {
+        ArgumentNullException.ThrowIfNull(edit);
+
+        return new OwnerAdoptableClassificationSetting(
+            edit.Path,
+            edit.Value ?? throw new ArgumentException("An adoption states a value for every setting it carries.", nameof(edit)));
+    }
+}

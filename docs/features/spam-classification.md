@@ -161,6 +161,34 @@ The image is pinned to an exact digest in all four places that name it, and movi
 which is what the recorded corpus revision exists to make visible. `THIRD_PARTY_LICENSES.md` records the image, its
 licences, that whole messages are sent to it, and that it bundles no plugin reporting anything outside the deployment.
 
+## Each owner decides this for their own mail
+
+Junk is a judgement about somebody's own mailbox, and both of the actions below write to that person's mail server. So
+**the posture is the owner's**: whether their mail is classified at all, whether the scanner is consulted for it, which
+of their folders are classified, the score a verdict is reached at, and what becomes of the result. An owner may switch
+classification off entirely for themselves, and no deployment setting requires it of them. That follows from junk
+affecting only that owner's own mailbox: there is nobody else's interest for a deployment-wide floor to protect.
+
+**What stays the deployment's is what costs it a resource**: where the scanner daemon is, what one scan may spend, how
+many scans run at once, how long a message may wait for a verdict before the index moves on without it, and how wide one
+pass of a classification run is. So are the bounds a threshold may be set within — an owner writing a value outside them
+is refused at the write, and the refusal names the range.
+
+Which source an owner's posture is read from is the same per-owner marker that decides where their mail accounts come
+from, described in [the owners a deployment serves](../operations/configuration-sources.md#the-owners-a-deployment-serves).
+An owner still read from a configuration source takes the deployment's `SpamClassification` section; an owner whose
+document has been written takes the block that document carries. **The two are never unioned**: switching classification
+off in a record actually switches it off rather than falling back to whatever the file still says. Adoption carries the
+section's posture into the record with the mailboxes, so the handover moves an owner's settings rather than resetting
+them.
+
+A folder resolves within that owner's own mail accounts and nowhere else — both the folders their mail is classified
+over and the folder their junk is filed into. A name only somebody else's account carries is answered exactly as one
+this deployment does not serve.
+
+A single-owner deployment is unchanged by all of this. It serves one owner read from configuration, so the section it
+already has is that owner's posture and behaves exactly as it did.
+
 ## What an operator can let a verdict do
 
 Two switches, independent of each other and **both off by default**. With neither on, a verdict is recorded and no
@@ -265,6 +293,12 @@ decided about yet waits rather than being derived from ahead of the answer.
 
 With classification off, nothing is gated. Chunking, embedding, and rule evaluation reach exactly the mail they reached
 before any of this existed, and no folder is looked at to decide it.
+
+**Off is per owner here as everywhere else.** A walk over stored mail spans owners, and the gate narrows it by the
+accounts of the owners who classify — so an owner who switched classification off has all of their mail admitted at
+once, their junk folder included, while another owner's mail in the same walk goes on waiting on its verdict. Their junk
+folder goes with them because withholding it is an ordering behind a verdict rather than a rule of its own: nothing is
+ever going to score that mail, so holding it back would hold it back forever.
 
 ### What is decided about one message
 
@@ -476,19 +510,26 @@ unchanged rather than wrapped in a predicate that admits everything.
 ## Configuration
 
 The `SpamClassification` section, in full, is in the
-[AI configuration](../operations/configuration-ai.md#spamclassification). What it decides:
+[AI configuration](../operations/configuration-ai.md#spamclassification). It is what reaches an owner still read from a
+configuration source; an owner whose document has been written states the same posture in their own record, under the
+`SpamClassification` property the same page describes. What either of them decides:
 
 - whether classification runs at all;
 - whether a configured scanner is consulted after the deterministic stage;
 - which folder aliases are classified, defaulting to whichever alias each account maps to its inbox;
-- the threshold a scanner's score is judged against, defaulting to the scanner's own;
-- how wide one pass of a classification run is: how many messages a batch commits, and how many batches one account run
-  takes before it leaves the rest to the next. Neither is a schedule — how often a pass happens is the account's own
-  synchronization interval.
+- the threshold a scanner's score is judged against, defaulting to the scanner's own.
+
+What neither of them decides is how wide one pass of a classification run is: how many messages a batch commits, and how
+many batches one account run takes before it leaves the rest to the next. Both are the deployment's for every owner,
+because they bound what one pass of the process spends rather than what happens to anybody's mail, and neither is a
+schedule — how often a pass happens is the account's own synchronization interval. So is how long a message may wait on
+a verdict before derived work runs for it unclassified.
 
 Two blocks sit below it. `SpamClassification:Scanner` holds the daemon's address and bounds and is read only where the
-scanner is switched on. `SpamClassification:Actions` holds the two switches, the folder junk is filed into, and the score
-an operator is willing to act at; it is read per verdict, so switching filing on reaches the next one without a restart.
+scanner is switched on, and it is the deployment's for every owner. `SpamClassification:Actions` holds the two switches,
+the folder junk is filed into, and the score the owner is willing to act at; it is read per verdict, so switching filing
+on reaches the next one without a restart. An owner's own record carries `Actions` and the posture above it, and none of
+the engine settings — a record reaching for one is refused by the strict binding that reads it.
 
 An operator who switched the scanner on and left classification off is told at startup rather than given the quiet
 answer, and so is one who switched it on and named no address for it, one who asked for junk to be acted on with

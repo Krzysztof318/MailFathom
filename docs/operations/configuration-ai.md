@@ -140,10 +140,15 @@ analyzed whole and only something pathological reaches it.
 
 ## `SpamClassification`
 
-Whether mail is classified as spam, and where. A root of its own for the same reason `SensitiveContent` is one: it is a
-property of the deployment rather than of one account, and what it switches on reaches the mailbox reads as well as the
-classification. [Spam classification](../features/spam-classification.md) records what a classification holds, which
-facts the deterministic stage reads, and why a scanner never overturns a provider's own verdict.
+Whether mail is classified as spam, and where. A root of its own rather than a per-account block, because what it
+switches on reaches the mailbox reads as well as the classification. [Spam classification](../features/spam-classification.md)
+records what a classification holds, which facts the deterministic stage reads, and why a scanner never overturns a
+provider's own verdict.
+
+**The section is read for each owner this deployment still serves from a configuration source.** Junk is a judgement
+about somebody's own mailbox, so the posture below is that owner's rather than the deployment's, and an owner whose
+document has been written states it in [their own record](configuration-sources.md#one-owners-own-classification-posture)
+instead — at which point this section stops reaching them. The keys the two split into are named after the table.
 
 Every switch is off by default, and an absent section is that default rather than a startup failure. The deterministic
 stage works alone and is the whole of the feature without a sidecar; `UseScanner` adds the Apache SpamAssassin daemon
@@ -168,8 +173,21 @@ described below.
 | `SpamClassification:Actions:JunkFolder` | string | `role:Junk` | A folder alias, or a role written as `role:<name>`; every configured account has to map it once filing is on | reload |
 | `SpamClassification:Actions:Threshold` | double | unset | 0.1 – 1000; unset acts on every spam verdict, and a value judges what a scanner scored | reload |
 
+**Eight of those keys are one owner's decision and the rest are the deployment's.** `Enabled`, `UseScanner`,
+`ScannedFolders`, `ScannerThreshold`, and the four settings under `Actions` are what an owner decides about their own
+mail, and are the whole of what their record may carry. `ClassificationWait`, `RunBatchSize`, `MaxRunBatchesPerPass`,
+and the `Scanner` block are the deployment's, because each of them is what the process holds open or spends rather than
+a judgement about anybody's mailbox — an owner record naming one is refused. The bounds a threshold is judged against,
+`0.1` to `1000`, are the deployment's too and apply to an owner's value unchanged.
+
+**An owner's `UseScanner` asks for the deployment's scanner rather than deciding that one exists.** Whether any scanner
+is registered is read from this section alone, at startup, so an owner switching the key on where the deployment
+registered none is neither refused nor a failed start: their mail is classified by the deterministic stage, exactly as
+it would be with the key off. Everything else in the eight means the same for an owner as it does here.
+
 `UseScanner` and the `Scanner` block are read once, at startup: whether a scanner exists at all decides what is
-constructed and whether the host refuses to start without a daemon, which a reload cannot revisit. Everything else in
+constructed and whether the host refuses to start without a daemon, which a reload cannot revisit. That is this
+section's key; the paragraph above is what an owner's own copy of it can and cannot do. Everything else in
 this section is read per classification.
 
 `ClassificationWait` bounds the ordering rather than a scan. Wherever classification is on, a message it covers is not
@@ -192,9 +210,11 @@ what an address outside it gives up, and what the rule-update and DNS postures c
 sidecar itself — [Kubernetes](deployment-kubernetes.md#spam-scanning),
 [Compose](deployment-compose.md#spam-scanning), and [Quadlet](deployment-quadlet.md#spam-scanning).
 
-The default scope follows the folder **role** rather than the text `INBOX`: it is whichever alias each account maps to
-`Inbox` in [`MailSynchronization`](configuration-mail.md#one-account--mailsynchronizationaccountsn), so a server presenting the inbox under
-another name is classified without the scope being restated here. The two shapes of an unset list are deliberately
+The default scope follows the folder **role** rather than the text `INBOX`: it is whichever alias each of that owner's
+own accounts maps to `Inbox`, so a server presenting the inbox under another name is classified without the scope being
+restated here. For an owner served from this section those accounts are
+[`MailSynchronization:Accounts`](configuration-mail.md#one-account--mailsynchronizationaccountsn); for an owner declared
+in the top-level `Accounts` collection or read from their own record they are that owner's own `MailAccounts`. The two shapes of an unset list are deliberately
 distinguishable — writing no key asks for that default, and writing an empty list asks for no folder, which switches the
 work off without switching the section off.
 

@@ -5,6 +5,8 @@
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.Rules;
+using MailFathom.Host.Configuration.Spam;
 
 namespace MailFathom.Host.Configuration.OwnerSettings;
 
@@ -18,10 +20,11 @@ namespace MailFathom.Host.Configuration.OwnerSettings;
 /// </para>
 /// <para>
 /// What belongs in it is whatever is that owner's own rather than the deployment's. Today that is their mail-account
-/// declarations; the mail rules, the trusted senders, and the scanning and spam postures join them as each moves out
-/// of the deployment's section, and each arrives as a property here rather than as a second document. What never
-/// belongs in it is a value the deployment set: there is no owner configuration layer, so nothing here shadows a
-/// deployment setting, and a property that would need to is a deployment setting somebody put in the wrong document.
+/// declarations and how their own mail is classified as spam; the mail rules, the trusted senders, and the scanning
+/// posture join them as each moves out of the deployment's section, and each arrives as a property here rather than as
+/// a second document. What never belongs in it is a value the deployment set: there is no owner configuration layer, so
+/// nothing here shadows a deployment setting, and a property that would need to is a deployment setting somebody put in
+/// the wrong document.
 /// </para>
 /// <para>
 /// The envelope is not repeated here. The owner's identifier, the label they are told apart by, the version, and the
@@ -41,20 +44,37 @@ internal sealed class OwnerAccountOptions : IValidatableObject
     /// </remarks>
     public List<MailSynchronizationAccountOptions> MailAccounts { get; set; } = [];
 
+    /// <summary>Gets or sets how this owner's mail is classified as spam and what becomes of their junk.</summary>
+    /// <remarks>
+    /// Always present so that a record stating none of its keys still binds, and off in every switch, which is what
+    /// makes classification something this owner asked for rather than something a deployment did to their mailbox. It
+    /// holds only the decisions that are about their own mail: the engine and what it costs stay the deployment's, and
+    /// no key here shadows one of theirs.
+    /// </remarks>
+    public OwnerSpamClassificationOptions SpamClassification { get; set; } = new();
+
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext) => this.FindRefusals();
 
-    /// <summary>Judges this record by every rule a mail account is declared under that needs no clock.</summary>
+    /// <summary>Judges this record by every rule it is written under that needs no clock.</summary>
     /// <returns>One result per refusal, empty when the record could be this owner's.</returns>
     /// <remarks>
-    /// The rules are <see cref="OwnerMailAccountRules" />' rather than this type's, because the same declarations
-    /// arrive here as a persisted record and arrive in the deployment's own file as an owner's declared section, and a
-    /// rule stated twice is a rule that comes to hold in one of the two places. The one rule that is not among them is
-    /// the one that cannot be: <see cref="FindSynchronizationWindowErrors" /> asks a question about the current date,
-    /// so it is supplied a clock by whoever runs it.
+    /// <para>
+    /// The mail-account rules are <see cref="OwnerMailAccountRules" />' rather than this type's, because the same
+    /// declarations arrive here as a persisted record and arrive in the deployment's own file as an owner's declared
+    /// section, and a rule stated twice is a rule that comes to hold in one of the two places. The one rule that is not
+    /// among them is the one that cannot be: <see cref="FindSynchronizationWindowErrors" /> asks a question about the
+    /// current date, so it is supplied a clock by whoever runs it.
+    /// </para>
+    /// <para>
+    /// The classification block is judged against this record's own mailboxes and against nothing else, which is what
+    /// makes a scanned folder or a junk destination resolve within the owner's accounts: a name only somebody else's
+    /// account carries is refused here exactly as one nobody carries.
+    /// </para>
     /// </remarks>
     internal IEnumerable<ValidationResult> FindRefusals() =>
-        OwnerMailAccountRules.FindRefusals(this.MailAccounts, nameof(this.MailAccounts));
+        OwnerMailAccountRules.FindRefusals(this.MailAccounts, nameof(this.MailAccounts))
+            .Concat(this.SpamClassification.FindRefusals(DeclaredMailAccounts.ReadFrom(this.MailAccounts)));
 
     /// <summary>Finds every declared earliest received date that could not mean anything on the supplied date.</summary>
     /// <param name="today">The current date the declared bounds are read against.</param>

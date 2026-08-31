@@ -43,8 +43,8 @@ internal sealed class ConfiguredMailFolderMappingReader : IMailFolderMappingRead
     /// <summary>Builds every account's mappings once, keyed by the account identifier the lookups arrive with.</summary>
     /// <remarks>
     /// It walks <see cref="MailSynchronizationAccountOptions.EffectiveFolders" /> for the reason
-    /// <see cref="ConfiguredMailFolders.Of" /> does, so an account that configures no folder answers for the inbox
-    /// mapping it is actually run with. An entry whose names are unusable is skipped rather than raised over: startup
+    /// <see cref="ConfiguredMailFolders.Of(MailSynchronizationOptions)" /> does, so an account that configures no
+    /// folder answers for the inbox mapping it is actually run with. An entry whose names are unusable is skipped rather than raised over: startup
     /// validation refuses that configuration, and a reload being rejected must not make a lookup throw. Two accounts
     /// configured under one identifier is the same refusal, so the first is kept here rather than the build failing
     /// over what validation already reports.

@@ -5,6 +5,7 @@
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
@@ -62,7 +63,7 @@ public sealed class SpamActionRecorder
     private readonly OptimisticConcurrencyRetryPolicy retryPolicy;
 
     /// <summary>Initializes the use case from the decisions it has to read and the record it writes.</summary>
-    /// <param name="settingsReader">Answers what the operator asked to happen to junk.</param>
+    /// <param name="settingsReader">Answers what the message's owner asked to happen to their own junk.</param>
     /// <param name="occurrences">Reads where the classified email is and whether it is already read.</param>
     /// <param name="records">Opens the durable record each change is carried by.</param>
     /// <param name="destinations">Turns the configured junk folder into the folder on the server it currently names.</param>
@@ -92,7 +93,8 @@ public sealed class SpamActionRecorder
         this.retryPolicy = retryPolicy;
     }
 
-    /// <summary>Asks for whatever the switches say should happen to one classified message.</summary>
+    /// <summary>Asks for whatever the owner's switches say should happen to one classified message.</summary>
+    /// <param name="owner">The owner whose mailbox would be written to, whose switches decide whether anything is.</param>
     /// <param name="classification">What classification concluded about the occurrence.</param>
     /// <param name="posture">Whether the changes are written down or only worked out.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
@@ -101,10 +103,10 @@ public sealed class SpamActionRecorder
     /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="posture" /> is not a defined member.</exception>
     /// <exception cref="PersistenceConcurrencyConflictException">Thrown when every allowed commit attempt conflicted.</exception>
     /// <remarks>
-    /// The checks run in the order of what they cost and of what they settle. Whether anything is switched on at all is
-    /// free and answers for the whole deployment; the verdict and the threshold are already in hand; only then is the
-    /// mailbox read. A deployment that asked for no action therefore performs one property read per classified message
-    /// and nothing else.
+    /// The checks run in the order of what they cost and of what they settle. Whether this owner switched anything on is
+    /// free and answers for every one of their messages; the verdict and the threshold are already in hand; only then is
+    /// the mailbox read. An owner who asked for no action therefore costs one settings read per classified message of
+    /// theirs and nothing else.
     /// <para>
     /// The posture is read last of all, after every one of those checks. That is what makes a dry run a rehearsal rather
     /// than a prediction: a message a filing would be refused for reports the refusal in both postures, so an operator
@@ -112,6 +114,7 @@ public sealed class SpamActionRecorder
     /// </para>
     /// </remarks>
     public async Task<SpamActionResult> RecordAsync(
+        MailOwnerId owner,
         SpamClassification classification,
         SpamActionPosture posture,
         CancellationToken cancellationToken)
@@ -126,7 +129,7 @@ public sealed class SpamActionRecorder
                 "An attempt either writes the changes down or works them out and writes nothing.");
         }
 
-        var settings = this.settingsReader.Actions;
+        var settings = this.settingsReader.ActionsFor(owner);
 
         if (!settings.IsAnyActionEnabled)
         {
