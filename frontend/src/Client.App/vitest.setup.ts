@@ -24,3 +24,20 @@ if (jsdomStorage instanceof Storage) {
         writable: false,
     });
 }
+
+// jsdom evaluates no media query and publishes no `matchMedia` at all, so a component asking what appearance the
+// machine is set to fails on a missing function rather than reading a preference. What is put back answers the way a
+// browser whose machine matches nothing does, and never changes its answer — this environment has no machine
+// preference to report and computes no styles. A test that states one defines its own over this, the way
+// `src/theme/Theme.test.tsx` does, which is the same shape `Localization.test.tsx` states a language preference in.
+if (typeof window.matchMedia !== 'function') {
+    Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: (query: string) => ({
+            media: query,
+            matches: false,
+            addEventListener: () => undefined,
+            removeEventListener: () => undefined,
+        }),
+    });
+}

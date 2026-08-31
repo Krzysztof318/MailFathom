@@ -158,8 +158,9 @@ root. No threshold is enforced on the figure.
 
 `pnpm test:browser` is the other one. It runs `pnpm build`, serves `src/Client.App/dist/` with Vite's preview server,
 and drives it with Playwright, so what it proves is the bundle a deployment publishes rather than the source: the
-application loading, the version the build stamped, the screen rendering through roles and accessible names, the
-browser's own back navigation, and the requests the page actually issued. It needs a browser of its own —
+application loading, the version the build stamped, the screen rendering through roles and accessible names, each space
+reloading at its own address and the back gesture moving through the client's own history, which composition a width
+produces, and the requests the page actually issued. It needs a browser of its own —
 `pnpm exec playwright install chromium` — which is why neither verification gate runs it and the pipeline does, on every
 pull request that reaches this stack. Its configuration is `playwright.config.ts` and its specs are under `tests/`.
 
@@ -172,11 +173,37 @@ client's file types. Prettier reads it: its CLI respects `.editorconfig` by defa
 those values in a second file that would drift. Prettier's own configuration here is `.prettierignore` and nothing
 more.
 
-## Styling
+## Three spaces, one frame, and no router
 
-Tailwind is wired CSS-first through `@tailwindcss/vite`. The palette and the type scale are `@theme` tokens in
-`src/Client.App/src/styles.css`, and there is no JavaScript configuration file. The colours are MailFathom's own,
-sampled from the product icon.
+The client is **Discover**, **Mail**, and **Cases**, and they are one application rather than three: `src/App.tsx` is
+the frame that holds them, and it is what a person carries their question, their scope, and their selection across.
+The frame is one tree laid out two ways by the width it is given — a navigation rail beside the workspace at or above
+the `workspace` breakpoint, bottom navigation under a stack of screens below it — and nothing in it reads which head or
+which platform it is running on.
+
+Each space is reached at a **fragment address** of its own: `#/discover`, `#/mail`, `#/cases`. `src/routing/` is the
+whole of it, and it is deliberately not a package — three addresses with no segment, no parameter, and no nested tree
+are what `location.hash` and `hashchange` already are, and the browser keeps the history for us. A fragment rather than
+a path because a path would have to be reloadable, and the service serves the bundle with no fallback mapping an
+unmatched path onto the entry document; a fragment never reaches a server, so every address reloads on both heads with
+nothing configured.
+
+`src/workspace/` is what survives moving between spaces, and it is mounted above the frame for exactly that reason.
+
+## Styling, and the two themes
+
+Tailwind is wired CSS-first through `@tailwindcss/vite`. The palette, the type scale, the breakpoint the composition
+changes at, the safe-area insets, and the motion defaults are `@theme` tokens in `src/Client.App/src/styles.css`, and
+there is no JavaScript configuration file.
+
+The colours come in two layers. `--color-fathom-*` is MailFathom's own ramp, sampled from the product icon; everything
+a screen actually composes against is a **semantic** name set from it — a panel, a rail, a sunken region, two line
+weights, four text weights, an accent, a healthy state, a warning. Both themes declare the same names, which is what
+lets the light and the dark client be one set of utilities rather than a `dark:` variant on every one of them.
+
+`src/theme/` decides which of the two is painted, from the person's choice of light, dark, or following the machine.
+It writes one `data-theme` attribute on the document before the first paint, so nothing on a screen ever asks which
+theme is in force — the same rule that keeps a screen from asking which language it is in.
 
 ## What the build produces
 

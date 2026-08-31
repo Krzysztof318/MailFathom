@@ -13,6 +13,24 @@
 export const en = {
     'shell.title': 'MailFathom',
     'shell.language': 'Language',
+    'shell.theme': 'Theme',
+    'shell.spaces': 'Spaces',
+
+    'theme.system': 'Follow the system',
+    'theme.light': 'Light',
+    'theme.dark': 'Dark',
+
+    'space.discover': 'Discover',
+    'space.mail': 'Mail',
+    'space.cases': 'Cases',
+    'space.pending':
+        'This space is not built yet. What is here is the frame around it: its address, its navigation, and the scope every question is asked against.',
+
+    'intent.label': 'Ask your mail',
+    'intent.placeholder': 'What do you want to ask your mail?',
+
+    'scope.mailbox': 'Mailbox in scope',
+    'scope.allMailboxes': 'All mailboxes',
 
     'connect.title': 'Point this client at your MailFathom',
     'connect.explanation':
@@ -38,22 +56,18 @@ export const en = {
     'deployment.change': 'Point somewhere else',
 
     'accounts.reading': 'Reading accounts…',
-    'accounts.refreshing': 'This deployment refreshes the local copy of these accounts.',
     'accounts.notRefreshing': 'This deployment is not refreshing the local copy of these accounts.',
     'accounts.failed': 'The accounts could not be read: {reason}.',
+
+    'connection.current': 'Every account is up to date.',
+    'connection.behind': 'Some accounts are behind.',
+    'connection.noAccounts': 'No mail account is configured for this owner yet.',
+    'connection.retry': 'Try again',
 
     'failure.unauthenticated': 'unauthenticated',
     'failure.unauthorized': 'unauthorized',
     'failure.unavailable': 'unavailable',
     'failure.unreadable': 'unreadable',
-
-    'synchronization.neverSynchronized': 'never synchronized',
-    'synchronization.synchronized': 'synchronized',
-    'synchronization.failing': 'failing',
-    'synchronization.unreachable': 'unreachable',
-
-    'account.stateBehind': '{state}, behind',
-    'account.lastSynchronized': 'last synchronized {when}',
 } as const;
 
 /** Every message a screen may ask for. A key absent here does not compile at the call site. */

@@ -7,7 +7,13 @@ Project repository: https://github.com/Krzysztof318/MailFathom
 <html lang="en">
     <head>
         <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <!-- viewport-fit=cover is what makes the safe-area insets report anything: without it a window with a notch,
+             a rounded corner, or a system bar is laid out inside them and `env(safe-area-inset-*)` is zero, so the
+             tokens the frame pads with would silently do nothing. -->
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <!-- What the browser paints its own canvas from before the bundle has loaded, so a reader whose machine is
+             dark does not get a white document while it does. -->
+        <meta name="color-scheme" content="light dark" />
         <title>MailFathom</title>
     </head>
     <body>

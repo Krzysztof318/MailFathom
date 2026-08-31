@@ -76,6 +76,10 @@ component library, which ADR 0021 excluded deliberately; a router; a state conta
 Adopting one is a decision with its own issue, its own licence review, and its own reasoning about what it buys — never
 a side effect of writing the screen that wanted one thing it does.
 
+The router is the one of the four whose absence has already been argued rather than merely inherited: the client
+reaches each space at a fragment address and reads it back through `hashchange`, which
+[the workspace's page](README.md) describes. So a change proposing one is answering that argument, not filling a gap.
+
 ## Driving the running client in a real browser
 
 A screen is not proven by compiling. The client is served by `pnpm dev` and driven with

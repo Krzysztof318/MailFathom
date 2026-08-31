@@ -180,11 +180,15 @@ the answer; dropping it is not, and neither is asserting it in jsdom where it wo
   Neither verification gate runs it, because it needs a browser install the gates would otherwise demand of every
   machine.
 
-Two things it does not cover yet, because the client does not have them. There is no router, so the only navigation
-there is to check is the browser's own — leaving the client and coming back to it — and an in-application back gesture
-is asserted here on the day one exists. And nothing goes over the wire to a service, because the mail is stubbed inside
-the bundle and the origin serving it is the deployment it is pointed at, so what is asserted about the network today is
-that the client reaches its own origin and no other.
+One thing it does not cover yet, because the client does not have it: nothing goes over the wire to a service, because
+the mail is stubbed inside the bundle and the origin serving it is the deployment it is pointed at, so what is asserted
+about the network today is that the client reaches its own origin and no other.
+
+Navigation is no longer on that list. Each space is reached at a fragment address of its own, so this suite moves
+between them, reloads one, and moves back and forward through the client's own history — which is the whole reason the
+address is a fragment, and which nothing but a real document with a history can answer. Where the composition changes
+is here as well, because it is geometry: the navigation sits beside the workspace in a wide window and under it in a
+narrow one, asked of two viewport widths rather than of two heads.
 
 ## Coverage
 

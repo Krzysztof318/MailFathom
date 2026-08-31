@@ -5,16 +5,27 @@
  */
 
 /*
- * The whole of the client's styling configuration. Tailwind is wired CSS-first through its Vite plugin, so the palette
- * and the type scale are `@theme` tokens here and there is no JavaScript configuration file to keep in step with them.
+ * The whole of the client's styling configuration. Tailwind is wired CSS-first through its Vite plugin, so the palette,
+ * the type scale, the breakpoints, and the motion defaults are `@theme` tokens here and there is no JavaScript
+ * configuration file to keep in step with them.
  *
- * The colours are MailFathom's own, sampled from `assets/icon-900.png` rather than picked by eye: the near-black navy
- * the mark sits on, the blue ramp across it, the pale blue of the lettering, and the gold of the star.
+ * Two layers of colour, and only the first one names a hue. `--color-fathom-*` is MailFathom's own ramp, sampled from
+ * `assets/icon-900.png` rather than picked by eye: the near-black navy the mark sits on, the blue across it, the pale
+ * blue of the lettering, and the gold of the star. Everything below it is *semantic* — a panel, a rail, a line, a text
+ * weight, a healthy state — and a screen composes against those names alone, which is what lets the second theme exist
+ * as a block of values rather than as a `dark:` variant on every utility a screen writes.
+ *
+ * The light values are the ones declared in `@theme`; the block after it redeclares exactly the same names for dark and
+ * nothing else. It sits outside every cascade layer deliberately: Tailwind emits `@theme` into its own `theme` layer,
+ * and an unlayered declaration wins over any layered one whatever its specificity, so the override cannot be reordered
+ * out of effect by a later import.
  */
 
 @import 'tailwindcss';
 
 @theme {
+    /* MailFathom's own ramp. Nothing outside this file uses these directly — they are what the semantic names below
+       are set from, so the brand lives in one place and a screen never learns a hue. */
     --color-fathom-950: #010d33;
     --color-fathom-800: #0028a0;
     --color-fathom-600: #0048e0;
@@ -22,7 +33,120 @@
     --color-fathom-200: #a8c8f8;
     --color-fathom-star: #f8d848;
 
+    /* Surfaces, from the page underneath everything to the chrome that sits on it. `sunken` is a region set into a
+       panel — a side column, a summary strip — and `hover` is what any of them becomes under a pointer. */
+    --color-page: #f6f7fb;
+    --color-panel: #ffffff;
+    --color-rail: #eef0f7;
+    --color-sunken: #f1f3f9;
+    --color-hover: #e4e8f3;
+
+    /* Two line weights and no more: one that separates regions, one that separates rows inside a region. */
+    --color-line: #d7dced;
+    --color-line-soft: #e8ebf5;
+
+    /* Four text weights, from what a sentence is written in down to what a timestamp is. */
+    --color-text: #0b1020;
+    --color-text-soft: #38405a;
+    --color-muted: #515a72;
+    --color-faint: #666f8a;
+
+    /* The accent is MailFathom's blue, `strong` is what it becomes as text on its own tint, and `soft` is that tint. */
+    --color-accent: var(--color-fathom-600);
+    --color-accent-strong: var(--color-fathom-800);
+    --color-accent-soft: #e6edfd;
+    --color-on-accent: #ffffff;
+
+    /* The two states a mail client cannot avoid saying out loud: everything is current, or something is not. */
+    --color-healthy: #1a7f4b;
+    --color-healthy-soft: #e6f4ec;
+    --color-warning: #b45309;
+    --color-warning-soft: #fdf0e2;
+
+    /* The one width the composition changes at: below it the workspace is a stack of screens under bottom navigation,
+       and at or above it a rail beside columns. Declared here so the point where narrow stops is one decision rather
+       than one per screen. The number is the prototype's, and it is a width rather than a device. */
+    --breakpoint-workspace: 48.75rem;
+
+    /* What a notch, a rounded corner, or a system bar takes out of the viewport. Zero everywhere a window has none,
+       which is every head this repository builds today; declaring it as a token is what keeps a screen from reaching
+       for a fixed padding the day one of them has one. */
+    --spacing-safe-top: env(safe-area-inset-top, 0px);
+    --spacing-safe-bottom: env(safe-area-inset-bottom, 0px);
+    --spacing-safe-left: env(safe-area-inset-left, 0px);
+    --spacing-safe-right: env(safe-area-inset-right, 0px);
+
+    /* Motion is decided once. A component writes `transition` and gets these; one that writes a duration of its own is
+       the same drift as one that writes a hexadecimal colour. */
+    --default-transition-duration: 140ms;
+    --default-transition-timing-function: ease;
+
     --font-sans:
         'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
     --font-mono: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
+}
+
+/* The same names, dark. `data-theme` is written by `theme/Theme.tsx`, which resolves the follow-the-system choice
+   before the first paint, so nothing on a screen ever asks which theme is in force. */
+:root[data-theme='dark'] {
+    --color-page: #070d20;
+    --color-panel: #0f1730;
+    --color-rail: #0a1128;
+    --color-sunken: #0c142c;
+    --color-hover: #182242;
+
+    --color-line: #232e4d;
+    --color-line-soft: #182140;
+
+    --color-text: #e9edf8;
+    --color-text-soft: #c2c9dc;
+    --color-muted: #9aa2ba;
+    --color-faint: #7e87a1;
+
+    --color-accent: var(--color-fathom-500);
+    --color-accent-strong: var(--color-fathom-200);
+    --color-accent-soft: #0c1c3f;
+    --color-on-accent: #ffffff;
+
+    --color-healthy: #4ec98a;
+    --color-healthy-soft: #10291d;
+    --color-warning: #f0a14a;
+    --color-warning-soft: #2e2013;
+}
+
+@layer base {
+    /* What the browser draws its own furniture from: the scrollbar, a form control it renders itself, and the canvas
+       behind the document before any rule of ours has painted. */
+    :root {
+        color-scheme: light;
+    }
+
+    :root[data-theme='dark'] {
+        color-scheme: dark;
+    }
+
+    body {
+        background-color: var(--color-rail);
+        color: var(--color-text);
+    }
+
+    /* Focus is always visible, and it is decided once here rather than by every control remembering a ring utility.
+       The browser's own outline is replaced rather than removed, which is the part a screen is refused for skipping. */
+    :focus-visible {
+        outline: 2px solid var(--color-accent);
+        outline-offset: 2px;
+    }
+
+    /* An accessibility obligation rather than a nicety: motion is removed under the preference rather than shortened,
+       and a transition that carried meaning still lands on its final value because only its duration is taken away. */
+    @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+            animation-duration: 0s !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0s !important;
+            scroll-behavior: auto !important;
+        }
+    }
 }
