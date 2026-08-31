@@ -67,8 +67,9 @@ never in a component.
 commands, and they exist for one reason: [ADR 0023](../docs/decisions/0023-where-the-client-keeps-the-credential-it-signs-in-with.md)
 keeps the credential this head signs in with in the operating system's own store, which a webview cannot reach and a
 shell can. `keychain_reachable` says whether there is a store to keep one in, and `keep_credential`, `read_credential`,
-and `forget_credential` are the three operations on it; none of them answers with anything but the credential asked
-for, because everything else they could report is about a password. There is still no capability file, and adding one
+and `forget_credential` are the three operations on it. Two of them answer whether they succeeded, which is what lets
+the client say that a store refused to delete rather than report a sign-out that did not happen; none of them answers
+_why_ one failed, because everything a failure could name is about a password. There is still no capability file, and adding one
 would be a mistake rather than an omission: Tauri gates its own plugin commands through an access-control list and
 never an application's, so a `capabilities/` entry naming these four would grant the webview reach into plugins
 nothing here pins. What the webview reaches them through is `app.withGlobalTauri` in `tauri.conf.json`, which puts

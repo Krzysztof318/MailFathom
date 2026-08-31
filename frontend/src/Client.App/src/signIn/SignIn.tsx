@@ -29,10 +29,16 @@ import type { CredentialLifetime } from './credentialStore';
 // What is decided here is only what a person sees; the address rule and the credential's own encoding each belong to
 // the module that owns them.
 
-/** What the screen has to say before anybody types, which is about the previous session rather than about this one. */
+/**
+ * What the screen has to say before anybody types, which is about the previous session rather than about this one.
+ *
+ * The screen takes a list rather than one of these, because two of them are true together: a credential the deployment
+ * stopped accepting is cleared, and the store may refuse to delete what was kept — which leaves the person signed out
+ * for one reason and still carrying a password for another.
+ */
 export type SignInNotice = 'credentialNoLongerAccepted' | 'passwordNotRemoved';
 
-const notices: Readonly<Record<SignInNotice, MessageKey>> = {
+const noticeMessages: Readonly<Record<SignInNotice, MessageKey>> = {
     credentialNoLongerAccepted: 'signIn.noLongerAccepted',
     passwordNotRemoved: 'signIn.notRemoved',
 };
@@ -97,13 +103,13 @@ const fieldStyle = 'rounded-md border border-line bg-panel px-3 py-2 text-text';
 export function SignIn({
     deployment,
     lifetime,
-    notice,
+    notices,
     send,
     onSignedIn,
 }: {
     readonly deployment: DeploymentAddress | null;
     readonly lifetime: CredentialLifetime;
-    readonly notice: SignInNotice | null;
+    readonly notices: readonly SignInNotice[];
     readonly send: DeploymentTransport;
     readonly onSignedIn: (deployment: DeploymentAddress, authorization: string) => void;
 }) {
@@ -192,8 +198,9 @@ export function SignIn({
         };
 
         // An address typed on this screen is asked what it is before it is handed a password, which is the whole
-        // reason there are two requests here. An address that arrived from the edge is not: the origin that served
-        // this client is the deployment, and there is nothing about it left to establish.
+        // reason there are two requests here. An address this screen was handed is not, whichever way it arrived: an
+        // origin that served the client is the deployment by definition, and an address somebody chose was asked this
+        // question on the run they chose it — which is why the stored one is not asked again on every later start.
         if (deployment === null) {
             const greeting = await reachDeployment(reached.deployment, send(running.signal));
 
@@ -257,11 +264,11 @@ export function SignIn({
                 <p className="text-sm">{translate('signIn.explanation')}</p>
             </div>
 
-            {notice === null ? null : (
-                <p className="text-warning" role="status">
-                    {translate(notices[notice])}
+            {notices.map((notice) => (
+                <p key={notice} className="text-warning" role="status">
+                    {translate(noticeMessages[notice])}
                 </p>
-            )}
+            ))}
 
             <form
                 className="flex flex-col gap-5"

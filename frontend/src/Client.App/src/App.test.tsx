@@ -415,6 +415,52 @@ describe('App sign-in', () => {
         expect([...credentials.kept]).toEqual([]);
     });
 
+    it('clears what the person carried between the spaces when the deployment stops accepting what was kept', async () => {
+        // One deployment whose answer to the accounts changes under the client, which is what a service restarted with
+        // a different password looks like from here: the read that was working starts refusing.
+        let accounts: Answer = { status: 503, body: '' };
+        const send: DeploymentTransport = () => (request) => {
+            asked.push(request);
+
+            return Promise.resolve(complete(request.path.endsWith('/session') ? accepted : accounts));
+        };
+
+        renderApp(servedFrom, null, send, storeKeeping());
+        signIn();
+        await screen.findByRole('button', { name: 'Try again' });
+
+        fireEvent.change(screen.getByRole('searchbox', { name: 'Ask your mail' }), {
+            target: { value: 'the renewal Nordwind sent' },
+        });
+
+        accounts = { status: 401, body: '' };
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+        await screen.findByText('This deployment has stopped accepting the password that was kept. Sign in again.');
+
+        // Being turned away mid-session returns this person to the sign-in exactly as signing out does, so what they
+        // were carrying goes with the credential there too rather than waiting for the next person to read.
+        accounts = directory(true, [workAccount]);
+        signIn();
+        await framed();
+
+        expect(screen.getByRole('searchbox', { name: 'Ask your mail' })).toHaveProperty('value', '');
+    });
+
+    it('says the password is still on the machine when the deployment stops accepting it and the store will not', async () => {
+        renderApp(servedFrom, typedCredential, deploymentAnswering({ status: 401, body: '' }), storeRefusingToForget());
+
+        // Two things went wrong at once and both are the person's to act on: the deployment no longer accepts what was
+        // kept, and the store would not give it up — so it is read back on every later start until they remove it.
+        expect(
+            await screen.findByText('This deployment has stopped accepting the password that was kept. Sign in again.'),
+        ).toBeDefined();
+        expect(
+            await screen.findByText(
+                'Signing out did not remove the password from this machine’s credential store, so it is still kept there. Remove it in the store itself, or sign in and out again.',
+            ),
+        ).toBeDefined();
+    });
+
     it('clears the credential and everything read with it when somebody signs out', async () => {
         const credentials = storeKeeping();
 
@@ -520,6 +566,22 @@ describe('App deployment', () => {
         await framed();
 
         expect(screen.getByRole('button', { name: 'Point somewhere else' })).toBeDefined();
+    });
+
+    it('offers a way out of the sign-in screen a chosen deployment left behind', () => {
+        renderApp(chose('https://mail.example.invalid'), null);
+
+        // A chosen address renders no address field, and it is read back out of storage on every later start — so
+        // without this, somebody whose password no longer works has no way to point the client anywhere else.
+        fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else' }));
+
+        expect(screen.getByRole('textbox', { name: 'Deployment address' })).toBeDefined();
+    });
+
+    it('offers nothing to change on the sign-in screen the origin that served the client left', () => {
+        renderApp(servedFrom, null);
+
+        expect(screen.queryByRole('button', { name: 'Point somewhere else' })).toBeNull();
     });
 
     it('offers nothing to change where the origin that served the client is the deployment', async () => {

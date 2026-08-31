@@ -70,7 +70,7 @@ function renderScreen(
     send: MailFathomTransport,
     deployment: DeploymentAddress | null = null,
     lifetime: CredentialLifetime = 'untilTheTabCloses',
-    notice: SignInNotice | null = null,
+    notices: readonly SignInNotice[] = [],
 ): Rendered {
     const presented: { deployment: DeploymentAddress; authorization: string }[] = [];
     const attempts: AbortSignal[] = [];
@@ -80,7 +80,7 @@ function renderScreen(
             <SignIn
                 deployment={deployment}
                 lifetime={lifetime}
-                notice={notice}
+                notices={notices}
                 send={(abandoned) => {
                     attempts.push(abandoned);
 
@@ -473,7 +473,7 @@ describe('SignIn', () => {
     });
 
     it('says why it is asking again when the deployment stopped accepting what was kept', () => {
-        renderScreen(signedIn, knownDeployment, 'untilSignedOut', 'credentialNoLongerAccepted');
+        renderScreen(signedIn, knownDeployment, 'untilSignedOut', ['credentialNoLongerAccepted']);
 
         expect(screen.getByRole('status').textContent).toBe(
             'This deployment has stopped accepting the password that was kept. Sign in again.',
@@ -481,11 +481,35 @@ describe('SignIn', () => {
     });
 
     it('says the password is still on the machine when signing out could not remove it', () => {
-        renderScreen(signedIn, knownDeployment, 'untilSignedOut', 'passwordNotRemoved');
+        renderScreen(signedIn, knownDeployment, 'untilSignedOut', ['passwordNotRemoved']);
 
         expect(screen.getByRole('status').textContent).toBe(
             'Signing out did not remove the password from this machine’s credential store, so it is still kept there. Remove it in the store itself, or sign in and out again.',
         );
+    });
+
+    it('says both things at once when the credential was refused and the password could not be removed', () => {
+        renderScreen(signedIn, knownDeployment, 'untilSignedOut', ['credentialNoLongerAccepted', 'passwordNotRemoved']);
+
+        // Two facts rather than one told twice: a person is signed out for one reason and is still carrying a password
+        // for another, and hearing only the first would leave them believing the machine holds nothing.
+        expect(screen.getAllByRole('status').map((shown) => shown.textContent)).toEqual([
+            'This deployment has stopped accepting the password that was kept. Sign in again.',
+            'Signing out did not remove the password from this machine’s credential store, so it is still kept there. Remove it in the store itself, or sign in and out again.',
+        ]);
+    });
+
+    it('says the credential was accepted and reads nothing when the deployment holds no grant for it', async () => {
+        renderScreen(grantMissing, knownDeployment);
+        typeCredential('owner', 'open sesame');
+        submit();
+
+        // The one refusal that is not about what was typed: retyping the password would change nothing, so the
+        // sentence says the credential was accepted rather than asking for it again.
+        expect((await screen.findByRole('alert')).textContent).toBe(
+            'This deployment accepted the credential, but it is allowed to read no mail.',
+        );
+        expect(screen.getByLabelText('Password').getAttribute('aria-invalid')).toBe('false');
     });
 
     it.each([

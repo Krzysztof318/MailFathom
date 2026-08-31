@@ -52,7 +52,7 @@ export function App({
     const [authorization, setAuthorization] = useState(signedInWith);
     const [accounts, setAccounts] = useState<ClientResult<MailAccountDirectory> | null>(null);
     const [attempt, setAttempt] = useState(0);
-    const [notice, setNotice] = useState<SignInNotice | null>(null);
+    const [notices, setNotices] = useState<readonly SignInNotice[]>([]);
     const baseAddress = adopted === null ? null : adopted.deployment.baseAddress;
     const workspace = useRef<HTMLDivElement>(null);
     const focusedFor = useRef(authorization);
@@ -99,10 +99,16 @@ export function App({
             // refusal on every later read, which is why this is the one failure the frame does not render. What was
             // kept goes with it: a stored password the service refuses is a password nothing will make work again.
             if (answer.outcome === 'failed' && answer.failure.reason === 'unauthenticated') {
-                void credentials.forget({ baseAddress });
-                setNotice('credentialNoLongerAccepted');
+                setNotices(['credentialNoLongerAccepted']);
                 setAuthorization(null);
                 setAccounts(null);
+                revise(emptyWorkspace);
+
+                void credentials.forget({ baseAddress }).then((removed) => {
+                    if (!removed) {
+                        setNotices((shown) => [...shown, 'passwordNotRemoved']);
+                    }
+                });
 
                 return;
             }
@@ -114,7 +120,7 @@ export function App({
             listening = false;
             attempted.abort();
         };
-    }, [baseAddress, authorization, attempt, credentials, send]);
+    }, [baseAddress, authorization, attempt, credentials, revise, send]);
 
     // Reading again is a new attempt rather than a second copy of the read above: the effect owns the cancellation, so
     // the retry only says that the answer it holds is stale.
@@ -130,7 +136,7 @@ export function App({
         }
 
         void credentials.keep(reached, presented);
-        setNotice(null);
+        setNotices([]);
         setAccounts(null);
         setAuthorization(presented);
     }
@@ -143,7 +149,7 @@ export function App({
     // what removes the password, so a refused deletion leaves it on the machine for the next start to read back while
     // the person believes they signed out.
     function signOut(): void {
-        setNotice(null);
+        setNotices([]);
         setAccounts(null);
         setAuthorization(null);
         revise(emptyWorkspace);
@@ -151,7 +157,7 @@ export function App({
         if (adopted !== null) {
             void credentials.forget(adopted.deployment).then((removed) => {
                 if (!removed) {
-                    setNotice('passwordNotRemoved');
+                    setNotices(['passwordNotRemoved']);
                 }
             });
         }
@@ -167,10 +173,12 @@ export function App({
         return (
             <SignInScreen
                 deployment={adopted === null ? null : adopted.deployment}
+                chosen={adopted?.chosen === true}
                 lifetime={credentials.lifetime}
-                notice={notice}
+                notices={notices}
                 send={send}
                 onSignedIn={signedIn}
+                onPointSomewhereElse={pointSomewhereElse}
             />
         );
     }
@@ -214,16 +222,20 @@ export function App({
 // screen at this point.
 function SignInScreen({
     deployment,
+    chosen,
     lifetime,
-    notice,
+    notices,
     send,
     onSignedIn,
+    onPointSomewhereElse,
 }: {
     readonly deployment: DeploymentAddress | null;
+    readonly chosen: boolean;
     readonly lifetime: CredentialStore['lifetime'];
-    readonly notice: SignInNotice | null;
+    readonly notices: readonly SignInNotice[];
     readonly send: DeploymentTransport;
     readonly onSignedIn: (reached: DeploymentAddress, authorization: string) => void;
+    readonly onPointSomewhereElse: () => void;
 }) {
     const { translate } = useLocalization();
 
@@ -240,10 +252,18 @@ function SignInScreen({
                     </div>
                 </header>
 
+                {/* The way out of an address somebody named themselves, offered here rather than only inside the
+                    frame: a deployment that stopped accepting the credential, or one whose password is gone, leaves a
+                    person on this screen with no address field to correct — and a chosen address is read back out of
+                    storage on every later start, so reloading returns to the same one. */}
+                {chosen && deployment !== null ? (
+                    <ChosenDeployment address={deployment.baseAddress} onChange={onPointSomewhereElse} />
+                ) : null}
+
                 <SignIn
                     deployment={deployment}
                     lifetime={lifetime}
-                    notice={notice}
+                    notices={notices}
                     send={send}
                     onSignedIn={onSignedIn}
                 />
