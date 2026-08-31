@@ -12,8 +12,17 @@ namespace MailFathom.Application.SensitiveContent;
 /// The composition is one-directional and that is the whole rule: an owner may switch on a scanner the deployment left
 /// off and refuse more of their own outgoing mail, and may never switch off or narrow what the deployment set. The
 /// deployment operator carries the legal obligation, so what they required stands for every owner whose mail they hold;
-/// what an owner adds is theirs alone. A write attempting the other direction is refused where it is written rather
-/// than quietly composed away here, so an owner reading their own record reads what is actually in force.
+/// what an owner adds is theirs alone. A write attempting the other direction is refused at the write, naming the
+/// deployment setting it would narrow.
+/// </para>
+/// <para>
+/// A record already held is composed rather than refused, so this port and the record are two different readings and a
+/// consumer asking what is in force asks here. An owner whose record was accepted before the deployment tightened past
+/// it goes on holding what they asked for while the stricter answer runs over their mail, and an owner who switched the
+/// personal-data scanner on holds that answer after an operator removes the analyzer address, while nothing scans them
+/// for it — a record that stayed authoritative through either would fail a deployment closed at its next start, from
+/// behind the surface that would have let its owner rewrite it. The record states what the owner asked for; this states
+/// what happens to their mail.
 /// </para>
 /// <para>
 /// It is a port because the postures are composed from configuration, which is the host's, while every path that scans

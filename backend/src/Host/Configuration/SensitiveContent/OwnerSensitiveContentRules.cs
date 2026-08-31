@@ -10,8 +10,9 @@ namespace MailFathom.Host.Configuration.SensitiveContent;
 /// <remarks>
 /// <para>
 /// One rule set for both directions, for the reason the owner-record binder is one binder: the same block arrives as a
-/// record somebody is writing, as a record a start reads back, and as an owner's declared section in the deployment's
-/// own file, and a rule stated three times is a rule that comes to hold in one of the three places.
+/// record somebody is writing and as an owner's declared section in the deployment's own file, and a rule stated twice
+/// is a rule that comes to hold in one of the two places. A record this deployment already holds reaches none of these
+/// rules — <see cref="OwnerSettings.OwnerRecordArrival" /> holds why — and is composed to the stricter answer instead.
 /// </para>
 /// <para>
 /// Every refusal names the deployment setting it is about, because that is the only thing whoever wrote the record can
@@ -108,9 +109,9 @@ internal static class OwnerSensitiveContentRules
 
         if (unknown.Length > 0)
         {
-            // Counted rather than quoted. The entries are an owner's own text, reaching an administrator's refusal and
-            // every log of it, so one carrying a newline would put a forged line there and one carrying personal data
-            // would put that there — and this same sentence is what a start reports when it reads the record back.
+            // Counted rather than quoted. The entries are an owner's own text, reaching an administrator's refusal on a
+            // record write and a start's refusal of an owner's section in the deployment's own file, so one carrying a
+            // newline would put a forged line in every log of either and one carrying personal data would put that there.
             var counted = unknown.Length == 1 ? "1 entry" : $"{unknown.Length} entries";
 
             yield return $"{key} names {counted} this deployment has no scanner for, and every entry is "

@@ -737,6 +737,42 @@ public sealed class OwnerRecordAdministrationTests
             .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
     }
 
+    /// <summary>
+    /// The write route is where a mailbox owner's own record actually arrives, and it is the one path a narrowing has
+    /// to be refused on: a record already held is composed to the stricter answer instead, so nothing downstream would
+    /// report this. A candidate switching off a scanner the deployment requires is refused here, naming the deployment
+    /// setting it would narrow rather than quoting anything out of the record.
+    /// </summary>
+    [Fact]
+    public async Task ApplyRecordAsync_ACandidateSwitchingOffAScannerTheDeploymentRequires_IsRefused()
+    {
+        // Arrange
+        var deployment = new SensitiveContentOptions();
+        deployment.Secrets.Enabled = true;
+
+        var harness = new RecordHarness(
+            MailFathomPermission.AdminConfigurationWrite,
+            alsoGranted: MailFathomPermission.AdminRead,
+            scanning: deployment);
+        harness.Holding(SyntheticMailOwner.Deployment, Declaring("primary"), version: 1);
+
+        // Act
+        var outcome = await harness.Records.ApplyRecordAsync(
+            SyntheticMailOwner.Deployment,
+            """{ "MailAccounts": [], "SensitiveContent": { "Secrets": { "Enabled": false } } }""",
+            expectedVersion: 1,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.ConfigurationCandidateInvalid, outcome!.Refusal);
+        Assert.Contains(
+            "SensitiveContent:Secrets:Enabled",
+            Assert.Single(outcome.Messages),
+            StringComparison.Ordinal);
+        await harness.Store.DidNotReceiveWithAnyArgs()
+            .CommitAsync(default, default!, default, TestContext.Current.CancellationToken);
+    }
+
     /// <summary>A save that composes what the record already carries spends no version, and says so rather than reporting a commit.</summary>
     [Fact]
     public async Task ApplyRecordAsync_ARecordSavedExactlyAsItWasRead_ChangesNothingAndSpendsNoVersion()
@@ -1083,7 +1119,8 @@ public sealed class OwnerRecordAdministrationTests
             MailFathomPermission granted,
             Dictionary<string, string?>? configuration = null,
             MailOwnerId actingFor = default,
-            MailFathomPermission alsoGranted = default)
+            MailFathomPermission alsoGranted = default,
+            SensitiveContentOptions? scanning = null)
         {
             // A caller that has to read a record before saving it holds both grants, which is what an administrator
             // editing a record actually carries; the unspecified default is what a test granting one permission passes.
@@ -1119,7 +1156,7 @@ public sealed class OwnerRecordAdministrationTests
                 new OwnerAccountDocumentBinder(
                     new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
                     new FakeTimeProvider(Today),
-                    Options.Create(new SensitiveContentOptions())),
+                    Options.Create(scanning ?? new SensitiveContentOptions())),
                 SecretValidation.OverRegisteredSchemes(),
                 this.ServedOwners,
                 new ConfiguredOwnerSettings(settings, this.ServedOwners));
