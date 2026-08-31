@@ -61,6 +61,7 @@ export const en = {
 
     'connection.current': 'Every account is up to date.',
     'connection.behind': 'Some accounts are behind.',
+    'connection.failing': 'Some accounts stopped synchronizing.',
     'connection.noAccounts': 'No mail account is configured for this owner yet.',
     'connection.retry': 'Try again',
 

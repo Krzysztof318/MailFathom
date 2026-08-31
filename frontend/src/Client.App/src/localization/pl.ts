@@ -60,6 +60,7 @@ export const pl: Catalogue = {
 
     'connection.current': 'Wszystkie konta są aktualne.',
     'connection.behind': 'Część kont ma zaległości.',
+    'connection.failing': 'Część kont przestała się synchronizować.',
     'connection.noAccounts': 'Dla tego właściciela nie skonfigurowano jeszcze żadnego konta pocztowego.',
     'connection.retry': 'Spróbuj ponownie',
 

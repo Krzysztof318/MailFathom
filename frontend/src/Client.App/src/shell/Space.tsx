@@ -12,18 +12,19 @@ import { spaceLabels, type Space as SpaceName } from '../routing/spaces';
 export function Space({ space }: { readonly space: SpaceName }) {
     const { translate } = useLocalization();
     const region = useRef<HTMLElement>(null);
-    const arrived = useRef(false);
+    const shown = useRef(space);
 
     // Navigation puts focus at the start of the new content, which is where keyboard and screen-reader use otherwise
     // silently stops working: focus would stay on the link that was activated, in navigation the reader has left.
     // Not on the first render — landing in the client is not a navigation, and moving focus there would scroll the
-    // page out from under somebody who has not asked to go anywhere.
+    // page out from under somebody who has not asked to go anywhere. What the ref holds is therefore the space that
+    // was last shown rather than whether the effect has run before: the second is what StrictMode's extra invocation
+    // makes true on the first mount, which would move focus on landing in every development run.
     useEffect(() => {
-        if (arrived.current) {
+        if (shown.current !== space) {
             region.current?.focus();
+            shown.current = space;
         }
-
-        arrived.current = true;
     }, [space]);
 
     return (

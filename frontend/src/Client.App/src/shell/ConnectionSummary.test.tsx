@@ -18,6 +18,15 @@ const workAccount: MailAccount = {
 
 const archiveAccount: MailAccount = { ...workAccount, id: 'archive', displayName: 'Archive', behind: true };
 
+const failingAccount: MailAccount = {
+    ...workAccount,
+    id: 'failing',
+    displayName: 'Newsletters',
+    synchronizationState: 'Failing',
+};
+
+const unreachableAccount: MailAccount = { ...failingAccount, synchronizationState: 'Unreachable' };
+
 function directory(
     synchronizationEnabled: boolean,
     accounts: readonly MailAccount[],
@@ -50,6 +59,25 @@ describe('ConnectionSummary', () => {
         renderSummary(directory(true, [workAccount, archiveAccount]));
 
         expect(screen.getByText('Some accounts are behind.')).toBeDefined();
+    });
+
+    it('says an account stopped synchronizing rather than reporting it as merely behind', () => {
+        renderSummary(directory(true, [workAccount, failingAccount]));
+
+        expect(screen.getByText('Some accounts stopped synchronizing.')).toBeDefined();
+        expect(screen.queryByText('Some accounts are behind.')).toBeNull();
+    });
+
+    it('reads an account it cannot reach the same way as one that is failing', () => {
+        renderSummary(directory(true, [workAccount, unreachableAccount]));
+
+        expect(screen.getByText('Some accounts stopped synchronizing.')).toBeDefined();
+    });
+
+    it('says an account stopped synchronizing even where another is only behind', () => {
+        renderSummary(directory(true, [archiveAccount, failingAccount]));
+
+        expect(screen.getByText('Some accounts stopped synchronizing.')).toBeDefined();
     });
 
     it('says the deployment is not refreshing these accounts when it is not', () => {

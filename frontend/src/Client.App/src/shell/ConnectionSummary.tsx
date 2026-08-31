@@ -3,7 +3,12 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { ReactNode } from 'react';
-import type { ClientFailureReason, ClientResult, MailAccountDirectory } from '@mailfathom/client-backend';
+import type {
+    ClientFailureReason,
+    ClientResult,
+    MailAccountDirectory,
+    MailSynchronizationState,
+} from '@mailfathom/client-backend';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 
@@ -25,6 +30,10 @@ const toneColours: Readonly<Record<Tone, string>> = {
     quiet: 'bg-faint',
 };
 
+// The two states in which an account is not going to catch up on its own. They are read before the lag below, because
+// an account nothing is fixing says something a lagging one does not, and "behind" would let it wait unnoticed.
+const brokenStates: readonly MailSynchronizationState[] = ['Failing', 'Unreachable'];
+
 interface Freshness {
     readonly message: MessageKey;
     readonly tone: Tone;
@@ -37,6 +46,10 @@ function freshnessOf(directory: MailAccountDirectory): Freshness {
 
     if (!directory.synchronizationEnabled) {
         return { message: 'accounts.notRefreshing', tone: 'quiet' };
+    }
+
+    if (directory.accounts.some((account) => brokenStates.includes(account.synchronizationState))) {
+        return { message: 'connection.failing', tone: 'attention' };
     }
 
     const current = directory.accounts.every(
