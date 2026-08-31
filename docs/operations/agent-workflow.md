@@ -2190,7 +2190,7 @@ Each nested `CLAUDE.md` imports its sibling `AGENTS.md`.
 The repository is public, so everything below is read by people who did not write
 it. Each was classified deliberately rather than left in place by default:
 
-- **The five `AGENTS.md` files and their `CLAUDE.md` imports — kept in place.**
+- **The seven `AGENTS.md` files and their `CLAUDE.md` imports — kept in place.**
   They are the contract the agents execute, they are what makes a contribution
   produced by an agent satisfy the same rules, and `AGENTS.md` is a convention
   other projects now share rather than a private artifact.
