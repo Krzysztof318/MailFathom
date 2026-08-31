@@ -266,6 +266,42 @@ public sealed class SensitiveContentDeclarationRulesTests
         Assert.Equal(4, errors.Count);
     }
 
+    /// <summary>
+    /// An owner's own record may switch a provided scanner on for their own mail, so what an operator wrote under a
+    /// switch that is off is not a comment. Left unjudged it would pass every start and then throw out of the posture
+    /// composition the moment somebody opted in, which stops scanning for the whole deployment rather than for them.
+    /// </summary>
+    [Fact]
+    public void FindDeclarationErrors_AnUnknownCategoryUnderASwitchThatIsOff_IsStillRefused()
+    {
+        // Arrange
+        var settings = new SensitiveContentOptions();
+        settings.Secrets.Categories.Add("CloudKey");
+        settings.Secrets.Categories.Add("PrivateKeys");
+
+        // Act
+        var errors = SensitiveContentDeclarationRules.FindDeclarationErrors(settings, [SecretsCatalog]);
+
+        // Assert
+        var error = Assert.Single(errors);
+
+        Assert.Contains("SensitiveContent:Secrets:Categories:1", error.ErrorMessage!, StringComparison.Ordinal);
+    }
+
+    /// <summary>A scanner nobody wrote anything under, and nobody switched on, is still nothing to refuse a start over.</summary>
+    [Fact]
+    public void FindDeclarationErrors_AProvidedScannerNobodyWroteAnythingUnder_ReportsNothing()
+    {
+        // Arrange
+        var settings = new SensitiveContentOptions();
+
+        // Act
+        var errors = SensitiveContentDeclarationRules.FindDeclarationErrors(settings, [SecretsCatalog]);
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
     [Fact]
     public void FindDeclarationErrors_WithoutSettingsOrCatalogs_IsRejected()
     {

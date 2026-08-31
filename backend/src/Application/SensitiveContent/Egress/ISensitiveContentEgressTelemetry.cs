@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.SensitiveContent.Redaction;
+using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.SensitiveContent.Egress;
 
@@ -48,14 +49,25 @@ public interface ISensitiveContentEgressTelemetry
 
     /// <summary>Opens the report of one guarded operation, which is what a caller actually waits on.</summary>
     /// <param name="egressPoint">Where the texts this operation guards are going.</param>
+    /// <param name="owner">Whose mail this operation is publishing, which the span records so a scan is attributable.</param>
     /// <param name="cancellationToken">The caller's token, read as the scope is disposed to tell a shutdown from an operation that broke.</param>
     /// <returns>The scope, which the caller must dispose exactly once and inside which the scanning happens.</returns>
     /// <remarks>
+    /// <para>
     /// The instruments above answer over every guarded text of a deployment; this answers what one operation cost the
     /// caller in front of it. Both are needed and neither substitutes for the other: a percentile over values says a
     /// scan is quick while a read that ran fifty of them was not.
+    /// </para>
+    /// <para>
+    /// The owner is here and on none of the instruments above, because postures now differ between the people one
+    /// deployment serves and a scan that cannot be attributed to one of them cannot be read against what that person
+    /// asked for. It is a span attribute rather than a metric dimension for the reason every tag above is a closed set:
+    /// an identifier on a counter incremented per text is an unbounded series, while a span already carries the one
+    /// operation it describes. The identifier is an opaque UUID and is not mail.
+    /// </para>
     /// </remarks>
     ISensitiveContentGuardScope BeginGuardedOperation(
         SensitiveContentEgressPoint egressPoint,
+        MailOwnerId owner,
         CancellationToken cancellationToken);
 }

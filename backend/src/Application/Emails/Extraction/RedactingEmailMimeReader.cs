@@ -5,10 +5,11 @@
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.SensitiveContent.Detection;
+using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.Emails.Extraction;
 
-/// <summary>Replaces what a switched-on scanner finds in a message's body before anything derived from it is written.</summary>
+/// <summary>Replaces what an owner's switched-on scanner finds in a message's body before anything is derived from it.</summary>
 /// <remarks>
 /// <para>
 /// One decorator rather than a redaction inside each writer, because this port is where every derived copy of a body
@@ -17,6 +18,12 @@ namespace MailFathom.Application.Emails.Extraction;
 /// just fetched, and the backfill re-reading raw MIME stored before extraction existed — reach it through here. Redacting
 /// at this seam is therefore what makes the placeholder the thing that is stored, chunked, embedded, and later retrieved,
 /// with nothing downstream needing to know a scanner exists.
+/// </para>
+/// <para>
+/// <b>What is looked for is the owner's, and the owner arrives with the message.</b> A deployment serves several people
+/// and one of them may have switched a scanner on that the deployment left off, so the body is redacted under the
+/// posture of whoever the mail belongs to rather than under one answer for the whole store. Both paths that reach here
+/// already hold it, which is why the port carries it rather than resolving it.
 /// </para>
 /// <para>
 /// <b>The body is what is redacted, and only the body.</b> A subject, an address, and a thread identifier are the
@@ -57,27 +64,40 @@ public sealed class RedactingEmailMimeReader : IEmailMimeReader
     /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the body carries, which refuses the derivation.</exception>
     public async Task<EmailMimeExtractionResult> ReadMetadataAsync(
         RemoteEmailContent content,
+        MailOwnerId owner,
         CancellationToken cancellationToken)
     {
-        var extraction = await this.inner.ReadMetadataAsync(content, cancellationToken);
+        // Read before the scan rather than where the reading is written, and before the scan rather than after it.
+        // A posture republished while this message is being scanned then leaves the row stamped with the older one,
+        // which reads as stale and is re-derived — the safe direction, where a stamp taken at the write would record a
+        // posture the text never went through and the row would never be revisited.
+        var redactedUnder = this.guard.StampFor(owner);
+        var extraction = await this.inner.ReadMetadataAsync(content, owner, cancellationToken);
 
         // A message nobody could parse carries no text to redact, and neither does one whose body held no words or
-        // arrived inside a cryptographic envelope. Each of those reaches the derived store as the absence it already is.
+        // arrived inside a cryptographic envelope. Each of those reaches the derived store as the absence it already
+        // is, and is still stamped: a row nothing had to redact was still derived under this posture, and one left
+        // unstamped would be outstanding to every rebuild for ever.
         if (extraction.Metadata is not { Text: { OriginalText: { } original, TrimmedText: { } trimmed } text } metadata)
         {
-            return extraction;
+            return extraction.Metadata is { } unredacted
+                ? EmailMimeExtractionResult.Extracted(unredacted with { RedactedUnder = redactedUnder })
+                : extraction;
         }
 
-        var redactedOriginal = await this.guard.GuardAsync(original, cancellationToken);
+        var redactedOriginal = await this.guard.GuardAsync(owner, original, cancellationToken);
 
         // Most mail quotes nothing and signs off with nothing, so the two readings are one string and redaction is
         // reproducible over it — scanning it twice would spend a second budget and report a second measurement for one
         // message, which is both the cost and the figure an operator reads the derivation latency from.
         var redactedTrimmed = StringComparer.Ordinal.Equals(original, trimmed)
             ? redactedOriginal
-            : await this.guard.GuardAsync(trimmed, cancellationToken);
+            : await this.guard.GuardAsync(owner, trimmed, cancellationToken);
 
-        return EmailMimeExtractionResult.Extracted(
-            metadata with { Text = text.WithRedactedText(redactedOriginal, redactedTrimmed) });
+        return EmailMimeExtractionResult.Extracted(metadata with
+        {
+            Text = text.WithRedactedText(redactedOriginal, redactedTrimmed),
+            RedactedUnder = redactedUnder,
+        });
     }
 }

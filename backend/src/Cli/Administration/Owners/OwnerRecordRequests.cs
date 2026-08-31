@@ -72,6 +72,7 @@ internal sealed record OwnerAdoptionRequest([property: JsonPropertyName("version
 /// <param name="ConfigurationPath">The configuration path that stops deciding them once the adoption commits, and nothing where no source supplies them.</param>
 /// <param name="MailAccounts">The mail accounts the adoption would move, empty where the source supplies none.</param>
 /// <param name="Classification">The classification posture the adoption would commit beside them, empty where the deployment states none.</param>
+/// <param name="SensitiveContent">The scanning block the adoption would commit beside them, empty where their declaration states none.</param>
 internal sealed record OwnerAdoptionPreview(
     [property: JsonPropertyName("owner")] Guid Owner,
     [property: JsonPropertyName("displayName")] string? DisplayName,
@@ -80,7 +81,8 @@ internal sealed record OwnerAdoptionPreview(
     [property: JsonPropertyName("readFromConfiguration")] bool ReadFromConfiguration,
     [property: JsonPropertyName("configurationPath")] string? ConfigurationPath,
     [property: JsonPropertyName("mailAccounts")] IReadOnlyList<OwnerAdoptableMailAccount>? MailAccounts,
-    [property: JsonPropertyName("classification")] IReadOnlyList<OwnerAdoptableClassificationSetting>? Classification);
+    [property: JsonPropertyName("classification")] IReadOnlyList<OwnerAdoptableRecordSetting>? Classification,
+    [property: JsonPropertyName("sensitiveContent")] IReadOnlyList<OwnerAdoptableRecordSetting>? SensitiveContent);
 
 /// <summary>One mail account an adoption would move into an owner's record.</summary>
 /// <param name="AccountId">The identifier the account is declared under.</param>
@@ -92,7 +94,7 @@ internal sealed record OwnerAdoptableMailAccount(
 /// <summary>One classification setting an adoption would commit into an owner's record.</summary>
 /// <param name="Path">The path the setting is written at in the record.</param>
 /// <param name="Value">The value it takes, which is what the deployment's section states today.</param>
-internal sealed record OwnerAdoptableClassificationSetting(
+internal sealed record OwnerAdoptableRecordSetting(
     [property: JsonPropertyName("path")] string? Path,
     [property: JsonPropertyName("value")] string? Value);
 

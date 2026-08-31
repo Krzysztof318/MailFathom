@@ -149,6 +149,8 @@ internal sealed partial class OwnerRosterAdministration(
                     "The owner was recorded and then removed before their record could be written, so this deployment holds nobody under that label. Record them again.");
             }
 
+            // An adoption commits an empty record, so the owner it publishes declares no mailbox, classifies nothing,
+            // and reads the deployment's own scanning posture until they write one.
             servedOwners.OwnerDocumentPublished(owner, label, new OwnerAccountOptions(), committed);
 
             this.LogOwnerProvisioned(label);

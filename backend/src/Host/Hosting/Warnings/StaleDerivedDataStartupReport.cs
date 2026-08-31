@@ -25,10 +25,12 @@ namespace MailFathom.Host.Hosting.Warnings;
 /// over it would be refusing over a decision that is the operator's. What it must not do is stay quiet.
 /// </para>
 /// <para>
-/// Registered only where a scanner is switched on. With both off there is no configuration for anything to be stale
-/// against: a document derived under an older scanner holds redacted text, which is not a protection gap, and telling an
-/// operator who deliberately switched a scanner off that their mailbox is out of date would be reporting their own
-/// decision back to them as a problem.
+/// Registered on every deployment, and it answers at start whether there is anything to report. Which owners are
+/// scanned follows the roster the gate ahead of this one publishes rather than the deployment's own section, so the
+/// question cannot be settled while services are being registered. Where nothing scans anybody it says nothing and
+/// reads no table: there is no configuration for anything to be stale against, a document derived under an older
+/// scanner holds redacted text rather than a protection gap, and telling an operator who deliberately switched a
+/// scanner off that their mailbox is out of date would be reporting their own decision back to them as a problem.
 /// </para>
 /// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "The dependency injection container materializes this hosted service.")]
@@ -66,7 +68,7 @@ internal sealed partial class StaleDerivedDataStartupReport : IHostedService
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A report that cannot read the count says so and lets the host start; it decides nothing.")]
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (this.derivationGuard.Stamp is not { } current)
+        if (!this.derivationGuard.IsActive)
         {
             return;
         }
@@ -79,7 +81,7 @@ internal sealed partial class StaleDerivedDataStartupReport : IHostedService
 
             staleEmailCount = await scope.ServiceProvider
                 .GetRequiredService<IStoredEmailExtractionBackfillStore>()
-                .CountEmailsWithStaleDerivedDataAsync(current, cancellationToken);
+                .CountEmailsWithStaleDerivedDataAsync(cancellationToken);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

@@ -8,10 +8,12 @@ using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Folders;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -36,7 +38,7 @@ public sealed class RedactingEmailMimeReaderTests
             derivation.Guard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(Content(), TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal("the key is [redacted:CloudKey]", extraction.Metadata?.Text.TrimmedText);
@@ -54,7 +56,7 @@ public sealed class RedactingEmailMimeReaderTests
             derivation.Guard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(Content(), TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal("nothing to see", extraction.Metadata?.Text.TrimmedText);
@@ -72,7 +74,7 @@ public sealed class RedactingEmailMimeReaderTests
             derivation.Guard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(Content(), TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal("the key is [redacted:CloudKey]", extraction.Metadata?.Text.TrimmedText);
@@ -92,7 +94,7 @@ public sealed class RedactingEmailMimeReaderTests
             derivation.Guard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(Content(), TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(ExtractedEmailTextSource.DerivedFromHtmlBodyPart, extraction.Metadata?.Text.Source);
@@ -110,7 +112,7 @@ public sealed class RedactingEmailMimeReaderTests
             derivation.Guard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(Content(), TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal("Subject", extraction.Metadata?.Subject);
@@ -130,7 +132,7 @@ public sealed class RedactingEmailMimeReaderTests
         var reader = new RedactingEmailMimeReader(ReaderYielding(text), derivation.Guard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(Content(), TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Same(text, extraction.Metadata?.Text);
@@ -144,12 +146,12 @@ public sealed class RedactingEmailMimeReaderTests
         // Arrange
         using var derivation = ScanningSensitiveContentDerivation.Finding(Marker, this.timeProvider);
         var inner = Substitute.For<IEmailMimeReader>();
-        inner.ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<CancellationToken>())
+        inner.ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(EmailMimeExtractionResult.MalformedContent()));
         var reader = new RedactingEmailMimeReader(inner, derivation.Guard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(Content(), TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(EmailMimeExtractionOutcome.MalformedContent, extraction.Outcome);
@@ -168,7 +170,7 @@ public sealed class RedactingEmailMimeReaderTests
 
         // Act
         var refusal = await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(() =>
-            reader.ReadMetadataAsync(Content(), TestContext.Current.CancellationToken));
+            reader.ReadMetadataAsync(Content(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal(SensitiveContentScannerKind.Secrets, refusal.Scanner);
@@ -185,11 +187,113 @@ public sealed class RedactingEmailMimeReaderTests
         var reader = new RedactingEmailMimeReader(ReaderYielding(extracted), guard);
 
         // Act
-        var extraction = await reader.ReadMetadataAsync(Content(), TestContext.Current.CancellationToken);
+        var extraction = await reader.ReadMetadataAsync(Content(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal($"original {Marker}", extraction.Metadata?.Text.OriginalText);
         Assert.Equal($"trimmed {Marker}", extraction.Metadata?.Text.TrimmedText);
+    }
+
+    /// <summary>
+    /// The stamp travels on the reading rather than being resolved where the reading is written, because a batch is
+    /// read outside any transaction and commits afterwards: a stamp taken at the write would record a posture the text
+    /// beside it never went through, and a row stamped stricter than what produced it is a row nothing revisits.
+    /// </summary>
+    [Fact]
+    public async Task ReadMetadataAsync_ABodyRedactedForAnOwner_CarriesThePostureItWasRedactedUnder()
+    {
+        // Arrange
+        using var derivation = ScanningSensitiveContentDerivation.Finding(Marker, this.timeProvider);
+        var reader = new RedactingEmailMimeReader(
+            ReaderYielding($"before {Marker} after", $"before {Marker} after"),
+            derivation.Guard);
+
+        // Act
+        var extraction = await reader.ReadMetadataAsync(
+            Content(),
+            SyntheticMailOwner.Deployment,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            derivation.Guard.StampFor(SyntheticMailOwner.Deployment),
+            extraction.Metadata!.RedactedUnder);
+    }
+
+    /// <summary>
+    /// This decorator is the outermost of the extraction chain and receives the owner first-hand, and nothing below it
+    /// re-checks — so forwarding that argument rather than resolving a posture of its own is its whole claim. The same
+    /// body read for two owners is what states it: one scanned, one not, and a reader asking about anybody but its
+    /// argument answers the same way for both.
+    /// </summary>
+    [Fact]
+    public async Task ReadMetadataAsync_TwoOwnersScannedDifferently_RedactsAndStampsOnlyTheOneWhoAskedForIt()
+    {
+        // Arrange
+        using var derivation = ScanningSensitiveContentDerivation.FindingForOneOwner(
+            SyntheticMailOwner.Another,
+            Marker,
+            this.timeProvider);
+        var reader = new RedactingEmailMimeReader(
+            ReaderYielding($"before {Marker} after", $"before {Marker} after"),
+            derivation.Guard);
+
+        // Act
+        var scanned = await reader.ReadMetadataAsync(
+            Content(),
+            SyntheticMailOwner.Another,
+            TestContext.Current.CancellationToken);
+        var unscanned = await reader.ReadMetadataAsync(
+            Content(),
+            SyntheticMailOwner.Deployment,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.DoesNotContain(Marker, scanned.Metadata!.Text.OriginalText, StringComparison.Ordinal);
+        Assert.Equal(derivation.Guard.StampFor(SyntheticMailOwner.Another), scanned.Metadata.RedactedUnder);
+
+        Assert.Equal($"before {Marker} after", unscanned.Metadata!.Text.OriginalText);
+        Assert.Null(unscanned.Metadata.RedactedUnder);
+    }
+
+    /// <summary>A message with no body to redact is still derived under a posture, and a row left unstamped would be outstanding for ever.</summary>
+    [Fact]
+    public async Task ReadMetadataAsync_AMessageWithNoTextToRedact_IsStampedJustTheSame()
+    {
+        // Arrange
+        using var derivation = ScanningSensitiveContentDerivation.Finding(Marker, this.timeProvider);
+        var reader = new RedactingEmailMimeReader(
+            ReaderYielding(ExtractedEmailText.NoTextualBody),
+            derivation.Guard);
+
+        // Act
+        var extraction = await reader.ReadMetadataAsync(
+            Content(),
+            SyntheticMailOwner.Deployment,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(
+            derivation.Guard.StampFor(SyntheticMailOwner.Deployment),
+            extraction.Metadata!.RedactedUnder);
+    }
+
+    /// <summary>Nothing scanned it, so the row says so: that is what separates "written under no scanner" from "written under this one".</summary>
+    [Fact]
+    public async Task ReadMetadataAsync_ADeploymentThatScansNothing_CarriesNoPosture()
+    {
+        // Arrange
+        var guard = ScanningSensitiveContentDerivation.Inactive();
+        var reader = new RedactingEmailMimeReader(ReaderYielding("body", "body"), guard);
+
+        // Act
+        var extraction = await reader.ReadMetadataAsync(
+            Content(),
+            SyntheticMailOwner.Deployment,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(extraction.Metadata!.RedactedUnder);
     }
 
     private static IEmailMimeReader ReaderYielding(string trimmedText, string originalText) =>
@@ -199,7 +303,7 @@ public sealed class RedactingEmailMimeReaderTests
     {
         var reader = Substitute.For<IEmailMimeReader>();
 
-        reader.ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<CancellationToken>())
+        reader.ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(new ExtractedEmailMetadata(
                 call.Arg<RemoteEmailContent>()!.OccurrenceId,
                 Subject: "Subject",

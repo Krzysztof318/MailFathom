@@ -23,6 +23,7 @@ public sealed class SensitiveContentEgressGuardTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+        using var actingFor = egress.ActingForOwner();
 
         // Act
         var guarded = await egress.Guard.GuardAsync(
@@ -34,12 +35,131 @@ public sealed class SensitiveContentEgressGuardTests
         Assert.Equal("the key is [redacted:CloudKey] and it works", guarded);
     }
 
+    /// <summary>
+    /// The claim every path into this guard rests on: two people served by one deployment are read under their own
+    /// posture, and the one nobody scans for is handed their text back exactly as it arrived.
+    /// </summary>
+    [Fact]
+    public async Task GuardAsync_TwoOwnersOfOneDeployment_RedactsForTheOneWhoseMailIsScannedAndNotTheOther()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+
+        var guard = new SensitiveContentEgressGuard(
+            FixedSensitiveContentPostures.Of(
+                SensitiveContentPosture.ScanningNothing,
+                (SyntheticMailOwner.Deployment, egress.Postures.ForOwner(SyntheticMailOwner.Deployment))),
+            new RecordingSensitiveContentEgressTelemetry(),
+            this.timeProvider);
+
+        // Act
+        string scanned;
+        string unscanned;
+
+        using (guard.ActingFor(SyntheticMailOwner.Deployment))
+        {
+            scanned = await guard.GuardAsync(
+                SensitiveContentEgressPoint.ChatPrompt,
+                $"the key is {Marker}",
+                TestContext.Current.CancellationToken);
+        }
+
+        using (guard.ActingFor(SyntheticMailOwner.Another))
+        {
+            unscanned = await guard.GuardAsync(
+                SensitiveContentEgressPoint.ChatPrompt,
+                $"the key is {Marker}",
+                TestContext.Current.CancellationToken);
+        }
+
+        // Assert
+        Assert.Equal("the key is [redacted:CloudKey]", scanned);
+        Assert.Equal($"the key is {Marker}", unscanned);
+    }
+
+    /// <summary>
+    /// A flow that reached the guard without stating whose mail it holds is a use case that skipped the resolution,
+    /// which would otherwise be served under whatever the deployment happened to scan for. It fails loudly instead,
+    /// because the wrong answer here is one person's mail read under another person's posture.
+    /// </summary>
+    [Fact]
+    public async Task GuardAsync_AFlowActingForNoOwner_IsRefusedRatherThanReadUnderSomebodyElsesPosture()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<InvalidOperationException>(() => egress.Guard.GuardAsync(
+            SensitiveContentEgressPoint.ChatPrompt,
+            $"the key is {Marker}",
+            TestContext.Current.CancellationToken));
+
+        // Assert
+        Assert.Contains("acting for no owner", refusal.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A deployment nobody is scanned for needs no owner stated, which is what keeps an opt-in nobody took free.</summary>
+    [Fact]
+    public async Task GuardAsync_AFlowActingForNoOwnerWhereNothingIsScanned_HandsTheTextBack()
+    {
+        // Arrange
+        var guard = new SensitiveContentEgressGuard(
+            FixedSensitiveContentPostures.ScanningNothing(),
+            new RecordingSensitiveContentEgressTelemetry(),
+            this.timeProvider);
+
+        // Act
+        var guarded = await guard.GuardAsync(
+            SensitiveContentEgressPoint.ChatPrompt,
+            $"the key is {Marker}",
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal($"the key is {Marker}", guarded);
+    }
+
+    /// <summary>
+    /// A scope restores what the flow was acting for rather than clearing it, so a use case that reaches another one
+    /// leaves the caller reading their own owner afterwards instead of none.
+    /// </summary>
+    [Fact]
+    public async Task ActingFor_AScopeOpenedInsideAnother_RestoresTheOwnerTheOuterOneNamed()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+
+        var guard = new SensitiveContentEgressGuard(
+            FixedSensitiveContentPostures.Of(
+                SensitiveContentPosture.ScanningNothing,
+                (SyntheticMailOwner.Deployment, egress.Postures.ForOwner(SyntheticMailOwner.Deployment))),
+            new RecordingSensitiveContentEgressTelemetry(),
+            this.timeProvider);
+
+        // Act
+        using var outer = guard.ActingFor(SyntheticMailOwner.Deployment);
+
+        using (guard.ActingFor(SyntheticMailOwner.Another))
+        {
+            Assert.False(guard.IsActive);
+        }
+
+        var guarded = await guard.GuardAsync(
+            SensitiveContentEgressPoint.ChatPrompt,
+            $"the key is {Marker}",
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(guard.IsActive);
+        Assert.Equal("the key is [redacted:CloudKey]", guarded);
+    }
+
     /// <summary>What a caller waits on is the operation, so every text guarded inside one is counted against it.</summary>
     [Fact]
     public async Task BeginGuardedOperation_TextsGuardedInsideIt_AreAllCountedAgainstTheOneOperation()
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+        using var actingFor = egress.ActingForOwner();
 
         // Act
         using (var scan = egress.Guard.BeginGuardedOperation(
@@ -74,6 +194,7 @@ public sealed class SensitiveContentEgressGuardTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+        using var actingFor = egress.ActingForOwner();
 
         // Act
         using (var scan = egress.Guard.BeginGuardedOperation(
@@ -104,6 +225,7 @@ public sealed class SensitiveContentEgressGuardTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Unavailable(this.timeProvider);
+        using var actingFor = egress.ActingForOwner();
 
         // Act
         using (egress.Guard.BeginGuardedOperation(
@@ -134,6 +256,7 @@ public sealed class SensitiveContentEgressGuardTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+        using var actingFor = egress.ActingForOwner();
 
         // Act
         await Assert.ThrowsAsync<InvalidOperationException>(async () =>
@@ -165,7 +288,10 @@ public sealed class SensitiveContentEgressGuardTests
     {
         // Arrange
         var telemetry = new RecordingSensitiveContentEgressTelemetry();
-        var guard = new SensitiveContentEgressGuard(redactor: null, telemetry, this.timeProvider);
+        var guard = new SensitiveContentEgressGuard(
+            FixedSensitiveContentPostures.ScanningNothing(),
+            telemetry,
+            this.timeProvider);
 
         // Act
         using (var scan = guard.BeginGuardedOperation(
@@ -203,6 +329,7 @@ public sealed class SensitiveContentEgressGuardTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Unavailable(this.timeProvider);
+        using var actingFor = egress.ActingForOwner();
 
         // Act
         var refusal = await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(() =>
@@ -222,6 +349,7 @@ public sealed class SensitiveContentEgressGuardTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Unavailable(this.timeProvider);
+        using var actingFor = egress.ActingForOwner();
 
         // Act
         await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(() =>
@@ -243,6 +371,7 @@ public sealed class SensitiveContentEgressGuardTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+        using var actingFor = egress.ActingForOwner();
 
         // Act
         await egress.Guard.GuardAsync(
@@ -264,6 +393,7 @@ public sealed class SensitiveContentEgressGuardTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+        using var actingFor = egress.ActingForOwner();
 
         // Act
         var guarded = await egress.Guard.GuardAllAsync(
@@ -301,6 +431,7 @@ public sealed class SensitiveContentEgressGuardTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+        using var actingFor = egress.ActingForOwner();
 
         // Act
         var guarded = await egress.Guard.GuardOptionalAsync(
@@ -318,6 +449,7 @@ public sealed class SensitiveContentEgressGuardTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+        using var actingFor = egress.ActingForOwner();
 
         // Act
         var guarded = await egress.Guard.GuardOptionalAsync(
@@ -338,6 +470,7 @@ public sealed class SensitiveContentEgressGuardTests
             Marker,
             this.timeProvider,
             bounds: SensitiveContentScanBounds.Create(25, TimeSpan.FromSeconds(5), 4));
+        using var actingFor = egress.ActingForOwner();
 
         // Act
         var guarded = await egress.Guard.GuardWithOmissionAsync(
@@ -357,6 +490,7 @@ public sealed class SensitiveContentEgressGuardTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+        using var actingFor = egress.ActingForOwner();
 
         // Act
         var guarded = await egress.Guard.GuardWithOmissionAsync(
@@ -392,6 +526,7 @@ public sealed class SensitiveContentEgressGuardTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Unavailable(this.timeProvider);
+        using var actingFor = egress.ActingForOwner();
 
         // Act
         var refusal = await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(() =>

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.SensitiveContent;
+using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.SensitiveContent.Redaction;
@@ -25,22 +26,59 @@ public sealed class SensitiveContentEgressScreenTests
         // Arrange
         var telemetry = new RecordingSensitiveContentEgressTelemetry();
         var screen = new SensitiveContentEgressScreen(
-            redactor: null,
-            SensitiveContentScreeningPolicy.ScreeningNothing(),
+            FixedSensitiveContentPostures.ScanningNothing(),
             telemetry,
             this.timeProvider);
 
         // Act
         var refusal = await screen.ScreenAsync(
             SensitiveContentEgressPoint.OutgoingMail,
+            ScanningSensitiveContentEgress.Owner,
             [$"the key is {Marker}"],
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.False(screen.IsActive);
+        Assert.False(screen.IsActiveFor(ScanningSensitiveContentEgress.Owner));
         Assert.Null(refusal);
         Assert.Empty(telemetry.Operations);
         Assert.Empty(telemetry.Guarded);
+    }
+
+    /// <summary>
+    /// A send is stopped for the owner whose record screens for what it carries, and goes through for the owner whose
+    /// does not. The owner is stated by the act rather than read off the flow, because a send names whose message it is.
+    /// </summary>
+    [Fact]
+    public async Task ScreenAsync_TwoOwnersOfOneDeployment_StopsTheActForTheOneWhoScreensForIt()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+
+        var screen = new SensitiveContentEgressScreen(
+            FixedSensitiveContentPostures.Of(
+                SensitiveContentPosture.ScanningNothing,
+                (SyntheticMailOwner.Deployment, egress.Postures.ForOwner(SyntheticMailOwner.Deployment))),
+            new RecordingSensitiveContentEgressTelemetry(),
+            this.timeProvider);
+
+        // Act
+        var screened = await screen.ScreenAsync(
+            SensitiveContentEgressPoint.OutgoingMail,
+            SyntheticMailOwner.Deployment,
+            [$"the key is {Marker}"],
+            TestContext.Current.CancellationToken);
+        var unscreened = await screen.ScreenAsync(
+            SensitiveContentEgressPoint.OutgoingMail,
+            SyntheticMailOwner.Another,
+            [$"the key is {Marker}"],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.NotNull(screened);
+        Assert.Equal(MarkerSensitiveContentScanner.Category, screened.Category);
+        Assert.Null(unscreened);
+        Assert.True(screen.IsActiveFor(SyntheticMailOwner.Deployment));
+        Assert.False(screen.IsActiveFor(SyntheticMailOwner.Another));
     }
 
     [Fact]
@@ -52,11 +90,12 @@ public sealed class SensitiveContentEgressScreenTests
         // Act
         var refusal = await egress.Screen.ScreenAsync(
             SensitiveContentEgressPoint.OutgoingMail,
+            ScanningSensitiveContentEgress.Owner,
             [$"the key is {Marker}"],
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.True(egress.Screen.IsActive);
+        Assert.True(egress.Screen.IsActiveFor(ScanningSensitiveContentEgress.Owner));
         Assert.NotNull(refusal);
         Assert.Equal(SensitiveContentEgressRefusalReason.ContentFound, refusal.Reason);
         Assert.Equal(SensitiveContentScannerKind.Secrets, refusal.Scanner);
@@ -77,6 +116,7 @@ public sealed class SensitiveContentEgressScreenTests
         // Act
         var refusal = await egress.Screen.ScreenAsync(
             SensitiveContentEgressPoint.OutgoingMail,
+            ScanningSensitiveContentEgress.Owner,
             ["a subject", "an ordinary message"],
             TestContext.Current.CancellationToken);
 
@@ -102,6 +142,7 @@ public sealed class SensitiveContentEgressScreenTests
         // Act
         var refusal = await egress.Screen.ScreenAsync(
             SensitiveContentEgressPoint.OutgoingMail,
+            ScanningSensitiveContentEgress.Owner,
             [$"subject with {Marker}", "the body nobody reached"],
             TestContext.Current.CancellationToken);
 
@@ -132,29 +173,34 @@ public sealed class SensitiveContentEgressScreenTests
                 [])]);
         var telemetry = new RecordingSensitiveContentEgressTelemetry();
 
-        using var redactor = new SensitiveContentRedactor(plan, [scanner], this.timeProvider);
+        using var permits = new SensitiveContentScanConcurrency(plan.Bounds.MaximumConcurrentScans);
 
         var screen = new SensitiveContentEgressScreen(
-            redactor,
-            SensitiveContentScreeningPolicy.Create(
-                SensitiveContentPlan.Create(
-                    SensitiveContentScanBounds.Default,
-                    [SensitiveContentScannerPlan.Create(
-                        scanner.Scanner,
-                        [SensitiveContentCategory.Create("PrivateKey")],
-                        [])]),
-                [SensitiveContentScannerKind.Secrets]),
+            FixedSensitiveContentPostures.ForEveryOwner(
+                SensitiveContentPosture.Scanning(
+                    [scanner.Scanner],
+                    new SensitiveContentRedactor(plan, [scanner], this.timeProvider, permits),
+                    SensitiveContentScreeningPolicy.Create(
+                        SensitiveContentPlan.Create(
+                            SensitiveContentScanBounds.Default,
+                            [SensitiveContentScannerPlan.Create(
+                                scanner.Scanner,
+                                [SensitiveContentCategory.Create("PrivateKey")],
+                                [])]),
+                        [SensitiveContentScannerKind.Secrets]),
+                    SensitiveContentDerivationStamp.Compute(plan, [scanner]))),
             telemetry,
             this.timeProvider);
 
         // Act
         var refusal = await screen.ScreenAsync(
             SensitiveContentEgressPoint.OutgoingMail,
+            ScanningSensitiveContentEgress.Owner,
             [$"the key is {Marker}"],
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.True(screen.IsActive);
+        Assert.True(screen.IsActiveFor(ScanningSensitiveContentEgress.Owner));
         Assert.Null(refusal);
         Assert.Equal([$"the key is {Marker}"], scanner.ScannedTexts);
         Assert.Single(telemetry.Guarded);
@@ -176,6 +222,7 @@ public sealed class SensitiveContentEgressScreenTests
         // Act
         var refusal = await egress.Screen.ScreenAsync(
             SensitiveContentEgressPoint.OutgoingMail,
+            ScanningSensitiveContentEgress.Owner,
             ["a message far longer than the ceiling analyzes"],
             TestContext.Current.CancellationToken);
 
@@ -201,6 +248,7 @@ public sealed class SensitiveContentEgressScreenTests
         // Act
         var refusal = await egress.Screen.ScreenAsync(
             SensitiveContentEgressPoint.OutgoingMail,
+            ScanningSensitiveContentEgress.Owner,
             [$"{Marker} and a great deal of text after it",],
             TestContext.Current.CancellationToken);
 
@@ -220,6 +268,7 @@ public sealed class SensitiveContentEgressScreenTests
         var refusal = await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(
             () => egress.Screen.ScreenAsync(
                 SensitiveContentEgressPoint.OutgoingMail,
+                ScanningSensitiveContentEgress.Owner,
                 ["an ordinary message"],
                 TestContext.Current.CancellationToken));
 
@@ -246,6 +295,7 @@ public sealed class SensitiveContentEgressScreenTests
         // Act
         var refusal = await egress.Screen.ScreenAsync(
             SensitiveContentEgressPoint.OutgoingMail,
+            ScanningSensitiveContentEgress.Owner,
             [],
             TestContext.Current.CancellationToken);
 

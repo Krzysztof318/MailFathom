@@ -13,6 +13,7 @@ using MailFathom.Application.Mail;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
 using MailFathom.Application.SensitiveContent;
+using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.SensitiveContent.Redaction;
@@ -26,6 +27,7 @@ using MailFathom.Infrastructure.Persistence.Connections;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using MailFathom.Infrastructure.SensitiveContent.PersonalData;
 using MailFathom.Infrastructure.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -40,8 +42,13 @@ using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests;
 
-public sealed class ServiceCollectionExtensionsTests
+public sealed class ServiceCollectionExtensionsTests : IDisposable
 {
+    private readonly List<SensitiveContentScanConcurrency> openedPermits = [];
+
+    /// <inheritdoc />
+    public void Dispose() => this.openedPermits.ForEach(permits => permits.Dispose());
+
     /// <summary>A numeric configuration value binds to an undefined member, which must fail rather than fall through to the strictest mode by accident.</summary>
     [Fact]
     public void AddSecretResolution_UndefinedInterpretation_FailsInsteadOfStartingInAModeNobodySelected()
@@ -284,6 +291,7 @@ public sealed class ServiceCollectionExtensionsTests
         // Arrange
         var services = new ServiceCollection();
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<ISensitiveContentPostures>(FixedSensitiveContentPostures.ScanningNothing());
 
         // Act
         services.AddInfrastructure(
@@ -304,16 +312,7 @@ public sealed class ServiceCollectionExtensionsTests
         // Arrange
         var services = new ServiceCollection();
         services.AddSingleton(TimeProvider.System);
-        services.AddSingleton(SensitiveContentPlan.Create(
-            SensitiveContentScanBounds.Default,
-            [
-                SensitiveContentScannerPlan.Create(
-                    SensitiveContentScannerKind.Secrets,
-                    [SensitiveContentCategory.Create("ProviderToken")],
-                    []),
-            ])!);
-        services.AddSingleton<SensitiveContentRedactor>();
-        services.AddSecretContentScanning();
+        this.AddScanningPostures(services, SensitiveContentCategory.Create("ProviderToken"));
 
         // Act
         services.AddInfrastructure(
@@ -342,16 +341,7 @@ public sealed class ServiceCollectionExtensionsTests
         services.AddSingleton(Substitute.For<ITrustedAuthenticationAuthorityReader>());
         services.AddSingleton(Substitute.For<ISenderTrustPolicyReader>());
         services.AddSingleton(MachineAuthorshipProfile.Standard);
-        services.AddSingleton(SensitiveContentPlan.Create(
-            SensitiveContentScanBounds.Default,
-            [
-                SensitiveContentScannerPlan.Create(
-                    SensitiveContentScannerKind.Secrets,
-                    [SensitiveContentCategory.Create("ProviderToken")],
-                    []),
-            ])!);
-        services.AddSingleton<SensitiveContentRedactor>();
-        services.AddSecretContentScanning();
+        this.AddScanningPostures(services, SensitiveContentCategory.Create("ProviderToken"));
 
         // Act
         services.AddInfrastructure(
@@ -366,29 +356,47 @@ public sealed class ServiceCollectionExtensionsTests
         Assert.IsType<RedactingEmailMimeReader>(scope.ServiceProvider.GetRequiredService<IEmailMimeReader>());
     }
 
-    /// <summary>The control the case above rests on: with both switches off the message is read exactly as it arrived.</summary>
+    /// <summary>
+    /// The control the case above rests on: with nobody's mail scanned the message is read exactly as it arrived, and
+    /// the row it produces carries no posture.
+    /// </summary>
+    /// <remarks>
+    /// Asserted through the reading rather than against the resolved type, because the decorator is now wrapped
+    /// whatever the postures say: they change while a scope is open, so a scope that decided at construction would go
+    /// on writing an owner's mail unredacted for the rest of its run after that owner switched a scanner on. What the
+    /// decorator being inert means is therefore a claim about the text and the stamp, which is what this states.
+    /// </remarks>
     [Fact]
-    public void AddInfrastructure_WithoutAScanner_ResolvesAMimeReaderThatRedactsNothing()
+    public async Task AddInfrastructure_WithoutAScanner_ResolvesAMimeReaderThatRedactsNothing()
     {
         // Arrange
+        var policies = Substitute.For<ISenderTrustPolicyReader>();
+        policies.GetTrustPolicy(Arg.Any<MailAccountId>()).Returns(SenderTrustPolicy.Create([], [], []));
+
         var services = new ServiceCollection();
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<ISensitiveContentPostures>(FixedSensitiveContentPostures.ScanningNothing());
         services.AddSingleton(new EmailMimeExtractionOptions());
         services.AddSingleton(Substitute.For<ITrustedAuthenticationAuthorityReader>());
-        services.AddSingleton(Substitute.For<ISenderTrustPolicyReader>());
+        services.AddSingleton(policies);
         services.AddSingleton(MachineAuthorshipProfile.Standard);
 
-        // Act
         services.AddInfrastructure(
             _ => new PostgresConnectionSettings("Host=localhost;Database=mailfathom", null, null),
             PostgresTextSearchConfiguration.Default,
             MailAnsweringBudget.Default);
 
-        // Assert
         using var provider = services.BuildServiceProvider();
         using var scope = provider.CreateScope();
 
-        Assert.IsNotType<RedactingEmailMimeReader>(scope.ServiceProvider.GetRequiredService<IEmailMimeReader>());
+        // Act
+        var extraction = await scope.ServiceProvider
+            .GetRequiredService<IEmailMimeReader>()
+            .ReadMetadataAsync(OrdinaryMessage(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Null(extraction.Metadata?.RedactedUnder);
+        Assert.Contains("body", extraction.Metadata?.Text.OriginalText ?? string.Empty, StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -413,6 +421,7 @@ public sealed class ServiceCollectionExtensionsTests
 
         var services = new ServiceCollection();
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<ISensitiveContentPostures>(FixedSensitiveContentPostures.ScanningNothing());
         services.AddSingleton(new EmailMimeExtractionOptions());
         services.AddSingleton(Substitute.For<ITrustedAuthenticationAuthorityReader>());
         services.AddSingleton(policies);
@@ -429,7 +438,7 @@ public sealed class ServiceCollectionExtensionsTests
         // Act
         var extraction = await scope.ServiceProvider
             .GetRequiredService<IEmailMimeReader>()
-            .ReadMetadataAsync(OrdinaryMessage(), TestContext.Current.CancellationToken);
+            .ReadMetadataAsync(OrdinaryMessage(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(policy.Revision, extraction.Metadata?.SenderTrust.PolicyRevision);
@@ -453,6 +462,7 @@ public sealed class ServiceCollectionExtensionsTests
 
         var services = new ServiceCollection();
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<ISensitiveContentPostures>(FixedSensitiveContentPostures.ScanningNothing());
         services.AddSingleton(new EmailMimeExtractionOptions { VerifyDkimLocally = true });
         services.AddSingleton(Substitute.For<ITrustedAuthenticationAuthorityReader>());
         services.AddSingleton(TrustPolicyReader());
@@ -470,7 +480,7 @@ public sealed class ServiceCollectionExtensionsTests
         // Act
         var extraction = await scope.ServiceProvider
             .GetRequiredService<IEmailMimeReader>()
-            .ReadMetadataAsync(MimeFixtures.RawContent(signed.RawMime), TestContext.Current.CancellationToken);
+            .ReadMetadataAsync(MimeFixtures.RawContent(signed.RawMime), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(
@@ -491,6 +501,7 @@ public sealed class ServiceCollectionExtensionsTests
 
         var services = new ServiceCollection();
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<ISensitiveContentPostures>(FixedSensitiveContentPostures.ScanningNothing());
         services.AddSingleton(new EmailMimeExtractionOptions { VerifyDkimLocally = false });
         services.AddSingleton(Substitute.For<ITrustedAuthenticationAuthorityReader>());
         services.AddSingleton(TrustPolicyReader());
@@ -508,7 +519,7 @@ public sealed class ServiceCollectionExtensionsTests
         // Act
         var extraction = await scope.ServiceProvider
             .GetRequiredService<IEmailMimeReader>()
-            .ReadMetadataAsync(MimeFixtures.RawContent(signed.RawMime), TestContext.Current.CancellationToken);
+            .ReadMetadataAsync(MimeFixtures.RawContent(signed.RawMime), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(
@@ -531,6 +542,7 @@ public sealed class ServiceCollectionExtensionsTests
         // Arrange
         var services = new ServiceCollection();
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<ISensitiveContentPostures>(FixedSensitiveContentPostures.ScanningNothing());
         services.AddSingleton(new EmailMimeExtractionOptions());
         services.AddSingleton(Substitute.For<ITrustedAuthenticationAuthorityReader>());
         services.AddSingleton(TrustPolicyReader());
@@ -547,7 +559,7 @@ public sealed class ServiceCollectionExtensionsTests
         // Act
         var extraction = await scope.ServiceProvider
             .GetRequiredService<IEmailMimeReader>()
-            .ReadMetadataAsync(OrdinaryMessage(), TestContext.Current.CancellationToken);
+            .ReadMetadataAsync(OrdinaryMessage(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MachineAuthorshipBand.Unlikely, extraction.Metadata?.MachineAuthorship.Band);
@@ -566,6 +578,7 @@ public sealed class ServiceCollectionExtensionsTests
         // Arrange
         var services = new ServiceCollection();
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<ISensitiveContentPostures>(FixedSensitiveContentPostures.ScanningNothing());
         services.AddSingleton(new EmailMimeExtractionOptions());
         services.AddSingleton(Substitute.For<ITrustedAuthenticationAuthorityReader>());
         services.AddSingleton(TrustPolicyReader());
@@ -582,7 +595,7 @@ public sealed class ServiceCollectionExtensionsTests
         // Act
         var extraction = await scope.ServiceProvider
             .GetRequiredService<IEmailMimeReader>()
-            .ReadMetadataAsync(OrdinaryMessage(), TestContext.Current.CancellationToken);
+            .ReadMetadataAsync(OrdinaryMessage(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MachineAuthorshipBand.NotAssessed, extraction.Metadata?.MachineAuthorship.Band);
@@ -612,16 +625,7 @@ public sealed class ServiceCollectionExtensionsTests
         services.AddSingleton(Substitute.For<ITrustedAuthenticationAuthorityReader>());
         services.AddSingleton(policies);
         services.AddSingleton(MachineAuthorshipProfile.Standard);
-        services.AddSingleton(SensitiveContentPlan.Create(
-            SensitiveContentScanBounds.Default,
-            [
-                SensitiveContentScannerPlan.Create(
-                    SensitiveContentScannerKind.Secrets,
-                    [SensitiveContentCategory.Create("ProviderToken")],
-                    []),
-            ])!);
-        services.AddSingleton<SensitiveContentRedactor>();
-        services.AddSecretContentScanning();
+        this.AddScanningPostures(services, SensitiveContentCategory.Create("ProviderToken"));
 
         services.AddInfrastructure(
             _ => new PostgresConnectionSettings("Host=localhost;Database=mailfathom", null, null),
@@ -634,7 +638,7 @@ public sealed class ServiceCollectionExtensionsTests
         // Act
         var extraction = await scope.ServiceProvider
             .GetRequiredService<IEmailMimeReader>()
-            .ReadMetadataAsync(OrdinaryMessage(), TestContext.Current.CancellationToken);
+            .ReadMetadataAsync(OrdinaryMessage(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(EmailMimeExtractionOutcome.Extracted, extraction.Outcome);
@@ -659,11 +663,7 @@ public sealed class ServiceCollectionExtensionsTests
         services.AddSingleton(Substitute.For<ITrustedAuthenticationAuthorityReader>());
         services.AddSingleton(TrustPolicyReader());
         services.AddSingleton(MachineAuthorshipProfile.Standard);
-        services.AddSingleton(SensitiveContentPlan.Create(
-            SensitiveContentScanBounds.Default,
-            [SensitiveContentScannerPlan.Create(SensitiveContentScannerKind.Secrets, [category], [])])!);
-        services.AddSingleton<SensitiveContentRedactor>();
-        services.AddSingleton<ISensitiveContentScanner>(new WholeTextScanner(category));
+        this.AddScanningPostures(services, category);
 
         services.AddInfrastructure(
             _ => new PostgresConnectionSettings("Host=localhost;Database=mailfathom", null, null),
@@ -676,7 +676,7 @@ public sealed class ServiceCollectionExtensionsTests
         // Act
         var extraction = await scope.ServiceProvider
             .GetRequiredService<IEmailMimeReader>()
-            .ReadMetadataAsync(ConcealingMessage(), TestContext.Current.CancellationToken);
+            .ReadMetadataAsync(ConcealingMessage(), SyntheticMailOwner.Deployment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(MachineAuthorshipBand.Likely, extraction.Metadata?.MachineAuthorship.Band);
@@ -687,6 +687,30 @@ public sealed class ServiceCollectionExtensionsTests
             "\U000E0069",
             extraction.Metadata?.Text.OriginalText ?? string.Empty,
             StringComparison.Ordinal);
+    }
+
+    /// <summary>Registers the postures a deployment with one scanner switched on for every owner would compose.</summary>
+    /// <remarks>
+    /// The host composes these from the owner records and the deployment section; nothing under <c>Infrastructure</c>
+    /// does, so a graph asserted here states them the way a composed one would arrive with them. The permits outlive
+    /// the posture, so the class holds them rather than the arrangement that opened them.
+    /// </remarks>
+    private void AddScanningPostures(IServiceCollection services, SensitiveContentCategory category)
+    {
+        var scanner = new WholeTextScanner(category);
+        var plan = SensitiveContentPlan.Create(
+            SensitiveContentScanBounds.Default,
+            [SensitiveContentScannerPlan.Create(scanner.Scanner, [category], [])]);
+        var permits = new SensitiveContentScanConcurrency(plan.Bounds.MaximumConcurrentScans);
+
+        this.openedPermits.Add(permits);
+
+        services.AddSingleton<ISensitiveContentPostures>(FixedSensitiveContentPostures.ForEveryOwner(
+            SensitiveContentPosture.Scanning(
+                [scanner.Scanner],
+                new SensitiveContentRedactor(plan, [scanner], TimeProvider.System, permits),
+                SensitiveContentScreeningPolicy.ScreeningNothing(),
+                SensitiveContentDerivationStamp.Compute(plan, [scanner]))));
     }
 
     /// <summary>
@@ -1005,6 +1029,7 @@ public sealed class ServiceCollectionExtensionsTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddSingleton(TimeProvider.System);
+        services.AddSingleton<ISensitiveContentPostures>(FixedSensitiveContentPostures.ScanningNothing());
         services.AddSecretResolution(SecretValueInterpretation.ReferenceOnly);
         services.AddInfrastructure(_ => new PostgresConnectionSettings(
             "Host=localhost;Database=mailfathom;Username=mailfathom",

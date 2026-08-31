@@ -24,7 +24,6 @@ public sealed class SensitiveContentOptionsTests
         // Assert
         Assert.False(settings.Secrets.Enabled);
         Assert.False(settings.Pii.Enabled);
-        Assert.False(settings.IsAnyScannerEnabled);
     }
 
     [Fact]
@@ -39,19 +38,47 @@ public sealed class SensitiveContentOptionsTests
         Assert.Equal(SensitiveContentScanBounds.Default.MaximumConcurrentScans, settings.MaximumConcurrentScans);
     }
 
+    /// <summary>The secrets scanner runs inside this process, so every deployment can serve an owner who asks for it.</summary>
+    [Fact]
+    public void ProvidedScanners_ADeploymentWithNoAnalyzerAddress_ProvidesTheSecretsScannerAlone()
+    {
+        // Act
+        var settings = new SensitiveContentOptions();
+
+        // Assert
+        Assert.Equal([SensitiveContentScannerKind.Secrets], settings.ProvidedScanners);
+        Assert.False(settings.ProvidesPersonalDataScanner);
+    }
+
+    /// <summary>Standing the analyzer up is what makes the personal-data scanner available, whoever switches it on.</summary>
     [Theory]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    [InlineData(true, true)]
-    public void IsAnyScannerEnabled_EitherSwitchOn_IsTrue(bool secrets, bool personalData)
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ProvidedScanners_AConfiguredAnalyzer_ProvidesBothWhicheverWayTheSwitchReads(bool switchedOn)
     {
         // Arrange
-        var settings = new SensitiveContentOptions();
-        settings.Secrets.Enabled = secrets;
-        settings.Pii.Enabled = personalData;
+        var settings = new SensitiveContentOptions { PersonalDataAnalyzer = { Endpoint = "http://analyzer:3000" } };
+        settings.Pii.Enabled = switchedOn;
 
         // Act, Assert
-        Assert.True(settings.IsAnyScannerEnabled);
+        Assert.Equal(
+            [SensitiveContentScannerKind.Secrets, SensitiveContentScannerKind.Pii],
+            settings.ProvidedScanners);
+        Assert.True(settings.ProvidesPersonalDataScanner);
+    }
+
+    /// <summary>An address no request could be composed from provides nothing, so a record asking for that scanner is refused.</summary>
+    [Theory]
+    [InlineData("presidio-analyzer:3000")]
+    [InlineData("ftp://analyzer:3000")]
+    [InlineData("   ")]
+    public void ProvidedScanners_AnAddressNothingCouldBeAskedAt_ProvidesTheSecretsScannerAlone(string endpoint)
+    {
+        // Arrange
+        var settings = new SensitiveContentOptions { PersonalDataAnalyzer = { Endpoint = endpoint } };
+
+        // Act, Assert
+        Assert.Equal([SensitiveContentScannerKind.Secrets], settings.ProvidedScanners);
     }
 
     [Fact]
@@ -193,6 +220,52 @@ public sealed class SensitiveContentOptionsTests
         var result = Assert.Single(results);
         Assert.Contains("'polish'", result.ErrorMessage!, StringComparison.Ordinal);
         Assert.DoesNotContain("'en'", result.ErrorMessage!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An address alone stands the analyzer up, for the owners who may switch the scanner on for their own mail, so the
+    /// block beside it is judged whether or not this deployment scans with it. Left unjudged, the profile the
+    /// composition root builds from these keys would throw out of the first posture that resolved it, taking every
+    /// scanning path down with nothing naming the key that did it.
+    /// </summary>
+    [Fact]
+    public void Validate_AMalformedAnalyzerLanguageUnderAScannerOnlyOwnersRun_IsReported()
+    {
+        // Arrange
+        var settings = new SensitiveContentOptions();
+        settings.Secrets.Enabled = true;
+        settings.PersonalDataAnalyzer.Endpoint = "http://presidio-analyzer:3000";
+        settings.PersonalDataAnalyzer.Languages.Add("polish");
+
+        // Act
+        var results = settings.Validate(new ValidationContext(settings)).ToArray();
+
+        // Assert
+        Assert.False(settings.Pii.Enabled);
+        Assert.True(settings.ProvidesPersonalDataScanner);
+
+        var result = Assert.Single(results);
+        Assert.Contains("'polish'", result.ErrorMessage!, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// An address nothing could be built from under a switched-off scanner stands nothing up and describes no
+    /// protection, so it is left where it is rather than refusing a start over a setting that decides nothing.
+    /// </summary>
+    [Fact]
+    public void Validate_AnUnusableAnalyzerAddressUnderASwitchedOffScanner_ReportsNothing()
+    {
+        // Arrange
+        var settings = new SensitiveContentOptions();
+        settings.PersonalDataAnalyzer.Endpoint = "presidio-analyzer:3000";
+        settings.PersonalDataAnalyzer.Languages.Add("polish");
+
+        // Act
+        var results = settings.Validate(new ValidationContext(settings)).ToArray();
+
+        // Assert
+        Assert.False(settings.ProvidesPersonalDataScanner);
+        Assert.Empty(results);
     }
 
     /// <summary>

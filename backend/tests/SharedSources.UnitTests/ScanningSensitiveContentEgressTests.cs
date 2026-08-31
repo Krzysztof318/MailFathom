@@ -23,6 +23,7 @@ public sealed class ScanningSensitiveContentEgressTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+        using var actingFor = egress.ActingForOwner();
 
         // Act
         var guarded = await egress.Guard.GuardAsync(
@@ -49,6 +50,7 @@ public sealed class ScanningSensitiveContentEgressTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider, scanner);
+        using var actingFor = egress.ActingForOwner();
 
         // Act
         var guarded = await egress.Guard.GuardAsync(
@@ -70,6 +72,7 @@ public sealed class ScanningSensitiveContentEgressTests
             Marker,
             this.timeProvider,
             bounds: SensitiveContentScanBounds.Create(8, TimeSpan.FromSeconds(5), 4));
+        using var actingFor = egress.ActingForOwner();
 
         // Act
         var guarded = await egress.Guard.GuardWithOmissionAsync(
@@ -87,6 +90,7 @@ public sealed class ScanningSensitiveContentEgressTests
     {
         // Arrange
         using var egress = ScanningSensitiveContentEgress.Unavailable(this.timeProvider);
+        using var actingFor = egress.ActingForOwner();
 
         // Act
         var refusal = await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(() =>
@@ -118,21 +122,24 @@ public sealed class ScanningSensitiveContentEgressTests
         // Act
         var refusal = await egress.Screen.ScreenAsync(
             SensitiveContentEgressPoint.OutgoingMail,
+            ScanningSensitiveContentEgress.Owner,
             [$"the key is {Marker}"],
             TestContext.Current.CancellationToken);
 
         // Assert
-        Assert.True(egress.Screen.IsActive);
+        Assert.True(egress.Screen.IsActiveFor(ScanningSensitiveContentEgress.Owner));
         Assert.NotNull(refusal);
         Assert.Equal(scanner, refusal.Scanner);
     }
 
-    /// <summary>The redactor holds a deployment's concurrency permits, so the holder releases it rather than the test.</summary>
+    /// <summary>The deployment holds the process's scan permits, so the holder releases them rather than the test.</summary>
     [Fact]
-    public async Task Dispose_ADeploymentATestFinishedWith_ReleasesTheRedactionItHeld()
+    public async Task Dispose_ADeploymentATestFinishedWith_ReleasesThePermitsItHeld()
     {
         // Arrange
         var egress = ScanningSensitiveContentEgress.Finding(Marker, this.timeProvider);
+
+        using var actingFor = egress.ActingForOwner();
 
         // Act
         egress.Dispose();

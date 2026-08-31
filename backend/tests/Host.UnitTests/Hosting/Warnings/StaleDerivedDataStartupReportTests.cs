@@ -5,10 +5,12 @@
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Derivation;
+using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Hosting.Warnings;
 using MailFathom.Host.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
@@ -82,9 +84,7 @@ public sealed class StaleDerivedDataStartupReportTests
     {
         // Arrange
         this.store
-            .CountEmailsWithStaleDerivedDataAsync(
-                Arg.Any<SensitiveContentDerivationStamp>(),
-                Arg.Any<CancellationToken>())
+            .CountEmailsWithStaleDerivedDataAsync(Arg.Any<CancellationToken>())
             .Returns<Task<int>>(_ => throw new InvalidOperationException("The database is not answering."));
         using var report = this.Report(rebuildStaleDerivedData: false);
 
@@ -99,16 +99,13 @@ public sealed class StaleDerivedDataStartupReportTests
 
     private void StoreCounts(int staleEmailCount) =>
         this.store
-            .CountEmailsWithStaleDerivedDataAsync(
-                Arg.Any<SensitiveContentDerivationStamp>(),
-                Arg.Any<CancellationToken>())
+            .CountEmailsWithStaleDerivedDataAsync(Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(staleEmailCount));
 
-    /// <summary>Builds a deployment that scans something, which is the only state this report is registered in.</summary>
+    /// <summary>Builds a deployment that scans somebody's mail, which is the only state this report says anything in.</summary>
     /// <remarks>
-    /// The redaction behind the guard is never exercised, because the report reads the stamp and nothing else — so the
-    /// stamp is a written-down value rather than one computed from a detector this test would then have to keep
-    /// meaningful.
+    /// The redaction behind the posture is never exercised, because the report reads whether anything is scanned at all
+    /// and nothing else — so the detector list is empty rather than one this test would then have to keep meaningful.
     /// </remarks>
     private ScannedDeployment Report(bool rebuildStaleDerivedData)
     {
@@ -120,36 +117,41 @@ public sealed class StaleDerivedDataStartupReportTests
                     [SensitiveContentCategory.Create("ProviderToken")],
                     []),
             ]);
-        var redactor = new SensitiveContentRedactor(plan, [], this.timeProvider);
+        var concurrency = new SensitiveContentScanConcurrency(plan.Bounds.MaximumConcurrentScans);
+        var postures = FixedSensitiveContentPostures.ForEveryOwner(
+            SensitiveContentPosture.Scanning(
+                [SensitiveContentScannerKind.Secrets],
+                new SensitiveContentRedactor(plan, [], this.timeProvider, concurrency),
+                SensitiveContentScreeningPolicy.ScreeningNothing(),
+                SensitiveContentDerivationStamp.Create(
+                    new string('a', SensitiveContentDerivationStamp.Length))));
         var settings = new SensitiveContentOptions { RebuildStaleDerivedData = rebuildStaleDerivedData };
         var services = new ServiceCollection()
             .AddScoped(_ => this.store)
             .BuildServiceProvider();
 
         return new ScannedDeployment(
-            redactor,
+            concurrency,
             services,
             new StaleDerivedDataStartupReport(
                 services.GetRequiredService<IServiceScopeFactory>(),
                 new SensitiveContentDerivationGuard(
-                    redactor,
-                    SensitiveContentDerivationStamp.Create(
-                        new string('a', SensitiveContentDerivationStamp.Length)),
+                    postures,
                     Substitute.For<ISensitiveContentDerivationTelemetry>(),
                     this.timeProvider),
                 Options.Create(settings),
                 this.logger));
     }
 
-    /// <summary>Holds what one report is exercised against, so the redactor's permits and the scope factory are released.</summary>
+    /// <summary>Holds what one report is exercised against, so the scan permits and the scope factory are released.</summary>
     private sealed class ScannedDeployment(
-        SensitiveContentRedactor redactor,
+        SensitiveContentScanConcurrency concurrency,
         ServiceProvider services,
         StaleDerivedDataStartupReport report) : IDisposable
     {
         public void Dispose()
         {
-            redactor.Dispose();
+            concurrency.Dispose();
             services.Dispose();
         }
 

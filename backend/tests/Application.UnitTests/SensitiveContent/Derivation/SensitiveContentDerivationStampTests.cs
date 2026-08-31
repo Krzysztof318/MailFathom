@@ -5,7 +5,10 @@
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.SensitiveContent.Detection;
+using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.SensitiveContent.Derivation;
@@ -202,6 +205,52 @@ public sealed class SensitiveContentDerivationStampTests
         // Assert
         Assert.Equal(computed, readBack);
         Assert.Equal(computed.Value, readBack.ToString());
+    }
+
+    /// <summary>
+    /// A cursor is discarded whenever anything the walk judges mail against has moved, and mail whose owner the roster
+    /// no longer names is judged against the deployment's own posture. That posture moving is invisible in the rostered
+    /// stamps whenever every rostered owner had already asked for at least as much, so it is digested beside them —
+    /// otherwise the walk resumes past rows that had just become stale and never revisits them.
+    /// </summary>
+    [Fact]
+    public void Across_TheFallbackPostureMovingWhileNoRosteredOneDid_ProducesADifferentComposite()
+    {
+        // Arrange
+        var scanner = Scanner(SensitiveContentScannerKind.Secrets, "corpus", "1");
+        var plan = Plan(scanner, ProviderToken);
+        var stamp = SensitiveContentDerivationStamp.Compute(plan, [scanner]);
+        using var permits = new SensitiveContentScanConcurrency(plan.Bounds.MaximumConcurrentScans);
+        var rostered = new[]
+        {
+            new OwnerSensitiveContentPosture(
+                SyntheticMailOwner.Deployment,
+                SensitiveContentPosture.Scanning(
+                    [scanner.Scanner],
+                    new SensitiveContentRedactor(plan, [scanner], TimeProvider.System, permits),
+                    SensitiveContentScreeningPolicy.ScreeningNothing(),
+                    stamp)),
+        };
+
+        // Act
+        var beforeTheDeploymentScanned = SensitiveContentDerivationStamp.Across(rostered, null);
+        var afterwards = SensitiveContentDerivationStamp.Across(rostered, stamp);
+
+        // Assert
+        Assert.NotNull(beforeTheDeploymentScanned);
+        Assert.NotNull(afterwards);
+        Assert.NotEqual(beforeTheDeploymentScanned, afterwards);
+    }
+
+    /// <summary>A walk covering nobody's scanned mail records no composite, so a cursor it wrote is resumed from.</summary>
+    [Fact]
+    public void Across_NothingScannedAtAll_ProducesNoComposite()
+    {
+        // Act
+        var composite = SensitiveContentDerivationStamp.Across([], null);
+
+        // Assert
+        Assert.Null(composite);
     }
 
     private static SensitiveContentPlan Plan(

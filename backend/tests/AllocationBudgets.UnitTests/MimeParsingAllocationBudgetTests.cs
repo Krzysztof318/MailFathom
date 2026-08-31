@@ -45,13 +45,13 @@ public sealed class MimeParsingAllocationBudgetTests
 
         // The measured run asserts nothing, because an assertion inside it would allocate and be charged to the path.
         // Establishing that the run does the work is therefore a step of its own, before anything is counted.
-        var extraction = await reader.ReadMetadataAsync(content, cancellationToken);
+        var extraction = await reader.ReadMetadataAsync(content, SyntheticMailOwner.Deployment, cancellationToken);
         Assert.Equal(EmailMimeExtractionOutcome.Extracted, extraction.Outcome);
 
         // Act, Assert
         await AllocationBudget.AssertWithinAsync(
             "Extracting metadata from a large message",
             budgetBytes,
-            () => reader.ReadMetadataAsync(content, cancellationToken));
+            () => reader.ReadMetadataAsync(content, SyntheticMailOwner.Deployment, cancellationToken));
     }
 }

@@ -467,7 +467,8 @@ public sealed class StoredEmailEmbeddingBackfillTests
                     spendBudget ?? EmbeddingSpendBudget.Unbounded,
                     new FakeTimeProvider(PeriodStart)),
                 EmbeddingRequestPacer.Create(maxRequestsPerMinute: 0, new FakeTimeProvider()),
-                ownership ?? new StubMailOwnership()),
+                ownership ?? new StubMailOwnership(),
+                SensitiveContentEgressGuards.Inactive()),
             concurrencyRetryPolicy,
             new RecordingDerivedWorkGateTelemetry());
     }

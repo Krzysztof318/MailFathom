@@ -6,10 +6,12 @@ using System.Globalization;
 using System.Text;
 using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.OwnerSettings;
+using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.Spam;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.Infrastructure.Persistence.Owners;
 using MailFathom.Infrastructure.Persistence.Settings;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
@@ -37,7 +39,7 @@ public sealed class OwnerAccountDocumentBinderTests
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind("{}");
+        var binding = binder.Bind("{}", OwnerRecordArrival.BeingWritten);
 
         // Assert
         Assert.True(binding.IsBound);
@@ -52,7 +54,7 @@ public sealed class OwnerAccountDocumentBinderTests
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind(DocumentDeclaring(("work", "The work mailbox")));
+        var binding = binder.Bind(DocumentDeclaring(("work", "The work mailbox")), OwnerRecordArrival.BeingWritten);
 
         // Assert
         Assert.True(binding.IsBound);
@@ -76,7 +78,7 @@ public sealed class OwnerAccountDocumentBinderTests
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind(DocumentDeclaring(("work", "The work mailbox"), ("work", "The other mailbox")));
+        var binding = binder.Bind(DocumentDeclaring(("work", "The work mailbox"), ("work", "The other mailbox")), OwnerRecordArrival.BeingWritten);
 
         // Assert
         Assert.False(binding.IsBound);
@@ -91,7 +93,7 @@ public sealed class OwnerAccountDocumentBinderTests
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind(DocumentDeclaring(("work", "personal"), ("personal", "The personal mailbox")));
+        var binding = binder.Bind(DocumentDeclaring(("work", "personal"), ("personal", "The personal mailbox")), OwnerRecordArrival.BeingWritten);
 
         // Assert
         Assert.False(binding.IsBound);
@@ -109,7 +111,8 @@ public sealed class OwnerAccountDocumentBinderTests
         var binding = binder.Bind(
             """
             { "MailAccounts": [ { "AccountId": "work", "DisplayName": "The work mailbox", "UserName": "mailfathom@example.test" } ] }
-            """);
+            """,
+            OwnerRecordArrival.BeingWritten);
 
         // Assert
         Assert.False(binding.IsBound);
@@ -124,7 +127,7 @@ public sealed class OwnerAccountDocumentBinderTests
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind("""{ "MailAccounts": [], "TrustedSenders": [] }""");
+        var binding = binder.Bind("""{ "MailAccounts": [], "TrustedSenders": [] }""", OwnerRecordArrival.BeingWritten);
 
         // Assert
         Assert.False(binding.IsBound);
@@ -148,7 +151,7 @@ public sealed class OwnerAccountDocumentBinderTests
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind("""{ "MailAccounts": [], "quiet\nDatabase error: reached": 1 }""");
+        var binding = binder.Bind("""{ "MailAccounts": [], "quiet\nDatabase error: reached": 1 }""", OwnerRecordArrival.BeingWritten);
 
         // Assert
         Assert.False(binding.IsBound);
@@ -174,7 +177,7 @@ public sealed class OwnerAccountDocumentBinderTests
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind(json);
+        var binding = binder.Bind(json, OwnerRecordArrival.BeingWritten);
 
         // Assert
         Assert.False(binding.IsBound);
@@ -193,7 +196,7 @@ public sealed class OwnerAccountDocumentBinderTests
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind("""{ "MailAccounts": [ { "AccountId": "work", "Port": "hunter2" } ] }""");
+        var binding = binder.Bind("""{ "MailAccounts": [ { "AccountId": "work", "Port": "hunter2" } ] }""", OwnerRecordArrival.BeingWritten);
 
         // Assert
         Assert.False(binding.IsBound);
@@ -211,7 +214,7 @@ public sealed class OwnerAccountDocumentBinderTests
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind(DocumentDeclaring(("work", "The work mailbox"), passwordReference: "hunter2"));
+        var binding = binder.Bind(DocumentDeclaring(("work", "The work mailbox"), passwordReference: "hunter2"), OwnerRecordArrival.BeingWritten);
 
         // Assert
         Assert.False(binding.IsBound);
@@ -232,7 +235,7 @@ public sealed class OwnerAccountDocumentBinderTests
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind("""{ "quiet\nDatabase error: reached": { "Password": "hunter2" } }""");
+        var binding = binder.Bind("""{ "quiet\nDatabase error: reached": { "Password": "hunter2" } }""", OwnerRecordArrival.BeingWritten);
 
         // Assert
         Assert.False(binding.IsBound);
@@ -256,7 +259,7 @@ public sealed class OwnerAccountDocumentBinderTests
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind(DocumentDeclaring(("work", "The work mailbox"), passwordReference: "Pa55:word"));
+        var binding = binder.Bind(DocumentDeclaring(("work", "The work mailbox"), passwordReference: "Pa55:word"), OwnerRecordArrival.BeingWritten);
 
         // Assert
         Assert.False(binding.IsBound);
@@ -271,7 +274,7 @@ public sealed class OwnerAccountDocumentBinderTests
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind(DocumentDeclaring(("work", "The work mailbox")));
+        var binding = binder.Bind(DocumentDeclaring(("work", "The work mailbox")), OwnerRecordArrival.BeingWritten);
 
         // Assert
         Assert.True(binding.IsBound);
@@ -288,7 +291,7 @@ public sealed class OwnerAccountDocumentBinderTests
         var binder = CreateBinder();
 
         // Act
-        var binding = binder.Bind(document);
+        var binding = binder.Bind(document, OwnerRecordArrival.BeingWritten);
 
         // Assert
         Assert.False(binding.IsBound);
@@ -314,7 +317,7 @@ public sealed class OwnerAccountDocumentBinderTests
                 "Actions": { "MoveToJunkFolder": true, "JunkFolder": "role:Junk", "Threshold": 8 }
               }
             }
-            """);
+            """, OwnerRecordArrival.BeingWritten);
 
         // Assert
         Assert.True(binding.IsBound);
@@ -344,7 +347,7 @@ public sealed class OwnerAccountDocumentBinderTests
         // Act
         var binding = binder.Bind("""
             { "MailAccounts": [], "SpamClassification": { "Enabled": true, "ClassificationWait": "00:30:00" } }
-            """);
+            """, OwnerRecordArrival.BeingWritten);
 
         // Assert
         Assert.False(binding.IsBound);
@@ -361,7 +364,7 @@ public sealed class OwnerAccountDocumentBinderTests
         // Act
         var binding = binder.Bind("""
             { "MailAccounts": [], "SpamClassification": { "Enabled": true, "ScannerThreshold": 5000 } }
-            """);
+            """, OwnerRecordArrival.BeingWritten);
 
         // Assert
         Assert.False(binding.IsBound);
@@ -381,7 +384,7 @@ public sealed class OwnerAccountDocumentBinderTests
         var oversized = $$"""{ "MailAccounts": [], "Padding": "{{new string('x', OwnerSettingsDocument.MaximumOctets)}}" }""";
 
         // Act
-        var binding = binder.Bind(oversized);
+        var binding = binder.Bind(oversized, OwnerRecordArrival.BeingWritten);
 
         // Assert
         Assert.False(binding.IsBound);
@@ -403,7 +406,7 @@ public sealed class OwnerAccountDocumentBinderTests
         var manySmallPairs = DocumentOfShortPairsUnderTheCeilingAsWritten();
 
         // Act
-        var binding = binder.Bind(manySmallPairs);
+        var binding = binder.Bind(manySmallPairs, OwnerRecordArrival.BeingWritten);
 
         // Assert
         Assert.True(Encoding.UTF8.GetByteCount(manySmallPairs) <= OwnerSettingsDocument.MaximumOctets);
@@ -441,7 +444,8 @@ public sealed class OwnerAccountDocumentBinderTests
                   }
                 ]
               }
-              """);
+              """,
+            OwnerRecordArrival.BeingWritten);
 
         // Assert
         Assert.False(binding.IsBound);
@@ -460,7 +464,7 @@ public sealed class OwnerAccountDocumentBinderTests
         var binder = CreateBinder();
 
         // Act
-        var rejected = Record.Exception(() => binder.Bind(document));
+        var rejected = Record.Exception(() => binder.Bind(document, OwnerRecordArrival.BeingWritten));
 
         // Assert
         Assert.IsType<ArgumentException>(rejected);
@@ -481,8 +485,106 @@ public sealed class OwnerAccountDocumentBinderTests
         return $$"""{"MailAccounts":[],{{string.Join(",", pairs)}}}""";
     }
 
-    private static OwnerAccountDocumentBinder CreateBinder() =>
-        new(new PersistedSecretMaterial(DeclaredSecretScheme.Registered), new FakeTimeProvider(Today));
+    /// <summary>An owner switching on a scanner the deployment left off is the record this block exists for.</summary>
+    [Fact]
+    public void Bind_ARecordSwitchingOnAScannerTheDeploymentLeftOff_BindsWhatItAsksFor()
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind("""{"SensitiveContent":{"Secrets":{"Enabled":true}}}""", OwnerRecordArrival.BeingWritten);
+
+        // Assert
+        Assert.True(binding.IsBound);
+        Assert.True(binding.Owner!.SensitiveContent.Secrets.Enabled);
+    }
+
+    /// <summary>
+    /// The write is where a loosening is stopped, so whoever wrote the record learns which deployment switch refused it
+    /// rather than finding their mail scanned anyway and their own record describing something else.
+    /// </summary>
+    [Fact]
+    public void Bind_ARecordSwitchingOffAScannerTheDeploymentRequires_IsRefusedNamingTheSetting()
+    {
+        // Arrange
+        var deployment = new SensitiveContentOptions();
+        deployment.Secrets.Enabled = true;
+        var binder = CreateBinder(deployment);
+
+        // Act
+        var binding = binder.Bind("""{"SensitiveContent":{"Secrets":{"Enabled":false}}}""", OwnerRecordArrival.BeingWritten);
+
+        // Assert
+        Assert.False(binding.IsBound);
+        Assert.Contains(
+            binding.Refusals,
+            refusal => refusal.Contains("SensitiveContent:Secrets:Enabled", StringComparison.Ordinal));
+    }
+
+    /// <summary>Asking for a scanner this deployment stood up no analyzer for is refused here rather than at the first message.</summary>
+    [Fact]
+    public void Bind_ARecordAskingForThePersonalDataScannerWithNoAnalyzer_IsRefusedNamingTheDeploymentSetting()
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind("""{"SensitiveContent":{"Pii":{"Enabled":true}}}""", OwnerRecordArrival.BeingWritten);
+
+        // Assert
+        Assert.False(binding.IsBound);
+        Assert.Contains(
+            binding.Refusals,
+            refusal => refusal.Contains("PersonalDataAnalyzer:Endpoint", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A record accepted while the deployment screened less is read back after the deployment tightened, which is the
+    /// case an operator creates by doing the thing this feature exists to make safe. Refusing it would refuse the start
+    /// for every owner, over a record whose author cannot reach the surface that would rewrite it.
+    /// </summary>
+    [Fact]
+    public void Bind_AHeldRecordTheDeploymentHasSinceTightenedPast_IsStillBound()
+    {
+        // Arrange
+        var deployment = new SensitiveContentOptions();
+        deployment.Secrets.Enabled = true;
+        deployment.ScreenOutgoingMailFor = ["Secrets", "Pii"];
+        var binder = CreateBinder(deployment);
+        const string held = """{"SensitiveContent":{"Secrets":{"Enabled":false},"ScreenOutgoingMailFor":["Secrets"]}}""";
+
+        // Act
+        var written = binder.Bind(held, OwnerRecordArrival.BeingWritten);
+        var alreadyHeld = binder.Bind(held, OwnerRecordArrival.AlreadyHeld);
+
+        // Assert
+        Assert.False(written.IsBound);
+        Assert.True(alreadyHeld.IsBound);
+        Assert.Equal(["Secrets"], alreadyHeld.Owner!.SensitiveContent.ScreenOutgoingMailFor!);
+    }
+
+    /// <summary>Everything a record is judged by other than the deployment's own posture holds in both directions.</summary>
+    [Fact]
+    public void Bind_AHeldRecordNamingASettingNothingBinds_IsRefusedAsOneBeingWrittenIs()
+    {
+        // Arrange
+        var binder = CreateBinder();
+
+        // Act
+        var binding = binder.Bind("""{"SensitiveContent":{"Secrets":{"Enabled":true}},"Nonsense":1}""", OwnerRecordArrival.AlreadyHeld);
+
+        // Assert
+        Assert.False(binding.IsBound);
+    }
+
+    /// <summary>Builds the binder, over a deployment that scans nothing unless a test says otherwise.</summary>
+    /// <param name="deployment">The deployment's own scanning section, which a record's scanning block is judged against.</param>
+    private static OwnerAccountDocumentBinder CreateBinder(SensitiveContentOptions? deployment = null) =>
+        new(
+            new PersistedSecretMaterial(DeclaredSecretScheme.Registered),
+            new FakeTimeProvider(Today),
+            Options.Create(deployment ?? new SensitiveContentOptions()));
 
     private static string DocumentDeclaring(
         params (string AccountId, string DisplayName)[] accounts) =>

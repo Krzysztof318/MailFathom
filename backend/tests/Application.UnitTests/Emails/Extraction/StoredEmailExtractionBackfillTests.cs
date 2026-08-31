@@ -7,12 +7,13 @@ using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Persistence;
-using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
 using MailFathom.Domain.Folders;
+using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -123,7 +124,7 @@ public sealed class StoredEmailExtractionBackfillTests
         var contentStore = CreateContentStoreWithReadableMime();
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
-            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult(EmailMimeExtractionResult.MalformedContent()));
         var backfill = CreateBackfill(store, contentStore, mimeReader, batchSize: 10);
 
@@ -336,11 +337,45 @@ public sealed class StoredEmailExtractionBackfillTests
         return contentStore;
     }
 
+    /// <summary>
+    /// Every message the walk re-reads is re-read under the posture of the owner who holds it, so a rebuild covering
+    /// two owners redacts each of their mail the way that owner's own record asks for. Nothing else says so: the reader
+    /// resolves the posture from the owner it is handed, and a walk that handed it one owner for the whole batch would
+    /// rewrite one person's mail under the other's answer.
+    /// </summary>
+    [Fact]
+    public async Task RunAsync_EmailsOfTwoOwners_ReReadsEachOfThemUnderItsOwnOwner()
+    {
+        // Arrange
+        var store = new FakeBackfillStore(
+        [
+            EmailAwaitingExtraction(1, SyntheticMailOwner.Deployment),
+            EmailAwaitingExtraction(2, SyntheticMailOwner.Another),
+        ]);
+        var contentStore = CreateContentStoreWithReadableMime();
+        var mimeReader = CreateReaderThatExtractsEverything();
+        var backfill = CreateBackfill(store, contentStore, mimeReader, batchSize: 10);
+
+        // Act
+        var result = await backfill.RunAsync(CancellationToken.None);
+
+        // Assert
+        Assert.Equal(2, result.ExtractedEmailCount);
+        await mimeReader.Received(1).ReadMetadataAsync(
+            Arg.Is<RemoteEmailContent>(content => content!.OccurrenceId.Uid == ImapUid.Create(1)),
+            SyntheticMailOwner.Deployment,
+            Arg.Any<CancellationToken>());
+        await mimeReader.Received(1).ReadMetadataAsync(
+            Arg.Is<RemoteEmailContent>(content => content!.OccurrenceId.Uid == ImapUid.Create(2)),
+            SyntheticMailOwner.Another,
+            Arg.Any<CancellationToken>());
+    }
+
     private static IEmailMimeReader CreateReaderThatExtractsEverything(string bodyText = "Body")
     {
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
-            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(new ExtractedEmailMetadata(
                 call.Arg<RemoteEmailContent>()!.OccurrenceId,
                 Subject: "Subject",
@@ -358,7 +393,14 @@ public sealed class StoredEmailExtractionBackfillTests
     /// <summary>Builds emails awaiting extraction whose identifiers increase in the order the walk visits them.</summary>
     private static IReadOnlyList<StoredEmailAwaitingExtraction> EmailsAwaitingExtraction(int count) =>
     [
-        .. Enumerable.Range(1, count).Select(position => new StoredEmailAwaitingExtraction(
+        .. Enumerable
+            .Range(1, count)
+            .Select(position => EmailAwaitingExtraction(position, SyntheticMailOwner.Deployment)),
+    ];
+
+    /// <summary>Builds one email awaiting extraction, at a stated position in the walk and belonging to a stated owner.</summary>
+    private static StoredEmailAwaitingExtraction EmailAwaitingExtraction(int position, MailOwnerId owner) =>
+        new(
             StoredEmailId.Create(Guid.Parse($"00000000-0000-0000-0000-{position:D12}")),
             EmailOccurrenceId.Create(
                 MailAccountId.Create("primary"),
@@ -366,8 +408,8 @@ public sealed class StoredEmailExtractionBackfillTests
                     MailFolderAlias.Create("inbox"),
                     MailFolderResolutionGeneration.First),
                 ImapUidValidity.Create(5),
-                ImapUid.Create((uint)position)))),
-    ];
+                ImapUid.Create((uint)position)),
+            owner);
 
     /// <summary>Stands in for the persisted walk state, keyed the way the real store's ordering is.</summary>
     private sealed class FakeBackfillStore(IReadOnlyList<StoredEmailAwaitingExtraction> awaitingExtraction)
@@ -448,9 +490,7 @@ public sealed class StoredEmailExtractionBackfillTests
         /// The predicate behind it is PostgreSQL's, so what it counts is proven against a real database rather than
         /// against this fake; nothing the backfill itself does reads the answer.
         /// </remarks>
-        public Task<int> CountEmailsWithStaleDerivedDataAsync(
-            SensitiveContentDerivationStamp current,
-            CancellationToken cancellationToken) =>
+        public Task<int> CountEmailsWithStaleDerivedDataAsync(CancellationToken cancellationToken) =>
             Task.FromResult(0);
 
         private void RecordSession(IPersistenceSession session)

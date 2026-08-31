@@ -4,6 +4,7 @@
 
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Redaction;
+using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.SensitiveContent.Egress;
 
@@ -37,49 +38,54 @@ namespace MailFathom.Application.SensitiveContent.Egress;
 /// </para>
 /// <para>
 /// <b>With nothing to screen this is inert.</b> It is registered whatever a deployment configured, so no consumer
-/// carries a null check or a second code path, and with no redactor or a policy that stops nothing every call answers
+/// carries a null check or a second code path, and with no redaction or a policy that stops nothing every call answers
 /// without constructing a detector, taking a concurrency permit, or touching an instrument.
+/// </para>
+/// <para>
+/// <b>Which findings stop a message is the author's own posture.</b> The deployment names the categories no message
+/// may carry out of it and an owner may add to that set for their own mail, so what a send is judged by is composed
+/// from both rather than read off the deployment alone. The owner is an argument here because the two callers — the
+/// outbox and the draft book — hold the message's author before they hold its bytes.
 /// </para>
 /// </remarks>
 public sealed class SensitiveContentEgressScreen
 {
-    private readonly SensitiveContentRedactor? redactor;
-    private readonly SensitiveContentScreeningPolicy policy;
+    private readonly ISensitiveContentPostures postures;
     private readonly ISensitiveContentEgressTelemetry telemetry;
     private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes the screen of a deployment, whether or not it screens anything.</summary>
-    /// <param name="redactor">The one redaction every consumer shares, or <see langword="null" /> where both switches are off.</param>
-    /// <param name="policy">Which findings stop an act, or a policy that stops none.</param>
+    /// <param name="postures">Answers which of an owner's findings stop their outgoing message.</param>
     /// <param name="telemetry">Reports what each screened act found and what it cost.</param>
     /// <param name="timeProvider">Measures what the scan added to the act being screened.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="policy" />, <paramref name="telemetry" />, or <paramref name="timeProvider" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public SensitiveContentEgressScreen(
-        SensitiveContentRedactor? redactor,
-        SensitiveContentScreeningPolicy policy,
+        ISensitiveContentPostures postures,
         ISensitiveContentEgressTelemetry telemetry,
         TimeProvider timeProvider)
     {
-        ArgumentNullException.ThrowIfNull(policy);
+        ArgumentNullException.ThrowIfNull(postures);
         ArgumentNullException.ThrowIfNull(telemetry);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
-        this.redactor = redactor;
-        this.policy = policy;
+        this.postures = postures;
         this.telemetry = telemetry;
         this.timeProvider = timeProvider;
     }
 
-    /// <summary>Gets whether this deployment stops anything at this kind of egress.</summary>
+    /// <summary>Reports whether anything stops one owner's message at this kind of egress.</summary>
+    /// <param name="owner">The owner whose message is about to be queued or filed.</param>
+    /// <returns><see langword="true" /> when a finding in their message could stop it.</returns>
     /// <remarks>
     /// Read by a consumer deciding whether work only a screen makes necessary is worth doing — parsing a message back
     /// into the values to screen, for one — never as permission to let the act happen unscreened, which is what calling
     /// the screen already does when it is inactive.
     /// </remarks>
-    public bool IsActive => this.redactor is not null && this.policy.RefusesAnything;
+    public bool IsActiveFor(MailOwnerId owner) => this.postures.ForOwner(owner).ScreensAnything;
 
     /// <summary>Screens every text of one act, and reports the first thing that stops it.</summary>
     /// <param name="egressPoint">Where the texts were about to go.</param>
+    /// <param name="owner">The owner whose message is about to leave, whose posture the findings are judged by.</param>
     /// <param name="texts">The texts to screen, each a value rather than a document composed around one.</param>
     /// <param name="cancellationToken">Cancels the scan.</param>
     /// <returns>What stopped the act, or <see langword="null" /> where nothing did.</returns>
@@ -100,29 +106,34 @@ public sealed class SensitiveContentEgressScreen
     /// </remarks>
     public Task<SensitiveContentEgressRefusal?> ScreenAsync(
         SensitiveContentEgressPoint egressPoint,
+        MailOwnerId owner,
         IReadOnlyList<string> texts,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(texts);
 
-        return this.redactor is { } active && this.policy.RefusesAnything && texts.Count > 0
-            ? this.ScreenEachAsync(active, egressPoint, texts, cancellationToken)
+        var posture = this.postures.ForOwner(owner);
+
+        return texts.Count > 0 && posture is { ScreensAnything: true, Redactor: { } active }
+            ? this.ScreenEachAsync(active, posture.Screening, egressPoint, owner, texts, cancellationToken)
             : Task.FromResult<SensitiveContentEgressRefusal?>(null);
     }
 
     private async Task<SensitiveContentEgressRefusal?> ScreenEachAsync(
         SensitiveContentRedactor active,
+        SensitiveContentScreeningPolicy policy,
         SensitiveContentEgressPoint egressPoint,
+        MailOwnerId owner,
         IReadOnlyList<string> texts,
         CancellationToken cancellationToken)
     {
-        using var operation = this.telemetry.BeginGuardedOperation(egressPoint, cancellationToken);
+        using var operation = this.telemetry.BeginGuardedOperation(egressPoint, owner, cancellationToken);
 
         try
         {
             foreach (var text in texts)
             {
-                var screened = await this.ScreenOneAsync(active, egressPoint, text, cancellationToken);
+                var screened = await this.ScreenOneAsync(active, policy, egressPoint, text, cancellationToken);
 
                 operation.TextGuarded();
 
@@ -161,6 +172,7 @@ public sealed class SensitiveContentEgressScreen
     /// </remarks>
     private async Task<SensitiveContentEgressRefusal?> ScreenOneAsync(
         SensitiveContentRedactor active,
+        SensitiveContentScreeningPolicy policy,
         SensitiveContentEgressPoint egressPoint,
         string text,
         CancellationToken cancellationToken)
@@ -183,7 +195,7 @@ public sealed class SensitiveContentEgressScreen
         this.telemetry.RecordGuarded(egressPoint, scanned, this.timeProvider.GetElapsedTime(startedAt));
 
         var stopping = scanned.Findings
-            .Select(finding => (Finding: finding, Scanner: this.policy.StoppedBy(finding)))
+            .Select(finding => (Finding: finding, Scanner: policy.StoppedBy(finding)))
             .FirstOrDefault(judged => judged.Scanner is not null);
 
         if (stopping.Scanner is { } scanner)

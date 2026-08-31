@@ -933,7 +933,7 @@ public sealed class MailboxSynchronizer
         // Enrichment reads the payload this run already fetched, so it costs no second IMAP round trip and cannot reach
         // the remote \Seen flag. A message nobody can parse is counted and stepped over: the occurrence is stored with
         // only what the server's envelope reported, and the folder checkpoint still advances past it.
-        var extraction = await this.mimeReader.ReadMetadataAsync(content, cancellationToken);
+        var extraction = await this.mimeReader.ReadMetadataAsync(content, owner, cancellationToken);
 
         // Recorded where the message arrives, although nothing is derived from it here. The gate's answer about a
         // message nobody has scored yet is the only place the two withholding answers are ever reached — a later stage

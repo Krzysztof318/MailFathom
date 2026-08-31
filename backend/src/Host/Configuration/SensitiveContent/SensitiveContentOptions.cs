@@ -107,12 +107,28 @@ internal sealed class SensitiveContentOptions : IValidatableObject
     /// </remarks>
     public bool RebuildStaleDerivedData { get; set; }
 
-    /// <summary>Gets whether this deployment scans anything at all.</summary>
+    /// <summary>Gets whether this deployment stood the analyzer the personal-data scanner reaches up.</summary>
     /// <remarks>
-    /// This is what the composition root registers on. With both switches off no plan is composed, no redactor exists,
-    /// and no detector is constructed, so an opt-in nobody took costs nothing on any path.
+    /// Configuring an address is what makes that scanner available — to the deployment itself, and to an owner who
+    /// switches it on for their own mail — and it is deliberately a different question from whether <see cref="Pii" />
+    /// is on. The address is parsed rather than merely present, because the composition root builds the analyzer client
+    /// from it and an address no request could be composed from provides nothing.
     /// </remarks>
-    public bool IsAnyScannerEnabled => this.Secrets.Enabled || this.Pii.Enabled;
+    public bool ProvidesPersonalDataScanner =>
+        Uri.TryCreate(this.PersonalDataAnalyzer.Endpoint, UriKind.Absolute, out var analyzer)
+        && (analyzer.Scheme == Uri.UriSchemeHttp || analyzer.Scheme == Uri.UriSchemeHttps);
+
+    /// <summary>Gets every scanner this deployment stands behind, whether or not it scans its owners' mail with one.</summary>
+    /// <remarks>
+    /// This is what the composition root registers detectors on, because which of them run over one owner's mail is
+    /// that owner's posture and no roster exists while services are being registered. The secrets scanner is always
+    /// among them: it runs inside this process and needs nothing deployed beside it. Registering a detector constructs
+    /// none, so a deployment nobody asked for scanning on still compiles no expression and opens no client.
+    /// </remarks>
+    public IReadOnlyList<SensitiveContentScannerKind> ProvidedScanners =>
+        this.ProvidesPersonalDataScanner
+            ? [SensitiveContentScannerKind.Secrets, SensitiveContentScannerKind.Pii]
+            : [SensitiveContentScannerKind.Secrets];
 
     /// <summary>Finds the scanner options one switch is configured by.</summary>
     /// <param name="scanner">The switch to read.</param>
@@ -189,18 +205,26 @@ internal sealed class SensitiveContentOptions : IValidatableObject
     private static bool IsLanguageCode(string language) =>
         language is { Length: 2 } && language.All(char.IsAsciiLetterLower);
 
-    /// <summary>Finds what is wrong with the analyzer block, which only a switched-on personal-data scanner reads.</summary>
+    /// <summary>Finds what is wrong with the analyzer block, which every deployment standing the scanner up reads.</summary>
     /// <remarks>
-    /// Nothing here judges an analyzer address left behind under a scanner nobody runs, for the reason nothing judges a
-    /// category list in that state: it describes no protection, so refusing to start over it would be refusing over a
-    /// comment. What is refused is the reverse — the scanner on with nowhere to ask — because that deployment would fail
-    /// every operation the scanner guards while its own configuration read as protection in force.
+    /// Judged whenever this deployment stands the analyzer up, which an address alone is enough to do: the composition
+    /// root builds the client and the analyzer profile from these keys as soon as <see cref="ProvidesPersonalDataScanner" />
+    /// holds, whether the deployment scans its own mail with the scanner or only offers it to an owner who switches it
+    /// on. Leaving them unjudged in that state would let a start that reads as protection in force fail every operation
+    /// the scanner guards, with nothing naming the key that did it.
+    /// <para>
+    /// What stays unjudged is an address nothing could be built from under a scanner nobody runs, for the reason nothing
+    /// judges a category list in that state: it describes no protection and stands nothing up, so refusing to start over
+    /// it would be refusing over a comment. The absent-address refusal below is reachable only under
+    /// <see cref="Pii" />.<see cref="SensitiveContentScannerOptions.Enabled" /> for the same reason — a deployment
+    /// providing the scanner has an address by definition.
+    /// </para>
     /// </remarks>
     private IEnumerable<ValidationResult> FindAnalyzerErrors()
     {
         var analyzerKey = $"{SectionName}:{nameof(this.PersonalDataAnalyzer)}";
 
-        if (!this.Pii.Enabled)
+        if (!this.Pii.Enabled && !this.ProvidesPersonalDataScanner)
         {
             yield break;
         }

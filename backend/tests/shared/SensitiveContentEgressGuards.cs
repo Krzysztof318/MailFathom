@@ -14,8 +14,11 @@ namespace MailFathom.TestSupport;
 /// </remarks>
 internal static class SensitiveContentEgressGuards
 {
-    /// <summary>Builds the guard of a deployment with both switches off.</summary>
+    /// <summary>Builds the guard of a deployment nobody's mail is scanned for.</summary>
     /// <returns>A guard that returns every text it is handed and constructs no detector.</returns>
     internal static SensitiveContentEgressGuard Inactive() =>
-        new(redactor: null, new RecordingSensitiveContentEgressTelemetry(), TimeProvider.System);
+        new(
+            FixedSensitiveContentPostures.ScanningNothing(),
+            new RecordingSensitiveContentEgressTelemetry(),
+            TimeProvider.System);
 }

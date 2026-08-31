@@ -5,6 +5,7 @@
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.SensitiveContent.Redaction;
+using MailFathom.Domain.Access;
 
 namespace MailFathom.TestSupport;
 
@@ -57,9 +58,10 @@ internal sealed class RecordingSensitiveContentEgressTelemetry : ISensitiveConte
     /// <inheritdoc />
     public ISensitiveContentGuardScope BeginGuardedOperation(
         SensitiveContentEgressPoint egressPoint,
+        MailOwnerId owner,
         CancellationToken cancellationToken)
     {
-        var operation = new GuardedOperation(egressPoint, cancellationToken);
+        var operation = new GuardedOperation(egressPoint, owner, cancellationToken);
         this.operations.Add(operation);
 
         return operation;
@@ -76,13 +78,18 @@ internal sealed class RecordingSensitiveContentEgressTelemetry : ISensitiveConte
 
     /// <summary>One guarded operation and what was reported into it before its scope was closed.</summary>
     /// <param name="egressPoint">Where the texts this operation guarded were going.</param>
+    /// <param name="owner">Whose mail the operation was publishing.</param>
     /// <param name="cancellationToken">The token the consumer opened the operation with, which a test reads to tell a shutdown apart.</param>
     internal sealed class GuardedOperation(
         SensitiveContentEgressPoint egressPoint,
+        MailOwnerId owner,
         CancellationToken cancellationToken) : ISensitiveContentGuardScope
     {
         /// <summary>Gets where the texts this operation guarded were going.</summary>
         public SensitiveContentEgressPoint EgressPoint => egressPoint;
+
+        /// <summary>Gets whose mail the operation was publishing.</summary>
+        public MailOwnerId Owner => owner;
 
         /// <summary>Gets the token the consumer opened the operation with.</summary>
         public CancellationToken CancellationToken => cancellationToken;

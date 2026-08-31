@@ -160,6 +160,13 @@ public sealed class MailboxQuestionReader
             request.Folders,
             JunkMailInclusion.Excluded);
 
+        // Stated before the capability is read rather than after the run begins, because everything a run publishes to
+        // a provider is this owner's mail: the question is composed with extracts from it, and the query text is placed
+        // in a vector space by the same provider before any of them is retrieved. Read from the resolver rather than
+        // from the scope, which names nobody where the caller owns no served account — a run that still sends its
+        // question text out, and would send it under the deployment's floor instead of this owner's posture.
+        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.Owner);
+
         var gate = await this.capability.ResolveAsync(cancellationToken);
         if (gate.Answerer is not { } answerer)
         {

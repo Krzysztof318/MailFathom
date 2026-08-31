@@ -7,6 +7,7 @@ using System.Diagnostics;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Common.Observability;
 using MailFathom.Infrastructure.Observability;
+using MailFathom.TestSupport;
 using Xunit;
 
 namespace MailFathom.Infrastructure.UnitTests.Observability;
@@ -66,6 +67,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         // Act
         using (var operation = telemetry.BeginGuardedOperation(
             SensitiveContentEgressPoint.McpEmailContent,
+            SyntheticMailOwner.Deployment,
             TestContext.Current.CancellationToken))
         {
             operation.TextGuarded();
@@ -83,6 +85,55 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         Assert.Equal("succeeded", span.GetTagItem("mailfathom.sensitive_content.outcome"));
     }
 
+    /// <summary>
+    /// Postures differ between the people one deployment serves, so a scan that cannot be attributed to one of them
+    /// cannot be read against what that person asked for. The identifier is on the span and on none of the counters,
+    /// which is what keeps every metric dimension a closed set.
+    /// </summary>
+    [Fact]
+    public void BeginGuardedOperation_AnOperationPublishingOneOwnersMail_PublishesWhoseMailItWas()
+    {
+        // Arrange
+        var telemetry = new SensitiveContentEgressTelemetry();
+
+        // Act
+        using (var operation = telemetry.BeginGuardedOperation(
+            SensitiveContentEgressPoint.McpEmailContent,
+            SyntheticMailOwner.Another,
+            TestContext.Current.CancellationToken))
+        {
+            operation.TextGuarded();
+            operation.Completed();
+        }
+
+        // Assert
+        var span = Assert.Single(this.published);
+
+        Assert.Equal(SyntheticMailOwner.Another.Value.ToString(), span.GetTagItem("mailfathom.owner"));
+    }
+
+    /// <summary>A deployment that scans nobody opens no operation, so an unset owner is a flow that skipped resolving one.</summary>
+    [Fact]
+    public void BeginGuardedOperation_AnOperationNamingNoOwner_PublishesNoOwnerAttribute()
+    {
+        // Arrange
+        var telemetry = new SensitiveContentEgressTelemetry();
+
+        // Act
+        using (var operation = telemetry.BeginGuardedOperation(
+            SensitiveContentEgressPoint.McpEmailContent,
+            default,
+            TestContext.Current.CancellationToken))
+        {
+            operation.Completed();
+        }
+
+        // Assert
+        var span = Assert.Single(this.published);
+
+        Assert.Null(span.GetTagItem("mailfathom.owner"));
+    }
+
     /// <summary>A refusal is an ending rather than an error, because the scanner stopped the egress on purpose.</summary>
     [Fact]
     public void BeginGuardedOperation_AScannerThatCouldNotAnswer_PublishesItAsRefused()
@@ -93,6 +144,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         // Act
         using (var operation = telemetry.BeginGuardedOperation(
             SensitiveContentEgressPoint.McpSnippet,
+            SyntheticMailOwner.Deployment,
             TestContext.Current.CancellationToken))
         {
             operation.Refused();
@@ -119,6 +171,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         {
             using var operation = telemetry.BeginGuardedOperation(
                 SensitiveContentEgressPoint.McpEmailContent,
+                SyntheticMailOwner.Deployment,
                 TestContext.Current.CancellationToken);
 
             operation.TextGuarded();
@@ -140,6 +193,7 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         // Act
         using (var operation = telemetry.BeginGuardedOperation(
             SensitiveContentEgressPoint.McpSnippet,
+            SyntheticMailOwner.Deployment,
             TestContext.Current.CancellationToken))
         {
             operation.TextGuarded();
@@ -162,7 +216,10 @@ public sealed class SensitiveContentGuardSpanTests : IDisposable
         using var shutdown = new CancellationTokenSource();
 
         // Act
-        using (telemetry.BeginGuardedOperation(SensitiveContentEgressPoint.McpEmailContent, shutdown.Token))
+        using (telemetry.BeginGuardedOperation(
+            SensitiveContentEgressPoint.McpEmailContent,
+            SyntheticMailOwner.Deployment,
+            shutdown.Token))
         {
             shutdown.Cancel();
         }

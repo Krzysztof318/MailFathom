@@ -8,12 +8,14 @@ using MailFathom.Application.SensitiveContent.Detection;
 
 namespace MailFathom.Application.SensitiveContent.Redaction;
 
-/// <summary>Runs every switched-on scanner over a text and replaces what they found, once, for every consumer.</summary>
+/// <summary>Runs every switched-on scanner over a text and replaces what they found, once, for every consumer of one posture.</summary>
 /// <remarks>
 /// <para>
 /// This is the single implementation the whole feature turns on. The derived path and the read path both redact through
 /// it, so a citation drawn from a redacted chunk lands on the same redacted text when a reader opens the message; two
-/// implementations would drift the moment either one gained a rule about ordering, overlap, or truncation.
+/// implementations would drift the moment either one gained a rule about ordering, overlap, or truncation. One instance
+/// answers for one posture, and a deployment serving owners with different postures holds one per distinct posture —
+/// all of them sharing the single <see cref="SensitiveContentScanConcurrency" /> the process budgets scans by.
 /// </para>
 /// <para>
 /// <b>The result is reproducible.</b> For a given text, plan, and set of detector revisions, the redacted text is
@@ -28,33 +30,34 @@ namespace MailFathom.Application.SensitiveContent.Redaction;
 /// an over-long input costs the remainder instead of the whole operation.
 /// </para>
 /// </remarks>
-public sealed class SensitiveContentRedactor : IDisposable
+public sealed class SensitiveContentRedactor
 {
     private readonly SensitiveContentPlan plan;
     private readonly IReadOnlyList<ISensitiveContentScanner> scanners;
     private readonly TimeProvider timeProvider;
-    private readonly SemaphoreSlim concurrency;
+    private readonly SensitiveContentScanConcurrency concurrency;
 
-    /// <summary>Initializes the redactor of a deployment with at least one scanner switched on.</summary>
-    /// <param name="plan">What this deployment scans for, and what one scan may spend.</param>
+    /// <summary>Initializes the redaction one posture with at least one scanner switched on is read under.</summary>
+    /// <param name="plan">What that posture scans for, and what one scan may spend.</param>
     /// <param name="scanners">Every registered detector, of which the planned ones are used.</param>
     /// <param name="timeProvider">Times the per-call budget and stamps the findings.</param>
+    /// <param name="concurrency">The process-wide budget of scans running at once, which every posture shares.</param>
     /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public SensitiveContentRedactor(
         SensitiveContentPlan plan,
         IEnumerable<ISensitiveContentScanner> scanners,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        SensitiveContentScanConcurrency concurrency)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(scanners);
         ArgumentNullException.ThrowIfNull(timeProvider);
+        ArgumentNullException.ThrowIfNull(concurrency);
 
         this.plan = plan;
         this.scanners = [.. scanners];
         this.timeProvider = timeProvider;
-        this.concurrency = new SemaphoreSlim(
-            plan.Bounds.MaximumConcurrentScans,
-            plan.Bounds.MaximumConcurrentScans);
+        this.concurrency = concurrency;
     }
 
     /// <summary>Scans a text and returns it with every detected region replaced by a placeholder.</summary>
@@ -72,22 +75,12 @@ public sealed class SensitiveContentRedactor : IDisposable
             ? text[..AnalyzedLength(text, this.plan.Bounds.MaximumAnalyzedCharacters)]
             : text;
 
-        await this.concurrency.WaitAsync(cancellationToken);
+        using var permit = await this.concurrency.AcquireAsync(cancellationToken);
 
-        try
-        {
-            var findings = await this.CollectFindingsAsync(analyzed, cancellationToken);
+        var findings = await this.CollectFindingsAsync(analyzed, cancellationToken);
 
-            return RedactedText.Create(Apply(analyzed, findings), findings, text.Length - analyzed.Length);
-        }
-        finally
-        {
-            this.concurrency.Release();
-        }
+        return RedactedText.Create(Apply(analyzed, findings), findings, text.Length - analyzed.Length);
     }
-
-    /// <inheritdoc />
-    public void Dispose() => this.concurrency.Dispose();
 
     /// <summary>Finds where to cut an over-long text so the cut does not fall inside a character.</summary>
     /// <remarks>

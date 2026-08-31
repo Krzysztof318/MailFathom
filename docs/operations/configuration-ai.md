@@ -20,24 +20,33 @@ Both scanners are off by default, and an absent section is that default rather t
 this process. `Pii` reaches an analyzer deployed beside it, configured in the block below, and switching it on with
 nowhere to ask **fails startup** rather than running unprotected.
 
+**This section is the floor rather than the whole answer.** Each owner's record carries a scanning block of its own, and
+the posture their mail is read under is the stricter of the two: an owner may switch on a scanner this section left off
+and add a scanner to what stops their outgoing mail, and may do neither in the other direction. The keys below the two
+switches — the analyzer's address, the ceiling, the timeout, the concurrency, and the rebuild — stay wholly the
+deployment's, and the concurrency is one budget every owner shares. [Each owner's own
+posture](../features/sensitive-content-scanning.md#each-owners-own-posture) is the rule, and
+[`Accounts:<n>:SensitiveContent`](configuration-sources.md#what-an-owner-may-say-about-scanning-their-own-mail) is where
+it is written.
+
 | Key | Type | Default | Constraint | Change |
 | --- | --- | --- | --- | --- |
-| `SensitiveContent:Secrets:Enabled` | bool | `false` | A scanner switched on with no detector registered fails startup | restart |
+| `SensitiveContent:Secrets:Enabled` | bool | `false` | A scanner switched on with no detector registered fails startup. It is the floor for every owner: one may switch it on for their own mail and none may switch it off | restart |
 | `SensitiveContent:Secrets:Categories:<n>` | string | unset | Must name a category the scanner detects; the list replaces the scanner's defaults, and an absent list yields them | restart |
 | `SensitiveContent:Secrets:Suppressions:<n>:Category` | string | — | Must name a category the scanner detects; naming one never switches it on | restart |
 | `SensitiveContent:Secrets:Suppressions:<n>:Rule` | string | — | Must name a rule that category holds | restart |
-| `SensitiveContent:Pii:Enabled` | bool | `false` | As above, for the personal-data scanner | restart |
+| `SensitiveContent:Pii:Enabled` | bool | `false` | As above, for the personal-data scanner. An owner may switch it on for their own mail only where the analyzer address below names one | restart |
 | `SensitiveContent:Pii:Categories:<n>` | string | unset | As above | restart |
 | `SensitiveContent:Pii:Suppressions:<n>:Category` | string | — | As above | restart |
 | `SensitiveContent:Pii:Suppressions:<n>:Rule` | string | — | As above | restart |
-| `SensitiveContent:PersonalDataAnalyzer:Endpoint` | string | unset | Required once `Pii` is on, and an absolute `http` or `https` address; read by nothing while that switch is off | restart |
+| `SensitiveContent:PersonalDataAnalyzer:Endpoint` | string | unset | Required once `Pii` is on, and an absolute `http` or `https` address. It is also what makes the personal-data scanner available to an owner: a record switching that scanner on where this names no address is refused at the write, naming this key | restart |
 | `SensitiveContent:PersonalDataAnalyzer:Languages:<n>` | string | unset | Two lowercase letters each, naming a language the analyzer loads a model for and registers recognizers in; an absent list yields `en`. At most eight, since one scan asks once per language inside a single `ScanTimeout`. The order is not read — the set is deduplicated and ordered before use — and the set is part of the derivation stamp | restart |
 | `SensitiveContent:PersonalDataAnalyzer:MinimumConfidence` | double | `0.4` | 0 – 1 inclusive, compared inclusively by the analyzer. It decides which regions are replaced, so it is part of the derivation stamp and changing it marks earlier-derived rows stale | restart |
 | `SensitiveContent:MaximumAnalyzedCharacters` | int | `200000` | 1 – 10000000; text beyond it is dropped from the result rather than handed on unscanned. On the derived path that is what is *stored*, so lowering it truncates every message indexed afterwards and the value is part of the derivation stamp | restart |
 | `SensitiveContent:ScanTimeout` | TimeSpan | `00:00:15` | One second to two minutes, per call to one scanner — which for the personal-data scanner covers every configured language together rather than each. A scan that misses it is refused rather than served unscanned, and on the derivation path that refusal ends the synchronization run carrying it, so a budget below what the analyzer spends on a large body leaves a folder repeating the same batch. It also bounds one personal-data readiness scrape whole, so naming more languages costs more analyzer requests and never a longer scrape | restart |
-| `SensitiveContent:MaximumConcurrentScans` | int | `4` | 1 – 256, across the process | restart |
-| `SensitiveContent:RebuildStaleDerivedData` | bool | `false` | Read only while a scanner is on; re-derives every message whose derived text predates the current configuration | restart |
-| `SensitiveContent:ScreenOutgoingMailFor:<n>` | string | `Secrets` | Each entry names a scanner — `Secrets` or `Pii`, matched ignoring capitalization — whose findings cancel a send or a draft save. An absent key is the default; a written empty array screens nothing; a scanner named here that is switched off screens nothing | restart |
+| `SensitiveContent:MaximumConcurrentScans` | int | `4` | 1 – 256, across the process and across every owner it serves | restart |
+| `SensitiveContent:RebuildStaleDerivedData` | bool | `false` | Read only while a scanner is on for somebody; re-derives every message whose derived text predates its own owner's current configuration | restart |
+| `SensitiveContent:ScreenOutgoingMailFor:<n>` | string | `Secrets` | Each entry names a scanner — `Secrets` or `Pii`, matched ignoring capitalization — whose findings cancel a send or a draft save. An absent key is the default; a written empty array screens nothing; a scanner named here that is switched off screens nothing. An owner may name more than this and never fewer | restart |
 
 **Screening outgoing mail refuses acts rather than rewriting messages**, which is why what it screens for is a key of
 its own rather than the scanner switches above. A credential in a message somebody is sending is what it exists for and

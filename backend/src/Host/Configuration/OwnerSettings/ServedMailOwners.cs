@@ -174,7 +174,7 @@ internal sealed class ServedMailOwners : IDeploymentMailOwnerSource
     /// <remarks>
     /// The whole bound record rather than the accounts alone, because everything of an owner's the roster publishes
     /// comes from one document: a second parameter per settings block would leave a caller free to publish an owner's
-    /// mailboxes from the committed record and their spam posture from somewhere else.
+    /// mailboxes from the committed record and their spam or scanning posture from somewhere else.
     /// </remarks>
     internal void OwnerDocumentPublished(
         MailOwnerId owner,
@@ -206,7 +206,8 @@ internal sealed class ServedMailOwners : IDeploymentMailOwnerSource
                     displayName,
                     MailOwnerAccountSource.OwnerDocument,
                     [.. record.MailAccounts],
-                    record.SpamClassification);
+                    record.SpamClassification,
+                    record.SensitiveContent);
 
                 this.resolvedOwners = owners.Any(candidate => candidate.Owner == owner)
                     ? [.. owners.Select(candidate => candidate.Owner == owner ? published : candidate)]

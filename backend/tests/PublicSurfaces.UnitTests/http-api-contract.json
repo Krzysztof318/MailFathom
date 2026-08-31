@@ -3925,21 +3925,6 @@
         ],
         "type": "object"
       },
-      "OwnerAdoptableClassificationSettingResponse": {
-        "properties": {
-          "path": {
-            "type": "string"
-          },
-          "value": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "path",
-          "value"
-        ],
-        "type": "object"
-      },
       "OwnerAdoptableMailAccountResponse": {
         "properties": {
           "accountId": {
@@ -3955,11 +3940,26 @@
         ],
         "type": "object"
       },
+      "OwnerAdoptableRecordSettingResponse": {
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "value"
+        ],
+        "type": "object"
+      },
       "OwnerAdoptionPreviewResponse": {
         "properties": {
           "classification": {
             "items": {
-              "$ref": "#/components/schemas/OwnerAdoptableClassificationSettingResponse"
+              "$ref": "#/components/schemas/OwnerAdoptableRecordSettingResponse"
             },
             "type": "array"
           },
@@ -3985,6 +3985,12 @@
           "readFromConfiguration": {
             "type": "boolean"
           },
+          "sensitiveContent": {
+            "items": {
+              "$ref": "#/components/schemas/OwnerAdoptableRecordSettingResponse"
+            },
+            "type": "array"
+          },
           "source": {
             "type": "string"
           },
@@ -4005,7 +4011,8 @@
           "readFromConfiguration",
           "configurationPath",
           "mailAccounts",
-          "classification"
+          "classification",
+          "sensitiveContent"
         ],
         "type": "object"
       },

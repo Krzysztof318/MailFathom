@@ -32,13 +32,15 @@ public sealed class OutgoingMailScreeningTests
         var screening = new OutgoingMailScreening(
             reader,
             new SensitiveContentEgressScreen(
-                redactor: null,
-                SensitiveContentScreeningPolicy.ScreeningNothing(),
+                FixedSensitiveContentPostures.ScanningNothing(),
                 new RecordingSensitiveContentEgressTelemetry(),
                 this.timeProvider));
 
         // Act
-        var refusal = await screening.FindRefusalAsync(RawMime, TestContext.Current.CancellationToken);
+        var refusal = await screening.FindRefusalAsync(
+            ScanningSensitiveContentEgress.Owner,
+            RawMime,
+            TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(refusal);
@@ -57,14 +59,16 @@ public sealed class OutgoingMailScreeningTests
         var screening = new OutgoingMailScreening(
             reader,
             new SensitiveContentEgressScreen(
-                redactor: null,
-                SensitiveContentScreeningPolicy.ScreeningNothing(),
+                FixedSensitiveContentPostures.ScanningNothing(),
                 new RecordingSensitiveContentEgressTelemetry(),
                 this.timeProvider));
 
         // Act
         var refusal = await Assert.ThrowsAsync<ArgumentException>(
-            () => screening.FindRefusalAsync(ReadOnlyMemory<byte>.Empty, TestContext.Current.CancellationToken));
+            () => screening.FindRefusalAsync(
+                ScanningSensitiveContentEgress.Owner,
+                ReadOnlyMemory<byte>.Empty,
+                TestContext.Current.CancellationToken));
 
         // Assert
         Assert.Equal("rawMime", refusal.ParamName);
@@ -85,7 +89,10 @@ public sealed class OutgoingMailScreeningTests
         var screening = new OutgoingMailScreening(reader, egress.Screen);
 
         // Act
-        var refusal = await screening.FindRefusalAsync(RawMime, TestContext.Current.CancellationToken);
+        var refusal = await screening.FindRefusalAsync(
+            ScanningSensitiveContentEgress.Owner,
+            RawMime,
+            TestContext.Current.CancellationToken);
 
         // Assert
         Assert.NotNull(refusal);
@@ -112,7 +119,10 @@ public sealed class OutgoingMailScreeningTests
         var screening = new OutgoingMailScreening(reader, egress.Screen);
 
         // Act
-        var refusal = await screening.FindRefusalAsync(RawMime, TestContext.Current.CancellationToken);
+        var refusal = await screening.FindRefusalAsync(
+            ScanningSensitiveContentEgress.Owner,
+            RawMime,
+            TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Null(refusal);

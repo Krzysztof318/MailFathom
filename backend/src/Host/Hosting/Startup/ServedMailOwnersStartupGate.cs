@@ -319,7 +319,12 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
                 }
 
                 roster.Add(new MailOwnerRecord(owner, label, DocumentWrittenAtRuntime: false));
-                served.Add((index, new ServedMailOwner(owner, label, MailOwnerAccountSource.OwnerDeclaration, declaration.MailAccounts)));
+                served.Add((index, new ServedMailOwner(
+                    owner,
+                    label,
+                    MailOwnerAccountSource.OwnerDeclaration,
+                    declaration.MailAccounts,
+                    SensitiveContent: declaration.SensitiveContent)));
 
                 continue;
             }
@@ -340,7 +345,12 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
 
             served.Add((index, record.DocumentWrittenAtRuntime
                 ? await this.ServeFromTheOwnDocumentAsync(scope, record with { DisplayName = label }, cancellationToken)
-                : new ServedMailOwner(owner, label, MailOwnerAccountSource.OwnerDeclaration, declaration.MailAccounts)));
+                : new ServedMailOwner(
+                    owner,
+                    label,
+                    MailOwnerAccountSource.OwnerDeclaration,
+                    declaration.MailAccounts,
+                    SensitiveContent: declaration.SensitiveContent)));
         }
 
         return [.. served.OrderBy(entry => entry.Index).Select(entry => entry.Owner)];
@@ -356,6 +366,12 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
     /// what a write to it would be judged by. A record that will not bind stops the start rather than leaving that
     /// owner served from a section they have stopped reading: the alternative is a deployment quietly synchronizing the
     /// mailboxes an adoption was meant to replace.
+    /// <para>
+    /// It is read as a record already held, which drops exactly one rule — see <see cref="OwnerRecordArrival" />. The
+    /// scanning block a stored record carries is composed against the deployment's section rather than refused against
+    /// it, so an operator tightening what the deployment requires does not turn every record accepted before that into
+    /// a start this host cannot complete.
+    /// </para>
     /// </remarks>
     private async Task<ServedMailOwner> ServeFromTheOwnDocumentAsync(
         AsyncServiceScope scope,
@@ -371,7 +387,7 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
 
         var binding = scope.ServiceProvider
             .GetRequiredService<OwnerAccountDocumentBinder>()
-            .Bind(document.Json);
+            .Bind(document.Json, OwnerRecordArrival.AlreadyHeld);
 
         if (binding.Owner is not { } bound)
         {
@@ -383,7 +399,8 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
             record.DisplayName,
             MailOwnerAccountSource.OwnerDocument,
             bound.MailAccounts,
-            bound.SpamClassification);
+            bound.SpamClassification,
+            bound.SensitiveContent);
     }
 
     /// <summary>Refuses an owner whose own mail accounts carry a secret or a trust anchor this deployment cannot use.</summary>
@@ -581,10 +598,10 @@ internal sealed partial class ServedMailOwnersStartupGate : IHostedService
         Message = "This deployment serves {ServedOwnerCount} owners: {ConfiguredOwnerCount} read from configuration and {AdoptedOwnerCount} from their own document.")]
     private partial void LogOwnersResolved(int servedOwnerCount, int configuredOwnerCount, int adoptedOwnerCount);
 
-    /// <remarks>The label is the operator's own text for a row of their own file, which is what makes the line actionable: it is the owner whose declared section has stopped being applied.</remarks>
+    /// <remarks>The label is the operator's own text for a row of their own file, which is what makes the line actionable: it is the owner whose declared section has stopped being applied. Every part of that section is named, because the scanning block still binds and is still judged for an adopted owner and then decides nothing, so a line naming only the mail accounts would leave an operator who switched a scanner on there with no sentence explaining why nothing changed.</remarks>
     [LoggerMessage(
         Level = LogLevel.Information,
-        Message = "The owner labelled {OwnerDisplayName} is read from their own document; no configuration source reaches their mail accounts. Change them with mfctl.")]
+        Message = "The owner labelled {OwnerDisplayName} is read from their own document; no configuration source reaches their mail accounts or the scanning posture declared beside them. Change them with mfctl.")]
     private partial void LogOwnerReadFromTheirDocument(string ownerDisplayName);
 
     /// <remarks>A warning rather than information, because an owner the deployment holds and no longer serves keeps every message of theirs and synchronizes none of it, which is a state an operator meant either to reach or to notice.</remarks>

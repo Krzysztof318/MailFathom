@@ -26,16 +26,19 @@ internal static class EmailSearchDocumentWriter
     /// <param name="storedEmail">The email the document belongs to, tracked or already persisted.</param>
     /// <param name="metadata">What the MIME reader extracted.</param>
     /// <param name="extractedAt">When the extraction ran.</param>
-    /// <param name="stamp">The sensitive-content configuration the text was redacted under, or <see langword="null" /> where nothing is scanned.</param>
     /// <param name="cancellationToken">Propagates caller cancellation.</param>
     /// <returns>A task that completes when the write has been issued or staged.</returns>
     /// <exception cref="ArgumentNullException">Thrown when any reference argument is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The scanning posture the row records is taken off the reading rather than passed in beside it, so what is
+    /// stamped is what actually redacted this text. Reading it here would ask a port that answers for the posture in
+    /// force now, which is not the one a batch read outside a transaction went through.
+    /// </remarks>
     public static async Task SaveAsync(
         MailFathomDbContext dbContext,
         StoredEmailEntity storedEmail,
         ExtractedEmailMetadata metadata,
         DateTimeOffset extractedAt,
-        SensitiveContentDerivationStamp? stamp,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(dbContext);
@@ -50,7 +53,7 @@ internal static class EmailSearchDocumentWriter
             text.OriginalText,
             text.Source,
             extractedAt,
-            stamp?.Value);
+            metadata.RedactedUnder?.Value);
 
         // The change-tracker pass comes first for the reason the content store's does: a document staged earlier in
         // this same uncommitted session is not visible to a set-based update, and updating it twice would insert twice.

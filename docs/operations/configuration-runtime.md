@@ -34,6 +34,14 @@ one, what a start reports, and what an adoption costs.
 | `Accounts:<n>:Id` | string | *(required)* | A UUID, not the all-zero one, unique among the declared owners, and never changed for an owner the deployment already holds | restart |
 | `Accounts:<n>:DisplayName` | string | *(required)* | 1 – 128 characters, unique among the declared owners compared exactly | restart |
 | `Accounts:<n>:MailAccounts:<m>` | object | `[]` | Declared exactly as [one mail account](configuration-mail.md#one-account--mailsynchronizationaccountsn) is, and judged by the same rules | restart |
+| `Accounts:<n>:SensitiveContent:Secrets:Enabled` | bool | unset | May be `true` where [`SensitiveContent:Secrets:Enabled`](configuration-ai.md#sensitivecontent) is off, and never `false` where it is on | restart |
+| `Accounts:<n>:SensitiveContent:Pii:Enabled` | bool | unset | The same, and `true` additionally requires [`SensitiveContent:PersonalDataAnalyzer:Endpoint`](configuration-ai.md#sensitivecontent) to name an address | restart |
+| `Accounts:<n>:SensitiveContent:ScreenOutgoingMailFor:<m>` | string | unset | Each entry is `Secrets` or `Pii`, matched ignoring capitalization, and the list names at least what `SensitiveContent:ScreenOutgoingMailFor` does | restart |
+
+The scanning block is what an owner asks for over their own mail, and only a tightening of what the deployment set is
+accepted. [What an owner may say about scanning their own
+mail](configuration-sources.md#what-an-owner-may-say-about-scanning-their-own-mail) states the three refusals and what
+stays deployment-wide.
 
 At most 256 owners may be declared. Declaring any owner refuses a non-empty `MailSynchronization:Accounts`, no two
 owners may name a mail account alike, and only one owner may be served while the MCP endpoint, the client endpoint, or

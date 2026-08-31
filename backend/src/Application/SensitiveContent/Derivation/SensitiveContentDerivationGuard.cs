@@ -4,6 +4,7 @@
 
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Redaction;
+using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.SensitiveContent.Derivation;
 
@@ -14,84 +15,109 @@ namespace MailFathom.Application.SensitiveContent.Derivation;
 /// chunk, the vector, and the search document ever have, and putting it back costs a re-derivation from raw MIME rather
 /// than a refetch from a mail server. So the derived path redacts on the way in, while
 /// <see cref="Egress.SensitiveContentEgressGuard" /> redacts on the way out — two boundaries, one
-/// <see cref="SensitiveContentRedactor" /> behind both, which is what keeps a citation drawn from a redacted chunk
-/// landing on the same redacted text when a reader opens the message.
+/// <see cref="SensitiveContentRedactor" /> behind both for any one owner, which is what keeps a citation drawn from a
+/// redacted chunk landing on the same redacted text when a reader opens the message.
+/// </para>
+/// <para>
+/// <b>Whose mail is being derived is an argument rather than an ambient fact.</b> Both paths that reach here already
+/// hold it — synchronization is running one owner's account, and a re-derivation was enqueued for one owner — so the
+/// posture is resolved from what the caller knows instead of from a scope somebody has to remember to open. The egress
+/// guard settles the same question differently, and says why in its own words: there the values are guarded several
+/// layers below whoever resolved the owner, and here they are not.
 /// </para>
 /// <para>
 /// <b>It carries the stamp as well as the redaction.</b> A derived row records the configuration it was written under,
 /// so a scanner switched on over an already-indexed mailbox is answerable rather than silently partial: what was written
 /// under an older configuration is stale in exactly the sense an embedding profile already uses, and the way back is a
 /// rebuild. The stamp exists precisely when a redaction does, which is what makes "written under no scanner" and
-/// "written under this scanner" two readable states rather than one absence.
+/// "written under this scanner" two readable states rather than one absence. It is one owner's stamp rather than the
+/// deployment's, so a posture one owner changed leaves nobody else's rows stale.
 /// </para>
 /// <para>
-/// <b>With both switches off this guard is inert.</b> It is registered whatever a deployment configured, so no writer
-/// carries a null check or a second code path, and with no redactor behind it every call returns its argument without
-/// constructing a detector, taking a concurrency permit, or touching an instrument — and stamps nothing, so a derived
-/// row is byte-identical to the one the same message produced before this feature existed.
+/// <b>With nothing switched on for an owner this guard is inert.</b> It is registered whatever a deployment configured,
+/// so no writer carries a null check or a second code path, and with no redaction behind that owner's posture every
+/// call returns its argument without constructing a detector, taking a concurrency permit, or touching an instrument —
+/// and stamps nothing, so a derived row is byte-identical to the one the same message produced before this feature
+/// existed.
 /// </para>
 /// </remarks>
 public sealed class SensitiveContentDerivationGuard
 {
-    private readonly SensitiveContentRedactor? redactor;
+    private readonly ISensitiveContentPostures postures;
     private readonly ISensitiveContentDerivationTelemetry telemetry;
     private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes the derived-write guard of a deployment, whether or not it scans anything.</summary>
-    /// <param name="redactor">The one redaction every consumer shares, or <see langword="null" /> where both switches are off.</param>
-    /// <param name="stamp">The configuration derived rows are written under, present exactly when <paramref name="redactor" /> is.</param>
+    /// <param name="postures">Answers what each owner's mail is derived under.</param>
     /// <param name="telemetry">Reports what each derived write found and what it cost.</param>
     /// <param name="timeProvider">Measures what the scan added to the derivation.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="telemetry" /> or <paramref name="timeProvider" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when a stamp is supplied without a redactor, or a redactor without a stamp.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
     public SensitiveContentDerivationGuard(
-        SensitiveContentRedactor? redactor,
-        SensitiveContentDerivationStamp? stamp,
+        ISensitiveContentPostures postures,
         ISensitiveContentDerivationTelemetry telemetry,
         TimeProvider timeProvider)
     {
+        ArgumentNullException.ThrowIfNull(postures);
         ArgumentNullException.ThrowIfNull(telemetry);
         ArgumentNullException.ThrowIfNull(timeProvider);
 
-        // The pair is the contract every reader of a stored stamp depends on: a stamp on a row promises that the text
-        // beside it went through a redaction, and a redaction with no stamp would produce rows nothing could ever tell
-        // apart from the ones written before the feature existed.
-        if (redactor is null != stamp is null)
-        {
-            throw new ArgumentException(
-                "A derived-write guard either redacts and stamps or does neither, so a stamp without a redactor and a redactor without a stamp are both refused.",
-                redactor is null ? nameof(stamp) : nameof(redactor));
-        }
-
-        this.redactor = redactor;
-        this.Stamp = stamp;
+        this.postures = postures;
         this.telemetry = telemetry;
         this.timeProvider = timeProvider;
     }
 
-    /// <summary>Gets the configuration a row written now records, or <see langword="null" /> where nothing is scanned.</summary>
-    public SensitiveContentDerivationStamp? Stamp { get; }
+    /// <summary>Gets whether any owner this deployment serves has what is derived from their mail redacted.</summary>
+    /// <remarks>
+    /// Read by a walk deciding whether work only a redaction makes necessary is worth arranging at all. What one
+    /// message is judged by is <see cref="StampFor" />, because a deployment that redacts somebody's mail need not
+    /// redact everybody's.
+    /// </remarks>
+    public bool IsActive => this.postures.IsActiveForAnyOwner;
 
-    /// <summary>Gets whether this deployment redacts what it derives at all.</summary>
-    public bool IsActive => this.redactor is not null;
+    /// <summary>Gets what every owner this deployment serves has their mail derived under, ordered by owner.</summary>
+    /// <remarks>
+    /// For the walk that judges rows belonging to several owners in one query, which is the one consumer that cannot
+    /// ask about the owner in front of it. <see cref="ISensitiveContentPostures.Current" /> holds why.
+    /// </remarks>
+    public IReadOnlyList<OwnerSensitiveContentPosture> Current => this.postures.Current;
+
+    /// <summary>Gets what a row belonging to an owner this deployment no longer serves is judged against.</summary>
+    /// <remarks>
+    /// The deployment's own posture, which is what <see cref="ISensitiveContentPostures.ForOwner" /> answers for an
+    /// owner off the roster and is the stricter of the two candidates. Read by the walk that judges rows belonging to
+    /// several owners at once, so that mail still stored for somebody a deployment has stopped serving is judged by
+    /// something rather than stepped over.
+    /// <para>
+    /// The unspecified identifier is what asks the question, because no roster carries one: an owner is declared with a
+    /// UUID that is refused if it is the all-zero one, so this reaches the fallback by the same route every owner the
+    /// roster does not name reaches it.
+    /// </para>
+    /// </remarks>
+    public SensitiveContentDerivationStamp? StampForUnrostered => this.postures.ForOwner(default).Stamp;
+
+    /// <summary>Gets the configuration a row of one owner's mail written now records, or nothing where it is not scanned.</summary>
+    /// <param name="owner">The owner whose mail the row is derived from.</param>
+    /// <returns>That owner's stamp, or <see langword="null" /> where nothing scans their mail.</returns>
+    public SensitiveContentDerivationStamp? StampFor(MailOwnerId owner) => this.postures.ForOwner(owner).Stamp;
 
     /// <summary>Redacts one text about to be written into a derived store.</summary>
+    /// <param name="owner">The owner whose mail the text was extracted from.</param>
     /// <param name="text">The text to redact, which must be a value rather than a document composed around one.</param>
     /// <param name="cancellationToken">Cancels the scan.</param>
-    /// <returns>The text with every detected region replaced, or the text itself where nothing is scanned.</returns>
+    /// <returns>The text with every detected region replaced, or the text itself where nothing scans this owner's mail.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="text" /> is <see langword="null" />.</exception>
     /// <exception cref="SensitiveContentScannerUnavailableException">Thrown when a switched-on scanner could not establish what the text carries, which refuses the derived write.</exception>
     /// <exception cref="OperationCanceledException">Thrown when <paramref name="cancellationToken" /> is cancelled.</exception>
-    public Task<string> GuardAsync(string text, CancellationToken cancellationToken)
+    public Task<string> GuardAsync(MailOwnerId owner, string text, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(text);
 
-        return this.redactor is { } active
+        return this.postures.ForOwner(owner).Redactor is { } active
             ? this.RedactAsync(active, text, cancellationToken)
             : Task.FromResult(text);
     }
 
-    /// <summary>Runs the shared redaction and reports what it found, or reports the refusal and re-raises it.</summary>
+    /// <summary>Runs the owner's redaction and reports what it found, or reports the refusal and re-raises it.</summary>
     /// <remarks>
     /// The refusal reaches the caller unchanged, so a synchronization run or a backfill batch fails with the error code
     /// naming the scanner rather than with something this layer invented. That failure is the fail-closed contract at

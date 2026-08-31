@@ -13,7 +13,7 @@ using Xunit;
 namespace MailFathom.Application.UnitTests.SensitiveContent.Redaction;
 
 /// <summary>Covers the one implementation both the derived path and the read path redact through.</summary>
-public sealed class SensitiveContentRedactorTests
+public sealed class SensitiveContentRedactorTests : IDisposable
 {
     private static readonly SensitiveContentCategory CloudKey = SensitiveContentCategory.Create("CloudKey");
     private static readonly SensitiveContentCategory PersonName = SensitiveContentCategory.Create("PersonName");
@@ -21,6 +21,16 @@ public sealed class SensitiveContentRedactorTests
         SensitiveContentDetector.Create("in-process-secrets", "2026.08.01");
 
     private readonly FakeTimeProvider timeProvider = new(new DateTimeOffset(2026, 8, 11, 10, 0, 0, TimeSpan.Zero));
+    private readonly List<SensitiveContentScanConcurrency> openedPermits = [];
+
+    /// <inheritdoc />
+    public void Dispose()
+    {
+        foreach (var permits in this.openedPermits)
+        {
+            permits.Dispose();
+        }
+    }
 
     [Fact]
     public async Task RedactAsync_DetectedRegion_IsReplacedByThePlaceholderNamingItsCategory()
@@ -30,7 +40,7 @@ public sealed class SensitiveContentRedactorTests
         {
             Findings = [this.Finding(CloudKey, 11, 4)],
         };
-        using var redactor = this.Redactor(SensitiveContentScanBounds.Default, scanner);
+        var redactor = this.Redactor(SensitiveContentScanBounds.Default, scanner);
 
         // Act
         var redacted = await redactor.RedactAsync("the key is AKIA and it works", TestContext.Current.CancellationToken);
@@ -46,7 +56,7 @@ public sealed class SensitiveContentRedactorTests
     {
         // Arrange
         var scanner = new ScriptedSensitiveContentScanner(SensitiveContentScannerKind.Secrets);
-        using var redactor = this.Redactor(SensitiveContentScanBounds.Default, scanner);
+        var redactor = this.Redactor(SensitiveContentScanBounds.Default, scanner);
 
         // Act
         var redacted = await redactor.RedactAsync("nothing to see here", TestContext.Current.CancellationToken);
@@ -70,7 +80,7 @@ public sealed class SensitiveContentRedactorTests
         {
             Findings = [this.Finding(PersonName, 14, 4, "sidecar-personal-data", "2.2.355")],
         };
-        using var redactor = this.Redactor(SensitiveContentScanBounds.Default, secrets, personalData);
+        var redactor = this.Redactor(SensitiveContentScanBounds.Default, secrets, personalData);
         const string text = "one two three four five six seven";
 
         // Act
@@ -93,7 +103,7 @@ public sealed class SensitiveContentRedactorTests
         {
             Findings = [this.Finding(CloudKey, 4, 5), this.Finding(PersonName, 6, 6)],
         };
-        using var redactor = this.Redactor(SensitiveContentScanBounds.Default, scanner);
+        var redactor = this.Redactor(SensitiveContentScanBounds.Default, scanner);
 
         // Act
         var redacted = await redactor.RedactAsync("abcdefghijklmnop", TestContext.Current.CancellationToken);
@@ -110,7 +120,7 @@ public sealed class SensitiveContentRedactorTests
         // Arrange
         var scanner = new ScriptedSensitiveContentScanner(SensitiveContentScannerKind.Secrets);
         var bounds = SensitiveContentScanBounds.Create(8, TimeSpan.FromSeconds(5), 4);
-        using var redactor = this.Redactor(bounds, scanner);
+        var redactor = this.Redactor(bounds, scanner);
 
         // Act
         var redacted = await redactor.RedactAsync("0123456789abc", TestContext.Current.CancellationToken);
@@ -128,7 +138,7 @@ public sealed class SensitiveContentRedactorTests
         // Arrange
         var scanner = new ScriptedSensitiveContentScanner(SensitiveContentScannerKind.Secrets);
         var bounds = SensitiveContentScanBounds.Create(5, TimeSpan.FromSeconds(5), 4);
-        using var redactor = this.Redactor(bounds, scanner);
+        var redactor = this.Redactor(bounds, scanner);
 
         // Act
         var redacted = await redactor.RedactAsync("abcd\U0001F600e", TestContext.Current.CancellationToken);
@@ -146,7 +156,7 @@ public sealed class SensitiveContentRedactorTests
         {
             Failure = new InvalidOperationException("the corpus did not load"),
         };
-        using var redactor = this.Redactor(SensitiveContentScanBounds.Default, scanner);
+        var redactor = this.Redactor(SensitiveContentScanBounds.Default, scanner);
 
         // Act
         var failure = await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(
@@ -167,7 +177,7 @@ public sealed class SensitiveContentRedactorTests
         {
             Failure = new OperationCanceledException("the adapter gave up"),
         };
-        using var redactor = this.Redactor(SensitiveContentScanBounds.Default, scanner);
+        var redactor = this.Redactor(SensitiveContentScanBounds.Default, scanner);
 
         // Act
         var failure = await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(
@@ -184,7 +194,7 @@ public sealed class SensitiveContentRedactorTests
         // Arrange
         var scanner = new ScriptedSensitiveContentScanner(SensitiveContentScannerKind.Secrets) { NeverAnswers = true };
         var bounds = SensitiveContentScanBounds.Create(1_000, TimeSpan.FromSeconds(3), 4);
-        using var redactor = this.Redactor(bounds, scanner);
+        var redactor = this.Redactor(bounds, scanner);
 
         // Act
         var redaction = redactor.RedactAsync("a secret", TestContext.Current.CancellationToken);
@@ -202,7 +212,7 @@ public sealed class SensitiveContentRedactorTests
     {
         // Arrange
         var scanner = new ScriptedSensitiveContentScanner(SensitiveContentScannerKind.Secrets) { NeverAnswers = true };
-        using var redactor = this.Redactor(SensitiveContentScanBounds.Default, scanner);
+        var redactor = this.Redactor(SensitiveContentScanBounds.Default, scanner);
         using var caller = new CancellationTokenSource();
 
         // Act
@@ -222,7 +232,7 @@ public sealed class SensitiveContentRedactorTests
         var plan = SensitiveContentPlan.Create(
             SensitiveContentScanBounds.Default,
             [SensitiveContentScannerPlan.Create(SensitiveContentScannerKind.Pii, [PersonName], [])]);
-        using var redactor = new SensitiveContentRedactor(plan, [], this.timeProvider);
+        var redactor = new SensitiveContentRedactor(plan, [], this.timeProvider, this.Permits(plan.Bounds));
 
         // Act
         var failure = await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(
@@ -241,7 +251,7 @@ public sealed class SensitiveContentRedactorTests
         {
             Findings = [this.Finding(CloudKey, 4, 40)],
         };
-        using var redactor = this.Redactor(SensitiveContentScanBounds.Default, scanner);
+        var redactor = this.Redactor(SensitiveContentScanBounds.Default, scanner);
 
         // Act, Assert
         await Assert.ThrowsAsync<SensitiveContentScannerUnavailableException>(
@@ -258,7 +268,7 @@ public sealed class SensitiveContentRedactorTests
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var scanner = new ScriptedSensitiveContentScanner(SensitiveContentScannerKind.Secrets) { Gate = gate };
         var bounds = SensitiveContentScanBounds.Create(1_000, TimeSpan.FromSeconds(30), permits);
-        using var redactor = this.Redactor(bounds, scanner);
+        var redactor = this.Redactor(bounds, scanner);
 
         // Act
         var first = redactor.RedactAsync("one", TestContext.Current.CancellationToken);
@@ -275,7 +285,7 @@ public sealed class SensitiveContentRedactorTests
     public async Task RedactAsync_WithoutText_IsRejected()
     {
         // Arrange
-        using var redactor = this.Redactor(
+        var redactor = this.Redactor(
             SensitiveContentScanBounds.Default,
             new ScriptedSensitiveContentScanner(SensitiveContentScannerKind.Secrets));
 
@@ -294,7 +304,22 @@ public sealed class SensitiveContentRedactorTests
                 [scanner.Scanner == SensitiveContentScannerKind.Secrets ? CloudKey : PersonName],
                 []))]),
         scanners,
-        this.timeProvider);
+        this.timeProvider,
+        this.Permits(bounds));
+
+    /// <summary>Opens the permits one redaction runs under, and keeps them for this test class to release.</summary>
+    /// <remarks>
+    /// The budget outlives the redaction rather than belonging to it — a deployment holds one for every posture — so a
+    /// test holds it too instead of scoping it to the redactor it is about to build.
+    /// </remarks>
+    private SensitiveContentScanConcurrency Permits(SensitiveContentScanBounds bounds)
+    {
+        var permits = new SensitiveContentScanConcurrency(bounds.MaximumConcurrentScans);
+
+        this.openedPermits.Add(permits);
+
+        return permits;
+    }
 
     private SensitiveContentFinding Finding(
         SensitiveContentCategory category,

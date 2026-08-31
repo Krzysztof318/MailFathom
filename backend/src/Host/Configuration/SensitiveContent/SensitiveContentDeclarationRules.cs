@@ -17,9 +17,19 @@ namespace MailFathom.Host.Configuration.SensitiveContent;
 /// matched against a catalog, and one that matches nothing names itself in a startup failure.
 /// </para>
 /// <para>
-/// Every problem is reported rather than the first, so an operator who wrote two mistakes reads both. Nothing here
-/// judges a switch that is off: a category list left behind under a scanner nobody runs describes no protection, so
-/// refusing to start over it would be refusing over a comment.
+/// Every problem is reported rather than the first, so an operator who wrote two mistakes reads both.
+/// </para>
+/// <para>
+/// Two questions are asked of different sets, and the difference is who can turn a scanner on. What the operator
+/// <em>wrote</em> under a scanner — its categories and its suppressions — is judged for every scanner this deployment
+/// provides, switched on or not, because an owner's own record may switch a provided scanner on for their own mail and
+/// no roster exists while this runs: a mistyped category under a switch that is off would otherwise pass a start and
+/// then throw out of the posture composition the moment somebody opted in, taking every scanning path on the
+/// deployment with it. A scanner this section switched on is judged too, whether or not the deployment can provide it,
+/// so a switch on with nothing behind it is still answered here rather than by the endpoint rule alone. Whether a
+/// scanner has a detector behind it at all is asked only of the ones this section switched on, because that is a
+/// question about this process's own registrations rather than about what an operator wrote, and a switch that is off
+/// promises no protection for what stands behind it to fall short of.
 /// </para>
 /// </remarks>
 internal static class SensitiveContentDeclarationRules
@@ -41,41 +51,53 @@ internal static class SensitiveContentDeclarationRules
         return
         [
             .. Enum.GetValues<SensitiveContentScannerKind>()
-                .Where(scanner => settings.For(scanner).Enabled)
-                .SelectMany(scanner => FindScannerErrors(scanner, settings.For(scanner), declared)),
+                .Where(scanner => settings.For(scanner).Enabled || settings.ProvidedScanners.Contains(scanner))
+                .SelectMany(scanner => FindScannerErrors(
+                    scanner,
+                    settings.For(scanner),
+                    declared,
+                    settings.For(scanner).Enabled)),
         ];
     }
 
+    /// <summary>Finds everything wrong with one scanner's declaration, and with the detector behind it where it runs.</summary>
+    /// <param name="scanner">The scanner being judged.</param>
+    /// <param name="settings">What the deployment wrote under it.</param>
+    /// <param name="catalogs">Every catalog the registered scanners declare.</param>
+    /// <param name="switchedOn">Whether this deployment's own section runs it, which is what the registration questions are asked of.</param>
     private static IEnumerable<ValidationResult> FindScannerErrors(
         SensitiveContentScannerKind scanner,
         SensitiveContentScannerOptions settings,
-        IReadOnlyList<ISensitiveContentCatalog> catalogs)
+        IReadOnlyList<ISensitiveContentCatalog> catalogs,
+        bool switchedOn)
     {
         var registered = SensitiveContentCatalogResolution.CatalogsFor(catalogs, scanner);
 
-        if (registered.Count == 0)
+        if (registered.Count != 1)
         {
-            yield return Error(
-                scanner,
-                string.Empty,
-                "is switched on and this deployment registers no detector for it. A scanner that cannot run must not start, because the switch would otherwise report a protection that is not in force.");
-
-            yield break;
-        }
-
-        if (registered.Count > 1)
-        {
-            yield return Error(
-                scanner,
-                string.Empty,
-                $"is switched on and this deployment registers {registered.Count} detectors for it, so which categories it looks for is undecidable.");
+            // Reported only where this section runs the scanner. Both catalogs are registered on every deployment, and
+            // AddSensitiveContentCatalogs states why it is deliberately unconditional, so this asks about this process's
+            // own detectors rather than about anything an operator wrote. A switch that is off promises no protection,
+            // so what stands behind it decides nothing about whether this start is sound.
+            if (switchedOn)
+            {
+                yield return registered.Count == 0
+                    ? Error(
+                        scanner,
+                        string.Empty,
+                        "is switched on and this deployment registers no detector for it. A scanner that cannot run must not start, because the switch would otherwise report a protection that is not in force.")
+                    : Error(
+                        scanner,
+                        string.Empty,
+                        $"is switched on and this deployment registers {registered.Count} detectors for it, so which categories it looks for is undecidable.");
+            }
 
             yield break;
         }
 
         var catalog = registered[0];
 
-        foreach (var result in FindCategoryErrors(scanner, settings, catalog))
+        foreach (var result in FindCategoryErrors(scanner, settings, catalog, switchedOn))
         {
             yield return result;
         }
@@ -89,7 +111,8 @@ internal static class SensitiveContentDeclarationRules
     private static IEnumerable<ValidationResult> FindCategoryErrors(
         SensitiveContentScannerKind scanner,
         SensitiveContentScannerOptions settings,
-        ISensitiveContentCatalog catalog)
+        ISensitiveContentCatalog catalog,
+        bool switchedOn)
     {
         foreach (var (configured, position) in settings.Categories.Select((name, position) => (name, position)))
         {
@@ -123,15 +146,24 @@ internal static class SensitiveContentDeclarationRules
 
         if (SensitiveContentCatalogResolution.ResolveCategories(settings, catalog).Count == 0)
         {
-            yield return settings.Categories.Count == 0
-                ? Error(
-                    scanner,
-                    string.Empty,
-                    "is switched on and this scanner declares no category by default, so it would run and find nothing.")
-                : Error(
+            // A written list that resolves to nothing is what the operator wrote, so it is refused whether or not this
+            // section runs the scanner: an owner switching that scanner on for their own mail would otherwise be the
+            // first thing to meet it, out of the posture composition rather than out of a start. An empty list is a
+            // property of the catalog instead, and is judged only where this section runs it.
+            if (settings.Categories.Count > 0)
+            {
+                yield return Error(
                     scanner,
                     ":Categories",
                     "resolves to no category at all, so the scanner would run and find nothing.");
+            }
+            else if (switchedOn)
+            {
+                yield return Error(
+                    scanner,
+                    string.Empty,
+                    "is switched on and this scanner declares no category by default, so it would run and find nothing.");
+            }
         }
     }
 

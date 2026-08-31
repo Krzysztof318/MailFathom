@@ -44,6 +44,63 @@ The first row is what a message stores rather than what leaves, so what it cover
 configuration behind it, and what a late switch does to text already written are in [derived data](#derived-data-is-written-redacted-and-stamped)
 below.
 
+## Each owner's own posture
+
+A deployment serves people, and what one of them wants scanned over their own correspondence is not what the next one
+wants. So the two switches above are the deployment's floor rather than its whole answer: **an owner's record carries a
+scanning block of its own, and the posture their mail is read under is the stricter of the two.**
+
+The block is part of the owner document — the content of the record, not an overlay on the deployment's
+`SensitiveContent` section — and it is written under `Accounts:<index>:SensitiveContent` in the deployment's own file or
+in the owner's record.
+
+```jsonc
+{
+  "SensitiveContent": {
+    "Secrets": { "Enabled": true },
+    "Pii": { "Enabled": true },
+    "ScreenOutgoingMailFor": ["Secrets", "Pii"]
+  }
+}
+```
+
+**One direction only.** An owner may switch on a scanner the deployment left off, and may add a scanner to what stops
+their outgoing mail. They may not switch off a scanner the deployment requires, and may not name fewer scanners than the
+deployment screens for. The obligation belongs to whoever holds the mail, so a loosening is **refused where it is
+written** — at the record write, and at the start that reads a block declared in the deployment's own file — rather than
+accepted and then quietly overruled, which would leave an owner reading a record that describes something other than
+what is in force. Each refusal names the deployment setting behind it, and never repeats the text of the record.
+
+A record this deployment *already holds* is composed rather than refused, and that is deliberate rather than a gap. An
+operator who tightens the deployment afterwards turns every record accepted before into one that asks for less, and
+refusing those on the next start would refuse the start itself for every owner — over records their authors could no
+longer reach to rewrite, the surface that would rewrite them being behind the gate that is failing. The composition
+takes the stricter of the two, so such a record loosens nothing.
+
+**Asking for a scanner the deployment cannot run is refused at the write too.** The personal-data scanner reaches an
+analyzer an operator deploys beside the service, so an owner switching it on where
+`SensitiveContent:PersonalDataAnalyzer:Endpoint` names no address is told so immediately, with that key named. The
+alternative would be a record that reads as accepted and a mailbox that fails closed on its next message.
+
+**What stays the deployment's, wholly.** The analyzer's address, the analyzed ceiling, the per-scan timeout, the
+process-wide scan concurrency, and the rebuild switch below. They are the operator's costs rather than anybody's
+preference, and the concurrency in particular is **one budget shared across every owner**: a deployment's limit on
+scans running at once is a property of the process, and a per-owner share of it would let the number of people served
+decide how much load the analyzer sees.
+
+**A deployment serving one owner whose record says nothing behaves exactly as it did before any of this existed** — the
+same scanners, the same screening, the same stamp, the same queries. Nothing here is reached by a record that says
+nothing.
+
+Two owners asking for the same thing share one composed posture, so a deployment holds one redaction and one stamp
+however many people it serves, and the detectors behind them are constructed once for the scanners the deployment
+provides. An owner whose posture scans nothing constructs none at all.
+
+Changing an owner's posture rewrites nothing already stored, for the reason a deployment-wide change rewrites nothing:
+the way back is the same rebuild, and it covers that owner's mail alone. [The stamp a derived row
+carries](#the-stamp-a-derived-row-carries) is judged against the posture of the owner who holds the row, so one person
+switching a scanner on leaves everybody else's rows exactly where they were.
+
 ## The guarded egress points
 
 Every place text leaves this deployment goes through one guard, and the guard is told which place it is. There are
@@ -175,6 +232,9 @@ is which findings matter, because a redaction and a refusal are not the same act
   what leaves through a model may be redacted but what a person sends is theirs.
 - **A scanner named here but switched off screens nothing**, because it detects nothing to screen with. Naming one is
   not how it is switched on.
+- **An owner may add to this list and never take from it.** The key names what stops every owner's outgoing mail; an
+  owner's own `ScreenOutgoingMailFor` is read as their whole answer, so one naming fewer scanners than this does is
+  refused where it is written. [Each owner's own posture](#each-owners-own-posture) is the rule.
 
 With no scanner switched on, nothing is screened, no message is parsed, and no detector is constructed — the opt-in
 nobody took costs an enqueue and a draft save nothing at all.
@@ -281,8 +341,10 @@ stored derived text is never edited in place.** The way back is a rebuild, and t
 raw MIME byte-exact — an in-place edit of derived text would leave a chunk whose vector was built from something else,
 with nothing recording which half was which.
 
-So the deployment says so instead. At startup, a deployment with a scanner on counts the messages whose derived text was
-written under a different configuration and reports that count on its own log:
+So the deployment says so instead. At startup, a deployment where any owner has a scanner on counts the messages whose
+derived text was written under something other than **their own owner's** configuration, and reports that count on its
+own log. A row is stale against the stamp of the person who holds it and against no other, so a mailbox is never called
+stale because somebody else's posture happens to differ from what it was written under:
 
 - **A warning** when the count is above zero and no rebuild was asked for, naming `SensitiveContent:RebuildStaleDerivedData`
   as what re-derives them. It is a warning rather than a refusal, because derived text written before a switch is a
@@ -309,8 +371,10 @@ embeddings are **billed again**, per message, at that provider's rate. It is off
 Nothing triggers it automatically: switching a scanner on protects what is derived from that moment onward, and spending
 a mailbox's worth of embedding credit is the operator's decision rather than a side effect of a protection switch.
 
-With both scanners off nothing here runs at all: no detector is constructed, no text is scanned on the way to storage,
-and no stamp is written — a derived row on such a deployment is byte-identical to one written before this existed.
+With nothing switched on for anybody nothing here runs at all: no detector is constructed, no text is scanned on the way
+to storage, and no stamp is written — a derived row on such a deployment is byte-identical to one written before this
+existed. The same holds per person: an owner nobody scans has rows carrying no stamp, and nothing about them is ever
+outstanding.
 
 ## A finding names a position, never a value
 

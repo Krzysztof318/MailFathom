@@ -38,7 +38,6 @@ using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.History;
 using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Detection;
-using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Actions;
 using MailFathom.Application.Spam.Runs;
@@ -130,7 +129,7 @@ internal static class HostComposition
         BoundSettings.AddTo(builder.Services, builder.Configuration);
         AddServedMailOwners(builder);
 
-        var declaredSensitiveContent = AddSensitiveContentScanning(builder);
+        AddSensitiveContentScanning(builder);
         var spamScannerIsConfigured = AddSpamClassification(builder);
 
         AddMailRules(builder);
@@ -141,7 +140,7 @@ internal static class HostComposition
         var embedsMail = AddPersistenceAndProviders(builder);
 
         AddContentStorage(builder);
-        AddBackgroundWork(builder, declaredSensitiveContent, spamScannerIsConfigured, embedsMail);
+        AddBackgroundWork(builder, spamScannerIsConfigured, embedsMail);
 
         // Ahead of the surfaces rather than inside one, because the document it generates describes two of them and
         // belongs to neither. It registers nothing outside Development, which is the whole of the rule and is enforced
@@ -251,34 +250,45 @@ internal static class HostComposition
         builder.Services.AddScoped<StoredSecretAdministration>();
     }
 
-    /// <summary>Registers the scanners this deployment switched on, and reports what it declared.</summary>
-    /// <returns>The declared sensitive-content settings, which later stages read to decide which gates and reports exist.</returns>
-    private static SensitiveContentOptions AddSensitiveContentScanning(WebApplicationBuilder builder)
+    /// <summary>Registers the scanners this deployment provides, and the postures that decide whose mail meets one.</summary>
+    /// <remarks>
+    /// <para>
+    /// Registration follows what the deployment <em>provides</em> rather than what it switched on, because an owner's
+    /// own record may switch a scanner on for their own mail and no roster exists while services are being registered.
+    /// Providing is not the same as costing anything: a detector registered here is constructed on first resolution,
+    /// and nothing resolves one until a posture runs it, so a deployment nobody asked for scanning on still compiles no
+    /// expression and opens no analyzer client.
+    /// </para>
+    /// <para>
+    /// The plan registered here is the provisioned one — every scanner this deployment stands behind, with the
+    /// categories, suppressions, and bounds its own section names — because the detectors and the readiness probe are
+    /// built from it and each must be able to find everything the deployment configured. Which of them run over one
+    /// owner's mail is that owner's posture, which composes a plan of its own naming a subset of the same scanners.
+    /// </para>
+    /// </remarks>
+    private static void AddSensitiveContentScanning(WebApplicationBuilder builder)
     {
-        // Read while the services are being registered, for the reason the provider declarations below are: whether this
-        // deployment scans anything decides which services exist at all, and that decision is taken before a container that
-        // could resolve an options snapshot. With both switches off nothing here is registered, so an opt-in nobody took
-        // constructs no detector, holds no concurrency permit, and appears on no path.
+        // Read while the services are being registered, for the reason the provider declarations below are: what this
+        // deployment provides decides which services exist at all, and that decision is taken before a container that
+        // could resolve an options snapshot.
         var declaredSensitiveContent = builder.Configuration
             .GetSection(SensitiveContentOptions.SectionName)
             .Get<SensitiveContentOptions>() ?? new SensitiveContentOptions();
 
-        // Registered whichever way the switches read, unlike the detectors below them. What a scanner declares it can
-        // find is what the startup rule and a configuration write are both judged against, so binding that answer to the
-        // switches this process started with would make a candidate turning a scanner on refusable on a deployment that
-        // had it off — which is every deployment that would ever want to turn one on.
+        // What a scanner declares it can find is what the startup rule and a configuration write are both judged
+        // against, so binding that answer to what this process started with would make a candidate turning a scanner on
+        // refusable on a deployment that had it off — which is every deployment that would ever want to turn one on.
         builder.Services.AddSensitiveContentCatalogs();
 
-        if (declaredSensitiveContent.Secrets.Enabled)
-        {
-            builder.Services.AddSecretContentScanning();
-        }
+        // Unconditional, because the secrets scanner runs inside this process and needs nothing deployed beside it: any
+        // owner may switch it on for their own mail, so every deployment provides it.
+        builder.Services.AddSecretContentScanning();
 
-        if (declaredSensitiveContent.Pii.Enabled)
+        if (declaredSensitiveContent.ProvidesPersonalDataScanner)
         {
             // The profile is composed here rather than inside the registration, because where the analyzer is comes from this
-            // section and Infrastructure binds no configuration. Its address is proven absolute by options validation before
-            // anything resolves this, and the mapper refuses the combination validation already refuses rather than assuming it.
+            // section and Infrastructure binds no configuration. Its address is proven composable by the property that
+            // gates this branch, which is the same reading the mapper takes rather than a second one beside it.
             builder.Services.AddSingleton(provider => SensitiveContentPlanMapper.MapAnalyzerProfile(
                 provider.GetRequiredService<IOptions<SensitiveContentOptions>>().Value));
             builder.Services.AddPersonalDataContentScanning();
@@ -288,33 +298,36 @@ internal static class HostComposition
             // guards, so it must leave the load balancer rather than stay in it answering nothing. It must never reach
             // the liveness probe — restarting this process cannot start the container beside it. A singleton because the
             // check holds the last observation it made, which is what keeps one outage to one pair of log records
-            // instead of one per scrape.
+            // instead of one per scrape. Whether anybody's mail is actually scanned for personal data is the check's own
+            // first question, because that answer follows the roster rather than this section.
             builder.Services.AddSingleton<PersonalDataAnalyzerHealthCheck>();
             builder.Services.AddHealthChecks()
                 .Add(PersonalDataAnalyzerHealthCheck.Registration());
         }
 
-        if (declaredSensitiveContent.IsAnyScannerEnabled)
-        {
-            builder.Services.AddSingleton(provider => SensitiveContentPlanMapper.Map(
-                provider.GetRequiredService<IOptions<SensitiveContentOptions>>().Value,
-                provider.GetServices<ISensitiveContentCatalog>())
-                ?? throw new InvalidOperationException(
-                    "A sensitive-content scanner was switched on at registration and is absent from the validated configuration."));
-            // A singleton because the concurrency bound it holds is one for the process, and because a plan is composed
-            // once. Every consumer redacts through this one instance, which is what keeps the derived path and the read
-            // path from drifting into two redactions of the same message.
-            builder.Services.AddSingleton<SensitiveContentRedactor>();
-            // Composed here rather than in Infrastructure for the reason the analyzer profile is: which findings stop a
-            // send comes out of this section, and Infrastructure binds no configuration. It is registered only where a
-            // scanner is switched on, so the screen resolves nothing on a deployment that scans nothing and answers
-            // every act without asking.
-            builder.Services.AddSingleton(provider => SensitiveContentPlanMapper.MapScreeningPolicy(
-                provider.GetRequiredService<IOptions<SensitiveContentOptions>>().Value,
-                provider.GetRequiredService<SensitiveContentPlan>()));
-        }
+        builder.Services.AddSingleton(provider => SensitiveContentPlanMapper.Map(
+            provider.GetRequiredService<IOptions<SensitiveContentOptions>>().Value,
+            provider.GetServices<ISensitiveContentCatalog>(),
+            provider.GetRequiredService<IOptions<SensitiveContentOptions>>().Value.ProvidedScanners)
+            ?? throw new InvalidOperationException(
+                "The provisioned sensitive-content plan is empty, and every deployment provides at least the secrets scanner."));
 
-        return declaredSensitiveContent;
+        // One budget for the process rather than one per posture, which is the whole of what makes several owners'
+        // scanning affordable: an owner switching a scanner on adds work to the same queue rather than a queue of their
+        // own, so the bound an operator set is the bound the machine keeps however many owners it serves.
+        builder.Services.AddSingleton(provider => new SensitiveContentScanConcurrency(
+            provider.GetRequiredService<IOptions<SensitiveContentOptions>>().Value.MaximumConcurrentScans));
+
+        // The detectors arrive behind a delegate rather than resolved, so a deployment where nobody is scanned for never
+        // constructs one. Everything that scans reads this port, and nothing reads the deployment's own section for a
+        // posture: composing the two answers is this type's and no caller's.
+        builder.Services.AddSingleton<ISensitiveContentPostures>(provider => new OwnerSensitiveContentPostures(
+            provider.GetRequiredService<IOptions<SensitiveContentOptions>>().Value,
+            provider.GetServices<ISensitiveContentCatalog>(),
+            provider.GetServices<ISensitiveContentScanner>,
+            provider.GetRequiredService<TimeProvider>(),
+            provider.GetRequiredService<SensitiveContentScanConcurrency>(),
+            provider.GetRequiredService<ServedMailOwners>()));
     }
 
     /// <summary>Registers spam classification, and reports whether a scanner was declared behind it.</summary>
@@ -997,7 +1010,6 @@ internal static class HostComposition
     /// <summary>Registers the startup gates and the workers behind them, in the order a run may first touch mail.</summary>
     private static void AddBackgroundWork(
         WebApplicationBuilder builder,
-        SensitiveContentOptions declaredSensitiveContent,
         bool spamScannerIsConfigured,
         bool embedsMail)
     {
@@ -1019,13 +1031,12 @@ internal static class HostComposition
             builder.Services.AddHostedService<SpamScannerStartupGate>();
         }
 
-        // Behind the schema gate, because it reads a table, and ahead of the walk that would reduce the figure it reports,
-        // so what an operator sees at start is the state the instance came up in. Registered only where a scanner is
-        // switched on, which is the only state in which anything can be stale against a configuration at all.
-        if (declaredSensitiveContent.IsAnyScannerEnabled)
-        {
-            builder.Services.AddHostedService<StaleDerivedDataStartupReport>();
-        }
+        // Behind the schema gate, because it reads a table, and ahead of the walk that would reduce the figure it
+        // reports, so what an operator sees at start is the state the instance came up in. Registered whatever this
+        // deployment's own section says, because whether anything can be stale follows the postures the roster composes
+        // and the roster is settled by the gate above rather than known here; the report asks that question itself and
+        // says nothing where no owner's mail is scanned.
+        builder.Services.AddHostedService<StaleDerivedDataStartupReport>();
 
         builder.Services.AddHostedService<MailSynchronizationCoordinator>();
         // Registered beside the coordinator rather than instead of anything it does: the account run already drains

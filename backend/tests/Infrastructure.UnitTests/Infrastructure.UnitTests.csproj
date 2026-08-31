@@ -19,6 +19,7 @@
     <!-- The contact mapping writes the owner whose book a row belongs to, so its tests name the same two owners every
          other suite arranges. -->
     <Compile Include="..\shared\SyntheticMailOwner.cs" Link="SyntheticMailOwner.cs" />
+    <Compile Include="..\shared\FixedSensitiveContentPostures.cs" Link="FixedSensitiveContentPostures.cs" />
     <Compile Include="..\shared\TestCertificates.cs" Link="TestCertificates.cs" />
     <!-- The bounded metadata handler is the one Infrastructure type that speaks HTTP, and the suite's single HTTP test
          double is hand-written because a substitute cannot override the protected send path. -->

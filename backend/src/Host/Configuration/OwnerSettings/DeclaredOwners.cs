@@ -5,6 +5,7 @@
 using System.ComponentModel.DataAnnotations;
 using MailFathom.Application.Access;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.SensitiveContent;
 
 namespace MailFathom.Host.Configuration.OwnerSettings;
 
@@ -82,10 +83,17 @@ internal static class DeclaredOwners
             return errors;
         }
 
+        // Read once for the whole collection, because every owner's scanning block is judged against the same
+        // deployment section and binding it per owner would read the same keys once per declaration.
+        var deploymentScanning = configuration
+            .GetSection(SensitiveContentOptions.SectionName)
+            .Get<SensitiveContentOptions>() ?? new SensitiveContentOptions();
+
         return
         [
             .. FindDeploymentSectionConflict(owners, deploymentAccounts),
             .. owners.Index().SelectMany(entry => FindMailAccountErrors(entry.Item, entry.Index, today)),
+            .. owners.Index().SelectMany(entry => FindSensitiveContentErrors(entry.Item, entry.Index, deploymentScanning)),
             .. FindCrossOwnerAccountNameCollisions(owners),
         ];
     }
@@ -223,6 +231,21 @@ internal static class DeclaredOwners
 
         return refusals.Select(refusal => $"{path} — {Describe(owner)}: {refusal.ErrorMessage ?? "the declaration is invalid."}");
     }
+
+    /// <summary>Finds what one declared owner asks to have their mail scanned for that this deployment could not serve.</summary>
+    /// <remarks>
+    /// The rule is the one an owner's own record is written under rather than a second copy of it, so an operator
+    /// declaring a posture in the file and an owner writing one into their record are refused for the same reasons in
+    /// the same words — and a declaration that would be refused as a record is refused as a declaration.
+    /// </remarks>
+    private static IEnumerable<string> FindSensitiveContentErrors(
+        DeclaredOwnerOptions owner,
+        int index,
+        SensitiveContentOptions deployment) =>
+        OwnerSensitiveContentRules.FindRefusals(
+            owner.SensitiveContent,
+            deployment,
+            $"{DeclaredOwnerOptions.SectionName}:{index}:{OwnerSensitiveContentOptions.BlockName}");
 
     /// <summary>Reports a mail-account name two owners would both answer to.</summary>
     /// <remarks>

@@ -3,8 +3,10 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.SensitiveContent;
+using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.SensitiveContent.Redaction;
+using MailFathom.Domain.Access;
 
 namespace MailFathom.TestSupport;
 
@@ -17,14 +19,19 @@ namespace MailFathom.TestSupport;
 /// the guard is the same deployment answering the other question, which is whether an act may happen at all.
 /// </para>
 /// <para>
-/// It holds the redactor the guard runs through, which is what makes it disposable: the redactor owns the concurrency
-/// permits of a whole deployment, and a suite that left one per test behind would be leaking the thing the bound exists
-/// to hold.
+/// Every owner reads the same posture, because what these suites are about is what a boundary does with a finding
+/// rather than whose mail was scanned. A suite about the difference between two owners states two postures itself,
+/// through <see cref="FixedSensitiveContentPostures" />.
+/// </para>
+/// <para>
+/// It holds the permits the redaction runs under, which is what makes it disposable: they are the process's budget of
+/// scans running at once, and a suite that left one per test behind would be leaking the thing the bound exists to
+/// hold.
 /// </para>
 /// </remarks>
 internal sealed class ScanningSensitiveContentEgress : IDisposable
 {
-    private readonly SensitiveContentRedactor redactor;
+    private readonly SensitiveContentScanConcurrency concurrency;
 
     private ScanningSensitiveContentEgress(
         MarkerSensitiveContentScanner scanner,
@@ -40,16 +47,24 @@ internal sealed class ScanningSensitiveContentEgress : IDisposable
                     []),
             ]);
 
+        this.concurrency = new SensitiveContentScanConcurrency(bounds.MaximumConcurrentScans);
         this.Scanner = scanner;
         this.Telemetry = new RecordingSensitiveContentEgressTelemetry();
-        this.redactor = new SensitiveContentRedactor(plan, [scanner], timeProvider);
-        this.Guard = new SensitiveContentEgressGuard(this.redactor, this.Telemetry, timeProvider);
-        this.Screen = new SensitiveContentEgressScreen(
-            this.redactor,
-            SensitiveContentScreeningPolicy.Create(plan, [scanner.Scanner]),
-            this.Telemetry,
-            timeProvider);
+        this.Postures = FixedSensitiveContentPostures.ForEveryOwner(
+            SensitiveContentPosture.Scanning(
+                [scanner.Scanner],
+                new SensitiveContentRedactor(plan, [scanner], timeProvider, this.concurrency),
+                SensitiveContentScreeningPolicy.Create(plan, [scanner.Scanner]),
+                SensitiveContentDerivationStamp.Compute(plan, [scanner])));
+        this.Guard = new SensitiveContentEgressGuard(this.Postures, this.Telemetry, timeProvider);
+        this.Screen = new SensitiveContentEgressScreen(this.Postures, this.Telemetry, timeProvider);
     }
+
+    /// <summary>Gets the owner whose mail this deployment is exercised over.</summary>
+    public static MailOwnerId Owner => SyntheticMailOwner.Deployment;
+
+    /// <summary>Gets what every owner's mail is scanned under, for a consumer that resolves the owner itself.</summary>
+    public FixedSensitiveContentPostures Postures { get; }
 
     /// <summary>Gets the guard a consumer is handed.</summary>
     public SensitiveContentEgressGuard Guard { get; }
@@ -111,6 +126,14 @@ internal sealed class ScanningSensitiveContentEgress : IDisposable
             timeProvider);
     }
 
+    /// <summary>States that what follows is that owner's mail, as a use case does before it reads any.</summary>
+    /// <returns>The scope, which the test disposes.</returns>
+    /// <remarks>
+    /// Needed by a test that exercises the guard directly rather than through a use case. Everything reached inside a
+    /// use case is already acting for the owner it resolved, so a suite going through one never opens this.
+    /// </remarks>
+    public IDisposable ActingForOwner() => this.Guard.ActingFor(Owner);
+
     /// <inheritdoc />
-    public void Dispose() => this.redactor.Dispose();
+    public void Dispose() => this.concurrency.Dispose();
 }

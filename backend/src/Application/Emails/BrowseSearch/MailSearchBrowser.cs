@@ -127,6 +127,8 @@ public sealed class MailSearchBrowser
 
         using var read = this.readTelemetry.BeginRead(MailboxReadOperation.SearchMailbox, cancellationToken);
 
+        using var actingFor = this.egressGuard.ActingFor(this.scopeResolver.Owner);
+
         var rankedList = this.RankedList(request);
         var pageSize = EmailSearchResultLimit.FromRequested(request.PageSize);
         var boundary = ContinuationBoundary(request.Cursor, rankedList);

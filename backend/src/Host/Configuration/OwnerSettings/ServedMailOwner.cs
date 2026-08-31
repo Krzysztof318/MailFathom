@@ -4,6 +4,7 @@
 
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Configuration.SensitiveContent;
 using MailFathom.Host.Configuration.Spam;
 
 namespace MailFathom.Host.Configuration.OwnerSettings;
@@ -18,19 +19,26 @@ namespace MailFathom.Host.Configuration.OwnerSettings;
 /// a configuration source still does. Absence is what says *read the deployment's section for this owner* rather than
 /// an owner who classifies nothing, which is why it is nullable and not an empty block.
 /// </param>
+/// <param name="SensitiveContent">What this owner asks to have their own mail scanned for, or nothing where they asked for nothing.</param>
 /// <remarks>
 /// The accounts are empty for an owner whose source is <see cref="MailOwnerAccountSource.DeploymentSection" />, and
 /// deliberately so: those declarations are in the reloadable mail snapshot, which is where a reload of the file has to
 /// be able to reach them. Copying them here would freeze a deployment's existing shape at the start that read it, so
 /// what this record carries is what the snapshot cannot — an owner's own declared section, and the document of an
 /// owner who has taken their record over.
+/// <para>
+/// The scanning block is absent for the sole owner a deployment serves from its own section, who has no record of their
+/// own to state one in and therefore reads the deployment's posture. Absence and a block that asks for nothing compose
+/// to the same answer, so nothing downstream tells them apart.
+/// </para>
 /// </remarks>
 internal sealed record ServedMailOwner(
     MailOwnerId Owner,
     string DisplayName,
     MailOwnerAccountSource Source,
     IReadOnlyList<MailSynchronizationAccountOptions> MailAccounts,
-    OwnerSpamClassificationOptions? SpamClassification = null)
+    OwnerSpamClassificationOptions? SpamClassification = null,
+    OwnerSensitiveContentOptions? SensitiveContent = null)
 {
     /// <summary>Gets whether a configuration source still reaches this owner's mail accounts.</summary>
     /// <remarks>

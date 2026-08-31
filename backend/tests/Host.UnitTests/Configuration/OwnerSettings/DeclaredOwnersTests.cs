@@ -399,6 +399,53 @@ public sealed class DeclaredOwnersTests
         new($"{path}:Secrets:Password:SecretReference", $"systemd-credential:imap-{accountId}-password"),
     ];
 
+    /// <summary>
+    /// The same rule a record write is refused under holds over a declaration in the deployment's own file, because the
+    /// two are one block arriving by two routes and a rule that ran on only one of them is a rule an operator can step
+    /// around by editing the file instead.
+    /// </summary>
+    [Fact]
+    public void FindConfigurationErrors_ADeclaredOwnerSwitchingOffAScannerTheDeploymentRequires_IsRefused()
+    {
+        // Arrange
+        var configuration = Configuration(new Dictionary<string, string?>
+        {
+            ["MailSynchronization:Enabled"] = "true",
+            ["SensitiveContent:Secrets:Enabled"] = "true",
+            ["Accounts:0:Id"] = Alex,
+            ["Accounts:0:DisplayName"] = "alex",
+            ["Accounts:0:SensitiveContent:Secrets:Enabled"] = "false",
+        });
+
+        // Act
+        var errors = DeclaredOwners.FindConfigurationErrors(configuration, Today);
+
+        // Assert
+        var error = Assert.Single(errors);
+
+        Assert.Contains("Accounts:0:SensitiveContent:Secrets:Enabled", error, StringComparison.Ordinal);
+    }
+
+    /// <summary>The declaration a deployment writes may tighten exactly as an owner's own record may.</summary>
+    [Fact]
+    public void FindConfigurationErrors_ADeclaredOwnerSwitchingOnAScannerTheDeploymentLeftOff_AcceptsIt()
+    {
+        // Arrange
+        var configuration = Configuration(new Dictionary<string, string?>
+        {
+            ["MailSynchronization:Enabled"] = "true",
+            ["Accounts:0:Id"] = Alex,
+            ["Accounts:0:DisplayName"] = "alex",
+            ["Accounts:0:SensitiveContent:Secrets:Enabled"] = "true",
+        });
+
+        // Act
+        var errors = DeclaredOwners.FindConfigurationErrors(configuration, Today);
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
     private static IConfiguration Configuration(IEnumerable<KeyValuePair<string, string?>> values) =>
         new ConfigurationBuilder().AddInMemoryCollection(values).Build();
 }

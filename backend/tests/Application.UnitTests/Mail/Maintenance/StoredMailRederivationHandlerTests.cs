@@ -13,6 +13,7 @@ using MailFathom.Application.Mail.Maintenance;
 using MailFathom.Application.Observability;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Emails.Authentication;
@@ -337,7 +338,7 @@ public sealed class StoredMailRederivationHandlerTests
 
         var mimeReader = Substitute.For<IEmailMimeReader>();
         mimeReader
-            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<CancellationToken>())
+            .ReadMetadataAsync(Arg.Any<RemoteEmailContent>(), Arg.Any<MailOwnerId>(), Arg.Any<CancellationToken>())
             .Returns(call => Task.FromResult(EmailMimeExtractionResult.Extracted(
                 MetadataOf(call.Arg<RemoteEmailContent>()!.OccurrenceId))));
 

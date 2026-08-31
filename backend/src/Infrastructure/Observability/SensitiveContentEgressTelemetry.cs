@@ -8,6 +8,7 @@ using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Egress;
 using MailFathom.Application.SensitiveContent.Redaction;
 using MailFathom.Common.Observability;
+using MailFathom.Domain.Access;
 
 namespace MailFathom.Infrastructure.Observability;
 
@@ -19,10 +20,17 @@ namespace MailFathom.Infrastructure.Observability;
 /// listing and nothing to an embedding call, is where a category list or a bound gets changed.
 /// </para>
 /// <para>
-/// Nothing recorded here is mail or derived from it. The tags are an egress point, a category name, and a scanner name,
-/// all three of them MailFathom's own closed sets, and the values are counts and durations — never a rule's match, a
-/// position, a message identity, or any part of what was found, each of which would put the credential in the
-/// telemetry written to prove it never left.
+/// Nothing recorded here is mail or derived from it. The tags on the instruments are an egress point, a category name,
+/// and a scanner name, all three of them MailFathom's own closed sets, and the values are counts and durations — never
+/// a rule's match, a position, a message identity, or any part of what was found, each of which would put the
+/// credential in the telemetry written to prove it never left.
+/// </para>
+/// <para>
+/// One further attribute is exported, on the span alone and on no instrument: <c>mailfathom.owner</c>, the deployment's
+/// own configured identifier for whoever the published mail belongs to. Postures differ between the people one
+/// deployment serves, so a scan nothing attributes cannot be read against what its owner asked for; it names a person
+/// no more than a mail account alias does, and it stays off every counter because an identifier on a series
+/// incremented once per guarded text would be the unbounded dimension the closed sets above exist to avoid.
 /// </para>
 /// </remarks>
 public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTelemetry
@@ -52,6 +60,14 @@ public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTel
     /// appear under a name they can read.
     /// </remarks>
     private const string NotScannedTagValue = "not_scanned";
+
+    /// <summary>Whose mail one guarded operation published, so a scan is read against the posture that person asked for.</summary>
+    /// <remarks>
+    /// A span attribute and never a metric dimension. Postures differ between the people one deployment serves, so a
+    /// scan nothing attributes cannot be read against what its owner asked for; an owner identifier on a counter
+    /// incremented once per text would be an unbounded series, which is what every closed tag above exists to avoid.
+    /// </remarks>
+    private const string OwnerTagName = "mailfathom.owner";
 
     /// <summary>How the operation ended, which separates a scan that answered from one that could not and one that stopped.</summary>
     private const string OutcomeTagName = "mailfathom.sensitive_content.outcome";
@@ -161,10 +177,19 @@ public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTel
     /// <inheritdoc />
     public ISensitiveContentGuardScope BeginGuardedOperation(
         SensitiveContentEgressPoint egressPoint,
+        MailOwnerId owner,
         CancellationToken cancellationToken)
     {
         var activity = Telemetry.ActivitySource.StartActivity(GuardedOperationSpanName);
         activity?.SetTag(EgressPointTagName, TagOf(egressPoint));
+
+        // Written only where an owner was resolved, which is every scanning flow: a deployment scanning nobody opens no
+        // operation at all, so an unset value here is a flow that reached this before it established whose mail it holds
+        // and an empty attribute reads more honestly than a zero UUID.
+        if (owner.IsSpecified)
+        {
+            activity?.SetTag(OwnerTagName, owner.Value.ToString());
+        }
 
         return new GuardedOperation(activity, cancellationToken);
     }

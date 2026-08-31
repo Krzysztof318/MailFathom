@@ -12,6 +12,7 @@ using MailFathom.Host.Security.Transport;
 using MailFathom.Infrastructure.Secrets.Database;
 using MailFathom.Infrastructure.Secrets.References;
 using MailFathom.Mcp.Tools.Categories;
+using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.DataProtection.KeyManagement;
@@ -538,7 +539,7 @@ public sealed class HostCompositionTests
         var screen = provider.GetRequiredService<SensitiveContentEgressScreen>();
 
         // Assert
-        Assert.Equal(expected, screen.IsActive);
+        Assert.Equal(expected, screen.IsActiveFor(SyntheticMailOwner.Deployment));
     }
 
     /// <summary>

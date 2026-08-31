@@ -4,6 +4,7 @@
 
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Domain.Access;
 
 namespace MailFathom.Application.Mail.Delivery.Screening;
 
@@ -23,8 +24,9 @@ namespace MailFathom.Application.Mail.Delivery.Screening;
 /// It also screens what will actually be transmitted rather than what somebody typed.
 /// </para>
 /// <para>
-/// Nothing is parsed on a deployment that screens nothing. The screen answers whether it is active before the message
-/// is read back, so an opt-in nobody took costs a send no parse, no allocation, and no scan.
+/// Nothing is parsed where nothing screens this author's mail. The screen answers whether it is active for them before
+/// the message is read back, so an opt-in nobody took costs a send no parse, no allocation, and no scan — and an owner
+/// who added a category pays for one while the owner beside them does not.
 /// </para>
 /// </remarks>
 /// <param name="textReader">Reads back what the composed message says.</param>
@@ -34,6 +36,7 @@ public sealed class OutgoingMailScreening(
     SensitiveContentEgressScreen screen)
 {
     /// <summary>Screens one composed message and reports what stops it, if anything does.</summary>
+    /// <param name="owner">The owner the message is being sent or filed for, whose posture its findings are judged by.</param>
     /// <param name="rawMime">The RFC 822 bytes about to be stored and transmitted or filed.</param>
     /// <param name="cancellationToken">Cancels the parse and the scan.</param>
     /// <returns>What stopped the act, or <see langword="null" /> where nothing did.</returns>
@@ -49,12 +52,13 @@ public sealed class OutgoingMailScreening(
     /// </para>
     /// <para>
     /// The emptiness guard is above the active test rather than left to the reader, so what may be handed to this
-    /// method does not depend on what an operator switched on. The outbox refuses empty bytes of its own accord and
-    /// the draft book does not, and a deployment screening nothing would otherwise file a draft of no message at all
-    /// while a screening one refused it.
+    /// method does not depend on what an operator or an owner switched on. The outbox refuses empty bytes of its own
+    /// accord and the draft book does not, and an owner screening nothing would otherwise file a draft of no message at
+    /// all while the owner beside them was refused it.
     /// </para>
     /// </remarks>
     public async Task<SensitiveContentEgressRefusal?> FindRefusalAsync(
+        MailOwnerId owner,
         ReadOnlyMemory<byte> rawMime,
         CancellationToken cancellationToken)
     {
@@ -65,7 +69,7 @@ public sealed class OutgoingMailScreening(
                 nameof(rawMime));
         }
 
-        if (!screen.IsActive)
+        if (!screen.IsActiveFor(owner))
         {
             return null;
         }
@@ -74,6 +78,7 @@ public sealed class OutgoingMailScreening(
 
         return await screen.ScreenAsync(
             SensitiveContentEgressPoint.OutgoingMail,
+            owner,
             composed.ScreenedValues,
             cancellationToken);
     }

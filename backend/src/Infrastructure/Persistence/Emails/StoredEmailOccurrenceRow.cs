@@ -13,6 +13,7 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 
 /// <summary>The columns a walk reads to name one stored email and the remote occurrence it came from.</summary>
 /// <param name="Id">The stable local identity of the email.</param>
+/// <param name="OwnerId">The owner the email belongs to, which decides what a re-reading of it redacts.</param>
 /// <param name="MailboxAccountId">The configured account the email's folder belongs to.</param>
 /// <param name="Alias">The configured alias of that folder.</param>
 /// <param name="ResolutionGeneration">The generation the folder alias resolved in.</param>
@@ -27,6 +28,7 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 [RequiresIntegrationCoverage]
 internal sealed record StoredEmailOccurrenceRow(
     Guid Id,
+    Guid OwnerId,
     string MailboxAccountId,
     string Alias,
     int ResolutionGeneration,
@@ -37,6 +39,7 @@ internal sealed record StoredEmailOccurrenceRow(
     public static Expression<Func<StoredEmailEntity, StoredEmailOccurrenceRow>> Projection { get; } = email =>
         new StoredEmailOccurrenceRow(
             email.Id,
+            email.OwnerId,
             email.MailFolder.MailboxAccountId,
             email.MailFolder.Alias,
             email.MailFolder.ResolutionGeneration,

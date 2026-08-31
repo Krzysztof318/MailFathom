@@ -41,6 +41,9 @@ public readonly record struct SensitiveContentDerivationStamp
     /// <summary>Names the scheme in the digest itself, so a later encoding cannot collide with this one.</summary>
     private const string HashDomain = "mailfathom.sensitive-content-derivation.v1";
 
+    /// <summary>Names the composite scheme separately, so a set of one posture cannot collide with that posture.</summary>
+    private const string CompositeHashDomain = "mailfathom.sensitive-content-derivation-across-owners.v1";
+
     private SensitiveContentDerivationStamp(string value) => this.Value = value;
 
     /// <summary>Gets the digest as sixty-four lowercase hexadecimal characters.</summary>
@@ -83,6 +86,59 @@ public readonly record struct SensitiveContentDerivationStamp
             AppendNames(digest, [.. scannerPlan.Categories.Select(category => category.Name)]);
             AppendNames(digest, [.. scannerPlan.SuppressedRules.Select(rule => rule.ToString())]);
         }
+
+        return new SensitiveContentDerivationStamp(Convert.ToHexStringLower(digest.GetHashAndReset()));
+    }
+
+    /// <summary>Computes the one stamp a walk over every owner's mail is re-deriving towards.</summary>
+    /// <param name="postures">What every owner this deployment serves has their mail scanned under, ordered by owner.</param>
+    /// <param name="unrostered">
+    /// What mail whose owner the roster no longer names is judged against, which is the deployment's own posture, and
+    /// <see langword="null" /> where nothing scans it.
+    /// </param>
+    /// <returns>The composite, or <see langword="null" /> where no mail this walk covers is scanned at all.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="postures" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// It identifies a set of configurations rather than one, and it is written on exactly one thing: the position a
+    /// re-derivation walk has reached. A derived row records the stamp of the owner it belongs to, because that is what
+    /// says whether <em>that message</em> is stale; a cursor belongs to no owner and has to be discarded whenever any
+    /// owner's posture has moved, since the walk it was advancing was skipping rows a new one has to revisit.
+    /// </para>
+    /// <para>
+    /// It carries the owner beside each stamp, so two owners exchanging postures is a different composite rather than
+    /// the same one. Owners whose mail nothing scans are in the digest as well, by their identifier alone, because an
+    /// owner who switched their scanner off since the cursor was written is exactly the case that has to discard it.
+    /// </para>
+    /// <para>
+    /// The fallback is digested beside them because the walk judges mail against it: rows belonging to an owner this
+    /// deployment has stopped serving are stale exactly when the deployment's own posture moved, and that move is
+    /// invisible in the rostered stamps whenever every rostered owner had already asked for at least as much.
+    /// </para>
+    /// </remarks>
+    public static SensitiveContentDerivationStamp? Across(
+        IReadOnlyList<OwnerSensitiveContentPosture> postures,
+        SensitiveContentDerivationStamp? unrostered)
+    {
+        ArgumentNullException.ThrowIfNull(postures);
+
+        if (unrostered is null && !postures.Any(posture => posture.Posture.Stamp is not null))
+        {
+            return null;
+        }
+
+        using var digest = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+
+        CanonicalDigest.AppendText(digest, CompositeHashDomain);
+        CanonicalDigest.AppendNumber(digest, postures.Count);
+
+        foreach (var posture in postures.OrderBy(candidate => candidate.Owner.Value))
+        {
+            CanonicalDigest.AppendText(digest, posture.Owner.ToString());
+            CanonicalDigest.AppendText(digest, posture.Posture.Stamp?.Value ?? string.Empty);
+        }
+
+        CanonicalDigest.AppendText(digest, unrostered?.Value ?? string.Empty);
 
         return new SensitiveContentDerivationStamp(Convert.ToHexStringLower(digest.GetHashAndReset()));
     }
