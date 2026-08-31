@@ -181,6 +181,11 @@ The frame is one tree laid out two ways by the width it is given — a navigatio
 the `workspace` breakpoint, bottom navigation under a stack of screens below it — and nothing in it reads which head or
 which platform it is running on.
 
+One question is answered before the frame is drawn at all: which deployment this client belongs to. Where nothing has
+said, the connect screen stands in front of the frame rather than inside it, because three spaces with nothing behind
+them are a frame around nothing — and once a deployment is adopted, focus moves to the start of the workspace rather
+than staying on the control that reached it.
+
 Each space is reached at a **fragment address** of its own: `#/discover`, `#/mail`, `#/cases`. `src/routing/` is the
 whole of it, and it is deliberately not a package — three addresses with no segment, no parameter, and no nested tree
 are what `location.hash` and `hashchange` already are, and the browser keeps the history for us. A fragment rather than
