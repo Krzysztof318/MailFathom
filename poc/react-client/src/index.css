@@ -1,0 +1,76 @@
+/*
+Copyright © 2026 Krzysztof Kasprowicz
+Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+Project repository: https://github.com/Krzysztof318/MailFathom
+*/
+
+@import "tailwindcss";
+
+/* Palette lifted from the Claude Design mockup "MailFathom Demo". */
+@theme {
+  --font-sans: "Instrument Sans", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --color-canvas: #fbfaf8;
+  --color-surface: #ffffff;
+  --color-rail: #f1eee8;
+  --color-sunken: #f7f5f1;
+  --color-line: #e3ded6;
+  --color-hairline: #f0ece5;
+  --color-chrome: #d9d3ca;
+
+  --color-ink: #1b1c1f;
+  --color-ink-soft: #4a4740;
+  --color-muted: #6e6a63;
+  --color-faint: #9b968e;
+
+  --color-accent: oklch(0.55 0.13 258);
+  --color-accent-deep: oklch(0.45 0.13 258);
+  --color-accent-dark: oklch(0.4 0.13 258);
+  --color-accent-wash: #e2ebfa;
+
+  --color-mark: #fdf3d9;
+  --color-mark-edge: oklch(0.7 0.13 80);
+  --color-fresh: oklch(0.52 0.14 150);
+  --color-stale: oklch(0.55 0.14 45);
+  --color-ok-wash: #e8f2e9;
+  --color-warn-wash: #fdf0e4;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  /* A desktop app does not rubber-band or select its own chrome. */
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Message and document text stays selectable — it is the content, not the chrome. */
+.selectable {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+@utility label {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.1em;
+  color: var(--color-muted);
+  text-transform: uppercase;
+}
+
+/* Thin scrollbars everywhere; the mockup shows no browser chrome. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-chrome) transparent;
+}
