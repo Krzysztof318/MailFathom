@@ -227,10 +227,11 @@ Three things follow that are worth knowing before they are discovered.
   a file no build reads. The loop says so rather than exiting silently, since a gate
   that prints nothing reads as a gate that was not run.
 
-Formatting reaches the service solution alone, over the C# files the branch
-changed, since there is no client solution to load. The repairing half is the fast
-loop's and the verifying half the full gate's, and `dotnet format` is never
-invoked by hand in either.
+Each stack formats through its own tool, and the split into a repairing and a
+verifying half is the same on both sides: the fast loop repairs and the full gate
+verifies. `dotnet format` reaches the service solution alone, over the C# files
+the branch changed, and Prettier reaches the pnpm workspace; neither is ever
+invoked by hand, because both already run where they belong.
 
 ### A gate does not prove the same tree twice
 

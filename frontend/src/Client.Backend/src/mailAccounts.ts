@@ -27,6 +27,11 @@ export interface MailAccountDirectory {
     readonly accounts: readonly MailAccount[];
 }
 
+// The most accounts a directory answer may carry before it is refused unread. One owner holds a handful in practice,
+// so the ceiling is far above anything real and exists for the case the answer is not: the array is walked and
+// validated element by element, and a bound applied after that walk is not a bound.
+const maximumAccountsInDirectory = 256;
+
 const synchronizationStates: readonly MailSynchronizationState[] = [
     'NeverSynchronized',
     'Synchronized',
@@ -71,6 +76,10 @@ function parseDirectory(body: string): MailAccountDirectory | null {
     const synchronizationEnabled = record['synchronizationEnabled'];
     const entries = record['accounts'];
     if (typeof synchronizationEnabled !== 'boolean' || !Array.isArray(entries)) {
+        return null;
+    }
+
+    if (entries.length > maximumAccountsInDirectory) {
         return null;
     }
 
