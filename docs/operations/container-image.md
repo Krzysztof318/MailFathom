@@ -318,11 +318,11 @@ Publication runs the gates instead, in an order that spends the cheap ones first
    The migration check is the one worth naming here rather than leaving to `CI`: an image whose committed model
    snapshot describes a schema no migration produces would refuse to start against any database an operator can
    actually have, and a nightly is installable long before a tag exists to catch it.
-2. **The client stack's build and unit suite, and the repository contracts**, both against the same commit and both
+2. **The client stack's build and browser suite, and the repository contracts**, both against the same commit and both
    beside the gate above rather than behind it: the two solutions share no project, and the contract suite installs
    nothing and answers in twenty seconds, so putting either in sequence would delay a verdict without sharpening one.
-   The client's gate blocks the push on both channels — it asserts nothing while that stack carries no build, and the
-   dependency is what makes it block again the moment it does. The contract gate — the licensing headers, the page contracts, and the chart rendered against the
+   The client's gate blocks the push on both channels, and what it asserts is the browser suite: the client's bundle is
+   built and driven in a real browser, so a publication cannot carry a client that does not load. The contract gate — the licensing headers, the page contracts, and the chart rendered against the
    manifests committed beside it — blocks a release and reports on a nightly, which is the same difference the
    vulnerability scan draws and for the same reason: a release is one claim about one commit, and a nightly exists to
    be tried.

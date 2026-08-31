@@ -25,6 +25,14 @@ artifacts/
 node_modules/
 frontend/src/Client.App/dist/
 
+# What driving a browser writes, and neither of them is ever committed: a trace, a screenshot, a video, or a console
+# log of a signed-in client shows somebody's mail, so the rule is that it stays on the machine that captured it.
+# `frontend/.playwright/` is where the committed browser suite retains a failure, named in `frontend/playwright.config.ts`;
+# `.playwright-cli/` is what `@playwright/cli` writes into whichever directory a session started it from, which is why
+# that one is matched at any depth rather than at a path.
+frontend/.playwright/
+.playwright-cli/
+
 # What a documentation build writes beside its own configuration. `api/` is the reference generated from the XML
 # comments in `backend/src/`, and `_site/` is the rendered site when docfx is run without an output directory;
 # `scripts/build-docs-site.sh` writes under `artifacts/` instead, which is ignored above.

@@ -13,11 +13,14 @@
     "typecheck": "tsc --noEmit --project . && tsc --noEmit --project src/Client.Backend && tsc --noEmit --project src/Client.App",
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run",
+    "test:browser": "pnpm build && playwright test",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@playwright/cli": "0.1.18",
+    "@playwright/test": "1.62.1",
     "@types/node": "26.4.0",
     "eslint": "10.9.1",
     "eslint-config-prettier": "10.1.8",

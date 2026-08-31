@@ -4,8 +4,9 @@ These instructions apply under `frontend/` in addition to the repository root in
 `frontend/src/` and `frontend/tests/` alike, which is why they sit here rather than in either of those: a rule stated in
 one of them would be silently absent from the other.
 
-`frontend/src/AGENTS.md` adds what governs the application source, and `frontend/tests/AGENTS.md` what governs the
-suite — which is a directory holding a contract and no test, because a client test sits beside the source it covers.
+`frontend/src/AGENTS.md` adds what governs the application source, and `frontend/tests/AGENTS.md` what governs the two
+suites — a directory holding that contract and the browser suite, because a unit test sits beside the source it covers
+and only the browser suite belongs to neither package.
 Nothing here is restated in either, and nothing here restates [`frontend/README.md`](README.md), which is the workspace's page: the commands, the
 package boundary and the three mechanisms that hold it, the strict compiler settings, the styling, and what the build
 produces. [ADR 0021](../docs/decisions/0021-client-stack-react-typescript-tailwind-tauri-and-pnpm.md) is the decision
@@ -71,12 +72,37 @@ reports the requests the page issued, one request or response body, and what the
 defect and to check your own work before claiming a screen behaves, rather than reasoning about what the code should
 have done.
 
-It is a development tool and not a suite. What it establishes is turned into an assertion `pnpm test` runs, because a
-run in somebody's session proves nothing on the next pull request. It is also not installed by this workspace: it belongs
-to whoever is driving the client, and where it is on a given machine is that machine's own note rather than a fact this
-repository carries.
+It is pinned here like any other dependency, so it is reached as `pnpm exec playwright-cli` from `frontend/` rather than
+from whatever a machine happens to have installed globally, and a browser for it comes from
+`pnpm exec playwright install chromium`. It is a **different package from `@playwright/test`** and the two are not
+interchangeable: this one holds a browser open across invocations for a person or an agent to drive, and that one runs
+the committed suite below. Both are pinned, both are Apache-2.0, and `THIRD_PARTY_LICENSES.md` records them.
+
+Five things a first session gets wrong, and each of them wastes a session rather than failing loudly:
+
+- **Name a browser.** `open` defaults to a Chrome channel and looks for an installation this repository never asked for.
+  Pass `--browser chromium`, which is what `playwright install chromium` provided.
+- **Name a session.** Several agent sessions run on one machine, and an unnamed session is one shared browser between
+  them. Pass `-s=<session>` on every invocation, `list` shows what is open, and `close` ends your own — never somebody
+  else's.
+- **Start it from your own scratch directory, never from a worktree.** It writes snapshots, console logs, and traces
+  into a `.playwright-cli/` directory in the working directory it was started in, and it keeps that directory for the
+  life of the session. `.gitignore` covers the name so a stray run cannot leave untracked files for the full gate to
+  refuse, but the reason for the rule is the next paragraph rather than the gate.
+- **Element refs come from `snapshot`.** The targets `click`, `fill`, and `press` take are the refs its own
+  accessibility snapshot returned. A selector invented from reading the source is the single most common way to spend
+  an afternoon on a locator that never matched anything.
+- **Read its own skill once.** The package ships an agent skill describing every command it has, under
+  `playwright-core/lib/tools/skills/playwright-cli/SKILL.md` in the installed package. It is the current reference and
+  it is shorter than guessing.
+
+It is a development tool and not a suite. What it establishes is turned into an assertion a suite runs — `pnpm test`
+where jsdom can answer it, and `pnpm test:browser` where only a browser can — because a run in somebody's session proves
+nothing on the next pull request. `frontend/tests/AGENTS.md` is where that boundary is drawn.
 
 **A capture of a signed-in client is personal data.** A screenshot, a snapshot, a trace, a video, a console log, and a
 response body from a real deployment each show somebody's mail. They stay in the session's scratch directory and reach
-no issue, no pull request, no commit, and no external service; what travels is a description of what was observed.
-The same holds for a fixture: nothing standing in for mail in this tree comes from a real mailbox.
+no issue, no pull request, no commit, and no external service; what travels is a description of what was observed. That
+is why the directory a session starts the CLI from is part of the rule rather than a detail of it, and it is why the
+committed suite retains its own failures in `frontend/.playwright/` and uploads none of them. The same holds for a
+fixture: nothing standing in for mail in this tree comes from a real mailbox.

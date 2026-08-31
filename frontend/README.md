@@ -11,6 +11,7 @@ pnpm build                       # the static bundle, into src/Client.App/dist/
 pnpm typecheck                   # both packages and eslint.config.ts, under the strict set below
 pnpm lint                        # every rule an error, no warning tolerated
 pnpm test                        # both packages' suites, once, non-interactively
+pnpm test:browser                # build the bundle and drive it in a real browser
 pnpm format                      # rewrite; pnpm format:check reports instead
 ```
 
@@ -54,13 +55,20 @@ maximum as a named entry with its reason, and there is one.
 A lint violation is a build failure. `pnpm lint` runs with `--max-warnings 0`, so a rule the plugins ship as a warning
 still fails — which is what `TreatWarningsAsErrors` and the analyzer set are to the service half of this repository.
 
-## The suite
+## The two suites
 
-`pnpm test` is the whole of how the client is tested, and `vitest.config.ts` declares one Vitest project per package
-because the two are tested differently: `Client.Backend` is ordinary logic run without a DOM, and `Client.App` is
-components rendered into jsdom with React Testing Library. A test file sits beside the source it covers — the package
-boundary above is the reason, and [`tests/AGENTS.md`](tests/AGENTS.md) is where that and the rest of the suite's policy
-are decided.
+`pnpm test` is the unit suite, and `vitest.config.ts` declares one Vitest project per package because the two are tested
+differently: `Client.Backend` is ordinary logic run without a DOM, and `Client.App` is components rendered into jsdom
+with React Testing Library. A test file sits beside the source it covers — the package boundary above is the reason.
+
+`pnpm test:browser` is the other one. It runs `pnpm build`, serves `src/Client.App/dist/` with Vite's preview server,
+and drives it with Playwright, so what it proves is the bundle a deployment publishes rather than the source: the
+application loading, the version the build stamped, the screen rendering through roles and accessible names, the
+browser's own back navigation, and the requests the page actually issued. It needs a browser of its own —
+`pnpm exec playwright install chromium` — which is why neither verification gate runs it and the pipeline does, on every
+pull request that reaches this stack. Its configuration is `playwright.config.ts` and its specs are under `tests/`.
+
+[`tests/AGENTS.md`](tests/AGENTS.md) is where both suites' policy is decided, including which check belongs to which.
 
 ## Whitespace is decided in `.editorconfig`
 

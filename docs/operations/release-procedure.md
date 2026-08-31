@@ -292,8 +292,8 @@ verifies a download against, and it is the whole of what the release offers for 
 No client is published at all. The Uno Platform client whose desktop head this release used to attach was withdrawn —
 the platform did not work out for this project — and the client is being rebuilt in React, so no archive is attached
 here and no browser head travels inside the image. The client stack's gate is still called and still blocks the image,
-and it asserts nothing while that stack carries no build; the release notes say the same thing to whoever is looking
-for a download.
+and what it asserts is the browser suite: the bundle is built and driven in a real browser, so a release cannot be cut
+over a client that does not load. The release notes still say there is no download to whoever is looking for one.
 
 The chart is published **after** the image and **against the digest it produced**, because a chart names the image it
 deploys: before pushing, the run renders the packaged chart against that digest and refuses to publish one that would

@@ -1,8 +1,9 @@
 # Client Test Instructions
 
 These instructions govern every test in the client stack, in addition to the repository root instructions. They are
-reached from the root table rather than from the directory a test sits in, because a client test does not sit here: this
-directory holds the contract and no test, for the reason the first section gives.
+reached from the root table rather than from the directory a test sits in, because most of the client's tests do not sit
+here: a unit test sits beside the source it covers, and this directory holds the contract beside the one suite that
+belongs to neither package. The first section says why the two are placed differently.
 
 `backend/tests/AGENTS.md` is the same file for the service, and the two share only what the root one states for both.
 Nothing below translates a C# convention into TypeScript; where the service's answer does not survive the stack, the
@@ -18,16 +19,22 @@ question is answered again rather than reworded.
   could reach one only through a relative path out of the package, which is the one thing that boundary exists to
   refuse. A test inside the package inherits it instead: a `Client.Backend` test cannot import React, exactly as its
   source cannot, and nothing has to check that it did not.
-- `frontend/tests/` therefore holds this file alone. It is the contract's address, not the suite's, and a test written
-  here would resolve neither package.
-- No `include` glob is configured, so what makes a file part of the suite is that name and nothing else. A helper a test
-  imports is an ordinary module and carries no `.test.` in its name.
+- `frontend/tests/` therefore holds this file and the browser suite beside it, and nothing else. A unit test written
+  here would resolve neither package, which is the whole of the argument above; the browser suite is what can live here
+  precisely because it imports neither — it drives a built bundle over HTTP rather than importing a module out of one.
+- **The two suites are told apart by the name.** A unit test is `*.test.ts` or `*.test.tsx` beside its source; a browser
+  spec is `*.spec.ts` under this directory. Each runner's default finds its own and neither finds the other's, so a file
+  named for the wrong one silently joins the wrong suite — and a browser spec run by Vitest would fail on an import
+  Playwright supplies.
+- Neither runner is given an `include` glob, so what makes a file part of a suite is its name and nothing else. A helper
+  either suite imports is an ordinary module and carries neither marker in its name.
 
-## The runner
+## The unit runner
 
-- **`pnpm test` is the whole of how the suite runs**, locally and in CI. It is `vitest run` — one pass, non-interactive,
-  both packages — and there is no second invocation to drift from it. Both verification gates run it for any change
-  reaching the client stack.
+- **`pnpm test` is the whole of how the unit suite runs**, locally and in CI. It is `vitest run` — one pass,
+  non-interactive, both packages — and there is no second invocation to drift from it. Both verification gates run it
+  for any change reaching the client stack. `pnpm test:browser` is the other suite and runs elsewhere, which
+  [the browser suite](#the-browser-suite) below decides.
 - `frontend/vitest.config.ts` declares one project per package, because the two are tested differently: `Client.Backend`
   under `node` and `Client.App` under `jsdom`. A test that needs a DOM in the first project has been written in the
   wrong package.
@@ -90,7 +97,7 @@ question is answered again rather than reworded.
   part of what the screen is being proven against; faking them leaves a test that asserts a screen renders whatever it
   was handed.
 - No mock service worker, no request-interception package, and no local HTTP server. A real exchange belongs to the
-  browser harness below.
+  browser suite below.
 
 ## Time and randomness
 
@@ -113,12 +120,43 @@ question is answered again rather than reworded.
 - Vitest runs files in parallel workers, so a test shares nothing with another file: no fixture written at module
   scope and read across files, no temporary directory, no port, and no environment variable.
 
-## What belongs in the browser harness instead
+## The browser suite
 
-The Playwright harness [#1404](https://github.com/Krzysztof318/MailFathom/issues/1404) establishes is where a check goes
-that this suite structurally cannot make. **This suite starts no browser and no server**, so a claim that needs real
-layout or geometry, real navigation between screens, a real network exchange, a real credential, or a running
-deployment belongs there. Moving such a check is the answer; dropping it is not.
+`pnpm test:browser` is the second suite, and it is the answer to everything the first one structurally cannot make.
+**`pnpm test` starts no browser and no server**, so a claim that needs real layout or geometry, real navigation, the
+back gesture, a real network exchange, or the built bundle rather than the source belongs here. Moving such a check is
+the answer; dropping it is not, and neither is asserting it in jsdom where it would pass for the wrong reason.
+
+- **It runs against the built bundle, never the development server.** `pnpm test:browser` runs `pnpm build` and then
+  Playwright, whose configuration starts Vite's preview server over `src/Client.App/dist/`. A development server
+  transforms modules on demand, so a screen proven against one has not been proven against the directory of static
+  files a deployment publishes — which is half of what this suite is for.
+- **A check earns its place here by being unanswerable in jsdom.** Rendering a component with a value handed to it, a
+  branch, a label, a failure message: all of that is faster and clearer in `pnpm test`, and duplicating it here buys a
+  slower copy. What only a browser answers is the bundle, the document's history, layout and geometry, and the requests
+  the page actually issued.
+- **The same rule about what a test asserts holds**, and this suite has no exemption from it: a role first, then the
+  text a person would read. Playwright's `getByRole` is the same query React Testing Library's is. No CSS selector, no
+  `data-testid`, no coordinate, and no assertion on a class name.
+- **The service is not started and no credential is used.** The bundle carries `stubMailFathom`, so what the client
+  reads is a canned body and the suite proves the screen rather than a deployment. Driving a real deployment is the
+  agent's own work with `@playwright/cli`, which `frontend/AGENTS.md` covers, and it is not this suite.
+- **Nothing here retries.** A check that passes on a second attempt has reported that the client is flaky rather than
+  that it works.
+- **A failure keeps its trace and its screenshot in `frontend/.playwright/`, which Git ignores and nothing uploads.**
+  That is a privacy decision rather than a storage one: the moment this suite drives anything but the stub, a capture
+  shows somebody's mail, and an artifact anybody with the run's link can download is the wrong place for it. A pipeline
+  failure is therefore read from the job log and reproduced locally — where the trace is, on the machine that produced
+  it.
+- **Where it runs is decided**: on every pull request that reaches the client stack, in
+  `.github/workflows/build-test-frontend.yml`, which carries the argument for that rather than nightly or local-only.
+  Neither verification gate runs it, because it needs a browser install the gates would otherwise demand of every
+  machine.
+
+Two things it does not cover yet, because the client does not have them. There is no router, so the only navigation
+there is to check is the browser's own — leaving the client and coming back to it — and an in-application back gesture
+is asserted here on the day one exists. And nothing goes over the wire to a service, because the transport is stubbed
+inside the bundle, so what is asserted about the network today is that the client reaches its own origin and no other.
 
 ## Coverage
 

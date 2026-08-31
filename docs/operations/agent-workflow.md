@@ -166,12 +166,14 @@ under `backend/` builds and tests `backend/MailFathom.slnx`, a change under
 `frontend/` reaches the client stack, a change to a file above both reaches both,
 and a documentation-only change reaches neither.
 
-**The client stack's flow is nothing today, and both gates say so.** The Uno
-Platform client was withdrawn and the client is being rebuilt in React, so
-`frontend/` holds two placeholder directories and no solution to restore. What is
-kept is the detection rather than the work, because that is what the flow
-replacing it will be hung on — and a gate that reached the client stack and
-printed nothing would read as a gate that was not run.
+**One client check is deliberately outside both gates.** `pnpm test:browser`
+builds the bundle, serves it, and drives it in a real browser, so it needs a
+browser install of its own; running it on every client change would put a
+300 MB prerequisite in front of the loop for a check the pipeline makes on every
+pull request that reaches the client. `.github/workflows/build-test-frontend.yml`
+carries the argument for gating it there rather than nightly or locally, and
+`frontend/tests/AGENTS.md` says which checks belong to it rather than to
+`pnpm test`.
 
 `ci.yml` has answered the same question since the client existed, in its
 `detect-changes` job, and the gates answer it from the same two lists rather than

@@ -178,8 +178,9 @@ jobs:
 
   # The client stack's half of the same gate, against the same revision and with the same one switch turned off. It is
   # a second job rather than a switch on the one above because the two stacks share no solution, no build contract,
-  # and no package pins. It asserts nothing today — the Uno client was withdrawn and the React one has not landed —
-  # and it is kept called so that the job which replaces it gates this publication without a change here.
+  # and no package pins. What it asserts today is the browser suite: the bundle is built and driven in a real browser,
+  # which is the client check no other job can make. The linter, the type check, and the unit suites join it there and
+  # gate this publication from the same call rather than from a change here.
   verify-client:
     name: Build and test the client
     needs:

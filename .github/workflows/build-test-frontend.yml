@@ -4,21 +4,27 @@
 
 name: Build and test the frontend
 
-# The client stack's half of the required check, and it asserts nothing today. The Uno Platform client this workflow
-# compiled was withdrawn and the client is being rebuilt in React, so `frontend/` holds two placeholder directories and
-# no build. What is kept is the wiring rather than the work: the `workflow_call` contract below, the `Frontend` job of
-# `CI` that calls it, the `frontend` path filter that decides whether it runs, and the callers in `nightly.yml` and
-# `release.yml` that gate a publication on it. Filling the job in for the new stack is then a change to this file
-# alone, rather than a reconstruction of every caller that had learned to stop expecting one.
+# The client stack's half of the required check. What it asserts today is the browser suite and nothing else: the Uno
+# Platform client this workflow used to compile was withdrawn, the React client's build and unit suite are #1400's to
+# put back, and #1404 decided that the one check that cannot be run anywhere else runs here. So the job below builds
+# the bundle and drives it in a real browser, and the linter, the type check, and the unit suites join it beside those
+# steps rather than replacing them.
+#
+# **Why a browser check is gated on a pull request rather than left local or deferred to a nightly.** What it covers is
+# what jsdom structurally cannot answer — the built bundle rather than the source, a real document with a history, and
+# the requests a browser actually issued — which is exactly the class of break nobody notices while writing a screen.
+# A nightly finds it the morning after the merge and names a run at 02:00 rather than the change that caused it, and a
+# local-only suite is a suite whoever is in a hurry does not run. It costs a browser download, which the cache below
+# makes a one-off per lock file, and about a minute of runner time on a change that reaches the client at all — the
+# `frontend` path filter in `ci.yml` is what keeps every other change from paying it.
 #
 # `build-test-format-and-migrations.yml` is the same arrangement for the server, and the two deliberately share nothing
 # but the `CI` workflow that calls them.
 #
-# The two inputs are kept for the same reason the job is. `ref` is what lets a release and a nightly check the revision
-# they resolved once rather than whatever a ref points at by the time the job starts, and `run-format` is the switch
-# every caller already passes to both stacks: formatting is the one verdict a pull request settles for good, so it is
-# asked there and on no publication. Neither is read while the job below does nothing, and both are what the callers
-# already send.
+# The two inputs keep the contract every caller already sends. `ref` is what lets a release and a nightly check the
+# revision they resolved once rather than whatever a ref points at by the time the job starts, and `run-format` is the
+# switch every caller passes to both stacks: formatting is the one verdict a pull request settles for good, so it is
+# asked there and on no publication. `run-format` is read by nothing here until the formatting pass #1400 owns lands.
 on:
   workflow_call:
     inputs:
@@ -37,14 +43,60 @@ permissions:
   contents: read
 
 jobs:
-  build-and-unit-test-client:
-    name: Client stack, which carries no build yet
+  build-and-check-client-in-a-browser:
+    name: Build the client and check it in a real browser
     runs-on: ubuntu-latest
     steps:
-      # Nothing is checked out, no SDK is installed, and no toolchain is restored, because there is nothing under
-      # `frontend/` for any of them to read. A job that succeeds having done nothing is the honest report while that
-      # is true; a job removed instead would take the caller wiring with it.
-      - name: Report that the client stack carries no build
-        run: |
-          echo 'The Uno Platform client was withdrawn and the React client has not landed yet, so there is nothing'
-          echo 'under frontend/ to restore, build, test, or format. See frontend/src/README.md.'
+      # A full checkout rather than a shallow one, because the client's build reads `Version.props` through
+      # `scripts/read-declared-version.sh` and the browser suite asserts the number that reached the bundle.
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      # `engines.node` in the client's manifest is where the Node version is decided, so it is read from there rather
+      # than restated here — a second copy is a second thing to move when the floor does.
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend/package.json
+
+      # Corepack no longer ships with Node, so pnpm is installed rather than shimmed, and `packageManager` in the
+      # manifest is what says which version — the same field that says which pnpm wrote the lock file.
+      - name: Install pnpm
+        run: npm install --global "$(jq --raw-output .packageManager frontend/package.json)"
+
+      # The store rather than `node_modules`, which is what pnpm hard-links from. The lock file is the whole key: it
+      # fixes the resolved closure, so a key that ignored it would serve packages resolved under different pins.
+      - name: Resolve the pnpm store directory
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the pnpm store
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+
+      - name: Restore the client workspace
+        run: pnpm --dir frontend install --frozen-lockfile
+
+      # Which browser build Playwright downloads is decided by the Playwright version, which the lock file pins, so the
+      # same key covers both. Without this the browser is fetched on every run of every client change.
+      - name: Cache the browser Playwright downloads
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+
+      # `--with-deps` installs the shared libraries the browser needs from apt, which the cache above does not hold and
+      # which a GitHub-hosted runner does not carry. Chromium alone: `frontend/playwright.config.ts` says why.
+      - name: Install the browser
+        run: pnpm --dir frontend exec playwright install --with-deps chromium
+
+      # Builds the bundle and drives it. Nothing is uploaded afterwards, by design rather than by omission: a trace or
+      # a screenshot of a client is personal data the moment this drives a real deployment instead of the stubbed
+      # transport, so a failure is read from this log and reproduced locally rather than downloaded from a run.
+      - name: Check the built client in a real browser
+        run: pnpm --dir frontend run test:browser
