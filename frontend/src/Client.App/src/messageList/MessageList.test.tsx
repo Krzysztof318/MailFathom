@@ -1,0 +1,509 @@
+// Copyright © 2026 Krzysztof Kasprowicz
+// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Project repository: https://github.com/Krzysztof318/MailFathom
+
+import type { ReactElement } from 'react';
+import { fireEvent, render, screen, within, type RenderResult } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
+import type { ClientRequest, ClientSession, MailAccount, MailFathomTransport } from '@mailfathom/client-backend';
+import { LocalizationProvider } from '../localization/Localization';
+import { everything, type MailScope } from '../workspace/mailScope';
+import { WorkspaceProvider } from '../workspace/Workspace';
+import { useWorkspace, type Workspace } from '../workspace/useWorkspace';
+import { rowsPerPage } from './listing';
+import { MessageList } from './MessageList';
+import { rememberedListing, rememberListing } from './rememberedListings';
+
+const session: ClientSession = { baseAddress: 'https://mail.example.invalid', authorization: 'Basic dGVzdA==' };
+
+const work: MailAccount = {
+    id: 'work',
+    displayName: 'Work',
+    synchronizationState: 'Synchronized',
+    lastSynchronizedAt: '2026-08-31T09:41:00+00:00',
+    behind: false,
+};
+
+function message(at: number, carried: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+        id: `message-${String(at)}`,
+        account: 'work',
+        folder: 'INBOX',
+        threadId: null,
+        subject: `Message ${String(at)}`,
+        receivedAt: '2026-08-31T09:41:00+00:00',
+        sentAt: null,
+        senderAddress: `writer-${String(at)}@nordwind.example`,
+        senderDisplayName: `Writer ${String(at)}`,
+        toAddresses: ['owner@example.invalid'],
+        unread: false,
+        flagged: false,
+        answered: false,
+        hasAttachments: false,
+        attachmentCount: 0,
+        sizeOctets: 1_024,
+        preview: `The opening of message ${String(at)}.`,
+        ...carried,
+    };
+}
+
+function pageOf(rows: readonly unknown[], cursors: Record<string, unknown> = {}): string {
+    return JSON.stringify({
+        emails: rows,
+        nextCursor: null,
+        previousCursor: null,
+        pageSize: rowsPerPage,
+        ...cursors,
+    });
+}
+
+const wholeFolder = pageOf(Array.from({ length: rowsPerPage }, (_, at) => message(at)));
+
+function answering(body: string, status = 200): MailFathomTransport {
+    return () => Promise.resolve({ status, body, headers: {} });
+}
+
+function recording(body: string): { transport: MailFathomTransport; requests: ClientRequest[] } {
+    const requests: ClientRequest[] = [];
+
+    return {
+        requests,
+        transport: (request) => {
+            requests.push(request);
+
+            return Promise.resolve({ status: 200, body, headers: {} });
+        },
+    };
+}
+
+// What the list wrote, read back the way the rest of the client will read it: out of the workspace rather than out of
+// the component that wrote it.
+function SelectionProbe() {
+    const { workspace } = useWorkspace();
+
+    return <output>{JSON.stringify(workspace)}</output>;
+}
+
+function carried(): Workspace {
+    const probe = screen.getAllByRole('status').find((element) => element.textContent.startsWith('{'));
+
+    return JSON.parse(probe?.textContent ?? '') as Workspace;
+}
+
+function listUnder(
+    transport: MailFathomTransport,
+    { scope = everything, accounts = [work], online = true }: Partial<Drawn> = {},
+): ReactElement {
+    return (
+        <LocalizationProvider>
+            <WorkspaceProvider>
+                <MessageList
+                    session={session}
+                    transport={transport}
+                    scope={scope}
+                    accounts={accounts}
+                    online={online}
+                />
+                <SelectionProbe />
+            </WorkspaceProvider>
+        </LocalizationProvider>
+    );
+}
+
+interface Drawn {
+    readonly scope: MailScope;
+    readonly accounts: readonly MailAccount[];
+    readonly online: boolean;
+}
+
+function renderList(transport: MailFathomTransport, drawn: Partial<Drawn> = {}): RenderResult {
+    return render(listUnder(transport, drawn));
+}
+
+// Inside the list rather than in the document, because the order control is a `select` and its choices are options
+// too — a query across the document would answer with those first.
+async function rows(): Promise<HTMLElement[]> {
+    const list = await screen.findByRole('listbox', { name: 'Messages' });
+
+    return within(list).getAllByRole('option');
+}
+
+// By what it is about, which is the one part of a row's name nothing else abuts on both sides: the name runs its parts
+// together, so the subject is matched with the first word of the preview behind it — which is what keeps the row for
+// message one from also being the row for message ten.
+function row(at: number): HTMLElement {
+    const list = screen.getByRole('listbox', { name: 'Messages' });
+
+    return within(list).getByRole('option', { name: new RegExp(`Message ${String(at)}The opening`) });
+}
+
+afterEach(() => {
+    window.sessionStorage.clear();
+});
+
+describe('MessageList', () => {
+    it('says it is reading from the moment the read starts, where the mail will appear', () => {
+        renderList(() => new Promise(() => undefined));
+
+        expect(screen.getByText('Reading your mail…')).toBeDefined();
+    });
+
+    it('draws a row carrying who wrote, what about, when, and the opening of the message', async () => {
+        renderList(answering(wholeFolder));
+
+        const drawn = await rows();
+
+        expect(drawn[0]?.textContent).toContain('Writer 0');
+        expect(drawn[0]?.textContent).toContain('Message 0');
+        expect(drawn[0]?.textContent).toContain('The opening of message 0.');
+        expect(drawn[0]?.querySelector('time')?.getAttribute('datetime')).toBe('2026-08-31T09:41:00+00:00');
+    });
+
+    it('says what the mail server last reported about a message, in words rather than in a mark alone', async () => {
+        const marked = pageOf([
+            message(0, { unread: true, flagged: true, answered: true, hasAttachments: true, attachmentCount: 3 }),
+        ]);
+
+        renderList(answering(marked));
+
+        const drawn = await rows();
+
+        expect(drawn[0]?.textContent).toContain('Unread');
+        expect(drawn[0]?.textContent).toContain('Flagged');
+        expect(drawn[0]?.textContent).toContain('Answered');
+        expect(drawn[0]?.textContent).toContain('3 attached');
+    });
+
+    it('holds far fewer rows in the document than the page it read', async () => {
+        renderList(answering(wholeFolder));
+
+        expect((await rows()).length).toBeLessThan(rowsPerPage / 2);
+    });
+
+    it('asks for the folder the scope names rather than for every folder', async () => {
+        const { transport, requests } = recording(wholeFolder);
+
+        renderList(transport, { scope: { kind: 'folder', accountId: 'work', alias: 'ARCHIVE-2024' } });
+        await rows();
+
+        expect(requests[0]?.path).toContain('account=work');
+        expect(requests[0]?.path).toContain('folder=ARCHIVE-2024');
+    });
+
+    it('continues from the cursor the folder was left at rather than from its leading end', async () => {
+        rememberListing(session.baseAddress, everything, {
+            order: 'newestFirst',
+            filters: { unread: null, flagged: null, hasAttachments: null, includeJunk: false },
+            cursor: 'where-they-were',
+            readAs: 'forward',
+            rowInPage: 3,
+        });
+
+        const { transport, requests } = recording(wholeFolder);
+
+        renderList(transport);
+        await rows();
+
+        expect(requests[0]?.path).toContain('cursor=where-they-were');
+    });
+
+    it('says what failed and offers the way out of the one failure a second attempt answers', async () => {
+        renderList(answering('', 503));
+
+        expect(await screen.findByText('This folder could not be read: unavailable.')).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Try again' })).toBeDefined();
+    });
+
+    it('offers no second attempt for a failure that repeats identically', async () => {
+        renderList(answering('', 403));
+
+        expect(await screen.findByText('This folder could not be read: unauthorized.')).toBeDefined();
+        expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    });
+
+    it('says an empty folder is empty', async () => {
+        renderList(answering(pageOf([])));
+
+        expect(await screen.findByText('There is no mail in this folder.')).toBeDefined();
+    });
+
+    it('tells a folder nothing has been taken into yet apart from an empty one', async () => {
+        renderList(answering(pageOf([])), { accounts: [{ ...work, synchronizationState: 'NeverSynchronized' }] });
+
+        expect(
+            await screen.findByText(
+                'Nothing has been taken into this deployment from this mailbox yet, so there is nothing to show. The folder is not empty — it has not been read.',
+            ),
+        ).toBeDefined();
+    });
+
+    it('says a mailbox that stopped synchronizing may be holding less than the mail server does', async () => {
+        renderList(answering(pageOf([])), { accounts: [{ ...work, synchronizationState: 'Unreachable' }] });
+
+        expect(
+            await screen.findByText(
+                'This mailbox stopped synchronizing, so what is here may be less than the mail server holds.',
+            ),
+        ).toBeDefined();
+    });
+
+    it('says nothing matched where the reader narrowed the list themselves', async () => {
+        renderList(answering(pageOf([])));
+
+        await screen.findByText('There is no mail in this folder.');
+        fireEvent.click(screen.getByLabelText('Only unread'));
+
+        expect(
+            await screen.findByText('No message in this folder matches what the list is narrowed to.'),
+        ).toBeDefined();
+    });
+
+    it('says the machine is offline rather than reporting a deployment that did not answer', () => {
+        renderList(answering(wholeFolder), { online: false });
+
+        expect(
+            screen.getByText('This machine is offline. The client reconnects on its own when the network comes back.'),
+        ).toBeDefined();
+    });
+
+    it('reads the folder again under a filter the reader turned on, from its leading end', async () => {
+        const { transport, requests } = recording(wholeFolder);
+
+        renderList(transport);
+        await rows();
+        fireEvent.click(screen.getByLabelText('Only unread'));
+        await rows();
+
+        expect(requests.at(-1)?.path).toContain('unread=true');
+        expect(requests.at(-1)?.path).not.toContain('cursor=');
+    });
+
+    it('reads the folder again in the order the reader chose', async () => {
+        const { transport, requests } = recording(wholeFolder);
+
+        renderList(transport);
+        await rows();
+        fireEvent.change(screen.getByLabelText('Order'), { target: { value: 'oldestFirst' } });
+        await rows();
+
+        expect(requests.at(-1)?.path).toContain('order=oldestFirst');
+    });
+
+    it('keeps the order and the filters with the folder, so returning to it reads it the same way', async () => {
+        renderList(answering(wholeFolder));
+
+        await rows();
+        fireEvent.change(screen.getByLabelText('Order'), { target: { value: 'oldestFirst' } });
+        await rows();
+
+        expect(rememberedListing(session.baseAddress, everything).order).toBe('oldestFirst');
+    });
+
+    it('offers no junk control for a folder the reader has already pointed at', async () => {
+        renderList(answering(wholeFolder), { scope: { kind: 'folder', accountId: 'work', alias: 'Spam' } });
+
+        await rows();
+
+        expect(screen.queryByLabelText('Include junk')).toBeNull();
+    });
+
+    it('selects one message and opens it when it is pointed at', async () => {
+        renderList(answering(wholeFolder));
+
+        await rows();
+        fireEvent.pointerDown(row(2));
+
+        expect(carried().selected).toStrictEqual(['message-2']);
+        expect(carried().selection).toBe('message-2');
+    });
+
+    it('adds a message to the selection when the pointer holds the modifier key', async () => {
+        renderList(answering(wholeFolder));
+
+        await rows();
+        fireEvent.pointerDown(row(1));
+        fireEvent.pointerDown(row(3), { ctrlKey: true });
+
+        expect(carried().selected).toStrictEqual(['message-1', 'message-3']);
+    });
+
+    it('takes a message out of the selection when the modifier key picks it a second time', async () => {
+        renderList(answering(wholeFolder));
+
+        await rows();
+        fireEvent.pointerDown(row(1));
+        fireEvent.pointerDown(row(3), { ctrlKey: true });
+        fireEvent.pointerDown(row(3), { ctrlKey: true });
+
+        expect(carried().selected).toStrictEqual(['message-1']);
+    });
+
+    it('selects the run between the anchor and the message shift reached', async () => {
+        renderList(answering(wholeFolder));
+
+        await rows();
+        fireEvent.pointerDown(row(1));
+        fireEvent.pointerDown(row(4), { shiftKey: true });
+
+        expect(carried().selected).toStrictEqual(['message-1', 'message-2', 'message-3', 'message-4']);
+    });
+
+    it('selects the run a pointer dragged over', async () => {
+        renderList(answering(wholeFolder));
+
+        await rows();
+        fireEvent.pointerDown(row(1));
+        fireEvent.pointerEnter(row(3));
+
+        expect(carried().selected).toStrictEqual(['message-1', 'message-2', 'message-3']);
+    });
+
+    it('stops selecting once the pointer is let go, wherever that happened', async () => {
+        renderList(answering(wholeFolder));
+
+        await rows();
+        fireEvent.pointerDown(row(1));
+        fireEvent.pointerUp(window);
+        fireEvent.pointerEnter(row(3));
+
+        expect(carried().selected).toStrictEqual(['message-1']);
+    });
+
+    it('picks messages out one at a time under a finger, once the selection mode is on', async () => {
+        renderList(answering(wholeFolder));
+
+        await rows();
+        fireEvent.click(screen.getByLabelText('Select several'));
+        fireEvent.pointerDown(row(1));
+        fireEvent.pointerDown(row(3));
+
+        expect(carried().selected).toStrictEqual(['message-1', 'message-3']);
+    });
+
+    it('leaves what is open alone while messages are being picked out for a question', async () => {
+        renderList(answering(wholeFolder));
+
+        await rows();
+        fireEvent.click(screen.getByLabelText('Select several'));
+        fireEvent.pointerDown(row(1));
+
+        expect(carried().selection).toBeNull();
+    });
+
+    it('says how many messages are picked out', async () => {
+        renderList(answering(wholeFolder));
+
+        await rows();
+        fireEvent.pointerDown(row(1));
+        fireEvent.pointerDown(row(3), { ctrlKey: true });
+
+        expect(screen.getByText('2 selected')).toBeDefined();
+    });
+
+    it('moves through the list from the keyboard and selects what it moves onto', async () => {
+        renderList(answering(wholeFolder));
+
+        const drawn = await rows();
+
+        fireEvent.keyDown(screen.getByRole('listbox', { name: 'Messages' }), { key: 'ArrowDown' });
+
+        expect(carried().selected).toStrictEqual(['message-1']);
+        expect(drawn[1]?.getAttribute('tabindex')).toBe('0');
+    });
+
+    it('opens the message the keyboard is on', async () => {
+        renderList(answering(wholeFolder));
+
+        await rows();
+        const list = screen.getByRole('listbox', { name: 'Messages' });
+
+        fireEvent.keyDown(list, { key: 'ArrowDown' });
+        fireEvent.keyDown(list, { key: 'Enter' });
+
+        expect(carried().selection).toBe('message-1');
+    });
+
+    it('picks a message out from the keyboard without opening it', async () => {
+        renderList(answering(wholeFolder));
+
+        await rows();
+        const list = screen.getByRole('listbox', { name: 'Messages' });
+
+        fireEvent.keyDown(list, { key: 'ArrowDown', ctrlKey: true });
+        fireEvent.keyDown(list, { key: ' ' });
+
+        expect(carried().selected).toStrictEqual(['message-1']);
+        expect(carried().selection).toBeNull();
+    });
+
+    it('extends the selection when the keyboard moves with shift held', async () => {
+        renderList(answering(wholeFolder));
+
+        await rows();
+        const list = screen.getByRole('listbox', { name: 'Messages' });
+
+        fireEvent.keyDown(list, { key: 'ArrowDown' });
+        fireEvent.keyDown(list, { key: 'ArrowDown', shiftKey: true });
+
+        expect(carried().selected).toStrictEqual(['message-1', 'message-2']);
+    });
+
+    it('reports the list as one whose length no page answers, rather than as one the length of what is held', async () => {
+        renderList(answering(wholeFolder));
+
+        expect((await rows())[0]?.getAttribute('aria-setsize')).toBe('-1');
+    });
+
+    it.each([
+        ['Only flagged', 'flagged=true'],
+        ['Only with attachments', 'hasAttachments=true'],
+        ['Include junk', 'includeJunk=true'],
+    ])('reads the folder again under %s', async (control, asked) => {
+        const { transport, requests } = recording(wholeFolder);
+
+        renderList(transport);
+        await rows();
+        fireEvent.click(screen.getByLabelText(control));
+        await rows();
+
+        expect(requests.at(-1)?.path).toContain(asked);
+    });
+
+    it('draws a message carrying no subject as one with no subject rather than as a blank line', async () => {
+        renderList(answering(pageOf([message(0, { subject: null })])));
+
+        expect((await rows())[0]?.textContent).toContain('No subject');
+    });
+
+    it('draws a message whose sender could not be read as one with no sender', async () => {
+        renderList(answering(pageOf([message(0, { senderDisplayName: null, senderAddress: null, toAddresses: [] })])));
+
+        expect((await rows())[0]?.textContent).toContain('No sender');
+    });
+
+    it('falls back to who a message was written to where it carries no sender at all', async () => {
+        renderList(answering(pageOf([message(0, { senderDisplayName: null, senderAddress: null })])));
+
+        expect((await rows())[0]?.textContent).toContain('owner@example.invalid');
+    });
+
+    it('draws no time for a message no header carried a usable date on', async () => {
+        renderList(answering(pageOf([message(0, { receivedAt: null })])));
+
+        expect((await rows())[0]?.querySelector('time')).toBeNull();
+    });
+
+    it('draws no time where the date is one no clock produced, rather than the words for an invalid one', async () => {
+        renderList(answering(pageOf([message(0, { receivedAt: 'the day before yesterday' })])));
+
+        expect((await rows())[0]?.querySelector('time')).toBeNull();
+    });
+
+    it('says the whole of a folder has been read once both its cursors are spent', async () => {
+        renderList(answering(wholeFolder));
+
+        await rows();
+
+        expect(screen.getByText('That is the whole of this folder.')).toBeDefined();
+    });
+});

@@ -9,6 +9,8 @@ import { forgetDeployment, storeDeployment, type AdoptedDeployment } from './dep
 import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { FolderTree } from './folders/FolderTree';
 import { useLocalization } from './localization/useLocalization';
+import { MessageList } from './messageList/MessageList';
+import { forgetListings } from './messageList/rememberedListings';
 import { ReadingPane } from './readingPane/ReadingPane';
 import { useSpace } from './routing/useSpace';
 import { offers, spacesOffered, withheldFrom } from './shell/capabilities';
@@ -22,13 +24,8 @@ import { useConnection } from './shell/useConnection';
 import { CredentialNotices, type CredentialNotice } from './signIn/CredentialNotices';
 import type { CredentialStore } from './signIn/credentialStore';
 import { SignIn } from './signIn/SignIn';
-import { emptyWorkspace } from './workspace/useWorkspace';
-import { useWorkspace } from './workspace/useWorkspace';
-
-// Which message the reading pane draws is the message list's to decide, and that list is not built yet. Until it is,
-// the Mail space opens one message by identifier — which is what makes the pane reachable in a browser at all, and is
-// the only reason this constant is here rather than a value the screen was handed.
-const provingRead = '00000000-0000-4000-8000-000000000000';
+import { scopeKey } from './workspace/mailScope';
+import { emptyWorkspace, useWorkspace } from './workspace/useWorkspace';
 
 // The frame Discover, Mail, and Cases are held in, and the only thing in the client that survives moving between them.
 // It is one tree laid out two ways by the width it is given — a rail beside a workspace, or bottom navigation under a
@@ -53,12 +50,12 @@ export function App({
     readonly credentials: CredentialStore;
     readonly send: DeploymentTransport;
 }) {
-    const { revise } = useWorkspace();
+    const { workspace, revise } = useWorkspace();
     const [adopted, setAdopted] = useState(deployment);
     const [authorization, setAuthorization] = useState(signedInWith);
     const [notices, setNotices] = useState<readonly CredentialNotice[]>([]);
     const baseAddress = adopted === null ? null : adopted.deployment.baseAddress;
-    const workspace = useRef<HTMLDivElement>(null);
+    const workspaceRegion = useRef<HTMLDivElement>(null);
     const focusedFor = useRef(authorization);
 
     // Built once per address and credential rather than per render, because it is what the message read below depends
@@ -93,7 +90,7 @@ export function App({
         focusedFor.current = authorization;
 
         if (authorization !== null) {
-            workspace.current?.focus();
+            workspaceRegion.current?.focus();
         }
     }, [authorization]);
 
@@ -107,6 +104,7 @@ export function App({
         setNotices(['credentialNoLongerAccepted']);
         setAuthorization(null);
         revise(emptyWorkspace);
+        forgetListings();
 
         if (baseAddress === null) {
             return;
@@ -138,6 +136,12 @@ export function App({
 
         setNotices([]);
 
+        // Signing in is somebody arriving rather than somebody returning: a tab whose credential was not kept can be
+        // signed into by a second person, and what the first one was looking at and where they were reading is theirs.
+        // A reload of a signed-in client does not pass through here, so what survives a reload still survives one.
+        revise(emptyWorkspace);
+        forgetListings();
+
         // The screen has already said how long the password will be kept, so a store that refused the write says so
         // rather than leaving somebody to discover it by being asked for the password again at the next start. This
         // one is read inside the frame: signing in worked, and what failed is only the keeping.
@@ -160,6 +164,7 @@ export function App({
         setNotices([]);
         setAuthorization(null);
         revise(emptyWorkspace);
+        forgetListings();
 
         if (adopted !== null) {
             void credentials.forget(adopted.deployment).then((removed) => {
@@ -192,7 +197,7 @@ export function App({
 
     return (
         <div className="flex h-dvh flex-col bg-rail pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left workspace:flex-row">
-            <div ref={workspace} tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col bg-page">
+            <div ref={workspaceRegion} tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col bg-page">
                 <header className="flex flex-wrap items-center gap-3 border-b border-line-soft bg-panel px-4 py-2 workspace:px-8">
                     <ConnectionSummary connection={connection} />
 
@@ -238,12 +243,27 @@ export function App({
                                 <FolderTree session={session} transport={readMail} online={connection.online} />
                             )
                         }
+                        list={
+                            session === null || !readsMail ? null : (
+                                // Keyed by the scope, so pointing at another mailbox starts a list rather than resets
+                                // one: every value the list holds belongs to one folder read one way, and there is no
+                                // correct way to carry any of it across.
+                                <MessageList
+                                    key={scopeKey(workspace.scope)}
+                                    session={session}
+                                    transport={readMail}
+                                    scope={workspace.scope}
+                                    accounts={mailAccounts}
+                                    online={connection.online}
+                                />
+                            )
+                        }
                         mail={
                             session === null ? null : (
                                 <ReadingPane
                                     session={session}
                                     transport={readMail}
-                                    storedEmailId={provingRead}
+                                    storedEmailId={workspace.selection}
                                     online={connection.online}
                                 />
                             )

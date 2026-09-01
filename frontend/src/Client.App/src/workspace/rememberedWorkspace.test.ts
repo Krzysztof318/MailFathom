@@ -13,6 +13,7 @@ const kept: Workspace = {
     collapsed: ['account:personal'],
     selection: 'AAMkAD-42',
     fragment: null,
+    selected: ['AAMkAD-42', 'AAMkAD-43'],
     question: 'what did Nordwind send',
 };
 

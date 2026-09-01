@@ -113,6 +113,37 @@ export const en = {
     'folder.all': 'All mail',
     'folder.outbox': 'Outbox',
 
+    'list.label': 'Messages',
+    'list.reading': 'Reading your mail…',
+    'list.readingMore': 'Reading more…',
+    'list.rowArriving': 'Reading this message again…',
+    'list.wholeFolderRead': 'That is the whole of this folder.',
+    'list.failed': 'This folder could not be read: {reason}.',
+    'list.partiallyFailed': 'Part of this folder could not be read: {reason}.',
+    'list.emptyFolder': 'There is no mail in this folder.',
+    'list.nothingMatches': 'No message in this folder matches what the list is narrowed to.',
+    'list.notSynchronizedYet':
+        'Nothing has been taken into this deployment from this mailbox yet, so there is nothing to show. The folder is not empty — it has not been read.',
+    'list.emptyWhileFailing':
+        'This mailbox stopped synchronizing, so what is here may be less than the mail server holds.',
+
+    'list.order': 'Order',
+    'list.newestFirst': 'Newest first',
+    'list.oldestFirst': 'Oldest first',
+    'list.onlyUnread': 'Only unread',
+    'list.onlyFlagged': 'Only flagged',
+    'list.onlyWithAttachments': 'Only with attachments',
+    'list.includeJunk': 'Include junk',
+    'list.selectSeveral': 'Select several',
+    'list.selectedCount': '{count} selected',
+
+    'list.unread': 'Unread',
+    'list.flagged': 'Flagged',
+    'list.answered': 'Answered',
+    'list.attachments': '{count} attached',
+    'list.noSubject': 'No subject',
+    'list.senderUnknown': 'No sender',
+
     'connection.current': 'Every account is up to date.',
     'connection.behind': 'Some accounts are behind.',
     'connection.failing': 'Some accounts stopped synchronizing.',

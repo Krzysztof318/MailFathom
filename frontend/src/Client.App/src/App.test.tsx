@@ -70,6 +70,13 @@ function routesAsked(): string[] {
     return [...new Set(asked.map((request) => request.path))];
 }
 
+// The folder the message list reads once Mail is on the screen. Empty, because what these tests are about is the frame
+// rather than the list: the list has its own file, and a folder with mail in it here would be a second copy of it.
+const emptyFolder: Answer = {
+    status: 200,
+    body: JSON.stringify({ emails: [], nextCursor: null, previousCursor: null, pageSize: 100 }),
+};
+
 /** A deployment that accepts any credential and answers the session and the accounts with what a test named. */
 function deploymentAnswering(
     accounts: Answer = directory(true, [workAccount]),
@@ -77,6 +84,10 @@ function deploymentAnswering(
 ): DeploymentTransport {
     return () => (request) => {
         asked.push(request);
+
+        if (request.path.includes('/emails')) {
+            return Promise.resolve(complete(emptyFolder));
+        }
 
         return Promise.resolve(complete(request.path.endsWith('/session') ? session : accounts));
     };
@@ -1005,6 +1016,29 @@ describe('App deployment', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else' }));
 
         expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Deployment address' }));
+    });
+
+    it('starts an empty workspace when somebody signs in, rather than handing them the last person’s', async () => {
+        // Written before the provider mounts, which is how a tab that was not signed out keeps what was on the screen:
+        // a second person signing into the same tab must not find the first one's question, mailbox, or reading
+        // position waiting for them.
+        window.sessionStorage.setItem(
+            'mailfathom.workspace',
+            JSON.stringify({
+                scope: { kind: 'account', accountId: 'work' },
+                collapsed: [],
+                selection: 'AAMkAD-42',
+                selected: ['AAMkAD-42'],
+                question: 'what did the last person ask',
+            }),
+        );
+
+        renderApp(servedFrom, null);
+        signIn();
+        await framed();
+
+        expect(screen.getByRole('searchbox', { name: 'Ask your mail' })).toHaveProperty('value', '');
+        expect(screen.getByRole('combobox', { name: 'Mailbox in scope' })).toHaveProperty('value', '');
     });
 
     it('signs in against the next deployment of its own, and never reads the one before it again', async () => {

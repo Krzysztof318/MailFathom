@@ -271,6 +271,14 @@ async function servedByADeployment(page: Page): Promise<void> {
         route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mailFolders) }),
     );
 
+    await page.route('**/api/client/emails*', (route) =>
+        route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: timelinePage(new URL(route.request().url())),
+        }),
+    );
+
     // The one route whose answer depends on what the client asked for: the reader's ask for the sender's pictures is
     // in the query and nowhere else, so answering it here is what lets this suite watch a request leave for the
     // sender's host — and watch it not leave before the ask.
@@ -281,6 +289,65 @@ async function servedByADeployment(page: Page): Promise<void> {
             body: messageBody(new URL(route.request().url()).searchParams.get('remoteImages') === 'true'),
         }),
     );
+}
+
+// How many messages the mailbox behind the routing holds, which is the number `frontend/src/AGENTS.md` names as the
+// one the client actually has to render. Nothing here is anybody's mail: every row is generated from its own number.
+const mailboxSize = 214_000;
+const rowsPerPage = 100;
+
+/**
+ * One page of the mailbox, keyset-paged the way the client surface pages it.
+ *
+ * The cursor is the row the page starts at, written as text, because what this suite proves about a cursor is that the
+ * client holds one and continues from it — what a deployment encodes in one is the deployment's own business.
+ */
+function timelinePage(url: URL): string {
+    const asked = Number(url.searchParams.get('cursor') ?? '0');
+    const backward = url.searchParams.get('direction') === 'backward';
+    const from = Math.max(backward ? asked - rowsPerPage : asked, 0);
+    const rows = Math.min(rowsPerPage, mailboxSize - from);
+
+    return JSON.stringify({
+        emails: Array.from({ length: rows }, (_, at) => ({
+            id: `message-${String(from + at)}`,
+            account: 'work',
+            folder: 'INBOX',
+            threadId: null,
+            subject: `Message ${String(from + at)}`,
+            receivedAt: '2026-08-31T09:41:00+00:00',
+            sentAt: null,
+            senderAddress: `writer-${String(from + at)}@nordwind.example`,
+            senderDisplayName: `Writer ${String(from + at)}`,
+            toAddresses: ['owner@example.invalid'],
+            unread: at % 3 === 0,
+            flagged: false,
+            answered: false,
+            hasAttachments: at % 5 === 0,
+            attachmentCount: at % 5 === 0 ? 1 : 0,
+            sizeOctets: 4_096,
+            preview: `The opening of message ${String(from + at)}.`,
+        })),
+        nextCursor: from + rows >= mailboxSize ? null : String(from + rows),
+        previousCursor: from === 0 ? null : String(from),
+        pageSize: rowsPerPage,
+    });
+}
+
+/**
+ * Reads onward the way a reader does, and answers once the list has moved.
+ *
+ * A wheel over the rows rather than a scroll offset written into the scroller: the scroller carries no role of its
+ * own, and this suite is compiled without a DOM declaration on purpose — `tsconfig.json` says why — so a closure
+ * naming an element would be the one thing that changes. A gesture needs neither.
+ */
+async function readOnward(page: Page, list: Locator): Promise<void> {
+    const before = await list.getByRole('option').first().textContent();
+
+    await list.getByRole('option').first().hover();
+    await page.mouse.wheel(0, 6_000);
+
+    await expect.poll(() => list.getByRole('option').first().textContent()).not.toBe(before);
 }
 
 async function signIn(page: Page): Promise<void> {
@@ -708,4 +775,72 @@ test('fetches nothing from the sender until the reader asks, and asks again next
     // Nothing on either side wrote the ask down, so the message opens asking again. Only a real document reloaded
     // proves that: browser storage is what a durable answer would have been kept in.
     await expect(page.getByRole('button', { name: 'Load pictures from the sender' })).toBeVisible();
+});
+
+// What only a browser can say about the message list: every row is one height, the document holds a window of rows
+// rather than the folder, and a reader who leaves and comes back is put back where they were. Everything else about
+// it — the paging arithmetic, the states, the selection, and every sentence — is jsdom's and lives in the unit suite
+// beside the source.
+
+test('draws every row of the list at one height, which is what the window is arithmetic over', async ({ page }) => {
+    await openSignedIn(page, '/#/mail');
+
+    const list = page.getByRole('listbox', { name: 'Messages' });
+    await expect(list.getByRole('option').first()).toBeVisible();
+
+    const heights = await Promise.all(
+        (await list.getByRole('option').all()).map(async (row) => (await row.boundingBox())?.height),
+    );
+
+    // The measurement the choice of windowing was made against, kept as an assertion rather than as a number in a
+    // pull request: a row whose height varied with its subject, its preview, or its marks would put every row below it
+    // somewhere other than where the list drew the space for it — and would be the argument for a virtualizer that
+    // measures rows, which this list deliberately does not carry.
+    expect(new Set(heights).size).toBe(1);
+    expect(heights[0]).toBeGreaterThan(0);
+});
+
+test('holds a window of rows in the document however far down the folder it is scrolled', async ({ page }) => {
+    await openSignedIn(page, '/#/mail');
+
+    const list = page.getByRole('listbox', { name: 'Messages' });
+    await expect(list.getByRole('option').first()).toBeVisible();
+
+    const drawnAtTheTop = await list.getByRole('option').count();
+
+    for (let read = 1; read <= 6; read += 1) {
+        await readOnward(page, list);
+    }
+
+    // Hundreds of rows further down a folder of two hundred and fourteen thousand, reached a screenful at a time the
+    // way somebody scrolls — and the document holds no more rows than it did on the first screen. That is the whole
+    // claim windowing makes, and only a browser laying the list out can answer it.
+    await expect(list.getByRole('option').first()).toContainText(/Message [1-9]\d\d/);
+    expect(await list.getByRole('option').count()).toBeLessThanOrEqual(drawnAtTheTop);
+    await expect(list.getByRole('option', { name: /^Writer 0\D/ })).toHaveCount(0);
+});
+
+test('puts a reader back where they were reading, across a reload', async ({ page }) => {
+    await openSignedIn(page, '/#/mail');
+
+    const list = page.getByRole('listbox', { name: 'Messages' });
+    await expect(list.getByRole('option').first()).toBeVisible();
+
+    // Far enough that the row the reader is on is in a page the client had to ask for with a cursor, which is the
+    // whole of what returning to a position means: a client that read the folder again from its leading end would land
+    // on message zero and look identical to one that had never scrolled.
+    for (let read = 1; read <= 3; read += 1) {
+        await readOnward(page, list);
+    }
+
+    const before = await list.getByRole('option').first().textContent();
+
+    // A reload is a cold start, so where somebody was reading is kept where the credential is kept and read back the
+    // same way. Only a real document reloaded proves it was written rather than held.
+    await page.reload();
+
+    const after = page.getByRole('listbox', { name: 'Messages' });
+    await expect(after.getByRole('option').first()).toBeVisible();
+
+    expect(await after.getByRole('option').first().textContent()).toBe(before);
 });

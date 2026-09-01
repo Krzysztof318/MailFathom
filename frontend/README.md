@@ -221,14 +221,39 @@ nothing configured.
 
 `src/workspace/` is what survives moving between spaces, and it is mounted above the frame for exactly that reason. It
 holds one **scope** — every mailbox at once, one role across all of them, one mailbox, or one folder of one — beside the
-question, the selection, and the rows of the folder tree somebody has folded away. It is kept in the store the web head
-keeps its credential in, so a reload returns to what was on the screen; signing out empties it, because what somebody
-was looking at and about to ask is theirs rather than the machine's.
+question, the message that is open, the messages that have been picked out, and the rows of the folder tree somebody has
+folded away. It is kept in the store the web head keeps its credential in, so a reload returns to what was on the
+screen; signing in and signing out both empty it, because what somebody was looking at and about to ask is theirs rather
+than the machine's.
 
 `src/folders/` is what writes that scope. It draws the owner's mailboxes and their folders as one tree, read from the
 folders route in a single exchange, with the roles that span every mailbox above them — so asking about every inbox at
 once is one act rather than three. A folder is placed and named by the role the deployment gave it rather than by what
 its server calls it, because a name is whatever a provider chose in whatever language.
+
+`src/messageList/` is what that scope is drawn as. It reads `/api/client/emails`, which is keyset-paged in both
+directions, and it is where the client's three hardest constraints meet: a mailbox of two hundred and fourteen thousand
+messages that has to stay smooth, a reading position that has to survive leaving the folder and reloading, and a
+multi-selection the rest of the client reads as scope for the question it is about to ask.
+
+Three bounds hold that up, and each is one module. **The document holds a window of rows rather than the folder** —
+`timelineWindow.ts` is arithmetic over four numbers, and the number of rows in the document is the same on the first
+screen as at message forty thousand. **The list holds a window of pages rather than every page it has read** —
+`heldTimeline.ts`; a page too far from the reader keeps its place and its cursor but loses its rows, so the list keeps
+its height, nothing under the reader moves, and scrolling back into it reads that page again from its own cursor rather
+than reading the folder from its leading end. **Where the reader is lives outside React** — `rememberedListings.ts`,
+keyed by the deployment and the folder, holding a cursor, a row, an order, and the filters together so a cursor cannot
+outlive the list it was issued for, and holding nothing about any message.
+
+**No package windows it, and that is a measurement rather than a preference.** Every row of this list is one height,
+because the row is a fixed two lines by design — who wrote and when, then what about and how it opens — and the browser
+suite asserts that every drawn row measures the same. What a virtualizer buys over sixty lines of arithmetic is the
+machinery for measuring rows that are _not_ one height, which this list has no use for; what it costs is a dependency,
+a licence review, and a census in
+[the third-party register](../THIRD_PARTY_LICENSES.md). So the arithmetic stays, the one height it depends on is
+measured off a rendered row rather than written down twice, and the assertion that keeps it true runs on every pull
+request. A row that ever stops being one height is the argument for reopening this, and it fails a test rather than
+degrading quietly.
 
 ## Styling, and the two themes
 

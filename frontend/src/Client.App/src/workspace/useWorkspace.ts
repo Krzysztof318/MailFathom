@@ -36,6 +36,15 @@ export interface Workspace {
      */
     readonly fragment: string | null;
 
+    /**
+     * The messages the person has picked out, in the order the list draws them.
+     *
+     * Here rather than inside the list because *select and ask* is what it is for: the question asked of a selection is
+     * composed somewhere the list is not, so a selection the list kept to itself would be a visual state nothing else
+     * could read as scope.
+     */
+    readonly selected: readonly string[];
+
     /** What has been typed into the intent field, which the next question would be asked with. */
     readonly question: string;
 }
@@ -52,6 +61,7 @@ export const emptyWorkspace: Workspace = {
     collapsed: [],
     selection: null,
     fragment: null,
+    selected: [],
     question: '',
 };
 
