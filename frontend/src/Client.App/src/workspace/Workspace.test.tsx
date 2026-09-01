@@ -69,6 +69,7 @@ describe('WorkspaceProvider', () => {
         { scope: { kind: 'account', accountId: 'work' } },
         { collapsed: ['account:work'] },
         { selection: 'AAMkAD-42' },
+        { fragment: 'the part of the message somebody pointed at' },
         { question: 'what did Nordwind send' },
     ])('changes %o and leaves the rest of the workspace as it was', (change) => {
         renderProbe(change);

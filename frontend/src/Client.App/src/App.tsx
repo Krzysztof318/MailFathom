@@ -6,10 +6,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DeploymentAddress } from '@mailfathom/client-backend';
 import { SecondaryButton } from './controls/SecondaryButton';
 import { forgetDeployment, storeDeployment, type AdoptedDeployment } from './deployment/adoptedDeployment';
+import type { AttachmentDelivery } from './deployment/attachmentDelivery';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { FolderTree } from './folders/FolderTree';
 import { useLocalization } from './localization/useLocalization';
-import { Message } from './messageBody/Message';
+import { ReadingPane } from './readingPane/ReadingPane';
 import { useSpace } from './routing/useSpace';
 import { offers, spacesOffered, withheldFrom } from './shell/capabilities';
 import { ConnectionSummary } from './shell/ConnectionSummary';
@@ -25,9 +26,9 @@ import { SignIn } from './signIn/SignIn';
 import { emptyWorkspace } from './workspace/useWorkspace';
 import { useWorkspace } from './workspace/useWorkspace';
 
-// Which message the Mail space draws is the reading pane's to decide, and that pane is #1426's. Until it exists, the
-// space draws one message by identifier — which is what makes the renderer reachable in a browser at all, and is the
-// only reason this constant is here rather than a value the screen was handed.
+// Which message the reading pane draws is the message list's to decide, and that list is not built yet. Until it is,
+// the Mail space opens one message by identifier — which is what makes the pane reachable in a browser at all, and is
+// the only reason this constant is here rather than a value the screen was handed.
 const provingRead = '00000000-0000-4000-8000-000000000000';
 
 // The frame Discover, Mail, and Cases are held in, and the only thing in the client that survives moving between them.
@@ -47,11 +48,13 @@ export function App({
     signedInWith,
     credentials,
     send,
+    deliver,
 }: {
     readonly deployment: AdoptedDeployment | null;
     readonly signedInWith: string | null;
     readonly credentials: CredentialStore;
     readonly send: DeploymentTransport;
+    readonly deliver: AttachmentDelivery;
 }) {
     const { revise } = useWorkspace();
     const [adopted, setAdopted] = useState(deployment);
@@ -69,8 +72,10 @@ export function App({
     );
 
     // The transport those reads are made through, built once for the same reason. It carries a signal nothing ever
-    // fires: both the tree and the message discard the answer to a read they stopped listening for rather than
-    // cancelling it, and the pane that will own a read outliving the message it was started for is #1426's.
+    // fires: the tree, the reading pane, and the body renderer each discard the answer to a read they stopped listening
+    // for rather than cancelling it, which is what a screen that may be looking at another message by then actually
+    // needs. A download is the one read here that is genuinely abandoned, and it carries a signal of its own from the
+    // row that started it.
     const readMail = useMemo(() => send(new AbortController().signal), [send]);
 
     // The view changed, so focus goes to the start of what replaced it rather than staying on a control that is no
@@ -238,7 +243,13 @@ export function App({
                         }
                         mail={
                             session === null ? null : (
-                                <Message session={session} transport={readMail} storedEmailId={provingRead} />
+                                <ReadingPane
+                                    session={session}
+                                    transport={readMail}
+                                    storedEmailId={provingRead}
+                                    online={connection.online}
+                                    deliver={deliver}
+                                />
                             )
                         }
                     />

@@ -27,6 +27,15 @@ export interface Workspace {
     /** What the person has open, once a space offers something to open. */
     readonly selection: string | null;
 
+    /**
+     * The part of what is open that a question would be asked about, or `null` where the whole of it is.
+     *
+     * It is the words a person selected rather than a position in anything, because what the intent field does with it
+     * is quote it: a range would have to be resolved against a document that is drawn again on every read, and against
+     * the same message read a second time under a different ask.
+     */
+    readonly fragment: string | null;
+
     /** What has been typed into the intent field, which the next question would be asked with. */
     readonly question: string;
 }
@@ -42,6 +51,7 @@ export const emptyWorkspace: Workspace = {
     scope: everything,
     collapsed: [],
     selection: null,
+    fragment: null,
     question: '',
 };
 

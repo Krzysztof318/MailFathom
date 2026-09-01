@@ -169,10 +169,52 @@ function messageBody(remoteImages: boolean): string {
     });
 }
 
-// The heading the message below carries. The sender wrote it as their own first-level heading and the space it is
-// drawn in already holds the only first-level heading on the screen, so the pane draws it one deeper — which is the
-// assertion in the level rather than an accident of the fixture.
-const messageHeading = { name: 'This week at Example', level: 2 } as const;
+// The heading the message below carries. The sender wrote it as their own first-level heading, and two levels above it
+// are already taken — the space's own title and the subject the reading pane draws — so the pane draws it two deeper,
+// which is the assertion in the level rather than an accident of the fixture.
+const messageHeading = { name: 'This week at Example', level: 3 } as const;
+
+/** The subject the message below carries, which is what names the region the pane draws it in. */
+const messageRegion = { name: 'A newsletter from Example' } as const;
+
+/** What the attachment below holds, small enough to state here and large enough to arrive in more than nothing. */
+const attachedOctets = 'order,quantity\nkettle,1\n';
+
+/** What the message route answers with: everything the pane draws around a body it never carries. */
+const messageDescription = JSON.stringify({
+    storedEmailId: '00000000-0000-4000-8000-000000000000',
+    account: 'work',
+    folder: 'INBOX',
+    threadId: null,
+    sizeOctets: 40_960,
+    headers: {
+        subject: messageRegion.name,
+        sentAt: '2026-08-31T09:41:00+00:00',
+        receivedAt: '2026-08-31T09:41:10+00:00',
+        participants: [
+            { role: 'From', address: 'news@example.invalid', displayName: 'Example' },
+            { role: 'To', address: 'reader@example.invalid', displayName: null },
+        ],
+        messageId: 'abc@example.invalid',
+        inReplyTo: null,
+        references: [],
+    },
+    body: { availability: 'Readable', plainText: true, html: true },
+    sender: { authorAuthentication: 'Authenticated', deploymentTrust: 'Unknown', authenticatedDomain: null },
+    attachments: [
+        {
+            position: 0,
+            fileName: 'orders.csv',
+            wasFileNameNormalized: false,
+            mediaType: 'text/csv',
+            sizeOctets: attachedOctets.length,
+        },
+    ],
+    carried: null,
+    unread: true,
+    flagged: false,
+    answered: false,
+});
 
 interface Box {
     readonly x: number;
@@ -202,6 +244,21 @@ async function boxOf(element: Locator): Promise<Box> {
  * bundle exactly as it would be against a service.
  */
 async function servedByADeployment(page: Page): Promise<void> {
+    await page.route('**/api/client/messages/*', (route) =>
+        route.fulfill({ status: 200, contentType: 'application/json', body: messageDescription }),
+    );
+
+    // The one route that answers with octets rather than with JSON, which is what makes a real download something this
+    // suite can watch: the built bundle composes the request, sends it with the credential it holds, reads the stream,
+    // and hands the browser a file — none of which jsdom has any of.
+    await page.route('**/api/client/messages/*/attachments/*', (route) =>
+        route.fulfill({
+            status: 200,
+            contentType: 'text/csv',
+            body: attachedOctets,
+        }),
+    );
+
     await page.route('**/api/client/session', (route) =>
         route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(sessionAnswer) }),
     );
@@ -529,7 +586,7 @@ test('issues every request to the origin it was served from and to no other', as
 test('draws the message as this document own elements, with nothing a sender wrote becoming one', async ({ page }) => {
     await openSignedIn(page, '/#/mail');
 
-    const message = page.getByRole('article');
+    const message = page.getByRole('article', messageRegion);
     await expect(message.getByRole('heading', messageHeading)).toBeVisible();
 
     // The isolation statement is an absence, so it is asserted as one. A frame, a script, an embedded object, or a
@@ -546,7 +603,7 @@ test('draws the message as this document own elements, with nothing a sender wro
 test('shows where a link goes, and says so when its words name somewhere else', async ({ page }) => {
     await openSignedIn(page, '/#/mail');
 
-    const message = page.getByRole('article');
+    const message = page.getByRole('article', messageRegion);
 
     await expect(message.getByText('goes to offers.invalid', { exact: true })).toBeVisible();
     await expect(
@@ -575,6 +632,54 @@ test('leaves the application when a link is followed rather than navigating it',
     // nothing whenever `noopener` was asked for, so a client reading that answer as a refusal would put this sentence
     // under every link that worked — and every unit test of it would still pass.
     await expect(page.getByText('This link could not be opened.')).toHaveCount(0);
+});
+
+test('describes an attached file before it is fetched, and fetches it only when it is asked for', async ({ page }) => {
+    const downloads: string[] = [];
+
+    page.on('request', (request) => {
+        if (request.url().includes('/attachments/')) {
+            downloads.push(request.url());
+        }
+    });
+
+    await openSignedIn(page, '/#/mail');
+
+    const download = page.getByRole('button', { name: 'Download orders.csv' });
+    await expect(download).toBeVisible();
+    await expect(page.getByText('text/csv')).toBeVisible();
+
+    // Nothing about the file has been fetched at this point, which is what keeps opening a message the same cost
+    // whether the sender attached a note or a video. Only a browser can say so: the source says what the pane intends
+    // and this says what the built bundle actually put on the wire.
+    expect(downloads).toStrictEqual([]);
+
+    const offered = page.waitForEvent('download');
+    await download.click();
+
+    // The file reaches the person as a file rather than as a page, which is a browser event and nothing jsdom has.
+    expect((await offered).suggestedFilename()).toBe('orders.csv');
+    await expect(page.getByText('orders.csv was downloaded.')).toBeVisible();
+});
+
+test('presents the credential the bundle composed when it fetches an attached file', async ({ page }) => {
+    const presented: (string | undefined)[] = [];
+
+    await openSignedIn(page, '/#/mail');
+
+    // Registered after the deployment's own routes so this one wins for the attachment, which is what lets the header
+    // the built bundle actually sent be read rather than inferred from the source.
+    await page.route('**/api/client/messages/*/attachments/*', async (route) => {
+        presented.push(route.request().headers()['authorization']);
+
+        await route.fulfill({ status: 200, contentType: 'text/csv', body: attachedOctets });
+    });
+
+    const offered = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Download orders.csv' }).click();
+    await offered;
+
+    expect(presented).toStrictEqual([expectedAuthorization]);
 });
 
 test('fetches nothing from the sender until the reader asks, and asks again next time', async ({ page }) => {

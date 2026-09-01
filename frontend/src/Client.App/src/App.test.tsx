@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientResponse } from '@mailfathom/client-backend';
 import { App } from './App';
 import type { AdoptedDeployment } from './deployment/adoptedDeployment';
+import type { AttachmentDelivery } from './deployment/attachmentDelivery';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { LocalizationProvider } from './localization/Localization';
 import { localeNames, locales, readStoredLocale } from './localization/locale';
@@ -109,7 +110,40 @@ const drawnMessage: Answer = {
     }),
 };
 
-/** A deployment that answers the accounts as the one above does, and the body the reading pane in Mail asks it for. */
+/** What the message route answers with, which is everything the pane draws around a body it never carries. */
+const describedMessage: Answer = {
+    status: 200,
+    body: JSON.stringify({
+        storedEmailId: '00000000-0000-4000-8000-000000000000',
+        account: 'work',
+        folder: 'INBOX',
+        threadId: null,
+        sizeOctets: 4_096,
+        headers: {
+            subject: 'Quarterly invoice',
+            sentAt: '2026-08-31T09:41:00+00:00',
+            receivedAt: '2026-08-31T09:41:10+00:00',
+            participants: [{ role: 'From', address: 'billing@example.invalid', displayName: 'Billing' }],
+            messageId: 'abc@example.invalid',
+            inReplyTo: null,
+            references: [],
+        },
+        body: { availability: 'Readable', plainText: true, html: true },
+        sender: { authorAuthentication: 'Authenticated', deploymentTrust: 'Unknown', authenticatedDomain: null },
+        attachments: [],
+        carried: null,
+        unread: true,
+        flagged: false,
+        answered: false,
+    }),
+};
+
+/**
+ * A deployment that answers the accounts as the one above does, and both reads the reading pane in Mail makes.
+ *
+ * The two are separate routes because they are separately expensive, so the double answers them separately as well —
+ * a description that also served a body would prove the pane against an exchange the service does not have.
+ */
 function deploymentDrawingAMessage(): DeploymentTransport {
     const otherwise = deploymentAnswering();
 
@@ -120,9 +154,12 @@ function deploymentDrawingAMessage(): DeploymentTransport {
 
         asked.push(request);
 
-        return Promise.resolve(complete(drawnMessage));
+        return Promise.resolve(complete(request.path.includes('/body') ? drawnMessage : describedMessage));
     };
 }
+
+/** A delivery nobody in these tests asks for, supplied because the frame hands one down rather than reaching for it. */
+const deliversNothing: AttachmentDelivery = () => Promise.resolve('delivered');
 
 /** A deployment answering every route the same way, which is how a refusal to sign anybody in is stated. */
 function deploymentRefusing(answer: Answer): DeploymentTransport {
@@ -202,6 +239,7 @@ function renderApp(
                         <LinkOpenerContext value={() => Promise.resolve()}>
                             <App
                                 credentials={credentials}
+                                deliver={deliversNothing}
                                 deployment={deployment}
                                 send={send}
                                 signedInWith={signedInWith}

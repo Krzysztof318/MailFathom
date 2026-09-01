@@ -12,6 +12,7 @@ const kept: Workspace = {
     scope: { kind: 'folder', accountId: 'work', alias: 'INBOX' },
     collapsed: ['account:personal'],
     selection: 'AAMkAD-42',
+    fragment: null,
     question: 'what did Nordwind send',
 };
 
@@ -29,6 +30,14 @@ describe('rememberWorkspace', () => {
         rememberWorkspace(kept);
 
         expect(rememberedWorkspace()).toEqual(kept);
+    });
+
+    // The one part of the workspace that is mail rather than a name for one, so it is the one part a store never sees.
+    it('keeps no part of the message somebody had selected', () => {
+        rememberWorkspace({ ...kept, fragment: 'the part of the message somebody pointed at' });
+
+        expect(window.sessionStorage.getItem(storageKey)).not.toContain('somebody pointed at');
+        expect(rememberedWorkspace().fragment).toBeNull();
     });
 });
 

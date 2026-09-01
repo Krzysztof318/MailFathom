@@ -172,6 +172,58 @@ export const pl: Catalogue = {
     'body.remotePicturesShownCount': 'Obrazów pobranych od nadawcy: {count}',
     'body.undrawnPicturesCount': 'Obrazów zbyt dużych, by je narysować: {count}',
 
+    'message.nothingOpen': 'Otwórz wiadomość, aby ją tutaj przeczytać.',
+    'message.reading': 'Trwa otwieranie tej wiadomości…',
+    'message.offline':
+        'Ta maszyna jest bez sieci, więc nie można otworzyć tej wiadomości. Otworzy się sama, gdy sieć wróci.',
+    'message.failed': 'Nie udało się otworzyć tej wiadomości: {reason}.',
+    'message.noSubject': 'Bez tematu',
+    'message.noAuthor': 'Ta wiadomość nie wskazuje nikogo jako autora.',
+    'message.sentAt': 'Wysłano {when}',
+    'message.sentAtUnknown': 'Nadawca nie zapisał daty, którą ten klient potrafi odczytać.',
+    'message.otherParticipants': 'Pozostałe osoby wskazane w tej wiadomości ({count})',
+
+    'participant.from': 'Od',
+    'participant.sender': 'Nadane przez',
+    'participant.replyTo': 'Odpowiedź do',
+    'participant.to': 'Do',
+    'participant.cc': 'Kopia do',
+    'participant.bcc': 'Ukryta kopia do',
+
+    'sender.failed':
+        'Odbierający serwer pocztowy sprawdził, kto naprawdę wysłał tę wiadomość, i stwierdził, że wskazany w niej autor się nie potwierdził.',
+    'sender.recognized': 'To wdrożenie rozpoznaje nadawcę tej wiadomości.',
+    'sender.authenticatedBy':
+        'Uwierzytelniona przez {domain} — to ona naprawdę ją wysłała, a nie nazwa widoczna powyżej.',
+    'sender.authenticatedByNobody': 'Nic nie uwierzytelniło nadawcy tej wiadomości.',
+
+    'attachments.heading': 'Pliki dołączone do tej wiadomości',
+    'attachment.unnamed': 'Plik bez nazwy',
+    'attachment.download': 'Pobierz {name}',
+    'attachment.nameWasRewritten':
+        'Nadawca zapisał nazwę pliku, której to wdrożenie by nie użyło, więc widoczna jest nazwa nadana w jej miejsce.',
+    'attachment.arriving': 'Jaka część pliku już dotarła',
+    'attachment.arrivingOf': '{arrived} z {whole}',
+    'attachment.stop': 'Przerwij pobieranie',
+    'attachment.saved': 'Pobrano {name}.',
+    'attachment.abandoned': 'Pobieranie zostało przerwane, więc nic nie zostało zapisane.',
+    'attachment.refusedUnauthenticated':
+        'To wdrożenie nie przyjmuje już tych danych logowania, więc plik nie został pobrany. Zaloguj się ponownie.',
+    'attachment.refusedUnauthorized':
+        'Te dane logowania nie pozwalają czytać poczty w tym wdrożeniu, więc plik nie został pobrany.',
+    'attachment.refusedUnavailable': 'Wdrożenie nie odpowiedziało, więc plik nie został pobrany. Spróbuj ponownie.',
+    'attachment.refusedLargerThanDescribed':
+        'Wdrożenie przysłało więcej, niż ta wiadomość deklaruje dla tego pliku, więc nic nie zostało zapisane. Zgłoś to jako usterkę.',
+
+    'carried.total': 'Wszystkie załączniki razem to {size}.',
+    'carried.encrypted': 'Ta wiadomość zawiera gdzieś zaszyfrowaną treść.',
+    'carried.unverifiedSignature': 'Ta wiadomość zawiera podpis, którego nic tutaj nie zweryfikowało.',
+    'carried.unexpandedTnefPart':
+        'Ta wiadomość zawiera część winmail.dat, którą zapisano bez otwierania, więc to, co się w niej znajduje, nie jest wymienione powyżej.',
+
+    'scope.fragment': 'Pytanie dotyczy zaznaczonego fragmentu tej wiadomości: „{fragment}”',
+    'scope.wholeMessage': 'Pytaj o całą wiadomość',
+
     'link.goesTo': 'prowadzi do {host}',
     'link.warningDisplayedHostDiffers': 'Ten odnośnik nie prowadzi tam, gdzie mówią jego słowa. Prowadzi do {host}.',
     'link.warningAsciiHost': 'Ten odnośnik prowadzi do {host}, zapisanego jako {asciiHost}.',

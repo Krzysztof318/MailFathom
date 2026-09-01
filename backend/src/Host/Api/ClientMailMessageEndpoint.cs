@@ -146,7 +146,7 @@ internal sealed record ClientMailMessageResponse(
             message.SizeOctets,
             ClientMailMessageHeadersResponse.For(message.Headers),
             ClientMailMessageBodyResponse.For(message.Body),
-            ClientMailSenderVerdictResponse.For(message.SenderVerification),
+            ClientMailSenderVerdictResponse.For(message.SenderVerification, message.SenderAuthenticationEvidence),
             [.. message.Attachments.Select((attachment, position) =>
                 ClientMailAttachmentResponse.For(attachment, position))],
             message.AttachmentSummary is { } carried ? ClientMailCarriedResponse.For(carried) : null,
@@ -232,28 +232,51 @@ internal sealed record ClientMailMessageBodyResponse(string Availability, bool P
 /// <summary>What this deployment established about the author one message displays.</summary>
 /// <param name="AuthorAuthentication">What the receiving mail server established about the displayed author, as the outcome's own name.</param>
 /// <param name="DeploymentTrust">Whether this deployment recognizes that author, as the level's own name.</param>
+/// <param name="AuthenticatedDomain">The domain that actually authenticated, or <see langword="null" /> where none did.</param>
 /// <remarks>
 /// <para>
-/// The two are published side by side and are never collapsed into one value, because a screen drawing a single badge
-/// from them would have to invent the rule that combines them. One is a fact a receiving server established about the
-/// message, and the other is this deployment's own classification of the author it established; an authenticated author
-/// nobody has named is the ordinary state of legitimate mail and carries the same trust value as one whose
+/// The two outcomes are published side by side and are never collapsed into one value, because a screen drawing a single
+/// badge from them would have to invent the rule that combines them. One is a fact a receiving server established about
+/// the message, and the other is this deployment's own classification of the author it established; an authenticated
+/// author nobody has named is the ordinary state of legitimate mail and carries the same trust value as one whose
 /// authentication failed outright.
+/// </para>
+/// <para>
+/// The domain travels with them so that a reading pane can name who actually sent a message rather than repeating the
+/// <c>From</c> value the message displays, which is the one thing an impersonation gets wrong. It is stated and never
+/// judged: whether it differs from the displayed domain says nothing on its own — a provider that signs as itself while
+/// the author's own domain passes SPF is authenticated exactly as it appears — so what a reader acts on stays
+/// <paramref name="AuthorAuthentication" />, and a client comparing the two would be evaluating a policy this deployment
+/// deliberately does not.
 /// </para>
 /// <para>
 /// It is read back as it was stored rather than derived here. Nothing on this path re-reads a header, resolves DNS, or
 /// evaluates a policy, so what a reader is shown is what extraction concluded about the authenticated author — never a
-/// reading of the <c>From</c> header the message displays.
+/// reading of the <c>From</c> header the message displays. The domain is personal data like the rest of this response.
 /// </para>
 /// </remarks>
-internal sealed record ClientMailSenderVerdictResponse(string AuthorAuthentication, string DeploymentTrust)
+internal sealed record ClientMailSenderVerdictResponse(
+    string AuthorAuthentication,
+    string DeploymentTrust,
+    string? AuthenticatedDomain)
 {
     /// <summary>Describes one message's sender verdict for the wire.</summary>
     /// <param name="verification">The verdict the read carried.</param>
+    /// <param name="evidence">What that verdict was reached from, of which only the authenticated domain is published.</param>
     /// <returns>The response body.</returns>
-    internal static ClientMailSenderVerdictResponse For(SenderVerification verification) => new(
-        verification.AuthorAuthentication.ToString(),
-        verification.DeploymentTrust.ToString());
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    internal static ClientMailSenderVerdictResponse For(
+        SenderVerification verification,
+        SenderAuthenticationEvidence evidence)
+    {
+        ArgumentNullException.ThrowIfNull(verification);
+        ArgumentNullException.ThrowIfNull(evidence);
+
+        return new ClientMailSenderVerdictResponse(
+            verification.AuthorAuthentication.ToString(),
+            verification.DeploymentTrust.ToString(),
+            evidence.AuthenticatedDomain?.Value);
+    }
 }
 
 /// <summary>One file a message carries, described and carrying none of what it holds.</summary>

@@ -55,6 +55,26 @@ export {
     type MailFolderDirectory,
     type MailFolderRole,
 } from './mailFolders';
+export {
+    attachmentRefusalForStatus,
+    mailAttachmentRequest,
+    mailAttachmentRoute,
+    type MailAttachmentRefusal,
+} from './mailAttachment';
+export {
+    mailMessageRoute,
+    readMailMessage,
+    type MailAttachment,
+    type MailAuthorAuthentication,
+    type MailCarried,
+    type MailDeploymentTrust,
+    type MailMessage,
+    type MailMessageBodyForms,
+    type MailMessageHeaders,
+    type MailParticipant,
+    type MailParticipantRole,
+    type MailSenderVerdict,
+} from './mailMessage';
 export { clientRoutePrefix, headersFor, routeFor, type ClientSession, type DeploymentAddress } from './session';
 export { reachDeployment, signIn, type DeploymentGreeting, type SignInOutcome, type SignInRefusal } from './signIn';
 export { longestResponseBody, type ClientRequest, type ClientResponse, type MailFathomTransport } from './transport';

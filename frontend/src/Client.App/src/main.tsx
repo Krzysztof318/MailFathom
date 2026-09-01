@@ -6,6 +6,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { adoptedDeployment } from './deployment/adoptedDeployment';
+import { deliverAttachment } from './deployment/attachmentDelivery';
 import { sendToDeployment } from './deployment/sendToDeployment';
 import { LocalizationProvider } from './localization/Localization';
 import { LinkOpenerContext, linkOpenerForThisApplication } from './shellOperations/linkOpener';
@@ -52,6 +53,7 @@ async function open(root: HTMLElement): Promise<void> {
                         <LinkOpenerContext value={openLink}>
                             <App
                                 credentials={credentials}
+                                deliver={deliverAttachment}
                                 deployment={deployment}
                                 send={sendToDeployment}
                                 signedInWith={signedInWith}
