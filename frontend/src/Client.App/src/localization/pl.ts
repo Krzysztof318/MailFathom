@@ -96,6 +96,23 @@ export const pl: Catalogue = {
     'account.lastRefreshed': 'Ostatnio odświeżono {age}',
     'account.neverRefreshed': 'Nigdy nie odświeżono',
 
+    'folders.label': 'Skrzynki i foldery',
+    'folders.reading': 'Odczytywanie skrzynek i folderów…',
+    'folders.failed': 'Nie udało się odczytać skrzynek i folderów: {reason}.',
+    'folders.unread': 'nieprzeczytane: {count}',
+    'folders.stored': 'przechowywane tutaj: {count}',
+
+    'folder.inbox': 'Odebrane',
+    'folder.drafts': 'Kopie robocze',
+    'folder.sent': 'Wysłane',
+    'folder.archive': 'Archiwum',
+    'folder.junk': 'Spam',
+    'folder.trash': 'Kosz',
+    'folder.flagged': 'Oznaczone',
+    'folder.important': 'Ważne',
+    'folder.all': 'Cała poczta',
+    'folder.outbox': 'Do wysłania',
+
     'connection.current': 'Wszystkie konta są aktualne.',
     'connection.behind': 'Część kont ma zaległości.',
     'connection.failing': 'Część kont przestała się synchronizować.',

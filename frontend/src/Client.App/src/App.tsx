@@ -7,6 +7,7 @@ import type { DeploymentAddress } from '@mailfathom/client-backend';
 import { SecondaryButton } from './controls/SecondaryButton';
 import { forgetDeployment, storeDeployment, type AdoptedDeployment } from './deployment/adoptedDeployment';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
+import { FolderTree } from './folders/FolderTree';
 import { useLocalization } from './localization/useLocalization';
 import { Message } from './messageBody/Message';
 import { useSpace } from './routing/useSpace';
@@ -67,10 +68,10 @@ export function App({
         [baseAddress, authorization],
     );
 
-    // The transport that read is made through, built once for the same reason. It carries a signal nothing ever fires:
-    // `Message` discards the answer to a read it stopped listening for rather than cancelling it, and the pane that
-    // will own a read outliving the message it was started for is #1426's.
-    const readMessage = useMemo(() => send(new AbortController().signal), [send]);
+    // The transport those reads are made through, built once for the same reason. It carries a signal nothing ever
+    // fires: both the tree and the message discard the answer to a read they stopped listening for rather than
+    // cancelling it, and the pane that will own a read outliving the message it was started for is #1426's.
+    const readMail = useMemo(() => send(new AbortController().signal), [send]);
 
     // The view changed, so focus goes to the start of what replaced it rather than staying on a control that is no
     // longer there. Only in this direction: the sign-in screen places focus itself, on the field it is asking to have
@@ -125,6 +126,7 @@ export function App({
     const space = useSpace(offeredSpaces);
     const withheld = deploymentSession === null ? [] : withheldFrom(deploymentSession);
     const mailAccounts = connection.accounts?.outcome === 'read' ? connection.accounts.value.accounts : [];
+    const readsMail = deploymentSession !== null && offers(deploymentSession, 'readMail');
 
     function signedIn(reached: DeploymentAddress, presented: string): void {
         if (adopted === null) {
@@ -229,9 +231,14 @@ export function App({
                 ) : (
                     <Space
                         space={space}
+                        folders={
+                            session === null || !readsMail ? null : (
+                                <FolderTree session={session} transport={readMail} online={connection.online} />
+                            )
+                        }
                         mail={
                             session === null ? null : (
-                                <Message session={session} transport={readMessage} storedEmailId={provingRead} />
+                                <Message session={session} transport={readMail} storedEmailId={provingRead} />
                             )
                         }
                     />

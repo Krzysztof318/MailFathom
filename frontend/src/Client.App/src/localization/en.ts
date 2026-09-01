@@ -96,6 +96,23 @@ export const en = {
     'account.lastRefreshed': 'Last refreshed {age}',
     'account.neverRefreshed': 'Never refreshed',
 
+    'folders.label': 'Mailboxes and folders',
+    'folders.reading': 'Reading mailboxes and folders…',
+    'folders.failed': 'The mailboxes and folders could not be read: {reason}.',
+    'folders.unread': '{count} unread',
+    'folders.stored': '{count} held here',
+
+    'folder.inbox': 'Inbox',
+    'folder.drafts': 'Drafts',
+    'folder.sent': 'Sent',
+    'folder.archive': 'Archive',
+    'folder.junk': 'Junk',
+    'folder.trash': 'Trash',
+    'folder.flagged': 'Flagged',
+    'folder.important': 'Important',
+    'folder.all': 'All mail',
+    'folder.outbox': 'Outbox',
+
     'connection.current': 'Every account is up to date.',
     'connection.behind': 'Some accounts are behind.',
     'connection.failing': 'Some accounts stopped synchronizing.',

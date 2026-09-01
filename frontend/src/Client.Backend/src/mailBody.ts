@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { failed, failureReasonForStatus, read, type ClientResult } from './failure';
+import { asRecord, isRecord } from './json';
 import { headersFor, routeFor, type ClientSession } from './session';
 import { send, type MailFathomTransport } from './transport';
 
@@ -875,14 +876,6 @@ function parsed(body: string): unknown {
     } catch {
         return null;
     }
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-    return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function asRecord(value: unknown): Readonly<Record<string, unknown>> | null {
-    return isRecord(value) ? value : null;
 }
 
 function isCount(value: unknown): value is number {

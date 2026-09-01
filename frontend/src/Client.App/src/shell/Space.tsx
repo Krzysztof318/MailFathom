@@ -9,7 +9,15 @@ import { spaceLabels, type Space as SpaceName } from '../routing/spaces';
 // The region the address decides the contents of. What each of the three spaces actually holds is built by its own
 // issue; what this owns permanently is where a space is rendered and what happens to focus when the address changes.
 
-export function Space({ space, mail }: { readonly space: SpaceName; readonly mail: ReactNode }) {
+export function Space({
+    space,
+    folders,
+    mail,
+}: {
+    readonly space: SpaceName;
+    readonly folders: ReactNode;
+    readonly mail: ReactNode;
+}) {
     const { translate } = useLocalization();
     const region = useRef<HTMLElement>(null);
     const shown = useRef(space);
@@ -39,7 +47,15 @@ export function Space({ space, mail }: { readonly space: SpaceName; readonly mai
                     something of its own would make that true of one of the three and not the others. */}
                 <p className="text-sm text-muted">{translate('space.pending')}</p>
 
-                {space === 'mail' ? mail : null}
+                {/* Mail is the one space with anything in it, and what it has is the scope selector beside what the
+                    scope is about: a column under a narrow window and beside the reading pane at the width the
+                    workspace opens out at. The list that will stand between them is #1424's. */}
+                {space === 'mail' ? (
+                    <div className="flex flex-col gap-6 workspace:flex-row workspace:items-start">
+                        <div className="workspace:w-64 workspace:shrink-0">{folders}</div>
+                        <div className="min-w-0 flex-1">{mail}</div>
+                    </div>
+                ) : null}
             </div>
         </main>
     );
