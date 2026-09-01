@@ -77,6 +77,9 @@ them in full. They are the same four whether the diff was written by a person, b
    version numbers. `gh api repos/<owner>/<repo>/releases/tags/<tag> --jq '.body'` is the whole of it for an action, and
    a package's release notes or repository is the equivalent. A major is where this matters, and a major with nothing to
    gain is a bump not worth taking.
+   The survey marks the rows this applies to: a `behind` row whose leading segment moved carries a `MAJOR` line, and
+   so does a `0.y` line whose minor moved, that being where SemVer stops promising anything. The mark says where a break
+   is permitted rather than that one happened, so it decides which notes to open and never what they say.
 2. **Does the owner stay inside the reviewed set?** A transfer, a rename, or a fork under the same name is the case no
    contract sees and a reader does.
 3. **Does the register still describe the truth?** Step 5 above.

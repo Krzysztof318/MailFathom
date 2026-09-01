@@ -720,8 +720,42 @@ state_of() {
   fi
 }
 
+# The one thing a pair of versions says about compatibility on its own. SemVer promises the major bump for a change
+# that breaks somebody, and under `0.y.z` it makes that promise about the minor instead — which is the clause root
+# `AGENTS.md` reads against this repository's own version, and therefore the reading to apply to what it pins. Marking
+# those rows is what turns the survey's first question, *read the upstream release notes*, into a handful of rows
+# rather than a hundred comparisons by hand.
+#
+# It says where a break is permitted, never that one happened: only the notes say that, and nothing here fetches them.
+# A leading segment that is not a number is outside version ordering and answers neither question, so a digest and the
+# timestamp naming a MinIO-derived release are left unmarked rather than guessed at.
+breaking_move_of() {
+  local pinned="${1#v}" latest="${2#v}"
+  local pinned_major="${pinned%%.*}" latest_major="${latest%%.*}"
+  local pinned_minor latest_minor
+
+  [[ "$pinned_major" =~ ^[0-9]+$ && "$latest_major" =~ ^[0-9]+$ ]] || return 0
+
+  if [[ "$pinned_major" != "$latest_major" ]]; then
+    printf 'MAJOR %s -> %s' "$pinned_major" "$latest_major"
+    return 0
+  fi
+
+  [[ "$pinned_major" == '0' ]] || return 0
+
+  pinned_minor="${pinned#*.}"
+  pinned_minor="${pinned_minor%%.*}"
+  latest_minor="${latest#*.}"
+  latest_minor="${latest_minor%%.*}"
+
+  [[ "$pinned_minor" =~ ^[0-9]+$ && "$latest_minor" =~ ^[0-9]+$ ]] || return 0
+  [[ "$pinned_minor" != "$latest_minor" ]] || return 0
+
+  printf 'MAJOR 0.%s -> 0.%s on a 0.y line' "$pinned_minor" "$latest_minor"
+}
+
 report() {
-  local family component pinned latest licence recorded note source state
+  local family component pinned latest licence recorded note source state breaking
   local heading_printed_for='' heading
 
   while IFS=$'\t' read -r family component pinned latest licence recorded note source; do
@@ -750,6 +784,18 @@ report() {
       "$(if [[ "$state" == 'current' ]]; then printf '%s' "$pinned"; else printf '%s -> %s' "$pinned" "$latest"; fi)"
     printf '           licence now: %-24s register records: %s\n' "$licence" "$recorded"
     printf '           %s\n' "$note"
+
+    # Read only where the pin is behind, which is the only state that puts a version in front of a decision. `ahead`
+    # and `moved` are the reference sitting below a moving tag and a digest that is simply a different digest, and
+    # neither is a bump anybody is weighing.
+    if [[ "$state" == 'behind' ]]; then
+      breaking="$(breaking_move_of "$pinned" "$latest")"
+
+      if [[ -n "$breaking" ]]; then
+        printf '           %s. Read the upstream release notes: this is the move a compatible bump does not promise.\n' \
+          "$breaking"
+      fi
+    fi
 
     # Only an SPDX expression is comparable. A package declaring its terms as a bundled file, a deprecated URL, or
     # nothing at all has no identifier to hold against the register, and saying so is the answer rather than a
