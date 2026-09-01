@@ -12,8 +12,9 @@
 // It sits here beside `SecondaryButton` rather than in the screen that needed it first, for the reason stated there: a
 // screen may reach what is shared, and what is shared reaches no screen.
 
-const checkable =
-    'flex cursor-pointer items-center gap-1.5 rounded-md border border-line bg-panel px-2 py-1 text-sm text-text-soft transition hover:bg-hover';
+import { borderedControl } from './chrome';
+
+const checkable = `flex cursor-pointer items-center gap-1.5 px-2 py-1 text-sm ${borderedControl}`;
 
 export function CheckControl({
     label,

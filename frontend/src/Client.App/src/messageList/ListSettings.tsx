@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { MailTimelineOrder } from '@mailfathom/client-backend';
+import { borderedControl } from '../controls/chrome';
 import { CheckControl } from '../controls/CheckControl';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
@@ -22,7 +23,7 @@ const orderNames: Readonly<Record<MailTimelineOrder, MessageKey>> = {
 
 const orders: readonly MailTimelineOrder[] = ['newestFirst', 'oldestFirst'];
 
-const control = 'rounded-md border border-line bg-panel px-2 py-1 text-sm text-text-soft transition hover:bg-hover';
+const control = `px-2 py-1 text-sm ${borderedControl}`;
 
 export function ListSettings({
     listing,

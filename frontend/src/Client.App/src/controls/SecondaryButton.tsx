@@ -10,6 +10,8 @@
 // It sits here rather than in `shell/` because two of the four are on the sign-in screen, which is not the frame: a
 // screen may reach what is shared, and what is shared reaches no screen.
 
+import { borderedControl } from './chrome';
+
 /**
  * How much room the button takes, which is the one thing its four callers genuinely differ on.
  *
@@ -23,8 +25,6 @@ const shapes: Readonly<Record<SecondaryButtonShape, string>> = {
     form: 'px-4 py-2 font-medium',
 };
 
-const secondary = 'rounded-md border border-line bg-panel text-text-soft transition hover:bg-hover';
-
 export function SecondaryButton({
     label,
     shape = 'compact',
@@ -35,7 +35,7 @@ export function SecondaryButton({
     readonly onActivate: () => void;
 }) {
     return (
-        <button className={`${secondary} ${shapes[shape]}`} type="button" onClick={onActivate}>
+        <button className={`${borderedControl} ${shapes[shape]}`} type="button" onClick={onActivate}>
             {label}
         </button>
     );

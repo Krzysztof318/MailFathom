@@ -9,7 +9,7 @@ import {
     forgetListings,
     rememberedListing,
     rememberListing,
-    unreadListing,
+    neverOpenedListing,
     type RememberedListing,
 } from './rememberedListings';
 
@@ -48,13 +48,13 @@ describe('rememberListing', () => {
     it('keeps a folder of one deployment apart from the same folder of another', () => {
         rememberListing(deployment, inbox, kept);
 
-        expect(rememberedListing('https://other.example.invalid', inbox)).toStrictEqual(unreadListing);
+        expect(rememberedListing('https://other.example.invalid', inbox)).toStrictEqual(neverOpenedListing);
     });
 
     it('keeps one folder apart from another of the same deployment', () => {
         rememberListing(deployment, inbox, kept);
 
-        expect(rememberedListing(deployment, everything)).toStrictEqual(unreadListing);
+        expect(rememberedListing(deployment, everything)).toStrictEqual(neverOpenedListing);
     });
 
     it('drops the folder read longest ago once it is holding as many as it keeps', () => {
@@ -62,7 +62,9 @@ describe('rememberListing', () => {
             rememberListing(deployment, { kind: 'account', accountId: `account-${String(at)}` }, kept);
         }
 
-        expect(rememberedListing(deployment, { kind: 'account', accountId: 'account-0' })).toStrictEqual(unreadListing);
+        expect(rememberedListing(deployment, { kind: 'account', accountId: 'account-0' })).toStrictEqual(
+            neverOpenedListing,
+        );
         expect(rememberedListing(deployment, { kind: 'account', accountId: 'account-64' })).toStrictEqual(kept);
     });
 
@@ -96,7 +98,7 @@ describe('rememberedListing', () => {
     ])('opens at the leading end for %s', (_, written) => {
         window.sessionStorage.setItem(storageKey, written);
 
-        expect(rememberedListing(deployment, inbox)).toStrictEqual(unreadListing);
+        expect(rememberedListing(deployment, inbox)).toStrictEqual(neverOpenedListing);
     });
 
     it.each([
@@ -114,7 +116,7 @@ describe('rememberedListing', () => {
     ])('opens at the leading end for a record carrying %s', (_, written) => {
         stored({ [keyFor(inbox)]: written });
 
-        expect(rememberedListing(deployment, inbox)).toStrictEqual(unreadListing);
+        expect(rememberedListing(deployment, inbox)).toStrictEqual(neverOpenedListing);
     });
 
     it('refuses a store holding more folders than it keeps rather than reading part of it', () => {
@@ -124,7 +126,7 @@ describe('rememberedListing', () => {
 
         stored(crowd);
 
-        expect(rememberedListing(deployment, { kind: 'account', accountId: '1' })).toStrictEqual(unreadListing);
+        expect(rememberedListing(deployment, { kind: 'account', accountId: '1' })).toStrictEqual(neverOpenedListing);
     });
 });
 
@@ -134,6 +136,6 @@ describe('forgetListings', () => {
 
         forgetListings();
 
-        expect(rememberedListing(deployment, inbox)).toStrictEqual(unreadListing);
+        expect(rememberedListing(deployment, inbox)).toStrictEqual(neverOpenedListing);
     });
 });

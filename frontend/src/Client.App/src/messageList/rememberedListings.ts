@@ -44,12 +44,22 @@ export interface RememberedListing extends MailListing {
     readonly rowInPage: number;
 }
 
-/** A folder nobody has read yet: the opening listing, at the leading end of it. */
-export const unreadListing: RememberedListing = { ...openingListing, cursor: null, readAs: 'forward', rowInPage: 0 };
+/**
+ * Where a folder nobody has opened yet is read from: the opening listing, at the leading end of it.
+ *
+ * Named for the reading position rather than for a message state, because `unread` is this client's word for a message
+ * nobody has read and is a filter three controls away from here.
+ */
+export const neverOpenedListing: RememberedListing = {
+    ...openingListing,
+    cursor: null,
+    readAs: 'forward',
+    rowInPage: 0,
+};
 
 /** How a folder of one deployment was last read, or the opening listing where it has not been. */
 export function rememberedListing(baseAddress: string, scope: MailScope): RememberedListing {
-    return listingsIn(stored())[keyFor(baseAddress, scope)] ?? unreadListing;
+    return listingsIn(stored())[keyFor(baseAddress, scope)] ?? neverOpenedListing;
 }
 
 /** Keeps how a folder is being read and where in it the reader is, so leaving and returning is a continuation. */

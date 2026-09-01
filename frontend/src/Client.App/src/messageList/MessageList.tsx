@@ -423,7 +423,10 @@ export function MessageList({
     if (rowCount === 0 && failure !== null) {
         return (
             <div className="flex flex-col items-start gap-2">
-                <p className="text-sm text-warning">
+                {/* Announced rather than merely drawn, for the reason the reading pane's failure is: a reader who
+                    heard the list say it was reading hears nothing at all when it stops, and the way out sits under a
+                    sentence they were never told about. */}
+                <p className="text-sm text-warning" role="alert">
                     {translate('list.failed', { reason: translate(failureLabels[failure.reason]) })}
                 </p>
 
@@ -469,7 +472,7 @@ export function MessageList({
                 {/* A read that failed with rows already drawn is the partial state: what is on the screen stays, and
                     what is missing is said above it rather than replacing it. */}
                 {failure === null ? null : (
-                    <p className="text-sm text-warning">
+                    <p className="text-sm text-warning" role="alert">
                         {translate('list.partiallyFailed', { reason: translate(failureLabels[failure.reason]) })}
                     </p>
                 )}
