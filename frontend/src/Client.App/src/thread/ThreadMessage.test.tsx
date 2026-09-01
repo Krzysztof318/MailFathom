@@ -154,6 +154,30 @@ describe('ThreadMessage', () => {
         });
     });
 
+    it('recognises a sender by their initials, which is what a conversation of several people is scanned down', () => {
+        drawing(false);
+
+        expect(screen.getByText('TA')).toBeDefined();
+    });
+
+    it('takes the initials from the address where the sender wrote no name', () => {
+        drawing(false, message({ senderDisplayName: null }));
+
+        expect(screen.getByText('A')).toBeDefined();
+    });
+
+    it('invents no initials for a sender this deployment could not name', () => {
+        drawing(false, message({ senderDisplayName: null, senderAddress: null }));
+
+        expect(screen.queryByText('NS')).toBeNull();
+    });
+
+    it('says a collapsed message carries files, which is what a reader opens it for', () => {
+        drawing(false, message({ hasAttachments: true, attachmentCount: 2 }));
+
+        expect(screen.getByText('2 attached')).toBeDefined();
+    });
+
     it('offers the way to the message on its own, where everything a conversation does not draw is', () => {
         const onOpenOnItsOwn = vi.fn();
         drawing(true, message(), { onOpenOnItsOwn });

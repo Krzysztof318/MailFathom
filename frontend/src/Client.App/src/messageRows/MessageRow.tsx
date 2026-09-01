@@ -4,6 +4,8 @@
 
 import type { PointerEvent, ReactNode } from 'react';
 import type { MailTimelineEntry } from '@mailfathom/client-backend';
+import { MessageMarkers } from '../controls/MessageMarkers';
+import { Organisation } from '../controls/Organisation';
 import { ReceivedAt } from '../controls/ReceivedAt';
 import { useLocalization } from '../localization/useLocalization';
 
@@ -87,7 +89,7 @@ export function MessageRow({
 
                 <Organisation address={email.senderAddress} />
 
-                <Markers email={email} />
+                <MessageMarkers email={email} />
 
                 <ReceivedAt at={email.receivedAt} />
             </div>
@@ -114,56 +116,4 @@ export function MessageRow({
 /** Who the row is about: the sender, else the address it came from, else who it was written to. */
 function correspondent(email: MailTimelineEntry): string | undefined {
     return email.senderDisplayName ?? email.senderAddress ?? email.toAddresses[0];
-}
-
-// The host the message came from, which is what the reader recognises when the display name is somebody's first name
-// and the address is not shown. Absent where the sender wrote no address, rather than drawn as an empty parenthesis.
-// It gives way before the name does: a column this narrow cannot hold both in full, and the name is what is scanned.
-function Organisation({ address }: { readonly address: string | null }) {
-    const at = address?.lastIndexOf('@') ?? -1;
-
-    if (address === null || at < 0 || at === address.length - 1) {
-        return null;
-    }
-
-    return <span className="hidden truncate text-xs text-faint workspace:inline">{address.slice(at + 1)}</span>;
-}
-
-// What the mail server said about the message, in the order a reader scans for it. Each carries its own words, because
-// a mark with no name is a mark nobody using a screen reader can see at all.
-function Markers({ email }: { readonly email: MailTimelineEntry }) {
-    const { translate } = useLocalization();
-
-    return (
-        <span className="ms-auto flex shrink-0 items-center gap-1">
-            {email.answered ? (
-                <Marker label={translate('list.answered')}>
-                    <path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11Z" />
-                </Marker>
-            ) : null}
-
-            {email.hasAttachments ? (
-                <Marker label={translate('list.attachments', { count: String(email.attachmentCount) })}>
-                    <path d="M16.5 6.5v9a4.5 4.5 0 1 1-9 0V5.5a3 3 0 1 1 6 0v9a1.5 1.5 0 1 1-3 0v-8H9v8a3 3 0 1 0 6 0v-9a4.5 4.5 0 1 0-9 0v10a6 6 0 0 0 12 0v-9h-1.5Z" />
-                </Marker>
-            ) : null}
-
-            {email.flagged ? (
-                <Marker label={translate('list.flagged')}>
-                    <path d="m12 17.3-6.2 3.7 1.7-7L2 9.2l7.2-.6L12 2l2.8 6.6 7.2.6-5.5 4.8 1.7 7L12 17.3Z" />
-                </Marker>
-            ) : null}
-        </span>
-    );
-}
-
-function Marker({ label, children }: { readonly label: string; readonly children: ReactNode }) {
-    return (
-        <span className="text-muted">
-            <svg viewBox="0 0 24 24" aria-hidden="true" className="size-3.5 fill-current">
-                {children}
-            </svg>
-            <span className="sr-only">{label}</span>
-        </span>
-    );
 }

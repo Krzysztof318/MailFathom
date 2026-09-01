@@ -3,8 +3,11 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { ClientSession, MailFathomTransport, MailThreadMessage } from '@mailfathom/client-backend';
+import { MessageMarkers } from '../controls/MessageMarkers';
+import { Organisation } from '../controls/Organisation';
 import { ReceivedAt } from '../controls/ReceivedAt';
 import { SecondaryButton } from '../controls/SecondaryButton';
+import { SenderAvatar } from '../controls/SenderAvatar';
 import { useLocalization } from '../localization/useLocalization';
 import { Message } from '../messageBody/Message';
 
@@ -53,6 +56,8 @@ export function ThreadMessage({
                     ref={onSummary}
                     className="flex cursor-pointer items-baseline gap-2 px-3 py-2 transition hover:bg-hover"
                 >
+                    <SenderAvatar displayName={email.senderDisplayName} address={email.senderAddress} />
+
                     {email.unread ? (
                         <span className="size-2 shrink-0 rounded-full bg-accent">
                             <span className="sr-only">{translate('list.unread')}</span>
@@ -65,6 +70,8 @@ export function ThreadMessage({
                         {email.senderDisplayName ?? email.senderAddress ?? translate('list.senderUnknown')}
                     </span>
 
+                    <Organisation address={email.senderAddress} />
+
                     {/* What this message added, trimmed of the history it quoted by the deployment rather than here.
                         It gives way to the body once the message is open, where drawing it again would be the same
                         words twice on one screen. */}
@@ -74,9 +81,9 @@ export function ThreadMessage({
                         </span>
                     )}
 
-                    <span className="ms-auto shrink-0">
-                        <ReceivedAt at={email.receivedAt} />
-                    </span>
+                    <MessageMarkers email={email} />
+
+                    <ReceivedAt at={email.receivedAt} />
                 </summary>
 
                 {/* Mounted by the expansion rather than hidden by it, which is what makes a collapsed message cost no
