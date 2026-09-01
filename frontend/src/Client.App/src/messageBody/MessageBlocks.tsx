@@ -34,9 +34,11 @@ const alignments: Readonly<Record<MailBlockAlignment, string>> = {
     Justify: 'text-justify',
 };
 
-// A message never claims the level the application's own title holds, so every heading it wrote is drawn one level
-// deeper. The reading order stays a real heading order, which is what a screen reader navigates by.
-const headingElements = ['h2', 'h3', 'h4', 'h5', 'h6', 'h6'] as const;
+// A message never claims a level the screen around it already holds, so every heading it wrote is drawn two levels
+// deeper: the space's own title is the first, and the reading pane draws the message's subject as the second. What a
+// sender wrote therefore starts below the subject it belongs to, which is what makes the reading order a real heading
+// order rather than a message whose own headings read as siblings of its subject.
+const headingElements = ['h3', 'h4', 'h5', 'h6', 'h6', 'h6'] as const;
 
 export function MessageBlocks({ blocks }: { readonly blocks: readonly MailDocumentBlock[] }) {
     return (

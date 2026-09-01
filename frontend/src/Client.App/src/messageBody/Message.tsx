@@ -16,9 +16,9 @@ import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { MessageBody } from './MessageBody';
 
-// One message, read and drawn. The pane that will choose which message and lay the space out around it is #1426's;
-// what this owns is the read itself, the reader's own ask for pictures from the sender, and the five states a surface
-// that waits owes somebody.
+// One message's body, read and drawn. Which message that is, and everything the reading pane lays out around it, is
+// `readingPane/ReadingPane.tsx`'s; what this owns is the body read itself, the reader's own ask for pictures from the
+// sender, and the five states a surface that waits owes somebody.
 //
 // Asking for pictures re-reads that one message with the ask in the query, and neither this component nor anything
 // beneath it writes the answer down: leaving the message and coming back asks again, which is the whole of what

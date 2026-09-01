@@ -169,6 +169,56 @@ export const en = {
     'body.remotePicturesShownCount': 'Pictures loaded from the sender: {count}',
     'body.undrawnPicturesCount': 'Pictures too large to draw: {count}',
 
+    'message.nothingOpen': 'Open a message to read it here.',
+    'message.reading': 'Reading this message…',
+    'message.offline':
+        'This machine is offline, so this message cannot be opened. It opens on its own once the network comes back.',
+    'message.failed': 'This message could not be opened: {reason}.',
+    'message.noSubject': 'No subject',
+    'message.noAuthor': 'This message names nobody as its author.',
+    'message.sentAt': 'Sent {when}',
+    'message.sentAtUnknown': 'The sender wrote no date this client can read.',
+    'message.otherParticipants': 'Everybody else this message names ({count})',
+
+    'participant.sender': 'Submitted by',
+    'participant.replyTo': 'Reply to',
+    'participant.to': 'To',
+    'participant.cc': 'Copy to',
+    'participant.bcc': 'Blind copy to',
+
+    'sender.failed':
+        'A receiving mail server checked who actually sent this message and reported that the author it displays did not hold.',
+    'sender.recognized': 'This deployment recognizes the sender of this message.',
+    'sender.authenticatedBy': 'Authenticated by {domain}, which is who actually sent it rather than the name above.',
+    'sender.authenticatedByNobody': 'Nothing authenticated a sender for this message.',
+
+    'attachments.heading': 'Files this message carries',
+    'attachment.unnamed': 'Unnamed file',
+    'attachment.download': 'Download {name}',
+    'attachment.nameWasRewritten':
+        'The sender wrote a file name this deployment would not use, so what is shown is the name it was given instead.',
+    'attachment.arriving': 'How much of the file has arrived',
+    'attachment.arrivingOf': '{arrived} of {whole}',
+    'attachment.stop': 'Stop downloading',
+    'attachment.saved': '{name} was downloaded.',
+    'attachment.abandoned': 'The download was stopped, so nothing was saved.',
+    'attachment.refusedUnauthenticated':
+        'This deployment no longer accepts the credential, so the file was not downloaded. Sign in again.',
+    'attachment.refusedUnauthorized':
+        'This credential may not read mail on this deployment, so the file was not downloaded.',
+    'attachment.refusedUnavailable': 'The deployment did not answer, so the file was not downloaded. Try again.',
+    'attachment.refusedLargerThanDescribed':
+        'The deployment sent more than this message said the file holds, so nothing was saved. Report this as a defect.',
+
+    'carried.total': 'Everything attached comes to {size}.',
+    'carried.encrypted': 'This message carries encrypted content somewhere.',
+    'carried.unverifiedSignature': 'This message carries a signature, and nothing here has verified it.',
+    'carried.unexpandedTnefPart':
+        'This message carries a winmail.dat part, which was recorded without being opened, so whatever it holds is not listed above.',
+
+    'scope.fragment': 'Asking about the part of this message you selected: “{fragment}”',
+    'scope.wholeMessage': 'Ask about the whole message instead',
+
     'link.goesTo': 'goes to {host}',
     'link.warningDisplayedHostDiffers': 'This link does not go where its words say. It goes to {host}.',
     'link.warningAsciiHost': 'This link goes to {host}, which is written {asciiHost}.',

@@ -664,7 +664,11 @@ of its body exist to be asked for:
     "references": []
   },
   "body": { "availability": "Readable", "plainText": true, "html": true },
-  "sender": { "authorAuthentication": "Authenticated", "deploymentTrust": "Trusted" },
+  "sender": {
+    "authorAuthentication": "Authenticated",
+    "deploymentTrust": "Trusted",
+    "authenticatedDomain": "example.test"
+  },
   "attachments": [
     {
       "position": 0,
@@ -711,6 +715,12 @@ would mean inventing the rule that combines them: an authenticated author nobody
 legitimate mail and carries the same trust value as one whose authentication failed outright. Both are read back as they
 were stored; nothing on this path re-reads a header, resolves DNS, or evaluates a policy, so what a reader is shown is
 what was concluded about the authenticated author rather than a reading of the `From` header.
+
+**`authenticatedDomain` is who the authentication was established for**, which is the fact a reader needs when the
+name a message displays is not it. It is the domain the receiving mail server authenticated and nothing wider: it is
+`null` for a message nothing authenticated a sender for, and it is published beside the two states rather than
+compared against the `From` address, because judging whether the two agree is the policy this path deliberately does
+not evaluate.
 
 **No octet of a file is here, at any size and in any encoding.** Each entry says what the file is called, what it
 declares itself to be, and how large it decodes to — which is what a reader decides against — and `position` is what its

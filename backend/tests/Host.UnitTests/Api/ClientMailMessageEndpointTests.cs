@@ -191,6 +191,40 @@ public sealed class ClientMailMessageEndpointTests
         Assert.Equal("Trusted", response.Sender.DeploymentTrust);
     }
 
+    /// <summary>
+    /// The domain that authenticated travels beside the verdict, so a reading pane can name who actually sent a message
+    /// rather than repeating the <c>From</c> value it displays — which is the one thing an impersonation gets wrong.
+    /// </summary>
+    [Fact]
+    public void For_AMessageWhoseAuthorAuthenticated_NamesTheDomainThatDidSo()
+    {
+        // Arrange
+        var evidence = new SenderAuthenticationEvidence
+        {
+            AuthenticatedDomain = SenderDomain.TryCreate("mail.example.test", out var domain) ? domain : default,
+            AuthenticatedBy = SenderAuthenticationMethod.DomainKeysIdentifiedMail,
+            Dmarc = DmarcOutcome.Pass,
+            Source = SenderAuthenticationSource.ReceivingServer,
+        };
+
+        // Act
+        var response = ClientMailMessageResponse.For(MessageWith(evidence));
+
+        // Assert
+        Assert.Equal("mail.example.test", response.Sender.AuthenticatedDomain);
+    }
+
+    /// <summary>A message nothing authenticated names no domain, which is an ordinary outcome rather than missing data.</summary>
+    [Fact]
+    public void For_AMessageNothingAuthenticated_NamesNoDomain()
+    {
+        // Act
+        var response = ClientMailMessageResponse.For(MessageWith());
+
+        // Assert
+        Assert.Null(response.Sender.AuthenticatedDomain);
+    }
+
     /// <summary>The flags a pane draws are the ones the mail server last showed, and unread is the absence of the seen flag.</summary>
     [Fact]
     public void For_AReadMessage_CarriesTheFlagsTheServerLastShowed()
@@ -204,7 +238,7 @@ public sealed class ClientMailMessageEndpointTests
         Assert.False(response.Answered);
     }
 
-    private static ReadEmailContent MessageWith() => new()
+    private static ReadEmailContent MessageWith(SenderAuthenticationEvidence? evidence = null) => new()
     {
         StoredEmailId = StoredEmailId.Create(Message),
         AccountId = MailAccountId.Create("primary"),
@@ -242,7 +276,7 @@ public sealed class ClientMailMessageEndpointTests
             AuthorAuthentication = AuthorAuthenticationOutcome.Authenticated,
             DeploymentTrust = SenderTrustLevel.Trusted,
         },
-        SenderAuthenticationEvidence = SenderAuthenticationEvidence.None,
+        SenderAuthenticationEvidence = evidence ?? SenderAuthenticationEvidence.None,
         MachineAuthorship = MachineAuthorshipAssessment.NotAssessed,
         Thread = new ReadEmailThread
         {

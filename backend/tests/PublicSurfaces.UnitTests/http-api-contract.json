@@ -662,6 +662,12 @@
       },
       "ClientMailSenderVerdictResponse": {
         "properties": {
+          "authenticatedDomain": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "authorAuthentication": {
             "type": "string"
           },
@@ -671,7 +677,8 @@
         },
         "required": [
           "authorAuthentication",
-          "deploymentTrust"
+          "deploymentTrust",
+          "authenticatedDomain"
         ],
         "type": "object"
       },

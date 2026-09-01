@@ -54,10 +54,16 @@ export function rememberedWorkspace(): Workspace {
     return workspaceIn(parsed) ?? emptyWorkspace;
 }
 
-/** Keeps what this tab is looking at, so a reload returns to it. */
+/**
+ * Keeps what this tab is looking at, so a reload returns to it.
+ *
+ * Everything but the selected fragment, which is a passage of somebody's mail rather than a name the service assigned:
+ * keeping it would put mail content in a browser store for nothing, since the reading pane drops the fragment as the
+ * message it belongs to opens and a reload is that message opening again.
+ */
 export function rememberWorkspace(workspace: Workspace): void {
     try {
-        window.sessionStorage.setItem(storageKey, JSON.stringify(workspace));
+        window.sessionStorage.setItem(storageKey, JSON.stringify({ ...workspace, fragment: null }));
     } catch {
         // A browser refusing storage still runs the client; what a person was looking at then lasts the run rather
         // than outliving it, which is a smaller loss than a client that fails over a preference.
@@ -90,7 +96,7 @@ function workspaceIn(value: unknown): Workspace | null {
         return null;
     }
 
-    return { scope, collapsed, selection, question };
+    return { scope, collapsed, selection, fragment: null, question };
 }
 
 function scopeIn(value: unknown): MailScope | null {

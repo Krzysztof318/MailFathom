@@ -10,8 +10,8 @@ import { MessageBlocks } from './MessageBlocks';
 import { LinkOpenerContext } from '../shellOperations/linkOpener';
 
 // Written as attacks rather than as examples, because a message is written by a stranger: what is asserted below is
-// that markup written into a message stays characters, that a heading a sender wrote cannot claim the level the
-// application's own title holds, and that a block this build does not know costs the reader that block and no more.
+// that markup written into a message stays characters, that a heading a sender wrote cannot claim a level the screen
+// around the message already holds, and that a block this build does not know costs the reader that block and no more.
 
 const noEmphasis = {
     bold: false,
@@ -56,11 +56,12 @@ describe('MessageBlocks', () => {
         expect(screen.queryByRole('img')).toBeNull();
     });
 
-    it('never lets a heading a sender wrote claim the level the application own title holds', () => {
+    it('never lets a heading a sender wrote claim a level the screen around the message already holds', () => {
         drawing([{ type: 'heading', level: 1, content: [run('A masthead')], alignment: 'Start' }]);
 
-        expect(screen.getByRole('heading', { level: 2, name: 'A masthead' })).toBeDefined();
+        expect(screen.getByRole('heading', { level: 3, name: 'A masthead' })).toBeDefined();
         expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+        expect(screen.queryByRole('heading', { level: 2 })).toBeNull();
     });
 
     it('draws the deepest heading a message may carry without running past the levels there are', () => {
