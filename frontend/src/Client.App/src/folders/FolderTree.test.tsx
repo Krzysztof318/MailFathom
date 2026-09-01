@@ -305,6 +305,16 @@ describe('FolderTree', () => {
         expect(carried().scope).toEqual({ kind: 'everything' });
     });
 
+    it('leaves the tab stop on the row the pointer opened, so tabbing out leaves the tree from it', async () => {
+        renderTree(answering(JSON.stringify(tree)));
+
+        await drawn();
+
+        fireEvent.click(row(/^Work/).firstElementChild as HTMLElement);
+
+        expect(row(/^Work/).getAttribute('tabindex')).toBe('0');
+    });
+
     it('keeps what has been folded away in the workspace, so it survives moving between the spaces', async () => {
         renderTree(answering(JSON.stringify(tree)));
 

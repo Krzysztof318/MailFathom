@@ -65,6 +65,17 @@ describe('rememberedWorkspace', () => {
             value: JSON.stringify({ ...emptyWorkspace, scope: { kind: 'folder', alias: 'INBOX' } }),
         },
         {
+            shape: 'an account identifier longer than any the service assigned',
+            value: JSON.stringify({ ...emptyWorkspace, scope: { kind: 'account', accountId: 'a'.repeat(257) } }),
+        },
+        {
+            shape: 'a folder alias longer than any the service assigned',
+            value: JSON.stringify({
+                ...emptyWorkspace,
+                scope: { kind: 'folder', accountId: 'work', alias: 'a'.repeat(257) },
+            }),
+        },
+        {
             shape: 'folded rows that are not rows',
             value: JSON.stringify({ ...emptyWorkspace, collapsed: [42] }),
         },

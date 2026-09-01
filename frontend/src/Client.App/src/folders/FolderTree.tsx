@@ -243,6 +243,10 @@ export function FolderTree({
                             }
                         }}
                         onToggle={() => {
+                            // The tab stop follows the row a pointer just acted on, exactly as selecting one moves it:
+                            // the browser has already put DOM focus on this row, and a tab stop left on another is a
+                            // reader tabbing out of the tree from somewhere they never were.
+                            setFocused(visibleRow.row.key);
                             fold(visibleRow.row.key, visibleRow.expanded === true);
                         }}
                         onKeyDown={(event) => {

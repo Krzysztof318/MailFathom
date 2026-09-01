@@ -19,11 +19,11 @@ import { emptyWorkspace, type Workspace } from './useWorkspace';
 const storageKey = 'mailfathom.workspace';
 
 // What a stored workspace may carry before it is read as somebody's edit rather than as this client's own writing. A
-// tree holds tens of rows, a question is a sentence, and a selection is an identifier, so each of the three is far
-// above anything the client itself writes there.
+// tree holds tens of rows, a question is a sentence, and an identifier — a message, an account, a folder alias — is a
+// name the service assigned, so each of the three is far above anything the client itself writes there.
 const mostCollapsedRows = 512;
 const longestQuestion = 4_096;
-const longestSelection = 256;
+const longestIdentifier = 256;
 
 /** What this tab was last looking at, or an empty workspace where nothing was kept or what was kept is not one. */
 export function rememberedWorkspace(): Workspace {
@@ -78,7 +78,7 @@ function workspaceIn(value: unknown): Workspace | null {
         return null;
     }
 
-    if (selection !== null && (typeof selection !== 'string' || selection.length > longestSelection)) {
+    if (selection !== null && !isIdentifier(selection)) {
         return null;
     }
 
@@ -104,14 +104,18 @@ function scopeIn(value: unknown): MailScope | null {
         case 'role':
             return isMailFolderRole(record['role']) ? { kind: 'role', role: record['role'] } : null;
         case 'account':
-            return typeof accountId === 'string' ? { kind: 'account', accountId } : null;
+            return isIdentifier(accountId) ? { kind: 'account', accountId } : null;
         case 'folder':
-            return typeof accountId === 'string' && typeof alias === 'string'
-                ? { kind: 'folder', accountId, alias }
-                : null;
+            return isIdentifier(accountId) && isIdentifier(alias) ? { kind: 'folder', accountId, alias } : null;
         default:
             return null;
     }
+}
+
+// A name the service assigned rather than free text, so it is bounded here for the same reason every other stored value
+// is: what is read back is held in state and written out again on every revision.
+function isIdentifier(value: unknown): value is string {
+    return typeof value === 'string' && value.length <= longestIdentifier;
 }
 
 function collapsedIn(value: unknown): readonly string[] | null {
