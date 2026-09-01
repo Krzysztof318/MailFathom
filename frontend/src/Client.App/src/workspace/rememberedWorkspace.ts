@@ -25,6 +25,10 @@ const mostCollapsedRows = 512;
 const longestQuestion = 4_096;
 const longestIdentifier = 256;
 
+// What a selection may hold before it is read as somebody's edit. The list keeps a bounded number of pages, so a reader
+// who selects every row it is holding selects a few hundred; this is above that and bounds what one tab writes here.
+const mostSelectedMessages = 1_024;
+
 // A folded row is keyed by the scope it stands for, so at its longest it names an account and a folder's whole place on
 // its mail server rather than one identifier.
 const longestRow = 1_024;
@@ -82,9 +86,10 @@ function workspaceIn(value: unknown): Workspace | null {
     const scope = scopeIn(record['scope']);
     const collapsed = collapsedIn(record['collapsed']);
     const selection = record['selection'] ?? null;
+    const selected = selectedIn(record['selected']);
     const question = record['question'];
 
-    if (scope === null || collapsed === null) {
+    if (scope === null || collapsed === null || selected === null) {
         return null;
     }
 
@@ -96,7 +101,24 @@ function workspaceIn(value: unknown): Workspace | null {
         return null;
     }
 
-    return { scope, collapsed, selection, fragment: null, question };
+    return { scope, collapsed, selection, fragment: null, selected, question };
+}
+
+function selectedIn(value: unknown): readonly string[] | null {
+    if (!Array.isArray(value) || value.length > mostSelectedMessages) {
+        return null;
+    }
+
+    const messages: string[] = [];
+    for (const message of value) {
+        if (!isIdentifier(message)) {
+            return null;
+        }
+
+        messages.push(message);
+    }
+
+    return messages;
 }
 
 function scopeIn(value: unknown): MailScope | null {

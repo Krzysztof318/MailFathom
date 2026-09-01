@@ -13,6 +13,7 @@ const kept: Workspace = {
     collapsed: ['account:personal'],
     selection: 'AAMkAD-42',
     fragment: null,
+    selected: ['AAMkAD-42', 'AAMkAD-43'],
     question: 'what did Nordwind send',
 };
 
@@ -107,6 +108,25 @@ describe('rememberedWorkspace', () => {
         {
             shape: 'a selection longer than any identifier the client wrote there',
             value: JSON.stringify({ ...emptyWorkspace, selection: 'a'.repeat(257) }),
+        },
+        {
+            shape: 'messages picked out as something other than a list of them',
+            value: JSON.stringify({ ...emptyWorkspace, selected: 'message-1' }),
+        },
+        {
+            shape: 'a message picked out that is not an identifier',
+            value: JSON.stringify({ ...emptyWorkspace, selected: [7] }),
+        },
+        {
+            shape: 'a picked-out identifier longer than any the client wrote there',
+            value: JSON.stringify({ ...emptyWorkspace, selected: ['a'.repeat(257)] }),
+        },
+        {
+            shape: 'more messages picked out than one question may be asked about',
+            value: JSON.stringify({
+                ...emptyWorkspace,
+                selected: Array.from({ length: 1_025 }, (_, at) => `message-${String(at)}`),
+            }),
         },
     ])('opens on nothing rather than on $shape', ({ value }) => {
         window.sessionStorage.setItem(storageKey, value);

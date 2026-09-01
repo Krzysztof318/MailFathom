@@ -75,6 +75,17 @@ export {
     type MailParticipantRole,
     type MailSenderVerdict,
 } from './mailMessage';
+export {
+    longestTimelinePage,
+    mailTimelineRoute,
+    readMailTimeline,
+    timelineQueryString,
+    type MailTimelineEntry,
+    type MailTimelineOrder,
+    type MailTimelinePage,
+    type MailTimelinePageDirection,
+    type MailTimelineQuery,
+} from './mailTimeline';
 export { clientRoutePrefix, headersFor, routeFor, type ClientSession, type DeploymentAddress } from './session';
 export { reachDeployment, signIn, type DeploymentGreeting, type SignInOutcome, type SignInRefusal } from './signIn';
 export { longestResponseBody, type ClientRequest, type ClientResponse, type MailFathomTransport } from './transport';

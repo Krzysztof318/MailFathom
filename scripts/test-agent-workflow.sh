@@ -8563,9 +8563,14 @@ no_tracked_text_file_carries_a_nul_byte() {
 # extension is also what keeps `Cargo.lock` beside `Cargo.toml` out of the answer: those spell their
 # shared stem identically, and only a stem spelled two ways is a collision. A leading dot is not an
 # extension, so `.npmrc` keeps its whole name.
+#
+# The sort collates by byte, because a locale collation orders one pair two ways: `theme` before
+# `Theme` under a UTF-8 locale and after it under `C`, so which half of a collision the answer names
+# first would follow the machine the sweep ran on. It also stops `sort -u` from dropping one of a
+# pair a locale collates as equal, which would hide the collision the sweep exists to find.
 paths_differing_only_by_case() {
   sed -E 's#(/|^)([^/]+)\.[^/.]+$#\1\2#' |
-    sort -u |
+    LC_ALL=C sort -u |
     awk '{ key = tolower($0); if (key in seen) { print seen[key] " and " $0 } else { seen[key] = $0 } }'
 }
 
@@ -8590,7 +8595,7 @@ no_two_tracked_paths_differ_only_by_case() {
 
   # And the sweep itself, against the pair the nightly of 2026-09-01 found and against the two shapes
   # it must leave alone.
-  if [[ "$(printf 'a/theme.ts\na/Theme.tsx\n' | paths_differing_only_by_case)" != 'a/theme and a/Theme' ]]; then
+  if [[ "$(printf 'a/theme.ts\na/Theme.tsx\n' | paths_differing_only_by_case)" != 'a/Theme and a/theme' ]]; then
     printf 'the sweep does not report one stem spelled two ways in a directory\n' >&2
     failures=$(( failures + 1 ))
   fi

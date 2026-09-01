@@ -113,6 +113,37 @@ export const pl: Catalogue = {
     'folder.all': 'Cała poczta',
     'folder.outbox': 'Do wysłania',
 
+    'list.label': 'Wiadomości',
+    'list.reading': 'Wczytywanie poczty…',
+    'list.readingMore': 'Wczytywanie dalszych wiadomości…',
+    'list.rowArriving': 'Ponowne wczytywanie tej wiadomości…',
+    'list.wholeFolderRead': 'To już cały ten folder.',
+    'list.failed': 'Nie udało się odczytać tego folderu: {reason}.',
+    'list.partiallyFailed': 'Części tego folderu nie udało się odczytać: {reason}.',
+    'list.emptyFolder': 'W tym folderze nie ma poczty.',
+    'list.nothingMatches': 'Żadna wiadomość w tym folderze nie pasuje do zawężenia listy.',
+    'list.notSynchronizedYet':
+        'Do tego wdrożenia nie pobrano jeszcze niczego z tej skrzynki, więc nie ma czego pokazać. Folder nie jest pusty — nie został odczytany.',
+    'list.emptyWhileFailing':
+        'Ta skrzynka przestała się synchronizować, więc może tu być mniej wiadomości, niż ma serwer pocztowy.',
+
+    'list.order': 'Kolejność',
+    'list.newestFirst': 'Najnowsze na górze',
+    'list.oldestFirst': 'Najstarsze na górze',
+    'list.onlyUnread': 'Tylko nieprzeczytane',
+    'list.onlyFlagged': 'Tylko oznaczone',
+    'list.onlyWithAttachments': 'Tylko z załącznikami',
+    'list.includeJunk': 'Uwzględnij spam',
+    'list.selectSeveral': 'Zaznacz wiele',
+    'list.selectedCount': 'Zaznaczono: {count}',
+
+    'list.unread': 'Nieprzeczytana',
+    'list.flagged': 'Oznaczona',
+    'list.answered': 'Odpowiedziano',
+    'list.attachments': 'Załączniki: {count}',
+    'list.noSubject': 'Bez tematu',
+    'list.senderUnknown': 'Brak nadawcy',
+
     'connection.current': 'Wszystkie konta są aktualne.',
     'connection.behind': 'Część kont ma zaległości.',
     'connection.failing': 'Część kont przestała się synchronizować.',

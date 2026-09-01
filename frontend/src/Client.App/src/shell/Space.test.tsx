@@ -9,9 +9,10 @@ import { LocalizationProvider } from '../localization/Localization';
 import type { Space as SpaceName } from '../routing/spaces';
 import { Space } from './Space';
 
-// Not catalogue entries: each stands for whatever the frame composes for Mail, which is the point of the two props.
+// Not catalogue entries: each stands for whatever the frame composes for Mail, which is the point of the three props.
 const handedToMail = 'The mail this space was handed.';
 const handedTheFolders = 'The folder tree this space was handed.';
+const handedTheList = 'The message list this space was handed.';
 
 // Every case here renders under `StrictMode`, which is what `main.tsx` mounts and what makes React invoke an effect
 // twice on the first mount. A focus rule written against "has this effect run before" passes without it and moves
@@ -20,7 +21,12 @@ function inStrictMode(space: SpaceName): ReactNode {
     return (
         <StrictMode>
             <LocalizationProvider>
-                <Space space={space} folders={<p>{handedTheFolders}</p>} mail={<p>{handedToMail}</p>} />
+                <Space
+                    space={space}
+                    folders={<p>{handedTheFolders}</p>}
+                    list={<p>{handedTheList}</p>}
+                    mail={<p>{handedToMail}</p>}
+                />
             </LocalizationProvider>
         </StrictMode>
     );
@@ -57,6 +63,12 @@ describe('Space', () => {
         render(inStrictMode('mail'));
 
         expect(screen.getByText(handedTheFolders)).toBeDefined();
+    });
+
+    it('does not call the Mail space unbuilt, which is what it stopped being when it started reading mail', () => {
+        render(inStrictMode('mail'));
+
+        expect(screen.queryByText(/This space is not built yet\./)).toBeNull();
     });
 
     it('shows the pending note rather than the mail in a space nothing has been built for yet', () => {
