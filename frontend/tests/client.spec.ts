@@ -341,6 +341,34 @@ function timelinePage(url: URL): string {
  * own, and this suite is compiled without a DOM declaration on purpose — `tsconfig.json` says why — so a closure
  * naming an element would be the one thing that changes. A gesture needs neither.
  */
+/**
+ * The row at the top of the list once it has stopped moving.
+ *
+ * A wheel gesture goes on arriving after the row under it has changed, and where the reader is is written down only
+ * once the list has rested — so the row read the instant it changes is not the row the client will remember. Two reads
+ * that agree across longer than that rest is what says the list has settled on one.
+ */
+async function restingFirstRow(list: Locator): Promise<string> {
+    const row = list.getByRole('option').first();
+    let previous = '';
+
+    await expect
+        .poll(
+            async () => {
+                const now = (await row.textContent()) ?? '';
+                const rested = now !== '' && now === previous;
+
+                previous = now;
+
+                return rested;
+            },
+            { intervals: [600, 600, 600, 600] },
+        )
+        .toBe(true);
+
+    return (await row.textContent()) ?? '';
+}
+
 async function readOnward(page: Page, list: Locator): Promise<void> {
     const before = await list.getByRole('option').first().textContent();
 
@@ -890,7 +918,7 @@ test('puts a reader back where they were reading, across a reload', async ({ pag
         await readOnward(page, list);
     }
 
-    const before = await list.getByRole('option').first().textContent();
+    const before = await restingFirstRow(list);
 
     // A reload is a cold start, so where somebody was reading is kept where the credential is kept and read back the
     // same way. Only a real document reloaded proves it was written rather than held.
