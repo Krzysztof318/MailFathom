@@ -22,6 +22,58 @@ const readOutAttribute =
 const readOutAttributeMessage =
     'This attribute is read out to somebody, so it is a user-visible string: put it in src/Client.App/src/localization/en.ts and pass translate() to it.';
 
+// The calls that turn a value back into markup: `dangerouslySetInnerHTML`, `innerHTML`, `outerHTML`,
+// `insertAdjacentHTML`, `document.write`, `document.writeln`, `setHTMLUnsafe` on an element or a shadow root,
+// `DOMParser.parseFromString`, `Range.createContextualFragment`, and an `iframe`'s `srcdoc` in either form. The client is handed no markup and writes none, which is the
+// whole of ADR 0024's safety statement and the reason no sanitizer is pinned: a message reaches a screen as a closed
+// tree of typed values, and React escapes every one of them. Writing any of these is the single change that would
+// undo that, so it is made unwritable rather than left to a reviewer — the same shape the localization rule takes.
+//
+// They are declared here because `no-restricted-syntax` is replaced rather than merged when a later configuration
+// object sets it again, so the block that states the localization rule has to carry these as well.
+const markupWritingSyntax = [
+    {
+        selector: 'JSXAttribute[name.name="dangerouslySetInnerHTML"]',
+        message:
+            'A message reaches this client as a closed document tree and never as markup, per ADR 0024. Draw it with the typed components in src/Client.App/src/messageBody/ instead.',
+    },
+    {
+        selector: 'MemberExpression[property.name=/^(innerHTML|outerHTML|insertAdjacentHTML)$/]',
+        message:
+            'Writing markup from a value is what ADR 0024 refuses: nothing the service sends is markup, and building any here would put a parser back on the path that exists not to have one.',
+    },
+    {
+        selector: 'MemberExpression[property.value=/^(innerHTML|outerHTML|insertAdjacentHTML)$/]',
+        message:
+            'Writing markup from a value is what ADR 0024 refuses, and reaching the same member through a computed name reaches the same parser.',
+    },
+    {
+        selector: 'MemberExpression[object.name="document"][property.name=/^write(ln)?$/]',
+        message:
+            'document.write and document.writeln parse whatever they are given as markup, which is the one thing this client never does. Render elements instead.',
+    },
+    {
+        selector: 'MemberExpression[property.name="setHTMLUnsafe"]',
+        message:
+            'setHTMLUnsafe parses its argument as markup on an element or a shadow root, which is the parser ADR 0024 exists not to have. Render elements instead.',
+    },
+    {
+        selector: 'MemberExpression[property.name=/^(parseFromString|createContextualFragment)$/]',
+        message:
+            'This parses a string into nodes, which is the parser ADR 0024 exists not to have: a message reaches a screen as a closed tree of typed values and nothing here builds one from markup.',
+    },
+    {
+        selector: 'JSXAttribute[name.name="srcdoc"]',
+        message:
+            "srcdoc is a document written from a value and parsed as markup. ADR 0024 draws a message with typed components in the application's own document, and neither a frame nor a second parser is part of that.",
+    },
+    {
+        selector: 'MemberExpression[property.name="srcdoc"]',
+        message:
+            "srcdoc is a document written from a value and parsed as markup. ADR 0024 draws a message with typed components in the application's own document, and neither a frame nor a second parser is part of that.",
+    },
+];
+
 export default defineConfig(
     // `dist/` is what the client build writes, and `src-tauri/target/` and `src-tauri/gen/` are what the desktop
     // shell's build writes; none of the three is source, and the crate target directory alone is larger than
@@ -78,6 +130,14 @@ export default defineConfig(
         },
     },
     {
+        // Both packages and every file in them, tests included: a test reaching for one of these would be proving a
+        // screen against an arrangement the application refuses.
+        files: ['src/*/**/*.{ts,tsx}'],
+        rules: {
+            'no-restricted-syntax': ['error', ...markupWritingSyntax],
+        },
+    },
+    {
         files: ['src/Client.App/**/*.{ts,tsx}'],
         extends: [reactHooks.configs.flat.recommended, reactRefresh.configs.vite],
     },
@@ -91,6 +151,7 @@ export default defineConfig(
         rules: {
             'no-restricted-syntax': [
                 'error',
+                ...markupWritingSyntax,
                 {
                     selector: 'JSXText[value=/\\S/]',
                     message:

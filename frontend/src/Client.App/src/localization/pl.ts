@@ -92,4 +92,47 @@ export const pl: Catalogue = {
     'failure.unauthorized': 'brak uprawnień',
     'failure.unavailable': 'usługa niedostępna',
     'failure.unreadable': 'odpowiedź nie do odczytania',
+
+    'body.reading': 'Odczytywanie wiadomości…',
+    'body.failed': 'Nie udało się odczytać wiadomości: {reason}.',
+
+    'body.encryptedNotReadable': 'Ta wiadomość jest zaszyfrowana i to wdrożenie nie potrafi jej odczytać.',
+    'body.notStoredExceededSizeLimit':
+        'Ta wiadomość była większa, niż to wdrożenie przechowuje, więc jej treść nie została zapisana.',
+    'body.notStoredAwaitingStorageHeadroom':
+        'Ta wiadomość czeka na miejsce w magazynie, zanim jej treść zostanie zapisana.',
+
+    'body.refusedNoHtmlPart':
+        'Nadawca nie napisał sformatowanej wersji tej wiadomości, więc jest ona pokazana jako sam tekst.',
+    'body.refusedReductionFailed':
+        'To wdrożenie nie potrafiło odczytać sformatowanej wersji tej wiadomości, więc jest ona pokazana jako sam tekst.',
+    'body.refusedNothingRenderable':
+        'Sformatowana wersja tej wiadomości nie zawierała niczego do narysowania, więc jest ona pokazana jako sam tekst.',
+    'body.notReduced':
+        'To wdrożenie nie przysłało wersji tej wiadomości do narysowania, więc jest ona pokazana jako sam tekst.',
+
+    'body.truncated': 'Ta wiadomość jest dłuższa, niż okno czytania rysuje, więc kończy się w tym miejscu.',
+    'body.textTruncated': 'Tekst tej wiadomości został skrócony przez ograniczenie stosowane przez to wdrożenie.',
+    'body.blockNotDrawn': 'Fragment tej wiadomości powstał dla nowszego klienta niż ten, więc nie został narysowany.',
+    'body.tableRegion': 'Tabela w tej wiadomości, przewijana w poziomie',
+    'body.preformattedRegion': 'Tekst preformatowany w tej wiadomości, przewijany w poziomie',
+    'body.pictureWithoutDescription': 'Obraz, którego nadawca nie opisał',
+
+    'body.remoteContentRemoved':
+        'Ta wiadomość prosiła o pobranie treści z innego serwera. Zostało to usunięte, więc otwarcie jej nic nadawcy nie zgłosiło.',
+    'body.remoteContentRemovedCount': 'Usuniętych odwołań: {count}',
+    'body.showRemotePictures': 'Pobierz obrazy od nadawcy',
+    'body.showRemotePicturesReveals':
+        'Pobranie ich mówi nadawcy, że ta wiadomość została otwarta. Pytanie dotyczy tylko tej wiadomości i nie jest nigdzie zapamiętywane.',
+    'body.remotePicturesLoading': 'Trwa pobieranie…',
+    'body.showWithoutRemotePictures': 'Pokaż wiadomość bez nich',
+    'body.remotePicturesShown': 'Dla tej wiadomości obrazy są pobierane od nadawcy.',
+    'body.remotePicturesShownCount': 'Obrazów pobranych od nadawcy: {count}',
+    'body.undrawnPicturesCount': 'Obrazów zbyt dużych, by je narysować: {count}',
+
+    'link.goesTo': 'prowadzi do {host}',
+    'link.warningDisplayedHostDiffers': 'Ten odnośnik nie prowadzi tam, gdzie mówią jego słowa. Prowadzi do {host}.',
+    'link.warningAsciiHost': 'Ten odnośnik prowadzi do {host}, zapisanego jako {asciiHost}.',
+    'link.warningWorthChecking': 'Ten odnośnik warto sprawdzić przed otwarciem. Prowadzi do {host}.',
+    'link.couldNotOpen': 'Nie udało się otworzyć tego odnośnika.',
 };

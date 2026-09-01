@@ -7,6 +7,16 @@ export interface ClientRequest {
     readonly method: 'GET';
     readonly path: string;
     readonly headers: Readonly<Record<string, string>>;
+
+    /**
+     * The most of this one answer the transport reads, in bytes, where the operation knows better than the backstop.
+     *
+     * `longestResponseBody` is written for an address nobody has trusted yet, and every operation that asks a
+     * deployment for something it already composes to a stated size is entitled to say so — a bound that cuts off an
+     * answer the service will legitimately send is a defect rather than a protection, and the reader meets it as
+     * `unreadable`, which tells them to report a defect for a message that was fine.
+     */
+    readonly longestAnswer?: number;
 }
 
 /** What came back, reduced to the three things this package reads. */

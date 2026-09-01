@@ -44,6 +44,96 @@ const userName = 'owner';
 const password = 'open sesame';
 const expectedAuthorization = 'Basic b3duZXI6b3BlbiBzZXNhbWU=';
 
+// The message the Mail space draws, standing in for one a deployment would hold, and the closest thing this suite has
+// to a mailbox. Nothing in it comes from a real one and nothing in it names a host this page could actually reach: the
+// blocks are chosen so that each the catalogue holds is drawn at least once, and so that the two things a sender may
+// try are visible — markup written as text, and a link whose words name one place while its target names another.
+//
+// A one-pixel transparent picture stands in for a part the message carried itself; `pictures.invalid` stands in for one
+// it asked to be fetched, and is the host the assertions below watch for.
+const transparentPicture = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+function run(text: string, overrides: Readonly<Record<string, unknown>> = {}) {
+    return { text, emphasis: 'None', foreground: null, link: null, ...overrides };
+}
+
+function messageBlocks(pictureSource: string) {
+    return [
+        { type: 'heading', version: 1, level: 1, content: [run('This week at Example')], alignment: 'Start' },
+        {
+            type: 'paragraph',
+            version: 1,
+            content: [
+                run('A sender may write '),
+                run('<script>alert(1)</script>', { emphasis: 'Bold, Monospace' }),
+                run(' and it stays words.'),
+            ],
+            alignment: 'Inherited',
+        },
+        {
+            type: 'paragraph',
+            version: 1,
+            content: [
+                run('example.invalid', {
+                    link: {
+                        target: 'https://offers.invalid/claim',
+                        host: 'offers.invalid',
+                        asciiHost: null,
+                        deception: 'DisplayedHostDiffers',
+                        isWorthWarningAbout: true,
+                    },
+                }),
+            ],
+            alignment: 'Inherited',
+        },
+        {
+            type: 'image',
+            version: 1,
+            image: { source: pictureSource, alternativeText: 'The Example mark', width: 32, height: 32 },
+            link: null,
+            alignment: 'Center',
+        },
+        {
+            type: 'quote',
+            version: 1,
+            depth: 1,
+            blocks: [
+                { type: 'paragraph', version: 1, content: [run('You wrote: send me the list.')], alignment: 'Start' },
+            ],
+        },
+        { type: 'separator', version: 1 },
+        { type: 'preformatted', version: 1, text: '  order  quantity\n  kettle 1' },
+    ];
+}
+
+function messageBody(remoteImages: boolean): string {
+    return JSON.stringify({
+        storedEmailId: '00000000-0000-4000-8000-000000000000',
+        availability: 'Readable',
+        plainText: {
+            text: 'A newsletter, as words.\n\nRead it at example.invalid.',
+            originalCharacterCount: 48,
+            truncation: 'None',
+        },
+        document: {
+            schemaVersion: 1,
+            blocks: messageBlocks(remoteImages ? 'https://pictures.invalid/mark.png' : transparentPicture),
+            refusal: 'None',
+            removedRemoteReferenceCount: remoteImages ? 0 : 3,
+            retainedRemoteImageCount: remoteImages ? 1 : 0,
+            inlineImageCount: remoteImages ? 0 : 1,
+            undrawnInlineImageCount: 0,
+            truncated: false,
+        },
+        remoteImagesRequested: remoteImages,
+    });
+}
+
+// The heading the message below carries. The sender wrote it as their own first-level heading and the space it is
+// drawn in already holds the only first-level heading on the screen, so the pane draws it one deeper — which is the
+// assertion in the level rather than an accident of the fixture.
+const messageHeading = { name: 'This week at Example', level: 2 } as const;
+
 interface Box {
     readonly x: number;
     readonly y: number;
@@ -78,6 +168,17 @@ async function servedByADeployment(page: Page): Promise<void> {
 
     await page.route('**/api/client/accounts', (route) =>
         route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mailAccounts) }),
+    );
+
+    // The one route whose answer depends on what the client asked for: the reader's ask for the sender's pictures is
+    // in the query and nowhere else, so answering it here is what lets this suite watch a request leave for the
+    // sender's host — and watch it not leave before the ask.
+    await page.route('**/api/client/messages/*/body*', (route) =>
+        route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: messageBody(new URL(route.request().url()).searchParams.get('remoteImages') === 'true'),
+        }),
     );
 }
 
@@ -337,11 +438,94 @@ test('issues every request to the origin it was served from and to no other', as
         origins.add(new URL(request.url()).origin);
     });
 
-    await openSignedIn(page);
-    await expect(page.getByRole('heading', { name: 'Discover', level: 1 })).toBeVisible();
+    // Mail rather than the root, because drawing a message is where a request to somebody else's server would come
+    // from: reading mail must not be what tells a sender it was read.
+    await openSignedIn(page, '/#/mail');
+    await expect(page.getByRole('heading', messageHeading)).toBeVisible();
 
     // A client of one person's own mail reaches the deployment serving it and nothing else, so a font, an analytics
     // beacon, or a stray CDN reference arriving in the bundle is a privacy defect rather than a slow page. Only a
     // browser can answer this: jsdom loads no subresource, and the source says nothing about what a build inlined.
     expect([...origins]).toStrictEqual([new URL(page.url()).origin]);
+});
+// What only a browser can say about the reading pane, per ADR 0024. Everything else about it — every refusal the
+// parser makes, every block, and every sentence — is jsdom's and lives in the unit suite beside the source.
+
+test('draws the message as this document own elements, with nothing a sender wrote becoming one', async ({ page }) => {
+    await openSignedIn(page, '/#/mail');
+
+    const message = page.getByRole('article');
+    await expect(message.getByRole('heading', messageHeading)).toBeVisible();
+
+    // The isolation statement is an absence, so it is asserted as one. A frame, a script, an embedded object, or a
+    // form inside the drawn message would each be a construct this path exists never to carry, and only a real
+    // document says what the built bundle actually put there.
+    for (const element of ['iframe', 'script', 'object', 'embed', 'form']) {
+        await expect(message.locator(element)).toHaveCount(0);
+    }
+
+    // Markup a sender wrote stays the characters they wrote, in the built bundle rather than only under jsdom.
+    await expect(message.getByText('<script>alert(1)</script>')).toBeVisible();
+});
+
+test('shows where a link goes, and says so when its words name somewhere else', async ({ page }) => {
+    await openSignedIn(page, '/#/mail');
+
+    const message = page.getByRole('article');
+
+    await expect(message.getByText('goes to offers.invalid', { exact: true })).toBeVisible();
+    await expect(
+        message.getByText('This link does not go where its words say. It goes to offers.invalid.'),
+    ).toBeVisible();
+});
+
+test('leaves the application when a link is followed rather than navigating it', async ({ page }) => {
+    await openSignedIn(page, '/#/mail');
+    await expect(page.getByRole('heading', messageHeading)).toBeVisible();
+
+    const openedHere = page.url();
+    const opening = page.waitForEvent('popup');
+
+    await page.getByRole('link', { name: 'example.invalid' }).click();
+
+    // A new browsing context is what the web head does with a link, and the application is still the application: a
+    // WebView that navigated here would have replaced it, which is the whole reason the shell owns the desktop half.
+    const opened = await opening;
+    await opened.close();
+
+    expect(page.url()).toBe(openedHere);
+    await expect(page.getByRole('heading', messageHeading)).toBeVisible();
+
+    // Nothing says the link failed, which is the assertion jsdom cannot make: a browser answers `window.open` with
+    // nothing whenever `noopener` was asked for, so a client reading that answer as a refusal would put this sentence
+    // under every link that worked — and every unit test of it would still pass.
+    await expect(page.getByText('This link could not be opened.')).toHaveCount(0);
+});
+
+test('fetches nothing from the sender until the reader asks, and asks again next time', async ({ page }) => {
+    const hosts = new Set<string>();
+
+    page.on('request', (request) => {
+        hosts.add(new URL(request.url()).hostname);
+    });
+
+    await openSignedIn(page, '/#/mail');
+
+    const askForPictures = page.getByRole('button', { name: 'Load pictures from the sender' });
+    await expect(askForPictures).toBeVisible();
+    await expect(page.getByText('References removed: 3')).toBeVisible();
+    expect([...hosts]).not.toContain('pictures.invalid');
+
+    await askForPictures.click();
+
+    // Asking is what makes the request, and it is the only thing that does. The address never reached the document
+    // before this click, so there was nothing for a rendering defect to fetch.
+    await expect(page.getByText('Pictures are being loaded from the sender for this message.')).toBeVisible();
+    await expect.poll(() => [...hosts]).toContain('pictures.invalid');
+
+    await page.reload();
+
+    // Nothing on either side wrote the ask down, so the message opens asking again. Only a real document reloaded
+    // proves that: browser storage is what a durable answer would have been kept in.
+    await expect(page.getByRole('button', { name: 'Load pictures from the sender' })).toBeVisible();
 });

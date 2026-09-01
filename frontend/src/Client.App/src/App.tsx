@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     readMailAccounts,
     type ClientResult,
@@ -13,6 +13,7 @@ import { SecondaryButton } from './controls/SecondaryButton';
 import { forgetDeployment, storeDeployment, type AdoptedDeployment } from './deployment/adoptedDeployment';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { useLocalization } from './localization/useLocalization';
+import { Message } from './messageBody/Message';
 import { useSpace } from './routing/useSpace';
 import { ConnectionSummary } from './shell/ConnectionSummary';
 import { IntentField } from './shell/IntentField';
@@ -24,6 +25,11 @@ import type { CredentialStore } from './signIn/credentialStore';
 import { SignIn } from './signIn/SignIn';
 import { emptyWorkspace } from './workspace/useWorkspace';
 import { useWorkspace } from './workspace/useWorkspace';
+
+// Which message the Mail space draws is the reading pane's to decide, and that pane is #1426's. Until it exists, the
+// space draws one message by identifier — which is what makes the renderer reachable in a browser at all, and is the
+// only reason this constant is here rather than a value the screen was handed.
+const provingRead = '00000000-0000-4000-8000-000000000000';
 
 // The frame Discover, Mail, and Cases are held in, and the only thing in the client that survives moving between them.
 // It is one tree laid out two ways by the width it is given — a rail beside a workspace, or bottom navigation under a
@@ -57,6 +63,18 @@ export function App({
     const baseAddress = adopted === null ? null : adopted.deployment.baseAddress;
     const workspace = useRef<HTMLDivElement>(null);
     const focusedFor = useRef(authorization);
+
+    // Built once per address and credential rather than per render, because it is what the message read below depends
+    // on: a fresh object every render would restart that read every render.
+    const session = useMemo(
+        () => (baseAddress === null || authorization === null ? null : { baseAddress, authorization }),
+        [baseAddress, authorization],
+    );
+
+    // The transport that read is made through, built once for the same reason. It carries a signal nothing ever fires:
+    // `Message` discards the answer to a read it stopped listening for rather than cancelling it, and the pane that
+    // will own a read outliving the message it was started for is #1426's.
+    const readMessage = useMemo(() => send(new AbortController().signal), [send]);
 
     // The view changed, so focus goes to the start of what replaced it rather than staying on a control that is no
     // longer there. Only in this direction: the sign-in screen places focus itself, on the field it is asking to have
@@ -221,7 +239,14 @@ export function App({
 
                 <IntentField accounts={accounts?.outcome === 'read' ? accounts.value.accounts : []} />
 
-                <Space space={space} />
+                <Space
+                    space={space}
+                    mail={
+                        session === null ? null : (
+                            <Message session={session} transport={readMessage} storedEmailId={provingRead} />
+                        )
+                    }
+                />
             </div>
 
             {/* Navigation is last in the document because the keyboard follows the document rather than the layout,

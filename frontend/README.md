@@ -64,17 +64,27 @@ chose Tauri for; a platform difference that genuinely exists belongs here or in 
 never in a component.
 
 `src/main.rs` is the whole of it, and there is no library target beside it. What it holds beyond the window is four
-commands, and they exist for one reason: [ADR 0023](../docs/decisions/0023-where-the-client-keeps-the-credential-it-signs-in-with.md)
+commands of this repository's own and one upstream plugin.
+
+The commands exist for one reason: [ADR 0023](../docs/decisions/0023-where-the-client-keeps-the-credential-it-signs-in-with.md)
 keeps the credential this head signs in with in the operating system's own store, which a webview cannot reach and a
 shell can. `keychain_reachable` says whether there is a store to keep one in, and `keep_credential`, `read_credential`,
 and `forget_credential` are the three operations on it. Two of them answer whether they succeeded, which is what lets
 the client say that a store refused to delete rather than report a sign-out that did not happen; none of them answers
-_why_ one failed, because everything a failure could name is about a password. There is still no capability file, and adding one
-would be a mistake rather than an omission: Tauri gates its own plugin commands through an access-control list and
-never an application's, so a `capabilities/` entry naming these four would grant the webview reach into plugins
-nothing here pins. What the webview reaches them through is `app.withGlobalTauri` in `tauri.conf.json`, which puts
-`invoke` on `window.__TAURI__` — the alternative being a fourth npm package redistributed inside every bundle to
-supply one function.
+_why_ one failed, because everything a failure could name is about a password. No capability file names them, and
+writing one would be a mistake rather than an omission: Tauri gates its own plugin commands through an access-control
+list and never an application's, so a `capabilities/` entry naming these four would grant the webview reach into
+plugins nothing here pins. What the webview reaches them through is `app.withGlobalTauri` in `tauri.conf.json`, which
+puts `invoke` on `window.__TAURI__`, and that is what lets this shell pin no JavaScript binding of its own: the four
+commands are this repository's, so nothing upstream publishes a package for them and writing one would be a package of
+ours to keep in step with them.
+
+The plugin is `tauri-plugin-opener`, and it is there because opening a followed link outside the application is the one
+thing the desktop head cannot do from the page. Its commands are a plugin's rather than this repository's, so they are
+gated where the four above are not: `capabilities/open-a-link.json` grants the webview that one operation over `http`,
+`https`, and `mailto` rather than the plugin's own default permission set — a capability is reach handed to whatever
+runs in the page, so it names the operation the application actually makes and nothing beside it. A second permission
+is added the same way, by the change that needs it.
 
 | What                                                                | Where it is decided                                                                                                      |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
@@ -83,6 +93,7 @@ supply one function.
 | Which crates the shell links, and at which versions                 | `src-tauri/Cargo.toml`, resolved into the committed `Cargo.lock`                                                         |
 | Whether the webview may call the shell's own commands               | `app.withGlobalTauri` in `src-tauri/tauri.conf.json`, which is what puts `invoke` on `window.__TAURI__`                  |
 | What the webview may load, connect to, and submit to                | `app.security.csp` in `src-tauri/tauri.conf.json`, which Tauri serves as the document's own Content-Security-Policy      |
+| What the webview may ask a registered plugin for                    | `src-tauri/capabilities/`, one file per capability                                                                       |
 | The icon every bundle carries                                       | `src-tauri/icons/`, generated from `assets/icon-1254.png` with `pnpm exec tauri icon`                                    |
 | The terms every bundle installs beside the application              | `bundle.resources` in `src-tauri/tauri.conf.json`, which takes the repository's own `LICENSE` and `NOTICE`               |
 | What a Linux package declares it needs                              | `bundle.linux.deb.depends` in `src-tauri/tauri.conf.json`; the `rpm` names none, per `docs/operations/desktop-client.md` |
@@ -232,8 +243,8 @@ deployment shape: the container image builds this in a stage of its own and copi
 what a deployment gains is files and a setting rather than a second service.
 
 `src/Client.App/public/` is copied into that directory verbatim, and it holds one file:
-`THIRD-PARTY-NOTICES.txt`, the MIT notice of the three packages the bundle actually redistributes. The build minifies
-every module into one chunk and none of the three carries a banner of its own, so the notice travels as text beside
+`THIRD-PARTY-NOTICES.txt`, the MIT notice of the five packages the bundle actually redistributes. The build minifies
+every module into one chunk and none of the five carries a banner of its own, so the notice travels as text beside
 the code rather than inside it. [The third-party register](../THIRD_PARTY_LICENSES.md) is where the review behind it
 lives, and it is what says which packages that file has to name.
 

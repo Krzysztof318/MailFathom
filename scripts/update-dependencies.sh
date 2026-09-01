@@ -369,9 +369,9 @@ survey_npm_pins() {
   done
 }
 
-# The desktop shell's direct crates. Both are written as `=<version>` because Cargo reads a bare `"2"` as a caret range
+# The desktop shell's direct crates. Each is written as `=<version>` because Cargo reads a bare `"2"` as a caret range
 # and this repository floats no pin, so the leading `=` is part of the syntax rather than part of the version. The Tauri
-# CLI rewrites either entry to the table form on any `dev` or `build`, which is why both shapes are read.
+# CLI rewrites an entry to the table form on any `dev` or `build`, which is why both shapes are read.
 survey_crate_pins() {
   local crate_name pinned latest licence recorded
 

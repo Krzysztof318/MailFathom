@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@mailfathom/client-backend": "workspace:*",
+    "@tauri-apps/plugin-opener": "2.5.4",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },

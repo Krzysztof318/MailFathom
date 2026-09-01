@@ -92,6 +92,46 @@ export const en = {
     'failure.unauthorized': 'unauthorized',
     'failure.unavailable': 'unavailable',
     'failure.unreadable': 'unreadable',
+
+    'body.reading': 'Reading the message…',
+    'body.failed': 'The message could not be read: {reason}.',
+
+    'body.encryptedNotReadable': 'This message is encrypted and this deployment cannot read it.',
+    'body.notStoredExceededSizeLimit':
+        'This message was larger than this deployment keeps, so its body was not stored.',
+    'body.notStoredAwaitingStorageHeadroom': 'This message is waiting for storage room before its body is kept.',
+
+    'body.refusedNoHtmlPart': 'The sender wrote no formatted version of this message, so it is shown as words.',
+    'body.refusedReductionFailed':
+        'This deployment could not read the formatted version of this message, so it is shown as words.',
+    'body.refusedNothingRenderable':
+        'The formatted version of this message held nothing to draw, so it is shown as words.',
+    'body.notReduced': 'This deployment sent no drawable version of this message, so it is shown as words.',
+
+    'body.truncated': 'This message is longer than a reading pane draws, so it stops here.',
+    'body.textTruncated': 'The words of this message were cut short by a limit this deployment applies.',
+    'body.blockNotDrawn': 'A part of this message was written for a newer client than this one, so it is not drawn.',
+    'body.tableRegion': 'A table in this message, scrollable sideways',
+    'body.preformattedRegion': 'Preformatted text in this message, scrollable sideways',
+    'body.pictureWithoutDescription': 'A picture the sender did not describe',
+
+    'body.remoteContentRemoved':
+        'This message asked to load content from another server. It was removed, so opening it reported nothing to the sender.',
+    'body.remoteContentRemovedCount': 'References removed: {count}',
+    'body.showRemotePictures': 'Load pictures from the sender',
+    'body.showRemotePicturesReveals':
+        'Loading them tells the sender that you opened this message. It is asked for this message alone and remembered nowhere.',
+    'body.remotePicturesLoading': 'Loading them…',
+    'body.showWithoutRemotePictures': 'Show the message without them',
+    'body.remotePicturesShown': 'Pictures are being loaded from the sender for this message.',
+    'body.remotePicturesShownCount': 'Pictures loaded from the sender: {count}',
+    'body.undrawnPicturesCount': 'Pictures too large to draw: {count}',
+
+    'link.goesTo': 'goes to {host}',
+    'link.warningDisplayedHostDiffers': 'This link does not go where its words say. It goes to {host}.',
+    'link.warningAsciiHost': 'This link goes to {host}, which is written {asciiHost}.',
+    'link.warningWorthChecking': 'This link is worth checking before you follow it. It goes to {host}.',
+    'link.couldNotOpen': 'This link could not be opened.',
 } as const;
 
 /** Every message a screen may ask for. A key absent here does not compile at the call site. */

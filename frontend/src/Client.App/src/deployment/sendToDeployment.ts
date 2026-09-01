@@ -27,7 +27,7 @@ export const sendToDeployment: DeploymentTransport = (abandoned) => async (reque
 
     return {
         status: response.status,
-        body: await readBoundedBody(response),
+        body: await readBoundedBody(response, request.longestAnswer ?? longestResponseBody),
 
         // Lower-cased already, which is what `ClientResponse` states its names are: the platform's own header
         // collection normalizes them, so a lookup there needs no second spelling to try.
@@ -43,10 +43,13 @@ export const sendToDeployment: DeploymentTransport = (abandoned) => async (reque
  * precisely because nobody knows yet. So the body is read in chunks against a running total and the read is cancelled
  * the moment it passes the bound, which also frees the connection rather than draining a stream nothing will use.
  *
+ * The bound is the request's own where it states one and the backstop otherwise, because an operation that knows
+ * what it is asking for knows better than a number written for a stranger.
+ *
  * An answer that goes over comes back empty, which every operation already refuses as unreadable — see
  * `longestResponseBody` for why that is the accurate outcome rather than a lost distinction.
  */
-async function readBoundedBody(response: Response): Promise<string> {
+async function readBoundedBody(response: Response, longest: number): Promise<string> {
     const reading = response.body?.getReader();
 
     if (reading === undefined) {
@@ -68,7 +71,7 @@ async function readBoundedBody(response: Response): Promise<string> {
 
         read += value.byteLength;
 
-        if (read > longestResponseBody) {
+        if (read > longest) {
             await reading.cancel();
 
             return '';

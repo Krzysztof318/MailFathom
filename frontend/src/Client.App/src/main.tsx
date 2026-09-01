@@ -8,10 +8,15 @@ import { App } from './App';
 import { adoptedDeployment } from './deployment/adoptedDeployment';
 import { sendToDeployment } from './deployment/sendToDeployment';
 import { LocalizationProvider } from './localization/Localization';
+import { LinkOpenerContext, linkOpenerForThisApplication } from './shellOperations/linkOpener';
 import { credentialStore } from './signIn/credentialStore';
 import { ThemeProvider } from './theme/Theme';
 import { WorkspaceProvider } from './workspace/Workspace';
 import './styles.css';
+
+// The one place a head is asked about. Everything below receives the operation rather than the answer to that
+// question, which is what keeps one client one client across both heads.
+const openLink = linkOpenerForThisApplication();
 
 const container = document.getElementById('root');
 
@@ -29,10 +34,10 @@ void open(container);
  * The credential store is asked before anything is rendered rather than while it is, because a screen that mounts
  * signed out and then swaps to the workspace is a screen somebody has already started reading.
  *
- * The three things that outlive every screen stand above it: the language it reads in, the theme it is painted in, and
- * what the person is carrying between the spaces. Each is above the frame because nothing below the frame may be what
- * decides it, and each is above the sign-in screen for the same reason — somebody who has not signed in yet reads in a
- * language and is painted in a theme exactly as somebody who has.
+ * The four things that outlive every screen stand above it: the language it reads in, the theme it is painted in, what
+ * the person is carrying between the spaces, and how a link they follow leaves the application. Each is above the frame
+ * because nothing below the frame may be what decides it, and each is above the sign-in screen for the same reason —
+ * somebody who has not signed in yet reads in a language and is painted in a theme exactly as somebody who has.
  */
 async function open(root: HTMLElement): Promise<void> {
     const deployment = adoptedDeployment();
@@ -44,12 +49,14 @@ async function open(root: HTMLElement): Promise<void> {
             <LocalizationProvider>
                 <ThemeProvider>
                     <WorkspaceProvider>
-                        <App
-                            credentials={credentials}
-                            deployment={deployment}
-                            send={sendToDeployment}
-                            signedInWith={signedInWith}
-                        />
+                        <LinkOpenerContext value={openLink}>
+                            <App
+                                credentials={credentials}
+                                deployment={deployment}
+                                send={sendToDeployment}
+                                signedInWith={signedInWith}
+                            />
+                        </LinkOpenerContext>
                     </WorkspaceProvider>
                 </ThemeProvider>
             </LocalizationProvider>

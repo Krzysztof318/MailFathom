@@ -13,6 +13,7 @@ import { LocalizationProvider } from './localization/Localization';
 import { localeNames, locales, readStoredLocale } from './localization/locale';
 import type { CredentialLifetime, CredentialStore } from './signIn/credentialStore';
 import { ThemeProvider } from './theme/Theme';
+import { LinkOpenerContext } from './shellOperations/linkOpener';
 import { WorkspaceProvider } from './workspace/Workspace';
 
 // The network boundary is the transport, and the credential this run holds is the store — both arrive as props, so a
@@ -65,6 +66,49 @@ function deploymentAnswering(accounts: Answer = directory(true, [workAccount])):
         asked.push(request);
 
         return Promise.resolve(complete(request.path.endsWith('/session') ? accepted : accounts));
+    };
+}
+
+/** The one message the reading pane reads, drawn from the closed tree rather than from any markup the sender wrote. */
+const drawnMessage: Answer = {
+    status: 200,
+    body: JSON.stringify({
+        storedEmailId: '00000000-0000-4000-8000-000000000000',
+        availability: 'Readable',
+        plainText: { text: 'As words.', originalCharacterCount: 9, truncation: 'None' },
+        document: {
+            schemaVersion: 1,
+            blocks: [
+                {
+                    type: 'paragraph',
+                    version: 1,
+                    content: [{ text: 'A drawn message.', emphasis: 'None', foreground: null, link: null }],
+                    alignment: 'Inherited',
+                },
+            ],
+            refusal: 'None',
+            removedRemoteReferenceCount: 0,
+            retainedRemoteImageCount: 0,
+            inlineImageCount: 0,
+            undrawnInlineImageCount: 0,
+            truncated: false,
+        },
+        remoteImagesRequested: false,
+    }),
+};
+
+/** A deployment that answers the accounts as the one above does, and the body the reading pane in Mail asks it for. */
+function deploymentDrawingAMessage(): DeploymentTransport {
+    const otherwise = deploymentAnswering();
+
+    return (signal) => (request) => {
+        if (!request.path.includes('/messages/')) {
+            return otherwise(signal)(request);
+        }
+
+        asked.push(request);
+
+        return Promise.resolve(complete(drawnMessage));
     };
 }
 
@@ -127,10 +171,11 @@ function chose(baseAddress: string): AdoptedDeployment {
     return { deployment: { baseAddress }, chosen: true };
 }
 
-// The application is mounted the way `main.tsx` mounts it, `StrictMode` and all four providers included. Nothing below
-// the frame may decide the language, the theme, or what the person is carrying, so a test that supplied fewer would be
-// proving a second arrangement — and the mode is half of that arrangement rather than a detail of it: it invokes every
-// effect twice on mount, which is the difference between a screen that behaves and one that behaves the first time.
+// The application is mounted the way `main.tsx` mounts it, `StrictMode` and all five providers included. Nothing below
+// the frame may decide the language, the theme, what the person is carrying, or how a followed link leaves the
+// application, so a test that supplied fewer would be proving a second arrangement — and the mode is half of that
+// arrangement rather than a detail of it: it invokes every effect twice on mount, which is the difference between a
+// screen that behaves and one that behaves the first time.
 function renderApp(
     deployment: AdoptedDeployment | null = servedFrom,
     signedInWith: string | null = heldCredential,
@@ -142,12 +187,14 @@ function renderApp(
             <LocalizationProvider>
                 <ThemeProvider>
                     <WorkspaceProvider>
-                        <App
-                            credentials={credentials}
-                            deployment={deployment}
-                            send={send}
-                            signedInWith={signedInWith}
-                        />
+                        <LinkOpenerContext value={() => Promise.resolve()}>
+                            <App
+                                credentials={credentials}
+                                deployment={deployment}
+                                send={send}
+                                signedInWith={signedInWith}
+                            />
+                        </LinkOpenerContext>
                     </WorkspaceProvider>
                 </ThemeProvider>
             </LocalizationProvider>
@@ -232,6 +279,22 @@ describe('App', () => {
         renderApp();
 
         expect(await screen.findByRole('heading', { name: space, level: 1 })).toBeDefined();
+    });
+
+    it('draws the message the reading pane read, once Mail is the space on the screen', async () => {
+        renderApp(servedFrom, heldCredential, deploymentDrawingAMessage());
+        await framed();
+
+        await goTo('Mail');
+
+        expect(await screen.findByText('A drawn message.')).toBeDefined();
+    });
+
+    it('reads no message while the space on the screen is not Mail', async () => {
+        renderApp(servedFrom, heldCredential, deploymentDrawingAMessage());
+        await framed();
+
+        expect(routesAsked().some((path) => path.includes('/messages/'))).toBe(false);
     });
 
     it('shows the space whose link was activated, and marks it as the current one', async () => {
