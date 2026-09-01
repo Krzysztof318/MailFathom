@@ -116,4 +116,14 @@ describe('IntentField scope', () => {
 
         expect(screen.queryByRole('button', { name: 'Ask about the whole message instead' })).toBeNull();
     });
+
+    // Widening the scope takes the control that did it off the screen, so where focus lands is the behaviour:
+    // left to the browser it falls to the document, which is where reading from a keyboard silently stops.
+    it('puts focus on the question when the control that widened the scope goes', () => {
+        fieldBesideASelection('the part of the message somebody pointed at');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Ask about the whole message instead' }));
+
+        expect(screen.getByRole('searchbox', { name: 'Ask your mail' })).toBe(document.activeElement);
+    });
 });

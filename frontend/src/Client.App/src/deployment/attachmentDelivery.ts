@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+import { createContext, useContext } from 'react';
 import { attachmentRefusalForStatus, longestResponseBody, type ClientRequest } from '@mailfathom/client-backend';
 
 // Fetching one file a message carries and handing it to the person, which is one operation rather than two: nothing
@@ -31,6 +32,24 @@ export type AttachmentDelivery = (
     arrived: (octets: number) => void,
     abandoned: AbortSignal,
 ) => Promise<AttachmentDeliveryOutcome>;
+
+// Reached through a context rather than handed down, for the reason `shellOperations/linkOpener.ts` gives about
+// the operation it carries: which implementation satisfies it is the composition root's decision, and the row
+// that calls it is several components below the screen that owns the message — none of which has a reason to
+// name a download it never makes.
+export const AttachmentDeliveryContext = createContext<AttachmentDelivery | null>(null);
+
+export function useAttachmentDelivery(): AttachmentDelivery {
+    const delivery = useContext(AttachmentDeliveryContext);
+
+    if (delivery === null) {
+        throw new Error(
+            'A component asked for an attachment outside the AttachmentDeliveryContext that main.tsx supplies.',
+        );
+    }
+
+    return delivery;
+}
 
 export const deliverAttachment: AttachmentDelivery = async (request, fileName, arrived, abandoned) => {
     let response: Response;

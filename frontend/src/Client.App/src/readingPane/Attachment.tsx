@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { mailAttachmentRequest, type ClientSession, type MailAttachment } from '@mailfathom/client-backend';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
-import type { AttachmentDelivery, AttachmentDeliveryOutcome } from '../deployment/attachmentDelivery';
+import { useAttachmentDelivery, type AttachmentDeliveryOutcome } from '../deployment/attachmentDelivery';
 import { sizeOf } from './octets';
 import { savedAs } from './savedFileName';
 
@@ -35,14 +35,13 @@ export function Attachment({
     session,
     storedEmailId,
     attachment,
-    deliver,
 }: {
     readonly session: ClientSession;
     readonly storedEmailId: string;
     readonly attachment: MailAttachment;
-    readonly deliver: AttachmentDelivery;
 }) {
     const { locale, translate } = useLocalization();
+    const deliver = useAttachmentDelivery();
     const [downloading, setDownloading] = useState<Downloading>({ stage: 'described' });
 
     // The one thing a render does not own: a download in flight outlives the render that started it, and the way out of

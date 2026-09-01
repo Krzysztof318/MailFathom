@@ -16,6 +16,10 @@ describe('savedAs', () => {
         ['a drive letter', 'C:notes.txt', 'Cnotes.txt'],
         ['a name that would be hidden by leading dots', '...secret.key', 'secret.key'],
         ['a name a file system would not keep the end of', 'summary.doc.', 'summary.doc'],
+        ['an override reversing what a listing draws after it', 'invoice\u202Efdp.exe', 'invoicefdp.exe'],
+        ['an isolate a sender wrapped an extension in', 'photo\u2066.jpg\u2069', 'photo.jpg'],
+        ['a mark that would reorder what is drawn', 'report\u200F.pdf', 'report.pdf'],
+        ['a control character nothing draws', 'notes\u0085.txt', 'notes.txt'],
     ])('reduces %s to something this client is willing to write', (_case, written, offered) => {
         expect(savedAs(written, 0)).toBe(offered);
     });
@@ -30,5 +34,10 @@ describe('savedAs', () => {
 
     it('keeps a sender from naming a file longer than this client will write', () => {
         expect(savedAs('a'.repeat(500), 0).length).toBe(128);
+    });
+
+    // Cutting to length is what can put back the character the trim removed, so the order of the two is the behaviour.
+    it('keeps a name cut to length from ending in what a file system would drop', () => {
+        expect(savedAs(`${'a'.repeat(127)}..pdf`, 0)).toBe('a'.repeat(127));
     });
 });

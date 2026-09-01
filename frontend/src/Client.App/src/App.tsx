@@ -6,7 +6,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { DeploymentAddress } from '@mailfathom/client-backend';
 import { SecondaryButton } from './controls/SecondaryButton';
 import { forgetDeployment, storeDeployment, type AdoptedDeployment } from './deployment/adoptedDeployment';
-import type { AttachmentDelivery } from './deployment/attachmentDelivery';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { FolderTree } from './folders/FolderTree';
 import { useLocalization } from './localization/useLocalization';
@@ -48,13 +47,11 @@ export function App({
     signedInWith,
     credentials,
     send,
-    deliver,
 }: {
     readonly deployment: AdoptedDeployment | null;
     readonly signedInWith: string | null;
     readonly credentials: CredentialStore;
     readonly send: DeploymentTransport;
-    readonly deliver: AttachmentDelivery;
 }) {
     const { revise } = useWorkspace();
     const [adopted, setAdopted] = useState(deployment);
@@ -248,7 +245,6 @@ export function App({
                                     transport={readMail}
                                     storedEmailId={provingRead}
                                     online={connection.online}
-                                    deliver={deliver}
                                 />
                             )
                         }

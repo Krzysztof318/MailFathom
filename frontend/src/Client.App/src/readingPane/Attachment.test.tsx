@@ -5,7 +5,11 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { ClientRequest, ClientSession, MailAttachment } from '@mailfathom/client-backend';
-import type { AttachmentDelivery, AttachmentDeliveryOutcome } from '../deployment/attachmentDelivery';
+import {
+    AttachmentDeliveryContext,
+    type AttachmentDelivery,
+    type AttachmentDeliveryOutcome,
+} from '../deployment/attachmentDelivery';
 import { LocalizationProvider } from '../localization/Localization';
 import { Attachment } from './Attachment';
 
@@ -59,9 +63,11 @@ function deliveryHeldOpen(): {
 function drawing(attachment: MailAttachment, deliver: AttachmentDelivery): void {
     render(
         <LocalizationProvider>
-            <ul>
-                <Attachment session={session} storedEmailId={messageId} attachment={attachment} deliver={deliver} />
-            </ul>
+            <AttachmentDeliveryContext value={deliver}>
+                <ul>
+                    <Attachment session={session} storedEmailId={messageId} attachment={attachment} />
+                </ul>
+            </AttachmentDeliveryContext>
         </LocalizationProvider>,
     );
 }

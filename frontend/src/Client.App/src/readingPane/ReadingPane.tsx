@@ -13,7 +13,6 @@ import {
     type MailMessage,
 } from '@mailfathom/client-backend';
 import { SecondaryButton } from '../controls/SecondaryButton';
-import type { AttachmentDelivery } from '../deployment/attachmentDelivery';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { useWorkspace } from '../workspace/useWorkspace';
@@ -63,13 +62,11 @@ export function ReadingPane({
     transport,
     storedEmailId,
     online,
-    deliver,
 }: {
     readonly session: ClientSession;
     readonly transport: MailFathomTransport;
     readonly storedEmailId: string | null;
     readonly online: boolean;
-    readonly deliver: AttachmentDelivery;
 }) {
     const { translate } = useLocalization();
 
@@ -78,13 +75,7 @@ export function ReadingPane({
             {storedEmailId === null ? (
                 <p className="text-sm text-muted">{translate('message.nothingOpen')}</p>
             ) : (
-                <OpenMessage
-                    session={session}
-                    transport={transport}
-                    storedEmailId={storedEmailId}
-                    online={online}
-                    deliver={deliver}
-                />
+                <OpenMessage session={session} transport={transport} storedEmailId={storedEmailId} online={online} />
             )}
         </section>
     );
@@ -98,18 +89,17 @@ function OpenMessage({
     transport,
     storedEmailId,
     online,
-    deliver,
 }: {
     readonly session: ClientSession;
     readonly transport: MailFathomTransport;
     readonly storedEmailId: string;
     readonly online: boolean;
-    readonly deliver: AttachmentDelivery;
 }) {
     const { translate } = useLocalization();
     const { revise } = useWorkspace();
     const [read, setRead] = useState<Read>({ storedEmailId, attempt: 0 });
     const [answer, setAnswer] = useState<Answered | null>(null);
+    const [connected, setConnected] = useState(online);
 
     const opened = useRef<HTMLElement>(null);
     const body = useRef<HTMLDivElement>(null);
@@ -121,7 +111,26 @@ function OpenMessage({
         setRead({ storedEmailId, attempt: 0 });
     }
 
+    // A failure the network gap itself caused goes with the gap, so what stands while there is no network is the
+    // sentence below rather than a refusal to try again that a reader would have to press through. A message already
+    // drawn stays where it is: nothing about it stopped being true, and it is the truest thing anybody has offline.
+    // Adjusted during render, which is where React answers a changed prop, for the reason `folders/FolderTree.tsx`
+    // gives about the frame this would otherwise be drawn one late in.
+    if (connected !== online) {
+        setConnected(online);
+
+        if (!online && answer?.result.outcome === 'failed') {
+            setAnswer(null);
+        }
+    }
+
+    // Nothing is read without a network, and coming back re-runs this — which is the whole of the recovery from that
+    // direction, and what makes the offline sentence's promise that the message opens on its own a true one.
     useEffect(() => {
+        if (!online) {
+            return;
+        }
+
         let listening = true;
 
         void readMailMessage(session, transport, read.storedEmailId).then((answered) => {
@@ -133,7 +142,7 @@ function OpenMessage({
         return () => {
             listening = false;
         };
-    }, [session, transport, read]);
+    }, [session, transport, read, online]);
 
     // The fragment somebody selected belonged to the message they were reading, so it goes when the message does:
     // carrying it into the next one would scope a question to words that are no longer on the screen. It happens as the
@@ -249,7 +258,6 @@ function OpenMessage({
                                 session={session}
                                 storedEmailId={storedEmailId}
                                 attachment={attachment}
-                                deliver={deliver}
                             />
                         ))}
                     </ul>

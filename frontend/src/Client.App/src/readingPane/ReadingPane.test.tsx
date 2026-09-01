@@ -5,7 +5,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { ClientRequest, ClientResponse, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
-import type { AttachmentDelivery } from '../deployment/attachmentDelivery';
+import { AttachmentDeliveryContext, type AttachmentDelivery } from '../deployment/attachmentDelivery';
 import { LocalizationProvider } from '../localization/Localization';
 import { IntentField } from '../shell/IntentField';
 import { LinkOpenerContext } from '../shellOperations/linkOpener';
@@ -87,13 +87,14 @@ function drawing(
         <LocalizationProvider>
             <WorkspaceProvider>
                 <LinkOpenerContext value={() => Promise.resolve()}>
-                    <ReadingPane
-                        session={session}
-                        transport={transport}
-                        storedEmailId={storedEmailId}
-                        online={online}
-                        deliver={deliver}
-                    />
+                    <AttachmentDeliveryContext value={deliver}>
+                        <ReadingPane
+                            session={session}
+                            transport={transport}
+                            storedEmailId={storedEmailId}
+                            online={online}
+                        />
+                    </AttachmentDeliveryContext>
                 </LinkOpenerContext>
             </WorkspaceProvider>
         </LocalizationProvider>,
@@ -123,6 +124,20 @@ describe('ReadingPane', () => {
                 'This machine is offline, so this message cannot be opened. It opens on its own once the network comes back.',
             ),
         ).toBeDefined();
+    });
+
+    // The sentence above promises the message opens on its own, so the network coming back is what has to make
+    // that true — and asking for nothing while there is none is what leaves a read to come back to.
+    it('asks for nothing without a network, and reads on its own once one is back', async () => {
+        asked.length = 0;
+        const transport = deploymentDescribing();
+        const { rerender } = render(paneReading(transport, false));
+
+        expect(asked).toEqual([]);
+
+        rerender(paneReading(transport, true));
+
+        expect(await screen.findByRole('heading', { name: 'Quarterly invoice', level: 2 })).toBeDefined();
     });
 
     it('draws the headers and the body of the message it read', async () => {
@@ -234,6 +249,25 @@ const photograph = {
     sizeOctets: 100_000,
 };
 
+// The same pane across a network gap, which is a thing only a rerender with another `online` produces.
+function paneReading(transport: MailFathomTransport, online: boolean) {
+    return (
+        <LocalizationProvider>
+            <WorkspaceProvider>
+                <LinkOpenerContext value={() => Promise.resolve()}>
+                    <AttachmentDeliveryContext value={deliversNothing}>
+                        <ReadingPane
+                            session={session}
+                            transport={transport}
+                            storedEmailId={messageId}
+                            online={online}
+                        />
+                    </AttachmentDeliveryContext>
+                </LinkOpenerContext>
+            </WorkspaceProvider>
+        </LocalizationProvider>
+    );
+}
 // A second message opening is a view change, which is a thing only a rerender with another identifier produces — the
 // first render is a landing rather than a navigation and deliberately moves focus nowhere.
 function paneFor(storedEmailId: string) {
@@ -241,13 +275,14 @@ function paneFor(storedEmailId: string) {
         <LocalizationProvider>
             <WorkspaceProvider>
                 <LinkOpenerContext value={() => Promise.resolve()}>
-                    <ReadingPane
-                        session={session}
-                        transport={deploymentDescribing()}
-                        storedEmailId={storedEmailId}
-                        online
-                        deliver={deliversNothing}
-                    />
+                    <AttachmentDeliveryContext value={deliversNothing}>
+                        <ReadingPane
+                            session={session}
+                            transport={deploymentDescribing()}
+                            storedEmailId={storedEmailId}
+                            online
+                        />
+                    </AttachmentDeliveryContext>
                 </LinkOpenerContext>
             </WorkspaceProvider>
         </LocalizationProvider>
@@ -262,14 +297,15 @@ describe('ReadingPane selection', () => {
             <LocalizationProvider>
                 <WorkspaceProvider>
                     <LinkOpenerContext value={() => Promise.resolve()}>
-                        <IntentField accounts={[]} />
-                        <ReadingPane
-                            session={session}
-                            transport={deploymentDescribing()}
-                            storedEmailId={messageId}
-                            online
-                            deliver={deliversNothing}
-                        />
+                        <AttachmentDeliveryContext value={deliversNothing}>
+                            <IntentField accounts={[]} />
+                            <ReadingPane
+                                session={session}
+                                transport={deploymentDescribing()}
+                                storedEmailId={messageId}
+                                online
+                            />
+                        </AttachmentDeliveryContext>
                     </LinkOpenerContext>
                 </WorkspaceProvider>
             </LocalizationProvider>,

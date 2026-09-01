@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientResponse } from '@mailfathom/client-backend';
 import { App } from './App';
 import type { AdoptedDeployment } from './deployment/adoptedDeployment';
-import type { AttachmentDelivery } from './deployment/attachmentDelivery';
+import { AttachmentDeliveryContext, type AttachmentDelivery } from './deployment/attachmentDelivery';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { LocalizationProvider } from './localization/Localization';
 import { localeNames, locales, readStoredLocale } from './localization/locale';
@@ -158,7 +158,7 @@ function deploymentDrawingAMessage(): DeploymentTransport {
     };
 }
 
-/** A delivery nobody in these tests asks for, supplied because the frame hands one down rather than reaching for it. */
+/** A delivery nobody in these tests asks for, supplied because a row below the frame reads one from the context. */
 const deliversNothing: AttachmentDelivery = () => Promise.resolve('delivered');
 
 /** A deployment answering every route the same way, which is how a refusal to sign anybody in is stated. */
@@ -237,13 +237,14 @@ function renderApp(
                 <ThemeProvider>
                     <WorkspaceProvider>
                         <LinkOpenerContext value={() => Promise.resolve()}>
-                            <App
-                                credentials={credentials}
-                                deliver={deliversNothing}
-                                deployment={deployment}
-                                send={send}
-                                signedInWith={signedInWith}
-                            />
+                            <AttachmentDeliveryContext value={deliversNothing}>
+                                <App
+                                    credentials={credentials}
+                                    deployment={deployment}
+                                    send={send}
+                                    signedInWith={signedInWith}
+                                />
+                            </AttachmentDeliveryContext>
                         </LinkOpenerContext>
                     </WorkspaceProvider>
                 </ThemeProvider>
