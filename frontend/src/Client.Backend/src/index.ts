@@ -47,6 +47,14 @@ export {
     type MailAccountDirectory,
     type MailSynchronizationState,
 } from './mailAccounts';
+export {
+    mailFoldersRoute,
+    readMailFolders,
+    type MailAccountFolders,
+    type MailFolder,
+    type MailFolderDirectory,
+    type MailFolderRole,
+} from './mailFolders';
 export { clientRoutePrefix, headersFor, routeFor, type ClientSession, type DeploymentAddress } from './session';
 export { reachDeployment, signIn, type DeploymentGreeting, type SignInOutcome, type SignInRefusal } from './signIn';
 export { longestResponseBody, type ClientRequest, type ClientResponse, type MailFathomTransport } from './transport';

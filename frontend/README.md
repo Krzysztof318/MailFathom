@@ -219,7 +219,16 @@ a path because a path would have to be reloadable, and the service serves the bu
 unmatched path onto the entry document; a fragment never reaches a server, so every address reloads on both heads with
 nothing configured.
 
-`src/workspace/` is what survives moving between spaces, and it is mounted above the frame for exactly that reason.
+`src/workspace/` is what survives moving between spaces, and it is mounted above the frame for exactly that reason. It
+holds one **scope** — every mailbox at once, one role across all of them, one mailbox, or one folder of one — beside the
+question, the selection, and the rows of the folder tree somebody has folded away. It is kept in the store the web head
+keeps its credential in, so a reload returns to what was on the screen; signing out empties it, because what somebody
+was looking at and about to ask is theirs rather than the machine's.
+
+`src/folders/` is what writes that scope. It draws the owner's mailboxes and their folders as one tree, read from the
+folders route in a single exchange, with the roles that span every mailbox above them — so asking about every inbox at
+once is one act rather than three. A folder is placed and named by the role the deployment gave it rather than by what
+its server calls it, because a name is whatever a provider chose in whatever language.
 
 ## Styling, and the two themes
 

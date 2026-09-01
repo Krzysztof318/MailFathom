@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { failed, failureReasonForStatus, read, type ClientResult } from './failure';
+import { asRecord } from './json';
 import { headersFor, routeFor, type ClientSession } from './session';
 import { send, type MailFathomTransport } from './transport';
 
@@ -30,7 +31,10 @@ export interface MailAccountDirectory {
 // The most accounts a directory answer may carry before it is refused unread. One owner holds a handful in practice,
 // so the ceiling is far above anything real and exists for the case the answer is not: the array is walked and
 // validated element by element, and a bound applied after that walk is not a bound.
-const maximumAccountsInDirectory = 256;
+//
+// The folders route nests this same account shape, so the bound and the parser below are that route's as well: two
+// copies of either would be two answers to what an account is, and the surface publishes one.
+export const maximumAccountsInDirectory = 256;
 
 const synchronizationStates: readonly MailSynchronizationState[] = [
     'NeverSynchronized',
@@ -89,7 +93,7 @@ function parseDirectory(body: string): MailAccountDirectory | null {
 
     const accounts: MailAccount[] = [];
     for (const entry of entries) {
-        const account = parseAccount(entry);
+        const account = parseMailAccount(entry);
         if (account === null) {
             return null;
         }
@@ -100,7 +104,8 @@ function parseDirectory(body: string): MailAccountDirectory | null {
     return { synchronizationEnabled, accounts };
 }
 
-function parseAccount(value: unknown): MailAccount | null {
+/** Reads one account off a response body, or answers `null` where any field of it is missing or of the wrong shape. */
+export function parseMailAccount(value: unknown): MailAccount | null {
     const record = asRecord(value);
     if (record === null) {
         return null;
@@ -133,12 +138,7 @@ function parseAccount(value: unknown): MailAccount | null {
     };
 }
 
-function asRecord(value: unknown): Readonly<Record<string, unknown>> | null {
-    return typeof value === 'object' && value !== null && !Array.isArray(value)
-        ? (value as Record<string, unknown>)
-        : null;
-}
-
-function isSynchronizationState(value: unknown): value is MailSynchronizationState {
+/** Whether the value is one of the four states this surface publishes, which the folders route answers with as well. */
+export function isSynchronizationState(value: unknown): value is MailSynchronizationState {
     return typeof value === 'string' && synchronizationStates.includes(value as MailSynchronizationState);
 }

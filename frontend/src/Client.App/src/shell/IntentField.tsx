@@ -5,11 +5,16 @@
 import type { MailAccount } from '@mailfathom/client-backend';
 import { useLocalization } from '../localization/useLocalization';
 import { goToSpace } from '../routing/useSpace';
+import { accountInScope, scopeOfAccount } from '../workspace/mailScope';
 import { useWorkspace } from '../workspace/useWorkspace';
 
 // What the product puts at the centre of the application, above whichever space is open. It asks nothing here: running
 // a question is Discover's work, so submitting goes to the space that will answer and carries the question there in the
 // workspace rather than starting anything. The scope beside it always says what that question would be asked against.
+//
+// It reads and writes the one scope the folder tree writes, rather than holding a mailbox of its own: the two controls
+// are two ways to say one thing, and this one is present in every space where the tree is Mail's. Choosing a mailbox
+// here scopes to the whole of it, which is what somebody who has not opened a folder means by naming one.
 
 export function IntentField({ accounts }: { readonly accounts: readonly MailAccount[] }) {
     const { translate } = useLocalization();
@@ -39,9 +44,9 @@ export function IntentField({ accounts }: { readonly accounts: readonly MailAcco
 
             <select
                 aria-label={translate('scope.mailbox')}
-                value={workspace.accountId ?? ''}
+                value={accountInScope(workspace.scope) ?? ''}
                 onChange={(event) => {
-                    revise({ accountId: event.target.value === '' ? null : event.target.value });
+                    revise({ scope: scopeOfAccount(event.target.value === '' ? null : event.target.value) });
                 }}
                 className="rounded-full border border-line bg-sunken px-3 py-1.5 text-sm text-text-soft"
             >

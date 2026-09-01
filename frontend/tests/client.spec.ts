@@ -45,6 +45,39 @@ const mailAccounts = {
     ],
 };
 
+// The tree the Mail space is scoped by, standing in for what the folders route answers. One mailbox with an inbox and
+// a folder nested where a mail server nests one, which is what the reload below is read against.
+const mailFolders = {
+    synchronizationEnabled: true,
+    accounts: [
+        {
+            account: mailAccounts.accounts[0],
+            folders: [
+                {
+                    alias: 'INBOX',
+                    role: 'Inbox',
+                    path: ['INBOX'],
+                    storedEmailCount: 4213,
+                    unreadEmailCount: 12,
+                    synchronizationState: 'Synchronized',
+                    lastSynchronizedAt: '2026-08-31T09:41:00+00:00',
+                    behind: false,
+                },
+                {
+                    alias: 'ARCHIVE-2024',
+                    role: null,
+                    path: ['Archive', '2024'],
+                    storedEmailCount: 980,
+                    unreadEmailCount: 0,
+                    synchronizationState: 'Synchronized',
+                    lastSynchronizedAt: '2026-08-31T09:00:00+00:00',
+                    behind: false,
+                },
+            ],
+        },
+    ],
+};
+
 // The password this suite signs in with, and the RFC 7617 value the client is expected to compose out of it. Neither
 // belongs to anybody: the deployment is the preview server, and nothing here reaches a machine holding real mail.
 const userName = 'owner';
@@ -161,7 +194,7 @@ async function boxOf(element: Locator): Promise<Box> {
 }
 
 /**
- * Answers the two routes the client reaches on the origin it was served from, as the deployment behind it would.
+ * Answers the routes the client reaches on the origin it was served from, as the deployment behind it would.
  *
  * The preview server serves the bundle and nothing else, so without this the client meets a deployment that is not
  * there — and every screen past the sign-in would be unreachable. It is the browser's own routing rather than a
@@ -175,6 +208,10 @@ async function servedByADeployment(page: Page): Promise<void> {
 
     await page.route('**/api/client/accounts', (route) =>
         route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mailAccounts) }),
+    );
+
+    await page.route('**/api/client/folders', (route) =>
+        route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(mailFolders) }),
     );
 
     // The one route whose answer depends on what the client asked for: the reader's ask for the sender's pictures is
@@ -444,6 +481,29 @@ test('opens again in the language that was chosen, after the page is loaded afre
     // object to.
     await expect(discover).toHaveCount(0);
     await expect(page.locator('html')).toHaveAttribute('lang', 'pl');
+});
+
+test('keeps the folder tree as it was left, across a reload', async ({ page }) => {
+    await openSignedIn(page, '/#/mail');
+
+    const tree = page.getByRole('tree', { name: 'Mailboxes and folders' });
+    const everyMailbox = tree.getByRole('treeitem', { name: /^All mailboxes/ });
+
+    await everyMailbox.click();
+    await page.keyboard.press('ArrowLeft');
+    await expect(everyMailbox).toHaveAttribute('aria-expanded', 'false');
+
+    const nested = tree.getByRole('treeitem', { name: /^2024/ });
+    await nested.click();
+    await expect(nested).toHaveAttribute('aria-selected', 'true');
+
+    await page.reload();
+
+    // A reload is a cold start, so what somebody was looking at is kept where the credential is kept and read back the
+    // same way. Only a real document reloaded proves it was written rather than held: a remount in jsdom re-reads the
+    // same process's storage, and what this asks is that a browser wrote it.
+    await expect(tree.getByRole('treeitem', { name: /^All mailboxes/ })).toHaveAttribute('aria-expanded', 'false');
+    await expect(tree.getByRole('treeitem', { name: /^2024/ })).toHaveAttribute('aria-selected', 'true');
 });
 
 test('issues every request to the origin it was served from and to no other', async ({ page }) => {

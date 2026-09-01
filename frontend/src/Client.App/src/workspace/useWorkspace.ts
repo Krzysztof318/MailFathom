@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { createContext, useContext } from 'react';
+import { everything, type MailScope } from './mailScope';
 
 // What a person carries between the spaces. Discover, Mail, and Cases are one application rather than three, and this
 // is what makes them one: the frame owns it, so moving to another space re-renders what is under the frame and leaves
@@ -12,11 +13,16 @@ import { createContext, useContext } from 'react';
 // gives: a module Vite hot-reloads may export components alone.
 
 export interface Workspace {
-    /** The account every question is asked against, or `null` for all of the owner's accounts at once. */
-    readonly accountId: string | null;
+    /** What the list, the search, and the next question are all asked against, owned here rather than per screen. */
+    readonly scope: MailScope;
 
-    /** The folder within that account, once a space offers one to choose. */
-    readonly folder: string | null;
+    /**
+     * The rows of the folder tree somebody has folded away, by the key each row is identified with.
+     *
+     * Folded rather than unfolded, so a tree nobody has touched shows what is in it: an owner who opens the client and
+     * sees a column of closed mailboxes has to open every one of them before the client says anything.
+     */
+    readonly collapsed: readonly string[];
 
     /** What the person has open, once a space offers something to open. */
     readonly selection: string | null;
@@ -33,8 +39,8 @@ export interface WorkspaceRevision {
 }
 
 export const emptyWorkspace: Workspace = {
-    accountId: null,
-    folder: null,
+    scope: everything,
+    collapsed: [],
     selection: null,
     question: '',
 };

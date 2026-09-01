@@ -3,10 +3,11 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { ReactNode } from 'react';
-import type { ClientFailureReason, MailAccountDirectory, MailSynchronizationState } from '@mailfathom/client-backend';
+import type { ClientFailureReason, MailAccountDirectory } from '@mailfathom/client-backend';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { needsAttention } from '../synchronization/synchronizationState';
 import { AccountLine } from './AccountLine';
 import { offers } from './capabilities';
 import { ageOf } from './synchronizationAge';
@@ -35,10 +36,6 @@ const toneColours: Readonly<Record<Tone, string>> = {
     quiet: 'bg-faint',
 };
 
-// The two states in which an account is not going to catch up on its own. They are read before the lag below, because
-// an account nothing is fixing says something a lagging one does not, and "behind" would let it wait unnoticed.
-const brokenStates: readonly MailSynchronizationState[] = ['Failing', 'Unreachable'];
-
 interface Freshness {
     readonly message: MessageKey;
     readonly tone: Tone;
@@ -53,7 +50,8 @@ function freshnessOf(directory: MailAccountDirectory): Freshness {
         return { message: 'accounts.notRefreshing', tone: 'quiet' };
     }
 
-    if (directory.accounts.some((account) => brokenStates.includes(account.synchronizationState))) {
+    // An account nothing is fixing is read before the lag below, because it says something a lagging one does not.
+    if (directory.accounts.some((account) => needsAttention(account.synchronizationState))) {
         return { message: 'connection.failing', tone: 'attention' };
     }
 
