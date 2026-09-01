@@ -3,8 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { StrictMode } from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientResponse } from '@mailfathom/client-backend';
 import { App } from './App';
 import type { AdoptedDeployment } from './deployment/adoptedDeployment';
@@ -12,6 +12,7 @@ import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { LocalizationProvider } from './localization/Localization';
 import { localeNames, locales, readStoredLocale } from './localization/locale';
 import type { CredentialLifetime, CredentialStore } from './signIn/credentialStore';
+import { mostReconnectionAttempts } from './shell/useConnection';
 import { ThemeProvider } from './theme/Theme';
 import { LinkOpenerContext } from './shellOperations/linkOpener';
 import { WorkspaceProvider } from './workspace/Workspace';
@@ -23,7 +24,15 @@ import { WorkspaceProvider } from './workspace/Workspace';
 type Answer = Omit<ClientResponse, 'headers'> & { readonly headers?: Readonly<Record<string, string>> };
 
 /** What a deployment answers a caller it accepts, which is what proves the address is MailFathom and the password works. */
-const accepted: Answer = { status: 200, body: JSON.stringify({ service: 'MailFathom', version: '0.8.0' }) };
+const accepted = sessionAnswering(['mailfathom.mail.read', 'mailfathom.mail.ask']);
+
+/** A deployment reporting itself and what it grants the credential that just reached it. */
+function sessionAnswering(permissions: readonly string[]): Answer {
+    return {
+        status: 200,
+        body: JSON.stringify({ service: 'MailFathom', version: '0.8.7', permissions }),
+    };
+}
 
 // The two challenges a MailFathom surface answers a refusal with, in one header value: the bearer one every deployment
 // produces, and the password one beside it where the deployment accepts passwords.
@@ -60,12 +69,15 @@ function routesAsked(): string[] {
     return [...new Set(asked.map((request) => request.path))];
 }
 
-/** A deployment that accepts any credential and answers the accounts with what a test named. */
-function deploymentAnswering(accounts: Answer = directory(true, [workAccount])): DeploymentTransport {
+/** A deployment that accepts any credential and answers the session and the accounts with what a test named. */
+function deploymentAnswering(
+    accounts: Answer = directory(true, [workAccount]),
+    session: Answer = accepted,
+): DeploymentTransport {
     return () => (request) => {
         asked.push(request);
 
-        return Promise.resolve(complete(request.path.endsWith('/session') ? accepted : accounts));
+        return Promise.resolve(complete(request.path.endsWith('/session') ? session : accounts));
     };
 }
 
@@ -233,6 +245,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
     openingAt('/');
     asked.length = 0;
     window.localStorage.clear();
@@ -242,10 +256,21 @@ afterEach(() => {
 });
 
 describe('App', () => {
-    it('says it is reading while the answer has not arrived', () => {
+    it('says it is reaching the deployment while nothing has answered', () => {
         renderApp(servedFrom, heldCredential, () => () => new Promise<ClientResponse>(() => undefined));
 
-        expect(screen.getByText('Reading accounts…')).toBeDefined();
+        expect(screen.getByText('Reaching your deployment…')).toBeDefined();
+    });
+
+    it('says it is reading the accounts once the deployment has said what the credential may do', async () => {
+        const send: DeploymentTransport = () => (request) =>
+            request.path.endsWith('/session')
+                ? Promise.resolve(complete(accepted))
+                : new Promise<ClientResponse>(() => undefined);
+
+        renderApp(servedFrom, heldCredential, send);
+
+        expect(await screen.findByText('Reading accounts…')).toBeDefined();
     });
 
     it('opens in Discover when the address names no space', async () => {
@@ -339,11 +364,13 @@ describe('App', () => {
         });
     });
 
-    it('says the deployment is not refreshing these accounts when it is not', async () => {
+    it('says the deployment is not refreshing these accounts when it is not, as its setting rather than a grant', async () => {
         renderApp(servedFrom, heldCredential, deploymentAnswering(directory(false, [workAccount])));
 
         expect(
-            await screen.findByText('This deployment is not refreshing the local copy of these accounts.'),
+            await screen.findByText(
+                'This deployment is not refreshing the local copy of these accounts, so what you see is as current as its last run left it. That is a setting on the deployment rather than a permission you are missing.',
+            ),
         ).toBeDefined();
     });
 
@@ -372,6 +399,170 @@ describe('App', () => {
         await framed();
 
         expect([...new Set(asked.map((request) => request.headers['Authorization']))]).toEqual([typedCredential]);
+    });
+});
+
+describe('App session', () => {
+    /** A deployment that grants the credential exactly these names, and answers the accounts normally. */
+    function granting(...permissions: readonly string[]): DeploymentTransport {
+        return deploymentAnswering(directory(true, [workAccount]), sessionAnswering(permissions));
+    }
+
+    it('offers only the spaces the grant permits, rather than ones the deployment would refuse', async () => {
+        renderApp(servedFrom, heldCredential, granting('mailfathom.mail.read'));
+        await framed();
+
+        expect(screen.getAllByRole('link').map((space) => space.textContent)).toEqual(['Mail', 'Cases']);
+    });
+
+    it('says what the credential may not do, so an absence is not read as a client that is broken', async () => {
+        renderApp(servedFrom, heldCredential, granting('mailfathom.mail.read'));
+        await framed();
+
+        expect(
+            screen.getByText(
+                'This credential may not ask questions of your mail on this deployment, so asking is not offered. Whoever runs the deployment can grant that.',
+            ),
+        ).toBeDefined();
+    });
+
+    it('offers nothing to ask with where the credential may not ask', async () => {
+        renderApp(servedFrom, heldCredential, granting('mailfathom.mail.read'));
+        await framed();
+
+        expect(screen.queryByRole('searchbox', { name: 'Ask your mail' })).toBeNull();
+    });
+
+    it('never asks for the mail a credential may not read, rather than letting the read be refused', async () => {
+        renderApp(servedFrom, heldCredential, granting('mailfathom.mail.ask'));
+        await screen.findByRole('heading', { name: 'Discover', level: 1 });
+
+        await waitFor(() => {
+            expect(routesAsked()).toEqual(['https://mail.example.invalid/api/client/session']);
+        });
+        expect(screen.queryByText(/The accounts could not be read/)).toBeNull();
+    });
+
+    it('answers an address naming a space this credential may not open with one it may', async () => {
+        openingAt('#/discover');
+
+        renderApp(servedFrom, heldCredential, granting('mailfathom.mail.read'));
+
+        expect(await screen.findByRole('heading', { name: 'Mail', level: 1 })).toBeDefined();
+        await waitFor(() => {
+            expect(window.location.hash).toBe('#/mail');
+        });
+    });
+
+    it('tells a credential granted nothing everything it may not do, rather than leaving it to guess', async () => {
+        renderApp(servedFrom, heldCredential, granting());
+
+        expect(await screen.findByText(/This credential may not read mail on this deployment/)).toBeDefined();
+        expect(screen.getByText(/This credential may not ask questions of your mail/)).toBeDefined();
+        expect(screen.queryByRole('link', { name: 'Mail' })).toBeNull();
+    });
+
+    it('reaches for a deployment that did not answer on its own, and says which attempt it is on', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+
+        renderApp(servedFrom, heldCredential, deploymentRefusing({ status: 503, body: '' }));
+        await screen.findByText(/Trying again — attempt 1 of/);
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(10_000);
+        });
+
+        expect(screen.getByText(/Trying again — attempt 2 of/)).toBeDefined();
+    });
+
+    it('stops reaching once the budget is spent, and hands the way out to the person', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+
+        renderApp(servedFrom, heldCredential, deploymentRefusing({ status: 503, body: '' }));
+        await screen.findByText(/Trying again — attempt 1 of/);
+
+        // One pass per wait in the budget, because each attempt is only scheduled once the one before it has answered:
+        // a single long advance would find no timer to fire past the first.
+        for (let attempt = 0; attempt < mostReconnectionAttempts; attempt += 1) {
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(60_000);
+            });
+        }
+
+        expect(await screen.findByText(/Your deployment has not answered after/)).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Try again' })).toBeDefined();
+    });
+
+    it('asks a deployment for nothing while this machine has no network, and says that rather than blaming it', () => {
+        vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+
+        renderApp();
+
+        expect(
+            screen.getByText('This machine is offline. The client reconnects on its own when the network comes back.'),
+        ).toBeDefined();
+        expect(asked).toEqual([]);
+    });
+
+    it('reads again on its own when the network comes back, without anybody restarting the client', async () => {
+        const connected = vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+
+        renderApp();
+        await screen.findByText(/This machine is offline\./);
+
+        connected.mockReturnValue(true);
+        fireEvent(window, new Event('online'));
+
+        await framed();
+    });
+
+    it('offers the next person nothing of the last one until their own grant has been read', async () => {
+        renderApp(servedFrom, null, deploymentAnswering(), storeKeeping());
+        signIn();
+        await framed();
+        expect(screen.getByRole('navigation', { name: 'Spaces' })).toBeDefined();
+
+        // No network from here on, so nothing can arrive to replace what is on the screen: what has to clear it is the
+        // credential changing rather than an answer about the new one.
+        vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
+        fireEvent(window, new Event('offline'));
+
+        fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+        signIn('somebody', 'else');
+        await screen.findByText(/This machine is offline\./);
+
+        expect(screen.queryByRole('navigation', { name: 'Spaces' })).toBeNull();
+    });
+
+    it('reports the deployment it is reading from beside the client it is running', async () => {
+        renderApp();
+        await framed();
+
+        expect(screen.getByText(`Client ${__MAILFATHOM_VERSION__}, deployment 0.8.7`)).toBeDefined();
+    });
+
+    it('names each account and what its last attempt did, behind the line that summarizes them', async () => {
+        const failing = { ...workAccount, id: 'news', displayName: 'Newsletters', synchronizationState: 'Unreachable' };
+
+        renderApp(servedFrom, heldCredential, deploymentAnswering(directory(true, [workAccount, failing])));
+        await screen.findByText('Some accounts stopped synchronizing.');
+
+        // Scoped to the panel, because the mailbox in scope offers the same names and this is about the freshness
+        // reading rather than about the field beside it.
+        const panel = within(screen.getByRole('group'));
+        expect(panel.getByText('Work')).toBeDefined();
+        expect(panel.getByText('Up to date')).toBeDefined();
+        expect(panel.getByText('Newsletters')).toBeDefined();
+        expect(panel.getByText('The mail server did not answer')).toBeDefined();
+    });
+
+    it('tells an owner holding no account what would fill it, rather than showing a failure', async () => {
+        renderApp(servedFrom, heldCredential, deploymentAnswering(directory(true, [])));
+
+        expect(await screen.findByText(/No mail account is configured for this owner yet\./)).toBeDefined();
+        expect(
+            screen.getByText(/Whoever runs this deployment declares which mailboxes it reads for you/),
+        ).toBeDefined();
     });
 });
 
@@ -628,7 +819,10 @@ describe('App deployment', () => {
         renderApp(chose('https://elsewhere.example.invalid'));
         await framed();
 
-        expect(routesAsked()).toEqual(['https://elsewhere.example.invalid/api/client/accounts']);
+        expect(routesAsked()).toEqual([
+            'https://elsewhere.example.invalid/api/client/session',
+            'https://elsewhere.example.invalid/api/client/accounts',
+        ]);
     });
 
     it('asks for an address when nothing has said where the deployment is', () => {
@@ -780,6 +974,7 @@ describe('App deployment', () => {
         await framed();
 
         expect(routesAsked()).toEqual([
+            'https://first.example.invalid/api/client/session',
             'https://first.example.invalid/api/client/accounts',
             'https://second.example.invalid/api/client/session',
             'https://second.example.invalid/api/client/accounts',

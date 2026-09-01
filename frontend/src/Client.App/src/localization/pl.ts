@@ -15,6 +15,8 @@ export const pl: Catalogue = {
     'shell.theme': 'Motyw',
     'shell.spaces': 'Przestrzenie',
     'shell.signOut': 'Wyloguj się',
+    'shell.clientVersion': 'Klient {client}',
+    'shell.versions': 'Klient {client}, wdrożenie {deployment}',
 
     'theme.system': 'Zgodnie z systemem',
     'theme.light': 'Jasny',
@@ -79,14 +81,37 @@ export const pl: Catalogue = {
     'deployment.change': 'Wskaż inne wdrożenie',
 
     'accounts.reading': 'Odczytywanie kont…',
-    'accounts.notRefreshing': 'To wdrożenie nie odświeża lokalnej kopii tych kont.',
+    'accounts.notRefreshing':
+        'To wdrożenie nie odświeża lokalnej kopii tych kont, więc widzisz je w takim stanie, w jakim zostawił je jego ostatni przebieg. To ustawienie wdrożenia, a nie brakujące Ci uprawnienie.',
     'accounts.failed': 'Nie udało się odczytać kont: {reason}.',
+    'accounts.oldest': 'Najstarsze z nich odświeżono {age}.',
+    'accounts.noneDeclared':
+        'To osoba prowadząca to wdrożenie wskazuje skrzynki, które są dla Ciebie odczytywane, a nie wskazano jeszcze żadnej.',
+
+    'account.synchronized': 'Aktualne',
+    'account.behind': 'Nadrabia zaległości',
+    'account.failing': 'Przestało się synchronizować',
+    'account.unreachable': 'Serwer pocztowy nie odpowiedział',
+    'account.neverSynchronized': 'Nic jeszcze nie pobrano',
+    'account.lastRefreshed': 'Ostatnio odświeżono {age}',
+    'account.neverRefreshed': 'Nigdy nie odświeżono',
 
     'connection.current': 'Wszystkie konta są aktualne.',
     'connection.behind': 'Część kont ma zaległości.',
     'connection.failing': 'Część kont przestała się synchronizować.',
     'connection.noAccounts': 'Dla tego właściciela nie skonfigurowano jeszcze żadnego konta pocztowego.',
     'connection.retry': 'Spróbuj ponownie',
+    'connection.connecting': 'Łączenie z Twoim wdrożeniem…',
+    'connection.reconnecting': 'Twoje wdrożenie nie odpowiedziało. Próbujemy ponownie — próba {attempt} z {total}.',
+    'connection.lost': 'Twoje wdrożenie nie odpowiedziało po {total} próbach.',
+    'connection.unreadable': 'Twoje wdrożenie odpowiedziało, ale klient nie mógł wykorzystać tej odpowiedzi: {reason}.',
+    'connection.offline': 'Ta maszyna nie ma połączenia z siecią. Klient połączy się ponownie sam, gdy sieć wróci.',
+
+    'grant.heading': 'Czego to poświadczenie nie może tutaj zrobić',
+    'grant.readMail':
+        'To poświadczenie nie może odczytywać poczty w tym wdrożeniu, więc nie pokazujemy żadnej skrzynki ani wiadomości. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
+    'grant.askMail':
+        'To poświadczenie nie może zadawać pytań Twojej poczcie w tym wdrożeniu, więc nie oferujemy pytania. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
 
     'failure.unauthenticated': 'brak uwierzytelnienia',
     'failure.unauthorized': 'brak uprawnień',

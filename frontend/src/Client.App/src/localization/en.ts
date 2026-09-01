@@ -16,6 +16,8 @@ export const en = {
     'shell.theme': 'Theme',
     'shell.spaces': 'Spaces',
     'shell.signOut': 'Sign out',
+    'shell.clientVersion': 'Client {client}',
+    'shell.versions': 'Client {client}, deployment {deployment}',
 
     'theme.system': 'Follow the system',
     'theme.light': 'Light',
@@ -79,14 +81,37 @@ export const en = {
     'deployment.change': 'Point somewhere else',
 
     'accounts.reading': 'Reading accounts…',
-    'accounts.notRefreshing': 'This deployment is not refreshing the local copy of these accounts.',
+    'accounts.notRefreshing':
+        'This deployment is not refreshing the local copy of these accounts, so what you see is as current as its last run left it. That is a setting on the deployment rather than a permission you are missing.',
     'accounts.failed': 'The accounts could not be read: {reason}.',
+    'accounts.oldest': 'The oldest of these was last refreshed {age}.',
+    'accounts.noneDeclared':
+        'Whoever runs this deployment declares which mailboxes it reads for you, and none is declared yet.',
+
+    'account.synchronized': 'Up to date',
+    'account.behind': 'Catching up',
+    'account.failing': 'Stopped synchronizing',
+    'account.unreachable': 'The mail server did not answer',
+    'account.neverSynchronized': 'Nothing taken in yet',
+    'account.lastRefreshed': 'Last refreshed {age}',
+    'account.neverRefreshed': 'Never refreshed',
 
     'connection.current': 'Every account is up to date.',
     'connection.behind': 'Some accounts are behind.',
     'connection.failing': 'Some accounts stopped synchronizing.',
     'connection.noAccounts': 'No mail account is configured for this owner yet.',
     'connection.retry': 'Try again',
+    'connection.connecting': 'Reaching your deployment…',
+    'connection.reconnecting': 'Your deployment did not answer. Trying again — attempt {attempt} of {total}.',
+    'connection.lost': 'Your deployment has not answered after {total} attempts.',
+    'connection.unreadable': 'Your deployment answered, but this client could not act on the answer: {reason}.',
+    'connection.offline': 'This machine is offline. The client reconnects on its own when the network comes back.',
+
+    'grant.heading': 'What this credential may not do here',
+    'grant.readMail':
+        'This credential may not read mail on this deployment, so no mailbox and no message is shown. Whoever runs the deployment can grant that.',
+    'grant.askMail':
+        'This credential may not ask questions of your mail on this deployment, so asking is not offered. Whoever runs the deployment can grant that.',
 
     'failure.unauthenticated': 'unauthenticated',
     'failure.unauthorized': 'unauthorized',

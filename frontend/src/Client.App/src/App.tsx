@@ -2,24 +2,22 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-    readMailAccounts,
-    type ClientResult,
-    type DeploymentAddress,
-    type MailAccountDirectory,
-} from '@mailfathom/client-backend';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { DeploymentAddress } from '@mailfathom/client-backend';
 import { SecondaryButton } from './controls/SecondaryButton';
 import { forgetDeployment, storeDeployment, type AdoptedDeployment } from './deployment/adoptedDeployment';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { useLocalization } from './localization/useLocalization';
 import { Message } from './messageBody/Message';
 import { useSpace } from './routing/useSpace';
+import { offers, spacesOffered, withheldFrom } from './shell/capabilities';
 import { ConnectionSummary } from './shell/ConnectionSummary';
+import { GrantNotice } from './shell/GrantNotice';
 import { IntentField } from './shell/IntentField';
 import { LanguageChoice, ThemeChoice } from './shell/Preferences';
 import { Space } from './shell/Space';
 import { SpaceNavigation } from './shell/SpaceNavigation';
+import { useConnection } from './shell/useConnection';
 import { CredentialNotices, type CredentialNotice } from './signIn/CredentialNotices';
 import type { CredentialStore } from './signIn/credentialStore';
 import { SignIn } from './signIn/SignIn';
@@ -39,8 +37,9 @@ const provingRead = '00000000-0000-4000-8000-000000000000';
 // That is a screen rather than a state of the frame, because three spaces with nothing behind them are a frame around
 // nothing — and the two halves of the answer are one screen because a person was handed all of it together.
 //
-// What the accounts are read for here is the line above the space and the mailboxes the scope offers. Each account's
-// own freshness and the grants that decide what a space may show are the next stage's.
+// What the frame holds is then the session's answer rather than a fixed set: the deployment says what this credential
+// may do, and a space, a control, or a read it does not permit is absent here instead of present and refused when it
+// is pressed. Enforcing that is the service's; declining to offer it is this frame's.
 
 export function App({
     deployment,
@@ -53,12 +52,9 @@ export function App({
     readonly credentials: CredentialStore;
     readonly send: DeploymentTransport;
 }) {
-    const space = useSpace();
     const { revise } = useWorkspace();
     const [adopted, setAdopted] = useState(deployment);
     const [authorization, setAuthorization] = useState(signedInWith);
-    const [accounts, setAccounts] = useState<ClientResult<MailAccountDirectory> | null>(null);
-    const [attempt, setAttempt] = useState(0);
     const [notices, setNotices] = useState<readonly CredentialNotice[]>([]);
     const baseAddress = adopted === null ? null : adopted.deployment.baseAddress;
     const workspace = useRef<HTMLDivElement>(null);
@@ -98,55 +94,37 @@ export function App({
         }
     }, [authorization]);
 
-    // The session is built from the address and the credential rather than held beside them, which is what makes a
-    // credential unable to outlive the deployment it was presented to: pointing the client somewhere else, or signing
-    // out, runs this again with nothing to present, and there is nowhere for the previous one's session to survive.
-    useEffect(() => {
-        if (baseAddress === null || authorization === null) {
+    // A credential the deployment has stopped accepting is acted on once rather than left to produce the same refusal
+    // on every later read, which is why this is the one failure the frame does not render. What was kept goes with it:
+    // a stored password the service refuses is a password nothing will make work again.
+    //
+    // It is held steady across renders because the connection below reads again whenever it changes, and a callback
+    // rebuilt every render would be a read started every render.
+    const credentialRefused = useCallback(() => {
+        setNotices(['credentialNoLongerAccepted']);
+        setAuthorization(null);
+        revise(emptyWorkspace);
+
+        if (baseAddress === null) {
             return;
         }
 
-        const attempted = new AbortController();
-        let listening = true;
-
-        void readMailAccounts({ baseAddress, authorization }, send(attempted.signal)).then((answer) => {
-            if (!listening) {
-                return;
+        void credentials.forget({ baseAddress }).then((removed) => {
+            if (!removed) {
+                setNotices((shown) => [...shown, 'passwordNotRemoved']);
             }
-
-            // A credential the deployment has stopped accepting is acted on once rather than left to produce the same
-            // refusal on every later read, which is why this is the one failure the frame does not render. What was
-            // kept goes with it: a stored password the service refuses is a password nothing will make work again.
-            if (answer.outcome === 'failed' && answer.failure.reason === 'unauthenticated') {
-                setNotices(['credentialNoLongerAccepted']);
-                setAuthorization(null);
-                setAccounts(null);
-                revise(emptyWorkspace);
-
-                void credentials.forget({ baseAddress }).then((removed) => {
-                    if (!removed) {
-                        setNotices((shown) => [...shown, 'passwordNotRemoved']);
-                    }
-                });
-
-                return;
-            }
-
-            setAccounts(answer);
         });
+    }, [baseAddress, credentials, revise]);
 
-        return () => {
-            listening = false;
-            attempted.abort();
-        };
-    }, [baseAddress, authorization, attempt, credentials, revise, send]);
-
-    // Reading again is a new attempt rather than a second copy of the read above: the effect owns the cancellation, so
-    // the retry only says that the answer it holds is stale.
-    function reread(): void {
-        setAccounts(null);
-        setAttempt((previous) => previous + 1);
-    }
+    // What the deployment says is read from the address and the credential rather than held beside them, which is what
+    // makes a credential unable to outlive the deployment it was presented to: pointing the client somewhere else, or
+    // signing out, runs this again with nothing to present, and nothing of the previous one's answers survives it.
+    const connection = useConnection(baseAddress, authorization, send, credentialRefused);
+    const deploymentSession = connection.session?.outcome === 'read' ? connection.session.value : null;
+    const offeredSpaces = deploymentSession === null ? [] : spacesOffered(deploymentSession);
+    const space = useSpace(offeredSpaces);
+    const withheld = deploymentSession === null ? [] : withheldFrom(deploymentSession);
+    const mailAccounts = connection.accounts?.outcome === 'read' ? connection.accounts.value.accounts : [];
 
     function signedIn(reached: DeploymentAddress, presented: string): void {
         if (adopted === null) {
@@ -164,7 +142,6 @@ export function App({
                 setNotices(['passwordNotKept']);
             }
         });
-        setAccounts(null);
         setAuthorization(presented);
     }
 
@@ -177,7 +154,6 @@ export function App({
     // the person believes they signed out.
     function signOut(): void {
         setNotices([]);
-        setAccounts(null);
         setAuthorization(null);
         revise(emptyWorkspace);
 
@@ -214,14 +190,14 @@ export function App({
         <div className="flex h-dvh flex-col bg-rail pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left workspace:flex-row">
             <div ref={workspace} tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col bg-page">
                 <header className="flex flex-wrap items-center gap-3 border-b border-line-soft bg-panel px-4 py-2 workspace:px-8">
-                    <ConnectionSummary accounts={accounts} reread={reread} />
+                    <ConnectionSummary connection={connection} />
 
                     {adopted?.chosen === true ? (
                         <ChosenDeployment address={baseAddress} onChange={pointSomewhereElse} />
                     ) : null}
 
                     <div className="ms-auto flex items-center gap-2">
-                        <p className="font-mono text-xs text-faint">{__MAILFATHOM_VERSION__}</p>
+                        <Versions deployment={deploymentSession?.version ?? null} />
                         <ThemeChoice />
                         <LanguageChoice />
                         <SignOut onSignOut={signOut} />
@@ -230,23 +206,36 @@ export function App({
 
                 {/* Inside the frame as well as on the sign-in screen, because a credential that could not be kept is
                     learned about at the moment somebody successfully signed in — which is the one of these sentences
-                    whose reader is already past that screen. */}
-                {notices.length === 0 ? null : (
-                    <div className="border-b border-line-soft bg-panel px-4 py-2 workspace:px-8">
+                    whose reader is already past that screen. Beside it, and in the same strip, is what this credential
+                    may not do: both are statements about the credential rather than about anything it read. */}
+                {notices.length === 0 && withheld.length === 0 ? null : (
+                    <div className="flex flex-col gap-2 border-b border-line-soft bg-panel px-4 py-2 workspace:px-8">
                         <CredentialNotices notices={notices} />
+                        <GrantNotice withheld={withheld} />
                     </div>
                 )}
 
-                <IntentField accounts={accounts?.outcome === 'read' ? accounts.value.accounts : []} />
+                {/* Asking is what the field is for, so a credential that may not ask is not shown one. It is absent
+                    rather than disabled: a control nobody can use says less about why than the sentence above does. */}
+                {deploymentSession !== null && offers(deploymentSession, 'askMail') ? (
+                    <IntentField accounts={mailAccounts} />
+                ) : null}
 
-                <Space
-                    space={space}
-                    mail={
-                        session === null ? null : (
-                            <Message session={session} transport={readMessage} storedEmailId={provingRead} />
-                        )
-                    }
-                />
+                {/* The region the space is drawn in is there before the deployment says which space that is, so
+                    nothing on the screen moves under a reader when the answer arrives. What is waiting is said once,
+                    above, where the answer will appear rather than twice. */}
+                {space === null ? (
+                    <main className="flex-1" />
+                ) : (
+                    <Space
+                        space={space}
+                        mail={
+                            session === null ? null : (
+                                <Message session={session} transport={readMessage} storedEmailId={provingRead} />
+                            )
+                        }
+                    />
+                )}
             </div>
 
             {/* Navigation is last in the document because the keyboard follows the document rather than the layout,
@@ -255,8 +244,23 @@ export function App({
                 composition then carries the one mismatch CSS cannot remove — a rail drawn on the left out of a node
                 that comes last — because no single document order matches both shapes, and content before navigation
                 is the direction a skip link exists to manufacture rather than the one it works around. */}
-            <SpaceNavigation current={space} />
+            {space === null ? null : <SpaceNavigation offered={offeredSpaces} current={space} />}
         </div>
+    );
+}
+
+// What the client is running and what the deployment it is reading from is running, beside each other because a
+// mismatch between them is the first thing to look at when a screen behaves oddly. The client's own is substituted
+// into the bundle at build time rather than retyped, and the deployment's is what the session route answered.
+function Versions({ deployment }: { readonly deployment: string | null }) {
+    const { translate } = useLocalization();
+
+    return (
+        <p className="font-mono text-xs text-faint">
+            {deployment === null
+                ? translate('shell.clientVersion', { client: __MAILFATHOM_VERSION__ })
+                : translate('shell.versions', { client: __MAILFATHOM_VERSION__, deployment })}
+        </p>
     );
 }
 

@@ -5,12 +5,13 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { LocalizationProvider } from '../localization/Localization';
+import { spaces, type Space } from '../routing/spaces';
 import { SpaceNavigation } from './SpaceNavigation';
 
-function renderNavigation(): void {
+function renderNavigation(offered: readonly Space[] = spaces): void {
     render(
         <LocalizationProvider>
-            <SpaceNavigation current="mail" />
+            <SpaceNavigation offered={offered} current="mail" />
         </LocalizationProvider>,
     );
 }
@@ -37,5 +38,11 @@ describe('SpaceNavigation', () => {
         renderNavigation();
 
         expect(screen.getByRole('navigation', { name: 'Spaces' })).toBeDefined();
+    });
+
+    it('offers only what it was given, so a space this credential may not open is absent from the rail', () => {
+        renderNavigation(['mail', 'cases']);
+
+        expect(screen.getAllByRole('link').map((space) => space.textContent)).toEqual(['Mail', 'Cases']);
     });
 });
