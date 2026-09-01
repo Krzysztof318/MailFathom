@@ -8221,6 +8221,59 @@ the_dependency_survey_refuses_what_would_write_without_being_asked() {
   "$script" --help > /dev/null
 }
 
+# The survey's report is everything a reader has in front of them while deciding whether a bump is worth taking, and
+# the first of the four questions a bump answers — read the upstream release notes — applies to a handful of its rows
+# rather than to all hundred. `breaking_move_of` is what names that handful, so what it must never do is claim one
+# where version ordering says nothing at all: a digest, a timestamp-named release, and an ordinary patch each answer
+# nothing about compatibility, and a mark on one of them teaches a reader to skip the mark that matters.
+#
+# The pairs below are the shapes this repository actually pins, including the `0.y` container tag and the `v<major>`
+# action reference, and the function is extracted by name and sourced exactly as the rewrite contract above does it —
+# no network, no repository, and a rename fails loudly.
+the_dependency_survey_names_the_bump_that_may_break() {
+  local script="$source_repository_root/scripts/update-dependencies.sh"
+  local outcome expected
+
+  outcome="$(
+    set -uo pipefail
+    source <(sed -n '/^breaking_move_of() {$/,/^}$/p' "$script")
+
+    for pair in \
+      '1.2.3 2.0.0' \
+      '1.2.3 1.3.0' \
+      '1.2.3 1.2.4' \
+      '0.4.1 1.0.0' \
+      '0.4.1 0.5.0' \
+      '0.4.1 0.4.2' \
+      '0.9.0 0.10.0' \
+      '0.8.6-pg18 0.9.0-pg18' \
+      '10.0.0-preview.1 10.0.0' \
+      'v4 v5' \
+      'sha256:9bea393 sha256:1c0ffee' \
+      'RELEASE.2026-08-06T00-00-00Z RELEASE.2026-09-01T00-00-00Z'; do
+      printf '%s [%s]\n' "$pair" "$(breaking_move_of "${pair% *}" "${pair#* }")"
+    done
+  )"
+
+  expected='1.2.3 2.0.0 [MAJOR 1 -> 2]
+1.2.3 1.3.0 []
+1.2.3 1.2.4 []
+0.4.1 1.0.0 [MAJOR 0 -> 1]
+0.4.1 0.5.0 [MAJOR 0.4 -> 0.5 on a 0.y line]
+0.4.1 0.4.2 []
+0.9.0 0.10.0 [MAJOR 0.9 -> 0.10 on a 0.y line]
+0.8.6-pg18 0.9.0-pg18 [MAJOR 0.8 -> 0.9 on a 0.y line]
+10.0.0-preview.1 10.0.0 []
+v4 v5 [MAJOR 4 -> 5]
+sha256:9bea393 sha256:1c0ffee []
+RELEASE.2026-08-06T00-00-00Z RELEASE.2026-09-01T00-00-00Z []'
+
+  if [[ "$outcome" != "$expected" ]]; then
+    printf 'breaking_move_of classified:\n%s\n\nwhere this was expected:\n%s\n' "$outcome" "$expected" >&2
+    return 1
+  fi
+}
+
 # The per-file licensing mark, everywhere the analyzer that applies it cannot reach. IDE0073 reads
 # C# and rewrites a `.cs` header to match `file_header_template`, so the source files stay consistent
 # without anyone typing one; the workflows, the scripts, the chart, the unit sources, and the skills
@@ -8827,6 +8880,7 @@ run_test the_client_job_runs_every_check_the_full_gate_runs
 run_test workflow_scripts_use_flat_manual_layout
 run_test the_dependency_survey_refuses_what_would_write_without_being_asked
 run_test the_dependency_rewrite_encodes_a_hostile_version_into_a_pin_file
+run_test the_dependency_survey_names_the_bump_that_may_break
 run_test every_hash_commented_file_carries_the_license_header
 run_test every_browser_asset_carries_the_license_header
 run_test every_container_unit_carries_the_license_header
