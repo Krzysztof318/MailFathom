@@ -4,7 +4,7 @@
 
 import { getDefaultNormalizer, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import type { MailDocumentBlock, MailInlineRun } from '@mailfathom/client-backend';
+import type { MailDocumentBlock, MailDocumentLink, MailInlineRun } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
 import { MessageBlocks } from './MessageBlocks';
 import { LinkOpenerContext } from '../shellOperations/linkOpener';
@@ -23,6 +23,10 @@ const noEmphasis = {
 
 function run(text: string, overrides: Partial<MailInlineRun> = {}): MailInlineRun {
     return { text, emphasis: noEmphasis, foreground: null, link: null, ...overrides };
+}
+
+function linkTo(target: string): MailDocumentLink {
+    return { target, host: 'example.invalid', asciiHost: null, deception: 'None', worthWarningAbout: false };
 }
 
 function drawing(blocks: readonly MailDocumentBlock[]) {
@@ -197,6 +201,76 @@ describe('MessageBlocks', () => {
 
         expect(screen.getByRole('blockquote')).toBeDefined();
         expect(screen.getByText('You wrote this.')).toBeDefined();
+    });
+
+    it('draws one anchor as one link however many runs the emphasis split it into', () => {
+        const link = linkTo('https://example.invalid/renewal');
+        const emphasized = { ...noEmphasis, bold: true };
+
+        drawing([
+            {
+                type: 'paragraph',
+                content: [run('Read the ', { link }), run('renewal', { link, emphasis: emphasized })],
+                alignment: 'Inherited',
+            },
+        ]);
+
+        // One anchor rather than two: a reader meeting the target and the warning twice, tabbing through it twice, and
+        // finding it twice in a screen reader's list of links is the defect this asserts against.
+        const links = screen.getAllByRole('link');
+
+        expect(links.length).toBe(1);
+        expect(links[0]?.textContent).toBe('Read the renewal');
+    });
+
+    it('keeps two anchors apart even where they run into each other', () => {
+        drawing([
+            {
+                type: 'paragraph',
+                content: [
+                    run('One', { link: linkTo('https://example.invalid/one') }),
+                    run('Two', { link: linkTo('https://example.invalid/two') }),
+                ],
+                alignment: 'Inherited',
+            },
+        ]);
+
+        expect(screen.getAllByRole('link').map((anchor) => anchor.textContent)).toEqual(['One', 'Two']);
+    });
+
+    it('gives a table wider than the pane a keyboard path to the columns past its edge', () => {
+        drawing([
+            {
+                type: 'table',
+                columns: [{ widthShare: null }],
+                rows: [
+                    {
+                        isHeader: false,
+                        cells: [
+                            {
+                                columnSpan: 1,
+                                rowSpan: 1,
+                                alignment: 'Start',
+                                background: null,
+                                blocks: [{ type: 'paragraph', content: [run('A kettle')], alignment: 'Start' }],
+                            },
+                        ],
+                    },
+                ],
+            },
+        ]);
+
+        const region = screen.getByRole('group', { name: 'A table in this message, scrollable sideways' });
+
+        expect(region.tabIndex).toBe(0);
+    });
+
+    it('gives preformatted text wider than the pane a keyboard path to the rest of the line', () => {
+        drawing([{ type: 'preformatted', text: 'a line longer than the pane' }]);
+
+        const region = screen.getByRole('group', { name: 'Preformatted text in this message, scrollable sideways' });
+
+        expect(region.tabIndex).toBe(0);
     });
 
     it('draws a separator as one rather than as an empty paragraph', () => {

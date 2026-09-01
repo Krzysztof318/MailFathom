@@ -75,12 +75,16 @@ function readsAsked(): string[] {
 }
 
 function readingOneMessage(storedEmailId = 'stub-message') {
-    return render(
+    return render(reading(storedEmailId));
+}
+
+function reading(storedEmailId: string) {
+    return (
         <StrictMode>
             <LocalizationProvider>
                 <Message session={session} transport={transport} storedEmailId={storedEmailId} />
             </LocalizationProvider>
-        </StrictMode>,
+        </StrictMode>
     );
 }
 
@@ -167,16 +171,30 @@ describe('Message', () => {
         answering(bodyAnswering(false));
         asked = [];
 
-        opened.rerender(
-            <StrictMode>
-                <LocalizationProvider>
-                    <Message session={session} transport={transport} storedEmailId="another-message" />
-                </LocalizationProvider>
-            </StrictMode>,
-        );
+        opened.rerender(reading('another-message'));
 
         expect(await screen.findByText('Load pictures from the sender')).toBeDefined();
         expect(readsAsked()).toEqual([`${baseAddress}/api/client/messages/another-message/body`]);
+    });
+
+    it('draws no answered pictures when the reader comes back before the message they left has answered', async () => {
+        const opened = readingOneMessage();
+        await screen.findByText('A drawn message.');
+        answering(bodyAnswering(true));
+        fireEvent.click(screen.getByRole('button', { name: 'Load pictures from the sender' }));
+        await screen.findByText('Pictures are being loaded from the sender for this message.');
+
+        // The message they moved to never answers, so what stands on the screen when they come back is decided
+        // entirely by what this component was still holding from the visit they asked for the pictures in.
+        answer = (path) =>
+            path.includes('another-message')
+                ? new Promise<Answer>(() => undefined)
+                : Promise.resolve(bodyAnswering(false));
+        opened.rerender(reading('another-message'));
+        opened.rerender(reading('stub-message'));
+
+        expect(await screen.findByRole('button', { name: 'Load pictures from the sender' })).toBeDefined();
+        expect(screen.queryByText('Pictures are being loaded from the sender for this message.')).toBeNull();
     });
 
     it('remembers nothing about the ask, so opening the message again asks again', async () => {

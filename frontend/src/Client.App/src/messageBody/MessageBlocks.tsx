@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import type {
     MailBlockAlignment,
     MailDocumentBlock,
+    MailDocumentLink,
     MailHeadingBlock,
     MailImageBlock,
     MailInlineRun,
@@ -95,10 +96,14 @@ function MessageList({ block }: { readonly block: MailListBlock }) {
 }
 
 function MessageTable({ block }: { readonly block: MailTableBlock }) {
+    const { translate } = useLocalization();
+
     return (
         // A table is how mail layout is overwhelmingly built, so it is the one block that may be wider than the pane.
-        // It scrolls inside its own box rather than making the page scroll sideways under everything else.
-        <div className="overflow-x-auto">
+        // It scrolls inside its own box rather than making the page scroll sideways under everything else — and it is
+        // focusable and named, because WebKit gives a scroll container holding nothing focusable no keyboard path at
+        // all, which would leave the columns past the right edge unreachable on the head the desktop shell renders in.
+        <div aria-label={translate('body.tableRegion')} className="overflow-x-auto" role="group" tabIndex={0}>
             <table className="w-full border-collapse text-start">
                 <colgroup>
                     {block.columns.map((column, position) => (
@@ -178,7 +183,20 @@ function MessagePicture({ block }: { readonly block: MailImageBlock }) {
 }
 
 function MessagePreformatted({ block }: { readonly block: MailPreformattedBlock }) {
-    return <pre className="overflow-x-auto font-mono text-sm">{block.text}</pre>;
+    const { translate } = useLocalization();
+
+    // Focusable and named for the reason the table above is: a line longer than the pane is reachable from a keyboard
+    // only where the region that scrolls it can take focus.
+    return (
+        <pre
+            aria-label={translate('body.preformattedRegion')}
+            className="overflow-x-auto font-mono text-sm"
+            role="group"
+            tabIndex={0}
+        >
+            {block.text}
+        </pre>
+    );
 }
 
 function UndrawnBlock() {
@@ -187,10 +205,55 @@ function UndrawnBlock() {
     return <p className="text-sm text-muted">{translate('body.blockNotDrawn')}</p>;
 }
 
+// One anchor is one link on the screen, however many runs the service split it into: it merges adjacent runs only
+// where the emphasis, the colour, and the link are all equal, so an anchor whose words change weight halfway arrives as
+// two runs of one link. Drawn one anchor per run, a reader would meet the target and the warning twice, tab through it
+// twice, and find it twice in a screen reader's list of links.
 function MessageRuns({ content }: { readonly content: readonly MailInlineRun[] }) {
     return (
         <>
-            {content.map((run, position) => (
+            {anchors(content).map((anchor, position) =>
+                anchor.link === null ? (
+                    <MessageRunGroup key={position} runs={anchor.runs} />
+                ) : (
+                    <MessageLink key={position} link={anchor.link}>
+                        <MessageRunGroup runs={anchor.runs} />
+                    </MessageLink>
+                ),
+            )}
+        </>
+    );
+}
+
+interface Anchor {
+    readonly link: MailDocumentLink | null;
+    readonly runs: readonly MailInlineRun[];
+}
+
+/** The runs grouped as the reader meets them: adjacent runs of one link together, and every other run on its own. */
+function anchors(content: readonly MailInlineRun[]): Anchor[] {
+    const grouped: Anchor[] = [];
+
+    for (const run of content) {
+        const last = grouped.at(-1);
+
+        // The same link rather than an equal one: the parser answers with one object per anchor and the service splits
+        // an anchor only into runs that follow each other, so identity is what says "still inside that anchor".
+        if (run.link !== null && last?.link === run.link) {
+            grouped[grouped.length - 1] = { link: run.link, runs: [...last.runs, run] };
+            continue;
+        }
+
+        grouped.push({ link: run.link, runs: [run] });
+    }
+
+    return grouped;
+}
+
+function MessageRunGroup({ runs }: { readonly runs: readonly MailInlineRun[] }) {
+    return (
+        <>
+            {runs.map((run, position) => (
                 <MessageRun key={position} run={run} />
             ))}
         </>
@@ -202,9 +265,7 @@ function MessageRun({ run }: { readonly run: MailInlineRun }) {
     // `MailInlineRun` states — so a signature, a postal address, and a poem are all line breaks this has to keep.
     const emphasized = emphasize(run, <span className="whitespace-pre-line">{run.text}</span>);
 
-    const coloured = run.foreground === null ? emphasized : <span style={{ color: run.foreground }}>{emphasized}</span>;
-
-    return run.link === null ? coloured : <MessageLink link={run.link}>{coloured}</MessageLink>;
+    return run.foreground === null ? emphasized : <span style={{ color: run.foreground }}>{emphasized}</span>;
 }
 
 // Emphasis is drawn with the elements that mean it rather than with a class, so the meaning survives a stylesheet and

@@ -66,8 +66,8 @@ Nothing is published for macOS, and neither Android nor iOS is a head this proje
   daemon is the usual case — is told so on the sign-in screen and asked for the password again the next time the
   application opens, rather than having it written somewhere less safe instead.
 - **A link in a message opens in your own browser**, not in the application's window. The shell asks the desktop for
-  `http`, `https`, and `mailto` addresses and for nothing else, which is the whole of what the window is permitted to
-  ask of the machine it runs on; a window that navigated to a sender's page would have replaced the client with it.
+  `http`, `https`, and `mailto` addresses and for nothing else, which is the whole of what the window may ask the
+  opener for; a window that navigated to a sender's page would have replaced the client with it.
 - **It never updates itself.** No update channel exists and the shell links no updater, so a new version is a new
   download from a release page.
 - **It is not signed.** No bundle published here carries an Authenticode signature or a Linux package signature, so

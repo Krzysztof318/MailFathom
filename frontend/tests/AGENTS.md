@@ -205,11 +205,11 @@ browser is the only witness to it. Where the credential is kept is here for the 
 a real one, and a second tab is a second document, which is what `sessionStorage` is bounded by and what jsdom has one
 of.
 
-Navigation is the third of those. Each space is reached at a fragment address of its own, so this suite moves between
-them, reloads one, and moves back and forward through the client's own history — which is the whole reason the address
-is a fragment, and which nothing but a real document with a history can answer. Where the composition changes is here
-as well, because it is geometry: the navigation sits beside the workspace in a wide window and under it in a narrow
-one, asked of two viewport widths rather than of two heads.
+Navigation is answered here as well. Each space is reached at a fragment address of its own, so this suite moves
+between them, reloads one, and moves back and forward through the client's own history — which is the whole reason the
+address is a fragment, and which nothing but a real document with a history can answer. Where the composition changes
+is here as well, because it is geometry: the navigation sits beside the workspace in a wide window and under it in a
+narrow one, asked of two viewport widths rather than of two heads.
 
 ## Coverage
 

@@ -153,9 +153,11 @@ credential, under [ADR 0023](../../docs/decisions/0023-where-the-client-keeps-th
 application declares the operation it needs, and which implementation satisfies it is decided in one module at the
 composition root by whether a shell offered the command. `Client.App/src/shellOperations/linkOpener.ts` is that shape: one
 function resolves it, `main.tsx` calls that function once, and every component below receives the operation through
-context. `shellOperations/` is where such a module lives rather than beside the screen that happens to need it first,
-because what it answers is the application's and not one screen's; a second such operation joins it there. What is
-refused above is a component, a hook, or a screen asking the question itself, and that refusal is unchanged by either
+context. It is the first module of that shape and `shellOperations/` is where the next one goes, rather than beside the
+screen that happens to need it first, because what such a module answers is the application's and not one screen's.
+`Client.App/src/signIn/credentialStore.ts` is the other one today and predates the directory, so it still sits beside
+the sign-in screen; moving it is a change of its own rather than a side effect of adding the second. What is refused
+above is a component, a hook, or a screen asking the question itself, and that refusal is unchanged by either
 paragraph.
 
 **What a screen adapts to instead is the width it has been given and what the pointer can do.** Those two are the whole

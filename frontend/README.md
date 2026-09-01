@@ -75,8 +75,9 @@ _why_ one failed, because everything a failure could name is about a password. N
 writing one would be a mistake rather than an omission: Tauri gates its own plugin commands through an access-control
 list and never an application's, so a `capabilities/` entry naming these four would grant the webview reach into
 plugins nothing here pins. What the webview reaches them through is `app.withGlobalTauri` in `tauri.conf.json`, which
-puts `invoke` on `window.__TAURI__` — the alternative being one more npm package redistributed inside every bundle to
-supply one function.
+puts `invoke` on `window.__TAURI__`, and that is what lets this shell pin no JavaScript binding of its own: the four
+commands are this repository's, so nothing upstream publishes a package for them and writing one would be a package of
+ours to keep in step with them.
 
 The plugin is `tauri-plugin-opener`, and it is there because opening a followed link outside the application is the one
 thing the desktop head cannot do from the page. Its commands are a plugin's rather than this repository's, so they are

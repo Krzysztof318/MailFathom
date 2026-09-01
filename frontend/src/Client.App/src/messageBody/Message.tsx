@@ -11,6 +11,7 @@ import {
     type MailBody,
     type MailFathomTransport,
 } from '@mailfathom/client-backend';
+import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { MessageBody } from './MessageBody';
@@ -117,29 +118,23 @@ export function Message({
                 {/* Reading again is the way out of exactly one of the four failures, for the reason
                     `shell/ConnectionSummary.tsx` gives: the other three repeat identically on a second attempt. */}
                 {held.result.failure.reason === 'unavailable' ? (
-                    <button
-                        className="rounded-md border border-line px-3 py-1 text-sm"
-                        type="button"
-                        onClick={() => {
+                    <SecondaryButton
+                        label={translate('connection.retry')}
+                        onActivate={() => {
                             setRead({ ...read, attempt: read.attempt + 1 });
                         }}
-                    >
-                        {translate('connection.retry')}
-                    </button>
+                    />
                 ) : null}
 
                 {/* A failed ask for the sender's pictures has a second way out, which is not reloading the page: the
                     message read without them is one this deployment already answered with. */}
                 {read.remotePictures ? (
-                    <button
-                        className="rounded-md border border-line px-3 py-1 text-sm"
-                        type="button"
-                        onClick={() => {
+                    <SecondaryButton
+                        label={translate('body.showWithoutRemotePictures')}
+                        onActivate={() => {
                             setRead({ storedEmailId, remotePictures: false, attempt: read.attempt + 1 });
                         }}
-                    >
-                        {translate('body.showWithoutRemotePictures')}
-                    </button>
+                    />
                 ) : null}
             </div>
         );

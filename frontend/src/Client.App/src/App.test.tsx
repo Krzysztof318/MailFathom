@@ -69,6 +69,49 @@ function deploymentAnswering(accounts: Answer = directory(true, [workAccount])):
     };
 }
 
+/** The one message the reading pane reads, drawn from the closed tree rather than from any markup the sender wrote. */
+const drawnMessage: Answer = {
+    status: 200,
+    body: JSON.stringify({
+        storedEmailId: '00000000-0000-4000-8000-000000000000',
+        availability: 'Readable',
+        plainText: { text: 'As words.', originalCharacterCount: 9, truncation: 'None' },
+        document: {
+            schemaVersion: 1,
+            blocks: [
+                {
+                    type: 'paragraph',
+                    version: 1,
+                    content: [{ text: 'A drawn message.', emphasis: 'None', foreground: null, link: null }],
+                    alignment: 'Inherited',
+                },
+            ],
+            refusal: 'None',
+            removedRemoteReferenceCount: 0,
+            retainedRemoteImageCount: 0,
+            inlineImageCount: 0,
+            undrawnInlineImageCount: 0,
+            truncated: false,
+        },
+        remoteImagesRequested: false,
+    }),
+};
+
+/** A deployment that answers the accounts as the one above does, and the body the reading pane in Mail asks it for. */
+function deploymentDrawingAMessage(): DeploymentTransport {
+    const otherwise = deploymentAnswering();
+
+    return (signal) => (request) => {
+        if (!request.path.includes('/messages/')) {
+            return otherwise(signal)(request);
+        }
+
+        asked.push(request);
+
+        return Promise.resolve(complete(drawnMessage));
+    };
+}
+
 /** A deployment answering every route the same way, which is how a refusal to sign anybody in is stated. */
 function deploymentRefusing(answer: Answer): DeploymentTransport {
     return () => (request) => {
@@ -236,6 +279,22 @@ describe('App', () => {
         renderApp();
 
         expect(await screen.findByRole('heading', { name: space, level: 1 })).toBeDefined();
+    });
+
+    it('draws the message the reading pane read, once Mail is the space on the screen', async () => {
+        renderApp(servedFrom, heldCredential, deploymentDrawingAMessage());
+        await framed();
+
+        await goTo('Mail');
+
+        expect(await screen.findByText('A drawn message.')).toBeDefined();
+    });
+
+    it('reads no message while the space on the screen is not Mail', async () => {
+        renderApp(servedFrom, heldCredential, deploymentDrawingAMessage());
+        await framed();
+
+        expect(routesAsked().some((path) => path.includes('/messages/'))).toBe(false);
     });
 
     it('shows the space whose link was activated, and marks it as the current one', async () => {

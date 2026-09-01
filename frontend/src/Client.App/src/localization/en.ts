@@ -111,6 +111,8 @@ export const en = {
     'body.truncated': 'This message is longer than a reading pane draws, so it stops here.',
     'body.textTruncated': 'The words of this message were cut short by a limit this deployment applies.',
     'body.blockNotDrawn': 'A part of this message was written for a newer client than this one, so it is not drawn.',
+    'body.tableRegion': 'A table in this message, scrollable sideways',
+    'body.preformattedRegion': 'Preformatted text in this message, scrollable sideways',
     'body.pictureWithoutDescription': 'A picture the sender did not describe',
 
     'body.remoteContentRemoved':

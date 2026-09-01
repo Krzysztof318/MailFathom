@@ -232,6 +232,8 @@ const bounds = {
     maximumInlineImageOctets: 2 * 1024 * 1024,
     maximumInlineImageOctetsPerDocument: 4 * 1024 * 1024,
     maximumLinkTargetLength: 4096,
+    maximumPictureEdge: 10_000,
+    maximumAlternativeTextLength: 1024,
 } as const;
 
 const availabilities: readonly MailBodyAvailability[] = [
@@ -803,15 +805,25 @@ function parseImage(value: unknown, walk: Walk): MailInlineImage | null {
         return null;
     }
 
-    if (alternativeText !== null && typeof alternativeText !== 'string') {
+    if (
+        alternativeText !== null &&
+        (typeof alternativeText !== 'string' || alternativeText.length > bounds.maximumAlternativeTextLength)
+    ) {
         return null;
     }
 
-    if ((width !== null && !isCount(width)) || (height !== null && !isCount(height))) {
+    // A dimension is drawn onto the element as the message declared it, so it is bounded the way the service bounds it
+    // rather than left to any safe integer: one picture claiming a height of nine quadrillion pixels is a box nothing
+    // scrolls past to reach the rest of the message.
+    if (!isDrawableEdge(width) || !isDrawableEdge(height)) {
         return null;
     }
 
     return { source, alternativeText, width, height };
+}
+
+function isDrawableEdge(value: unknown): value is number | null {
+    return value === null || (isCount(value) && value > 0 && value <= bounds.maximumPictureEdge);
 }
 
 /**

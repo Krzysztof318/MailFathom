@@ -114,6 +114,8 @@ export const pl: Catalogue = {
     'body.truncated': 'Ta wiadomość jest dłuższa, niż okno czytania rysuje, więc kończy się w tym miejscu.',
     'body.textTruncated': 'Tekst tej wiadomości został skrócony przez ograniczenie stosowane przez to wdrożenie.',
     'body.blockNotDrawn': 'Fragment tej wiadomości powstał dla nowszego klienta niż ten, więc nie został narysowany.',
+    'body.tableRegion': 'Tabela w tej wiadomości, przewijana w poziomie',
+    'body.preformattedRegion': 'Tekst preformatowany w tej wiadomości, przewijany w poziomie',
     'body.pictureWithoutDescription': 'Obraz, którego nadawca nie opisał',
 
     'body.remoteContentRemoved':

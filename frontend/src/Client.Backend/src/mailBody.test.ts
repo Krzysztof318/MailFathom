@@ -381,6 +381,29 @@ describe('readMailBody refusing a document this deployment did not compose', () 
         expect(await refusing(blocks)).toBe('failed');
     });
 
+    it('refuses a picture claiming an edge no screen draws', async () => {
+        const image = { source: 'data:image/gif;base64,R0lGOD==', alternativeText: null, width: 10_001, height: 40 };
+
+        expect(await refusing([{ type: 'image', version: 1, image, link: null, alignment: 'Start' }])).toBe('failed');
+    });
+
+    it('refuses a picture claiming an edge of nothing, which no layout reserves room for', async () => {
+        const image = { source: 'data:image/gif;base64,R0lGOD==', alternativeText: null, width: 40, height: 0 };
+
+        expect(await refusing([{ type: 'image', version: 1, image, link: null, alignment: 'Start' }])).toBe('failed');
+    });
+
+    it('refuses a picture described at greater length than a description may be', async () => {
+        const image = {
+            source: 'data:image/gif;base64,R0lGOD==',
+            alternativeText: 'a'.repeat(1025),
+            width: null,
+            height: null,
+        };
+
+        expect(await refusing([{ type: 'image', version: 1, image, link: null, alignment: 'Start' }])).toBe('failed');
+    });
+
     it('refuses a link whose target is longer than a target may be', async () => {
         const target = `https://example.invalid/${'a'.repeat(4096)}`;
         const link = {
