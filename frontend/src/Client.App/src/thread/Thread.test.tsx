@@ -233,6 +233,19 @@ describe('Thread', () => {
         });
     });
 
+    it('puts the reader at the message it opened itself at, where nobody named one', async () => {
+        drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])));
+
+        expect(await screen.findByText('What one added.')).toBeDefined();
+
+        await waitFor(() => {
+            const focused = document.activeElement;
+
+            expect(focused?.tagName).toBe('SUMMARY');
+            expect(focused?.closest('details')?.open).toBe(true);
+        });
+    });
+
     it('reads on until the message it was opened at is in hand, keeping the history above it', async () => {
         drawing(
             deploymentAnswering(

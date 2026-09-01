@@ -92,6 +92,18 @@ describe('openedBy', () => {
         expect(openedBy(messages, 'somewhere-else')).toStrictEqual(['two']);
     });
 
+    it('opens the most recent of what has not been read rather than all of it, because each open message is a read', () => {
+        const messages = [
+            message('one', 0, true),
+            message('two', 1, true),
+            message('three', 2, true),
+            message('four', 3, true),
+            message('five', 4, true),
+        ];
+
+        expect(openedBy(messages, null)).toStrictEqual(['three', 'four', 'five']);
+    });
+
     it('opens nothing in a conversation holding no message anybody may see', () => {
         expect(openedBy([], 'two')).toStrictEqual([]);
     });

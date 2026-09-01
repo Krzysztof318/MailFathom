@@ -136,16 +136,24 @@ export function Thread({
     // opened the conversation. Focus rather than a scroll of our own: placing it is the obligation, a browser scrolls
     // what it focuses into view, and one call cannot leave the two disagreeing about where the reader is.
     useEffect(() => {
-        const openAt = conversation.openAt;
-
-        if (openAt === null || expanded === null || focusedOn.current === openAt) {
+        if (expanded === null) {
             return;
         }
 
-        const summary = summaries.current.get(openAt);
+        // Where nobody named a message, the conversation decided for itself which of them to open, and the first of
+        // those is where reading starts — so focus goes there rather than nowhere at all, which is the same view change
+        // either way. A conversation holding no message at all has nothing to arrive at, and the empty state says so
+        // where focus already is.
+        const arriveAt = conversation.openAt ?? expanded.at(0) ?? null;
+
+        if (arriveAt === null || focusedOn.current === arriveAt) {
+            return;
+        }
+
+        const summary = summaries.current.get(arriveAt);
 
         if (summary !== undefined) {
-            focusedOn.current = openAt;
+            focusedOn.current = arriveAt;
             summary.focus();
         }
     }, [conversation.openAt, expanded]);
