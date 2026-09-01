@@ -92,7 +92,7 @@ function storeKeeping(lifetime: CredentialLifetime = 'untilTheTabCloses'): Recor
         keep: (deployment, authorization) => {
             kept.set(deployment.baseAddress, authorization);
 
-            return Promise.resolve();
+            return Promise.resolve(true);
         },
         forget: (deployment) => {
             kept.delete(deployment.baseAddress);
@@ -100,6 +100,13 @@ function storeKeeping(lifetime: CredentialLifetime = 'untilTheTabCloses'): Recor
             return Promise.resolve(true);
         },
     };
+}
+
+/** A store that will not write, which is a keychain locked between being found and being written to. */
+function storeRefusingToKeep(): RecordingStore {
+    const store = storeKeeping('untilSignedOut');
+
+    return { ...store, keep: () => Promise.resolve(false) };
 }
 
 /** A store that holds the credential and will not give it up, which is a locked keychain from the client's side. */
@@ -495,6 +502,20 @@ describe('App sign-in', () => {
         expect(screen.getByRole('combobox', { name: 'Mailbox in scope' })).toHaveProperty('value', '');
     });
 
+    it('says the password was not kept when the store would not write it, without refusing the sign-in', async () => {
+        renderApp(servedFrom, null, deploymentAnswering(), storeRefusingToKeep());
+        signIn();
+        await framed();
+
+        // The screen promised how long the password would last before anybody typed, so a store that refused the write
+        // says so — inside the frame, because signing in worked and only the keeping did not.
+        expect(
+            screen.getByText(
+                'Your password could not be stored on this machine, so you will be asked for it again the next time you open MailFathom. You are signed in either way.',
+            ),
+        ).toBeDefined();
+    });
+
     it('says the password is still on the machine when the store would not remove it', async () => {
         renderApp(servedFrom, null, deploymentAnswering(), storeRefusingToForget());
         signIn();
@@ -509,6 +530,18 @@ describe('App sign-in', () => {
                 'Signing out did not remove the password from this machine’s credential store, so it is still kept there. Remove it in the store itself, or sign in and out again.',
             ),
         ).toBeDefined();
+    });
+
+    it('places focus on what it has to say about the credential, rather than on the field below it', async () => {
+        renderApp(servedFrom, typedCredential, deploymentAnswering({ status: 401, body: '' }), storeKeeping());
+
+        const notice = await screen.findByText(
+            'This deployment has stopped accepting the password that was kept. Sign in again.',
+        );
+
+        // Each of these sentences is inserted in the same commit as its own text, which a live region does not
+        // announce — so somebody signed out mid-session would otherwise land in the form with nothing read to them.
+        expect(document.activeElement).toBe(notice.parentElement);
     });
 
     it('places focus on the credential where the deployment is already known', () => {
@@ -599,6 +632,48 @@ describe('App deployment', () => {
 
         expect(screen.getByRole('textbox', { name: 'Deployment address' })).toBeDefined();
         expect(screen.queryByRole('navigation', { name: 'Spaces' })).toBeNull();
+    });
+
+    it('calls off an attempt whose deployment was abandoned while it ran', async () => {
+        const credentials = storeKeeping();
+        const held: (() => void)[] = [];
+        let answering = false;
+
+        // A deployment that answers nothing until this test says so, and everything from then on: what the attempt is
+        // holding on is the first request, and what would carry it through to signing somebody in is the rest of them
+        // answering normally once it resumes.
+        const send: DeploymentTransport = () => (request) => {
+            asked.push(request);
+            const answer = complete(request.path.endsWith('/session') ? accepted : directory(true, [workAccount]));
+
+            if (answering) {
+                return Promise.resolve(answer);
+            }
+
+            return new Promise((resolved) => {
+                held.push(() => {
+                    resolved(answer);
+                });
+            });
+        };
+
+        renderApp(chose('https://mail.example.invalid'), null, send, credentials);
+        signIn();
+
+        // The way out of a chosen address sits above the form and stays live while an attempt runs. An answer for the
+        // address somebody has just pointed away from would sign them back in to it and write the credential into the
+        // store that was asked to clear it.
+        fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else' }));
+        answering = true;
+        for (const answer of held) {
+            answer();
+        }
+
+        expect(await screen.findByRole('textbox', { name: 'Deployment address' })).toBeDefined();
+        await waitFor(() => {
+            expect(screen.queryByRole('navigation', { name: 'Spaces' })).toBeNull();
+        });
+        expect([...credentials.kept]).toEqual([]);
     });
 
     it('forgets the credential of the deployment it is pointed away from', async () => {

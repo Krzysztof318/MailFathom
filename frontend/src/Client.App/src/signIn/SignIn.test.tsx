@@ -6,7 +6,8 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, DeploymentAddress, MailFathomTransport } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
-import { SignIn, type SignInNotice } from './SignIn';
+import type { CredentialNotice } from './CredentialNotices';
+import { SignIn } from './SignIn';
 import { longestCredentialPart } from './credentialEntry';
 import type { CredentialLifetime } from './credentialStore';
 
@@ -70,7 +71,7 @@ function renderScreen(
     send: MailFathomTransport,
     deployment: DeploymentAddress | null = null,
     lifetime: CredentialLifetime = 'untilTheTabCloses',
-    notices: readonly SignInNotice[] = [],
+    notices: readonly CredentialNotice[] = [],
 ): Rendered {
     const presented: { deployment: DeploymentAddress; authorization: string }[] = [];
     const attempts: AbortSignal[] = [];

@@ -22,7 +22,15 @@ export interface CredentialStore {
     /** The credential kept for this deployment, or `null` where none was kept for it. */
     read(deployment: DeploymentAddress): Promise<string | null>;
 
-    keep(deployment: DeploymentAddress, authorization: string): Promise<void>;
+    /**
+     * Keeps this credential for that deployment, answering whether it is stored.
+     *
+     * `false` is a store that would not write — a keychain locked between being found and being written to, a browser
+     * that stopped permitting storage — and it is answered for the same reason `forget` answers: the screen has
+     * already told the person how long what it keeps will last, so a refused write that reported nothing would leave
+     * them asked for the password again at the next start with nothing having said why.
+     */
+    keep(deployment: DeploymentAddress, authorization: string): Promise<boolean>;
 
     /**
      * Removes what was kept for this deployment, answering whether it is gone.
@@ -73,11 +81,7 @@ function keptForTheRun(lifetime: CredentialLifetime): CredentialStore {
 
         read: (deployment) => Promise.resolve(readStorage(entryFor(deployment))),
 
-        keep: (deployment, authorization) => {
-            writeStorage(entryFor(deployment), authorization);
-
-            return Promise.resolve();
-        },
+        keep: (deployment, authorization) => Promise.resolve(writeStorage(entryFor(deployment), authorization)),
 
         forget: (deployment) => Promise.resolve(removeStorage(entryFor(deployment))),
     };
@@ -95,13 +99,17 @@ function keptInTheKeychain(): CredentialStore {
         },
 
         keep: async (deployment, authorization) => {
-            await shellAnswers('keep_credential', { deployment: deployment.baseAddress, authorization });
+            return (
+                (await shellAnswers('keep_credential', {
+                    deployment: deployment.baseAddress,
+                    authorization,
+                })) === true
+            );
         },
 
         forget: async (deployment) => {
-            // The shell's own answer, because this is the one operation whose failure a person has to be told about:
-            // the entry outlives uninstalling the application, so a deletion nobody performed is a password left on
-            // the machine.
+            // The shell's own answer, because a deletion nobody performed is a password left on the machine: the entry
+            // outlives uninstalling the application.
             return (await shellAnswers('forget_credential', { deployment: deployment.baseAddress })) === true;
         },
     };
@@ -130,12 +138,17 @@ function readStorage(entry: string): string | null {
     }
 }
 
-function writeStorage(entry: string, value: string): void {
+/** Whether the value is stored, which a browser configured to refuse storage answers `false` rather than throwing on. */
+function writeStorage(entry: string, value: string): boolean {
     try {
         window.sessionStorage.setItem(entry, value);
+
+        return true;
     } catch {
-        // A browser configured to refuse storage still runs the client; the credential then lasts until the screen is
-        // reloaded rather than until the tab closes, which is a smaller loss than a client that fails to sign in.
+        // A browser configured to refuse storage still runs the client, and signing in still worked: the credential
+        // then lasts until the screen is reloaded rather than until the tab closes. What is owed is telling somebody
+        // that, which is why this is answered rather than swallowed here.
+        return false;
     }
 }
 

@@ -18,6 +18,7 @@ import type { DeploymentTransport } from '../deployment/sendToDeployment';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { resolveCredentialEntry, type CredentialEntryRefusal } from './credentialEntry';
+import { CredentialNotices, type CredentialNotice } from './CredentialNotices';
 import type { CredentialLifetime } from './credentialStore';
 
 // The screen somebody meets before any mail: it collects the credential, and the address beside it wherever nothing has
@@ -28,20 +29,6 @@ import type { CredentialLifetime } from './credentialStore';
 // bundle is served by its deployment and so arrives with one, and a shell loaded from a scheme of its own does not.
 // What is decided here is only what a person sees; the address rule and the credential's own encoding each belong to
 // the module that owns them.
-
-/**
- * What the screen has to say before anybody types, which is about the previous session rather than about this one.
- *
- * The screen takes a list rather than one of these, because two of them are true together: a credential the deployment
- * stopped accepting is cleared, and the store may refuse to delete what was kept — which leaves the person signed out
- * for one reason and still carrying a password for another.
- */
-export type SignInNotice = 'credentialNoLongerAccepted' | 'passwordNotRemoved';
-
-const noticeMessages: Readonly<Record<SignInNotice, MessageKey>> = {
-    credentialNoLongerAccepted: 'signIn.noLongerAccepted',
-    passwordNotRemoved: 'signIn.notRemoved',
-};
 
 /** Everything this screen can be stopped by, whether it was decided here, by the deployment, or by the wire. */
 type SignInScreenRefusal = DeploymentEntryRefusal | CredentialEntryRefusal | SignInRefusal | ClientFailureReason;
@@ -76,11 +63,12 @@ const refusals: Readonly<Record<SignInScreenRefusal, Refusal>> = {
     credentialRefused: { message: 'signIn.credentialRefused', controls: ['userName', 'password'] },
     basicNotOffered: { message: 'signIn.basicNotOffered', controls: [] },
 
-    // `unauthenticated` is the answer `credentialRefused` already is — a 401 whose challenge did not prove MailFathom
-    // wrote it — so it reads as a refused credential and marks both halves of one. `unauthorized` is the one that says
-    // something about the grant rather than about the password, and it marks nothing: retyping a password changes
-    // nothing about a permission an owner is missing. Both are named because the set is closed by its own type rather
-    // than because this screen expects either.
+    // `unauthenticated` is the answer `credentialRefused` already is — a 401 whose challenge did prove MailFathom
+    // wrote it, a 401 that did not being an unreadable answer instead — so it reads as a refused credential and marks
+    // both halves of one. `unauthorized` is the one that says something about the grant rather than about the
+    // password, and it marks nothing: retyping a password changes nothing about a permission an owner is missing.
+    // Neither is reached from here — `signIn` and `reachDeployment` return neither — and both are named because the
+    // failure set is closed by its own type rather than because this screen expects either.
     unauthenticated: { message: 'signIn.credentialRefused', controls: ['userName', 'password'] },
     unauthorized: { message: 'signIn.grantMissing', controls: [] },
     unavailable: { message: 'connect.unavailable', controls: [] },
@@ -109,7 +97,7 @@ export function SignIn({
 }: {
     readonly deployment: DeploymentAddress | null;
     readonly lifetime: CredentialLifetime;
-    readonly notices: readonly SignInNotice[];
+    readonly notices: readonly CredentialNotice[];
     readonly send: DeploymentTransport;
     readonly onSignedIn: (deployment: DeploymentAddress, authorization: string) => void;
 }) {
@@ -123,14 +111,26 @@ export function SignIn({
     const address = useRef<HTMLInputElement>(null);
     const name = useRef<HTMLInputElement>(null);
     const submit = useRef<HTMLButtonElement>(null);
+    const notified = useRef<HTMLDivElement>(null);
     const attempt = useRef<AbortController | null>(null);
     const started = useRef(false);
 
-    // The view changed, so focus is placed rather than left wherever the previous screen had it, on the first thing
-    // this form is asking to have filled. Moving focus is an imperative browser API, which is what an effect is for.
+    // The view changed, so focus is placed rather than left wherever the previous screen had it: on what this screen
+    // has to say about why it is back where there is something, and otherwise on the first thing the form is asking to
+    // have filled. Moving focus is an imperative browser API, which is what an effect is for.
     useEffect(() => {
-        (address.current ?? name.current)?.focus();
+        (notified.current ?? address.current ?? name.current)?.focus();
     }, []);
+
+    // An attempt is answered for the deployment it was started against, so one whose deployment was abandoned while it
+    // ran is called off rather than allowed to answer: the way out of a chosen address sits above this form and stays
+    // live while an attempt runs, and a client that signed somebody in here would write the credential back into the
+    // store that was just asked to clear it, at the address they had pointed away from.
+    useEffect(() => {
+        return () => {
+            attempt.current?.abort();
+        };
+    }, [deployment]);
 
     // An attempt disables the control that started it, and the browser drops focus to the document when it does — so
     // an attempt that ends leaves the refusal announced with focus nowhere and somebody reading by keyboard tabbing in
@@ -177,6 +177,20 @@ export function SignIn({
 
         const running = new AbortController();
         attempt.current = running;
+
+        // Whatever called this attempt off — the person, or the deployment it was against being abandoned underneath
+        // it — the form it disabled is what has to come back. Hanging that on the signal rather than on the caller is
+        // what makes it hold for a wire that never answers at all, which no later step of this function would reach.
+        running.signal.addEventListener(
+            'abort',
+            () => {
+                if (attempt.current === running) {
+                    attempt.current = null;
+                    setPresenting(false);
+                }
+            },
+            { once: true },
+        );
 
         setRefusal(null);
         setPresenting(true);
@@ -253,8 +267,6 @@ export function SignIn({
     // control this one stood beside, placed by the effect above, since this one is about to leave the document.
     function abandon(): void {
         attempt.current?.abort();
-        attempt.current = null;
-        setPresenting(false);
     }
 
     return (
@@ -264,11 +276,7 @@ export function SignIn({
                 <p className="text-sm">{translate('signIn.explanation')}</p>
             </div>
 
-            {notices.map((notice) => (
-                <p key={notice} className="text-warning" role="status">
-                    {translate(noticeMessages[notice])}
-                </p>
-            ))}
+            <CredentialNotices notices={notices} ref={notified} />
 
             <form
                 className="flex flex-col gap-5"

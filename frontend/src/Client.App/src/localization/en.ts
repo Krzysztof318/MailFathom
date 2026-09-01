@@ -53,6 +53,8 @@ export const en = {
     'signIn.noLongerAccepted': 'This deployment has stopped accepting the password that was kept. Sign in again.',
     'signIn.notRemoved':
         'Signing out did not remove the password from this machine’s credential store, so it is still kept there. Remove it in the store itself, or sign in and out again.',
+    'signIn.notKept':
+        'Your password could not be stored on this machine, so you will be asked for it again the next time you open MailFathom. You are signed in either way.',
     'signIn.keptUntilSignedOut':
         'Your password is kept in this machine’s keychain until you sign out. Signing out is what removes it.',
     'signIn.keptUntilTheTabCloses':

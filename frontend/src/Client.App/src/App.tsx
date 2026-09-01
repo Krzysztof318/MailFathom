@@ -19,8 +19,9 @@ import { IntentField } from './shell/IntentField';
 import { LanguageChoice, ThemeChoice } from './shell/Preferences';
 import { Space } from './shell/Space';
 import { SpaceNavigation } from './shell/SpaceNavigation';
+import { CredentialNotices, type CredentialNotice } from './signIn/CredentialNotices';
 import type { CredentialStore } from './signIn/credentialStore';
-import { SignIn, type SignInNotice } from './signIn/SignIn';
+import { SignIn } from './signIn/SignIn';
 import { emptyWorkspace } from './workspace/useWorkspace';
 import { useWorkspace } from './workspace/useWorkspace';
 
@@ -52,7 +53,7 @@ export function App({
     const [authorization, setAuthorization] = useState(signedInWith);
     const [accounts, setAccounts] = useState<ClientResult<MailAccountDirectory> | null>(null);
     const [attempt, setAttempt] = useState(0);
-    const [notices, setNotices] = useState<readonly SignInNotice[]>([]);
+    const [notices, setNotices] = useState<readonly CredentialNotice[]>([]);
     const baseAddress = adopted === null ? null : adopted.deployment.baseAddress;
     const workspace = useRef<HTMLDivElement>(null);
     const focusedFor = useRef(authorization);
@@ -135,8 +136,16 @@ export function App({
             setAdopted({ deployment: reached, chosen: true });
         }
 
-        void credentials.keep(reached, presented);
         setNotices([]);
+
+        // The screen has already said how long the password will be kept, so a store that refused the write says so
+        // rather than leaving somebody to discover it by being asked for the password again at the next start. This
+        // one is read inside the frame: signing in worked, and what failed is only the keeping.
+        void credentials.keep(reached, presented).then((stored) => {
+            if (!stored) {
+                setNotices(['passwordNotKept']);
+            }
+        });
         setAccounts(null);
         setAuthorization(presented);
     }
@@ -201,6 +210,15 @@ export function App({
                     </div>
                 </header>
 
+                {/* Inside the frame as well as on the sign-in screen, because a credential that could not be kept is
+                    learned about at the moment somebody successfully signed in — which is the one of these sentences
+                    whose reader is already past that screen. */}
+                {notices.length === 0 ? null : (
+                    <div className="border-b border-line-soft bg-panel px-4 py-2 workspace:px-8">
+                        <CredentialNotices notices={notices} />
+                    </div>
+                )}
+
                 <IntentField accounts={accounts?.outcome === 'read' ? accounts.value.accounts : []} />
 
                 <Space space={space} />
@@ -232,7 +250,7 @@ function SignInScreen({
     readonly deployment: DeploymentAddress | null;
     readonly chosen: boolean;
     readonly lifetime: CredentialStore['lifetime'];
-    readonly notices: readonly SignInNotice[];
+    readonly notices: readonly CredentialNotice[];
     readonly send: DeploymentTransport;
     readonly onSignedIn: (reached: DeploymentAddress, authorization: string) => void;
     readonly onPointSomewhereElse: () => void;

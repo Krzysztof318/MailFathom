@@ -107,14 +107,18 @@ describe('a credential kept for the run', () => {
         expect(window.localStorage.length).toBe(0);
     });
 
-    it('signs somebody in anyway where the browser refuses storage', async () => {
-        vi.spyOn(window.sessionStorage, 'setItem').mockImplementation(() => {
+    it('signs somebody in anyway where the browser refuses storage, and says nothing was kept', async () => {
+        // On the prototype rather than on the store itself: jsdom hands out `sessionStorage` behind a proxy, so an own
+        // property defined on the instance is not what a call goes through.
+        vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
             throw new DOMException('The storage is full.', 'QuotaExceededError');
         });
 
         const store = await credentialStore();
 
-        await expect(store.keep(deployment, authorization)).resolves.toBeUndefined();
+        // Signing in worked and only the keeping failed, so this answers rather than throws — and it answers `false`,
+        // because the screen has already said how long the password would last.
+        await expect(store.keep(deployment, authorization)).resolves.toBe(false);
     });
 });
 
@@ -147,6 +151,19 @@ describe('a credential kept in the keychain', () => {
             command: 'keep_credential',
             argument: { deployment: deployment.baseAddress, authorization },
         });
+    });
+
+    it.each([
+        ['a keychain that would not write the entry', false],
+        ['a keychain that could not be reached at all', new Error('the keychain is locked')],
+    ])('reports the credential as not kept where the shell answered with %s', async (_, answer) => {
+        shellAnswering({ keychain_reachable: true, keep_credential: answer });
+        const store = await credentialStore();
+
+        // A keychain found at startup can be locked by the time it is written to, and the screen has already said the
+        // password will last until sign-out — so a refused write is answered rather than left to be discovered at the
+        // next start.
+        expect(await store.keep(deployment, authorization)).toBe(false);
     });
 
     it('asks the shell to delete the entry when the credential is forgotten', async () => {
