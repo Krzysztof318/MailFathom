@@ -113,6 +113,10 @@ Four things may never cross, in either direction:
   path inside it, which is what lets that package rearrange its own files.
 - **Never re-export a whole directory to save an import line.** A barrel that exists only for brevity makes every
   consumer depend on everything behind it.
+- **No two files in a directory spell one name two ways.** `theme.ts` beside `Theme.tsx` is a single name to a
+  filesystem that ignores case, which is what Windows and macOS both are, so `./theme/Theme` reaches the logic module
+  there and the component here. A module a component is named after therefore takes a name of its own:
+  `themeChoice.ts` beside `Theme.tsx`, `folderTreeRows.ts` beside `FolderTree.tsx`.
 
 ## Where markup ends and logic begins
 

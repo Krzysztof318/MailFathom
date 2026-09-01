@@ -5,7 +5,7 @@
 import type { MessageKey } from '../localization/en';
 import { isOfferedLocale, localeNames, locales } from '../localization/locale';
 import { useLocalization } from '../localization/useLocalization';
-import { isThemeChoice, themeChoices } from '../theme/theme';
+import { isThemeChoice, themeChoices } from '../theme/themeChoice';
 import { useTheme } from '../theme/useTheme';
 
 // The two settings that belong to the person rather than to the deployment. They sit in the header rather than on the

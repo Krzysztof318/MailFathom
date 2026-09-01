@@ -8503,6 +8503,53 @@ no_tracked_text_file_carries_a_nul_byte() {
   (( failures == 0 ))
 }
 
+# The paths a module resolver would confuse, out of whatever list is fed in. The final extension is
+# dropped first, because an import naming none is what a resolver adds one back to: `./theme/Theme`
+# is asked of `Theme.ts` before `Theme.tsx`, so `theme.ts` sitting beside `Theme.tsx` answers the
+# first ask on a filesystem that ignores case and binds the import to the wrong module. Dropping the
+# extension is also what keeps `Cargo.lock` beside `Cargo.toml` out of the answer: those spell their
+# shared stem identically, and only a stem spelled two ways is a collision. A leading dot is not an
+# extension, so `.npmrc` keeps its whole name.
+paths_differing_only_by_case() {
+  sed -E 's#(/|^)([^/]+)\.[^/.]+$#\1\2#' |
+    sort -u |
+    awk '{ key = tolower($0); if (key in seen) { print seen[key] " and " $0 } else { seen[key] = $0 } }'
+}
+
+no_two_tracked_paths_differ_only_by_case() {
+  local collisions swept failures=0
+
+  swept="$(git -C "$source_repository_root" ls-files)"
+  collisions="$(paths_differing_only_by_case <<< "$swept")"
+
+  if [[ -n "$collisions" ]]; then
+    printf 'paths spelling one name two ways, which a case-insensitive filesystem cannot tell apart:\n%s\n' \
+      "$collisions" >&2
+    failures=$(( failures + 1 ))
+  fi
+
+  # The floor rather than the coverage, for the reason the sweep above gives: a list that arrived
+  # empty produces no collisions and reads exactly like a clean tree.
+  if (( $(grep -c '' <<< "$swept") < 1000 )); then
+    printf 'the sweep read %s tracked paths, which is not this repository\n' "$(grep -c '' <<< "$swept")" >&2
+    failures=$(( failures + 1 ))
+  fi
+
+  # And the sweep itself, against the pair the nightly of 2026-09-01 found and against the two shapes
+  # it must leave alone.
+  if [[ "$(printf 'a/theme.ts\na/Theme.tsx\n' | paths_differing_only_by_case)" != 'a/theme and a/Theme' ]]; then
+    printf 'the sweep does not report one stem spelled two ways in a directory\n' >&2
+    failures=$(( failures + 1 ))
+  fi
+
+  if [[ -n "$(printf 'a/Cargo.lock\na/Cargo.toml\na/.npmrc\na/.prettierignore\n' | paths_differing_only_by_case)" ]]; then
+    printf 'the sweep reports a stem spelled one way, which is not a collision\n' >&2
+    failures=$(( failures + 1 ))
+  fi
+
+  (( failures == 0 ))
+}
+
 run_test verify_fast_runs_restore_build_tests_and_formatting
 run_test verify_fast_runs_the_client_flow_for_a_change_under_frontend
 run_test verify_fast_runs_no_stack_flow_for_a_change_no_build_reads
@@ -8787,6 +8834,7 @@ run_test the_editor_workspace_opens_the_service_and_the_repository
 run_test every_shell_script_carries_the_license_header
 run_test every_skill_declares_its_license
 run_test no_tracked_text_file_carries_a_nul_byte
+run_test no_two_tracked_paths_differ_only_by_case
 
 printf '%s passed, %s failed\n' "$passed_count" "$failed_count"
 

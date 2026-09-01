@@ -9,7 +9,7 @@ import {
     storeThemeChoice,
     watchMachineTheme,
     type ThemeChoice,
-} from './theme';
+} from './themeChoice';
 import { ThemeContext, type Themed } from './useTheme';
 
 // Which of the two themes is painted is decided here and nowhere else. A screen composes against the semantic tokens in

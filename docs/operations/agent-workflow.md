@@ -368,6 +368,23 @@ remembered to add to it. Detection reads to the first NUL rather than asking git
 whose own binary heuristic looks at the first 8000 bytes alone and reads a file
 carrying the byte further in as ordinary text.
 
+An eighth walks it for a third reason: no two tracked paths may spell one name two
+ways once the final extension is dropped. `theme.ts` beside `Theme.tsx` is two
+files here and one on Windows and on macOS, whose filesystems ignore case, so a
+resolver asked there for the `./theme/Theme` a component import names is answered
+by the logic module and binds to it. That is a break no gate can see: every job
+that builds the client builds it on Linux except the Windows desktop bundle, which
+`Build the desktop client` produces for the nightly and the release and for no
+pull request, so the nightly of 2026-09-01 failed on a tree every check had
+passed. The extension is dropped because an import naming
+none is exactly what a resolver adds one back to, and dropping it is equally what
+keeps `Cargo.lock` beside `Cargo.toml` out of the answer: those spell one stem
+identically, and only a stem spelled two ways is a collision. A leading dot is not
+an extension, so `.npmrc` is compared under its whole name. The case runs the
+sweep over the tree and then over four paths of its own, because a sweep asserting
+a clean tree passes just as well when it reads nothing and when its own pattern
+stopped matching.
+
 The suite runs in two places and the second one is not a convenience. The
 `Workflow contracts` job of `repository-contracts.yml` runs it on every pull
 request, including a draft, on every push to `main` after a merge, and on the

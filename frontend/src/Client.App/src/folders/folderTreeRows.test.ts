@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { MailAccount, MailFolder, MailFolderDirectory } from '@mailfathom/client-backend';
-import { folderTreeOf, visibleRows, type FolderTreeRow } from './folderTree';
+import { folderTreeOf, visibleRows, type FolderTreeRow } from './folderTreeRows';
 
 function account(id: string, displayName: string): MailAccount {
     return {
