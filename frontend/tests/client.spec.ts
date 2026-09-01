@@ -630,6 +630,14 @@ test('keeps the folder tree as it was left, across a reload', async ({ page }) =
     await expect(tree.getByRole('treeitem', { name: /^2024/ })).toHaveAttribute('aria-selected', 'true');
 });
 
+// Opening a message is an act rather than a state the client lands in: the reading pane draws what a row of the list
+// was opened, so every check about it starts by opening one.
+async function openTheFirstMessage(page: Page): Promise<void> {
+    await openSignedIn(page, '/#/mail');
+
+    await page.getByRole('listbox', { name: 'Messages' }).getByRole('option').first().click();
+}
+
 test('issues every request to the origin it was served from and to no other', async ({ page }) => {
     const origins = new Set<string>();
 
@@ -639,7 +647,7 @@ test('issues every request to the origin it was served from and to no other', as
 
     // Mail rather than the root, because drawing a message is where a request to somebody else's server would come
     // from: reading mail must not be what tells a sender it was read.
-    await openSignedIn(page, '/#/mail');
+    await openTheFirstMessage(page);
     await expect(page.getByRole('heading', messageHeading)).toBeVisible();
 
     // A client of one person's own mail reaches the deployment serving it and nothing else, so a font, an analytics
@@ -651,7 +659,7 @@ test('issues every request to the origin it was served from and to no other', as
 // parser makes, every block, and every sentence — is jsdom's and lives in the unit suite beside the source.
 
 test('draws the message as this document own elements, with nothing a sender wrote becoming one', async ({ page }) => {
-    await openSignedIn(page, '/#/mail');
+    await openTheFirstMessage(page);
 
     const message = page.getByRole('article', messageRegion);
     await expect(message.getByRole('heading', messageHeading)).toBeVisible();
@@ -668,7 +676,7 @@ test('draws the message as this document own elements, with nothing a sender wro
 });
 
 test('shows where a link goes, and says so when its words name somewhere else', async ({ page }) => {
-    await openSignedIn(page, '/#/mail');
+    await openTheFirstMessage(page);
 
     const message = page.getByRole('article', messageRegion);
 
@@ -679,7 +687,7 @@ test('shows where a link goes, and says so when its words name somewhere else', 
 });
 
 test('leaves the application when a link is followed rather than navigating it', async ({ page }) => {
-    await openSignedIn(page, '/#/mail');
+    await openTheFirstMessage(page);
     await expect(page.getByRole('heading', messageHeading)).toBeVisible();
 
     const openedHere = page.url();
@@ -710,7 +718,7 @@ test('describes an attached file before it is fetched, and fetches it only when 
         }
     });
 
-    await openSignedIn(page, '/#/mail');
+    await openTheFirstMessage(page);
 
     const download = page.getByRole('button', { name: 'Download orders.csv' });
     await expect(download).toBeVisible();
@@ -732,7 +740,7 @@ test('describes an attached file before it is fetched, and fetches it only when 
 test('presents the credential the bundle composed when it fetches an attached file', async ({ page }) => {
     const presented: (string | undefined)[] = [];
 
-    await openSignedIn(page, '/#/mail');
+    await openTheFirstMessage(page);
 
     // Registered after the deployment's own routes so this one wins for the attachment, which is what lets the header
     // the built bundle actually sent be read rather than inferred from the source.
@@ -756,7 +764,7 @@ test('fetches nothing from the sender until the reader asks, and asks again next
         hosts.add(new URL(request.url()).hostname);
     });
 
-    await openSignedIn(page, '/#/mail');
+    await openTheFirstMessage(page);
 
     const askForPictures = page.getByRole('button', { name: 'Load pictures from the sender' });
     await expect(askForPictures).toBeVisible();

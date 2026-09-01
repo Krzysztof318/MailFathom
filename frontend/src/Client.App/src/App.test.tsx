@@ -149,6 +149,38 @@ const describedMessage: Answer = {
     }),
 };
 
+// The folder the message the pane draws stands in, so that opening it is the act it is in the client: a reader picks a
+// row out of the list, and the pane draws what that row named.
+const folderWithOneMessage: Answer = {
+    status: 200,
+    body: JSON.stringify({
+        emails: [
+            {
+                id: '00000000-0000-4000-8000-000000000000',
+                account: 'work',
+                folder: 'INBOX',
+                threadId: null,
+                subject: 'Quarterly invoice',
+                receivedAt: '2026-08-31T09:41:10+00:00',
+                sentAt: '2026-08-31T09:41:00+00:00',
+                senderAddress: 'billing@example.invalid',
+                senderDisplayName: 'Billing',
+                toAddresses: ['owner@example.invalid'],
+                unread: true,
+                flagged: false,
+                answered: false,
+                hasAttachments: false,
+                attachmentCount: 0,
+                sizeOctets: 4_096,
+                preview: 'The invoice for August.',
+            },
+        ],
+        nextCursor: null,
+        previousCursor: null,
+        pageSize: 100,
+    }),
+};
+
 /**
  * A deployment that answers the accounts as the one above does, and both reads the reading pane in Mail makes.
  *
@@ -159,6 +191,12 @@ function deploymentDrawingAMessage(): DeploymentTransport {
     const otherwise = deploymentAnswering();
 
     return (signal) => (request) => {
+        if (request.path.includes('/emails')) {
+            asked.push(request);
+
+            return Promise.resolve(complete(folderWithOneMessage));
+        }
+
         if (!request.path.includes('/messages/')) {
             return otherwise(signal)(request);
         }
@@ -356,13 +394,27 @@ describe('App', () => {
         expect(await screen.findByRole('heading', { name: space, level: 1 })).toBeDefined();
     });
 
-    it('draws the message the reading pane read, once Mail is the space on the screen', async () => {
+    it('draws the message a row of the list opened, which is what the frame wires the two together for', async () => {
         renderApp(servedFrom, heldCredential, deploymentDrawingAMessage());
         await framed();
 
         await goTo('Mail');
 
+        const list = await screen.findByRole('listbox', { name: 'Messages' });
+        fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
+
         expect(await screen.findByText('A drawn message.')).toBeDefined();
+    });
+
+    it('draws no message until a row of the list opens one', async () => {
+        renderApp(servedFrom, heldCredential, deploymentDrawingAMessage());
+        await framed();
+
+        await goTo('Mail');
+        await screen.findByRole('listbox', { name: 'Messages' });
+
+        expect(screen.getByText('Open a message to read it here.')).toBeDefined();
+        expect(routesAsked().some((path) => path.includes('/messages/'))).toBe(false);
     });
 
     it('reads no message while the space on the screen is not Mail', async () => {

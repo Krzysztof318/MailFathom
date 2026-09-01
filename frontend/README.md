@@ -245,6 +245,10 @@ than reading the folder from its leading end. **Where the reader is lives outsid
 keyed by the deployment and the folder, holding a cursor, a row, an order, and the filters together so a cursor cannot
 outlive the list it was issued for, and holding nothing about any message.
 
+What a row opens is what the reading pane beside it draws. The list writes the message into the workspace and the pane
+reads it from there, so the two meet over one value rather than over each other — and nothing is open until a reader
+has opened it.
+
 **No package windows it, and that is a measurement rather than a preference.** Every row of this list is one height,
 because the row is a fixed three lines by design — who wrote, what about, and the line stage 3 fills with what
 MailFathom made of the message — and the browser suite asserts that every drawn row measures the same. What a
