@@ -813,20 +813,26 @@ test('draws the three columns of the Mail space without the page scrolling sidew
     // have: any narrower and they are a stack instead. A column that held its width here rather than giving way is
     // what would push the page wider than the window, and only a browser answers that — jsdom computes no geometry.
     await page.setViewportSize({ width: 780, height: 800 });
-    await openSignedIn(page, '/#/mail');
 
-    await expect(page.getByRole('tree', { name: 'Mailboxes and folders' })).toBeVisible();
-    await expect(page.getByRole('listbox', { name: 'Messages' })).toBeVisible();
+    // With a message open, so the third column is the pane a reader actually gets rather than the note standing in
+    // for it: the pane is the column that has to give way, and an empty one proves nothing about a filled one.
+    await openTheFirstMessage(page);
+    await expect(page.getByRole('article', messageRegion)).toBeVisible();
 
-    // The space's own box rather than the document's: the region that holds the three columns scrolls its own
-    // overflow, so a column too wide for the window makes that region scroll sideways while the document stays
-    // exactly as wide as the window. Asked of the landmark by its element name, because what is being measured is a
-    // box rather than something a reader would look for — and as an expression rather than a closure, for the reason
-    // the sign-in test above gives.
-    const scrollingSideways = await page.evaluate<boolean>(
-        'document.querySelector("main").scrollWidth > document.querySelector("main").clientWidth',
-    );
-    expect(scrollingSideways).toBe(false);
+    // Each column against the space it stands in, reached by its role like everything else here. A column that held
+    // its width rather than giving way lays out past that space's right edge, which is what makes the region scroll
+    // sideways while the document stays exactly as wide as the window.
+    const room = await boxOf(page.getByRole('main'));
+    const columns = [
+        await boxOf(page.getByRole('tree', { name: 'Mailboxes and folders' })),
+        await boxOf(page.getByRole('listbox', { name: 'Messages' })),
+        await boxOf(page.getByRole('article', messageRegion)),
+    ];
+
+    for (const column of columns) {
+        expect(column.x).toBeGreaterThanOrEqual(room.x);
+        expect(column.x + column.width).toBeLessThanOrEqual(room.x + room.width);
+    }
 });
 
 test('holds a window of rows in the document however far down the folder it is scrolled', async ({ page }) => {
@@ -847,6 +853,28 @@ test('holds a window of rows in the document however far down the folder it is s
     await expect(list.getByRole('option').first()).toContainText(/Message [1-9]\d\d/);
     expect(await list.getByRole('option').count()).toBeLessThanOrEqual(drawnAtTheTop);
     await expect(list.getByRole('option', { name: /^Writer 0\D/ })).toHaveCount(0);
+});
+
+test('starts the list at its leading end when the order changes under a reader who had scrolled', async ({ page }) => {
+    await openSignedIn(page, '/#/mail');
+
+    const list = page.getByRole('listbox', { name: 'Messages' });
+    await expect(list.getByRole('option').first()).toBeVisible();
+
+    const drawnAtTheTop = await list.getByRole('option').count();
+
+    for (let read = 1; read <= 3; read += 1) {
+        await readOnward(page, list);
+    }
+
+    await page.getByLabel('Order').selectOption('oldestFirst');
+
+    // Changing the order empties the list, which takes the scroller out of the document, so the one that comes back is
+    // at the top however far down the reader had been. A window still computed from where they were draws the far end
+    // of the first page under a screen of blank space, and no scroll is left to fire the event that would correct it —
+    // which only a browser laying the list out can answer.
+    await expect(list.getByRole('option').first()).toContainText('Message 0');
+    expect(await list.getByRole('option').count()).toBeGreaterThanOrEqual(drawnAtTheTop);
 });
 
 test('puts a reader back where they were reading, across a reload', async ({ page }) => {

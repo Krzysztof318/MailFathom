@@ -297,6 +297,12 @@ export function MessageList({
         setHeld(nothingHeld);
         setFailure(null);
         setFocusedRow(0);
+
+        // The position goes back with them. Emptying the list unmounts the scroller, so the one that comes back is at
+        // the top whatever this state says — and a window computed from where the reader was in the old listing draws
+        // the new one's last row under a screen of blank space, with no scroll left to fire the event that would
+        // correct it.
+        setScrollTop(0);
     }
 
     function reveal(row: number): void {
