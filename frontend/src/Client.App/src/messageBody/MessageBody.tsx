@@ -3,11 +3,18 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { useEffect, useRef } from 'react';
-import type { MailBody, MailBodyAvailability, MailDocument, MailDocumentRefusal } from '@mailfathom/client-backend';
+import type {
+    MailBody,
+    MailBodyAvailability,
+    MailDocument,
+    MailDocumentBlock,
+    MailDocumentRefusal,
+} from '@mailfathom/client-backend';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import type { Locale } from '../localization/locale';
 import { MessageBlocks } from './MessageBlocks';
+import { splitQuotedHistory } from './quotedHistory';
 
 // One message's body, drawn from the closed document tree the service reduced it to and never from markup. What this
 // component owns is everything around the blocks: whether there is a body at all, whether the reduction refused it and
@@ -29,10 +36,21 @@ const refusalMessages: Readonly<Record<Exclude<MailDocumentRefusal, 'None'>, Mes
 export function MessageBody({
     body,
     asking,
+    quotedHistoryOnRequest = false,
     onShowRemotePictures,
 }: {
     readonly body: MailBody;
     readonly asking: boolean;
+
+    /**
+     * Whether the conversation this message quoted is folded away until a reader asks for it.
+     *
+     * Off where one message is what is being read, because there the quotation is the only context on the screen. On in
+     * a thread, where the message it quotes is a row of its own a few lines up and drawing it again is the repetition
+     * that makes a long conversation unreadable.
+     */
+    readonly quotedHistoryOnRequest?: boolean;
+
     readonly onShowRemotePictures: () => void;
 }) {
     const { translate } = useLocalization();
@@ -60,11 +78,44 @@ export function MessageBody({
                 <ReadAsWords body={body} />
             ) : (
                 <article className="flex flex-col gap-3">
-                    <MessageBlocks blocks={drawn.blocks} />
+                    <Written blocks={drawn.blocks} quotedHistoryOnRequest={quotedHistoryOnRequest} />
                     {drawn.truncated ? <p className="text-sm text-muted">{translate('body.truncated')}</p> : null}
                 </article>
             )}
         </div>
+    );
+}
+
+// What the message says, with the conversation it quoted either under the words or one gesture away from them. The
+// disclosure is the browser's own rather than one built out of a button and a piece of state, for the reason
+// `readingPane/MessageHeaders.tsx` gives: it is operable from the keyboard and announces whether it is open, and it
+// costs no code to be so.
+function Written({
+    blocks,
+    quotedHistoryOnRequest,
+}: {
+    readonly blocks: readonly MailDocumentBlock[];
+    readonly quotedHistoryOnRequest: boolean;
+}) {
+    const { translate } = useLocalization();
+    const written = quotedHistoryOnRequest ? splitQuotedHistory(blocks) : null;
+
+    if (written === null || written.quotedHistory.length === 0) {
+        return <MessageBlocks blocks={blocks} />;
+    }
+
+    return (
+        <>
+            <MessageBlocks blocks={written.contribution} />
+
+            <details>
+                <summary className="cursor-pointer text-sm text-muted">{translate('body.quotedHistory')}</summary>
+
+                <div className="mt-3 flex flex-col gap-3">
+                    <MessageBlocks blocks={written.quotedHistory} />
+                </div>
+            </details>
+        </>
     );
 }
 

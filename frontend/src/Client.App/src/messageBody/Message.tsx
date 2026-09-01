@@ -63,10 +63,14 @@ export function Message({
     session,
     transport,
     storedEmailId,
+    quotedHistoryOnRequest = false,
 }: {
     readonly session: ClientSession;
     readonly transport: MailFathomTransport;
     readonly storedEmailId: string;
+
+    /** Whether the conversation this message quoted is folded away until a reader asks for it, which a thread does. */
+    readonly quotedHistoryOnRequest?: boolean;
 }) {
     const { translate } = useLocalization();
     const [read, setRead] = useState<Read>({ storedEmailId, remotePictures: false, attempt: 0 });
@@ -144,6 +148,7 @@ export function Message({
         <MessageBody
             body={held.result.value}
             asking={reading}
+            quotedHistoryOnRequest={quotedHistoryOnRequest}
             onShowRemotePictures={() => {
                 setRead({ ...read, remotePictures: true });
             }}

@@ -88,6 +88,46 @@ function reading(storedEmailId: string) {
     );
 }
 
+/** The same message read as a conversation reads one, where the history it quoted is folded away. */
+function readingInAConversation() {
+    return render(
+        <StrictMode>
+            <LocalizationProvider>
+                <Message session={session} transport={transport} storedEmailId="stub-message" quotedHistoryOnRequest />
+            </LocalizationProvider>
+        </StrictMode>,
+    );
+}
+
+/** A reply: what somebody wrote, above the message they were answering. */
+const replyQuotingWhatItAnswers: Answer = {
+    status: 200,
+    body: JSON.stringify({
+        ...readableBody,
+        document: {
+            ...readableBody.document,
+            blocks: [
+                ...readableBody.document.blocks,
+                {
+                    type: 'quote',
+                    version: 1,
+                    depth: 1,
+                    blocks: [
+                        {
+                            type: 'paragraph',
+                            version: 1,
+                            content: [
+                                { text: 'The message it answers.', emphasis: 'None', foreground: null, link: null },
+                            ],
+                            alignment: 'Inherited',
+                        },
+                    ],
+                },
+            ],
+        },
+    }),
+};
+
 describe('Message', () => {
     beforeEach(() => {
         answering(bodyAnswering(false));
@@ -211,5 +251,26 @@ describe('Message', () => {
 
         expect(await screen.findByText('Load pictures from the sender')).toBeDefined();
         expect(readsAsked()).toEqual([`${baseAddress}/api/client/messages/stub-message/body`]);
+    });
+
+    it('folds the history a reply quoted away where it is read as part of a conversation', async () => {
+        answering(replyQuotingWhatItAnswers);
+
+        readingInAConversation();
+
+        // What is folded is still in the document, so the assertion is on the disclosure being shut rather than on
+        // the words being absent: a browser is what hides them, and jsdom draws no geometry.
+        const quoted = await screen.findByText('The conversation this message quoted');
+
+        expect(quoted.closest('details')?.open).toBe(false);
+    });
+
+    it('draws that history inline where the message is what is being read on its own', async () => {
+        answering(replyQuotingWhatItAnswers);
+
+        readingOneMessage();
+
+        expect(await screen.findByText('The message it answers.')).toBeDefined();
+        expect(screen.queryByText('The conversation this message quoted')).toBeNull();
     });
 });

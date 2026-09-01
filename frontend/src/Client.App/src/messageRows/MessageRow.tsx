@@ -4,6 +4,7 @@
 
 import type { PointerEvent, ReactNode } from 'react';
 import type { MailTimelineEntry } from '@mailfathom/client-backend';
+import { ReceivedAt } from '../controls/ReceivedAt';
 import { useLocalization } from '../localization/useLocalization';
 
 // One row of mail, which is its own component for the reason a tree's row is: it is what carries state, a keyboard
@@ -46,7 +47,7 @@ export function MessageRow({
     readonly onPointerEnter: () => void;
     readonly onElement: (element: HTMLLIElement | null) => void;
 }) {
-    const { locale, translate } = useLocalization();
+    const { translate } = useLocalization();
 
     return (
         <li
@@ -88,7 +89,7 @@ export function MessageRow({
 
                 <Markers email={email} />
 
-                <ReceivedAt at={email.receivedAt} locale={locale} />
+                <ReceivedAt at={email.receivedAt} />
             </div>
 
             <div className="flex items-baseline gap-2 text-sm">
@@ -164,28 +165,5 @@ function Marker({ label, children }: { readonly label: string; readonly children
             </svg>
             <span className="sr-only">{label}</span>
         </span>
-    );
-}
-
-// When the last receiving hop recorded the message, formatted by `Intl` under the active locale rather than assembled
-// here. The machine-readable form stays on the element beside it, which is what lets anything reading the document work
-// with the instant rather than with somebody's local spelling of it.
-function ReceivedAt({ at, locale }: { readonly at: string | null; readonly locale: string }) {
-    if (at === null) {
-        return null;
-    }
-
-    const received = new Date(at);
-
-    if (Number.isNaN(received.getTime())) {
-        return null;
-    }
-
-    const when = new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short' });
-
-    return (
-        <time dateTime={at} className="shrink-0 text-xs tabular-nums text-faint">
-            {when.format(received)}
-        </time>
     );
 }

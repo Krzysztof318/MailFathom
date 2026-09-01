@@ -2,28 +2,30 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import type { MailBody, MailDocument } from '@mailfathom/client-backend';
+import type { MailBody, MailDocument, MailDocumentBlock } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
 import { MessageBody } from './MessageBody';
 import { LinkOpenerContext } from '../shellOperations/linkOpener';
 
+function written(text: string): MailDocumentBlock {
+    return {
+        type: 'paragraph',
+        content: [
+            {
+                text,
+                emphasis: { bold: false, italic: false, underline: false, strikethrough: false, monospace: false },
+                foreground: null,
+                link: null,
+            },
+        ],
+        alignment: 'Inherited',
+    };
+}
+
 const drawnDocument: MailDocument = {
-    blocks: [
-        {
-            type: 'paragraph',
-            content: [
-                {
-                    text: 'A drawn message.',
-                    emphasis: { bold: false, italic: false, underline: false, strikethrough: false, monospace: false },
-                    foreground: null,
-                    link: null,
-                },
-            ],
-            alignment: 'Inherited',
-        },
-    ],
+    blocks: [written('A drawn message.')],
     refusal: 'None',
     removedRemoteReferenceCount: 0,
     retainedRemoteImageCount: 0,
@@ -49,6 +51,26 @@ function inThePane(body: MailBody, onShowRemotePictures: () => void = () => unde
         </LocalizationProvider>
     );
 }
+
+/** The same body drawn as a conversation draws one, where the history a message quoted is folded away. */
+function inAConversation(body: MailBody) {
+    return render(
+        <LocalizationProvider>
+            <LinkOpenerContext value={() => Promise.resolve()}>
+                <MessageBody body={body} asking={false} quotedHistoryOnRequest onShowRemotePictures={() => undefined} />
+            </LinkOpenerContext>
+        </LocalizationProvider>,
+    );
+}
+
+/** A reply: what somebody wrote, above the message they were answering. */
+const replyQuotingWhatItAnswers: MailBody = {
+    ...readable,
+    document: {
+        ...drawnDocument,
+        blocks: [...drawnDocument.blocks, { type: 'quote', depth: 1, blocks: [written('The message it answers.')] }],
+    },
+};
 
 function drawing(body: MailBody, onShowRemotePictures: () => void = () => undefined, asking = false) {
     return render(inThePane(body, onShowRemotePictures, asking));
@@ -214,5 +236,40 @@ describe('MessageBody', () => {
         drawing({ ...readable, document: { ...drawnDocument, undrawnInlineImageCount: 4 } });
 
         expect(screen.getByText('Pictures too large to draw: 4')).toBeDefined();
+    });
+
+    it('draws the history a reply quoted inline where one message is what is being read', () => {
+        drawing(replyQuotingWhatItAnswers);
+
+        expect(screen.getByText('The message it answers.')).toBeDefined();
+        expect(screen.queryByText('The conversation this message quoted')).toBeNull();
+    });
+
+    it('folds the history a reply quoted away in a conversation, where the message it quotes is a row of its own', () => {
+        inAConversation(replyQuotingWhatItAnswers);
+
+        expect(screen.getByText('A drawn message.')).toBeDefined();
+        // What is folded is still in the document, so the assertion is on the disclosure being shut rather than on the
+        // words being absent: a browser is what hides them, and jsdom draws no geometry.
+        expect(screen.getByText('The conversation this message quoted').closest('details')?.open).toBe(false);
+    });
+
+    it('draws the history a reader asks for', async () => {
+        inAConversation(replyQuotingWhatItAnswers);
+
+        const quoted = screen.getByText('The conversation this message quoted');
+        fireEvent.click(quoted);
+
+        await waitFor(() => {
+            expect(quoted.closest('details')?.open).toBe(true);
+        });
+        expect(screen.getByText('The message it answers.')).toBeDefined();
+    });
+
+    it('folds nothing away in a conversation where the message quoted nothing', () => {
+        inAConversation(readable);
+
+        expect(screen.getByText('A drawn message.')).toBeDefined();
+        expect(screen.queryByText('The conversation this message quoted')).toBeNull();
     });
 });

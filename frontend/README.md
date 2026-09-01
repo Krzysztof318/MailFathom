@@ -221,8 +221,8 @@ nothing configured.
 
 `src/workspace/` is what survives moving between spaces, and it is mounted above the frame for exactly that reason. It
 holds one **scope** — every mailbox at once, one role across all of them, one mailbox, or one folder of one — beside the
-question, the message that is open, the messages that have been picked out, what was searched for before, and the rows
-of the folder tree somebody has folded away. It is kept in the store the web head keeps its credential in, so a reload returns to what was on the
+question, the message that is open, the conversation being read in front of it, the messages that have been picked
+out, what was searched for before, and the rows of the folder tree somebody has folded away. It is kept in the store the web head keeps its credential in, so a reload returns to what was on the
 screen; signing in and signing out both empty it, because what somebody was looking at and about to ask is theirs rather
 than the machine's.
 
@@ -253,6 +253,21 @@ on what a row measures.
 What a row opens is what the reading pane beside it draws. The list writes the message into the workspace and the pane
 reads it from there, so the two meet over one value rather than over each other — and nothing is open until a reader
 has opened it.
+
+`src/thread/` is the conversation that message belongs to, drawn in the same place and **in front of** it rather than
+instead of it: the workspace still holds the message, so closing the conversation returns to it and nothing had to
+remember where it came from. It reads `/api/client/threads/{threadId}`, which spans folders and accounts because a
+conversation does — the question is in the inbox, the answer is in the sent folder — and it takes the participants and
+the message count from that answer rather than walking the messages it happens to hold.
+
+Presentation is the whole difficulty there, because a long conversation is mostly repetition. Three things answer it.
+Each message is one line until somebody opens it, and **opening it is what mounts its body**, so a conversation of
+thirty messages costs one read rather than thirty-one. The line shows what that message added, trimmed of the history it
+quoted by the deployment rather than here. And inside an opened message the quotation it ended on is folded behind a
+disclosure — `messageBody/quotedHistory.ts` splits it — because the message it quotes is a row of its own a few lines
+up. A conversation opens at the message somebody arrived at, else at what they have not read, else at its last word,
+and that is decided once from what is held when it is first drawn so a page arriving later cannot close what somebody is
+reading. A conversation longer than one page is read on rather than cut off, and says which of the two it is.
 
 **No package windows it, and that is a measurement rather than a preference.** Every row of this list is one height,
 because the row is a fixed three lines by design — who wrote, what about, and a line for a sentence about the message

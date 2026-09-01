@@ -254,6 +254,28 @@ export const en = {
     'body.remotePicturesShown': 'Pictures are being loaded from the sender for this message.',
     'body.remotePicturesShownCount': 'Pictures loaded from the sender: {count}',
     'body.undrawnPicturesCount': 'Pictures too large to draw: {count}',
+    'body.quotedHistory': 'The conversation this message quoted',
+
+    'thread.label': 'Conversation',
+    'thread.open': 'Show the whole conversation',
+    'thread.close': 'Back to the message',
+    'thread.reading': 'Reading this conversation…',
+    'thread.readingMore': 'Reading more of this conversation…',
+    'thread.readMore': 'Read more of this conversation',
+    'thread.wholeConversationRead': 'That is the whole of this conversation.',
+    'thread.failed': 'This conversation could not be read: {reason}.',
+    'thread.partiallyFailed': 'Part of this conversation could not be read: {reason}.',
+    'thread.offline':
+        'This machine is offline, so this conversation cannot be opened. It opens on its own once the network comes back.',
+    'thread.empty': 'There is no message in this conversation that you are allowed to see.',
+    'thread.messages': 'Messages in this conversation: {count}',
+    'thread.wroteHere': 'Written by {names}',
+    'thread.moreParticipants': 'More people wrote in this conversation than are named here.',
+    'thread.moreNotAssembled':
+        'This conversation is longer than one read assembles, so what is shown is the beginning of it.',
+    'thread.storedIn': 'In {account}, {folder}',
+    'thread.openOnItsOwn': 'Open this message on its own',
+    'thread.contributionNotExtracted': 'What this message added has not been read into this deployment yet.',
 
     'message.nothingOpen': 'Open a message to read it here.',
     'message.reading': 'Reading this message…',

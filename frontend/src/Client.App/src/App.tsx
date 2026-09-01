@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { DeploymentAddress } from '@mailfathom/client-backend';
+import type { ClientSession, DeploymentAddress, MailFathomTransport } from '@mailfathom/client-backend';
 import { SecondaryButton } from './controls/SecondaryButton';
 import { forgetDeployment, storeDeployment, type AdoptedDeployment } from './deployment/adoptedDeployment';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
@@ -25,6 +25,8 @@ import { useConnection } from './shell/useConnection';
 import { CredentialNotices, type CredentialNotice } from './signIn/CredentialNotices';
 import type { CredentialStore } from './signIn/credentialStore';
 import { SignIn } from './signIn/SignIn';
+import { Thread } from './thread/Thread';
+import { conversationKey, type OpenConversation } from './workspace/openConversation';
 import { scopeKey } from './workspace/mailScope';
 import { emptyWorkspace, useWorkspace } from './workspace/useWorkspace';
 
@@ -273,9 +275,10 @@ export function App({
                         }
                         mail={
                             session === null ? null : (
-                                <ReadingPane
+                                <OpenMail
                                     session={session}
                                     transport={readMail}
+                                    conversation={workspace.conversation}
                                     storedEmailId={workspace.selection}
                                     online={connection.online}
                                 />
@@ -293,6 +296,39 @@ export function App({
                 is the direction a skip link exists to manufacture rather than the one it works around. */}
             {space === null ? null : <SpaceNavigation offered={offeredSpaces} current={space} />}
         </div>
+    );
+}
+
+// What is being read on the right of the mail space: one message, or the conversation it belongs to standing in front
+// of it. The conversation is in front rather than instead, which is why the message it was opened from is still what
+// this component is holding — closing the conversation draws it again with nothing having had to remember it.
+//
+// Keyed by the conversation together with the message it was opened at, because what a conversation opens with is
+// decided once from what it holds then: opening the same conversation at another message is a screen of its own rather
+// than the same one adjusted.
+function OpenMail({
+    session,
+    transport,
+    conversation,
+    storedEmailId,
+    online,
+}: {
+    readonly session: ClientSession;
+    readonly transport: MailFathomTransport;
+    readonly conversation: OpenConversation | null;
+    readonly storedEmailId: string | null;
+    readonly online: boolean;
+}) {
+    return conversation === null ? (
+        <ReadingPane session={session} transport={transport} storedEmailId={storedEmailId} online={online} />
+    ) : (
+        <Thread
+            key={conversationKey(conversation)}
+            session={session}
+            transport={transport}
+            conversation={conversation}
+            online={online}
+        />
     );
 }
 

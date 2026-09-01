@@ -230,6 +230,7 @@ function OpenMessage({
     }
 
     const message = held.result.value;
+    const threadId = message.threadId;
 
     // Named by its own subject, which is what a reader arriving in the region needs to hear and what tells one message's
     // region from the body's inside it. The heading below says the same words on the screen; this is what the region
@@ -243,6 +244,22 @@ function OpenMessage({
         >
             <MessageHeaders headers={message.headers} />
             <SenderVerdict verdict={message.sender} />
+
+            {/* The way into the conversation this message belongs to, offered where the service threaded it and absent
+                where it did not: a control that opened a conversation of one message would be a control that answers
+                nothing. It carries this message, so the conversation opens at what is being read rather than at its
+                beginning, and closing it returns here — the selection this pane draws from is what it was opened
+                from. */}
+            {threadId === null ? null : (
+                <div>
+                    <SecondaryButton
+                        label={translate('thread.open')}
+                        onActivate={() => {
+                            revise({ conversation: { threadId, openAt: storedEmailId } });
+                        }}
+                    />
+                </div>
+            )}
 
             {/* The gestures a selection ends on rather than a document-wide subscription: a selection made with the
                 pointer settles on the release and one made with the keyboard on the key coming back up, and both of

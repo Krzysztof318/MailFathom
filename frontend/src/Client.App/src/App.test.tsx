@@ -207,6 +207,80 @@ function deploymentDrawingAMessage(): DeploymentTransport {
     };
 }
 
+// The same message, threaded, beside the conversation it belongs to. It is a second double rather than an option on the
+// first because what it proves is the frame wiring three screens together: a row opens a message, the message opens its
+// conversation, and closing the conversation returns to the message the workspace still holds.
+const conversationThreadId = '9b2a1c74-4a4e-4c93-9a2e-3f6f0a1b2c3d';
+
+function threaded(answer: Answer): Answer {
+    return { ...answer, body: answer.body.replace('"threadId":null', `"threadId":"${conversationThreadId}"`) };
+}
+
+const drawnConversation: Answer = {
+    status: 200,
+    body: JSON.stringify({
+        threadId: conversationThreadId,
+        messages: [
+            {
+                position: 0,
+                answeredId: null,
+                email: {
+                    id: '00000000-0000-4000-8000-000000000000',
+                    account: 'work',
+                    folder: 'INBOX',
+                    threadId: conversationThreadId,
+                    subject: 'Quarterly invoice',
+                    receivedAt: '2026-08-31T09:41:10+00:00',
+                    sentAt: '2026-08-31T09:41:00+00:00',
+                    senderAddress: 'billing@example.invalid',
+                    senderDisplayName: 'Billing',
+                    toAddresses: ['owner@example.invalid'],
+                    unread: true,
+                    flagged: false,
+                    answered: false,
+                    hasAttachments: false,
+                    attachmentCount: 0,
+                    sizeOctets: 4_096,
+                    preview: 'The invoice for August.',
+                },
+            },
+        ],
+        participants: [{ address: 'billing@example.invalid', displayName: 'Billing', messageCount: 1 }],
+        messageCount: 1,
+        moreMessagesNotAssembled: false,
+        moreParticipantsNotNamed: false,
+        nextCursor: null,
+        pageSize: 100,
+    }),
+};
+
+/** A deployment whose one message belongs to a conversation, and which answers that conversation as well. */
+function deploymentDrawingAConversation(): DeploymentTransport {
+    const otherwise = deploymentAnswering();
+
+    return (signal) => (request) => {
+        if (request.path.includes('/emails')) {
+            asked.push(request);
+
+            return Promise.resolve(complete(threaded(folderWithOneMessage)));
+        }
+
+        if (request.path.includes('/threads/')) {
+            asked.push(request);
+
+            return Promise.resolve(complete(drawnConversation));
+        }
+
+        if (!request.path.includes('/messages/')) {
+            return otherwise(signal)(request);
+        }
+
+        asked.push(request);
+
+        return Promise.resolve(complete(request.path.includes('/body') ? drawnMessage : threaded(describedMessage)));
+    };
+}
+
 /** A delivery nobody in these tests asks for, supplied because a row below the frame reads one from the context. */
 const deliversNothing: AttachmentDelivery = () => Promise.resolve('delivered');
 
@@ -404,6 +478,26 @@ describe('App', () => {
         fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
 
         expect(await screen.findByText('A drawn message.')).toBeDefined();
+    });
+
+    it('opens the conversation a message belongs to, and returns to that message when it is closed', async () => {
+        renderApp(servedFrom, heldCredential, deploymentDrawingAConversation());
+        await framed();
+
+        await goTo('Mail');
+
+        const list = await screen.findByRole('listbox', { name: 'Messages' });
+        fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Show the whole conversation' }));
+
+        const conversation = await screen.findByRole('region', { name: 'Conversation' });
+        expect(within(conversation).getByText('Messages in this conversation: 1')).toBeDefined();
+
+        fireEvent.click(within(conversation).getByRole('button', { name: 'Back to the message' }));
+
+        expect(await screen.findByText('A drawn message.')).toBeDefined();
+        expect(screen.queryByRole('region', { name: 'Conversation' })).toBeNull();
     });
 
     it('draws no message until a row of the list opens one', async () => {

@@ -4,6 +4,7 @@
 
 import { longestSearchText } from '@mailfathom/client-backend';
 import { everything, isMailFolderRole, type MailScope } from './mailScope';
+import type { OpenConversation } from './openConversation';
 import { emptyWorkspace, type Workspace } from './useWorkspace';
 
 // Where the workspace survives a reload, which a single-page application makes a cold start rather than a way out:
@@ -98,8 +99,15 @@ function workspaceIn(value: unknown): Workspace | null {
     const selected = selectedIn(record['selected']);
     const question = record['question'];
     const recentSearches = recentSearchesIn(record['recentSearches'] ?? []);
+    const conversation = conversationIn(record['conversation'] ?? null);
 
-    if (scope === null || collapsed === null || selected === null || recentSearches === null) {
+    if (
+        scope === null ||
+        collapsed === null ||
+        selected === null ||
+        recentSearches === null ||
+        conversation === undefined
+    ) {
         return null;
     }
 
@@ -111,7 +119,7 @@ function workspaceIn(value: unknown): Workspace | null {
         return null;
     }
 
-    return { scope, collapsed, selection, fragment: null, selected, question, recentSearches };
+    return { scope, collapsed, selection, conversation, fragment: null, selected, question, recentSearches };
 }
 
 // The searches read back, each held to what this surface ranks against at all: text longer than that is not a search
@@ -131,6 +139,27 @@ function recentSearchesIn(value: unknown): readonly string[] | null {
     }
 
     return searches;
+}
+
+// Answers `undefined` for a shape it refuses, because `null` is what a tab reading a single message legitimately kept.
+function conversationIn(value: unknown): OpenConversation | null | undefined {
+    if (value === null) {
+        return null;
+    }
+
+    if (typeof value !== 'object' || Array.isArray(value)) {
+        return undefined;
+    }
+
+    const record = value as Record<string, unknown>;
+    const threadId = record['threadId'];
+    const openAt = record['openAt'] ?? null;
+
+    if (!isIdentifier(threadId) || (openAt !== null && !isIdentifier(openAt))) {
+        return undefined;
+    }
+
+    return { threadId, openAt };
 }
 
 function selectedIn(value: unknown): readonly string[] | null {
