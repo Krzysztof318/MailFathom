@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "open-a-link",
+  "description": "The one thing the bundle may ask of this shell: hand a link a reader followed to the system browser. Narrowed to the three schemes a message body may carry, which is the same allow-list the service applies while it reduces the body, so a link the pane cannot draw is also one this window cannot be asked to open. The plugin's own default set is deliberately not taken: it also grants revealing a file in the desktop file manager and opening a telephone address, and the application asks for neither.",
+  "windows": ["main"],
+  "permissions": [
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "http://*" },
+        { "url": "https://*" },
+        { "url": "mailto:*" }
+      ]
+    }
+  ]
+}

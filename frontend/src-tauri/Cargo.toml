@@ -13,7 +13,7 @@
 # `Cargo.lock` beside this file fixes the closure the way `pnpm-lock.yaml` and the `packages.lock.json` files do, and
 # the manifest states what was reviewed rather than what was compatible.
 #
-# The empty `features` lists are the Tauri CLI's, not a style choice: it rewrites both entries to the table form on
+# The empty `features` lists are the Tauri CLI's, not a style choice: it rewrites the entries to the table form on
 # every `dev` and `build` because it owns which Tauri features a given command needs. Written any other way, the first
 # desktop build leaves a modified manifest behind and the full gate refuses the working tree.
 [package]
@@ -27,3 +27,9 @@ tauri-build = { version = "=2.6.3", features = [] }
 [dependencies]
 keyring = "=4.2.0"
 tauri = { version = "=2.11.5", features = [] }
+
+# The one operation the application asks of this shell, per ADR 0024: a link in a message is followed in the system
+# browser rather than in the WebView, because a WebView that navigates to a sender's page has replaced the application
+# with it. Nothing in the bundle branches on the head — it asks for a link to be opened, and this is what answers on
+# the desktop. What the webview may ask for is narrowed in `capabilities/` rather than by the plugin's own default set.
+tauri-plugin-opener = { version = "=2.5.5", features = [] }

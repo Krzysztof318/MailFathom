@@ -146,6 +146,18 @@ than a head it looked up. Both answers are addresses, which is why neither case 
 why `main.tsx` is where the resolution happens: the edge supplies a value, and no screen underneath asks where it came
 from.
 
+**The other exception is a shell operation, and it is resolved the same way.** Where the application genuinely depends
+on something only a shell can do — opening a followed link outside the application, under
+[ADR 0024](../../docs/decisions/0024-rendering-mail-in-the-client-as-a-closed-document-tree.md), and keeping the
+credential, under [ADR 0023](../../docs/decisions/0023-where-the-client-keeps-the-credential-it-signs-in-with.md) — the
+application declares the operation it needs, and which implementation satisfies it is decided in one module at the
+composition root by whether a shell offered the command. `Client.App/src/shellOperations/linkOpener.ts` is that shape: one
+function resolves it, `main.tsx` calls that function once, and every component below receives the operation through
+context. `shellOperations/` is where such a module lives rather than beside the screen that happens to need it first,
+because what it answers is the application's and not one screen's; a second such operation joins it there. What is
+refused above is a component, a hook, or a screen asking the question itself, and that refusal is unchanged by either
+paragraph.
+
 **What a screen adapts to instead is the width it has been given and what the pointer can do.** Those two are the whole
 of it, and the refusal above is not an instruction to adapt to nothing: a window is resized far more often than a head
 is changed, and one head produces both shapes anyway. A half-width window on a desktop gets the composition a

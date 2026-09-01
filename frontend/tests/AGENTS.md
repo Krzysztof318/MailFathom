@@ -91,10 +91,12 @@ question is answered again rather than reworded.
 - **The network boundary is `MailFathomTransport`, and it is the only thing a read fakes.** It is a function the caller
   supplies, so a test hands one over and nothing patches `fetch`, starts a server, or adds an HTTP mocking package.
 - Every component that reads takes its transport, or the value already read through one, from its caller, so no
-  application test replaces a module to fake the network. Where the credential is part of what is being proven, the
-  `CredentialStore` is the second thing supplied that way — a fake holding a map is enough, and it is what lets a test
-  assert what was kept rather than which method was called. A component that reached for either itself would be a seam
-  in the wrong place, and the answer is to move it rather than to reach for `vi.mock`.
+  application test replaces a module to fake the network. `Message` is the shape stated in one component: it declares
+  the transport as a prop, `App` hands it down, and its test hands one over with no `vi.mock` anywhere in the file.
+  Where the credential is part of what is being proven, the `CredentialStore` is the second thing supplied that way —
+  a fake holding a map is enough, and it is what lets a test assert what was kept rather than which method was called.
+  A component that reached for either itself would be a seam in the wrong place, and the answer is to move it rather
+  than to reach for `vi.mock`.
 - **Never `vi.mock` a module of `Client.Backend` from an application test.** The parsing and the failure mapping are
   part of what the screen is being proven against; faking them leaves a test that asserts a screen renders whatever it
   was handed.
@@ -193,11 +195,15 @@ the answer; dropping it is not, and neither is asserting it in jsdom where it wo
   Neither verification gate runs it, because it needs a browser install the gates would otherwise demand of every
   machine.
 
-What the suite asserts about the network is therefore two things rather than one: that the client reaches the origin
-it was served from and no other, and that what it sends there is the credential the bundle composed — the second being
-the one claim jsdom structurally cannot make, since the encoding runs through the browser's own `TextEncoder` and
-`btoa` after the bundler has been over it. Where the credential is kept is here for the same reason: a reload is a real
-one, and a second tab is a second document, which is what `sessionStorage` is bounded by and what jsdom has one of.
+What the suite asserts about the network is therefore three things rather than one: that the client reaches the origin
+it was served from and no other, that what it sends there is the credential the bundle composed — the second being the
+one claim jsdom structurally cannot make, since the encoding runs through the browser's own `TextEncoder` and `btoa`
+after the bundler has been over it — and that the sender's own host is the one exception to the first, asserted in both
+directions. Nothing is fetched from that host until the reader asks for the pictures of one message, a request does
+leave for it once they have, and the ask is gone again after a reload: that is the property ADR 0024 turns on, and a
+browser is the only witness to it. Where the credential is kept is here for the same reason as the second: a reload is
+a real one, and a second tab is a second document, which is what `sessionStorage` is bounded by and what jsdom has one
+of.
 
 Navigation is the third of those. Each space is reached at a fragment address of its own, so this suite moves between
 them, reloads one, and moves back and forward through the client's own history — which is the whole reason the address

@@ -13,6 +13,7 @@ import { LocalizationProvider } from './localization/Localization';
 import { localeNames, locales, readStoredLocale } from './localization/locale';
 import type { CredentialLifetime, CredentialStore } from './signIn/credentialStore';
 import { ThemeProvider } from './theme/Theme';
+import { LinkOpenerContext } from './shellOperations/linkOpener';
 import { WorkspaceProvider } from './workspace/Workspace';
 
 // The network boundary is the transport, and the credential this run holds is the store — both arrive as props, so a
@@ -127,10 +128,11 @@ function chose(baseAddress: string): AdoptedDeployment {
     return { deployment: { baseAddress }, chosen: true };
 }
 
-// The application is mounted the way `main.tsx` mounts it, `StrictMode` and all four providers included. Nothing below
-// the frame may decide the language, the theme, or what the person is carrying, so a test that supplied fewer would be
-// proving a second arrangement — and the mode is half of that arrangement rather than a detail of it: it invokes every
-// effect twice on mount, which is the difference between a screen that behaves and one that behaves the first time.
+// The application is mounted the way `main.tsx` mounts it, `StrictMode` and all five providers included. Nothing below
+// the frame may decide the language, the theme, what the person is carrying, or how a followed link leaves the
+// application, so a test that supplied fewer would be proving a second arrangement — and the mode is half of that
+// arrangement rather than a detail of it: it invokes every effect twice on mount, which is the difference between a
+// screen that behaves and one that behaves the first time.
 function renderApp(
     deployment: AdoptedDeployment | null = servedFrom,
     signedInWith: string | null = heldCredential,
@@ -142,12 +144,14 @@ function renderApp(
             <LocalizationProvider>
                 <ThemeProvider>
                     <WorkspaceProvider>
-                        <App
-                            credentials={credentials}
-                            deployment={deployment}
-                            send={send}
-                            signedInWith={signedInWith}
-                        />
+                        <LinkOpenerContext value={() => Promise.resolve()}>
+                            <App
+                                credentials={credentials}
+                                deployment={deployment}
+                                send={send}
+                                signedInWith={signedInWith}
+                            />
+                        </LinkOpenerContext>
                     </WorkspaceProvider>
                 </ThemeProvider>
             </LocalizationProvider>

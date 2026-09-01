@@ -41,7 +41,7 @@ Nothing is published for macOS, and neither Android nor iOS is a head this proje
 
 - **It installs the application and its own bundle**, which is the client's compiled web assets and the Rust shell that
   opens a window over them. MailFathom's own `LICENSE` and `NOTICE` are installed with it, in the application's
-  resource directory, and the notice covering the three packages the bundle itself carries travels inside the bundle
+  resource directory, and the notice covering the five packages the bundle itself carries travels inside the bundle
   as `THIRD-PARTY-NOTICES.txt`.
 - **It brings no rendering engine on Linux.** Both packages link against the WebKitGTK and GTK your distribution
   ships and patches rather than carrying a copy. The `.deb` names `libwebkit2gtk-4.1-0` and `libgtk-3-0` as
@@ -65,6 +65,9 @@ Nothing is published for macOS, and neither Android nor iOS is a head this proje
   and the client keeps no copy of it beside that. A machine offering no such store — a Linux session running no keyring
   daemon is the usual case — is told so on the sign-in screen and asked for the password again the next time the
   application opens, rather than having it written somewhere less safe instead.
+- **A link in a message opens in your own browser**, not in the application's window. The shell asks the desktop for
+  `http`, `https`, and `mailto` addresses and for nothing else, which is the whole of what the window is permitted to
+  ask of the machine it runs on; a window that navigated to a sender's page would have replaced the client with it.
 - **It never updates itself.** No update channel exists and the shell links no updater, so a new version is a new
   download from a release page.
 - **It is not signed.** No bundle published here carries an Authenticode signature or a Linux package signature, so
