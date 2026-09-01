@@ -160,6 +160,12 @@ describe('ThreadMessage', () => {
         expect(screen.getByText('TA')).toBeDefined();
     });
 
+    it('takes the one initial a sender who wrote a single-word name offers, rather than two', () => {
+        drawing(false, message({ senderDisplayName: 'Prince' }));
+
+        expect(screen.getByText('P')).toBeDefined();
+    });
+
     it('takes the initials from the address where the sender wrote no name', () => {
         drawing(false, message({ senderDisplayName: null }));
 
