@@ -97,12 +97,11 @@ export function FolderTree({
         return <Note>{translate('connection.offline')}</Note>;
     }
 
-    const reading = answered?.attempt !== attempt;
-
-    // A tree already drawn stays on the screen while a re-read runs, but a failure has nothing worth keeping — so a
-    // read started from one says it started rather than leaving the sentence about the last attempt under the button
-    // that started this one.
-    if (answered === null || (reading && answered.result.outcome === 'failed')) {
+    // Every read this tree starts is one with nothing worth keeping on the screen behind it: the first, one a retry
+    // started from a failure, and one the network coming back started after the offline note had already replaced the
+    // tree. So a read in flight is the whole of what the screen says, rather than a line beside a drawing that would
+    // otherwise be a sentence about the attempt before it.
+    if (answered?.attempt !== attempt) {
         return <Note announced>{translate('folders.reading')}</Note>;
     }
 
@@ -233,50 +232,43 @@ export function FolderTree({
     }
 
     return (
-        <div className="flex flex-col gap-2">
-            {/* A tree already on the screen stays on it while a re-read runs, and what is waiting is said beside it
-                rather than in place of it: replacing the tree with one line would move everything under a reader's
-                cursor and drop the focus of whoever asked. */}
-            {reading ? <Note announced>{translate('folders.reading')}</Note> : null}
+        <ul aria-label={translate('folders.label')} className="flex flex-col gap-0.5" role="tree">
+            {visible.map((visibleRow, at) => (
+                <FolderRow
+                    key={visibleRow.row.key}
+                    row={visibleRow.row}
+                    position={visibleRow.position}
+                    setSize={visibleRow.setSize}
+                    expanded={visibleRow.expanded}
+                    selected={visibleRow.row.key === inScope}
+                    focusable={visibleRow.row.key === carryingFocus?.row.key}
+                    onSelect={() => {
+                        setFocused(visibleRow.row.key);
 
-            <ul aria-label={translate('folders.label')} className="flex flex-col gap-0.5" role="tree">
-                {visible.map((visibleRow, at) => (
-                    <FolderRow
-                        key={visibleRow.row.key}
-                        row={visibleRow.row}
-                        position={visibleRow.position}
-                        setSize={visibleRow.setSize}
-                        expanded={visibleRow.expanded}
-                        selected={visibleRow.row.key === inScope}
-                        focusable={visibleRow.row.key === carryingFocus?.row.key}
-                        onSelect={() => {
-                            setFocused(visibleRow.row.key);
-
-                            if (visibleRow.row.scope !== null) {
-                                revise({ scope: visibleRow.row.scope });
-                            }
-                        }}
-                        onToggle={() => {
-                            // The tab stop follows the row a pointer just acted on, exactly as selecting one moves it:
-                            // the browser has already put DOM focus on this row, and a tab stop left on another is a
-                            // reader tabbing out of the tree from somewhere they never were.
-                            setFocused(visibleRow.row.key);
-                            fold(visibleRow.row.key, visibleRow.expanded === true);
-                        }}
-                        onKeyDown={(event) => {
-                            onKeyDown(event, at, visibleRow);
-                        }}
-                        onElement={(element) => {
-                            if (element === null) {
-                                elements.current.delete(visibleRow.row.key);
-                            } else {
-                                elements.current.set(visibleRow.row.key, element);
-                            }
-                        }}
-                    />
-                ))}
-            </ul>
-        </div>
+                        if (visibleRow.row.scope !== null) {
+                            revise({ scope: visibleRow.row.scope });
+                        }
+                    }}
+                    onToggle={() => {
+                        // The tab stop follows the row a pointer just acted on, exactly as selecting one moves it:
+                        // the browser has already put DOM focus on this row, and a tab stop left on another is a
+                        // reader tabbing out of the tree from somewhere they never were.
+                        setFocused(visibleRow.row.key);
+                        fold(visibleRow.row.key, visibleRow.expanded === true);
+                    }}
+                    onKeyDown={(event) => {
+                        onKeyDown(event, at, visibleRow);
+                    }}
+                    onElement={(element) => {
+                        if (element === null) {
+                            elements.current.delete(visibleRow.row.key);
+                        } else {
+                            elements.current.set(visibleRow.row.key, element);
+                        }
+                    }}
+                />
+            ))}
+        </ul>
     );
 }
 
