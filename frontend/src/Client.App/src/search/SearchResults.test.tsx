@@ -165,6 +165,16 @@ describe('SearchResults', () => {
         expect(found?.textContent).toContain('Matched what this message is about rather than anything in its text.');
     });
 
+    it('says a message matched both ways where the words are not in its text either', async () => {
+        const both = result(1, { snippets: [], matchedBy: 'BothRankings' });
+
+        render(resultsUnder(answering(pageOf([both]))));
+
+        const [found] = await rows();
+
+        expect(found?.textContent).toContain('Matched these words and what this message is about.');
+    });
+
     it('says a deployment that has activated no embedding profile searched by words alone', async () => {
         const lexical = pageOf([result(1)], { retrievalMode: 'Lexical', semanticSearch: 'Inactive' });
 

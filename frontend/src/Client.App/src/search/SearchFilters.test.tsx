@@ -154,6 +154,30 @@ describe('SearchFilters', () => {
         expect(narrowed).not.toHaveBeenCalled();
     });
 
+    it('keeps the refused day in the control, so it is corrected rather than typed again', () => {
+        const narrowed = vi.fn();
+
+        renderFilters({ ...anywhere, receivedFrom: '2026-09-01' }, narrowed);
+        narrowing();
+
+        const lastDay = screen.getByLabelText('Arrived on or before');
+
+        fireEvent.change(lastDay, { target: { value: '2026-08-31' } });
+
+        expect((lastDay as HTMLInputElement).value).toBe('2026-08-31');
+
+        // The first day is moved back off the refused pair the reader is looking at, rather than off the filter that
+        // is still in force — which is what makes the range selectable in one correction rather than two.
+        fireEvent.change(screen.getByLabelText('Arrived on or after'), { target: { value: '2026-08-01' } });
+
+        expect(narrowed).toHaveBeenCalledWith({
+            ...anywhere,
+            receivedFrom: '2026-08-01',
+            receivedTo: '2026-08-31',
+        });
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+
     it.each([
         ['Only unread', { unread: true }],
         ['Only flagged', { flagged: true }],

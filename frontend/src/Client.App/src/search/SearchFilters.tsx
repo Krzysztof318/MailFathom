@@ -48,6 +48,9 @@ const dayNarrowings: readonly MailSearchNarrowing[] = ['receivedFrom', 'received
 const control = `px-2 py-1 text-sm ${borderedControl}`;
 const field = `w-full ${control}`;
 
+// The two calendar days together, because neither can be judged without the other.
+type DayRange = Pick<MailSearchAsk, 'receivedFrom' | 'receivedTo'>;
+
 export function SearchFilters({
     ask,
     accounts,
@@ -58,7 +61,11 @@ export function SearchFilters({
     readonly onNarrow: (ask: MailSearchAsk) => void;
 }) {
     const { locale, translate } = useLocalization();
-    const [rangeRefused, setRangeRefused] = useState(false);
+
+    // The pair as typed, held only while it selects nothing. A refused range is still what the reader is looking at, so
+    // it stays in the two controls and is what the next keystroke is judged against — a control that snapped back to
+    // the filter in force would take away the day they just picked and leave them to remember it.
+    const [refusedRange, setRefusedRange] = useState<DayRange | null>(null);
 
     const inForce = narrowings(ask);
 
@@ -67,19 +74,21 @@ export function SearchFilters({
     // everything that found nothing.
     const everywhere = ask.account === null && ask.folder === null;
 
-    function received(change: Partial<Pick<MailSearchAsk, 'receivedFrom' | 'receivedTo'>>): void {
-        const moved = { ...ask, ...change };
+    const shownRange: DayRange = refusedRange ?? { receivedFrom: ask.receivedFrom, receivedTo: ask.receivedTo };
+
+    function received(change: Partial<DayRange>): void {
+        const moved = { ...shownRange, ...change };
 
         // A range whose end falls before its start selects nothing, and the deployment refuses it rather than
         // answering an empty page. Saying so here is where the reader can see which of the two days to move.
         if (!selectableRange(moved.receivedFrom, moved.receivedTo)) {
-            setRangeRefused(true);
+            setRefusedRange(moved);
 
             return;
         }
 
-        setRangeRefused(false);
-        onNarrow(moved);
+        setRefusedRange(null);
+        onNarrow({ ...ask, ...moved });
     }
 
     return (
@@ -100,7 +109,7 @@ export function SearchFilters({
                                 dayNarrowings.includes(narrowing),
                             )}
                             onRemove={() => {
-                                setRangeRefused(false);
+                                setRefusedRange(null);
                                 onNarrow(without(ask, narrowing));
                             }}
                         />
@@ -189,7 +198,7 @@ export function SearchFilters({
                                 <input
                                     type="date"
                                     className={control}
-                                    value={ask.receivedFrom ?? ''}
+                                    value={shownRange.receivedFrom ?? ''}
                                     onChange={(event) => {
                                         received({ receivedFrom: event.target.value || null });
                                     }}
@@ -201,7 +210,7 @@ export function SearchFilters({
                                 <input
                                     type="date"
                                     className={control}
-                                    value={ask.receivedTo ?? ''}
+                                    value={shownRange.receivedTo ?? ''}
                                     onChange={(event) => {
                                         received({ receivedTo: event.target.value || null });
                                     }}
@@ -209,7 +218,7 @@ export function SearchFilters({
                             </label>
                         </div>
 
-                        {rangeRefused ? (
+                        {refusedRange !== null ? (
                             <p className="text-sm text-warning" role="alert">
                                 {translate('search.rangeSelectsNothing')}
                             </p>

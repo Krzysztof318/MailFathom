@@ -259,6 +259,12 @@ export function addressFilter(value: string): string | null {
         return null;
     }
 
+    // A second `@` is the same class of refusal as none at all: no address carries one outside a quoted local part,
+    // which is not something a filter field is a place to type.
+    if (at !== typed.lastIndexOf('@')) {
+        return null;
+    }
+
     return /\s/.test(typed) ? null : typed;
 }
 

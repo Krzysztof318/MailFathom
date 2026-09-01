@@ -30,10 +30,11 @@ import { askable, askIn, askKey, narrowings, widened, type MailSearchAsk } from 
 // account, and a search across everything are three different questions, and somebody who cannot see which one they
 // asked reads an empty result as an absence rather than as something to widen.
 //
-// The field accepts a phrase and nothing else today. The prototype words it as accepting a description too, which is
+// The field accepts a phrase and nothing else today. The design words it as accepting a description too, which is
 // stage 3's work writing filters out of a sentence — it lands on this screen rather than replacing it, which is why
 // the filters here are objects with values in them for something to write into. Until it does, the field promises what
-// it does.
+// it does: a field offering to take a description of what somebody needs, over a deployment that can only match words,
+// fails them at the one moment they trusted it.
 
 export function MailSearch({
     session,
@@ -98,11 +99,14 @@ export function MailSearch({
                     search(typed);
                 }}
             >
-                <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
-                    <span className="text-muted">{translate('search.label')}</span>
+                {/* One pill across the column, which is where the design puts finding a message and what it draws it
+                    as. Its name is carried rather than drawn: a placeholder is not an accessible name — it leaves as
+                    soon as somebody types — and the design's shape has no room for a visible one. */}
+                <label className="min-w-0 flex-1 text-sm">
+                    <span className="sr-only">{translate('search.label')}</span>
                     <input
                         type="search"
-                        className={`w-full px-2 py-1 text-sm ${borderedControl}`}
+                        className="w-full rounded-full border border-line bg-rail px-3 py-2 text-sm text-text placeholder:text-faint transition hover:bg-hover"
                         placeholder={translate('search.placeholder')}
                         value={typed}
                         onChange={(event) => {
@@ -112,15 +116,11 @@ export function MailSearch({
                     />
                 </label>
 
-                <button className={`self-end px-2 py-1 text-sm ${borderedControl}`} type="submit">
+                <button className={`px-2 py-1 text-sm ${borderedControl}`} type="submit">
                     {translate('search.submit')}
                 </button>
 
-                {ask === null ? null : (
-                    <span className="self-end">
-                        <SecondaryButton label={translate('search.stop')} onActivate={stopSearching} />
-                    </span>
-                )}
+                {ask === null ? null : <SecondaryButton label={translate('search.stop')} onActivate={stopSearching} />}
             </form>
 
             {refused === null ? null : (

@@ -189,12 +189,16 @@ describe('addressFilter', () => {
         expect(addressFilter(typed)).toBe(address);
     });
 
-    it.each([['nordwind'], ['@example.invalid'], ['somebody@'], ['some body@example.invalid'], ['']])(
-        'refuses %j, which could not be an address at all',
-        (typed) => {
-            expect(addressFilter(typed)).toBeNull();
-        },
-    );
+    it.each([
+        ['nordwind'],
+        ['@example.invalid'],
+        ['somebody@'],
+        ['some body@example.invalid'],
+        ['somebody@nordwind@example.invalid'],
+        [''],
+    ])('refuses %j, which could not be an address at all', (typed) => {
+        expect(addressFilter(typed)).toBeNull();
+    });
 });
 
 describe('selectableRange', () => {

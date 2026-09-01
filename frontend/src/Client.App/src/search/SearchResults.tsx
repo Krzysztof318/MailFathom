@@ -11,6 +11,7 @@ import {
     type ClientSession,
     type MailFathomTransport,
     type MailSearchPage,
+    type MailSearchRanking,
     type MailSearchResult,
     type MailSearchRetrieval,
     type MailSemanticSearch,
@@ -393,6 +394,15 @@ export function SearchResults({
     );
 }
 
+// What a result matched on, said in words where the deployment cut no extract to show instead. Exhaustive over the
+// ranking rather than a test for one of its three members: a result that matched by meaning as well as by the words
+// typed has to say so, and reading it as a header match would drop the half a reader could not otherwise know about.
+const rankingSentences: Readonly<Record<MailSearchRanking, MessageKey>> = {
+    LexicalRanking: 'search.matchedInMail',
+    SemanticRanking: 'search.matchedByMeaning',
+    BothRankings: 'search.matchedBothWays',
+};
+
 /**
  * Why one result is in the list, in the line the row's height already reserves.
  *
@@ -409,7 +419,7 @@ function WhyItMatched({ result }: { readonly result: MailSearchResult }) {
             <span className="sr-only">{translate('search.whyItMatched')} </span>
 
             {extract === undefined
-                ? translate(result.matchedBy === 'SemanticRanking' ? 'search.matchedByMeaning' : 'search.matchedInMail')
+                ? translate(rankingSentences[result.matchedBy])
                 : matchedRuns(extract).map((run, at) => (
                       <span
                           // The runs of one extract have no identity of their own, so their position is what they are:

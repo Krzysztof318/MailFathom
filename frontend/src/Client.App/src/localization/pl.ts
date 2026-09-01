@@ -192,6 +192,7 @@ export const pl: Catalogue = {
     'search.whyItMatched': 'Dlaczego to pasuje:',
     'search.matchedByMeaning': 'Znalezione po znaczeniu, a nie po tych słowach.',
     'search.matchedInMail': 'Pasuje to, czego dotyczy ta wiadomość, a nie cokolwiek w jej treści.',
+    'search.matchedBothWays': 'Pasują te słowa i to, czego dotyczy ta wiadomość.',
     'search.wordsOnlyInactive':
         'To wdrożenie nie wyszukuje po znaczeniu, więc te wyniki zawierają wpisane przez ciebie słowa i nic, co zostałoby znalezione wyłącznie po znaczeniu.',
     'search.wordsOnlyDegraded':
