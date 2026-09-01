@@ -23,21 +23,32 @@ function currentAddress(): string {
 
 /**
  * The space the address names, re-read whenever it changes — including when the browser moves back to an earlier one.
- * An address naming no space is written back to the one actually being shown, so the two never disagree.
+ * An address naming no space, or naming one this credential is not offered, is written back to the one actually being
+ * shown, so the two never disagree and a bookmarked address is answered rather than left standing over a blank frame.
+ *
+ * @param offered The spaces this credential may open, which the session decides and which is empty while it is unknown.
+ * @returns The space to render, or `null` where there is none to render — a grant carrying nothing among them.
  */
-export function useSpace(): Space {
+export function useSpace(offered: readonly Space[]): Space | null {
     const address = useSyncExternalStore(subscribeToAddress, currentAddress);
-    const space = spaceAt(address) ?? defaultSpace;
+    const named = spaceAt(address);
+    const space = named !== null && offered.includes(named) ? named : (fallbackAmong(offered) ?? null);
 
     // Replaced rather than pushed: a first load at the root, or a fragment nobody answers, would otherwise leave the
-    // back gesture landing on an address that immediately corrects itself again.
+    // back gesture landing on an address that immediately corrects itself again. Nothing is written while the offered
+    // spaces are unknown, so an address somebody arrived at survives the session being read.
     useEffect(() => {
-        if (spaceAt(address) === null) {
+        if (space !== null && named !== space) {
             window.history.replaceState(null, '', addressOf(space));
         }
-    }, [address, space]);
+    }, [address, named, space]);
 
     return space;
+}
+
+/** Where the client opens among what it may open: its own default where that is offered, else the first that is. */
+function fallbackAmong(offered: readonly Space[]): Space | undefined {
+    return offered.includes(defaultSpace) ? defaultSpace : offered[0];
 }
 
 /**

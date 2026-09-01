@@ -3,11 +3,14 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { useLocalization } from '../localization/useLocalization';
-import { addressOf, spaceLabels, spaces, type Space } from '../routing/spaces';
+import { addressOf, spaceLabels, type Space } from '../routing/spaces';
 
 // One list of links, laid out two ways by the width it is given: a rail down the side of a wide window, and bottom
 // navigation across a narrow one. Nothing here asks which head it is running on, and nothing disappears at either
-// width — the same three destinations are present in both, which is what makes the two shapes one navigation.
+// width — the same destinations are present in both, which is what makes the two shapes one navigation.
+//
+// Which destinations those are is the session's answer rather than this component's: a space this credential may not
+// open is absent from both shapes, because offering it would offer an action the deployment is going to refuse.
 //
 // Links rather than buttons, because these navigate: the browser then supplies the keyboard path, the history entry,
 // and opening one in a window of its own, none of which a click handler would have.
@@ -18,7 +21,7 @@ const spaceGlyphs: Readonly<Record<Space, string>> = {
     cases: 'M9 3h6a2 2 0 0 1 2 2v1h3a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3V5a2 2 0 0 1 2-2Zm0 3h6V5H9v1ZM4 8v10h16V8H4Z',
 };
 
-export function SpaceNavigation({ current }: { readonly current: Space }) {
+export function SpaceNavigation({ offered, current }: { readonly offered: readonly Space[]; readonly current: Space }) {
     const { translate } = useLocalization();
 
     return (
@@ -26,7 +29,7 @@ export function SpaceNavigation({ current }: { readonly current: Space }) {
             aria-label={translate('shell.spaces')}
             className="flex shrink-0 justify-around gap-1 border-t border-line bg-rail p-1 workspace:order-first workspace:w-24 workspace:flex-col workspace:justify-start workspace:gap-2 workspace:border-t-0 workspace:border-e workspace:p-3"
         >
-            {spaces.map((space) => (
+            {offered.map((space) => (
                 <SpaceLink key={space} space={space} current={space === current} />
             ))}
         </nav>

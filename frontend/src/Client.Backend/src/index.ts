@@ -3,6 +3,13 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 export { resolveDeploymentEntry, type DeploymentEntryRefusal, type DeploymentEntryResult } from './deployment';
+export {
+    deploymentSessionRoute,
+    mailPermissions,
+    readDeploymentSession,
+    type DeploymentSession,
+    type MailFathomPermission,
+} from './deploymentSession';
 export { failureReasonForStatus, type ClientFailure, type ClientFailureReason, type ClientResult } from './failure';
 export {
     mailBodyRoute,
@@ -41,12 +48,5 @@ export {
     type MailSynchronizationState,
 } from './mailAccounts';
 export { clientRoutePrefix, headersFor, routeFor, type ClientSession, type DeploymentAddress } from './session';
-export {
-    deploymentSessionRoute,
-    reachDeployment,
-    signIn,
-    type DeploymentGreeting,
-    type SignInOutcome,
-    type SignInRefusal,
-} from './signIn';
+export { reachDeployment, signIn, type DeploymentGreeting, type SignInOutcome, type SignInRefusal } from './signIn';
 export { longestResponseBody, type ClientRequest, type ClientResponse, type MailFathomTransport } from './transport';

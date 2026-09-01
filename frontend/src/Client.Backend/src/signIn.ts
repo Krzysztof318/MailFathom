@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+import { deploymentSessionRoute, parseDeploymentSession } from './deploymentSession';
 import { failed, read, type ClientResult } from './failure';
 import { headersFor, routeFor, type ClientSession, type DeploymentAddress } from './session';
 import { send, type MailFathomTransport } from './transport';
@@ -15,14 +16,8 @@ import { send, type MailFathomTransport } from './transport';
 // there for that. What it is there for is the ordinary typo, which lands on a real host that would otherwise be sent a
 // password composed for somewhere else, and which the client cannot take back once it has.
 
-/** The route a deployment reports itself and the caller's grant at, relative to the client prefix. */
-export const deploymentSessionRoute = '/session';
-
 /** The name every MailFathom surface challenges under, which is what a refusal proves the client reached one by. */
 const protectionSpace = 'realm="MailFathom"';
-
-/** The product name the session route answers with. */
-const productName = 'MailFathom';
 
 // The scheme named as a scheme rather than as a word, so a parameter whose value happens to read as one is not mistaken
 // for a challenge. A surface accepting passwords answers with two challenges in one header — the bare bearer one every
@@ -142,28 +137,15 @@ export async function signIn(
     return failed(response.status >= 500 ? 'unavailable' : 'unreadable', response.status);
 }
 
-/** Whether the session answer is one MailFathom writes, which is what proves the address is a deployment. */
+/**
+ * Whether the session answer is one MailFathom writes, which is what proves the address is a deployment.
+ *
+ * It reads the same answer `readDeploymentSession` reads and through the same parser, because the two questions are one
+ * question asked at different moments: an address that answers as a session is a deployment, and a second reading of
+ * the same body would be a second thing to keep in step with the route.
+ */
 function answersAsMailFathom(body: string): boolean {
-    if (body.length > longestSessionBody) {
-        return false;
-    }
-
-    let parsed: unknown;
-
-    try {
-        parsed = JSON.parse(body);
-    } catch {
-        return false;
-    }
-
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-        return false;
-    }
-
-    const answered = parsed as Record<string, unknown>;
-    const version = answered['version'];
-
-    return answered['service'] === productName && typeof version === 'string' && version.length > 0;
+    return parseDeploymentSession(body) !== null;
 }
 
 function challengesAsMailFathom(headers: Readonly<Record<string, string>>): boolean {
@@ -173,11 +155,3 @@ function challengesAsMailFathom(headers: Readonly<Record<string, string>>): bool
 function offersBasic(headers: Readonly<Record<string, string>>): boolean {
     return offersBasicScheme.test(headers['www-authenticate']?.toLowerCase() ?? '');
 }
-
-// The longest session answer read at all. This is the one answer in the client that arrives from an address nobody has
-// trusted yet — the whole point of asking is that the client does not know what is there — so the bound is applied
-// before the body is expanded rather than to what parsing it produced. It names a product, a release, and the caller's
-// own grant out of a published set, which is a few hundred bytes; anything past this is not a session answer, whatever
-// it turns out to be. `longestResponseBody` is the transport's backstop behind it, and this is the bound that says what
-// *this* route may answer with.
-const longestSessionBody = 4096;

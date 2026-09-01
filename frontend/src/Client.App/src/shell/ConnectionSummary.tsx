@@ -3,18 +3,22 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { ReactNode } from 'react';
-import type {
-    ClientFailureReason,
-    ClientResult,
-    MailAccountDirectory,
-    MailSynchronizationState,
-} from '@mailfathom/client-backend';
+import type { ClientFailureReason, MailAccountDirectory, MailSynchronizationState } from '@mailfathom/client-backend';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { AccountLine } from './AccountLine';
+import { offers } from './capabilities';
+import { ageOf } from './synchronizationAge';
+import { mostReconnectionAttempts, type Connection } from './useConnection';
 
-// The line above every space saying what the client is looking at and how current it is. It summarizes rather than
-// enumerates: what each account was last synchronized at, and what a grant allows, is read by the space that shows it.
+// The line above every space saying what the client is looking at and how current it is, and the short panel behind it
+// naming each account. Three different things blur into one spinner unless they are kept apart, so each has its own
+// sentence: whether this client can reach its deployment at all, whether that deployment is refreshing these accounts,
+// and when each of them last took mail in.
+//
+// A credential that may not read mail says nothing here. There is no freshness to report and the reason is not about
+// this line, so it is said once, where everything this credential may not do is said.
 
 const failureLabels: Readonly<Record<ClientFailureReason, MessageKey>> = {
     unauthenticated: 'failure.unauthenticated',
@@ -62,17 +66,60 @@ function freshnessOf(directory: MailAccountDirectory): Freshness {
         : { message: 'connection.behind', tone: 'attention' };
 }
 
-export function ConnectionSummary({
-    accounts,
-    reread,
-}: {
-    readonly accounts: ClientResult<MailAccountDirectory> | null;
-    readonly reread: () => void;
-}) {
-    const { translate } = useLocalization();
+/** The instant the least recently refreshed account last took mail in, or `null` where none of them ever has. */
+function oldestSynchronization(directory: MailAccountDirectory): string | null {
+    return directory.accounts.reduce<string | null>((oldest, account) => {
+        const at = account.lastSynchronizedAt;
 
-    if (accounts === null) {
-        return <Line tone="quiet">{translate('accounts.reading')}</Line>;
+        if (at === null) {
+            return oldest;
+        }
+
+        return oldest === null || Date.parse(at) < Date.parse(oldest) ? at : oldest;
+    }, null);
+}
+
+export function ConnectionSummary({ connection }: { readonly connection: Connection }) {
+    const { locale, translate } = useLocalization();
+    const { session, accounts, readAt, online, attempts, reread } = connection;
+
+    // Nothing is being read and nothing will be until the network comes back, which is a different sentence from a
+    // deployment that is not answering: one of them is this machine's to fix and the other is not.
+    if (!online) {
+        return (
+            <Line tone="attention" announced>
+                {translate('connection.offline')}
+            </Line>
+        );
+    }
+
+    if (session === null) {
+        return (
+            <Line tone="quiet" announced>
+                {attempts === 0
+                    ? translate('connection.connecting')
+                    : translate('connection.reconnecting', {
+                          attempt: formatCount(locale, attempts),
+                          total: formatCount(locale, mostReconnectionAttempts),
+                      })}
+            </Line>
+        );
+    }
+
+    if (session.outcome === 'failed') {
+        return <Unreachable failure={session.failure.reason} attempts={attempts} reread={reread} />;
+    }
+
+    if (!offers(session.value, 'readMail')) {
+        return null;
+    }
+
+    if (accounts === null || readAt === null) {
+        return (
+            <Line tone="quiet" announced>
+                {translate('accounts.reading')}
+            </Line>
+        );
     }
 
     if (accounts.outcome === 'failed') {
@@ -92,15 +139,104 @@ export function ConnectionSummary({
         );
     }
 
-    const freshness = freshnessOf(accounts.value);
+    const directory = accounts.value;
+    const freshness = freshnessOf(directory);
 
-    return <Line tone={freshness.tone}>{translate(freshness.message)}</Line>;
+    // An owner holding no account is told so and told what would fill it, rather than being handed a disclosure with
+    // nothing behind it. Everything else opens onto the account-by-account reading of the same sentence.
+    if (directory.accounts.length === 0) {
+        return (
+            <Line tone={freshness.tone}>
+                {translate(freshness.message)} {translate('accounts.noneDeclared')}
+            </Line>
+        );
+    }
+
+    const oldest = ageOf(oldestSynchronization(directory), readAt, locale);
+
+    return (
+        <details className="text-sm text-muted">
+            <summary className="flex cursor-pointer items-center gap-2">
+                <Dot tone={freshness.tone} />
+                {translate(freshness.message)}
+            </summary>
+
+            <div className="mt-2 flex flex-col gap-2 rounded-lg bg-sunken px-3 py-2">
+                {oldest === null ? null : <p>{translate('accounts.oldest', { age: oldest })}</p>}
+
+                <ul className="flex flex-col gap-1">
+                    {directory.accounts.map((account) => (
+                        <AccountLine key={account.id} account={account} readAt={readAt} />
+                    ))}
+                </ul>
+            </div>
+        </details>
+    );
 }
 
-function Line({ tone, children }: { readonly tone: Tone; readonly children: ReactNode }) {
+// A deployment that did not answer is reached for again on its own, so what this says is which of those two moments it
+// is: another attempt is coming, or the budget is spent and it is a person's turn to ask. Every other failure of the
+// session read repeats identically however often it is asked, so it is named and offers nothing.
+function Unreachable({
+    failure,
+    attempts,
+    reread,
+}: {
+    readonly failure: ClientFailureReason;
+    readonly attempts: number;
+    readonly reread: () => void;
+}) {
+    const { locale, translate } = useLocalization();
+    const total = formatCount(locale, mostReconnectionAttempts);
+
+    // What could not be read here is the session rather than the accounts, and the sentence says so: an answer this
+    // client cannot act on is a different situation from a deployment that would not give up the mailboxes.
+    if (failure !== 'unavailable') {
+        return (
+            <Line tone="attention">
+                {translate('connection.unreadable', { reason: translate(failureLabels[failure]) })}
+            </Line>
+        );
+    }
+
+    if (attempts < mostReconnectionAttempts) {
+        return (
+            <Line tone="attention" announced>
+                {translate('connection.reconnecting', { attempt: formatCount(locale, attempts + 1), total })}
+            </Line>
+        );
+    }
+
     return (
-        <p className="flex items-center gap-2 text-sm text-muted">
-            <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${toneColours[tone]}`} />
+        <Line tone="attention">
+            {translate('connection.lost', { total })}
+            <SecondaryButton label={translate('connection.retry')} onActivate={reread} />
+        </Line>
+    );
+}
+
+// Small whole numbers, formatted rather than interpolated, for the reason no date is spelled into a catalogue: which
+// digits a language writes is `Intl`'s answer rather than JavaScript's default one.
+function formatCount(locale: string, count: number): string {
+    return new Intl.NumberFormat(locale).format(count);
+}
+
+function Dot({ tone }: { readonly tone: Tone }) {
+    return <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${toneColours[tone]}`} />;
+}
+
+function Line({
+    tone,
+    announced = false,
+    children,
+}: {
+    readonly tone: Tone;
+    readonly announced?: boolean;
+    readonly children: ReactNode;
+}) {
+    return (
+        <p className="flex items-center gap-2 text-sm text-muted" role={announced ? 'status' : undefined}>
+            <Dot tone={tone} />
             {children}
         </p>
     );

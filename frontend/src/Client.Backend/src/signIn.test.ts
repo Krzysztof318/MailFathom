@@ -90,6 +90,9 @@ describe('signIn', () => {
         ['a page rather than an answer', '<!doctype html><title>Sign in</title>'],
         ['an array', '[]'],
         ['nothing', ''],
+        // The session answer is read through the same parser `readDeploymentSession` reads it through, so what proves
+        // an address is a deployment is the whole answer rather than the two fields sign-in happens to look at.
+        ['an answer naming no grant', JSON.stringify({ service: 'MailFathom', version: '0.8.0' })],
     ])('refuses %s as a deployment', async (_, body) => {
         const result = await signIn(session, answering({ body }));
 

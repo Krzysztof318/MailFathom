@@ -23,7 +23,14 @@ const narrowWindow = { width: 380, height: 720 };
 // What the deployment the preview server stands in for answers. It accepts any credential presented to it, because
 // what this suite proves about signing in is the composing, the sending, and the keeping — which of two passwords a
 // service accepts is the service's own decision and is proven where that decision is made.
-const sessionAnswer = { service: 'MailFathom', version: declaredVersion };
+// The grant it reports is what decides which spaces the client offers, so it names both the client acts on: a session
+// answer without them would open a frame with Discover and the intent field absent, which is a different screen from
+// the one every test below is about.
+const sessionAnswer = {
+    service: 'MailFathom',
+    version: declaredVersion,
+    permissions: ['mailfathom.mail.read', 'mailfathom.mail.ask'],
+};
 
 const mailAccounts = {
     synchronizationEnabled: true,
@@ -266,11 +273,14 @@ test('asks for the credential again after signing out, including across a reload
     await expect(page.getByRole('navigation', { name: 'Spaces' })).toHaveCount(0);
 });
 
-test('opens in Discover, under the version it was built from', async ({ page }) => {
+test('opens in Discover, under the version it was built from and the one the deployment answered', async ({ page }) => {
     await openSignedIn(page);
 
     await expect(page.getByRole('heading', { name: 'Discover', level: 1 })).toBeVisible();
-    await expect(page.getByText(declaredVersion, { exact: true })).toBeVisible();
+
+    // The client's own is substituted into the bundle at build time, which is the half only a built bundle proves; the
+    // deployment's arrives over the wire beside it.
+    await expect(page.getByText(`Client ${declaredVersion}, deployment ${declaredVersion}`)).toBeVisible();
 
     // A first load at the root is written back to the address the space is actually reached at, which is what makes
     // the next assertion — reloading it — mean anything.
@@ -351,6 +361,11 @@ test('moves a keyboard through a narrow window in the order the window shows', a
     // The narrow composition draws the navigation at the bottom of the screen, and the keyboard follows the document
     // rather than the layout — so a document that put the navigation first would hand a reader the bottom bar before
     // the header at the top of the window. Only a browser answers this: jsdom has no sequential focus navigation.
+    // The freshness line is the first thing the header holds, and it is a disclosure onto the account-by-account
+    // reading of the same sentence — so it is where a keyboard arrives before any of the controls beside it.
+    await page.keyboard.press('Tab');
+    await expect(page.getByText('Every account is up to date.')).toBeFocused();
+
     await page.keyboard.press('Tab');
     await expect(page.getByRole('combobox', { name: 'Theme' })).toBeFocused();
 
