@@ -14,6 +14,7 @@ export const pl: Catalogue = {
     'shell.language': 'Język',
     'shell.theme': 'Motyw',
     'shell.spaces': 'Przestrzenie',
+    'shell.signOut': 'Wyloguj się',
 
     'theme.system': 'Zgodnie z systemem',
     'theme.light': 'Jasny',
@@ -31,25 +32,48 @@ export const pl: Catalogue = {
     'scope.mailbox': 'Skrzynka w zakresie',
     'scope.allMailboxes': 'Wszystkie skrzynki',
 
-    'connect.title': 'Wskaż temu klientowi swój MailFathom',
-    'connect.explanation':
-        'Podaj wdrożenie, które przechowuje Twoją pocztę. Wszystko, co ten klient odczytuje, i wszystko, co w nim wpiszesz, trafia tam i nigdzie indziej.',
+    'signIn.title': 'Zaloguj się do swojego MailFathom',
+    'signIn.explanation':
+        'Wszystko, co ten klient odczytuje, i wszystko, co w nim wpiszesz, trafia do wdrożenia przechowującego Twoją pocztę i nigdzie indziej.',
+    'signIn.userName': 'Nazwa użytkownika',
+    'signIn.password': 'Hasło',
+    'signIn.submit': 'Zaloguj się',
+    'signIn.presenting': 'Logowanie…',
+    'signIn.abandon': 'Przerwij próbę',
+    'signIn.incomplete': 'Wpisz nazwę użytkownika i hasło do swojego wdrożenia.',
+    'signIn.userNameHasColon':
+        'Nazwa użytkownika nie może zawierać dwukropka, ponieważ to on oddziela ją od hasła podczas wysyłania.',
+    'signIn.tooLong':
+        'Ta nazwa użytkownika lub to hasło są dłuższe, niż klient jest w stanie przedstawić. Sprawdź, co zostało wklejone.',
+    'signIn.credentialRefused': 'To wdrożenie nie akceptuje tej nazwy użytkownika lub tego hasła.',
+    'signIn.basicNotOffered':
+        'To wdrożenie nie przyjmuje nazwy użytkownika i hasła. Osoba, która je prowadzi, musi najpierw włączyć taką możliwość.',
+    'signIn.grantMissing': 'Wdrożenie przyjęło poświadczenie, ale nie zezwala mu na odczyt żadnej poczty.',
+    'signIn.deploymentSilent': 'Wdrożenie nie odpowiedziało. Spróbuj ponownie za chwilę.',
+    'signIn.noLongerAccepted': 'To wdrożenie przestało akceptować zapamiętane hasło. Zaloguj się ponownie.',
+    'signIn.notRemoved':
+        'Wylogowanie nie usunęło hasła z magazynu poświadczeń tej maszyny, więc nadal jest tam przechowywane. Usuń je w samym magazynie albo zaloguj się i wyloguj ponownie.',
+    'signIn.notKept':
+        'Nie udało się zapisać Twojego hasła na tej maszynie, więc zapytamy o nie ponownie przy następnym otwarciu MailFathom. Jesteś zalogowany tak czy inaczej.',
+    'signIn.keptUntilSignedOut':
+        'Twoje hasło jest przechowywane w pęku kluczy tego komputera, dopóki się nie wylogujesz. Wylogowanie jest tym, co je usuwa.',
+    'signIn.keptUntilTheTabCloses':
+        'Twoje hasło jest przechowywane do zamknięcia tej karty i zapytamy o nie ponownie — hasło pozostawione w przeglądarce może odczytać wszystko, co ma dostęp do tej strony.',
+    'signIn.keptUntilTheClientCloses':
+        'Twoje hasło jest przechowywane do zamknięcia MailFathom i zapytamy o nie ponownie — ten komputer nie udostępnia pęku kluczy, w którym można je bezpiecznie przechować.',
+
     'connect.address': 'Adres wdrożenia',
     'connect.addressHint':
         'Host, na którym wdrożenie odpowiada, oraz port, jeśli go używa — na przykład mailfathom.example.com albo mailfathom.example.com:8443.',
     'connect.clearText': 'Łącz się z tym wdrożeniem zwykłym protokołem HTTP',
     'connect.clearTextExplanation':
         'Twoje hasło jest kodowane, a nie szyfrowane, przy każdym żądaniu. Każdy, kto znajduje się między tym klientem a wdrożeniem, może je odczytać. Zostaw tę opcję wyłączoną, chyba że sieć między nimi należy do Ciebie.',
-    'connect.submit': 'Połącz',
-    'connect.reaching': 'Łączenie z wdrożeniem…',
-    'connect.abandon': 'Przerwij próbę',
     'connect.blank': 'Podaj wdrożenie, które przechowuje Twoją pocztę.',
     'connect.malformed': 'To nie jest adres. Podaj host, na którym wdrożenie odpowiada, oraz port, jeśli go używa.',
     'connect.clearTextRefused':
         'Ten adres używa zwykłego protokołu HTTP, a ten klient nie wyśle nim hasła, dopóki na to nie zezwolisz.',
     'connect.unavailable': 'Nic tam nie odpowiedziało. Sprawdź adres oraz to, czy wdrożenie jest uruchomione.',
     'connect.unreadable': 'Coś tam odpowiedziało, ale nie jako MailFathom.',
-    'connect.refused': 'Wdrożenie odrzuciło żądanie.',
 
     'deployment.reachedAt': 'Odczyt z {address}',
     'deployment.change': 'Wskaż inne wdrożenie',

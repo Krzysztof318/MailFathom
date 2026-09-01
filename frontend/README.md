@@ -63,15 +63,26 @@ else. A screen is written once and reaches the web head and the desktop head unc
 chose Tauri for; a platform difference that genuinely exists belongs here or in one stated rule in `styles.css`, and
 never in a component.
 
-`src/main.rs` is the whole of it. There is no library target beside it, no command registered, and no capability file:
-the application calls into Rust nowhere, so granting the webview a permission would be granting reach nothing asked
-for. The first command to exist is what adds both.
+`src/main.rs` is the whole of it, and there is no library target beside it. What it holds beyond the window is four
+commands, and they exist for one reason: [ADR 0023](../docs/decisions/0023-where-the-client-keeps-the-credential-it-signs-in-with.md)
+keeps the credential this head signs in with in the operating system's own store, which a webview cannot reach and a
+shell can. `keychain_reachable` says whether there is a store to keep one in, and `keep_credential`, `read_credential`,
+and `forget_credential` are the three operations on it. Two of them answer whether they succeeded, which is what lets
+the client say that a store refused to delete rather than report a sign-out that did not happen; none of them answers
+_why_ one failed, because everything a failure could name is about a password. There is still no capability file, and adding one
+would be a mistake rather than an omission: Tauri gates its own plugin commands through an access-control list and
+never an application's, so a `capabilities/` entry naming these four would grant the webview reach into plugins
+nothing here pins. What the webview reaches them through is `app.withGlobalTauri` in `tauri.conf.json`, which puts
+`invoke` on `window.__TAURI__` — the alternative being a fourth npm package redistributed inside every bundle to
+supply one function.
 
 | What                                                                | Where it is decided                                                                                                      |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | Product name, application identifier, window title and minimum size | `src-tauri/tauri.conf.json`                                                                                              |
 | The version the application reports                                 | `<VersionPrefix>` in `Version.props`, merged in by `src-tauri/run-tauri.ts`                                              |
 | Which crates the shell links, and at which versions                 | `src-tauri/Cargo.toml`, resolved into the committed `Cargo.lock`                                                         |
+| Whether the webview may call the shell's own commands               | `app.withGlobalTauri` in `src-tauri/tauri.conf.json`, which is what puts `invoke` on `window.__TAURI__`                  |
+| What the webview may load, connect to, and submit to                | `app.security.csp` in `src-tauri/tauri.conf.json`, which Tauri serves as the document's own Content-Security-Policy      |
 | The icon every bundle carries                                       | `src-tauri/icons/`, generated from `assets/icon-1254.png` with `pnpm exec tauri icon`                                    |
 | The terms every bundle installs beside the application              | `bundle.resources` in `src-tauri/tauri.conf.json`, which takes the repository's own `LICENSE` and `NOTICE`               |
 | What a Linux package declares it needs                              | `bundle.linux.deb.depends` in `src-tauri/tauri.conf.json`; the `rpm` names none, per `docs/operations/desktop-client.md` |
@@ -181,10 +192,14 @@ The frame is one tree laid out two ways by the width it is given — a navigatio
 the `workspace` breakpoint, bottom navigation under a stack of screens below it — and nothing in it reads which head or
 which platform it is running on.
 
-One question is answered before the frame is drawn at all: which deployment this client belongs to. Where nothing has
-said, the connect screen stands in front of the frame rather than inside it, because three spaces with nothing behind
-them are a frame around nothing — and once a deployment is adopted, focus moves to the start of the workspace rather
-than staying on the control that reached it.
+Two questions are answered before the frame is drawn at all: which deployment this client belongs to, and who is
+asking it. `src/signIn/` is where both are, as one form rather than two screens, because a person was handed the
+address and the credential together — and it stands in front of the frame rather than inside it, because three spaces
+with nothing behind them are a frame around nothing. Where the origin that served the client is the deployment, the
+address half is simply not rendered. One form is still two requests wherever the address was typed: the client asks
+what is at it before handing it a password, so a mistyped host is told apart from a refused credential and receives
+nothing. Once somebody is signed in, focus moves to the start of the workspace rather than staying on the control that
+reached it.
 
 Each space is reached at a **fragment address** of its own: `#/discover`, `#/mail`, `#/cases`. `src/routing/` is the
 whole of it, and it is deliberately not a package — three addresses with no segment, no parameter, and no nested tree

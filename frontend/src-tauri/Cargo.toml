@@ -9,7 +9,7 @@
 # to disagree with the one the service reports. Cargo defaults an omitted version to `0.0.0`, which is what a build
 # run without that wrapper is then honestly labelled.
 #
-# Both pins are exact. Cargo reads a bare `"2"` as a caret range, and this repository floats no pin in either stack:
+# Every pin is exact. Cargo reads a bare `"2"` as a caret range, and this repository floats no pin in either stack:
 # `Cargo.lock` beside this file fixes the closure the way `pnpm-lock.yaml` and the `packages.lock.json` files do, and
 # the manifest states what was reviewed rather than what was compatible.
 #
@@ -25,4 +25,5 @@ publish = false
 tauri-build = { version = "=2.6.3", features = [] }
 
 [dependencies]
+keyring = "=4.2.0"
 tauri = { version = "=2.11.5", features = [] }

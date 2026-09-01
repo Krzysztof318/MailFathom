@@ -57,6 +57,14 @@ Nothing is published for macOS, and neither Android nor iOS is a head this proje
 - **It carries no service and no database.** The desktop client is a client: it reaches a MailFathom deployment over
   [the client surface](client-endpoint.md) exactly as the web head does, and it needs one to be running and reachable
   before it can sign in.
+- **It keeps the password in the machine's own credential store.** Signing in once is enough: the shell hands the
+  credential to the Credential Manager on Windows and to the session's Secret Service on Linux — the two platforms
+  this head is published for — filed under the address of the deployment it was given for, and signing out removes it. Where
+  the store refuses the write, the client signs in anyway and says the password was not kept, and where it refuses the
+  removal it says so rather than reporting a sign-out that did not happen. What is stored is one value
+  and the client keeps no copy of it beside that. A machine offering no such store — a Linux session running no keyring
+  daemon is the usual case — is told so on the sign-in screen and asked for the password again the next time the
+  application opens, rather than having it written somewhere less safe instead.
 - **It never updates itself.** No update channel exists and the shell links no updater, so a new version is a new
   download from a release page.
 - **It is not signed.** No bundle published here carries an Authenticode signature or a Linux package signature, so

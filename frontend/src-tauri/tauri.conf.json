@@ -8,6 +8,19 @@
     "frontendDist": "../src/Client.App/dist"
   },
   "app": {
+    "withGlobalTauri": true,
+    "security": {
+      "csp": {
+        "default-src": "'self'",
+        "connect-src": "'self' ipc: http://ipc.localhost https: http:",
+        "img-src": "'self' data: blob:",
+        "style-src": "'self' 'unsafe-inline'",
+        "font-src": "'self'",
+        "object-src": "'none'",
+        "base-uri": "'self'",
+        "form-action": "'none'"
+      }
+    },
     "windows": [
       {
         "label": "main",

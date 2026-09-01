@@ -9,6 +9,7 @@ import type {
     MailAccountDirectory,
     MailSynchronizationState,
 } from '@mailfathom/client-backend';
+import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 
@@ -85,13 +86,7 @@ export function ConnectionSummary({
                     Their next steps — signing in again, saying the grant is missing, reporting a defect — are actions
                     this frame has nowhere to send anybody to yet, and each arrives with the screen that can. */}
                 {accounts.failure.reason === 'unavailable' && (
-                    <button
-                        type="button"
-                        onClick={reread}
-                        className="rounded-md border border-line px-2 py-0.5 text-sm text-text-soft transition hover:bg-hover"
-                    >
-                        {translate('connection.retry')}
-                    </button>
+                    <SecondaryButton label={translate('connection.retry')} onActivate={reread} />
                 )}
             </Line>
         );

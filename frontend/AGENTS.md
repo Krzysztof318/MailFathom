@@ -69,7 +69,7 @@ exactly as `Directory.Packages.props` and the `packages.lock.json` files are for
   that has moved away from the lock file stops `pnpm desktop:dev` and `pnpm desktop:build` rather than being resolved
   into a rewritten one. Nothing else holds that: a `cargo` command run by hand updates the lock file as Cargo always
   does, and neither verification gate reaches the crate graph at all. `scripts/update-dependencies.sh --only crates`
-  reads both pins against crates.io and against the terms the register recorded for them.
+  reads every pin in that manifest against crates.io and against the terms the register recorded for it.
 
 Four things the client is often assumed to need are absent, and each stays absent until a change argues for it: a
 component library, which ADR 0021 excluded deliberately; a router; a state container; and a data-fetching library.
