@@ -17,7 +17,7 @@ import { useLocalization } from '../localization/useLocalization';
 import { scopeKey } from '../workspace/mailScope';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { FolderRow } from './FolderRow';
-import { folderTreeOf, visibleRows, type VisibleRow } from './folderTree';
+import { folderTreeOf, visibleRows, type VisibleRow } from './folderTreeRows';
 
 // The client's scope selector: which mailbox and which folder everything else is about. It is a tree because the
 // mailboxes are a tree, and it is one tree rather than one per account because several mailboxes are one workspace —

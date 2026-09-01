@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { LocalizationProvider } from '../localization/Localization';
 import { ThemeChoice } from '../shell/Preferences';
 import { ThemeProvider } from './Theme';
-import { readStoredThemeChoice } from './theme';
+import { readStoredThemeChoice } from './themeChoice';
 
 // What the machine itself is set to. jsdom answers every media query with `matches: false` and never changes its
 // answer, so a test that states a machine preference — or changes one while the client is open — defines the query

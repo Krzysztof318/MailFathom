@@ -3,7 +3,13 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { afterEach, describe, expect, it } from 'vitest';
-import { isThemeChoice, preferredThemeChoice, readStoredThemeChoice, storeThemeChoice, themeChoices } from './theme';
+import {
+    isThemeChoice,
+    preferredThemeChoice,
+    readStoredThemeChoice,
+    storeThemeChoice,
+    themeChoices,
+} from './themeChoice';
 
 afterEach(() => {
     window.localStorage.clear();

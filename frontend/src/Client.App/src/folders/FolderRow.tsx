@@ -7,7 +7,7 @@ import type { MailFolderRole } from '@mailfathom/client-backend';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { isCurrent, needsAttention, synchronizationStateLabel } from '../synchronization/synchronizationState';
-import type { FolderTreeRow } from './folderTree';
+import type { FolderTreeRow } from './folderTreeRows';
 
 // One row of the tree, which is its own component because it is the row of a list and because it carries everything a
 // tree asks of a row: where it sits, whether it is open, whether it is what the client is scoped to, and whether it is

@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { createContext, useContext } from 'react';
-import type { Theme, ThemeChoice } from './theme';
+import type { Theme, ThemeChoice } from './themeChoice';
 
 // The context and its hook sit apart from the provider that fills them for the reason `localization/useLocalization.ts`
 // gives: a module Vite hot-reloads may export components alone.
