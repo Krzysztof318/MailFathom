@@ -76,6 +76,20 @@ export {
     type MailSenderVerdict,
 } from './mailMessage';
 export {
+    longestSearchPage,
+    longestSearchText,
+    mailSearchRoute,
+    mostSearchResults,
+    readMailSearch,
+    searchQueryString,
+    type MailSearchPage,
+    type MailSearchQuery,
+    type MailSearchRanking,
+    type MailSearchResult,
+    type MailSearchRetrieval,
+    type MailSemanticSearch,
+} from './mailSearch';
+export {
     longestTimelinePage,
     mailTimelineRoute,
     readMailTimeline,

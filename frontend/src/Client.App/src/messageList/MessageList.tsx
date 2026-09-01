@@ -23,6 +23,8 @@ import { CheckControl } from '../controls/CheckControl';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { MessageRow } from '../messageRows/MessageRow';
+import { estimatedRowHeight, leadingRow, offsetOfRow, windowOf } from '../messageRows/rowWindow';
 import { needsAttention } from '../synchronization/synchronizationState';
 import { accountInScope, type MailScope } from '../workspace/mailScope';
 import { useWorkspace } from '../workspace/useWorkspace';
@@ -41,19 +43,18 @@ import {
 } from './heldTimeline';
 import { ListSettings } from './ListSettings';
 import { narrowed, queryFor, type MailListing } from './listing';
-import { MessageRow } from './MessageRow';
 import { extendedTo, inReadingOrder, onlySelected, withToggled } from './messageSelection';
 import { rememberedListing, rememberListing } from './rememberedListings';
-import { estimatedRowHeight, leadingRow, offsetOfRow, windowOf } from './timelineWindow';
 
 // The client's message list, which is where a mail client is judged: it stays smooth at message forty thousand, it puts
 // a returning reader back where they were, and it lets somebody pick out four messages for the question they are about
 // to ask.
 //
 // Three bounds hold that up and none of them is optional. The document holds a window of rows rather than the folder —
-// `timelineWindow.ts`. The list holds a window of pages rather than every page it has read — `heldTimeline.ts`. And
-// where the reader is survives outside React rather than in it — `rememberedListings.ts`, because a scroll offset in
-// state re-renders everything under the workspace provider on the one interaction this screen exists to keep smooth.
+// `messageRows/rowWindow.ts`. The list holds a window of pages rather than every page it has read —
+// `heldTimeline.ts`. And where the reader is survives outside React rather than in it — `rememberedListings.ts`,
+// because a scroll offset in state re-renders everything under the workspace provider on the one interaction this
+// screen exists to keep smooth.
 //
 // The component is mounted with the scope as its key, so pointing at another mailbox starts a list rather than resets
 // one: every piece of state below belongs to one folder read one way, and there is no correct way to carry any of it

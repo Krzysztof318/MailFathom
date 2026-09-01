@@ -221,8 +221,8 @@ nothing configured.
 
 `src/workspace/` is what survives moving between spaces, and it is mounted above the frame for exactly that reason. It
 holds one **scope** — every mailbox at once, one role across all of them, one mailbox, or one folder of one — beside the
-question, the message that is open, the messages that have been picked out, and the rows of the folder tree somebody has
-folded away. It is kept in the store the web head keeps its credential in, so a reload returns to what was on the
+question, the message that is open, the messages that have been picked out, what was searched for before, and the rows
+of the folder tree somebody has folded away. It is kept in the store the web head keeps its credential in, so a reload returns to what was on the
 screen; signing in and signing out both empty it, because what somebody was looking at and about to ask is theirs rather
 than the machine's.
 
@@ -237,27 +237,51 @@ messages that has to stay smooth, a reading position that has to survive leaving
 multi-selection the rest of the client reads as scope for the question it is about to ask.
 
 Three bounds hold that up, and each is one module. **The document holds a window of rows rather than the folder** —
-`timelineWindow.ts` is arithmetic over four numbers, and the number of rows in the document is the same on the first
-screen as at message forty thousand. **The list holds a window of pages rather than every page it has read** —
+`src/messageRows/rowWindow.ts` is arithmetic over four numbers, and the number of rows in the document is the same on
+the first screen as at message forty thousand. **The list holds a window of pages rather than every page it has read** —
 `heldTimeline.ts`; a page too far from the reader keeps its place and its cursor but loses its rows, so the list keeps
 its height, nothing under the reader moves, and scrolling back into it reads that page again from its own cursor rather
 than reading the folder from its leading end. **Where the reader is lives outside React** — `rememberedListings.ts`,
 keyed by the deployment and the folder, holding a cursor, a row, an order, and the filters together so a cursor cannot
 outlive the list it was issued for, and holding nothing about any message.
 
+`src/messageRows/` is that arithmetic and the row it measures, and it sits apart from either screen because both of
+them draw the same row: the folder's list, and what a search found. A second arrangement of the same three lines is how
+the client would stop looking like one product, and a second copy of the windowing is how the two would stop agreeing
+on what a row measures.
+
 What a row opens is what the reading pane beside it draws. The list writes the message into the workspace and the pane
 reads it from there, so the two meet over one value rather than over each other — and nothing is open until a reader
 has opened it.
 
 **No package windows it, and that is a measurement rather than a preference.** Every row of this list is one height,
-because the row is a fixed three lines by design — who wrote, what about, and the line stage 3 fills with what
-MailFathom made of the message — and the browser suite asserts that every drawn row measures the same. What a
+because the row is a fixed three lines by design — who wrote, what about, and a line for a sentence about the message
+rather than from it, which carries why a search result matched today and what MailFathom made of the message when
+stage 3 lands — and the browser suite asserts that every drawn row measures the same. What a
 virtualizer buys over sixty lines of arithmetic is the machinery for measuring rows that are _not_ one height, which
 this list has no use for; what it costs is a dependency, a licence review, and a census in
 [the third-party register](../THIRD_PARTY_LICENSES.md). So the arithmetic stays, the one height it depends on is
 measured off a rendered row rather than written down twice, and the assertion that keeps it true runs on every pull
 request. A row that ever stops being one height is the argument for reopening this, and it fails a test rather than
 degrading quietly.
+
+`src/search/` stands above that list rather than on a screen of its own, because that is where somebody reaches for
+it: they are looking at a folder and the message is not in front of them. It reads `/api/client/emails/search`, which
+ranks by words and by meaning at once and says in its answer which of the two happened — so a page ranked by words
+alone says whether this deployment embeds nothing by choice or whether its provider is refusing, rather than being a
+quietly narrower answer. Each result carries the extract around what matched, marked by the deployment and drawn as
+text rather than as markup; one that matched by meaning carries no extract and says so, because a row with nothing
+under it would read as unexplained.
+
+The hard part is making the scope legible, and the answer is that a search carries its own. The mailbox or folder
+somebody was looking at is copied onto the search when it is submitted and drawn as an object they can take off, beside
+every other filter in force — sender, recipient, a range of days, read and flag state, attachments, and whether junk
+takes part. So an empty result is a search somebody can widen one press at a time rather than an absence, and a search
+narrowed by something nobody can see cannot happen. What ranks is the words; every one of those constrains.
+
+The field promises what it does today, which is a phrase. Turning a sentence into filters is stage 3's work, and it
+lands on this screen rather than replacing it — which is why the filters here are objects with values in them for
+something to write into.
 
 ## Styling, and the two themes
 

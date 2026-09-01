@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+import { longestSearchText } from '@mailfathom/client-backend';
 import { everything, isMailFolderRole, type MailScope } from './mailScope';
 import { emptyWorkspace, type Workspace } from './useWorkspace';
 
@@ -28,6 +29,14 @@ const longestIdentifier = 256;
 // What a selection may hold before it is read as somebody's edit. The list keeps a bounded number of pages, so a reader
 // who selects every row it is holding selects a few hundred; this is above that and bounds what one tab writes here.
 const mostSelectedMessages = 1_024;
+
+/**
+ * How many searches are offered back before the oldest is dropped.
+ *
+ * Read here and written by the screen that keeps them, so the bound a store is read under and the bound one tab writes
+ * under are one number rather than two that drift.
+ */
+export const mostRecentSearches = 8;
 
 // A folded row is keyed by the scope it stands for, so at its longest it names an account and a folder's whole place on
 // its mail server rather than one identifier.
@@ -88,8 +97,9 @@ function workspaceIn(value: unknown): Workspace | null {
     const selection = record['selection'] ?? null;
     const selected = selectedIn(record['selected']);
     const question = record['question'];
+    const recentSearches = recentSearchesIn(record['recentSearches'] ?? []);
 
-    if (scope === null || collapsed === null || selected === null) {
+    if (scope === null || collapsed === null || selected === null || recentSearches === null) {
         return null;
     }
 
@@ -101,7 +111,26 @@ function workspaceIn(value: unknown): Workspace | null {
         return null;
     }
 
-    return { scope, collapsed, selection, fragment: null, selected, question };
+    return { scope, collapsed, selection, fragment: null, selected, question, recentSearches };
+}
+
+// The searches read back, each held to what this surface ranks against at all: text longer than that is not a search
+// this client wrote, and a list longer than the bound is not one it kept.
+function recentSearchesIn(value: unknown): readonly string[] | null {
+    if (!Array.isArray(value) || value.length > mostRecentSearches) {
+        return null;
+    }
+
+    const searches: string[] = [];
+    for (const searched of value) {
+        if (typeof searched !== 'string' || searched.length === 0 || searched.length > longestSearchText) {
+            return null;
+        }
+
+        searches.push(searched);
+    }
+
+    return searches;
 }
 
 function selectedIn(value: unknown): readonly string[] | null {

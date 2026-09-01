@@ -6,15 +6,20 @@ import type { PointerEvent, ReactNode } from 'react';
 import type { MailTimelineEntry } from '@mailfathom/client-backend';
 import { useLocalization } from '../localization/useLocalization';
 
-// One row of the list, which is its own component for the reason a tree's row is: it is what carries state, a keyboard
+// One row of mail, which is its own component for the reason a tree's row is: it is what carries state, a keyboard
 // path, and a test. What it draws is what the page answered with — nothing here reads anything of its own, so a row
 // costs one request for the whole page it is in.
 //
+// It sits beside the arithmetic that decides which rows are in the document rather than inside either screen drawing
+// it, because two of them now do: the folder's list and the search's results are one row read two ways, and a second
+// arrangement of the same three lines is how the client would stop looking like one product.
+//
 // Its height is fixed by the token rather than by its contents, and that is load-bearing rather than cosmetic: the
 // window above it is arithmetic over one height, and a row that grew with a long subject would put every row below it
-// somewhere other than where the list drew the space for it. The third line is empty on purpose — it is the room stage
-// 3 fills with what MailFathom makes of the message, and leaving it now is what keeps that from being a redesign every
-// screen has to be re-read against.
+// somewhere other than where the list drew the space for it. The third line is what that height reserves for a
+// sentence about the message rather than from it — why a search result is in the list today, and what MailFathom made
+// of the message when stage 3 lands. A row given none keeps the space, so the row that gains one is this row rather
+// than a taller one.
 
 export function MessageRow({
     email,
@@ -22,6 +27,7 @@ export function MessageRow({
     open,
     selected,
     focusable,
+    note,
     onOpen,
     onPoint,
     onPointerEnter,
@@ -32,6 +38,9 @@ export function MessageRow({
     readonly open: boolean;
     readonly selected: boolean;
     readonly focusable: boolean;
+
+    /** What the row has to say about the message beyond what it draws, in the line the height already reserves. */
+    readonly note?: ReactNode;
     readonly onOpen: () => void;
     readonly onPoint: (event: PointerEvent<HTMLLIElement>) => void;
     readonly onPointerEnter: () => void;
@@ -92,9 +101,11 @@ export function MessageRow({
                 {email.preview === null ? null : <span className="truncate text-faint">{email.preview}</span>}
             </div>
 
-            {/* The room stage 3 draws what MailFathom made of this message in. It is reserved rather than filled, so
-                the row that gains that line is this row rather than a taller one. */}
-            <div aria-hidden="true" className="h-4" />
+            {/* The reserved line. Hidden from the accessibility tree where it holds nothing, so a row with nothing
+                to say about itself is not announced as one with an empty line in it. */}
+            <div aria-hidden={note === undefined ? 'true' : undefined} className="h-4 overflow-hidden text-xs">
+                {note}
+            </div>
         </li>
     );
 }

@@ -3,10 +3,10 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { KeyboardEvent } from 'react';
-import type { MailFolderRole } from '@mailfathom/client-backend';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { isCurrent, needsAttention, synchronizationStateLabel } from '../synchronization/synchronizationState';
+import { folderRoleLabels } from '../workspace/mailScope';
 import type { FolderTreeRow } from './folderTreeRows';
 
 // One row of the tree, which is its own component because it is the row of a list and because it carries everything a
@@ -16,19 +16,6 @@ import type { FolderTreeRow } from './folderTreeRows';
 // What names it is decided here rather than by the service. A folder playing a role is called by the role — an inbox
 // is an inbox whatever the provider named the folder and in whatever language — and everything else is called what its
 // mail server calls it.
-
-const roleLabels: Readonly<Record<MailFolderRole, MessageKey>> = {
-    Inbox: 'folder.inbox',
-    Drafts: 'folder.drafts',
-    Sent: 'folder.sent',
-    Archive: 'folder.archive',
-    Junk: 'folder.junk',
-    Trash: 'folder.trash',
-    Flagged: 'folder.flagged',
-    Important: 'folder.important',
-    All: 'folder.all',
-    Outbox: 'folder.outbox',
-};
 
 // How far in each level sits. Stated as one list rather than as a width worked out from the level, because a computed
 // indentation is a value written outside the token layer however it is arrived at. Anything deeper than the list sits
@@ -98,7 +85,7 @@ function nameOf(row: FolderTreeRow, translate: (key: MessageKey) => string): str
         return translate('scope.allMailboxes');
     }
 
-    return row.role === null ? row.name : translate(roleLabels[row.role]);
+    return row.role === null ? row.name : translate(folderRoleLabels[row.role]);
 }
 
 // The control that opens a row, and the room it takes when there is nothing to open, so every name on one level starts

@@ -15,6 +15,7 @@ const kept: Workspace = {
     fragment: null,
     selected: ['AAMkAD-42', 'AAMkAD-43'],
     question: 'what did Nordwind send',
+    recentSearches: ['quarterly figures'],
 };
 
 function stored(value: unknown): void {
@@ -45,6 +46,17 @@ describe('rememberWorkspace', () => {
 describe('rememberedWorkspace', () => {
     it('answers an empty workspace where nothing was kept', () => {
         expect(rememberedWorkspace()).toEqual(emptyWorkspace);
+    });
+
+    // A workspace this client wrote before it kept searches at all is one it wrote, so it opens on what was kept
+    // rather than on nothing.
+    it('reads a workspace kept before searches were offered back as one with none', () => {
+        const { recentSearches, ...before } = kept;
+
+        stored(before);
+
+        expect(rememberedWorkspace()).toEqual({ ...kept, recentSearches: [] });
+        expect(recentSearches).toHaveLength(1);
     });
 
     it.each([
@@ -120,6 +132,25 @@ describe('rememberedWorkspace', () => {
         {
             shape: 'a picked-out identifier longer than any the client wrote there',
             value: JSON.stringify({ ...emptyWorkspace, selected: ['a'.repeat(257)] }),
+        },
+        {
+            shape: 'searches kept as something other than a list of them',
+            value: JSON.stringify({ ...emptyWorkspace, recentSearches: 'invoice' }),
+        },
+        {
+            shape: 'a kept search that is not text',
+            value: JSON.stringify({ ...emptyWorkspace, recentSearches: [7] }),
+        },
+        {
+            shape: 'a kept search longer than this surface ranks against',
+            value: JSON.stringify({ ...emptyWorkspace, recentSearches: ['a'.repeat(513)] }),
+        },
+        {
+            shape: 'more kept searches than one tab offers back',
+            value: JSON.stringify({
+                ...emptyWorkspace,
+                recentSearches: Array.from({ length: 9 }, (_, at) => `search-${String(at)}`),
+            }),
         },
         {
             shape: 'more messages picked out than one question may be asked about',
