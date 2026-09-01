@@ -800,6 +800,27 @@ test('draws every row of the list at one height, which is what the window is ari
     expect(heights[0]).toBeGreaterThan(0);
 });
 
+test('draws the three columns of the Mail space without the page scrolling sideways', async ({ page }) => {
+    // The width the composition opens out at, which is where the three columns have the least room they will ever
+    // have: any narrower and they are a stack instead. A column that held its width here rather than giving way is
+    // what would push the page wider than the window, and only a browser answers that — jsdom computes no geometry.
+    await page.setViewportSize({ width: 780, height: 800 });
+    await openSignedIn(page, '/#/mail');
+
+    await expect(page.getByRole('tree', { name: 'Mailboxes and folders' })).toBeVisible();
+    await expect(page.getByRole('listbox', { name: 'Messages' })).toBeVisible();
+
+    // The space's own box rather than the document's: the region that holds the three columns scrolls its own
+    // overflow, so a column too wide for the window makes that region scroll sideways while the document stays
+    // exactly as wide as the window. Asked of the landmark by its element name, because what is being measured is a
+    // box rather than something a reader would look for — and as an expression rather than a closure, for the reason
+    // the sign-in test above gives.
+    const scrollingSideways = await page.evaluate<boolean>(
+        'document.querySelector("main").scrollWidth > document.querySelector("main").clientWidth',
+    );
+    expect(scrollingSideways).toBe(false);
+});
+
 test('holds a window of rows in the document however far down the folder it is scrolled', async ({ page }) => {
     await openSignedIn(page, '/#/mail');
 

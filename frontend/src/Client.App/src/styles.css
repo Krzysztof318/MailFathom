@@ -71,9 +71,9 @@
     /* One row of the message list, and the room the list itself takes. The row height is declared here rather than in
        the list because it is a density decision like any other — and because the list is arithmetic over it: the
        window that keeps a mailbox of two hundred thousand messages costing what a screenful costs measures this value
-       off a rendered row rather than holding a second copy of it. It is two lines and the space around them: who
-       wrote and when, then what about and how it opens. */
-    --spacing-message-row: 3.5rem;
+       off a rendered row rather than holding a second copy of it. It is three lines and the space around them: who
+       wrote, what about, and the line stage 3 fills with what MailFathom made of the message. */
+    --spacing-message-row: 4.75rem;
     --spacing-message-list: 70dvh;
 
     /* What a notch, a rounded corner, or a system bar takes out of the viewport. Zero everywhere a window has none,

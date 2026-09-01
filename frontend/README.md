@@ -246,10 +246,10 @@ keyed by the deployment and the folder, holding a cursor, a row, an order, and t
 outlive the list it was issued for, and holding nothing about any message.
 
 **No package windows it, and that is a measurement rather than a preference.** Every row of this list is one height,
-because the row is a fixed two lines by design — who wrote and when, then what about and how it opens — and the browser
-suite asserts that every drawn row measures the same. What a virtualizer buys over sixty lines of arithmetic is the
-machinery for measuring rows that are _not_ one height, which this list has no use for; what it costs is a dependency,
-a licence review, and a census in
+because the row is a fixed three lines by design — who wrote, what about, and the line stage 3 fills with what
+MailFathom made of the message — and the browser suite asserts that every drawn row measures the same. What a
+virtualizer buys over sixty lines of arithmetic is the machinery for measuring rows that are _not_ one height, which
+this list has no use for; what it costs is a dependency, a licence review, and a census in
 [the third-party register](../THIRD_PARTY_LICENSES.md). So the arithmetic stays, the one height it depends on is
 measured off a rendered row rather than written down twice, and the assertion that keeps it true runs on every pull
 request. A row that ever stops being one height is the argument for reopening this, and it fails a test rather than

@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import { inReadingOrder, onlySelected, rangeBetween, withToggled } from './messageSelection';
+import { extendedTo, inReadingOrder, onlySelected, rangeBetween, withToggled } from './messageSelection';
 
 const drawn = ['one', 'two', 'three', 'four', 'five'];
 
@@ -38,6 +38,24 @@ describe('rangeBetween', () => {
 
     it('selects nothing where an end is no longer drawn', () => {
         expect(rangeBetween(drawn, 'dropped', 'four')).toStrictEqual([]);
+    });
+});
+
+describe('extendedTo', () => {
+    it('selects the run where the list still holds both ends of it', () => {
+        expect(extendedTo(['two'], drawn, 'two', 'four')).toStrictEqual(['two', 'three', 'four']);
+    });
+
+    it('keeps what was picked out where the anchor’s page has been dropped, rather than selecting nothing', () => {
+        expect(extendedTo(['scrolled-past', 'two'], drawn, 'dropped', 'four')).toStrictEqual([
+            'scrolled-past',
+            'two',
+            'four',
+        ]);
+    });
+
+    it('leaves a selection alone where the message reached is already in it', () => {
+        expect(extendedTo(['four'], drawn, 'dropped', 'four')).toStrictEqual(['four']);
     });
 });
 

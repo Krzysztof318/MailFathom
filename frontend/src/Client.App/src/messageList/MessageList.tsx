@@ -19,6 +19,7 @@ import {
     type MailAccount,
     type MailFathomTransport,
 } from '@mailfathom/client-backend';
+import { CheckControl } from '../controls/CheckControl';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
@@ -41,7 +42,7 @@ import {
 import { ListSettings } from './ListSettings';
 import { narrowed, queryFor, type MailListing } from './listing';
 import { MessageRow } from './MessageRow';
-import { inReadingOrder, onlySelected, rangeBetween, withToggled } from './messageSelection';
+import { extendedTo, inReadingOrder, onlySelected, withToggled } from './messageSelection';
 import { rememberedListing, rememberListing } from './rememberedListings';
 import { estimatedRowHeight, leadingRow, offsetOfRow, windowOf } from './timelineWindow';
 
@@ -111,6 +112,11 @@ export function MessageList({
     const drawn = windowOf(rowCount, rowHeight, scrollTop, viewport);
     const lastDrawn = drawn.first + drawn.count - 1;
     const rows = heldRows(held);
+
+    // Whether the row the keyboard is on is a row rather than the space one is arriving into. The effect below waits on
+    // it: a keyboard that reached a dropped page has nothing to put focus on until that page answers, and refilling one
+    // changes neither the row count nor the window — so this is what says the row is there now.
+    const focusedIsDrawn = rowAt(held, focusedRow) !== null;
 
     // Which page is wanted is worked out during render rather than kept beside what is held, because it is a function
     // of what is held and where the window is: two pieces of state that have to agree are one piece of state and a
@@ -217,7 +223,7 @@ export function MessageList({
             element.scrollTop = offsetOfRow(opening.rowInPage, measured > 0 ? measured : rowHeight);
         }
 
-        if (wantsFocus.current) {
+        if (wantsFocus.current && focusedIsDrawn) {
             const row = elements.current.get(focusedRow);
 
             if (row !== undefined) {
@@ -225,7 +231,7 @@ export function MessageList({
                 wantsFocus.current = false;
             }
         }
-    }, [viewport, rowHeight, rowCount, drawn.first, opening.rowInPage, focusedRow]);
+    }, [viewport, rowHeight, rowCount, drawn.first, opening.rowInPage, focusedRow, focusedIsDrawn]);
 
     // A window resized changes how many rows the list draws, and a resize is not a commit. The scroller's own size is
     // read on the commit that follows, which is what this asks for.
@@ -323,7 +329,7 @@ export function MessageList({
         }
 
         if (extending && anchor !== null) {
-            select(rangeBetween(rows.map(identityOf), anchor, email.id));
+            select(extendedTo(workspace.selected, rows.map(identityOf), anchor, email.id));
         } else {
             setAnchor(email.id);
             select(onlySelected(email.id));
@@ -358,7 +364,7 @@ export function MessageList({
         }
 
         if (event.shiftKey && anchor !== null) {
-            select(rangeBetween(rows.map(identityOf), anchor, email.id));
+            select(extendedTo(workspace.selected, rows.map(identityOf), anchor, email.id));
 
             return;
         }
@@ -376,7 +382,7 @@ export function MessageList({
             return;
         }
 
-        select(rangeBetween(rows.map(identityOf), anchor, email.id));
+        select(extendedTo(workspace.selected, rows.map(identityOf), anchor, email.id));
     }
 
     function onKeyDown(event: KeyboardEvent<HTMLUListElement>): void {
@@ -443,7 +449,11 @@ export function MessageList({
             />
 
             <div className="flex flex-wrap items-center gap-2">
-                <SelectionMode
+                {/* Under a finger there is no modifier key, so picking out several messages is a mode rather than a
+                    chord. It is offered at every width and to every pointer, because a mode a reader can see is easier
+                    than a chord they have to know — and because nothing in this tree asks which head it runs on. */}
+                <CheckControl
+                    label={translate('list.selectSeveral')}
                     on={selecting}
                     onChange={(on) => {
                         setSelecting(on);
@@ -589,31 +599,6 @@ function ArrivingRow({ position }: { readonly position: number }) {
         >
             {translate('list.rowArriving')}
         </li>
-    );
-}
-
-// Under a finger there is no modifier key, so picking out several messages is a mode rather than a chord. It is offered
-// at every width and to every pointer, because a mode a reader can see is easier than a chord they have to know — and
-// because nothing in this tree asks which head it is running on.
-function SelectionMode({ on, onChange }: { readonly on: boolean; readonly onChange: (on: boolean) => void }) {
-    const { translate } = useLocalization();
-
-    return (
-        <label
-            className={`flex cursor-pointer items-center gap-1.5 rounded-md border border-line bg-panel px-2 py-1 text-sm text-text-soft transition hover:bg-hover ${
-                on ? 'bg-accent-soft text-accent-strong' : ''
-            }`}
-        >
-            <input
-                type="checkbox"
-                className="accent-accent"
-                checked={on}
-                onChange={(event) => {
-                    onChange(event.target.checked);
-                }}
-            />
-            {translate('list.selectSeveral')}
-        </label>
     );
 }
 

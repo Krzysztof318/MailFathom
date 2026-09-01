@@ -12,11 +12,9 @@ import { useLocalization } from '../localization/useLocalization';
 //
 // Its height is fixed by the token rather than by its contents, and that is load-bearing rather than cosmetic: the
 // window above it is arithmetic over one height, and a row that grew with a long subject would put every row below it
-// somewhere other than where the list drew the space for it.
-//
-// Everything on it competes for one column narrower than a reading measure, so what it carries is what a person scans
-// by: who wrote, when, what about, and how it opens. The sender's host was on the first line and is not, because at
-// this width it took the room the name needed and left both of them ellipsised.
+// somewhere other than where the list drew the space for it. The third line is empty on purpose — it is the room stage
+// 3 fills with what MailFathom makes of the message, and leaving it now is what keeps that from being a redesign every
+// screen has to be re-read against.
 
 export function MessageRow({
     email,
@@ -68,9 +66,16 @@ export function MessageRow({
                     </span>
                 ) : null}
 
-                <span className={`truncate text-sm ${email.unread ? 'font-semibold text-text' : ''}`}>
+                {/* Who wrote is read before where they wrote from, so the name keeps up to half the line and the host
+                    is what gives way. Half rather than more because the marks and the time hold their own width: a
+                    name allowed past it would push the time out of a row that clips rather than wraps. */}
+                <span
+                    className={`max-w-1/2 shrink-0 truncate text-sm ${email.unread ? 'font-semibold text-text' : ''}`}
+                >
                     {correspondent(email) ?? translate('list.senderUnknown')}
                 </span>
+
+                <Organisation address={email.senderAddress} />
 
                 <Markers email={email} />
 
@@ -86,6 +91,10 @@ export function MessageRow({
 
                 {email.preview === null ? null : <span className="truncate text-faint">{email.preview}</span>}
             </div>
+
+            {/* The room stage 3 draws what MailFathom made of this message in. It is reserved rather than filled, so
+                the row that gains that line is this row rather than a taller one. */}
+            <div aria-hidden="true" className="h-4" />
         </li>
     );
 }
@@ -93,6 +102,19 @@ export function MessageRow({
 /** Who the row is about: the sender, else the address it came from, else who it was written to. */
 function correspondent(email: MailTimelineEntry): string | undefined {
     return email.senderDisplayName ?? email.senderAddress ?? email.toAddresses[0];
+}
+
+// The host the message came from, which is what the reader recognises when the display name is somebody's first name
+// and the address is not shown. Absent where the sender wrote no address, rather than drawn as an empty parenthesis.
+// It gives way before the name does: a column this narrow cannot hold both in full, and the name is what is scanned.
+function Organisation({ address }: { readonly address: string | null }) {
+    const at = address?.lastIndexOf('@') ?? -1;
+
+    if (address === null || at < 0 || at === address.length - 1) {
+        return null;
+    }
+
+    return <span className="hidden truncate text-xs text-faint workspace:inline">{address.slice(at + 1)}</span>;
 }
 
 // What the mail server said about the message, in the order a reader scans for it. Each carries its own words, because

@@ -50,6 +50,13 @@ describe('queryFor', () => {
         expect(queryFor({ kind: 'role', role: 'Junk' }, openingListing, null, 'forward').includeJunk).toBe(true);
     });
 
+    it.each(['Inbox', 'Sent', 'Archive', 'Trash'] as const)(
+        'leaves junk out of the %s role, which spans folders the reader did not point at',
+        (role) => {
+            expect(queryFor({ kind: 'role', role }, openingListing, null, 'forward').includeJunk).toBe(false);
+        },
+    );
+
     it('carries the reader’s own narrowing', () => {
         const listing = { ...openingListing, filters: { ...openingListing.filters, unread: true, flagged: true } };
         const query = queryFor(everything, listing, null, 'forward');

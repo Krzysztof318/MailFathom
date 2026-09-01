@@ -44,6 +44,35 @@ export function rangeBetween(rows: readonly string[], anchor: string, reached: s
 }
 
 /**
+ * The selection a gesture that runs from the anchor leaves behind.
+ *
+ * The run where both ends are held, and otherwise what was already selected with the message reached added to it. That
+ * fallback is the whole point of this function: the anchor's page is dropped once the reader has scrolled far enough
+ * from it, and a run that cannot be worked out must not be written back as the empty selection it computes to — the
+ * pages behind the reader go, and what they picked out of them does not.
+ *
+ * @param selected What is selected.
+ * @param rows The identities the list is holding, in the order it draws them.
+ * @param anchor Where the run started.
+ * @param reached Where the run has got to.
+ * @returns The selection after the gesture.
+ */
+export function extendedTo(
+    selected: readonly string[],
+    rows: readonly string[],
+    anchor: string,
+    reached: string,
+): readonly string[] {
+    const run = rangeBetween(rows, anchor, reached);
+
+    if (run.length > 0) {
+        return run;
+    }
+
+    return selected.includes(reached) ? selected : [...selected, reached];
+}
+
+/**
  * The selection ordered as the list draws it, and with anything the list no longer holds left in place.
  *
  * A message scrolled past is still selected — the pages behind the reader are dropped and the selection is not, because

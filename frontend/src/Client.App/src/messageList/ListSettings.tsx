@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { MailTimelineOrder } from '@mailfathom/client-backend';
+import { CheckControl } from '../controls/CheckControl';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import type { MailListFilters, MailListing } from './listing';
@@ -57,7 +58,7 @@ export function ListSettings({
                 ))}
             </select>
 
-            <Narrowing
+            <CheckControl
                 label={translate('list.onlyUnread')}
                 on={listing.filters.unread === true}
                 onChange={(on) => {
@@ -65,7 +66,7 @@ export function ListSettings({
                 }}
             />
 
-            <Narrowing
+            <CheckControl
                 label={translate('list.onlyFlagged')}
                 on={listing.filters.flagged === true}
                 onChange={(on) => {
@@ -73,7 +74,7 @@ export function ListSettings({
                 }}
             />
 
-            <Narrowing
+            <CheckControl
                 label={translate('list.onlyWithAttachments')}
                 on={listing.filters.hasAttachments === true}
                 onChange={(on) => {
@@ -85,7 +86,7 @@ export function ListSettings({
                 that folder and nothing else, so a control saying whether junk takes part would be one that changes
                 nothing — which says less about why than not offering it does. */}
             {junkAskable ? (
-                <Narrowing
+                <CheckControl
                     label={translate('list.includeJunk')}
                     on={listing.filters.includeJunk}
                     onChange={(on) => {
@@ -94,34 +95,6 @@ export function ListSettings({
                 />
             ) : null}
         </div>
-    );
-}
-
-// A filter as a checkbox rather than as a button that looks pressed: whether it is on is what a reader has to be able
-// to see and what a screen reader has to be able to say, and that is what the platform's own control already answers.
-function Narrowing({
-    label,
-    on,
-    onChange,
-}: {
-    readonly label: string;
-    readonly on: boolean;
-    readonly onChange: (on: boolean) => void;
-}) {
-    return (
-        <label
-            className={`flex cursor-pointer items-center gap-1.5 ${control} ${on ? 'bg-accent-soft text-accent-strong' : ''}`}
-        >
-            <input
-                type="checkbox"
-                className="accent-accent"
-                checked={on}
-                onChange={(event) => {
-                    onChange(event.target.checked);
-                }}
-            />
-            {label}
-        </label>
     );
 }
 

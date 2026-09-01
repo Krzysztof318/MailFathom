@@ -63,12 +63,22 @@ function askedOf(scope: MailScope): { readonly account: string | null; readonly 
 }
 
 /**
+ * Whether the scope is junk the reader pointed at, which is the one case a read asks for junk without being told to.
+ *
+ * The deployment withholds junk from a read spanning folders, so a reader who has opened their junk folder — or the
+ * role that is every account's junk folder at once — would be shown an empty one. Both of those have already excluded
+ * everything but junk, so asking cannot reach anything the reader did not point at. Every other role spans many
+ * folders across many accounts and is exactly the list junk is withheld from, so it is left out there.
+ */
+function pointsAtJunk(scope: MailScope): boolean {
+    return scope.kind === 'folder' || (scope.kind === 'role' && scope.role === 'Junk');
+}
+
+/**
  * The request one page of a scope is read with.
  *
- * A scope that names a folder asks for the junk folder whatever the reader's filter says, and that is narrowing rather
- * than widening: the deployment withholds junk from a read that spans folders, so a reader who has pointed at their
- * junk folder would otherwise be shown an empty one. A folder scope has already excluded every folder but the one
- * named, so asking cannot reach anything the reader did not point at.
+ * A scope pointing at junk asks for it whatever the reader's filter says, and that is narrowing rather than widening —
+ * {@link pointsAtJunk} holds the reasoning.
  *
  * @param scope What the client is looking at.
  * @param listing How the reader has asked for it to be read.
@@ -87,7 +97,7 @@ export function queryFor(
     return {
         account,
         folder,
-        includeJunk: listing.filters.includeJunk || folder !== null,
+        includeJunk: listing.filters.includeJunk || pointsAtJunk(scope),
         unread: listing.filters.unread,
         flagged: listing.filters.flagged,
         hasAttachments: listing.filters.hasAttachments,
