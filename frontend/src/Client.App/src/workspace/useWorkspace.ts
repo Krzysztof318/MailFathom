@@ -47,6 +47,16 @@ export interface Workspace {
 
     /** What has been typed into the intent field, which the next question would be asked with. */
     readonly question: string;
+
+    /**
+     * What was searched for before, newest first, so a search is one press rather than something to retype.
+     *
+     * Here rather than inside the search screen because it has to outlive one: the column the search stands in is
+     * mounted afresh whenever the mailbox in scope changes, and what somebody looked for is not something a change of
+     * folder should forget. It is also what makes these go with the credential — the frame empties the whole workspace
+     * when one is let go, and a list of what a person searched for is theirs.
+     */
+    readonly recentSearches: readonly string[];
 }
 
 export interface WorkspaceRevision {
@@ -63,6 +73,7 @@ export const emptyWorkspace: Workspace = {
     fragment: null,
     selected: [],
     question: '',
+    recentSearches: [],
 };
 
 export const WorkspaceContext = createContext<WorkspaceRevision | null>(null);

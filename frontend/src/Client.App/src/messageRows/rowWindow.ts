@@ -2,10 +2,13 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-// Which rows of a list are in the document, which is the whole of what keeps a mailbox of two hundred thousand
+// Which rows of a list of mail are in the document, which is the whole of what keeps a mailbox of two hundred thousand
 // messages costing what a screenful costs. It is arithmetic over four numbers rather than a package, and the
-// measurement that decided it is in `frontend/README.md`: every row of this list is one height, so the only thing a
+// measurement that decided it is in `frontend/README.md`: every row of these lists is one height, so the only thing a
 // virtualizer would add over this file is the machinery for measuring rows that are not.
+//
+// It sits beside the row rather than inside a screen because both the folder's list and the search's results window
+// the same row the same way.
 //
 // The height itself is measured from a rendered row rather than written here, because the row's height is a token
 // decision and a number repeated in JavaScript is a second copy of it that drifts on the first change of the type

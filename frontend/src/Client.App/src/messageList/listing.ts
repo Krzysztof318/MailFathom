@@ -8,7 +8,7 @@ import {
     type MailTimelinePageDirection,
     type MailTimelineQuery,
 } from '@mailfathom/client-backend';
-import type { MailScope } from '../workspace/mailScope';
+import { namedInScope, scopePointsAtJunk, type MailScope } from '../workspace/mailScope';
 
 // What the reader has asked of one folder: which way round it is read, and what is kept out of it. It is the list's own
 // state rather than the workspace's, because it belongs to a folder rather than to the person — moving to another
@@ -48,37 +48,11 @@ export const openingListing: MailListing = {
  */
 export const rowsPerPage = longestTimelinePage;
 
-/** The account and the folder a scope names on the client surface, where it names either. */
-function askedOf(scope: MailScope): { readonly account: string | null; readonly folder: string | null } {
-    switch (scope.kind) {
-        case 'everything':
-            return { account: null, folder: null };
-        case 'role':
-            return { account: null, folder: `role:${scope.role}` };
-        case 'account':
-            return { account: scope.accountId, folder: null };
-        case 'folder':
-            return { account: scope.accountId, folder: scope.alias };
-    }
-}
-
-/**
- * Whether the scope is junk the reader pointed at, which is the one case a read asks for junk without being told to.
- *
- * The deployment withholds junk from a read spanning folders, so a reader who has opened their junk folder — or the
- * role that is every account's junk folder at once — would be shown an empty one. Both of those have already excluded
- * everything but junk, so asking cannot reach anything the reader did not point at. Every other role spans many
- * folders across many accounts and is exactly the list junk is withheld from, so it is left out there.
- */
-function pointsAtJunk(scope: MailScope): boolean {
-    return scope.kind === 'folder' || (scope.kind === 'role' && scope.role === 'Junk');
-}
-
 /**
  * The request one page of a scope is read with.
  *
  * A scope pointing at junk asks for it whatever the reader's filter says, and that is narrowing rather than widening —
- * {@link pointsAtJunk} holds the reasoning.
+ * {@link scopePointsAtJunk} holds the reasoning.
  *
  * @param scope What the client is looking at.
  * @param listing How the reader has asked for it to be read.
@@ -92,12 +66,12 @@ export function queryFor(
     cursor: string | null,
     direction: MailTimelinePageDirection,
 ): MailTimelineQuery {
-    const { account, folder } = askedOf(scope);
+    const { account, folder } = namedInScope(scope);
 
     return {
         account,
         folder,
-        includeJunk: listing.filters.includeJunk || pointsAtJunk(scope),
+        includeJunk: listing.filters.includeJunk || scopePointsAtJunk(scope),
         unread: listing.filters.unread,
         flagged: listing.filters.flagged,
         hasAttachments: listing.filters.hasAttachments,

@@ -72,7 +72,8 @@
        the list because it is a density decision like any other — and because the list is arithmetic over it: the
        window that keeps a mailbox of two hundred thousand messages costing what a screenful costs measures this value
        off a rendered row rather than holding a second copy of it. It is three lines and the space around them: who
-       wrote, what about, and the line stage 3 fills with what MailFathom made of the message. */
+       wrote, what about, and a line for a sentence about the message rather than from it — why a search result
+       matched, and what MailFathom made of the message once stage 3 lands. */
     --spacing-message-row: 4.75rem;
     --spacing-message-list: 70dvh;
 

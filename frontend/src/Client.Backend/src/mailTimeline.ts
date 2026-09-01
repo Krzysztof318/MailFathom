@@ -237,7 +237,7 @@ function parsePage(body: string, asked: number): MailTimelinePage | null {
 
     const emails: MailTimelineEntry[] = [];
     for (const row of rows) {
-        const entry = parseEntry(row);
+        const entry = parseTimelineEntry(row);
         if (entry === null) {
             return null;
         }
@@ -248,7 +248,16 @@ function parsePage(body: string, asked: number): MailTimelinePage | null {
     return { emails, nextCursor, previousCursor, pageSize };
 }
 
-function parseEntry(value: unknown): MailTimelineEntry | null {
+/**
+ * Reads one row of a mail listing, or `null` for a row with anything wrong in it.
+ *
+ * Exported inside this package rather than published, because the search route answers the same row with two fields
+ * added: one parser for one row shape is what keeps the two from drifting apart a field at a time.
+ *
+ * @param value The row as the deployment sent it.
+ * @returns The row, or `null` where it is not one.
+ */
+export function parseTimelineEntry(value: unknown): MailTimelineEntry | null {
     const record = asRecord(value);
     if (record === null) {
         return null;

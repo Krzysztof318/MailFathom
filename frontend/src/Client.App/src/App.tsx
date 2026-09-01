@@ -13,6 +13,7 @@ import { MessageList } from './messageList/MessageList';
 import { forgetListings } from './messageList/rememberedListings';
 import { ReadingPane } from './readingPane/ReadingPane';
 import { useSpace } from './routing/useSpace';
+import { MailSearch } from './search/MailSearch';
 import { offers, spacesOffered, withheldFrom } from './shell/capabilities';
 import { ConnectionSummary } from './shell/ConnectionSummary';
 import { GrantNotice } from './shell/GrantNotice';
@@ -245,17 +246,29 @@ export function App({
                         }
                         list={
                             session === null || !readsMail ? null : (
-                                // Keyed by the scope, so pointing at another mailbox starts a list rather than resets
-                                // one: every value the list holds belongs to one folder read one way, and there is no
-                                // correct way to carry any of it across.
-                                <MessageList
+                                // Both keyed by the scope, so pointing at another mailbox starts a list and a search
+                                // rather than resetting either: every value below belongs to one mailbox read one way,
+                                // and a search carries the mailbox it was made in as a filter it would go on showing.
+                                // Searching stands above the list rather than beside it because it is where somebody
+                                // reaches for it — looking at a folder, with the message not in front of them — and
+                                // what it finds is drawn in the same column with the same row.
+                                <MailSearch
                                     key={scopeKey(workspace.scope)}
                                     session={session}
                                     transport={readMail}
                                     scope={workspace.scope}
                                     accounts={mailAccounts}
                                     online={connection.online}
-                                />
+                                >
+                                    <MessageList
+                                        key={scopeKey(workspace.scope)}
+                                        session={session}
+                                        transport={readMail}
+                                        scope={workspace.scope}
+                                        accounts={mailAccounts}
+                                        online={connection.online}
+                                    />
+                                </MailSearch>
                             )
                         }
                         mail={

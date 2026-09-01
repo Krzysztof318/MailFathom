@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import { leadingRow, offsetOfRow, overscanRows, windowOf } from './timelineWindow';
+import { leadingRow, offsetOfRow, overscanRows, windowOf } from './rowWindow';
 
 // Ten rows of a hundred pixels each, so a number in an expectation reads as the row it stands for.
 const rowHeight = 100;
