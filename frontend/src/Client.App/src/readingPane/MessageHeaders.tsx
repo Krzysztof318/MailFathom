@@ -15,11 +15,14 @@ import { useLocalization } from '../localization/useLocalization';
 // Every value here is text a sender chose. It is drawn as text and never as markup, so a display name written to look
 // like an address, a heading, or a control arrives as the characters it is.
 
-// Every role the service publishes, in the order a reader reads them rather than the order the wire lists them.
-const roleOrder: readonly MailParticipantRole[] = ['From', 'Sender', 'ReplyTo', 'To', 'Cc', 'Bcc'];
+// Every role the disclosure shows, in the order a reader reads them rather than the order the wire lists them.
+// `From` is not one of them: the author stands on its own line above, so the disclosure is given everybody else
+// and a `From` row here could never be drawn.
+type DisclosedRole = Exclude<MailParticipantRole, 'From'>;
 
-const roleLabels: Readonly<Record<MailParticipantRole, MessageKey>> = {
-    From: 'participant.from',
+const roleOrder: readonly DisclosedRole[] = ['Sender', 'ReplyTo', 'To', 'Cc', 'Bcc'];
+
+const roleLabels: Readonly<Record<DisclosedRole, MessageKey>> = {
     Sender: 'participant.sender',
     ReplyTo: 'participant.replyTo',
     To: 'participant.to',
@@ -70,7 +73,10 @@ function OtherParticipants({ participants }: { readonly participants: readonly M
 
             <dl className="mt-2 flex flex-col gap-1">
                 {roleOrder
-                    .map((role) => ({ role, addressed: participants.filter((one) => one.role === role) }))
+                    .map((role) => ({
+                        role,
+                        addressed: participants.filter((one) => one.role === role),
+                    }))
                     .filter((group) => group.addressed.length > 0)
                     .map((group) => (
                         <div key={group.role} className="flex flex-wrap gap-2">

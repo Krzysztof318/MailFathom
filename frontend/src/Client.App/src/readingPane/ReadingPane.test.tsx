@@ -113,7 +113,7 @@ describe('ReadingPane', () => {
     it('says it is reading while the deployment has answered nothing', () => {
         drawing(answersNothing);
 
-        expect(screen.getByText('Reading this message…')).toBeDefined();
+        expect(screen.getByRole('status')).toHaveProperty('textContent', 'Reading this message…');
     });
 
     it('says the machine is offline rather than reporting the deployment as unreachable', () => {

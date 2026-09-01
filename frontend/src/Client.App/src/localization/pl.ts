@@ -183,7 +183,6 @@ export const pl: Catalogue = {
     'message.sentAtUnknown': 'Nadawca nie zapisał daty, którą ten klient potrafi odczytać.',
     'message.otherParticipants': 'Pozostałe osoby wskazane w tej wiadomości ({count})',
 
-    'participant.from': 'Od',
     'participant.sender': 'Nadane przez',
     'participant.replyTo': 'Odpowiedź do',
     'participant.to': 'Do',

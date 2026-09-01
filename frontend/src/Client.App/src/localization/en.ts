@@ -180,7 +180,6 @@ export const en = {
     'message.sentAtUnknown': 'The sender wrote no date this client can read.',
     'message.otherParticipants': 'Everybody else this message names ({count})',
 
-    'participant.from': 'From',
     'participant.sender': 'Submitted by',
     'participant.replyTo': 'Reply to',
     'participant.to': 'To',

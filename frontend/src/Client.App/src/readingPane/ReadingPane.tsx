@@ -201,7 +201,11 @@ function OpenMessage({
     }
 
     if (held === null) {
-        return <p className="text-sm text-muted">{translate('message.reading')}</p>;
+        return (
+            <p className="text-sm text-muted" role="status">
+                {translate('message.reading')}
+            </p>
+        );
     }
 
     if (held.result.outcome === 'failed') {
