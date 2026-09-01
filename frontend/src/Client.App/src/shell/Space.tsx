@@ -61,7 +61,7 @@ export function Space({
                         <div className="workspace:w-64 workspace:shrink-0">{folders}</div>
                         {/* Wider than the folder tree beside it because a row carries four things on one line — who
                             wrote, where from, what the server marked it with, and when — and a column that cannot
-                            hold them ellipsises the two that are read first. It is the column that gives way where
+                            hold them cuts short the two that are read first. It is the column that gives way where
                             the three of them do not fit, which is what keeps a window just wide enough for this
                             composition from scrolling sideways. */}
                         <div className="min-w-0 workspace:w-112">{list}</div>
