@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type {
     ClientFailureReason,
@@ -75,6 +75,14 @@ function renderSummary(connection: Partial<Connection>): void {
 /** The accounts read and on the screen, which is the shape every freshness assertion below is made against. */
 function showing(accounts: ClientResult<MailAccountDirectory>): Partial<Connection> {
     return { session: reading, accounts, readAt };
+}
+
+/**
+ * The one gesture the design asks for. The account-by-account reading sits behind a disclosure that is closed when the
+ * screen is drawn, so a test asserting on a row opens it exactly as a person would rather than reading through it.
+ */
+function reveal(freshness: string): void {
+    fireEvent.click(screen.getByText(freshness));
 }
 
 /** The age a person reads, asked of `Intl` the way the screen asks it rather than spelled out here. */
@@ -194,8 +202,20 @@ describe('ConnectionSummary', () => {
         ).toBeDefined();
     });
 
+    it('keeps the account-by-account reading behind the line that summarizes them until it is asked for', () => {
+        renderSummary(showing(directory(true, [workAccount])));
+
+        expect(screen.getByRole('group')).not.toHaveProperty('open', true);
+
+        reveal('Every account is up to date.');
+
+        expect(screen.getByRole('group')).toHaveProperty('open', true);
+    });
+
     it('names each account and when it was last refreshed, behind the line that summarizes them', () => {
         renderSummary(showing(directory(true, [workAccount, unreachableAccount])));
+
+        reveal('Some accounts stopped synchronizing.');
 
         expect(screen.getByText('Work')).toBeDefined();
         expect(screen.getByText('Up to date')).toBeDefined();
@@ -213,12 +233,16 @@ describe('ConnectionSummary', () => {
 
         renderSummary(showing(directory(true, [fresh])));
 
+        reveal('Some accounts are behind.');
+
         expect(screen.getByText('Nothing taken in yet')).toBeDefined();
         expect(screen.getByText('Never refreshed')).toBeDefined();
     });
 
     it('reads an account that is merely catching up as that rather than as one that stopped', () => {
         renderSummary(showing(directory(true, [archiveAccount])));
+
+        reveal('Some accounts are behind.');
 
         expect(screen.getByText('Catching up')).toBeDefined();
     });
@@ -227,6 +251,8 @@ describe('ConnectionSummary', () => {
         const older: MailAccount = { ...archiveAccount, lastSynchronizedAt: '2026-08-29T12:41:00+00:00' };
 
         renderSummary(showing(directory(true, [workAccount, older])));
+
+        reveal('Some accounts are behind.');
 
         expect(screen.getByText(`The oldest of these was last refreshed ${ageIn(-2, 'day')}.`)).toBeDefined();
     });

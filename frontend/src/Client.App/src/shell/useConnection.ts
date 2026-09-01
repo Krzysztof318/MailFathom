@@ -97,6 +97,28 @@ const nothingRead: Answered = {
     presenting: null,
 };
 
+/**
+ * How many automatic attempts have been made, and against which identity.
+ *
+ * The budget belongs to the identity that spent it for the same reason an answer does. Counting it on its own would
+ * carry a spent budget across a sign-out: the next person's first read would be announced as somebody else's fifth,
+ * and once the count had reached its ceiling they would be told the deployment has stopped answering before their own
+ * read had failed even once — with no automatic attempt left to correct it.
+ */
+interface Reaching {
+    readonly made: number;
+    readonly presentedAt: string | null;
+    readonly presenting: string | null;
+}
+
+// Nothing spent, against an identity no credential will ever match, which is also what a person asking again resets to.
+const noneMade: Reaching = { made: 0, presentedAt: null, presenting: null };
+
+// Reading the clock is the caller's, so a screen measuring an age against this instant is measured against one a test
+// decided rather than against the day the suite ran on. Declared once rather than defaulted inline: a new function on
+// every render is a new dependency on every render, and the read effect below would restart forever.
+const systemClock = (): Date => new Date();
+
 function subscribeToConnectivity(changed: () => void): () => void {
     window.addEventListener('online', changed);
     window.addEventListener('offline', changed);
@@ -120,6 +142,7 @@ function isOnline(): boolean {
  * @param onCredentialRefused What to do about a credential the deployment has stopped accepting, which is the one
  * answer this hook reports rather than renders: it is acted on once, by whatever owns signing in, instead of producing
  * the same refusal on every later read.
+ * @param now What the current instant is, which is what every age beside an account is measured from.
  * @returns Everything a screen needs to say what it is looking at and how current it is.
  */
 export function useConnection(
@@ -127,11 +150,16 @@ export function useConnection(
     authorization: string | null,
     send: DeploymentTransport,
     onCredentialRefused: () => void,
+    now: () => Date = systemClock,
 ): Connection {
     const online = useSyncExternalStore(subscribeToConnectivity, isOnline);
     const [read, setRead] = useState(0);
-    const [attempts, setAttempts] = useState(0);
+    const [reaching, setReaching] = useState<Reaching>(noneMade);
     const [answered, setAnswered] = useState<Answered>(nothingRead);
+
+    // Worked out during a render for the same reason the answer is: a budget spent against one identity is nothing to
+    // the next one, so signing in as somebody else starts at nothing without an effect having to clear it.
+    const attempts = reaching.presentedAt === baseAddress && reaching.presenting === authorization ? reaching.made : 0;
 
     useEffect(() => {
         // Nothing is read without a network, and what was read before it went is left on the screen rather than
@@ -178,7 +206,7 @@ export function useConnection(
                 return;
             }
 
-            setAttempts(0);
+            setReaching({ made: 0, presentedAt: baseAddress, presenting: authorization });
 
             // On the screen as soon as it is known rather than once the accounts beside it are: what it decides — the
             // spaces, the controls, the deployment's version — is answerable now, and holding it back would leave the
@@ -214,7 +242,7 @@ export function useConnection(
             setAnswered({
                 session,
                 accounts,
-                readAt: new Date(),
+                readAt: now(),
                 answering: read,
                 presentedAt: baseAddress,
                 presenting: authorization,
@@ -224,7 +252,7 @@ export function useConnection(
         return () => {
             attempted.abort();
         };
-    }, [baseAddress, authorization, online, read, send, onCredentialRefused]);
+    }, [baseAddress, authorization, online, read, send, onCredentialRefused, now]);
 
     // An answer belonging to an earlier attempt, or to a credential this client is no longer signed in with, is not
     // this attempt's, and nothing on the screen may be drawn from it: what a person is looking at then is a read in
@@ -246,7 +274,7 @@ export function useConnection(
 
         const waiting = setTimeout(
             () => {
-                setAttempts((made) => made + 1);
+                setReaching({ made: attempts + 1, presentedAt: baseAddress, presenting: authorization });
                 setRead((token) => token + 1);
             },
             reconnectionDelay(attempts, Math.random()),
@@ -255,7 +283,7 @@ export function useConnection(
         return () => {
             clearTimeout(waiting);
         };
-    }, [lost, attempts]);
+    }, [lost, attempts, baseAddress, authorization]);
 
     return {
         session: connection.session,
@@ -264,7 +292,7 @@ export function useConnection(
         online,
         attempts,
         reread: () => {
-            setAttempts(0);
+            setReaching(noneMade);
             setRead((token) => token + 1);
         },
     };

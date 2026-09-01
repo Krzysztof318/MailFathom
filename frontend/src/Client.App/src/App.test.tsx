@@ -545,11 +545,15 @@ describe('App session', () => {
         const failing = { ...workAccount, id: 'news', displayName: 'Newsletters', synchronizationState: 'Unreachable' };
 
         renderApp(servedFrom, heldCredential, deploymentAnswering(directory(true, [workAccount, failing])));
-        await screen.findByText('Some accounts stopped synchronizing.');
+
+        // The one gesture the design asks for: the reading is closed when the frame is drawn, and this is what a
+        // person does to it.
+        fireEvent.click(await screen.findByText('Some accounts stopped synchronizing.'));
 
         // Scoped to the panel, because the mailbox in scope offers the same names and this is about the freshness
         // reading rather than about the field beside it.
         const panel = within(screen.getByRole('group'));
+        expect(screen.getByRole('group')).toHaveProperty('open', true);
         expect(panel.getByText('Work')).toBeDefined();
         expect(panel.getByText('Up to date')).toBeDefined();
         expect(panel.getByText('Newsletters')).toBeDefined();
