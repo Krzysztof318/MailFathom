@@ -25,6 +25,10 @@ const mostCollapsedRows = 512;
 const longestQuestion = 4_096;
 const longestIdentifier = 256;
 
+// A folded row is keyed by the scope it stands for, so at its longest it names an account and a folder's whole place on
+// its mail server rather than one identifier.
+const longestRow = 1_024;
+
 /** What this tab was last looking at, or an empty workspace where nothing was kept or what was kept is not one. */
 export function rememberedWorkspace(): Workspace {
     let stored: string | null;
@@ -125,7 +129,7 @@ function collapsedIn(value: unknown): readonly string[] | null {
 
     const rows: string[] = [];
     for (const row of value) {
-        if (typeof row !== 'string') {
+        if (typeof row !== 'string' || row.length > longestRow) {
             return null;
         }
 

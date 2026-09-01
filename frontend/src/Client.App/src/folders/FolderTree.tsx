@@ -57,7 +57,21 @@ export function FolderTree({
     const [attempt, setAttempt] = useState(0);
     const [answered, setAnswered] = useState<Answered | null>(null);
     const [focused, setFocused] = useState<string | null>(null);
+    const [connected, setConnected] = useState(online);
     const elements = useRef(new Map<string, HTMLLIElement>());
+
+    // A network gap ends the answer it interrupted rather than outliving it. Coming back re-reads with the attempt
+    // unchanged, so an answer kept across the gap would report a read that is over while the new one is still running,
+    // and the tree would swap under a reader with nothing having said one was in flight. Adjusted during render, which
+    // is where React answers a changed prop: an effect would set it a rendered frame too late, which is the frame the
+    // stale tree would be drawn in.
+    if (connected !== online) {
+        setConnected(online);
+
+        if (!online) {
+            setAnswered(null);
+        }
+    }
 
     // Nothing is read without a network, and coming back re-runs this — which is the whole of the recovery from that
     // direction, exactly as it is for the accounts the frame reads.

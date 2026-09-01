@@ -2,7 +2,8 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import type { ReactElement } from 'react';
+import { fireEvent, render, screen, type RenderResult } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
@@ -93,15 +94,19 @@ function carried(): Workspace {
     return JSON.parse(probe?.textContent ?? '') as Workspace;
 }
 
-function renderTree(transport: MailFathomTransport, online = true): void {
-    render(
+function treeUnder(transport: MailFathomTransport, online: boolean): ReactElement {
+    return (
         <LocalizationProvider>
             <WorkspaceProvider>
                 <FolderTree session={session} transport={transport} online={online} />
                 <ScopeProbe />
             </WorkspaceProvider>
-        </LocalizationProvider>,
+        </LocalizationProvider>
     );
+}
+
+function renderTree(transport: MailFathomTransport, online = true): RenderResult {
+    return render(treeUnder(transport, online));
 }
 
 function row(name: RegExp): HTMLElement {
@@ -121,6 +126,29 @@ describe('FolderTree', () => {
         renderTree(() => new Promise(() => undefined));
 
         expect(screen.getByText('Reading mailboxes and folders…')).toBeDefined();
+    });
+
+    it('says it is reading again when the network comes back, rather than swapping the tree in silence', async () => {
+        let reads = 0;
+
+        // One transport across all three renders, so what starts the second read is the network coming back rather
+        // than a changed dependency, and that read never answers — which is the wait the note has to report.
+        const transport: MailFathomTransport = () => {
+            reads += 1;
+
+            return reads === 1
+                ? Promise.resolve({ status: 200, body: JSON.stringify(tree), headers: {} })
+                : new Promise<never>(() => undefined);
+        };
+
+        const view = renderTree(transport);
+
+        await drawn();
+        view.rerender(treeUnder(transport, false));
+        view.rerender(treeUnder(transport, true));
+
+        expect(screen.getByText('Reading mailboxes and folders…')).toBeDefined();
+        expect(screen.queryByRole('tree')).toBeNull();
     });
 
     it('draws the mailboxes and their folders as one tree', async () => {

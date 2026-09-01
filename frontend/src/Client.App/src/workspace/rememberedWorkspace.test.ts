@@ -80,6 +80,10 @@ describe('rememberedWorkspace', () => {
             value: JSON.stringify({ ...emptyWorkspace, collapsed: [42] }),
         },
         {
+            shape: 'a folded row longer than any key this client writes',
+            value: JSON.stringify({ ...emptyWorkspace, collapsed: ['a'.repeat(1_025)] }),
+        },
+        {
             shape: 'more folded rows than a tree has',
             value: JSON.stringify({ ...emptyWorkspace, collapsed: Array.from({ length: 513 }, () => 'account:work') }),
         },
