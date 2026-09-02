@@ -150,11 +150,13 @@ export function Thread({
             return;
         }
 
-        // Where nobody named a message, the conversation decided for itself which of them to open, and the first of
-        // those is where reading starts — so focus goes there rather than nowhere at all, which is the same view change
-        // either way. A conversation holding no message at all has nothing to arrive at, and the empty state says so
-        // where focus already is.
-        const arriveAt = conversation.openAt ?? expanded.at(0) ?? null;
+        // Where the reader is arriving was decided when the conversation decided what to open: the message somebody
+        // named, where the conversation holds it, and otherwise the first of what it opened for itself — which is what
+        // a message named but never found leaves, and what an arrival with nobody named leaves too. Reading it back
+        // from what is open rather than from what was asked for is what keeps focus and the screen from disagreeing. A
+        // conversation holding no message at all has nothing to arrive at, and the empty state says so where focus
+        // already is.
+        const arriveAt = expanded.at(0) ?? null;
 
         if (arriveAt === null) {
             return;
@@ -166,7 +168,7 @@ export function Thread({
             arrivedAt.current = arriveAt;
             summary.focus();
         }
-    }, [conversation.openAt, expanded]);
+    }, [expanded]);
 
     function close(): void {
         revise({ conversation: null });

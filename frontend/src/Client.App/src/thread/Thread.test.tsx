@@ -246,6 +246,17 @@ describe('Thread', () => {
         });
     });
 
+    it('puts the reader at what it opened instead, where the message it was opened at is not in the conversation', async () => {
+        drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])), { threadId, openAt: 'a-message-of-another' });
+
+        expect(await screen.findByText('The whole of what three says.')).toBeDefined();
+
+        await waitFor(() => {
+            expect(document.activeElement?.tagName).toBe('SUMMARY');
+            expect(document.activeElement?.closest('details')?.open).toBe(true);
+        });
+    });
+
     it('leaves focus where the reader put it when they collapse a message, which is not a view change', async () => {
         drawing(
             deploymentAnswering(pageOf(['one', 'two', 'three'], {}, { one: { unread: true }, two: { unread: true } })),
