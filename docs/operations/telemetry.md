@@ -1,6 +1,6 @@
 # Telemetry and the Aspire dashboard
 
-<!-- describes: backend/src/Application/Observability/**, backend/src/Common/Observability/**, backend/src/Host/Observability/**, backend/src/Host/ServiceDefaultsExtensions.cs, backend/src/Host/Hosting/Workers/**, backend/src/Infrastructure/Observability/**, backend/src/Infrastructure/Mail/MailServerConnectionBudget.cs, backend/src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, backend/src/Infrastructure/HostApplicationBuilderExtensions.cs, backend/src/Mcp/Observability/**, backend/src/Cli/Diagnostics/**, backend/src/AppHost/**, backend/src/AI/ProviderAdapters/OpenAiCompatibleClientFactory.cs -->
+<!-- describes: backend/src/Application/Observability/**, backend/src/Common/Observability/**, backend/src/Host/Observability/**, backend/src/Host/ServiceDefaultsExtensions.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Hosting/Workers/**, backend/src/Infrastructure/Observability/**, backend/src/Infrastructure/Mail/MailServerConnectionBudget.cs, backend/src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, backend/src/Infrastructure/HostApplicationBuilderExtensions.cs, backend/src/Mcp/Observability/**, backend/src/Cli/Diagnostics/**, backend/src/AppHost/**, backend/src/AI/ProviderAdapters/OpenAiCompatibleClientFactory.cs -->
 
 The host instruments itself with OpenTelemetry throughout — logs, metrics, and traces — and exports none of it unless
 the environment names a destination. Today exactly one environment does that out of the box: a local run under the
@@ -1134,6 +1134,39 @@ either keeps up or does not. The refusals are how much of a mailbox is being lef
 is retried on a later run rather than lost. All five read zero on a deployment with both switches off, which constructs
 no detector on this path at all.
 
+### What the client telemetry proxy emits
+
+The [client endpoint](client-endpoint.md#the-telemetry-routes) receives OTLP from the signed-in client and forwards it
+to the same destination this section's own signals leave by. That path is deliberately silent — accepting and
+forwarding writes no log record at any level, because a client open on somebody's desk exports every few seconds — so
+five counters are the whole of what an operator reads it by.
+
+| Instrument | Unit | What it counts |
+| --- | --- | --- |
+| `mailfathom.client_telemetry.accepted` | `{batch}` | Batches read, bounded, and attributed |
+| `mailfathom.client_telemetry.records` | `{record}` | Records those batches carried, which is what their volume is read against |
+| `mailfathom.client_telemetry.refused` | `{batch}` | Batches refused before anything was forwarded |
+| `mailfathom.client_telemetry.forwarded` | `{batch}` | Batches the destination accepted |
+| `mailfathom.client_telemetry.failed` | `{batch}` | Batches that did not reach the destination |
+
+All five carry `mailfathom.client_telemetry.signal`, whose values are `traces`, `metrics`, and `logs`. A refusal
+carries `mailfathom.client_telemetry.refusal` as well — `unsupported_media_type`, `rate_limited`, `too_large`,
+`too_many_records`, or `malformed`, which is this endpoint's own closed vocabulary for the bounds it enforces. A
+failure carries `mailfathom.client_telemetry.condition`, written as a past participle like every other outcome here:
+`refused` for a destination that will never take the batch, and `throttled`, `unavailable`, `timed_out`, `unreachable`,
+or `cancelled` for one that might.
+
+**None of the five names a person.** A batch is attributed to its owner in the payload that leaves for the collector,
+where it is what makes one client's traces separable from another's; the instruments here are the deployment's own
+reading of whether the relay works, and an owner dimension on them would publish how much each person's client is
+doing to whoever reads a dashboard. `refused` rising is a client sending something this deployment will not take, and
+`failed` rising is the collector rather than the client — which is the distinction the two counters exist to make,
+because the clients hold what they could not export and nothing is queued here.
+
+The one thing that does write a line is a forwarding condition that holds: one record per condition, repeated at most
+every five minutes, naming the condition and how many batches it has cost since it was last reported. That is a count a
+rate cannot give an operator reading the log after the fact, and it carries no part of a payload.
+
 ## What the administration command emits
 
 Nothing. `mfctl` runs on the operator's own machine and holds no exporter, no collector address, and no telemetry
@@ -1238,7 +1271,7 @@ variables itself:
 
 | Variable | What it does |
 | --- | --- |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | The OTLP destination; setting it is what attaches the exporter |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | The OTLP destination; setting it is what attaches the exporter, and what serves [the client endpoint's OTLP routes](client-endpoint.md#the-telemetry-routes) |
 | `OTEL_EXPORTER_OTLP_PROTOCOL` | `grpc` (the default) or `http/protobuf` |
 | `OTEL_EXPORTER_OTLP_HEADERS` | Headers sent with every export, which is where a collector's credential travels |
 | `OTEL_EXPORTER_OTLP_TIMEOUT` | The per-export timeout |
@@ -1288,7 +1321,8 @@ host starts.
 
 ## Deployments export nothing by default
 
-Neither the Compose deployment nor the Helm chart sets any `OTEL_*` variable. That is a privacy default, not a gap:
+Neither the Compose deployment nor the Helm chart sets any `OTEL_*` variable, so neither exports anything and neither
+serves [the client endpoint's OTLP routes](client-endpoint.md#the-telemetry-routes). That is a privacy default, not a gap:
 MailFathom's telemetry describes activity around personal mail — account aliases, folder aliases, tool-call rates,
 failure codes — and even without content, that stream identifies people and habits. Where it flows is therefore a
 decision the operator takes explicitly, never one a deployment asset takes for them.

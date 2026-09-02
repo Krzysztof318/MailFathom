@@ -13,6 +13,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.Mail;
+using MailFathom.Host.Observability.ClientTelemetry;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Host.UnitTests.TestDoubles;
@@ -26,6 +27,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
+using OpenTelemetry.Exporter;
 using Xunit;
 
 namespace MailFathom.Host.UnitTests.Api;
@@ -152,6 +154,10 @@ public sealed class ClientApiEndpointsTests
                 $"{ClientEndpointOptions.RoutePrefix}{ClientOwnerRecordEndpoint.MailAccountsRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientOwnerRecordEndpoint.MailAccountRemovalRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientApiEndpoints.SessionRoute}",
+                .. ClientTelemetrySignal.All
+                    .Select(signal =>
+                        $"{ClientEndpointOptions.RoutePrefix}{ClientTelemetryEndpoint.TelemetryRoutePrefix}{signal.Route}")
+                    .Order(StringComparer.Ordinal),
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailThreadEndpoint.MailThreadRoute}",
             ],
             routes);
@@ -220,6 +226,10 @@ public sealed class ClientApiEndpointsTests
                 $"POST {prefix}{ClientOwnerRecordEndpoint.RecordRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
                 $"POST {prefix}{ClientOwnerRecordEndpoint.MailAccountsRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
                 $"POST {prefix}{ClientOwnerRecordEndpoint.MailAccountRemovalRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
+                .. ClientTelemetrySignal.All
+                    .Select(signal =>
+                        $"POST {prefix}{ClientTelemetryEndpoint.TelemetryRoutePrefix}{signal.Route} -> none")
+                    .Order(StringComparer.Ordinal),
                 $"PUT {prefix}{ClientDraftEndpoints.DraftRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
             ],
             PublishedAllocation(endpoints).Order(StringComparer.Ordinal));
@@ -248,11 +258,12 @@ public sealed class ClientApiEndpointsTests
     }
 
     /// <summary>
-    /// A read under the reading grant, and every write under a grant that says what it writes, save the one write of
-    /// the caller's own client preferences. Reading mail, changing the caller's own record, composing a draft, filing
-    /// one on their server, and sending are five separately provisioned powers, so a route that changes anything under
-    /// <c>mailfathom.mail.read</c> is one somebody added without deciding what it costs — and a credential provisioned
-    /// to read a mailbox would then send from it.
+    /// A read under the reading grant, and every write under a grant that says what it writes, save the two a grant
+    /// could not tell apart: the caller's own client preferences, and the client handing over its own telemetry.
+    /// Reading mail, changing the caller's own record, composing a draft, filing one on their server, and sending are
+    /// five separately provisioned powers, so a route that changes anything under <c>mailfathom.mail.read</c> is one
+    /// somebody added without deciding what it costs — and a credential provisioned to read a mailbox would then send
+    /// from it.
     /// </summary>
     [Fact]
     public void MapClientApi_Always_PublishesEveryWriteUnderAGrantThatSaysWhatItWrites()
@@ -279,7 +290,8 @@ public sealed class ClientApiEndpointsTests
                     method => Assert.True(
                         method == "GET"
                         || IsPublishedAsAWrite(endpoint)
-                        || WritesTheCallersOwnPreferences(endpoint),
+                        || WritesTheCallersOwnPreferences(endpoint)
+                        || HandsOverTheClientsOwnTelemetry(endpoint),
                         $"{method} {endpoint} changes something under a grant that does not say so."));
             });
     }
@@ -305,6 +317,14 @@ public sealed class ClientApiEndpointsTests
         endpoint is RouteEndpoint route
         && $"/{route.RoutePattern.RawText?.TrimStart('/')}"
             == $"{ClientEndpointOptions.RoutePrefix}{ClientPreferencesEndpoint.PreferencesRoute}";
+
+    /// <summary>Reports whether a route is the client posting its own telemetry, which changes nothing this deployment holds.</summary>
+    /// <remarks>The path rather than the grant here, because these are published under none by design — the caller is handing over what it recorded about itself, and no permission in the mailbox half names that act.</remarks>
+    private static bool HandsOverTheClientsOwnTelemetry(Endpoint endpoint) =>
+        endpoint is RouteEndpoint { RoutePattern.RawText: { } path }
+        && path.Contains(
+            $"{ClientEndpointOptions.RoutePrefix}{ClientTelemetryEndpoint.TelemetryRoutePrefix}/",
+            StringComparison.Ordinal);
 
     /// <summary>
     /// The bound on each record-route body, which the routes carry as metadata the routing pipeline reads. This surface
@@ -430,6 +450,15 @@ public sealed class ClientApiEndpointsTests
             UnreachedScopeResolver(),
             Substitute.For<IStoredMailFolderReader>(),
             Substitute.For<IMailFolderMappingReader>()));
+
+        // A destination is registered so the telemetry routes are mapped, because every surface-wide claim in this
+        // file — the group's requirement, the CORS policy, the prefix, the published decision — has to hold over them
+        // too. Which deployment maps them at all is ClientTelemetryEndpointTests' subject rather than this file's.
+        services.AddSingleton(new ClientTelemetryDestination(
+            new Uri("https://collector.example.test"),
+            OtlpExportProtocol.HttpProtobuf,
+            [],
+            TimeSpan.FromSeconds(10)));
 
         return new TestEndpointRouteBuilder(services.BuildServiceProvider());
     }
