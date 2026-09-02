@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import type { MailMessageHeaders } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
 import { MessageHeaders } from './MessageHeaders';
@@ -42,6 +42,13 @@ function drawing(written: Partial<MailMessageHeaders> = {}): void {
     );
 }
 
+// A zone pinned for one test is put back for the reason a fake clock is released: it is the worker's, not the file's.
+const machineZone = process.env['TZ'];
+
+afterEach(() => {
+    process.env['TZ'] = machineZone;
+});
+
 describe('MessageHeaders', () => {
     it('draws the subject as the heading of the message', () => {
         drawing();
@@ -73,14 +80,32 @@ describe('MessageHeaders', () => {
         expect(screen.getByText('This message names nobody as its author.')).toBeDefined();
     });
 
-    it('words the date the platform way under the active language rather than out of a catalogue', () => {
+    it('places both instants against the reader own clock, so a message that arrived overnight says so', () => {
+        process.env['TZ'] = 'Europe/Warsaw';
+
+        drawing({ receivedAt: '2026-08-31T23:12:00+00:00' });
+
+        // Written out rather than compared against a formatter built here, because that comparison passes just as
+        // happily for a screen that pinned a zone of its own — which is the defect this is about. Warsaw is two hours
+        // ahead in August, which is what carries the arrival into the next day.
+        expect(screen.getByText('Sent August 31, 2026 at 11:41 AM')).toBeDefined();
+        expect(screen.getByText('Received September 1, 2026 at 1:12 AM')).toBeDefined();
+    });
+
+    it('reads the same instants a day earlier for a reader west of the sender', () => {
+        process.env['TZ'] = 'America/Los_Angeles';
+
+        drawing({ receivedAt: '2026-08-31T23:12:00+00:00' });
+
+        expect(screen.getByText('Sent August 31, 2026 at 2:41 AM')).toBeDefined();
+        expect(screen.getByText('Received August 31, 2026 at 4:12 PM')).toBeDefined();
+    });
+
+    it('keeps the instant the service sent beside the words, so what a machine reads is not the wording', () => {
         drawing();
 
-        const worded = new Intl.DateTimeFormat('en', { dateStyle: 'long', timeStyle: 'short' }).format(
-            Date.parse('2026-08-31T09:41:00+00:00'),
-        );
-
-        expect(screen.getByText(`Sent ${worded}`)).toBeDefined();
+        expect(screen.getByText(/^Sent /u).getAttribute('datetime')).toBe('2026-08-31T09:41:00+00:00');
+        expect(screen.getByText(/^Received /u).getAttribute('datetime')).toBe('2026-08-31T09:41:10+00:00');
     });
 
     it('says the sender wrote no readable date rather than drawing a broken one', () => {

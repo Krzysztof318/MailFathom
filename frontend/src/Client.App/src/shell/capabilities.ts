@@ -24,13 +24,19 @@ const capabilityGrants: Readonly<Record<ClientCapability, MailFathomPermission>>
     askMail: 'mailfathom.mail.ask',
 };
 
-// Which capability each space is reached under. `cases` carries none because nothing behind it is reached over a grant
-// yet; the space that fills it is what decides what it needs, and naming a permission here before then would be a
-// guess enforced on a screen that does not exist.
+// Which capability each space is reached under. Every space that is still a placeholder carries none, because nothing
+// behind one is reached over a grant yet; the space that fills it is what decides what it needs, and naming a
+// permission here before then would be a guess enforced on a screen that does not exist. `discover` is the exception
+// among them: it is a placeholder today, and asking is what it will be, so it is already withheld from a credential
+// that may not ask rather than offered as a placeholder somebody's grant would never let become a screen.
 const spaceCapabilities: Readonly<Record<Space, ClientCapability | null>> = {
     discover: 'askMail',
     mail: 'readMail',
     cases: null,
+    agent: 'askMail',
+    tasks: null,
+    calendar: null,
+    people: null,
 };
 
 /** Whether this credential may do that here. */

@@ -56,6 +56,13 @@ exactly as `Directory.Packages.props` and the `packages.lock.json` files are for
   identifier** — `react-dom`, not _ReactDOM_ — because that is what a manifest, a registry, and the survey all read.
   `scripts/update-dependencies.sh --only npm` reads this family and `--only crates` the one below, so noticing a pin is
   behind is a sentence in the report and an issue of its own, never a line in an unrelated diff.
+- **A family of files committed into the client's own tree is registered like a package**, and for a stronger reason
+  than one: a typeface or a set of icon outlines under `Client.App/src/assets/` is redistributed verbatim inside the
+  image and inside the desktop application, which is what puts a notice obligation on a release rather than on a file
+  here. It carries no pin a manifest could hold, so the row names what a reader would otherwise have no way to check —
+  the upstream, the exact revision or version the files were taken at, and the paths they were written to. That is
+  where the client's typeface and its symbols are recorded, and it is the other half of the rule in
+  `frontend/src/AGENTS.md` § _UI_ that keeps them out of an external origin.
 - A pin that moves costs the register a second thing the service's does not. Both client closures are recorded there as
   a census as well as a row — § _The client's two dependency closures_ — and nothing recomputes one, so re-run that
   section's enumeration commands in the same change and write what they printed.

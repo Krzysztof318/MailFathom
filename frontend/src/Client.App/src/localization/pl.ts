@@ -25,6 +25,11 @@ export const pl: Catalogue = {
     'space.discover': 'Odkrywaj',
     'space.mail': 'Poczta',
     'space.cases': 'Sprawy',
+    'space.agent': 'Agent',
+    'space.tasks': 'Zadania',
+    'space.calendar': 'Kalendarz',
+    'space.people': 'Osoby',
+    'space.notBuiltYet': '{space} — jeszcze niezbudowane',
     'space.pending':
         'Ta przestrzeń nie jest jeszcze zbudowana. Jest tu rama wokół niej: jej adres, nawigacja i zakres, w którym zadawane jest każde pytanie.',
 
@@ -33,6 +38,14 @@ export const pl: Catalogue = {
 
     'scope.mailbox': 'Skrzynka w zakresie',
     'scope.allMailboxes': 'Wszystkie skrzynki',
+
+    'signIn.claim': 'Twoja poczta zostaje na Twoim serwerze.',
+    'signIn.claimExplanation':
+        'Podaj adres wdrożenia MailFathom prowadzonego przez Twoją organizację. Indeksowanie i analiza wiadomości dzieją się po jego stronie — nic nie trafia do nikogo innego bez Twojej zgody.',
+    'signIn.revealPassword': 'Pokaż',
+    'signIn.hidePassword': 'Ukryj',
+    'signIn.revealPasswordControl': 'Pokaż hasło',
+    'signIn.hidePasswordControl': 'Ukryj hasło',
 
     'signIn.title': 'Zaloguj się do swojego MailFathom',
     'signIn.explanation':
@@ -70,6 +83,22 @@ export const pl: Catalogue = {
     'connect.clearText': 'Łącz się z tym wdrożeniem zwykłym protokołem HTTP',
     'connect.clearTextExplanation':
         'Twoje hasło jest kodowane, a nie szyfrowane, przy każdym żądaniu. Każdy, kto znajduje się między tym klientem a wdrożeniem, może je odczytać. Zostaw tę opcję wyłączoną, chyba że sieć między nimi należy do Ciebie.',
+    'connect.clearTextInForce':
+        'TLS jest wyłączony. Nazwa użytkownika, hasło i każda odczytana wiadomość pójdą otwartym tekstem. Używaj tego tylko w sieci, którą kontrolujesz, albo przez VPN.',
+    'connect.portHint': 'port {port}',
+    'connect.portDefaultNote': 'Port jest opcjonalny — bez niego klient łączy się na porcie {port}.',
+    'connect.details': 'Szczegóły połączenia',
+    'connect.hideDetails': 'Ukryj szczegóły połączenia',
+    'connect.protocol': 'Protokół',
+    'connect.protocolOverTls': 'HTTPS, przez TLS',
+    'connect.protocolClearText': 'HTTP, bez szyfrowania',
+    'connect.host': 'Adres',
+    'connect.port': 'Port',
+    'connect.portDefault': '{port} (domyślny)',
+    'connect.encryption': 'Szyfrowanie',
+    'connect.encryptionInForce': 'Włączone',
+    'connect.encryptionNone': 'Brak',
+    'connect.nothingNamed': 'Nic jeszcze nie podano',
     'connect.blank': 'Podaj wdrożenie, które przechowuje Twoją pocztę.',
     'connect.malformed': 'To nie jest adres. Podaj host, na którym wdrożenie odpowiada, oraz port, jeśli go używa.',
     'connect.clearTextRefused':
@@ -287,6 +316,7 @@ export const pl: Catalogue = {
     'message.noAuthor': 'Ta wiadomość nie wskazuje nikogo jako autora.',
     'message.sentAt': 'Wysłano {when}',
     'message.sentAtUnknown': 'Nadawca nie zapisał daty, którą ten klient potrafi odczytać.',
+    'message.receivedAt': 'Odebrano {when}',
     'message.otherParticipants': 'Pozostałe osoby wskazane w tej wiadomości ({count})',
 
     'participant.sender': 'Nadane przez',

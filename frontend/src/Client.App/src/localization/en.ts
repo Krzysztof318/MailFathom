@@ -26,6 +26,11 @@ export const en = {
     'space.discover': 'Discover',
     'space.mail': 'Mail',
     'space.cases': 'Cases',
+    'space.agent': 'Agent',
+    'space.tasks': 'Tasks',
+    'space.calendar': 'Calendar',
+    'space.people': 'People',
+    'space.notBuiltYet': '{space} — not built yet',
     'space.pending':
         'This space is not built yet. What is here is the frame around it: its address, its navigation, and the scope every question is asked against.',
 
@@ -34,6 +39,14 @@ export const en = {
 
     'scope.mailbox': 'Mailbox in scope',
     'scope.allMailboxes': 'All mailboxes',
+
+    'signIn.claim': 'Your mail stays on your own server.',
+    'signIn.claimExplanation':
+        'Name the MailFathom deployment your organization runs. Indexing and analysis happen on it — nothing reaches anybody else without your say-so.',
+    'signIn.revealPassword': 'Show',
+    'signIn.hidePassword': 'Hide',
+    'signIn.revealPasswordControl': 'Show the password',
+    'signIn.hidePasswordControl': 'Hide the password',
 
     'signIn.title': 'Sign in to your MailFathom',
     'signIn.explanation':
@@ -70,6 +83,22 @@ export const en = {
     'connect.clearText': 'Reach this deployment over plain HTTP',
     'connect.clearTextExplanation':
         'Your password is encoded rather than encrypted, on every request. Anybody between this client and the deployment can read it. Leave this off unless the network between them is yours.',
+    'connect.clearTextInForce':
+        'TLS is off. The user name, the password, and every message read travel in the clear. Use this only inside a network you control or over a VPN.',
+    'connect.portHint': 'port {port}',
+    'connect.portDefaultNote': 'The port is optional — without one this client reaches {port}.',
+    'connect.details': 'Connection details',
+    'connect.hideDetails': 'Hide connection details',
+    'connect.protocol': 'Protocol',
+    'connect.protocolOverTls': 'HTTPS, over TLS',
+    'connect.protocolClearText': 'HTTP, unencrypted',
+    'connect.host': 'Address',
+    'connect.port': 'Port',
+    'connect.portDefault': '{port} (default)',
+    'connect.encryption': 'Encryption',
+    'connect.encryptionInForce': 'In force',
+    'connect.encryptionNone': 'None',
+    'connect.nothingNamed': 'Nothing named yet',
     'connect.blank': 'Name the deployment that holds your mail.',
     'connect.malformed': 'That is not an address. Name the host it answers on, and a port where it uses one.',
     'connect.clearTextRefused':
@@ -286,6 +315,7 @@ export const en = {
     'message.noAuthor': 'This message names nobody as its author.',
     'message.sentAt': 'Sent {when}',
     'message.sentAtUnknown': 'The sender wrote no date this client can read.',
+    'message.receivedAt': 'Received {when}',
     'message.otherParticipants': 'Everybody else this message names ({count})',
 
     'participant.sender': 'Submitted by',

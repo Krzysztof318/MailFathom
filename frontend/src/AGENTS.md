@@ -201,6 +201,17 @@ rule catches a string written into markup and nothing else, so everything below 
   that is spelled into a catalogue — a month name, a decimal separator, or a hand-written plural form there is a second
   copy of something the platform already knows and gets right in every language. `Intl.PluralRules` is what selects a
   form when a screen first counts something, which Polish needs and English hides.
+- **An instant is shown in the reader's own timezone, and no screen names one.** The service sends an instant with an
+  offset and what a reader is owed is that instant placed against _their_ day rather than against a server's or a
+  sender's, so nothing passes `timeZone` to `Intl` and every screen therefore renders in the zone the runtime reports.
+  `Client.App/src/localization/instants.ts` is where that is stated and the only place a screen gets the wording from,
+  because three screens word an instant and a second copy of the decision is how two of them come to disagree about
+  when the same message arrived. What a `<time>` element carries in `dateTime` is the instant the service sent,
+  unchanged — the human spelling and the machine-readable form are different things and neither replaces the other.
+  **A calendar day that is a filter value is not an instant** and is read as local midnight, so the day somebody picked
+  is the day the chip reads back; `wordCalendarDay` is that case and it has a function of its own for that reason.
+  A test proves it by pinning a zone and asserting the literal spelling, never by comparing against a formatter built
+  the same way — that assertion passes for a screen that named `timeZone: 'UTC'` as happily as for one that did not.
 - **The list of languages is the one thing never translated.** Each is named in its own language, so somebody who has
   landed in one they cannot read finds their own.
 
@@ -248,6 +259,20 @@ so this is written to be mechanically visible in a diff rather than remembered.
   written into a component is the same drift as a hexadecimal colour.
 - **`prefers-reduced-motion` is honoured**, and that is an accessibility obligation rather than a nicety: motion is
   removed under it, not merely shortened, and any transition conveying meaning still conveys it without the movement.
+- **Everything a screen draws comes out of the bundle, and no screen reaches an external origin for it.** The typeface
+  and the symbols are committed under `Client.App/src/assets/` and served from where the client was served from, so a
+  `@font-face` naming `fonts.gstatic.com`, a stylesheet link to `fonts.googleapis.com`, and an icon font or sprite
+  fetched from a CDN are each refused. Three things decide that rather than taste: a deployment on a private network
+  would render in a fallback face and draw no symbols at all; a request to a third party on every screen tells that
+  party who is reading their mail and when, which is the disclosure ADR 0024 refuses for a sender's own host; and the
+  desktop head loads its document from a custom scheme where such a request is not reliably permitted anyway. The
+  browser suite asserts it, because it is the one witness to what the built bundle actually requests. `THIRD_PARTY_LICENSES.md`
+  carries a row for each committed family, redistribution being what puts the notice obligation on a release.
+- **A symbol is drawn by `controls/Icon.tsx` and nowhere else.** It is the one place an `svg` element is written, it
+  names the set of symbols the client has as a type, and it renders each of them out of the tree with no accessible name
+  of its own — so the name a control carries is the control's, stated once, rather than something a decorative glyph
+  competes with. Adding a symbol is committing its outline beside the others and naming it there; drawing a path
+  inline in a component is the same drift as writing a colour into one.
 
 ## Accessibility is a property of the two sections above
 

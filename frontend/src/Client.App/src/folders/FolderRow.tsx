@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { KeyboardEvent } from 'react';
+import { Icon } from '../controls/Icon';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { isCurrent, needsAttention, synchronizationStateLabel } from '../synchronization/synchronizationState';
@@ -106,9 +107,7 @@ function Twist({ expanded, onToggle }: { readonly expanded: boolean | null; read
                 onToggle();
             }}
         >
-            <svg viewBox="0 0 24 24" className={`size-3 fill-current transition ${expanded ? 'rotate-90' : ''}`}>
-                <path d="M9 5l7 7-7 7V5Z" />
-            </svg>
+            <Icon name="chevron_right" className={`size-3.5 transition ${expanded ? 'rotate-90' : ''}`} />
         </span>
     );
 }

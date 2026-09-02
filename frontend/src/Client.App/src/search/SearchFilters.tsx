@@ -6,7 +6,10 @@ import { useState } from 'react';
 import type { MailAccount } from '@mailfathom/client-backend';
 import { borderedControl } from '../controls/chrome';
 import { CheckControl } from '../controls/CheckControl';
+import { Icon } from '../controls/Icon';
 import type { MessageKey } from '../localization/en';
+import { wordCalendarDay } from '../localization/instants';
+import type { Locale } from '../localization/locale';
 import { useLocalization } from '../localization/useLocalization';
 import { folderRoleLabels, folderRoles, isMailFolderRole } from '../workspace/mailScope';
 import {
@@ -281,9 +284,7 @@ function FilterInForce({ label, onRemove }: { readonly label: string; readonly o
             >
                 {/* Drawn rather than written, for the reason the list's own marks are drawn: a glyph is a string
                     somebody reads in one language, and what names this control is the label above. */}
-                <svg viewBox="0 0 24 24" aria-hidden="true" className="size-3 fill-current">
-                    <path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z" />
-                </svg>
+                <Icon name="close" className="size-3.5" />
             </button>
         </li>
     );
@@ -352,7 +353,7 @@ function labelOf(
     narrowing: MailSearchNarrowing,
     value: string | null,
     accounts: readonly MailAccount[],
-    locale: string,
+    locale: Locale,
     translate: (key: MessageKey, values?: Readonly<Record<string, string>>) => string,
     isDay: boolean,
 ): string {
@@ -362,15 +363,7 @@ function labelOf(
 
     const named = accounts.find((account) => account.id === value)?.displayName ?? value;
 
-    return translate(narrowingLabels[narrowing], { value: isDay ? dayIn(locale, value) : named });
-}
-
-// A calendar day as the reader's language writes one. Formatted by `Intl` rather than shown as the machine-readable
-// value the control holds, which is the same day spelled for a filesystem.
-function dayIn(locale: string, day: string): string {
-    const at = new Date(`${day}T00:00:00`);
-
-    return Number.isNaN(at.getTime()) ? day : new Intl.DateTimeFormat(locale, { dateStyle: 'long' }).format(at);
+    return translate(narrowingLabels[narrowing], { value: isDay ? wordCalendarDay(value, locale) : named });
 }
 
 // The role a folder filter stands for, or `null` where it names a folder of one account instead.
