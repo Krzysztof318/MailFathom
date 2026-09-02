@@ -154,6 +154,9 @@ public sealed class ClientApiEndpointsTests
                 $"{ClientEndpointOptions.RoutePrefix}{ClientOutboxEndpoints.OutboxCancellationRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientOutboxEndpoints.OutboxRequeueRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientOutboxEndpoints.OutboxSendRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientPortraitEndpoint.PortraitRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientPortraitEndpoint.PortraitRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientPortraitEndpoint.PortraitRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientPreferencesEndpoint.PreferencesRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientPreferencesEndpoint.PreferencesRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientOwnerRecordEndpoint.RecordRoute}",
@@ -209,6 +212,7 @@ public sealed class ClientApiEndpointsTests
             [
                 $"DELETE {prefix}{ClientDraftEndpoints.DraftRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"DELETE {prefix}{ClientDraftEndpoints.DraftAttachmentRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
+                $"DELETE {prefix}{ClientPortraitEndpoint.PortraitRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailAccountsEndpoint.MailAccountsRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientDisplayNameEndpoint.DisplayNameRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientDraftEndpoints.DraftsRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
@@ -222,6 +226,7 @@ public sealed class ClientApiEndpointsTests
                 $"GET {prefix}{ClientMailMutationsEndpoint.MutationsRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientOutboxEndpoints.OutboxRoute} -> {MailFathomPermission.MailSend.Name}",
                 $"GET {prefix}{ClientOutboxEndpoints.OutboxSendRoute} -> {MailFathomPermission.MailSend.Name}",
+                $"GET {prefix}{ClientPortraitEndpoint.PortraitRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientPreferencesEndpoint.PreferencesRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientOwnerRecordEndpoint.RecordRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientApiEndpoints.SessionRoute} -> none",
@@ -236,6 +241,7 @@ public sealed class ClientApiEndpointsTests
                 $"POST {prefix}{ClientMailMutationsEndpoint.MoveWithdrawalsRoute} -> {MailFathomPermission.MailMove.Name}",
                 $"POST {prefix}{ClientOutboxEndpoints.OutboxCancellationRoute} -> {MailFathomPermission.MailSend.Name}",
                 $"POST {prefix}{ClientOutboxEndpoints.OutboxRequeueRoute} -> {MailFathomPermission.MailSend.Name}",
+                $"POST {prefix}{ClientPortraitEndpoint.PortraitRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientPreferencesEndpoint.PreferencesRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientOwnerRecordEndpoint.RecordRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
                 $"POST {prefix}{ClientOwnerRecordEndpoint.MailAccountsRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
@@ -272,8 +278,9 @@ public sealed class ClientApiEndpointsTests
     }
 
     /// <summary>
-    /// A read under the reading grant, and every write under a grant that says what it writes, save the two a grant
-    /// could not tell apart: the caller's own client preferences, and the client handing over its own telemetry.
+    /// A read under the reading grant, and every write under a grant that says what it writes, save the three a grant
+    /// could not tell apart: the caller's own client preferences, the caller's own portrait, and the client handing
+    /// over its own telemetry.
     /// Reading mail, changing the caller's own record, composing a draft, filing one on their server, sending,
     /// changing a flag, and moving a message are separately provisioned powers, so a route that changes anything under
     /// <c>mailfathom.mail.read</c> is one somebody added without deciding what it costs — and a credential provisioned
@@ -305,6 +312,7 @@ public sealed class ClientApiEndpointsTests
                         method == "GET"
                         || IsPublishedAsAWrite(endpoint)
                         || WritesTheCallersOwnPreferences(endpoint)
+                        || WritesTheCallersOwnPortrait(endpoint)
                         || HandsOverTheClientsOwnTelemetry(endpoint),
                         $"{method} {endpoint} changes something under a grant that does not say so."));
             });
@@ -333,6 +341,17 @@ public sealed class ClientApiEndpointsTests
         endpoint is RouteEndpoint route
         && $"/{route.RoutePattern.RawText?.TrimStart('/')}"
             == $"{ClientEndpointOptions.RoutePrefix}{ClientPreferencesEndpoint.PreferencesRoute}";
+
+    /// <summary>Reports whether a route is a write of the caller's own portrait, by the route it is served at.</summary>
+    /// <remarks>
+    /// The route rather than the grant, for the reason the preferences write is named that way: what a person is drawn
+    /// by is theirs to set under the grant they already hold, so nothing about the permission tells these two apart
+    /// from a <c>GET</c>. Naming the one route keeps the claim narrow.
+    /// </remarks>
+    private static bool WritesTheCallersOwnPortrait(Endpoint endpoint) =>
+        endpoint is RouteEndpoint route
+        && $"/{route.RoutePattern.RawText?.TrimStart('/')}"
+            == $"{ClientEndpointOptions.RoutePrefix}{ClientPortraitEndpoint.PortraitRoute}";
 
     /// <summary>Reports whether a route is the client posting its own telemetry, which changes nothing this deployment holds.</summary>
     /// <remarks>The path rather than the grant here, because these are published under none by design — the caller is handing over what it recorded about itself, and no permission in the mailbox half names that act.</remarks>
@@ -423,6 +442,32 @@ public sealed class ClientApiEndpointsTests
         Assert.Equal(
             ClientDisplayNameEndpoint.MaxWriteRequestBytes,
             write.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata>()!.MaxRequestBodySize);
+    }
+
+    /// <summary>
+    /// The portrait upload carries a bound of its own, which is what keeps a profile field from being a way to put
+    /// arbitrary octets into an operator's database. It is the one write here whose body is measured in megabytes.
+    /// </summary>
+    [Fact]
+    public void MapClientApi_ThePortraitUpload_CarriesItsOwnRequestBodyBound()
+    {
+        // Arrange
+        var endpoints = BuildRouteBuilder();
+
+        // Act
+        endpoints.MapClientApi();
+
+        // Assert
+        var upload = endpoints.Materialize()
+            .OfType<RouteEndpoint>()
+            .Single(endpoint =>
+                $"/{endpoint.RoutePattern.RawText?.TrimStart('/')}"
+                    == $"{ClientEndpointOptions.RoutePrefix}{ClientPortraitEndpoint.PortraitRoute}"
+                && endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Contains("POST"));
+
+        Assert.Equal(
+            ClientPortraitEndpoint.MaxPortraitBytes,
+            upload.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata>()!.MaxRequestBodySize);
     }
 
     /// <summary>

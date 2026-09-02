@@ -293,6 +293,27 @@ and then collide on the key.
 **Erasing an owner takes it with the cascade**, like the contact book and unlike the tables the erasure names by hand:
 it keys onto the owner row and records no mail account, so nothing has to know this table exists.
 
+## The picture a person is drawn by
+
+`owner_portraits` holds one row per owner, carrying the picture the client draws them by on
+[the portrait routes](../operations/client-endpoint.md#the-portrait-routes). It sits beside the preferences document
+rather than inside one for the reason that document is not a settings service: a megabyte of image octets is not a
+small closed document, and reading a switch should not carry a photograph.
+
+| Column of `owner_portraits` | What it records |
+|---|---|
+| `OwnerId` | The owner whose picture this is, and the primary key. It is also the foreign key onto `settings_accounts` with `ON DELETE CASCADE`, for the reason `client_preferences` keys the same way: one person has one picture and nothing else identifies it |
+| `Content` | The octets the person supplied, unchanged, as `bytea`. Nothing resizes, crops, re-encodes, or strips metadata from them |
+| `CreatedAt`, `UpdatedAt` | When the person first supplied a picture, and when they last replaced it — which is the first instant until they do |
+
+**What kind of image it is, is not stored.** It is read from the octets themselves wherever it is needed, so a stored
+media type cannot come to disagree with what is stored under it — and the write had already proved the kind, from the
+signature the format opens with, before the row existed.
+
+**The write is the same one statement `client_preferences` is written by**, with the same guarantees and for the same
+reasons: last write wins, an owner this deployment no longer holds affects no row, and two devices arriving at once
+cannot both read nothing and then collide on the key. Erasing an owner takes the picture with the cascade.
+
 ## What an owner signs in with
 
 `owner_credentials` holds every credential an owner authenticates to

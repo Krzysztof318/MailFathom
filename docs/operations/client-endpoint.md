@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientOwnerRecordEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Configuration/OwnerSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Observability/ClientTelemetry/** -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientOwnerRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Configuration/OwnerSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Observability/ClientTelemetry/** -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -93,6 +93,9 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `POST /api/client/outbox/requeue` | `mailfathom.mail.send` |
 | `GET /api/client/preferences` | `mailfathom.mail.read` |
 | `POST /api/client/preferences` | `mailfathom.mail.read` |
+| `GET /api/client/portrait` | `mailfathom.mail.read` |
+| `POST /api/client/portrait` | `mailfathom.mail.read` |
+| `DELETE /api/client/portrait` | `mailfathom.mail.read` |
 | `POST /api/client/telemetry/v1/traces` | none |
 | `POST /api/client/telemetry/v1/metrics` | none |
 | `POST /api/client/telemetry/v1/logs` | none |
@@ -1270,6 +1273,50 @@ their preferences with everything else derived from them.
 
 **A deployment that proxies no telemetry still serves these routes** and stores the switch unchanged. What a client
 draws when there is nothing behind the switch is the client's own question.
+
+### The portrait routes
+
+These three hold the picture a person is drawn by, which the account menu and the settings screen put beside their
+name. It is stored on the owner axis beside the preferences document rather than inside one: a megabyte of image
+octets is not a small closed document, and reading a switch should not carry a photograph.
+
+| Route | What it does |
+| --- | --- |
+| `GET /api/client/portrait` | Serves the signed-in person's picture under the kind it is |
+| `POST /api/client/portrait` | Replaces it with the octets the request body carries |
+| `DELETE /api/client/portrait` | Removes it, leaving everything else about the person as it was |
+
+**An upload is at most 1 MB, and is a JPEG or a PNG.** The bound is applied before a handler is entered, and an upload
+over it is answered `413` naming the megabyte. The kind is read from the signature the file opens with rather than
+from the `Content-Type` the request declared — a declared type is a string an uploader wrote, so trusting it would let
+anything at all be stored under an image's name and served back to a browser as one. Octets that are neither kind are
+answered `415` naming both. A request carrying no body at all is answered `400`.
+
+**Nothing is done to the picture beyond that.** It is not resized, cropped, re-encoded, or stripped of its metadata,
+and it is served back exactly as it was supplied — so the bound and the kind check are the whole of what stands
+between an upload and the database. A person keeps one picture and no history of previous ones.
+
+**Having no picture is answered `204`, not `404`.** The client draws the initials it already has from the person's
+name, so an absent portrait is an ordinary state of the screen rather than an error on it; `404` on this surface says
+a route or a record is not there, which is a different thing. A person this deployment no longer holds a record for is
+answered `404` on the upload, and `204` on the removal like anybody else.
+
+**The served picture is named, and the client revalidates against that name.** The response carries an entity tag over
+the octets and `Cache-Control: private, no-cache`, so the second screen that draws the same portrait is answered `304`
+rather than the picture again, while a replaced one reaches the next screen rather than the next expiry. It is
+deliberately not cached without revalidation: a portrait is personal data.
+
+**No route here names an owner**, exactly as no record route does: the picture acted on is that of the credential that
+authenticated, resolved from the request rather than read out of the body or the path.
+
+**All three are `mailfathom.mail.read`**, and none adds a name to [the published permission set](permissions.md). The
+two writes are deliberately not `mailfathom.mail.accounts.write`, for the reason [the preferences
+write](#the-preferences-routes) is not: that grant decides which mailboxes this deployment connects to, and what a
+person is drawn by must not be decided by a grant over their mail configuration.
+
+**The octets hang off the owner row.** Erasing an owner erases their portrait with everything else derived from them,
+without an erasure naming that table.
+
 ### The drafts routes
 
 These are what a person writes mail through, and the first thing to know about them is that **a draft here is the one
