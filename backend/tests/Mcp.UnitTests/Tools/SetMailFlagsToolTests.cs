@@ -406,10 +406,10 @@ public sealed class SetMailFlagsToolTests
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 
-        public Task<MailboxMutationRecord?> WithdrawAsync(
+        public Task<IReadOnlyList<MailboxMutationRecord>> WithdrawAsync(
             IPersistenceSession session,
             MailOwnerId owner,
-            MailboxMutationRecordId recordId,
+            IReadOnlyList<MailboxMutationRecordId> recordIds,
             CancellationToken cancellationToken) =>
             throw new NotSupportedException();
 

@@ -108,12 +108,15 @@ public sealed class MailRelocationRecorder
     {
         ArgumentNullException.ThrowIfNull(requester);
 
+        // The grant is asked for before the destination is read at all, so a caller that holds nothing is refused as
+        // unauthorized rather than told its argument was malformed. Today's one entry point filters an empty alias
+        // before this is reached, which is exactly why the order has to be stated here rather than relied on there.
+        this.authorization.RequirePermission(MailFathomPermission.MailMove);
+
         if (string.IsNullOrEmpty(destination.Value))
         {
             throw new ArgumentException("A move names the folder it files into.", nameof(destination));
         }
-
-        this.authorization.RequirePermission(MailFathomPermission.MailMove);
 
         var target = await this.targets.FindAsync(storedEmailId, cancellationToken);
 

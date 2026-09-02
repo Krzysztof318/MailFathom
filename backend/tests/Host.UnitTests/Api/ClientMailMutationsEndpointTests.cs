@@ -36,6 +36,10 @@ public sealed class ClientMailMutationsEndpointTests
 {
     private static readonly Guid Message = Guid.Parse("0199a0c0-0000-7000-8000-0000000090a0");
 
+    private static readonly MailAccountId ServedAccount = MailAccountId.Create("work");
+
+    private static readonly MailFolderAlias Inbox = MailFolderAlias.Create("INBOX");
+
     private static readonly DateTimeOffset RecordedAt = new(2026, 8, 12, 9, 0, 0, TimeSpan.Zero);
 
     private readonly IMailboxMutationRecordStore records = Substitute.For<IMailboxMutationRecordStore>();
@@ -226,6 +230,107 @@ public sealed class ClientMailMutationsEndpointTests
         Assert.Equal(StatusCodes.Status400BadRequest, RefusalOf(result).StatusCode);
     }
 
+    /// <summary>
+    /// The route's own translation of a change the use case wrote down, driven through the use case rather than through
+    /// the response builder: what a defect would swap here is which answer reaches the wire, and only a call that
+    /// actually records something proves the recorded one does.
+    /// </summary>
+    [Fact]
+    public async Task SubmitFlagChangesAsync_AChangeTheUseCaseRecords_PutsTheRecordOnTheWire()
+    {
+        // Arrange
+        this.RecordEveryRequest();
+
+        // Act
+        var result = await ClientMailMutationsEndpoint.SubmitFlagChangesAsync(
+            new ClientMailFlagChangesRequest(
+                "call-1",
+                [new ClientMailFlagChangeRequest(Message, new ClientMailFlagStateRequest(Seen: true, null), null)]),
+            this.FlagRecorder(TargetInInbox()),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var change = Assert.Single(Assert.IsType<Ok<ClientMailFlagChangesResponse>>(result.Result).Value!.Results);
+
+        Assert.Equal(Message, change.StoredEmailId);
+        Assert.Equal(ClientMailChangeOutcomes.Recorded, change.Outcome);
+        Assert.Null(change.Detail);
+        Assert.NotEmpty(change.Changes);
+    }
+
+    /// <summary>
+    /// A message the use case cannot find reaches the route as an exception and has to leave it as that one message's
+    /// result, because a batch carries on past a message that has gone.
+    /// </summary>
+    [Fact]
+    public async Task SubmitFlagChangesAsync_AMessageTheUseCaseCannotFind_ReportsThatMessageAlone()
+    {
+        // Act
+        var result = await ClientMailMutationsEndpoint.SubmitFlagChangesAsync(
+            new ClientMailFlagChangesRequest(
+                "call-1",
+                [new ClientMailFlagChangeRequest(Message, new ClientMailFlagStateRequest(Seen: true, null), null)]),
+            this.FlagRecorder(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var change = Assert.Single(Assert.IsType<Ok<ClientMailFlagChangesResponse>>(result.Result).Value!.Results);
+
+        Assert.Equal(ClientMailChangeOutcomes.MessageNotFound, change.Outcome);
+        Assert.Empty(change.Changes);
+    }
+
+    /// <summary>
+    /// A change the boundary cannot express is that message's refusal rather than the batch's, and it carries the
+    /// refusal's own sentence — which is written for somebody to read and names no mail content.
+    /// </summary>
+    [Fact]
+    public async Task SubmitFlagChangesAsync_ATagChangeNamingNoDirection_ReportsThatMessageWithTheRefusalsOwnSentence()
+    {
+        // Act
+        var result = await ClientMailMutationsEndpoint.SubmitFlagChangesAsync(
+            new ClientMailFlagChangesRequest(
+                "call-1",
+                [
+                    new ClientMailFlagChangeRequest(
+                        Message,
+                        null,
+                        new ClientMailTagChangeRequest("sideways", ["$label1"])),
+                ]),
+            this.FlagRecorder(TargetInInbox()),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var change = Assert.Single(Assert.IsType<Ok<ClientMailFlagChangesResponse>>(result.Result).Value!.Results);
+
+        Assert.Equal(ClientMailChangeOutcomes.ChangeNotUsable, change.Outcome);
+        Assert.False(string.IsNullOrWhiteSpace(change.Detail));
+        Assert.Empty(change.Changes);
+    }
+
+    /// <summary>
+    /// The move route's own translation, driven through the use case: what it publishes is the answer that use case
+    /// returned rather than one the route decided, so a result carried through the whole call proves the wiring the
+    /// response builder's own test cannot.
+    /// </summary>
+    [Fact]
+    public async Task SubmitMovesAsync_AMessageTheUseCaseCannotFind_PublishesTheUseCasesOwnAnswer()
+    {
+        // Act
+        var result = await ClientMailMutationsEndpoint.SubmitMovesAsync(
+            new ClientMailMovesRequest("call-1", [new ClientMailMoveRequest(Message, "Archive")]),
+            this.RelocationRecorder(),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var move = Assert.Single(Assert.IsType<Ok<ClientMailMovesResponse>>(result.Result).Value!.Results);
+
+        Assert.Equal(Message, move.StoredEmailId);
+        Assert.Equal(ClientMailChangeOutcomes.MessageNotFound, move.Outcome);
+        Assert.Null(move.DestinationFolder);
+        Assert.Null(move.Change);
+    }
+
     /// <summary>A withdrawal naming nothing is a request with nothing to take back.</summary>
     [Fact]
     public async Task WithdrawFlagChangesAsync_NoRecordNamed_IsRefused()
@@ -314,16 +419,51 @@ public sealed class ClientMailMutationsEndpointTests
         Assert.IsType<ProblemHttpResult>(result.Result);
 
     /// <summary>Builds the scope resolution every one of these use cases reaches its caller's mail through.</summary>
-    private static MailboxScopeResolver ScopeResolver()
+    /// <param name="participation">Which of the caller's folders are reachable, defaulting to none, because most tests here are refused before a folder is read.</param>
+    private static MailboxScopeResolver ScopeResolver(StubMailFolderParticipation? participation = null)
     {
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
-        catalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(MailAccountId.Create("work"))]);
+        catalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(ServedAccount)]);
 
         return new MailboxScopeResolver(
             catalog,
-            StubMailFolderParticipation.Nothing,
+            participation ?? StubMailFolderParticipation.Nothing,
             StubJunkMailFolderCatalog.None,
             StubMailFolderMappings.ResolvingNothing);
+    }
+
+    /// <summary>Answers every open with a freshly recorded row, which is what the routes' recorded answers are read from.</summary>
+    /// <remarks>
+    /// The identity is not deduplicated, because nothing asserted here asks the same thing twice — recognizing a repeat
+    /// is the record store's own contract and is covered against a real database.
+    /// </remarks>
+    private void RecordEveryRequest() => this.records
+        .OpenAsync(Arg.Any<IPersistenceSession>(), Arg.Any<MailboxMutationRequest>(), Arg.Any<CancellationToken>())
+        .Returns(call => Task.FromResult(new MailboxMutationRecord
+        {
+            Id = MailboxMutationRecordId.Create(Guid.CreateVersion7()),
+            Request = Assert.IsType<MailboxMutationRequest>(call[1]),
+            Stage = MailboxMutationStage.Recorded,
+            IsAudited = false,
+            RequiresSourceRemoval = false,
+            Placement = RemoteEmailPlacement.NotReported(),
+            AttemptCount = 0,
+            RecordedAt = RecordedAt,
+            StageChangedAt = RecordedAt,
+            LastFailure = null,
+            PlacementObservedAt = null,
+            SourceRemovalObservedAt = null,
+        }));
+
+    /// <summary>The caller's own message, in a folder the scope above reaches.</summary>
+    private static AuthoredMailboxTarget TargetInInbox()
+    {
+        var folder = MailFolderResolution.FirstBindingOf(Inbox, RemoteFolderPath.Create(Inbox.Value));
+
+        return new AuthoredMailboxTarget(
+            SyntheticMailOwner.Deployment,
+            EmailOccurrenceId.Create(ServedAccount, folder.Id, ImapUidValidity.Create(42), ImapUid.Create(7)),
+            folder);
     }
 
     private static OptimisticConcurrencyRetryPolicy CommitPolicy()
@@ -356,12 +496,23 @@ public sealed class ClientMailMutationsEndpointTests
         this.records,
         CommitPolicy());
 
-    private MailFlagChangeRecorder FlagRecorder() => new(
-        AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailFlagsWrite),
-        ScopeResolver(),
-        Substitute.For<IAuthoredMailboxTargetReader>(),
-        this.records,
-        CommitPolicy());
+    /// <summary>Builds the flag-change use case the routes are given.</summary>
+    /// <param name="target">The message the caller names, defaulting to none, which is the absence the recorder reports as a message that has gone.</param>
+    private MailFlagChangeRecorder FlagRecorder(AuthoredMailboxTarget? target = null)
+    {
+        var targets = Substitute.For<IAuthoredMailboxTargetReader>();
+        targets.FindAsync(Arg.Any<StoredEmailId>(), Arg.Any<CancellationToken>()).Returns(Task.FromResult(target));
+
+        return new MailFlagChangeRecorder(
+            AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailFlagsWrite),
+            ScopeResolver(
+                target is null
+                    ? null
+                    : StubMailFolderParticipation.Mapping(new MailFolderIdentity(ServedAccount, Inbox))),
+            targets,
+            this.records,
+            CommitPolicy());
+    }
 
     private MailRelocationRecorder RelocationRecorder() => new(
         AccessAuthorizations.ForCallerGranted(MailFathomPermission.MailMove),

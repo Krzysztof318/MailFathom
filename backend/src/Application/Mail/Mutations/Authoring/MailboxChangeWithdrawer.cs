@@ -125,28 +125,20 @@ public sealed class MailboxChangeWithdrawer
             return [];
         }
 
-        var withdrawn = new List<MailboxChangeProgress>(withdrawable.Length);
+        IReadOnlyList<MailboxChangeProgress> withdrawn = [];
 
         await this.commitPolicy.CommitAsync(
             async (session, attemptCancellationToken) =>
             {
-                // Cleared per attempt, because a retried commit reads every record again and would otherwise report the
-                // losing attempt's answers beside the winning one's.
-                withdrawn.Clear();
+                // Assigned rather than appended to, because a retried commit reads every record again and would
+                // otherwise report the losing attempt's answers beside the winning one's.
+                var records = await this.records.WithdrawAsync(
+                    session,
+                    this.scopeResolver.Owner,
+                    withdrawable,
+                    attemptCancellationToken);
 
-                foreach (var recordId in withdrawable)
-                {
-                    var record = await this.records.WithdrawAsync(
-                        session,
-                        this.scopeResolver.Owner,
-                        recordId,
-                        attemptCancellationToken);
-
-                    if (record is not null)
-                    {
-                        withdrawn.Add(MailboxChangeProgress.Of(record));
-                    }
-                }
+                withdrawn = [.. records.Select(MailboxChangeProgress.Of)];
             },
             cancellationToken);
 

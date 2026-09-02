@@ -646,8 +646,9 @@ recorded while the server was unreachable, and a command whose acknowledgement w
 durable record in a non-final state, and the first run after the interruption reads it and carries it the rest of the
 way. The mailbox ends in the state that was asked for however the process behaved in between.
 
-A change has exactly two acceptable endings, and *pending forever* is deliberately not one of them, because that is the
-one state that looks like success from every screen an operator reads.
+A change has exactly three acceptable endings — it completes, it is given up on, or the person who asked for it takes it
+back — and *pending forever* is deliberately not one of them, because that is the one state that looks like success from
+every screen an operator reads.
 
 | Where a change is left | What the next run does |
 | --- | --- |

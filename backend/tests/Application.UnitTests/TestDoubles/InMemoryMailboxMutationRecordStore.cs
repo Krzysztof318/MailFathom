@@ -111,24 +111,36 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
     }
 
     /// <inheritdoc />
-    public Task<MailboxMutationRecord?> WithdrawAsync(
+    public Task<IReadOnlyList<MailboxMutationRecord>> WithdrawAsync(
         IPersistenceSession session,
         MailOwnerId owner,
-        MailboxMutationRecordId recordId,
+        IReadOnlyList<MailboxMutationRecordId> recordIds,
         CancellationToken cancellationToken)
     {
-        if (this.recordsById.GetValueOrDefault(recordId) is not { } record || record.Owner != owner)
+        ArgumentNullException.ThrowIfNull(recordIds);
+
+        // One instant for the whole call, as the real store takes one, so a test asserting when a record was withdrawn
+        // reads the same answer for every record in the batch.
+        var withdrawnAt = this.Advance();
+        var withdrawn = new List<MailboxMutationRecord>(recordIds.Count);
+
+        foreach (var recordId in recordIds.Distinct())
         {
-            return Task.FromResult<MailboxMutationRecord?>(null);
+            if (this.recordsById.GetValueOrDefault(recordId) is not { } record || record.Owner != owner)
+            {
+                continue;
+            }
+
+            if (record.Stage is MailboxMutationStage.Recorded)
+            {
+                record = record with { Stage = MailboxMutationStage.Cancelled, StageChangedAt = withdrawnAt };
+                this.recordsById[recordId] = record;
+            }
+
+            withdrawn.Add(record);
         }
 
-        if (record.Stage is MailboxMutationStage.Recorded)
-        {
-            record = record with { Stage = MailboxMutationStage.Cancelled, StageChangedAt = this.Advance() };
-            this.recordsById[recordId] = record;
-        }
-
-        return Task.FromResult<MailboxMutationRecord?>(record);
+        return Task.FromResult<IReadOnlyList<MailboxMutationRecord>>(withdrawn);
     }
 
     /// <inheritdoc />

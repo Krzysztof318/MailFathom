@@ -184,42 +184,49 @@ internal sealed class MailboxMutationRecordStore(
     /// every terminal stage and orders the rest, and a withdrawal is neither: it applies to one stage only and is
     /// refused from every other by the record's own answer rather than by the ordering.
     /// </remarks>
-    public async Task<MailboxMutationRecord?> WithdrawAsync(
+    public async Task<IReadOnlyList<MailboxMutationRecord>> WithdrawAsync(
         IPersistenceSession session,
         MailOwnerId owner,
-        MailboxMutationRecordId recordId,
+        IReadOnlyList<MailboxMutationRecordId> recordIds,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(recordIds);
+
+        if (recordIds.Count == 0)
+        {
+            return [];
+        }
 
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
 
-        var identifier = recordId.Value;
+        var identifiers = recordIds.Select(recordId => recordId.Value).Distinct().ToArray();
         var ownerValue = owner.Value;
 
-        // Tracked, because the stage this may write has to be part of the caller's commit, and joined to the folder
-        // because rebuilding the record needs the binding its occurrence identity is made of. The owner is part of the
-        // predicate so a row belonging to somebody else is absent rather than read and then rejected.
-        var entity = await writeContext.MailboxMutations
+        // One query for the whole call rather than one per record: a caller withdrawing a full batch is the ordinary
+        // case here, and the commit this joins retries as a whole, so a round trip per record would be paid again on
+        // every attempt. Tracked, because the stage this may write has to be part of the caller's commit, and joined to
+        // the folder because rebuilding the record needs the binding its occurrence identity is made of. The owner is
+        // part of the predicate so a row belonging to somebody else is absent rather than read and then rejected.
+        var entities = await writeContext.MailboxMutations
             .Include(mutation => mutation.MailFolder)
-            .FirstOrDefaultAsync(
-                mutation => mutation.Id == identifier && mutation.OwnerId == ownerValue,
-                cancellationToken);
+            .Where(mutation => mutation.OwnerId == ownerValue && identifiers.Contains(mutation.Id))
+            .OrderBy(mutation => mutation.RecordedAt)
+            .ThenBy(mutation => mutation.Id)
+            .ToArrayAsync(cancellationToken);
 
-        if (entity is null)
+        var withdrawnAt = timeProvider.GetUtcNow();
+
+        foreach (var entity in entities)
         {
-            return null;
+            if (entity.Stage is MailboxMutationStage.Recorded)
+            {
+                entity.Stage = MailboxMutationStage.Cancelled;
+                entity.StageChangedAt = withdrawnAt;
+            }
         }
 
-        var folder = entity.MailFolder;
-
-        if (entity.Stage is MailboxMutationStage.Recorded)
-        {
-            entity.Stage = MailboxMutationStage.Cancelled;
-            entity.StageChangedAt = timeProvider.GetUtcNow();
-        }
-
-        return MailboxMutationRecordMapping.ToRecord(entity, folder);
+        return [.. entities.Select(entity => MailboxMutationRecordMapping.ToRecord(entity, entity.MailFolder))];
     }
 
     /// <inheritdoc />

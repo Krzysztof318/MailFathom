@@ -91,22 +91,29 @@ public interface IMailboxMutationRecordStore
         IReadOnlyList<MailboxMutationRecordId> recordIds,
         CancellationToken cancellationToken);
 
-    /// <summary>Withdraws one of an owner's changes, where nothing has been asked of the mail server for it yet.</summary>
+    /// <summary>Withdraws the owner's changes among those named, wherever nothing has been asked of the mail server for one yet.</summary>
     /// <param name="session">The session the write joins.</param>
-    /// <param name="owner">The owner the record must belong to.</param>
-    /// <param name="recordId">The record to withdraw.</param>
+    /// <param name="owner">The owner the records must belong to.</param>
+    /// <param name="recordIds">The records to withdraw.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
-    /// <returns>The record as it now stands, unchanged where the change had already been attempted, or <see langword="null" /> where this owner holds no such record.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
+    /// <returns>Each named record as it now stands, unchanged where the change had already been attempted, and absent where this owner holds no such record.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> or <paramref name="recordIds" /> is <see langword="null" />.</exception>
     /// <remarks>
+    /// <para>
     /// A record past <see cref="MailboxMutationRecord.IsWithdrawable" /> is returned rather than refused, because the
     /// caller's question is what became of the change and "it had already gone out" is the answer to it. That also makes
     /// the call safe to repeat: withdrawing an already withdrawn record reports it withdrawn and writes nothing.
+    /// </para>
+    /// <para>
+    /// The call takes the whole set rather than one record, because a caller withdrawing what it submitted as a batch
+    /// withdraws it as one, and the commit this joins retries as a whole — so a call per record would pay the round trip
+    /// again on every attempt.
+    /// </para>
     /// </remarks>
-    Task<MailboxMutationRecord?> WithdrawAsync(
+    Task<IReadOnlyList<MailboxMutationRecord>> WithdrawAsync(
         IPersistenceSession session,
         MailOwnerId owner,
-        MailboxMutationRecordId recordId,
+        IReadOnlyList<MailboxMutationRecordId> recordIds,
         CancellationToken cancellationToken);
 
     /// <summary>Counts one attempt against the record before that attempt is made.</summary>
