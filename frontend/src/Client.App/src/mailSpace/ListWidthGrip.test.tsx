@@ -111,6 +111,26 @@ describe('ListWidthGrip', () => {
         expect(moved).not.toHaveBeenCalled();
     });
 
+    it('leaves the drag with the pointer that started it when a second one lands on the grip', () => {
+        const chosen = vi.fn();
+
+        render(
+            <LocalizationProvider>
+                <ListWidthGrip width={400} onWidth={vi.fn()} onChosen={chosen} />
+            </LocalizationProvider>,
+        );
+
+        const grip = screen.getByRole('separator');
+        fireEvent.pointerDown(grip, { pointerId: 1, clientX: 600 });
+        fireEvent.pointerDown(grip, { pointerId: 2, clientX: 900 });
+
+        // The second finger is ignored rather than taking the drag over, so the first pointer's release still settles
+        // the width it was dragging toward instead of being dropped as a stranger's.
+        fireEvent.pointerUp(grip, { pointerId: 1, clientX: 660 });
+
+        expect(chosen).toHaveBeenCalledWith(460);
+    });
+
     it('moves nothing on a pointer that never took the boundary', () => {
         const moved = vi.fn();
 

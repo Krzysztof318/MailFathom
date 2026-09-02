@@ -41,6 +41,15 @@ export function ListWidthGrip({
     const dragging = useRef<{ pointer: number; from: number; startedAt: number } | null>(null);
 
     function beginDrag(event: PointerEvent<HTMLDivElement>): void {
+        const drag = dragging.current;
+
+        // A second finger landing on the grip mid-drag is ignored rather than taking the drag over: the pointer that
+        // started it is the one the two handlers below answer to, so letting a newcomer replace it would leave the
+        // first pointer's move and release unmatched and the width it was dragging toward never settled.
+        if (drag !== null && drag.pointer !== event.pointerId) {
+            return;
+        }
+
         // Without this a drag across the columns selects the rows it passes over, and the boundary arrives with half
         // the mailbox highlighted behind it.
         event.preventDefault();

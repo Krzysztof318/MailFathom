@@ -59,9 +59,9 @@ export function deviceStore(): DeviceStore {
  * nothing that says whether somebody is signed in. It is a name for a pane width, and the digest is what keeps even
  * the identity out of the store.
  *
- * ponytail: a non-cryptographic digest, because this is read before the first paint and `SubtleCrypto` only answers
- * asynchronously. It keeps the name out of the store rather than resisting somebody who already holds both; a
- * cryptographic one is the upgrade if a value under one of these keys ever becomes worth more than a pane width.
+ * **The digest is not a cryptographic one**, because this is read before the first paint and `SubtleCrypto` only
+ * answers asynchronously. It keeps the name out of the store rather than resisting somebody who already holds both;
+ * a cryptographic one is the upgrade if a value under one of these keys ever becomes worth more than a pane width.
  */
 export function listWidthKey(person: string): string {
     return `mailfathom.listWidth.${digestOf(person)}`;
