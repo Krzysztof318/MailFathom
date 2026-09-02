@@ -1,7 +1,7 @@
 ---
 name: update-dependencies
 description: Use when the task in front of you is to move dependency pins — packages in either stack, Rust crates, tools, SDKs, GitHub Action references, or container images — or to find out which of them are behind and whether any changed licence.
-license: Apache-2.0
+license: AGPL-3.0-only
 metadata:
   author: Krzysztof Kasprowicz
   repository: https://github.com/Krzysztof318/MailFathom

@@ -1,5 +1,5 @@
 # Copyright © 2026 Krzysztof Kasprowicz
-# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 # Project repository: https://github.com/Krzysztof318/MailFathom
 
 apiVersion: v2
@@ -91,7 +91,7 @@ maintainers:
 # README is for and what this listing used to be handed.
 annotations:
   artifacthub.io/category: ai-machine-learning
-  artifacthub.io/license: Apache-2.0
+  artifacthub.io/license: AGPL-3.0-only
   artifacthub.io/links: |
     - name: Documentation
       url: https://github.com/Krzysztof318/MailFathom/tree/main/docs

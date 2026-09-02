@@ -8,8 +8,8 @@ Four documents describe MailFathom's licensing, and each answers a different que
 
 | Document | Question it answers | Status |
 |---|---|---|
-| `LICENSE` | Which rights MailFathom grants for its own code | The unmodified Apache-2.0 text. Never edit it: GitHub detects the license by matching that file, and an edit turns a detected `Apache-2.0` into `NOASSERTION`. |
-| `NOTICE` | Who originally created the work, which section 4(d) asks a derivative distribution to preserve | Present, and informational only. Third-party notice text belongs beside it in the bundle below, never inside it. |
+| `LICENSE` | Which rights MailFathom grants for its own code | The unmodified AGPL-3.0 text, SPDX identifier `AGPL-3.0-only`. Never edit it: GitHub detects the license by matching that file, and an edit turns a detected `AGPL-3.0` into `NOASSERTION`. |
+| `NOTICE` | Who originally created the work, which section 7(b) permits a distribution to require be preserved | Present, and informational only. Third-party notice text belongs beside it in the bundle below, never inside it. |
 | `THIRD_PARTY_LICENSES.md` — this file | Which third-party components MailFathom uses, under which terms, and whether those terms fit both distribution models | Maintained here. |
 | A generated third-party notice bundle | The full license texts and attribution notices that must travel with a distributed binary, container, or source artifact | Not produced yet. Issue #191 owns generating it from each artifact's resolved dependency graph; the obligations it must satisfy are the ones recorded in this file. |
 
@@ -28,11 +28,13 @@ MailFathom must remain compatible with both contemplated distribution models:
 
 A third-party component may be used only when its license permits both, without forcing MailFathom itself to be distributed under a copyleft license.
 
+**MailFathom's own licence moved from Apache-2.0 to AGPL-3.0-only in 2026 and this policy did not move with it.** The two are independent, and the reading that a copyleft project may now consume copyleft dependencies is the one this paragraph exists to refuse. What MailFathom grants for its own code is the owner's to change — `CLA.md` is what keeps it changeable — and what a dependency grants is not, so a single copyleft dependency would end model 1 permanently and no later decision could undo it. Every row below is therefore written against model 1 exactly as it was before the relicensing. [ADR 0025](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0025-publishing-mailfathom-under-agpl-3-0-only.md) records the move and this consequence of it.
+
 Allowed licenses include permissive OSI-approved licenses such as MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, PostgreSQL License, and similarly permissive licenses after review.
 
 Licenses that require review before use include LGPL, MPL, EPL, Unicode, custom commercial licenses, source-available licenses, dual licenses, preview license terms, and any license with field-of-use, redistribution, network-service, data-use, patent, trademark, telemetry, or attribution conditions that are not already understood for this project.
 
-Prohibited without explicit owner approval are strong copyleft or source-available licenses that could conflict with closed-source commercial distribution or require relicensing MailFathom, including GPL, AGPL, SSPL, BUSL, Commons Clause, PolyForm Noncommercial, and similar restrictions.
+Prohibited without explicit owner approval are strong copyleft or source-available licenses that could conflict with closed-source commercial distribution or require relicensing MailFathom, including GPL, AGPL, SSPL, BUSL, Commons Clause, PolyForm Noncommercial, and similar restrictions. AGPL is on that list as a dependency licence whatever MailFathom itself is published under.
 
 A permissive SDK license never approves the hosted service, model, container image, or trademark behind it. Those terms are reviewed separately and recorded separately.
 
@@ -323,7 +325,7 @@ permission, and none is used.
 
 **Where the acknowledgement is published, and why there.** The several owners who ask for one are answered by an
 enumerated statement at the foot of the page that names the marks, not by a line in `NOTICE` and not by this register.
-`NOTICE` was considered and rejected: it is Apache-2.0 section 4(d) attribution for MailFathom's own authorship, and
+`NOTICE` was considered and rejected: it is the original-author attribution for MailFathom's own authorship, and
 third-party text does not belong in it. This register was considered and rejected too — it is a review record, and an
 acknowledgement that appears only in a review record is published to nobody. The page footer is where the marks are
 actually read, it is carried by both the repository and the documentation site, it enumerates the owners rather than

@@ -2,7 +2,7 @@
 name: prepare-release
 description: Manual only. Invoked by the owner to cut a MailFathom release — composes the changelog, raises the declared version, settles the milestones and the next release's tracking issue, and states the order the two pull requests and the tag have to land in.
 disable-model-invocation: true
-license: Apache-2.0
+license: AGPL-3.0-only
 metadata:
   author: Krzysztof Kasprowicz
   repository: https://github.com/Krzysztof318/MailFathom
@@ -392,11 +392,12 @@ What the reading asks:
 - **Does it still read as one thing?** Sections added a release at a time stop composing. The front page and the first
   get-started are the same document, and it is read by somebody who has not committed to anything yet.
 
-The licensing record is not prunable. `$check-docs-licenses` requires this file to carry that contributions arrive
-under the license by section 5 and under the contributor licence agreement in `CLA.md`, that contributors keep their
-copyright, and that sections 7 and 8
-give the software with no warranty and no contributor liability — the last because this is the only one of those files
-rendered outside the repository. Shorten around them.
+The licensing record is not prunable. `$check-docs-licenses` requires this file to carry that the contributor licence
+agreement in `CLA.md` is what places a contribution under the license, that contributors keep their copyright, that
+section 13 asks an operator running a modified version over a network to offer its source, and that sections 15 and 16
+give the software with no warranty and no liability — the last two because this is one of the files rendered outside
+the repository, where a reader who never opens `LICENSE` would otherwise meet the grant without them. Shorten around
+them.
 
 Nothing gates any of this either, and no length is prescribed: a number would be met by cutting whatever is nearest the
 end. What is prescribed is that the reading happens here, in the pull request whose merge commit is tagged, because

@@ -52,4 +52,4 @@ Where a violation touches someone directly, what they need comes before what the
 
 ## Attribution
 
-This document is MailFathom's own, written for this project, and it is covered by the repository's [Apache-2.0 license](LICENSE) like every other file here.
+This document is MailFathom's own, written for this project, and it is covered by the repository's [AGPL-3.0-only license](LICENSE) like every other file here.

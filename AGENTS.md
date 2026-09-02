@@ -34,7 +34,7 @@ This file is loaded into every agent session in either stack, so it holds what h
 | `docs/operations/issue-tracking.md` | `$start-task` opens, places, or claims an issue, `$finish-change` links one | Which work needs an issue, what its body contains, the one `type:*` label, the `backend` or `frontend` label naming the stack it lands in, the runtime-specific `agent:claude` or `agent:codex` marker a session applies when it takes the issue, the milestone, the board's `Area`, `Queue`, and `Size` fields and its views, and how an arrival from outside the project is triaged |
 | `docs/operations/agent-workflow.md` | Any of the workflow skills runs | The verification scripts at length, what each skill does, and how `Fathom review` behaves on a pull request |
 | `docs/operations/local-development.md` | The SDK, the database, packages, or the deployment assets are involved | The environment, the EF Core command split, the pull-request checks, package sources, lock files, and how every pin in the repository is read against its upstream |
-| `$check-docs-licenses` | Every change, as the mandatory completion gate | MailFathom's own Apache-2.0 record across its five files, and the third-party licensing rules and register |
+| `$check-docs-licenses` | Every change, as the mandatory completion gate | MailFathom's own AGPL-3.0-only record across its five files, and the third-party licensing rules and register |
 | `$add-migration` | A model change needs a migration | The additive migration workflow and the SQL review that is part of it |
 | `$update-dependencies` | The task is to move dependency pins | The order a bump runs in, what decides whether a pin moves at all, and the two pin families that are surveyed and never rewritten |
 

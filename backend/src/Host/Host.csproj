@@ -72,7 +72,7 @@
   </Target>
 
   <!-- The native artifact is this project's publish output, and so is the container image, which copies that output
-       and nothing else. The Apache-2.0 grant and the original-author attribution therefore travel with both, rather
+       and nothing else. The AGPL-3.0-only grant and the original-author attribution therefore travel with both, rather
        than being attached by a release step nobody runs the same way twice. -->
   <ItemGroup>
     <None Include="$(RepositoryRoot)LICENSE" Link="LICENSE" CopyToPublishDirectory="PreserveNewest" />

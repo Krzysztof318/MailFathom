@@ -181,11 +181,21 @@ after that version's tag, so a version reads as `v<version>`. The nightly public
 else, `latest`, because a nightly is named after a release the site publishes nothing for yet and what it actually
 carries is `main` — which is what `latest` documents.
 
-`org.opencontainers.image.licenses` is fixed rather than passed in, at `Apache-2.0`, because it states MailFathom's own
+`org.opencontainers.image.licenses` is fixed rather than passed in, at `AGPL-3.0-only`, because it states MailFathom's own
 license and a build must not be able to say otherwise. The label is only the claim a registry indexes; the terms
 themselves are `/app/LICENSE` and `/app/NOTICE`, which arrive as part of the publish output the runtime stage copies.
 `Host` fails its own publish when either is missing, so the image cannot be built without them. The third-party
 notices that must accompany them are not in the image yet — see `THIRD_PARTY_LICENSES.md` and issue #191.
+
+**What that licence asks of an operator** is one thing, and it is the same whichever deployment shape runs the image —
+Kubernetes, Compose, or Quadlet. Running a published image obliges nothing beyond the source this project already
+publishes: it is here, and `/app/LICENSE`, `/app/NOTICE`, and the `org.opencontainers.image.source` label all point at
+it. Section 13 of the AGPL is what differs from the GPL, and it applies to an operator who **modifies** MailFathom,
+builds their own image from it, and lets other people reach that version over a network — through the MCP endpoint, the
+client endpoint, the admin endpoint, or any other listener. Those users must then be offered the corresponding source of
+the version they are actually talking to, and publishing the fork and pointing at it from where they reach the service
+is how that is done. A modified deployment nobody else reaches triggers nothing, and neither does an unmodified one
+however many people use it. The licence text is what governs rather than this summary of it.
 
 `org.opencontainers.image.description` is the sentence a registry shows beside the image, and it is also what the
 release pushes as the Docker Hub repository's short description — that field is read off the published manifest rather

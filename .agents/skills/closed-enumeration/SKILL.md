@@ -1,7 +1,7 @@
 ---
 name: closed-enumeration
 description: Use when modelling a fixed set of named values that carries data, behavior, or a published identity, and a C# enum would not be enough.
-license: Apache-2.0
+license: AGPL-3.0-only
 metadata:
   author: Krzysztof Kasprowicz
   repository: https://github.com/Krzysztof318/MailFathom

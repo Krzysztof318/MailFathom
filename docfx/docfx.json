@@ -65,7 +65,7 @@
       "_appTitle": "MailFathom",
       "_appLogoPath": "assets/icon-180.png",
       "_appFaviconPath": "assets/icon-180.png",
-      "_appFooter": "<span>Copyright © 2026 Krzysztof Kasprowicz. Licensed under the <a href=\"https://github.com/Krzysztof318/MailFathom/blob/main/LICENSE\">Apache License 2.0</a>.</span>",
+      "_appFooter": "<span>Copyright © 2026 Krzysztof Kasprowicz. Licensed under the <a href=\"https://github.com/Krzysztof318/MailFathom/blob/main/LICENSE\">GNU Affero General Public License, Version 3</a>.</span>",
       "_enableSearch": true,
       "_gitContribute": {
         "repo": "https://github.com/Krzysztof318/MailFathom",

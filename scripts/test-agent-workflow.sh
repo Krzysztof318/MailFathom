@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copyright © 2026 Krzysztof Kasprowicz
-# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 # Project repository: https://github.com/Krzysztof318/MailFathom
 
 set -euo pipefail
@@ -8517,7 +8517,7 @@ every_skill_declares_its_license() {
   while IFS= read -r file; do
     frontmatter="$(awk 'NR == 1 { next } /^---$/ { exit } { print }' "$source_repository_root/$file")"
 
-    if ! grep -qxF 'license: Apache-2.0' <<< "$frontmatter"; then
+    if ! grep -qxF 'license: AGPL-3.0-only' <<< "$frontmatter"; then
       printf '%s declares no license in its frontmatter\n' "$file" >&2
       failures=$(( failures + 1 ))
     fi

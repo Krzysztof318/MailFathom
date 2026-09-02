@@ -54,4 +54,4 @@ architectural decision records under
 [`docs/decisions/`](https://github.com/Krzysztof318/MailFathom/tree/main/docs/decisions), which are a closed record of
 why a decision was taken rather than documentation of how MailFathom behaves, and the instructions that govern the
 agents and contributors working on it. MailFathom is published under the
-[Apache License 2.0](https://github.com/Krzysztof318/MailFathom/blob/main/LICENSE).
+[GNU Affero General Public License, Version 3](https://github.com/Krzysztof318/MailFathom/blob/main/LICENSE).

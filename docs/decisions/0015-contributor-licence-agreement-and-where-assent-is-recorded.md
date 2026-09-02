@@ -11,13 +11,22 @@ informed:
 
 <!-- describes: CLA.md, .github/workflows/contributor-licence.yml -->
 
+> **A premise of this record has since moved, and its decision has not.** MailFathom was Apache-2.0 when this was
+> written, and [ADR 0025](0025-publishing-mailfathom-under-agpl-3-0-only.md) moved it to AGPL-3.0-only on 2026-09-02 —
+> the first exercise of exactly the freedom the agreement below was taken to keep. Two consequences for reading this
+> page. Where it reasons from Apache-2.0 section 5 placing an inbound contribution under the project's terms, that is
+> the mechanism as it stood then; AGPL-3.0 has no equivalent clause, so clause 2.1 of `CLA.md` now carries that job as
+> well as the two this record was written for. And *Keep Apache-2.0 section 5 alone*, considered and rejected below,
+> is no longer an available option rather than a rejected one. Nothing about the decision changes: an agreement broad
+> enough to relicense, accepted once, recorded in this repository.
+
 ## Context and Problem Statement
 
 MailFathom has exactly one author, so every right in the work is still held in one place. Apache-2.0 section 5 puts an inbound contribution under Apache-2.0 by the act of submitting it, which is what makes a pull request usable; it grants nothing wider. It carries no right to distribute that contribution under any other terms, and no statement that the contributor was entitled to submit it at all.
 
 Both gaps close on the same event. The first external contribution merged without an agreement makes any later licensing decision — a different open-source licence, a commercial licence sold beside it, a move into a foundation — conditional on finding every past contributor and obtaining individual consent, which one unreachable or unwilling person is enough to defeat. The second gap has no closing event: nothing in the licence ever asks whether the code was the contributor's to give, and that is the one defect a follow-up commit cannot repair, because it has to come out of the history.
 
-The question is whether to take an agreement now, while there is nobody to ask retroactively, and where the evidence of acceptance lives. It is not a question about MailFathom's own licence, which stays Apache-2.0 and is untouched here.
+The question is whether to take an agreement now, while there is nobody to ask retroactively, and where the evidence of acceptance lives. It is not a question about MailFathom's own licence, which is Apache-2.0 as this is written and untouched here.
 
 ## Decision Drivers
 
@@ -25,7 +34,7 @@ The question is whether to take an agreement now, while there is nobody to ask r
 - An agreement is asked of people who owe this project nothing, so its cost to them decides whether it is answered.
 - Acceptance is evidence, and evidence is worth what its custody is worth.
 - The contributor's identity is personal data, and this project classifies personal data as sensitive by default.
-- MailFathom stays Apache-2.0. An agreement that reads as an announced licence change buys the cost of one without the decision.
+- MailFathom is Apache-2.0 as this is decided, and this record announces no change to that. An agreement that reads as an announced licence change buys the cost of one without the decision.
 
 ## Considered Options
 

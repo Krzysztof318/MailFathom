@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copyright © 2026 Krzysztof Kasprowicz
-# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 # Project repository: https://github.com/Krzysztof318/MailFathom
 
 # Report what the working tree obliges the rest of the repository to do.

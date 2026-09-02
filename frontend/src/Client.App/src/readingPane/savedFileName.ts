@@ -1,5 +1,5 @@
 // Copyright © 2026 Krzysztof Kasprowicz
-// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 // What a downloaded file is named on somebody's machine. It sits apart from the row that offers the download because a

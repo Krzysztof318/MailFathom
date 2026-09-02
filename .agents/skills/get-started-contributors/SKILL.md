@@ -2,7 +2,7 @@
 name: get-started-contributors
 description: Manual only. Invoked when somebody is contributing to MailFathom for the first time — the welcome, an orientation in what the project is and how it is licensed, then the Linux-only platform check, the toolchain and its installation, the base remote, the local instruction file naming the role, the permissions an agent harness needs, and the first green verification run. Invoked again on a machine it has already set up, it refreshes that machine against what the repository has changed since instead of repeating any of it.
 disable-model-invocation: true
-license: Apache-2.0
+license: AGPL-3.0-only
 metadata:
   author: Krzysztof Kasprowicz
   repository: https://github.com/Krzysztof318/MailFathom
@@ -125,12 +125,13 @@ offer to go deeper on any one of them instead of expanding all six.
    against — and `.agents/skills/` is this workflow, which Claude Code finds through the `.claude/skills` symlink every
    clone carries. Each directory's own `AGENTS.md` governs it, and the table in the root one says which to read when.
 
-4. **The licence, and the one mistake that cannot be undone.** MailFathom is Apache-2.0, and section 5 puts a
-   contribution under the same licence by the act of submitting it. Beside that, the repository asks for its contributor
-   licence agreement in `CLA.md`, accepted once by replying to the first pull request with the sentence it names — a bot
-   asks when it applies, and the `license/cla` status says where the contributor stands. It is a licence rather than a
-   transfer: the contributor keeps the copyright in what they write, and what it adds over section 5 is the freedom to
-   publish MailFathom under other terms later, and the contributor's own statement that the code was theirs to give.
+4. **The licence, and the one mistake that cannot be undone.** MailFathom is AGPL-3.0-only, and that licence has no
+   clause of its own putting a contribution under the project's terms — Apache-2.0's section 5 did, and nothing in the
+   AGPL replaces it. So the contributor licence agreement in `CLA.md` is what does it, accepted once by replying to the
+   first pull request with the sentence it names — a bot asks when it applies, and the `license/cla` status says where
+   the contributor stands. It is a licence rather than a transfer: the contributor keeps the copyright in what they
+   write, and it carries two further things — the freedom to publish MailFathom under other terms later, and the
+   contributor's own statement that the code was theirs to give.
    ADR 0015 records why. That statement is the part no licence and no agreement can check for them — so anything copied
    from a GPL, AGPL, SSPL, BUSL, or Commons Clause project, pasted from an answer with restrictive terms, or produced by
    a model that reproduced such code, is the one defect a follow-up commit cannot repair, because it has to come out of

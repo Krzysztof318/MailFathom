@@ -113,7 +113,7 @@ rule is a wrong finding, and so is one these files already reject.
   client suite, which is reached from the root table rather than from the directory a test sits in,
   because a client test sits beside the source it covers rather than under `frontend/tests/`.
   `docs/AGENTS.md` for a page under `docs/`.
-- `.agents/skills/check-docs-licenses/SKILL.md` for MailFathom's own Apache-2.0 record
+- `.agents/skills/check-docs-licenses/SKILL.md` for MailFathom's own AGPL-3.0-only record
   and the third-party licensing rules, and `docs/operations/issue-tracking.md` for what
   an issue and its board placement have to carry.
 - The ADRs under `docs/decisions/` that govern the area it changes, and the pages under
