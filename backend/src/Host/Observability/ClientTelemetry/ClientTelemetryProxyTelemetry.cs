@@ -166,6 +166,7 @@ internal sealed partial class ClientTelemetryProxyTelemetry
         ClientTelemetryFailure.Unavailable => "unavailable",
         ClientTelemetryFailure.TimedOut => "timed_out",
         ClientTelemetryFailure.Unreachable => "unreachable",
+        ClientTelemetryFailure.Unauthorized => "unauthorized",
         _ => "cancelled",
     };
 

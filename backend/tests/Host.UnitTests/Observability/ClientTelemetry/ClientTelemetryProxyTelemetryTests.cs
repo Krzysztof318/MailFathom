@@ -132,6 +132,6 @@ public sealed class ClientTelemetryProxyTelemetryTests
     [Fact]
     public void ConditionOf_EveryFailure_IsOneLowerCaseWordWrittenAsAPastParticiple() =>
         Assert.Equal(
-            ["forwarded", "refused", "throttled", "unavailable", "timed_out", "unreachable", "cancelled"],
+            ["forwarded", "refused", "throttled", "unavailable", "timed_out", "unreachable", "cancelled", "unauthorized"],
             Enum.GetValues<ClientTelemetryFailure>().Select(ClientTelemetryProxyTelemetry.ConditionOf));
 }

@@ -88,11 +88,13 @@ public sealed class ClientTelemetryForwarderTests
         Assert.Equal(partialSuccess, forwarding.Body);
     }
 
-    /// <summary>The two halves of the specification's own split: what a client should stop sending, and what it should hold.</summary>
+    /// <summary>The specification's own split — stop sending, or hold — plus the credential this deployment repairs itself.</summary>
     [Theory]
     [InlineData(HttpStatusCode.BadRequest, nameof(ClientTelemetryFailure.Refused))]
     [InlineData(HttpStatusCode.UnsupportedMediaType, nameof(ClientTelemetryFailure.Refused))]
     [InlineData(HttpStatusCode.TooManyRequests, nameof(ClientTelemetryFailure.Throttled))]
+    [InlineData(HttpStatusCode.Unauthorized, nameof(ClientTelemetryFailure.Unauthorized))]
+    [InlineData(HttpStatusCode.Forbidden, nameof(ClientTelemetryFailure.Unauthorized))]
     [InlineData(HttpStatusCode.BadGateway, nameof(ClientTelemetryFailure.Unavailable))]
     [InlineData(HttpStatusCode.ServiceUnavailable, nameof(ClientTelemetryFailure.Unavailable))]
     public async Task ForwardAsync_ADestinationThatDidNotAcceptTheBatch_ReportsTheConditionThatFitsIt(
@@ -162,6 +164,8 @@ public sealed class ClientTelemetryForwarderTests
     [Theory]
     [InlineData(3, nameof(ClientTelemetryFailure.Refused))]
     [InlineData(12, nameof(ClientTelemetryFailure.Refused))]
+    [InlineData(7, nameof(ClientTelemetryFailure.Unauthorized))]
+    [InlineData(16, nameof(ClientTelemetryFailure.Unauthorized))]
     [InlineData(8, nameof(ClientTelemetryFailure.Throttled))]
     [InlineData(14, nameof(ClientTelemetryFailure.Unavailable))]
     public async Task ForwardAsync_OverGrpc_AStatusOtherThanOk_ReportsTheConditionThatFitsIt(

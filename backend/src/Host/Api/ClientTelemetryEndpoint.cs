@@ -24,8 +24,18 @@ namespace MailFathom.Host.Api;
 /// <b>Identity is settled here rather than taken from the payload.</b> A client says what it likes about the browser,
 /// the release, and the screen, and none of that is this deployment's business; whose telemetry it is, is. The owner
 /// comes off the credential that authenticated, and it is written over whatever arrived under that name rather than
-/// merged with it — a client cannot export as somebody else, because there is no argument or attribute in which it
-/// could say so and be believed.
+/// merged with it — there is no argument and no resource attribute in which a client could name an owner of its own
+/// and be believed.
+/// </para>
+/// <para>
+/// The guarantee is about the <b>resource</b>, which is where OpenTelemetry puts the identity of what produced a
+/// signal and where a backend reads it from. A client remains free to write anything it likes into a span, a log
+/// record, or a metric data point, including a key spelled like this one, exactly as it is free to write anything into
+/// the text of a span name — those are the client's own words about its own work rather than an attribution this
+/// deployment made, and nothing here reads them. Stripping them would mean walking every record of all three signals
+/// against their schemas, which is the decoding this proxy deliberately does not do and which would make it a
+/// processor. So the rule to read telemetry by is the resource's own attribution, and it is the one thing in a
+/// forwarded batch a client cannot influence.
 /// </para>
 /// <para>
 /// <b>The routes exist only where the deployment named a destination.</b> Enabling the export is the whole switch and it

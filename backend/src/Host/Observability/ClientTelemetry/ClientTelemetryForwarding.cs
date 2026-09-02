@@ -78,4 +78,13 @@ internal enum ClientTelemetryFailure
 
     /// <summary>The client that sent the batch disconnected before the destination answered.</summary>
     Cancelled = 6,
+
+    /// <summary>The destination would not take this deployment's own credential.</summary>
+    /// <remarks>
+    /// Its own condition rather than one of the two it sits between, because it is the one forwarding failure an
+    /// operator repairs rather than waits out, and neither neighbour would say so: folded into
+    /// <see cref="Unavailable" /> it reads as a collector that is down, and folded into <see cref="Refused" /> it would
+    /// tell a client to drop a batch that is not what was wrong.
+    /// </remarks>
+    Unauthorized = 7,
 }

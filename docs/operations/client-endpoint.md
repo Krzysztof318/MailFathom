@@ -90,9 +90,11 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `POST /api/client/telemetry/v1/metrics` | none |
 | `POST /api/client/telemetry/v1/logs` | none |
 
-There is no version segment in either path: the major version is `0` and
+No path here carries a version segment MailFathom chose: the major version is `0` and
 [ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
-permits breaking the contract outright, so `/v1` would be scaffolding for a promise this project has not made.
+permits breaking the contract outright, so `/v1` would be scaffolding for a promise this project has not made. The
+`/v1` in the three [telemetry routes](#the-telemetry-routes) is not one: those paths are fixed by the OTLP
+specification, so a client points its exporter at the prefix above them and appends nothing itself.
 
 ### The session route
 
@@ -1195,6 +1197,14 @@ page cannot report as somebody else however its bundle was modified. Nothing els
 batch is forwarded as it arrived, so a signal a client's own instrumentation names arrives at the collector under that
 name.
 
+**Read attribution off the resource, which is the level this holds at.** A client is free to write anything into a
+span, a log record, or a metric data point, a key spelled like the owner one included, exactly as it is free to write
+anything into a span's name — those are its own words about its own work, they are forwarded untouched like every other
+field it sends, and nothing here reads them. Reaching them would mean decoding all three signals against their schemas,
+which is what would make this a processor rather than a proxy. So a dashboard, a query, or a retention rule that has to
+know whose telemetry it is reads the **resource** attribute, and that one is the deployment's own and cannot be
+influenced from a browser.
+
 **What it forwards to is the deployment's, never the client's.** There is no second destination setting, and the
 collector's address and its credential never leave the process — a client holding either would be publishing them to
 whoever opened the developer tools. The endpoint, the protocol, the headers, and the per-export timeout are the ones
@@ -1212,9 +1222,12 @@ A batch the endpoint cannot read as a protocol-buffers export request is answere
 deployment's collector is not the place to find out whether a client's encoder works. A collector that answered a
 partial success is relayed verbatim rather than reported as a success, because a client that was told everything
 arrived stops holding what did not. A collector that refused the batch outright is answered in this endpoint's own
-words instead: what it said is about this deployment's own export — a credential it would not take, a version it does
-not speak — and is not a document to hand to a browser. Anything transient — a collector that is down, unreachable, or slower than the
-configured timeout — is answered `503`, which is what leaves the batch where the client can still send it again.
+words instead: what it said is about this deployment's own export — a version it does not speak, a message it could not
+read — and is not a document to hand to a browser. Anything transient — a collector that is down, unreachable, slower
+than the configured timeout, or refusing this deployment's own collector credential — is answered `503`, which is what
+leaves the batch where the client can still send it again. That last one is a deployment fault rather than a client
+one, so it is reported to the operator as [its own
+condition](telemetry.md#what-the-client-telemetry-proxy-emits) rather than folded into the others.
 
 **Accepting and forwarding writes no log record at any level.** A signed-in client exports every few seconds for as
 long as it is open, so a line per batch would make a deployment's own logs unreadable within a day. A forwarding

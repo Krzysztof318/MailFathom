@@ -194,7 +194,7 @@ public sealed class ClientTelemetryEndpointTests
         // Arrange
         byte[] collectorReason = [0x0A, 0x02, 0x08, 0x10];
         using var collector = FakeHttpMessageHandler.AlwaysResponding(
-            () => new HttpResponseMessage(HttpStatusCode.Unauthorized) { Content = new ByteArrayContent(collectorReason) });
+            () => new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = new ByteArrayContent(collectorReason) });
         var request = Requesting(OtlpExportRequests.Batch([], records: 1));
         var body = new MemoryStream();
         request.Response.Body = body;
@@ -206,6 +206,27 @@ public sealed class ClientTelemetryEndpointTests
         Assert.Equal(StatusCodes.Status400BadRequest, answered);
         Assert.NotEqual(collectorReason, body.ToArray());
         Assert.NotEmpty(body.ToArray());
+    }
+
+    /// <summary>A collector that will not take this deployment's credential is not the client's batch being wrong.</summary>
+    /// <remarks>
+    /// Answered as retryable rather than as a refusal, because a browser told to stop would drop telemetry over a
+    /// header only an operator can correct — and the operator is told which condition it is, on the counter and in the
+    /// line the proxy writes, rather than through this answer.
+    /// </remarks>
+    [Fact]
+    public async Task AcceptAsync_ACollectorRefusingThisDeploymentsCredential_TellsTheClientToHold()
+    {
+        // Arrange
+        using var collector = FakeHttpMessageHandler.AlwaysResponding(
+            () => new HttpResponseMessage(HttpStatusCode.Unauthorized) { Content = new ByteArrayContent([]) });
+        var request = Requesting(OtlpExportRequests.Batch([], records: 1));
+
+        // Act
+        var answered = await AcceptAsync(request, collector);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, answered);
     }
 
     /// <summary>Nobody exports on somebody's behalf without a person to attribute it to.</summary>

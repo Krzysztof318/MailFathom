@@ -31,6 +31,14 @@ namespace MailFathom.Host.Observability.ClientTelemetry;
 /// the refusal it is, so the client stops rather than retrying forever; anything transient is answered as
 /// unavailability, which is what tells the client to hold.
 /// </para>
+/// <para>
+/// A destination that will not take <b>this deployment's own credential</b> is neither of those, and both transports
+/// sort it into a condition of its own. It is not the client's batch that was wrong, so answering the refusal would
+/// have a browser drop telemetry over a credential nobody there can repair, and it is not a collector that is down, so
+/// folding it into unavailability would leave the one condition an operator has to act on indistinguishable from the
+/// one they wait out. The client is therefore told to hold, exactly as it is for anything else transient, and the
+/// condition is named for the deployment on the counter and in the line the proxy writes.
+/// </para>
 /// </remarks>
 internal sealed class ClientTelemetryForwarder
 {
@@ -156,6 +164,11 @@ internal sealed class ClientTelemetryForwarder
             return ClientTelemetryForwarding.Throttled(response.Headers.RetryAfter?.Delta);
         }
 
+        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        {
+            return ClientTelemetryForwarding.Failed(ClientTelemetryFailure.Unauthorized);
+        }
+
         return (int)response.StatusCode >= StatusCodes.Status500InternalServerError
             ? ClientTelemetryForwarding.Failed(ClientTelemetryFailure.Unavailable)
             : ClientTelemetryForwarding.Refused();
@@ -183,6 +196,8 @@ internal sealed class ClientTelemetryForwarder
             GrpcStatus.Ok => ClientTelemetryForwarding.Forwarded(Unframe(body)),
             GrpcStatus.InvalidArgument or GrpcStatus.NotFound or GrpcStatus.Unimplemented =>
                 ClientTelemetryForwarding.Refused(),
+            GrpcStatus.PermissionDenied or GrpcStatus.Unauthenticated =>
+                ClientTelemetryForwarding.Failed(ClientTelemetryFailure.Unauthorized),
             GrpcStatus.ResourceExhausted => ClientTelemetryForwarding.Throttled(retryAfter: null),
             _ => ClientTelemetryForwarding.Failed(ClientTelemetryFailure.Unavailable),
         };
@@ -229,7 +244,9 @@ internal sealed class ClientTelemetryForwarder
         internal const int Ok = 0;
         internal const int InvalidArgument = 3;
         internal const int NotFound = 5;
+        internal const int PermissionDenied = 7;
         internal const int ResourceExhausted = 8;
         internal const int Unimplemented = 12;
+        internal const int Unauthenticated = 16;
     }
 }

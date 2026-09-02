@@ -1156,6 +1156,12 @@ failure carries `mailfathom.client_telemetry.condition`, written as a past parti
 `refused` for a destination that will never take the batch, and `throttled`, `unavailable`, `timed_out`, `unreachable`,
 or `cancelled` for one that might.
 
+`unauthorized` is the eighth and the one worth alerting on, because it is the only forwarding condition an operator
+repairs rather than waits out: the collector would not take **this deployment's own** credential, which is what
+`OTEL_EXPORTER_OTLP_HEADERS` carries. It is kept apart from `unavailable` for exactly that reason, and the client is
+still told to hold — the batch was never what was wrong, and telling a browser to drop telemetry over a credential
+nobody there can repair would lose what a corrected header would have carried.
+
 **None of the five names a person.** A batch is attributed to its owner in the payload that leaves for the collector,
 where it is what makes one client's traces separable from another's; the instruments here are the deployment's own
 reading of whether the relay works, and an owner dimension on them would publish how much each person's client is

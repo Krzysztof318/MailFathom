@@ -51,7 +51,10 @@ internal static class OtlpExportPayload
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="attributeKey" /> or <paramref name="attributeValue" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// The owner attribute is written onto every resource in the batch rather than onto the first, because a batch may
-    /// carry several and a resource left unwritten would be the one path by which a client's own claim survived.
+    /// carry several and a resource left unwritten would be the one path by which a client's own claim survived at the
+    /// level attribution is read from. It reaches the resource and nothing below it: an attribute a client writes on a
+    /// scope, a span, a log record, or a metric data point is copied through like every other field it sends, since
+    /// reaching those means walking each signal's own schema, which is the decoding this file exists not to do.
     /// </remarks>
     internal static OtlpExportRewrite Rewrite(
         ReadOnlySpan<byte> request,
