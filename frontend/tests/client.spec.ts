@@ -386,6 +386,12 @@ async function signIn(page: Page): Promise<void> {
     await expect(page.getByRole('navigation', { name: 'Spaces' })).toBeVisible();
 }
 
+/** The account menu at the foot of the navigation opened, which is where the preferences and signing out live. */
+async function openAccountMenu(page: Page): Promise<void> {
+    await page.getByRole('button', { name: 'Account and preferences' }).click();
+    await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+}
+
 /** The client opened at an address and signed in, which is where every test about the frame starts. */
 async function openSignedIn(page: Page, address = '/'): Promise<void> {
     await servedByADeployment(page);
@@ -453,6 +459,7 @@ test('stays signed in across a reload, and asks again in a tab that was not sign
 test('asks for the credential again after signing out, including across a reload', async ({ page }) => {
     await openSignedIn(page);
 
+    await openAccountMenu(page);
     await page.getByRole('button', { name: 'Sign out' }).click();
     await expect(page.getByRole('textbox', { name: 'User name' })).toBeVisible();
 
@@ -468,8 +475,10 @@ test('opens in Discover, under the version it was built from and the one the dep
     await expect(page.getByRole('heading', { name: 'Discover', level: 1 })).toBeVisible();
 
     // The client's own is substituted into the bundle at build time, which is the half only a built bundle proves; the
-    // deployment's arrives over the wire beside it.
+    // deployment's arrives over the wire beside it. Both are read in the account menu, which is where they live.
+    await openAccountMenu(page);
     await expect(page.getByText(`Client ${declaredVersion}, deployment ${declaredVersion}`)).toBeVisible();
+    await page.keyboard.press('Escape');
 
     // A first load at the root is written back to the address the space is actually reached at, which is what makes
     // the next assertion — reloading it — mean anything.
@@ -494,13 +503,13 @@ test('moves back and forward through its own spaces without leaving the applicat
     await expect(page.getByRole('heading', { name: 'Discover', level: 1 })).toBeVisible();
 
     await page.getByRole('link', { name: 'Mail' }).click();
-    await expect(page.getByRole('heading', { name: 'Mail', level: 1 })).toBeVisible();
+    await expect(page.getByRole('main', { name: 'Mail' })).toBeVisible();
 
     await page.goBack();
     await expect(page.getByRole('heading', { name: 'Discover', level: 1 })).toBeVisible();
 
     await page.goForward();
-    await expect(page.getByRole('heading', { name: 'Mail', level: 1 })).toBeVisible();
+    await expect(page.getByRole('main', { name: 'Mail' })).toBeVisible();
 });
 
 test('carries the question and the mailbox in scope from one space to the next', async ({ page }) => {
@@ -549,25 +558,45 @@ test('moves a keyboard through a narrow window in the order the window shows', a
 
     // The narrow composition draws the navigation at the bottom of the screen, and the keyboard follows the document
     // rather than the layout — so a document that put the navigation first would hand a reader the bottom bar before
-    // the header at the top of the window. Only a browser answers this: jsdom has no sequential focus navigation.
-    // The freshness line is the first thing the header holds, and it is a disclosure onto the account-by-account
-    // reading of the same sentence — so it is where a keyboard arrives before any of the controls beside it.
+    // the space at the top of the window. Only a browser answers this: jsdom has no sequential focus navigation.
+    // The freshness line is the first thing the space holds, and it is a disclosure onto the account-by-account
+    // reading of the same sentence — so it is where a keyboard arrives before any of the controls beneath it.
     await page.keyboard.press('Tab');
     await expect(page.getByText('Every account is up to date.')).toBeFocused();
 
     await page.keyboard.press('Tab');
-    await expect(page.getByRole('combobox', { name: 'Theme' })).toBeFocused();
-
-    await page.keyboard.press('Tab');
-    await page.keyboard.press('Tab');
-    await expect(page.getByRole('button', { name: 'Sign out' })).toBeFocused();
-
-    await page.keyboard.press('Tab');
     await expect(page.getByRole('searchbox', { name: 'Ask your mail' })).toBeFocused();
 
+    // Past the question's own two controls, the bar: the destinations first and the account last, which is where the
+    // design project puts what is about the person rather than about a space.
+    await page.keyboard.press('Tab');
     await page.keyboard.press('Tab');
     await page.keyboard.press('Tab');
     await expect(page.getByRole('link', { name: 'Discover' })).toBeFocused();
+
+    await page.getByRole('link', { name: /^People/u }).focus();
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('button', { name: 'Account and preferences' })).toBeFocused();
+});
+
+test('opens the account menu from its control and hands focus back to it on Escape', async ({ page }) => {
+    await openSignedIn(page);
+
+    // The menu is the platform's own popover, so what is asserted is the platform's contract rather than any code of
+    // this client's: it opens from the control that names it, its controls are reachable once it is open, Escape
+    // closes it, and focus returns to the control — none of which jsdom implements, so only a browser proves it.
+    const control = page.getByRole('button', { name: 'Account and preferences' });
+    await control.click();
+    await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('combobox', { name: 'Theme' })).toBeFocused();
+
+    // Escape is pressed from the way out rather than from a chooser, which takes the key for its own list.
+    await page.getByRole('button', { name: 'Sign out' }).focus();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('button', { name: 'Sign out' })).toBeHidden();
+    await expect(control).toBeFocused();
 });
 
 test('stays usable at the narrowest width a supported head presents', async ({ page }) => {
@@ -614,6 +643,7 @@ test('opens again in the theme that was chosen, after the page is loaded afresh'
 
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
 
+    await openAccountMenu(page);
     await page.getByRole('combobox', { name: 'Theme' }).selectOption('dark');
     await page.reload();
 
@@ -629,6 +659,7 @@ test('opens again in the language that was chosen, after the page is loaded afre
     await expect(discover).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 
+    await openAccountMenu(page);
     await page.getByRole('combobox', { name: 'Language' }).selectOption('pl');
     await page.reload();
 
@@ -812,7 +843,8 @@ test('describes an attached file before it is fetched, and fetches it only when 
 
     const download = page.getByRole('button', { name: 'Download orders.csv' });
     await expect(download).toBeVisible();
-    await expect(page.getByText('text/csv')).toBeVisible();
+    await expect(download).toHaveAttribute('title', 'text/csv');
+    await expect(download.getByText('csv', { exact: true })).toBeVisible();
 
     // Nothing about the file has been fetched at this point, which is what keeps opening a message the same cost
     // whether the sender attached a note or a video. Only a browser can say so: the source says what the pane intends

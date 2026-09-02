@@ -11,6 +11,7 @@ import {
     type MailFathomTransport,
     type MailThreadPage,
 } from '@mailfathom/client-backend';
+import { Icon } from '../controls/Icon';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
@@ -241,40 +242,43 @@ export function Thread({
     }
 
     return (
-        <Conversation onClose={close}>
-            <header className="flex flex-col gap-2 border-b border-line-soft pb-4">
-                <h2 className="text-xl font-semibold tracking-tight">
-                    {held[0]?.email.subject ?? translate('message.noSubject')}
-                </h2>
+        <Conversation
+            onClose={close}
+            header={
+                <header className="flex flex-col gap-1.5 border-b border-line px-5.5 py-4">
+                    <h2 className="text-3xl font-semibold text-balance">
+                        {held[0]?.email.subject ?? translate('message.noSubject')}
+                    </h2>
 
-                {/* Everybody who wrote, from the answer rather than walked out of the messages in hand: they are the
-                    conversation's authors, so a screen deriving them would be paging a conversation to draw its
-                    header. The list is worded by `Intl` under the active locale rather than joined here. */}
-                {latest.participants.length === 0 ? null : (
-                    <p className="text-sm text-text-soft">
-                        {translate('thread.wroteHere', {
-                            names: new Intl.ListFormat(locale, { type: 'conjunction' }).format(
-                                latest.participants.map((one) => one.displayName ?? one.address),
-                            ),
+                    {/* Everybody who wrote, from the answer rather than walked out of the messages in hand: they are
+                        the conversation's authors, so a screen deriving them would be paging a conversation to draw
+                        its header. The list is worded by `Intl` under the active locale rather than joined here. */}
+                    {latest.participants.length === 0 ? null : (
+                        <p className="text-base text-text-soft">
+                            {translate('thread.wroteHere', {
+                                names: new Intl.ListFormat(locale, { type: 'conjunction' }).format(
+                                    latest.participants.map((one) => one.displayName ?? one.address),
+                                ),
+                            })}
+                        </p>
+                    )}
+
+                    {latest.moreParticipantsNotNamed ? (
+                        <p className="text-base text-muted">{translate('thread.moreParticipants')}</p>
+                    ) : null}
+
+                    <p className="text-base text-muted">
+                        {translate('thread.messages', {
+                            count: new Intl.NumberFormat(locale).format(latest.messageCount),
                         })}
                     </p>
-                )}
 
-                {latest.moreParticipantsNotNamed ? (
-                    <p className="text-sm text-muted">{translate('thread.moreParticipants')}</p>
-                ) : null}
-
-                <p className="text-sm text-muted">
-                    {translate('thread.messages', {
-                        count: new Intl.NumberFormat(locale).format(latest.messageCount),
-                    })}
-                </p>
-
-                {latest.moreMessagesNotAssembled ? (
-                    <p className="text-sm text-warning">{translate('thread.moreNotAssembled')}</p>
-                ) : null}
-            </header>
-
+                    {latest.moreMessagesNotAssembled ? (
+                        <p className="text-base text-warning">{translate('thread.moreNotAssembled')}</p>
+                    ) : null}
+                </header>
+            }
+        >
             {/* A read that failed with messages already drawn is the partial state: what is on the screen stays, and
                 what is missing is said above it rather than replacing it. */}
             {failure === null ? null : (
@@ -304,7 +308,7 @@ export function Thread({
                     {translate(reading ? 'thread.reading' : 'thread.empty')}
                 </p>
             ) : (
-                <ol className="flex flex-col">
+                <ol className="flex flex-col gap-3">
                     {held.map((message) => (
                         <ThreadMessage
                             key={message.email.id}
@@ -383,16 +387,35 @@ function pageWanted(
 
 // The frame every state of this screen is drawn in, which is what makes the way out of it present in all five: a
 // conversation that failed, one with no network, and one still being read each stand under the control that closes it.
-function Conversation({ onClose, children }: { readonly onClose: () => void; readonly children: ReactNode }) {
+// The header stands across the column, as the design project draws a conversation's head, and everything under it
+// stands inset from the edges.
+function Conversation({
+    onClose,
+    header,
+    children,
+}: {
+    readonly onClose: () => void;
+    readonly header?: ReactNode;
+    readonly children: ReactNode;
+}) {
     const { translate } = useLocalization();
 
     return (
-        <section aria-label={translate('thread.label')} className="flex flex-col gap-4">
-            <div>
-                <SecondaryButton label={translate('thread.close')} onActivate={onClose} />
+        <section aria-label={translate('thread.label')} className="flex flex-col">
+            <div className="px-3.5 pt-3">
+                <button
+                    type="button"
+                    className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-base text-text-soft transition hover:bg-hover"
+                    onClick={onClose}
+                >
+                    <Icon name="arrow_back" className="size-5" />
+                    {translate('thread.close')}
+                </button>
             </div>
 
-            {children}
+            {header}
+
+            <div className="flex flex-col gap-3 px-5.5 py-4.5">{children}</div>
         </section>
     );
 }

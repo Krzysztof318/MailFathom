@@ -23,6 +23,9 @@ import { Message } from '../messageBody/Message';
 // keyboard in document order, it is operated by Enter and by Space without anything here handling a key, and it
 // announces whether it is open. What is added to it is that this one is controlled — a conversation decides which of
 // its messages open when it is first drawn, and after that the reader does.
+//
+// It is drawn as the card the design project draws a message of a conversation as: flat on the surface while it is a
+// line, and raised on the panel once it is open.
 
 export function ThreadMessage({
     session,
@@ -45,8 +48,9 @@ export function ThreadMessage({
     const email = message.email;
 
     return (
-        <li className="border-b border-line-soft last:border-b-0">
+        <li>
             <details
+                className="overflow-hidden rounded-2xl border border-line bg-sunken open:bg-panel open:shadow-raised"
                 open={expanded}
                 onToggle={(event) => {
                     onExpanded(event.currentTarget.open);
@@ -54,9 +58,9 @@ export function ThreadMessage({
             >
                 <summary
                     ref={onSummary}
-                    className="flex cursor-pointer items-baseline gap-2 px-3 py-2 transition hover:bg-hover"
+                    className="flex cursor-pointer items-center gap-2.5 px-3.75 py-3 transition hover:bg-hover"
                 >
-                    <SenderAvatar displayName={email.senderDisplayName} address={email.senderAddress} />
+                    <SenderAvatar displayName={email.senderDisplayName} address={email.senderAddress} place="card" />
 
                     {email.unread ? (
                         <span className="size-2 shrink-0 rounded-full bg-accent">
@@ -66,7 +70,7 @@ export function ThreadMessage({
 
                     {/* Who wrote is what a conversation is scanned by, so it keeps its width and the contribution
                         behind it is what gives way. */}
-                    <span className={`shrink-0 text-sm ${email.unread ? 'font-semibold text-text' : 'text-text-soft'}`}>
+                    <span className={`shrink-0 text-md font-semibold ${email.unread ? 'text-text' : 'text-text-soft'}`}>
                         {email.senderDisplayName ?? email.senderAddress ?? translate('list.senderUnknown')}
                     </span>
 
@@ -76,7 +80,7 @@ export function ThreadMessage({
                         It gives way to the body once the message is open, where drawing it again would be the same
                         words twice on one screen. */}
                     {expanded ? null : (
-                        <span className="truncate text-sm text-faint">
+                        <span className="truncate text-sm text-muted">
                             {email.preview ?? translate('thread.contributionNotExtracted')}
                         </span>
                     )}
@@ -89,7 +93,7 @@ export function ThreadMessage({
                 {/* Mounted by the expansion rather than hidden by it, which is what makes a collapsed message cost no
                     body read. Nothing below is drawn — and nothing is asked of the deployment — until it is open. */}
                 {expanded ? (
-                    <div className="flex flex-col gap-3 px-3 pt-1 pb-4">
+                    <div className="flex flex-col gap-3 px-3.75 pt-1 pb-3.75">
                         <p className="text-sm text-muted">
                             {translate('thread.storedIn', { account: email.account, folder: email.folder })}
                         </p>

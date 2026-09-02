@@ -4,6 +4,7 @@
 
 import { useEffect, useRef, type ReactNode } from 'react';
 import { useLocalization } from '../localization/useLocalization';
+import { MailSpace } from '../mailSpace/MailSpace';
 import { implementedSpaces, spaceLabels, type Space as SpaceName } from '../routing/spaces';
 
 // The region the address decides the contents of. What each space actually holds is built by its own issue; what this
@@ -11,11 +12,20 @@ import { implementedSpaces, spaceLabels, type Space as SpaceName } from '../rout
 
 export function Space({
     space,
+    intent,
+    status,
     folders,
     list,
     mail,
 }: {
     readonly space: SpaceName;
+
+    /** The question the reader is composing, which every space carries somewhere. */
+    readonly intent: ReactNode;
+
+    /** What the deployment says about the connection, which every space shows somewhere. */
+    readonly status: ReactNode;
+
     readonly folders: ReactNode;
     readonly list: ReactNode;
     readonly mail: ReactNode;
@@ -37,44 +47,40 @@ export function Space({
         }
     }, [space]);
 
+    // Mail is the one space with anything in it, and the design project draws it without a title: the columns are what
+    // it is, and a heading over them would be a word above the thing the word names. The region still carries the name,
+    // because a landmark a reader moves to is announced by it.
+    if (space === 'mail') {
+        return (
+            <main
+                ref={region}
+                tabIndex={-1}
+                aria-label={translate(spaceLabels[space])}
+                className="flex min-h-0 flex-1 flex-col overflow-hidden"
+            >
+                <MailSpace folders={folders} list={list} mail={mail} intent={intent} status={status} />
+            </main>
+        );
+    }
+
     return (
-        <main ref={region} tabIndex={-1} className="flex-1 overflow-y-auto px-4 py-6 workspace:px-8">
-            {/* Mail is the one space laid out in columns, so it is the one that is not held to a reading width: a
-                measure that keeps prose readable is the wrong bound for a scope selector beside a list beside a
-                message. */}
-            <div className={`flex flex-col gap-3 ${space === 'mail' ? '' : 'max-w-3xl'}`}>
+        <main
+            ref={region}
+            tabIndex={-1}
+            aria-label={translate(spaceLabels[space])}
+            className="flex-1 overflow-y-auto px-4 py-6 workspace:px-8"
+        >
+            <div className="flex max-w-3xl flex-col gap-3">
                 <h1 className="text-4xl font-semibold tracking-tight">{translate(spaceLabels[space])}</h1>
 
-                {/* The note belongs to a space that holds nothing, which Mail no longer is: it reads its own mail now,
-                    and a sentence saying otherwise above a working list is a screen contradicting itself. What Mail
-                    holds is composed above rather than reached for here, because this region owns where a space is
-                    drawn and what happens to focus, and a space that read something of its own would make that true of
-                    one space and not the others. */}
+                {status}
+
+                {/* The note belongs to a space that holds nothing, which is every space but Mail today. */}
                 {implementedSpaces.includes(space) ? null : (
                     <p className="text-base text-muted">{translate('space.pending')}</p>
                 )}
 
-                {/* Mail is the one space with anything in it, and what it has is the three regions a mail client is:
-                    the scope selector, the list of what is in that scope, and the message being read. Stacked under a
-                    narrow window and side by side at the width the workspace opens out at, out of one tree at one
-                    breakpoint rather than one composition per head. */}
-                {space === 'mail' ? (
-                    <div className="flex flex-col gap-6 workspace:flex-row workspace:flex-wrap workspace:items-start">
-                        <div className="workspace:w-mailboxes workspace:shrink-0">{folders}</div>
-                        {/* Wider than the folder tree beside it because a row carries four things on one line — who
-                            wrote, where from, what the server marked it with, and when — and a column that cannot
-                            hold them cuts short the two that are read first. It is the column that gives way where
-                            the three of them do not fit, which is what keeps a window just wide enough for this
-                            composition from scrolling sideways. */}
-                        <div className="min-w-0 workspace:w-112">{list}</div>
-                        {/* The message asks for a width of its own rather than for whatever is left: three columns do
-                            not fit a window barely wider than the point they open out at, and a pane squeezed to
-                            nothing there would push the space sideways instead of standing under the other two. So it
-                            states the width it needs, takes everything beyond that, and wraps below them where the
-                            window cannot give it. */}
-                        <div className="min-w-0 grow basis-0 workspace:basis-80">{mail}</div>
-                    </div>
-                ) : null}
+                {intent}
             </div>
         </main>
     );

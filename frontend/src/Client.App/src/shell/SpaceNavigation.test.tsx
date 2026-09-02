@@ -8,10 +8,12 @@ import { LocalizationProvider } from '../localization/Localization';
 import { spaces, type Space } from '../routing/spaces';
 import { SpaceNavigation } from './SpaceNavigation';
 
-function renderNavigation(offered: readonly Space[] = spaces): void {
+const handedTheAccount = 'The account control this navigation was handed.';
+
+function renderNavigation(offered: readonly Space[] = spaces, current: Space | null = 'mail'): void {
     render(
         <LocalizationProvider>
-            <SpaceNavigation offered={offered} current="mail" />
+            <SpaceNavigation offered={offered} current={current} account={<button>{handedTheAccount}</button>} />
         </LocalizationProvider>,
     );
 }
@@ -60,5 +62,23 @@ describe('SpaceNavigation', () => {
         renderNavigation(['mail', 'cases']);
 
         expect(screen.getAllByRole('link').map((space) => space.textContent)).toEqual(['Mail', 'Cases']);
+    });
+
+    it('places the account control after the spaces, so it is last in the rail and in the bar alike', () => {
+        renderNavigation();
+
+        const navigation = screen.getByRole('navigation', { name: 'Spaces' });
+        const account = screen.getByRole('button', { name: handedTheAccount });
+        const lastLink = screen.getAllByRole('link').at(-1);
+
+        expect(navigation.contains(account)).toBe(true);
+        expect(lastLink?.compareDocumentPosition(account)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+
+    it('still places the account control while the deployment has not said which spaces there are', () => {
+        renderNavigation([], null);
+
+        expect(screen.queryAllByRole('link')).toEqual([]);
+        expect(screen.getByRole('button', { name: handedTheAccount })).toBeDefined();
     });
 });

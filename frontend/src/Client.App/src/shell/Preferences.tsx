@@ -8,10 +8,9 @@ import { useLocalization } from '../localization/useLocalization';
 import { isThemeChoice, themeChoices } from '../theme/themeChoice';
 import { useTheme } from '../theme/useTheme';
 
-// The two settings that belong to the person rather than to the deployment. They sit in the header rather than on the
-// navigation the prototype puts the theme control on, because that navigation is the bottom bar of a narrow window —
-// where a third kind of control cannot go, and where a control that vanished with the width would be one the reader
-// can no longer reach. The header is the one place present at both widths.
+// The two settings that belong to the person rather than to the deployment. Inside the frame they sit in the account
+// menu, which is where the design project puts what is about the person, and on the sign-in screen they stand on their
+// own: they belong to somebody who has not signed in yet exactly as much as to somebody who has.
 
 const themeNames: Readonly<Record<(typeof themeChoices)[number], MessageKey>> = {
     system: 'theme.system',

@@ -12,7 +12,9 @@ import {
     type MailFathomTransport,
     type MailMessage,
 } from '@mailfathom/client-backend';
+import { Icon } from '../controls/Icon';
 import { SecondaryButton } from '../controls/SecondaryButton';
+import { SenderAvatar } from '../controls/SenderAvatar';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { useWorkspace } from '../workspace/useWorkspace';
@@ -81,9 +83,11 @@ export function ReadingPane({
     const { translate } = useLocalization();
 
     return (
-        <section className="flex flex-col gap-4">
+        <section className="flex min-h-full flex-col">
             {storedEmailId === null ? (
-                <p className="text-sm text-muted">{translate('message.nothingOpen')}</p>
+                <p className="flex flex-1 items-center justify-center px-6 py-10 text-base text-muted">
+                    {translate('message.nothingOpen')}
+                </p>
             ) : (
                 <OpenMessage
                     session={session}
@@ -113,7 +117,7 @@ function OpenMessage({
     readonly online: boolean;
     readonly arriving: boolean;
 }) {
-    const { translate } = useLocalization();
+    const { locale, translate } = useLocalization();
     const { revise } = useWorkspace();
     const [read, setRead] = useState<Read>({ storedEmailId, attempt: 0 });
     const [answer, setAnswer] = useState<Answered | null>(null);
@@ -215,7 +219,7 @@ function OpenMessage({
     // the machine has no network.
     if (!online && held?.result.outcome !== 'read') {
         return (
-            <p className="text-sm text-muted" role="status">
+            <p className="px-5.5 py-4 text-sm text-muted" role="status">
                 {translate('message.offline')}
             </p>
         );
@@ -223,7 +227,7 @@ function OpenMessage({
 
     if (held === null) {
         return (
-            <p className="text-sm text-muted" role="status">
+            <p className="px-5.5 py-4 text-sm text-muted" role="status">
                 {translate('message.reading')}
             </p>
         );
@@ -231,7 +235,7 @@ function OpenMessage({
 
     if (held.result.outcome === 'failed') {
         return (
-            <div className="flex flex-col items-start gap-2">
+            <div className="flex flex-col items-start gap-2 px-5.5 py-4">
                 <p className="text-sm text-warning" role="alert">
                     {translate('message.failed', { reason: translate(failureLabels[held.result.failure.reason]) })}
                 </p>
@@ -252,6 +256,8 @@ function OpenMessage({
 
     const message = held.result.value;
     const threadId = message.threadId;
+    const author = message.headers.participants.find((participant) => participant.role === 'From') ?? null;
+    const numbers = new Intl.NumberFormat(locale);
 
     // Named by its own subject, which is what a reader arriving in the region needs to hear and what tells one message's
     // region from the body's inside it. The heading below says the same words on the screen; this is what the region
@@ -261,52 +267,81 @@ function OpenMessage({
             ref={opened}
             tabIndex={-1}
             aria-label={message.headers.subject ?? translate('message.noSubject')}
-            className="flex flex-col gap-4"
+            className="flex flex-col"
         >
             <MessageHeaders headers={message.headers} />
-            <SenderVerdict verdict={message.sender} />
 
-            {/* The way into the conversation this message belongs to, offered where the service threaded it and absent
-                where it did not: a control that opened a conversation of one message would be a control that answers
-                nothing. It carries this message, so the conversation opens at what is being read rather than at its
-                beginning, and closing it returns here — the selection this pane draws from is what it was opened
-                from. */}
-            {threadId === null ? null : (
-                <div>
-                    <SecondaryButton
-                        label={translate('thread.open')}
-                        onActivate={() => {
-                            revise({ conversation: { threadId, openAt: storedEmailId } });
-                        }}
-                    />
+            <div className="flex flex-col gap-3 px-5.5 py-4.5">
+                <SenderVerdict verdict={message.sender} />
+
+                {/* The way into the conversation this message belongs to, offered where the service threaded it and
+                    absent where it did not: a control that opened a conversation of one message would be a control
+                    that answers nothing. It carries this message, so the conversation opens at what is being read
+                    rather than at its beginning, and closing it returns here — the selection this pane draws from is
+                    what it was opened from. Drawn as the pill the design project stands between a message and the
+                    conversation behind it. */}
+                {threadId === null ? null : (
+                    <div className="flex justify-center">
+                        <button
+                            type="button"
+                            className="rounded-full border border-line bg-sunken px-3.5 py-1.75 text-base text-text-soft transition hover:bg-hover"
+                            onClick={() => {
+                                revise({ conversation: { threadId, openAt: storedEmailId } });
+                            }}
+                        >
+                            {translate('thread.open')}
+                        </button>
+                    </div>
+                )}
+
+                {/* The card the design project draws a message as: who wrote it, what it carries, and what it says. */}
+                <div className="flex flex-col gap-3 rounded-2xl border border-line bg-panel px-4.5 py-4 shadow-raised">
+                    <div className="flex items-center gap-2.75">
+                        <SenderAvatar
+                            displayName={author?.displayName ?? null}
+                            address={author?.address ?? null}
+                            place="card"
+                        />
+
+                        <span className="min-w-0 truncate text-md font-semibold text-text">
+                            {author === null ? translate('message.noAuthor') : (author.displayName ?? author.address)}
+                        </span>
+
+                        {message.attachments.length === 0 ? null : (
+                            <span className="flex shrink-0 items-center gap-0.75 text-xs text-faint">
+                                <Icon name="attach_file" className="size-3.5" />
+                                {numbers.format(message.attachments.length)}
+                            </span>
+                        )}
+                    </div>
+
+                    {/* The gestures a selection ends on rather than a document-wide subscription: a selection made
+                        with the pointer settles on the release and one made with the keyboard on the key coming back
+                        up, and both of them are events this region already receives. */}
+                    <div ref={body} onKeyUp={capture} onMouseUp={capture}>
+                        <Message session={session} transport={transport} storedEmailId={storedEmailId} />
+                    </div>
+
+                    {message.attachments.length === 0 ? null : (
+                        <section className="flex flex-col gap-2 border-t border-line-soft pt-3">
+                            <h3 className="text-sm font-medium text-text-soft">{translate('attachments.heading')}</h3>
+
+                            <ul className="flex flex-wrap gap-2">
+                                {message.attachments.map((attachment) => (
+                                    <Attachment
+                                        key={attachment.position}
+                                        session={session}
+                                        storedEmailId={storedEmailId}
+                                        attachment={attachment}
+                                    />
+                                ))}
+                            </ul>
+                        </section>
+                    )}
                 </div>
-            )}
 
-            {/* The gestures a selection ends on rather than a document-wide subscription: a selection made with the
-                pointer settles on the release and one made with the keyboard on the key coming back up, and both of
-                them are events this region already receives. */}
-            <div ref={body} onKeyUp={capture} onMouseUp={capture}>
-                <Message session={session} transport={transport} storedEmailId={storedEmailId} />
+                {message.carried === null ? null : <Carried carried={message.carried} />}
             </div>
-
-            {message.attachments.length === 0 ? null : (
-                <section className="flex flex-col gap-2">
-                    <h3 className="text-sm font-medium text-text-soft">{translate('attachments.heading')}</h3>
-
-                    <ul className="flex flex-col gap-2">
-                        {message.attachments.map((attachment) => (
-                            <Attachment
-                                key={attachment.position}
-                                session={session}
-                                storedEmailId={storedEmailId}
-                                attachment={attachment}
-                            />
-                        ))}
-                    </ul>
-                </section>
-            )}
-
-            {message.carried === null ? null : <Carried carried={message.carried} />}
         </article>
     );
 }

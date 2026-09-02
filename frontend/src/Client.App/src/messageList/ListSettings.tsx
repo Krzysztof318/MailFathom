@@ -3,8 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { MailTimelineOrder } from '@mailfathom/client-backend';
-import { borderedControl } from '../controls/chrome';
 import { CheckControl } from '../controls/CheckControl';
+import { chip } from '../controls/chrome';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import type { MailListFilters, MailListing } from './listing';
@@ -23,8 +23,6 @@ const orderNames: Readonly<Record<MailTimelineOrder, MessageKey>> = {
 
 const orders: readonly MailTimelineOrder[] = ['newestFirst', 'oldestFirst'];
 
-const control = `px-2 py-1 text-sm ${borderedControl}`;
-
 export function ListSettings({
     listing,
     junkAskable,
@@ -41,10 +39,10 @@ export function ListSettings({
     }
 
     return (
-        <div className="flex flex-wrap items-center gap-2 border-b border-line-soft pb-2">
+        <div className="flex flex-wrap items-center gap-1">
             <select
                 aria-label={translate('list.order')}
-                className={control}
+                className={`px-2.25 py-0.75 text-sm ${chip}`}
                 value={listing.order}
                 onChange={(event) => {
                     if (isOrder(event.target.value)) {

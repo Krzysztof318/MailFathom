@@ -128,13 +128,12 @@ async function rows(): Promise<HTMLElement[]> {
     return within(list).getAllByRole('option');
 }
 
-// By what it is about, which is the one part of a row's name nothing else abuts on both sides: the name runs its parts
-// together, so the subject is matched with the first word of the preview behind it — which is what keeps the row for
-// message one from also being the row for message ten.
+// By what it is about, which is the last part of a row's name: the name runs its parts together, so the subject is
+// matched to the end of it — which is what keeps the row for message one from also being the row for message ten.
 function row(at: number): HTMLElement {
     const list = screen.getByRole('listbox', { name: 'Messages' });
 
-    return within(list).getByRole('option', { name: new RegExp(`Message ${String(at)}The opening`) });
+    return within(list).getByRole('option', { name: new RegExp(`Message ${String(at)}$`) });
 }
 
 afterEach(() => {
@@ -148,14 +147,14 @@ describe('MessageList', () => {
         expect(screen.getByText('Reading your mail…')).toBeDefined();
     });
 
-    it('draws a row carrying who wrote, what about, when, and the opening of the message', async () => {
+    it('draws a row carrying who wrote, what about, and when, and not the opening the design leaves off', async () => {
         renderList(answering(wholeFolder));
 
         const drawn = await rows();
 
         expect(drawn[0]?.textContent).toContain('Writer 0');
         expect(drawn[0]?.textContent).toContain('Message 0');
-        expect(drawn[0]?.textContent).toContain('The opening of message 0.');
+        expect(drawn[0]?.textContent).not.toContain('The opening of message 0.');
         expect(drawn[0]?.querySelector('time')?.getAttribute('datetime')).toBe('2026-08-31T09:41:00+00:00');
     });
 

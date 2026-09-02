@@ -47,6 +47,54 @@ export function wordInstant(instant: string | null, locale: Locale, detail: Inst
 }
 
 /**
+ * An instant as the design project words one on a row of the list, against the reader's own clock and calendar: the
+ * time alone for something that arrived today, the language's own word for yesterday, the day and the month for
+ * anything earlier this year, and the short date for anything older than that.
+ *
+ * The three calendar comparisons are made in the reader's zone, which is what `Date`'s local getters answer with, so a
+ * message that arrived late last night reads as yesterday for the person who received it rather than as today in UTC.
+ * `now` is a parameter rather than read here so that a test pins it beside the zone it pins.
+ */
+export function wordRecentInstant(instant: string | null, locale: Locale, now: number): string | null {
+    if (instant === null) {
+        return null;
+    }
+
+    const at = Date.parse(instant);
+
+    if (Number.isNaN(at)) {
+        return null;
+    }
+
+    const then = new Date(at);
+    const today = new Date(now);
+    const yesterday = new Date(now);
+    yesterday.setDate(today.getDate() - 1);
+
+    if (sameDay(then, today)) {
+        return new Intl.DateTimeFormat(locale, { timeStyle: 'short' }).format(at);
+    }
+
+    if (sameDay(then, yesterday)) {
+        return new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(-1, 'day');
+    }
+
+    if (then.getFullYear() === today.getFullYear()) {
+        return new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit' }).format(at);
+    }
+
+    return new Intl.DateTimeFormat(locale, { dateStyle: 'short' }).format(at);
+}
+
+function sameDay(one: Date, other: Date): boolean {
+    return (
+        one.getFullYear() === other.getFullYear() &&
+        one.getMonth() === other.getMonth() &&
+        one.getDate() === other.getDate()
+    );
+}
+
+/**
  * A calendar day as the reader's language writes one.
  *
  * This is the one value here that is not an instant, and the difference is the whole reason it has a function of its

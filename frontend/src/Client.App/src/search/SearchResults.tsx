@@ -296,7 +296,7 @@ export function SearchResults({
     const wordsOnly = found?.retrievalMode === 'Lexical' ? wordsOnlyReasons[found.semanticSearch] : null;
 
     return (
-        <div className="flex min-h-0 flex-col gap-2">
+        <div className="flex min-h-0 flex-1 flex-col gap-2 px-3">
             {/* A narrower answer says it is narrower, rather than being a quieter one. Which of the two sentences it is
                 separates what this deployment does not do from what is not working on it, and neither of them is what
                 a credential may not do — that is the notice the frame draws. */}
@@ -320,7 +320,7 @@ export function SearchResults({
 
             <div
                 ref={scroller}
-                className="h-message-list min-h-0 overflow-y-auto overscroll-contain"
+                className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
                 onScroll={(event) => {
                     setScrollTop(event.currentTarget.scrollTop);
                 }}

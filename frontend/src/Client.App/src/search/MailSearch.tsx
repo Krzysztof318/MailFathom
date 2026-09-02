@@ -9,7 +9,7 @@ import {
     type MailAccount,
     type MailFathomTransport,
 } from '@mailfathom/client-backend';
-import { borderedControl } from '../controls/chrome';
+import { chip } from '../controls/chrome';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
@@ -91,9 +91,9 @@ export function MailSearch({
     }
 
     return (
-        <div className="flex min-h-0 flex-col gap-2">
+        <div className="flex min-h-0 flex-1 flex-col gap-2">
             <form
-                className="flex flex-wrap items-center gap-2"
+                className="flex flex-wrap items-center gap-2 px-3 pt-2.5"
                 onSubmit={(event) => {
                     event.preventDefault();
                     search(typed);
@@ -106,7 +106,7 @@ export function MailSearch({
                     <span className="sr-only">{translate('search.label')}</span>
                     <input
                         type="search"
-                        className="w-full rounded-full border border-line bg-rail px-3 py-2 text-sm text-text placeholder:text-faint transition hover:bg-hover"
+                        className="w-full rounded-full border border-line bg-rail px-3.25 py-2 text-md text-text placeholder:text-faint transition hover:bg-hover"
                         placeholder={translate('search.placeholder')}
                         value={typed}
                         onChange={(event) => {
@@ -116,7 +116,7 @@ export function MailSearch({
                     />
                 </label>
 
-                <button className={`px-2 py-1 text-sm ${borderedControl}`} type="submit">
+                <button className={`px-2.75 py-1.25 text-sm ${chip}`} type="submit">
                     {translate('search.submit')}
                 </button>
 
@@ -124,7 +124,7 @@ export function MailSearch({
             </form>
 
             {refused === null ? null : (
-                <p className="text-sm text-warning" role="alert">
+                <p className="px-3 text-sm text-warning" role="alert">
                     {translate(refused, { longest: String(longestSearchText) })}
                 </p>
             )}
@@ -146,7 +146,9 @@ export function MailSearch({
                 children
             ) : (
                 <>
-                    <SearchFilters ask={ask} accounts={accounts} onNarrow={setAsk} />
+                    <div className="px-3">
+                        <SearchFilters ask={ask} accounts={accounts} onNarrow={setAsk} />
+                    </div>
 
                     {/* Keyed by the search, so changing a word or a filter starts a search rather than reconciles one:
                         a cursor belongs to the ranked list it was issued in, and a relevance order is recomputed for
@@ -183,7 +185,7 @@ function RecentSearches({
     const { translate } = useLocalization();
 
     return (
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1 px-3">
             <p className="text-sm text-muted">{translate('search.recent')}</p>
 
             <ul aria-label={translate('search.recent')} className="flex flex-wrap items-center gap-2">

@@ -18,6 +18,7 @@ import { MailSearch } from './search/MailSearch';
 import { offers, spacesOffered, withheldFrom } from './shell/capabilities';
 import { ConnectionSummary } from './shell/ConnectionSummary';
 import { GrantNotice } from './shell/GrantNotice';
+import { AccountMenu } from './shell/AccountMenu';
 import { IntentField } from './shell/IntentField';
 import { LanguageChoice, ThemeChoice } from './shell/Preferences';
 import { Space } from './shell/Space';
@@ -202,21 +203,6 @@ export function App({
     return (
         <div className="flex h-dvh flex-col bg-rail pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left workspace:flex-row">
             <div ref={workspaceRegion} tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col bg-page">
-                <header className="flex flex-wrap items-center gap-3 border-b border-line-soft bg-panel px-4 py-2 workspace:px-8">
-                    <ConnectionSummary connection={connection} />
-
-                    {adopted?.chosen === true ? (
-                        <ChosenDeployment address={baseAddress} onChange={pointSomewhereElse} />
-                    ) : null}
-
-                    <div className="ms-auto flex items-center gap-2">
-                        <Versions deployment={deploymentSession?.version ?? null} />
-                        <ThemeChoice />
-                        <LanguageChoice />
-                        <SignOut onSignOut={signOut} />
-                    </div>
-                </header>
-
                 {/* Inside the frame as well as on the sign-in screen, because a credential that could not be kept is
                     learned about at the moment somebody successfully signed in — which is the one of these sentences
                     whose reader is already past that screen. Beside it, and in the same strip, is what this credential
@@ -228,20 +214,28 @@ export function App({
                     </div>
                 )}
 
-                {/* Asking is what the field is for, so a credential that may not ask is not shown one. It is absent
-                    rather than disabled: a control nobody can use says less about why than the sentence above does. */}
-                {deploymentSession !== null && offers(deploymentSession, 'askMail') ? (
-                    <IntentField accounts={mailAccounts} />
-                ) : null}
-
                 {/* The region the space is drawn in is there before the deployment says which space that is, so
-                    nothing on the screen moves under a reader when the answer arrives. What is waiting is said once,
-                    above, where the answer will appear rather than twice. */}
+                    nothing on the screen moves under a reader when the answer arrives. Until it does, what stands in
+                    the region is what the connection says — reaching, retrying, offline, or refused — because that is
+                    the only thing on the screen there is to read, and the way out of a deployment that never answers
+                    has to be somewhere. */}
                 {space === null ? (
-                    <main className="flex-1" />
+                    <main className="flex-1 px-4 py-6 workspace:px-8">
+                        <ConnectionSummary connection={connection} />
+                    </main>
                 ) : (
                     <Space
                         space={space}
+                        // Asking is what the field is for, so a credential that may not ask is not shown one. It is
+                        // absent rather than disabled: a control nobody can use says less about why than the sentence
+                        // above does. Where it stands is the space's decision, which is why it is handed in rather
+                        // than drawn here.
+                        intent={
+                            deploymentSession !== null && offers(deploymentSession, 'askMail') ? (
+                                <IntentField accounts={mailAccounts} />
+                            ) : null
+                        }
+                        status={<ConnectionSummary connection={connection} />}
                         folders={
                             session === null || !readsMail ? null : (
                                 <FolderTree session={session} transport={readMail} online={connection.online} />
@@ -295,7 +289,18 @@ export function App({
                 composition then carries the one mismatch CSS cannot remove — a rail drawn on the left out of a node
                 that comes last — because no single document order matches both shapes, and content before navigation
                 is the direction a skip link exists to manufacture rather than the one it works around. */}
-            {space === null ? null : <SpaceNavigation offered={offeredSpaces} current={space} />}
+            <SpaceNavigation
+                offered={offeredSpaces}
+                current={space}
+                account={
+                    <AccountMenu
+                        deploymentVersion={deploymentSession?.version ?? null}
+                        readingFrom={adopted?.chosen === true ? baseAddress : null}
+                        onPointSomewhereElse={pointSomewhereElse}
+                        onSignOut={signOut}
+                    />
+                }
+            />
         </div>
     );
 }
@@ -349,21 +354,6 @@ function OpenMail({
             conversation={conversation}
             online={online}
         />
-    );
-}
-
-// What the client is running and what the deployment it is reading from is running, beside each other because a
-// mismatch between them is the first thing to look at when a screen behaves oddly. The client's own is substituted
-// into the bundle at build time rather than retyped, and the deployment's is what the session route answered.
-function Versions({ deployment }: { readonly deployment: string | null }) {
-    const { translate } = useLocalization();
-
-    return (
-        <p className="font-mono text-xs text-faint">
-            {deployment === null
-                ? translate('shell.clientVersion', { client: __MAILFATHOM_VERSION__ })
-                : translate('shell.versions', { client: __MAILFATHOM_VERSION__, deployment })}
-        </p>
     );
 }
 
@@ -450,12 +440,4 @@ function ChosenDeployment({ address, onChange }: { readonly address: string; rea
             <SecondaryButton label={translate('deployment.change')} onActivate={onChange} />
         </p>
     );
-}
-
-// Beside the two preferences rather than among them: signing out is what removes the credential this machine kept, so
-// it belongs in the one place present at both widths rather than behind something a reader has to find.
-function SignOut({ onSignOut }: { readonly onSignOut: () => void }) {
-    const { translate } = useLocalization();
-
-    return <SecondaryButton label={translate('shell.signOut')} onActivate={onSignOut} />;
 }

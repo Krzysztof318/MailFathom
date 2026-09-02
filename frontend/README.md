@@ -140,8 +140,8 @@ still fails — which is what `TreatWarningsAsErrors` and the analyzer set are t
 
 `Client.App` is localized in English and Polish. English is the default and the fallback. A first run with no choice
 stored reads what the browser or the operating system says the person prefers, narrowed to a language a catalogue was
-written for; the control in the header overrides that, the choice survives a restart of either head, and changing it
-rewrites the screen without anything restarting.
+written for; the control in the account menu at the foot of the navigation overrides that, the choice survives a
+restart of either head, and changing it rewrites the screen without anything restarting.
 
 The mechanism is `src/Client.App/src/localization/` and it depends on nothing. `Intl` — which every engine both heads
 render in already carries — formats dates, numbers, relative times, lists, and plural categories, so what was left to

@@ -2,6 +2,7 @@
 // Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+import type { ReactNode } from 'react';
 import { BrandMark } from '../controls/BrandMark';
 import { Icon } from '../controls/Icon';
 import type { IconName } from '../controls/icons';
@@ -22,6 +23,11 @@ import { addressOf, implementedSpaces, spaceLabels, type Space } from '../routin
 //
 // Links rather than buttons, because these navigate: the browser then supplies the keyboard path, the history entry,
 // and opening one in a window of its own, none of which a click handler would have.
+//
+// The account stands at the foot of the rail and at the end of the bar, which is where the design project puts what is
+// about the person rather than about a space: reachable at both widths, and last in both. It is there before the
+// deployment has answered which spaces there are, because signing out and pointing the client elsewhere are the way
+// out of a deployment that never answers.
 
 const spaceIcons: Readonly<Record<Space, IconName>> = {
     discover: 'explore',
@@ -33,21 +39,37 @@ const spaceIcons: Readonly<Record<Space, IconName>> = {
     people: 'group',
 };
 
-export function SpaceNavigation({ offered, current }: { readonly offered: readonly Space[]; readonly current: Space }) {
+export function SpaceNavigation({
+    offered,
+    current,
+    account,
+}: {
+    readonly offered: readonly Space[];
+
+    /** The space being shown, or `null` while the deployment has not yet said which spaces there are. */
+    readonly current: Space | null;
+
+    /** The control that opens the account menu, which the navigation places rather than draws. */
+    readonly account: ReactNode;
+}) {
     const { translate } = useLocalization();
 
     return (
         <nav
             aria-label={translate('shell.spaces')}
-            className="flex shrink-0 justify-around gap-1 border-t border-line bg-rail p-1 workspace:order-first workspace:w-rail workspace:flex-col workspace:justify-start workspace:gap-1 workspace:overflow-y-auto workspace:border-t-0 workspace:border-e workspace:p-2"
+            className="flex shrink-0 justify-around gap-0.75 border-t border-line bg-rail px-1.5 pt-1.5 pb-2 workspace:order-first workspace:w-rail workspace:flex-col workspace:justify-start workspace:gap-0.5 workspace:overflow-y-auto workspace:border-t-0 workspace:border-e workspace:px-0 workspace:pt-4 workspace:pb-3"
         >
             {/* The mark stands at the top of the rail and nowhere in the bottom bar: a narrow window gives the row to
                 destinations, and a logo taking one of seven places there would cost a reader a space to reach. */}
-            <BrandMark label={translate('shell.title')} className="mb-2 hidden size-9 self-center workspace:block" />
+            <BrandMark label={translate('shell.title')} className="mb-3 hidden size-10 self-center workspace:block" />
 
             {offered.map((space) => (
                 <SpaceLink key={space} space={space} current={space === current} />
             ))}
+
+            <div className="flex flex-1 items-center justify-center workspace:mt-auto workspace:flex-none workspace:pt-3">
+                {account}
+            </div>
         </nav>
     );
 }
@@ -64,13 +86,13 @@ function SpaceLink({ space, current }: { readonly space: Space; readonly current
             // A placeholder says what it is in its own name rather than in a note beside it: the name is what a screen
             // reader announces on the link, and it is the one place the sentence is not read on every other item too.
             aria-label={built ? undefined : translate('space.notBuiltYet', { space: name })}
-            className={`flex flex-1 flex-col items-center gap-1 rounded-lg px-1 py-2 text-2xs font-medium transition workspace:flex-none ${
+            className={`flex flex-1 flex-col items-center gap-0.75 rounded-2xl px-0.5 py-1.75 text-2xs font-medium transition workspace:flex-none workspace:gap-1 workspace:rounded-none workspace:border-e-3 workspace:py-2.25 workspace:text-sm ${
                 current
-                    ? 'bg-accent-soft text-accent-strong'
-                    : `hover:bg-hover hover:text-text ${built ? 'text-muted' : 'text-faint'}`
+                    ? 'bg-accent-soft font-semibold text-accent-deep workspace:border-accent'
+                    : `workspace:border-transparent hover:bg-hover hover:text-text ${built ? 'text-muted' : 'text-faint'}`
             }`}
         >
-            <Icon name={spaceIcons[space]} className="size-6" />
+            <Icon name={spaceIcons[space]} className="size-6 workspace:size-5.5" />
             <span className="max-w-full truncate">{name}</span>
         </a>
     );
