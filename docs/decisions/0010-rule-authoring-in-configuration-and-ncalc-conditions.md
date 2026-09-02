@@ -27,7 +27,7 @@ MailFathom already answers the storage question one way for everything else it h
 - **An edit has to take effect without a restart, and an invalid edit must not take effect at all.** The options infrastructure discards an invalid reloaded value silently, which for a rule set means an owner mistypes a fact name and gets an instance that keeps running the previous rules while their file says otherwise.
 - **The condition has to express a genuinely complex filter in a configuration file.** A sender domain, an attachment, an age, and a folder combined with `and`, `or`, and grouping is the ordinary case, and a predicate tree spelled out in YAML is the shape people avoid writing.
 - **Nothing may evaluate arbitrary authored code.** Mail is attacker-controlled input and a condition is authored text read at startup; an evaluator whose cost or reach is a property of what was typed is not acceptable at any licence.
-- **A dependency's obligations reach every operator, not only this repository.** MailFathom is Apache-2.0, self-hosted, and redistributed as an image, so a licence, a transitive graph, and a target framework are all part of the choice.
+- **A dependency's obligations reach every operator, not only this repository.** MailFathom is self-hosted and redistributed as an image, and it has to stay distributable under commercial closed-source terms beside its own open-source ones, so a licence, a transitive graph, and a target framework are all part of the choice.
 - **Both surfaces are public.** The configuration schema and the expression syntax are surfaces [ADR 0004](0004-versioning-and-release-policy.md) names, so whichever shape is chosen is one the project has to own and to break deliberately when it breaks it.
 
 ## Considered Options
