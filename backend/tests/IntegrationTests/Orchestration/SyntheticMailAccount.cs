@@ -119,6 +119,7 @@ internal sealed class SyntheticMailAccount(
         "mutation-identity",
         "mutation-reconciliation",
         "mutation-record-inbox",
+        "mutation-withdrawal",
         "occurrence-identity",
         "owner-stored-content",
         DraftCopyFolderAlias,

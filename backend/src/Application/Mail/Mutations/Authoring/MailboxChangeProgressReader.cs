@@ -76,9 +76,12 @@ public sealed class MailboxChangeProgressReader
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(recordIds);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(recordIds.Count, MaximumRecordsPerRead);
 
+        // The grant is asked for before the batch is measured, for the reason its sibling withdrawer states: a caller
+        // holding nothing is refused as unauthorized rather than told how large its batch was.
         this.authorization.RequirePermission(MailFathomPermission.MailRead);
+
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(recordIds.Count, MaximumRecordsPerRead);
 
         var held = await this.records.ReadAsync(this.scopeResolver.Owner, recordIds, cancellationToken);
 

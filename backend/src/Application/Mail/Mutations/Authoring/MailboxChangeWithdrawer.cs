@@ -109,9 +109,13 @@ public sealed class MailboxChangeWithdrawer
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(recordIds);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(recordIds.Count, MaximumRecordsPerCall);
 
+        // The grant is asked for before the batch is measured, so a caller holding nothing is refused as unauthorized
+        // rather than told how large its batch was. Today's routes bound the batch before either of them is reached,
+        // which is why the order is held here rather than left to them.
         this.authorization.RequirePermission(grant);
+
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(recordIds.Count, MaximumRecordsPerCall);
 
         var held = await this.records.ReadAsync(this.scopeResolver.Owner, recordIds, cancellationToken);
 
