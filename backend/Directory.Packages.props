@@ -4,15 +4,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.4.6" />
+    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.5.3" />
     <!-- The only prerelease pin in the repository. AddEFMigrations is the sole supported way to run dotnet-ef against
          the orchestration on Aspire 13: the aspire exec command that earlier versions offered no longer exists, and the
          package ships no stable build. It is referenced by AppHost alone, so nothing it carries reaches a deployed
          assembly. -->
-    <PackageVersion Include="Aspire.Hosting.EntityFrameworkCore" Version="13.4.6-preview.1.26319.6" />
-    <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.4.6" />
-    <PackageVersion Include="Aspire.Hosting.Testing" Version="13.4.6" />
-    <PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.4.6" />
+    <PackageVersion Include="Aspire.Hosting.EntityFrameworkCore" Version="13.5.3-preview.1.26425.3" />
+    <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.5.3" />
+    <PackageVersion Include="Aspire.Hosting.Testing" Version="13.5.3" />
+    <PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.5.3" />
     <!-- The non-interactive Microsoft Entra credentials an Azure OpenAI endpoint is reached with where no key exists to
          provision. Referenced by AI alone, and only for the four credential types a background service can hold; the
          chain is composed explicitly rather than through DefaultAzureCredential, which would reach a developer tool. -->
@@ -22,13 +22,13 @@
          dependency, AWSSDK.Core below, which is the second half of the same decision: the alternative clients each
          brought a stack this repository takes nowhere else. Both are Apache-2.0 and both carry a row in
          THIRD_PARTY_LICENSES.md. -->
-    <PackageVersion Include="AWSSDK.S3" Version="4.0.102.3" />
+    <PackageVersion Include="AWSSDK.S3" Version="4.0.102.4" />
     <!-- The runtime behind AWSSDK.S3 rather than a dependency of MailFathom's own: the credential, the endpoint, the
          signer, and the client configuration are its types. Pinned directly for the reason MimeKit is — the version the
          code compiles against is decided here instead of inherited from another package's dependency range — and it
          carries no package dependencies of its own on the net8.0 assets .NET 10 resolves. -->
-    <PackageVersion Include="AWSSDK.Core" Version="4.0.102" />
-    <PackageVersion Include="System.CommandLine" Version="2.0.10" />
+    <PackageVersion Include="AWSSDK.Core" Version="4.0.102.1" />
+    <PackageVersion Include="System.CommandLine" Version="2.0.11" />
     <!-- What draws the command's output: the tables its listings are laid out in, and the colour that tells a failure
          from a result. Referenced by Cli alone. It brings Spectre.Console.Ansi with it, which is the same project under
          the same licence, so both carry a row in THIRD_PARTY_LICENSES.md. Both are trimmable and the trimmed publish is
@@ -38,7 +38,7 @@
          framework, because it exists on one platform. The command uses it to bind its credential key to the current
          Windows user, and guards the call with a runtime platform check, so a Linux build carries it and never enters
          it. -->
-    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.10" />
+    <PackageVersion Include="System.Security.Cryptography.ProtectedData" Version="10.0.11" />
     <!-- The throughput harness `backend/tests/Benchmarks` reports with, and nothing else: it is referenced by that project
          alone, ships nowhere, and gates nothing. Its `net8.0` assets are what .NET 10 resolves, and it recognizes
          net10.0 as a runtime of its own. It brings sixteen transitive packages with it, every one of them recorded in
@@ -57,11 +57,11 @@
          declares AngleSharp as a range, and a version resolved for the sanitizer that differed from the one this
          reduction compiled against would be two readings of one body by two parsers, which is the thing the whole
          projection exists to avoid. MIT, and recorded in THIRD_PARTY_LICENSES.md as a direct dependency. -->
-    <PackageVersion Include="AngleSharp" Version="1.6.0" />
+    <PackageVersion Include="AngleSharp" Version="1.7.2" />
     <!-- Brings AngleSharp 1.6.0 and AngleSharp.Css 1.0.0 transitively, both MIT. The 9.1 line replaced the exact
          AngleSharp 0.17.1 pin the 9.0 line carried, which is what let the direct reference above be taken, and
          AngleSharp 1.6.0 publishes a net10.0 target of its own. -->
-    <PackageVersion Include="HtmlSanitizer" Version="9.1.974" />
+    <PackageVersion Include="HtmlSanitizer" Version="9.2.1039" />
     <!-- The DNS client the local DKIM verification resolves published keys with. The platform offers no TXT lookup at
          all — System.Net.Dns resolves addresses and nothing else — so the alternative was a hand-written resolver
          parsing untrusted wire data. It is Apache-2.0, carries no dependencies of its own on its net8.0 target, and
@@ -70,54 +70,58 @@
     <!-- MimeKit brings this in transitively and the DKIM key locator names one of its types, because that is what
          MimeKit's locator contract returns. Pinned directly for the reason MimeKit itself is: a version the code
          compiles against is decided here rather than inherited from another package's dependency range. -->
-    <PackageVersion Include="BouncyCastle.Cryptography" Version="2.6.2" />
+    <PackageVersion Include="BouncyCastle.Cryptography" Version="2.7.0" />
     <PackageVersion Include="MailKit" Version="4.17.0" />
     <PackageVersion Include="MimeKit" Version="4.17.0" />
-    <PackageVersion Include="Microsoft.Agents.AI" Version="1.15.0" />
-    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.10" />
+    <PackageVersion Include="Microsoft.Agents.AI" Version="1.20.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.11" />
     <!-- The OpenAPI document generator, which ships outside the shared framework. It builds the HTTP contract from the
          routes the host already mapped rather than from a second description somebody keeps in step. Referenced by Host
          alone, where the document is registered only when the environment is Development.
-         It is one patch ahead of the 10.0.10 the rest of this line sits at, and deliberately: 10.0.10 depends on
+         It was held one patch ahead while the rest of this line sat at 10.0.10, and deliberately: 10.0.10 depends on
          Microsoft.OpenApi 2.0.0 exactly, which carries CVE-2026-49451 (GHSA-v5pm-xwqc-g5wc, high) — a stack overflow
          parsing circular schema references — and NU1903 fails the restore over it. 10.0.11 is the release that widens
-         the dependency to the patched 2.7.5. -->
+         the dependency to the patched 2.7.5, and the rest of the line has since moved to it. -->
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
     <!-- The OpenAPI object model, brought in transitively by the generator above and pinned directly for the reason
          BouncyCastle.Cryptography is: the document and operation transformers name its types, so the version this
          repository compiles against is decided here rather than inherited from another package's dependency range. -->
     <PackageVersion Include="Microsoft.OpenApi" Version="2.7.5" />
     <PackageVersion Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" Version="5.6.0" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.302" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="10.0.400" />
     <PackageVersion Include="Microsoft.VisualStudio.Threading.Analyzers" Version="17.14.15" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.AI" Version="10.8.1" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.8.0" />
-    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.8.1" />
-    <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.8.1" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.AI" Version="10.9.0" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.9.0" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.9.0" />
+    <PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.9.0" />
     <!-- One client library reaches both supported providers. Azure OpenAI's v1 data plane is OpenAI-compatible, so an
          Azure deployment is this client pointed at `<resource>/openai/v1/`, which is what Microsoft's own current
          guidance shows; Azure.AI.OpenAI would be a second client construction and has published no stable release
-         since 2.1.0. -->
+         since 2.1.0.
+
+         Held below the newest release rather than left behind: Microsoft.Extensions.AI.OpenAI 10.9.0 depends on
+         OpenAI [2.12.0, 2.13.0), so 2.13.0 resolves outside that constraint and NU1608 fails the restore over it.
+         This pin moves when the adapter above widens its range, not before. -->
     <PackageVersion Include="OpenAI" Version="2.12.0" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.10" />
-    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.6.0" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.11" />
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.9.0" />
     <PackageVersion Include="Microsoft.Security.Utilities.Core" Version="1.21.0" />
-    <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.6.0" />
-    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.15.3" />
-    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.15.3" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.2" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.15.1" />
-    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.15.1" />
-    <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="2.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.9.0" />
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.18.0" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.18.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.18.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Http" Version="1.18.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.Runtime" Version="1.18.0" />
+    <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="2.2.0" />
     <!-- The expression language a mail rule's condition is written in, taken as the package that carries the
          asynchronous evaluator because a fact resolves through I/O. Referenced by Infrastructure alone, where the
          parser, the validating walk, and the evaluator live. Its graph is wider than the package name suggests —
@@ -127,7 +131,7 @@
          around it has to guarantee. -->
     <PackageVersion Include="NCalc" Version="7.1.0" />
     <PackageVersion Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
-    <PackageVersion Include="NSubstitute" Version="6.0.0" />
+    <PackageVersion Include="NSubstitute" Version="6.2.0" />
     <PackageVersion Include="Roslynator.Analyzers" Version="4.13.1" />
     <PackageVersion Include="Roslynator.CodeAnalysis.Analyzers" Version="4.13.1" />
     <PackageVersion Include="Roslynator.Formatting.Analyzers" Version="4.13.1" />
@@ -140,13 +144,13 @@
          own script bundle out of the assembly, so a running instance fetches nothing from a content delivery network.
          Referenced by Host alone, and mapped only when the environment is Development — the assembly is redistributed
          with the image either way, which is why THIRD_PARTY_LICENSES.md records it among the shipped components. -->
-    <PackageVersion Include="Scalar.AspNetCore" Version="2.17.1" />
+    <PackageVersion Include="Scalar.AspNetCore" Version="2.17.2" />
     <!-- The boundary rules that read compiled intermediate language rather than assembly metadata, referenced by
          Boundaries.UnitTests alone. The pin is the xUnit v3 integration, which carries the analyzer itself and with it
          Mono.Cecil, the reader that makes a method body visible at all, plus Newtonsoft.Json, JetBrains.Annotations,
          CycleDetection, and System.ValueTuple. Seven packages for one test project is the whole cost of the
          mechanism, and THIRD_PARTY_LICENSES.md records every one of them. -->
-    <PackageVersion Include="TngTech.ArchUnitNET.xUnitV3" Version="0.13.3" />
+    <PackageVersion Include="TngTech.ArchUnitNET.xUnitV3" Version="0.13.4" />
     <PackageVersion Include="xRetry.v3" Version="1.0.0-rc3" />
     <PackageVersion Include="xunit.analyzers" Version="1.27.0" />
     <PackageVersion Include="xunit.v3.mtp-v2" Version="3.2.2" />
