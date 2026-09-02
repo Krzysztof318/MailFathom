@@ -30,7 +30,12 @@ public sealed class OtlpExportPayloadTests
         var request = OtlpExportRequests.Batch([new KeyValuePair<string, string>(OwnerKey, "somebody-else")], 1);
 
         // Act
-        var rewritten = OtlpExportPayload.Rewrite(request, OwnerKey, AuthenticatedOwner, maxRecords: 10);
+        var rewritten = OtlpExportPayload.Rewrite(
+            request,
+            ClientTelemetrySignal.Traces,
+            OwnerKey,
+            AuthenticatedOwner,
+            maxRecords: 10);
 
         // Assert
         Assert.Equal(OtlpPayloadRefusal.None, rewritten.Refusal);
@@ -53,7 +58,12 @@ public sealed class OtlpExportPayloadTests
             1);
 
         // Act
-        var rewritten = OtlpExportPayload.Rewrite(request, OwnerKey, AuthenticatedOwner, maxRecords: 10);
+        var rewritten = OtlpExportPayload.Rewrite(
+            request,
+            ClientTelemetrySignal.Traces,
+            OwnerKey,
+            AuthenticatedOwner,
+            maxRecords: 10);
 
         // Assert
         Assert.Equal(
@@ -73,7 +83,12 @@ public sealed class OtlpExportPayloadTests
         var request = OtlpExportRequests.BatchWithoutResource(2);
 
         // Act
-        var rewritten = OtlpExportPayload.Rewrite(request, OwnerKey, AuthenticatedOwner, maxRecords: 10);
+        var rewritten = OtlpExportPayload.Rewrite(
+            request,
+            ClientTelemetrySignal.Traces,
+            OwnerKey,
+            AuthenticatedOwner,
+            maxRecords: 10);
 
         // Assert
         Assert.Equal(OtlpPayloadRefusal.None, rewritten.Refusal);
@@ -93,10 +108,80 @@ public sealed class OtlpExportPayloadTests
         var request = OtlpExportRequests.Batch([], records);
 
         // Act
-        var rewritten = OtlpExportPayload.Rewrite(request, OwnerKey, AuthenticatedOwner, maxRecords: 100);
+        var rewritten = OtlpExportPayload.Rewrite(
+            request,
+            ClientTelemetrySignal.Traces,
+            OwnerKey,
+            AuthenticatedOwner,
+            maxRecords: 100);
 
         // Assert
         Assert.Equal(records, rewritten.RecordCount);
+    }
+
+    /// <summary>A metric is as many records as it measured, which is what the bound has to count to be a bound at all.</summary>
+    [Theory]
+    [InlineData(1, 1, 1)]
+    [InlineData(3, 40, 120)]
+    [InlineData(2, 0, 2)]
+    public void Rewrite_AMetricsBatch_CountsItsDataPointsRatherThanItsMetrics(
+        int metrics,
+        int dataPoints,
+        int expected)
+    {
+        // Arrange
+        var request = OtlpExportRequests.MetricsBatch(metrics, dataPoints);
+
+        // Act
+        var rewritten = OtlpExportPayload.Rewrite(
+            request,
+            ClientTelemetrySignal.Metrics,
+            OwnerKey,
+            AuthenticatedOwner,
+            maxRecords: 1000);
+
+        // Assert
+        Assert.Equal(OtlpPayloadRefusal.None, rewritten.Refusal);
+        Assert.Equal(expected, rewritten.RecordCount);
+    }
+
+    /// <summary>A payload shape added after this was written counts as one rather than as none, so it never slips the bound.</summary>
+    [Fact]
+    public void Rewrite_AMetricReportedInAShapeThisDeploymentDoesNotKnow_StillCountsAsOneRecord()
+    {
+        // Arrange
+        var request = OtlpExportRequests.MetricsBatch(metrics: 2, dataPoints: 9, payloadField: 21);
+
+        // Act
+        var rewritten = OtlpExportPayload.Rewrite(
+            request,
+            ClientTelemetrySignal.Metrics,
+            OwnerKey,
+            AuthenticatedOwner,
+            maxRecords: 1000);
+
+        // Assert
+        Assert.Equal(2, rewritten.RecordCount);
+    }
+
+    /// <summary>The bound refuses a batch whose metrics are few and whose measurements are not.</summary>
+    [Fact]
+    public void Rewrite_AFewMetricsCarryingMoreDataPointsThanTheBound_RefusesTheBatch()
+    {
+        // Arrange
+        var request = OtlpExportRequests.MetricsBatch(metrics: 2, dataPoints: 30);
+
+        // Act
+        var rewritten = OtlpExportPayload.Rewrite(
+            request,
+            ClientTelemetrySignal.Metrics,
+            OwnerKey,
+            AuthenticatedOwner,
+            maxRecords: 40);
+
+        // Assert
+        Assert.Equal(OtlpPayloadRefusal.TooManyRecords, rewritten.Refusal);
+        Assert.Empty(rewritten.Body);
     }
 
     /// <summary>A receiver that forwarded whatever arrived would be a way to push arbitrary octets at somebody's collector.</summary>
@@ -107,7 +192,12 @@ public sealed class OtlpExportPayloadTests
     public void Rewrite_OctetsThatAreNotAnExportRequest_Refuses(byte[] request)
     {
         // Act
-        var rewritten = OtlpExportPayload.Rewrite(request, OwnerKey, AuthenticatedOwner, maxRecords: 100);
+        var rewritten = OtlpExportPayload.Rewrite(
+            request,
+            ClientTelemetrySignal.Traces,
+            OwnerKey,
+            AuthenticatedOwner,
+            maxRecords: 100);
 
         // Assert
         Assert.Equal(OtlpPayloadRefusal.Malformed, rewritten.Refusal);
@@ -122,7 +212,12 @@ public sealed class OtlpExportPayloadTests
         var request = OtlpExportRequests.Batch([], records: 5);
 
         // Act
-        var rewritten = OtlpExportPayload.Rewrite(request, OwnerKey, AuthenticatedOwner, maxRecords: 4);
+        var rewritten = OtlpExportPayload.Rewrite(
+            request,
+            ClientTelemetrySignal.Traces,
+            OwnerKey,
+            AuthenticatedOwner,
+            maxRecords: 4);
 
         // Assert
         Assert.Equal(OtlpPayloadRefusal.TooManyRecords, rewritten.Refusal);
@@ -134,7 +229,12 @@ public sealed class OtlpExportPayloadTests
     public void Rewrite_AnEmptyRequest_IsAccepted()
     {
         // Act
-        var rewritten = OtlpExportPayload.Rewrite([], OwnerKey, AuthenticatedOwner, maxRecords: 10);
+        var rewritten = OtlpExportPayload.Rewrite(
+            [],
+            ClientTelemetrySignal.Traces,
+            OwnerKey,
+            AuthenticatedOwner,
+            maxRecords: 10);
 
         // Assert
         Assert.Equal(OtlpPayloadRefusal.None, rewritten.Refusal);

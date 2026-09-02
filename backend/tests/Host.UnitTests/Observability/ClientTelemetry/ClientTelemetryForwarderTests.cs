@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Net;
 using MailFathom.Host.Observability.ClientTelemetry;
 using MailFathom.TestSupport;
+using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using OpenTelemetry.Exporter;
 using Xunit;
@@ -206,13 +207,26 @@ public sealed class ClientTelemetryForwarderTests
     }
 
     /// <summary>The ceiling is the exporter's own, and a destination past it is a condition rather than a hung request.</summary>
+    /// <remarks>
+    /// The wait is the fake clock's rather than the machine's, which is what makes the deadline itself the thing under
+    /// test: the collector is entered and then blocks until its token is cancelled, so nothing here completes until the
+    /// clock is advanced past the configured timeout.
+    /// </remarks>
     [Fact]
     public async Task ForwardAsync_ADestinationThatDoesNotAnswerInsideTheConfiguredTimeout_ReportsATimeout()
     {
         // Arrange
+        var timeout = TimeSpan.FromSeconds(4);
+        var clock = new FakeTimeProvider();
+        var entered = new TaskCompletionSource();
         using var collector = new FakeHttpMessageHandler(async (_, cancellationToken) =>
         {
-            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            entered.TrySetResult();
+
+            var blocked = new TaskCompletionSource();
+            await using var registration = cancellationToken.Register(
+                () => blocked.TrySetCanceled(cancellationToken));
+            await blocked.Task;
 
             return new HttpResponseMessage(HttpStatusCode.OK);
         });
@@ -220,16 +234,20 @@ public sealed class ClientTelemetryForwarderTests
             collector,
             OtlpExportProtocol.HttpProtobuf,
             headers: null,
-            timeout: TimeSpan.FromMilliseconds(30));
+            timeout: timeout,
+            clock: clock);
 
         // Act
-        var forwarding = await forwarder.ForwardAsync(
+        var forwarding = forwarder.ForwardAsync(
             ClientTelemetrySignal.Traces,
             Batch,
             TestContext.Current.CancellationToken);
 
+        await entered.Task;
+        clock.Advance(timeout);
+
         // Assert
-        Assert.Equal(ClientTelemetryFailure.TimedOut, forwarding.Failure);
+        Assert.Equal(ClientTelemetryFailure.TimedOut, (await forwarding).Failure);
     }
 
     /// <summary>Composes one gRPC answer: the status in the trailers, and the message inside its frame.</summary>
@@ -254,7 +272,8 @@ public sealed class ClientTelemetryForwarderTests
         HttpMessageHandler collector,
         OtlpExportProtocol protocol,
         IReadOnlyList<KeyValuePair<string, string>>? headers = null,
-        TimeSpan? timeout = null)
+        TimeSpan? timeout = null,
+        TimeProvider? clock = null)
     {
         var clients = Substitute.For<IHttpClientFactory>();
         clients.CreateClient(ClientTelemetryForwarder.HttpClientName)
@@ -266,6 +285,6 @@ public sealed class ClientTelemetryForwarderTests
             headers ?? [],
             timeout ?? TimeSpan.FromSeconds(10));
 
-        return new ClientTelemetryForwarder(clients, destination);
+        return new ClientTelemetryForwarder(clients, destination, clock ?? TimeProvider.System);
     }
 }

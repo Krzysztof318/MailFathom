@@ -73,8 +73,12 @@ internal static class ClientTelemetryEndpoint
     /// </remarks>
     internal const int MaxRequestBytes = 4 * 1024 * 1024;
 
-    /// <summary>The most records one batch may carry.</summary>
-    /// <remarks>Bounded beside the byte count rather than instead of it, because the two are different costs: the octets are what this process buffers, and the records are what the destination is charged for.</remarks>
+    /// <summary>The most records one batch may carry, a record being a span, a log record, or a single metric data point.</summary>
+    /// <remarks>
+    /// Bounded beside the byte count rather than instead of it, because the two are different costs: the octets are
+    /// what this process buffers, and the records are what the destination is charged for. A metric counts as its data
+    /// points rather than as one definition for exactly that reason — a collector bills the measurements.
+    /// </remarks>
     internal const int MaxRecordsPerBatch = 10_000;
 
     private const int InvalidArgumentStatus = 3;
@@ -193,7 +197,12 @@ internal static class ClientTelemetryEndpoint
                 $"An export batch is at most {MaxRequestBytes} bytes.");
         }
 
-        var rewritten = OtlpExportPayload.Rewrite(batch, OwnerTagName, owner.ToString(), MaxRecordsPerBatch);
+        var rewritten = OtlpExportPayload.Rewrite(
+            batch,
+            signal,
+            OwnerTagName,
+            owner.ToString(),
+            MaxRecordsPerBatch);
 
         if (rewritten.Refusal != OtlpPayloadRefusal.None)
         {

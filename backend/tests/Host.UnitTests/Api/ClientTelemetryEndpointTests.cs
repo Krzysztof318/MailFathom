@@ -301,7 +301,8 @@ public sealed class ClientTelemetryEndpointTests
                 new Uri("https://collector.example.test"),
                 OtlpExportProtocol.HttpProtobuf,
                 [],
-                TimeSpan.FromSeconds(10)));
+                TimeSpan.FromSeconds(10)),
+            TimeProvider.System);
     }
 
     private static TestEndpointRouteBuilder BuildRouteBuilder()

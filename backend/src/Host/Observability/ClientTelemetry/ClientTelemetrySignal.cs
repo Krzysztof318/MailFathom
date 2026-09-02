@@ -15,8 +15,11 @@ namespace MailFathom.Host.Observability.ClientTelemetry;
 /// <para>
 /// The three request messages are shaped identically for everything the proxy does with them — a repeated resource
 /// envelope at field 1, a resource at field 1 within it, repeated scopes at field 2, and repeated records at field 2
-/// within those — so nothing here says how a payload is read. <see cref="OtlpExportPayload" /> reads all three the same
-/// way, which is why a signal is a name and two strings rather than a parser of its own.
+/// within those — so nothing here says how a payload is read. <see cref="OtlpExportPayload" /> rewrites all three the
+/// same way and is told which signal it holds for one purpose alone: a metric's measurements sit one level below the
+/// metric, so counting them against the batch bound is the one thing that is not the same in all three. That is still
+/// a decision the walker takes from the member rather than from a parser here, which is why a signal is a name and two
+/// strings.
 /// </para>
 /// </remarks>
 internal sealed record ClientTelemetrySignal

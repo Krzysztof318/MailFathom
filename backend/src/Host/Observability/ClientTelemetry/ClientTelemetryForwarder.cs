@@ -54,18 +54,25 @@ internal sealed class ClientTelemetryForwarder
 
     private readonly IHttpClientFactory clients;
     private readonly ClientTelemetryDestination destination;
+    private readonly TimeProvider clock;
 
     /// <summary>Initializes the forwarder over the destination composition resolved.</summary>
     /// <param name="clients">Builds the bounded client one forward is sent on.</param>
     /// <param name="destination">Where the deployment's own telemetry goes, which is where this goes.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="clients" /> or <paramref name="destination" /> is <see langword="null" />.</exception>
-    public ClientTelemetryForwarder(IHttpClientFactory clients, ClientTelemetryDestination destination)
+    /// <param name="clock">Times the deadline one forward is given, so a suite can reach it without waiting it out.</param>
+    /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
+    public ClientTelemetryForwarder(
+        IHttpClientFactory clients,
+        ClientTelemetryDestination destination,
+        TimeProvider clock)
     {
         ArgumentNullException.ThrowIfNull(clients);
         ArgumentNullException.ThrowIfNull(destination);
+        ArgumentNullException.ThrowIfNull(clock);
 
         this.clients = clients;
         this.destination = destination;
+        this.clock = clock;
     }
 
     /// <summary>Forwards one batch and reports what the caller should be answered.</summary>
@@ -86,18 +93,21 @@ internal sealed class ClientTelemetryForwarder
         ArgumentNullException.ThrowIfNull(signal);
         ArgumentNullException.ThrowIfNull(batch);
 
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        deadline.CancelAfter(this.destination.Timeout);
+        // Two sources rather than one: the deadline is the exporter's own and is timed by the injected clock, and the
+        // caller's token is what a disconnected client cancels through. Linking them keeps the two apart at the catch
+        // below, which is what tells a timeout from a client that hung up.
+        using var deadline = new CancellationTokenSource(this.destination.Timeout, this.clock);
+        using var forwarding = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, deadline.Token);
 
         try
         {
             using var client = this.clients.CreateClient(HttpClientName);
             using var request = this.Compose(signal, batch);
-            using var response = await client.SendAsync(request, deadline.Token);
+            using var response = await client.SendAsync(request, forwarding.Token);
 
             return this.destination.Protocol == OtlpExportProtocol.Grpc
-                ? await ReadGrpcAsync(response, deadline.Token)
-                : await ReadHttpAsync(response, deadline.Token);
+                ? await ReadGrpcAsync(response, forwarding.Token)
+                : await ReadHttpAsync(response, forwarding.Token);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

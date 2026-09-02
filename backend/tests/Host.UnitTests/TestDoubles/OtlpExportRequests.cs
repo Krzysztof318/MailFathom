@@ -17,7 +17,8 @@ namespace MailFathom.Host.UnitTests.TestDoubles;
 /// <para>
 /// The three signals are shaped identically for everything the proxy does, so one builder covers all three. A record
 /// here is a message with one field in it: nothing under a scope is read, and giving a span its real fields would be
-/// arranging a schema the subject never consults.
+/// arranging a schema the subject never consults. A metric is the exception, and only as far as the subject goes — it
+/// is given a payload holding the points it measured, because that is the one nesting the record bound counts through.
 /// </para>
 /// </remarks>
 internal static class OtlpExportRequests
@@ -25,17 +26,31 @@ internal static class OtlpExportRequests
     private const int FirstField = 1;
     private const int SecondField = 2;
 
+    /// <summary>The one-of arm a sum reports its data points in, which is one of the five a metric may use.</summary>
+    private const int SumField = 7;
+
     /// <summary>Builds one export request carrying one resource and one scope.</summary>
     /// <param name="resourceAttributes">The attributes the client claims on the resource.</param>
     /// <param name="records">How many records the scope carries.</param>
     /// <returns>The request as it would arrive.</returns>
     internal static byte[] Batch(IReadOnlyList<KeyValuePair<string, string>> resourceAttributes, int records) =>
-        Envelope(Resource(resourceAttributes), records);
+        Envelope(Resource(resourceAttributes), Enumerable.Range(0, records).Select(_ => Record()));
+
+    /// <summary>Builds one metrics export request whose scope carries metrics reporting points of their own.</summary>
+    /// <param name="metrics">How many metric definitions the scope carries.</param>
+    /// <param name="dataPoints">How many data points each of them reports.</param>
+    /// <param name="payloadField">The one-of arm the points are reported in, a sum by default and an unknown number for a shape this repository has no name for.</param>
+    /// <returns>The request as it would arrive.</returns>
+    internal static byte[] MetricsBatch(int metrics, int dataPoints, int payloadField = SumField) =>
+        Envelope(
+            Resource([]),
+            Enumerable.Range(0, metrics).Select(_ => Metric(dataPoints, payloadField)));
 
     /// <summary>Builds one export request whose envelope carries no resource at all, which a client is free to send.</summary>
     /// <param name="records">How many records the scope carries.</param>
     /// <returns>The request as it would arrive.</returns>
-    internal static byte[] BatchWithoutResource(int records) => Envelope(resource: null, records);
+    internal static byte[] BatchWithoutResource(int records) =>
+        Envelope(resource: null, Enumerable.Range(0, records).Select(_ => Record()));
 
     /// <summary>Encodes one resource attribute exactly as it appears inside a request, tag included.</summary>
     private static byte[] Attribute(string key, string value) => LengthDelimited(
@@ -68,9 +83,9 @@ internal static class OtlpExportRequests
         ];
     }
 
-    private static byte[] Envelope(byte[]? resource, int records)
+    private static byte[] Envelope(byte[]? resource, IEnumerable<byte[]> records)
     {
-        byte[] scope = [.. Enumerable.Range(0, records).SelectMany(_ => LengthDelimited(SecondField, Record()))];
+        byte[] scope = [.. records.SelectMany(record => LengthDelimited(SecondField, record))];
 
         byte[] envelope =
         [
@@ -86,6 +101,16 @@ internal static class OtlpExportRequests
 
     /// <summary>One record, whose only field is opaque to everything the proxy does with it.</summary>
     private static byte[] Record() => LengthDelimited(FirstField, Encoding.UTF8.GetBytes("r"));
+
+    /// <summary>One metric: a name it is reported under, and one payload holding the points it measured.</summary>
+    private static byte[] Metric(int dataPoints, int payloadField) =>
+    [
+        .. LengthDelimited(FirstField, Encoding.UTF8.GetBytes("m")),
+        .. LengthDelimited(
+            payloadField,
+            [.. Enumerable.Range(0, dataPoints)
+                .SelectMany(_ => LengthDelimited(FirstField, Encoding.UTF8.GetBytes("p")))]),
+    ];
 
     private static byte[] LengthDelimited(int field, ReadOnlySpan<byte> payload) =>
         [.. Varint(((ulong)field << 3) | 2), .. Varint((ulong)payload.Length), .. payload];

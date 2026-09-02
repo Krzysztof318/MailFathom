@@ -15,7 +15,9 @@ namespace MailFathom.Host.Observability.ClientTelemetry;
 /// field this repository has no opinion about is copied octet for octet without ever being understood. What is
 /// understood is the one path to the resource attributes and the two levels of nesting a record sits at, and those are
 /// the same three field numbers in all three signals — a repeated resource envelope at field 1, the resource itself at
-/// field 1 within it, repeated scopes at field 2, and repeated records at field 2 within those.
+/// field 1 within it, repeated scopes at field 2, and repeated records at field 2 within those. One thing beyond that
+/// is understood, and only for counting: a metric holds its measurements one level further down, so the record bound
+/// reaches them rather than stopping at the metric definitions that carry them.
 /// </para>
 /// <para>
 /// Copying rather than re-encoding is what makes that safe as the schema grows. A field OpenTelemetry adds after this
@@ -44,11 +46,12 @@ internal static class OtlpExportPayload
 
     /// <summary>Rewrites one export request so it names the owner this deployment authenticated, and counts what it carries.</summary>
     /// <param name="request">The export request exactly as the client sent it.</param>
+    /// <param name="signal">Which signal the request carries, which is what decides what one record is.</param>
     /// <param name="attributeKey">The resource attribute naming whose telemetry this is.</param>
     /// <param name="attributeValue">What this deployment resolved that owner to.</param>
     /// <param name="maxRecords">The most records one batch may carry before it is refused whole.</param>
     /// <returns>The rewritten request and what it carries, or the refusal that stopped it.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="attributeKey" /> or <paramref name="attributeValue" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="signal" />, <paramref name="attributeKey" /> or <paramref name="attributeValue" /> is <see langword="null" />.</exception>
     /// <remarks>
     /// The owner attribute is written onto every resource in the batch rather than onto the first, because a batch may
     /// carry several and a resource left unwritten would be the one path by which a client's own claim survived at the
@@ -58,10 +61,12 @@ internal static class OtlpExportPayload
     /// </remarks>
     internal static OtlpExportRewrite Rewrite(
         ReadOnlySpan<byte> request,
+        ClientTelemetrySignal signal,
         string attributeKey,
         string attributeValue,
         int maxRecords)
     {
+        ArgumentNullException.ThrowIfNull(signal);
         ArgumentNullException.ThrowIfNull(attributeKey);
         ArgumentNullException.ThrowIfNull(attributeValue);
 
@@ -84,7 +89,7 @@ internal static class OtlpExportPayload
                 continue;
             }
 
-            var envelope = RewriteEnvelope(request.Slice(start, length), owner, maxRecords, ref records);
+            var envelope = RewriteEnvelope(request.Slice(start, length), signal, owner, maxRecords, ref records);
 
             if (envelope.Refusal != OtlpPayloadRefusal.None)
             {
@@ -105,6 +110,7 @@ internal static class OtlpExportPayload
     /// </remarks>
     private static OtlpExportRewrite RewriteEnvelope(
         ReadOnlySpan<byte> envelope,
+        ClientTelemetrySignal signal,
         ReadOnlySpan<byte> owner,
         int maxRecords,
         ref int records)
@@ -140,7 +146,7 @@ internal static class OtlpExportPayload
                     break;
 
                 case SecondField:
-                    if (!TryCountRecords(envelope.Slice(start, length), maxRecords, ref records))
+                    if (!TryCountRecords(envelope.Slice(start, length), signal, maxRecords, ref records))
                     {
                         return records > maxRecords ? OtlpExportRewrite.TooManyRecords : OtlpExportRewrite.Malformed;
                     }
@@ -207,13 +213,24 @@ internal static class OtlpExportPayload
 
     /// <summary>Counts the records one scope carries, refusing once the batch is past what this endpoint accepts.</summary>
     /// <returns><see langword="true" /> when the scope parsed and the batch is still within its bound.</returns>
-    private static bool TryCountRecords(ReadOnlySpan<byte> scope, int maxRecords, ref int records)
+    /// <remarks>
+    /// A span and a log record are one record each, and a metric is as many as it carries data points. That is the one
+    /// place a signal is told apart here, and it is told apart because a bound counted in metric definitions is no
+    /// bound at all: a handful of them carry as many measurements as a client cares to put in, so counting the
+    /// definitions would leave the batch bounded by its size alone.
+    /// </remarks>
+    private static bool TryCountRecords(
+        ReadOnlySpan<byte> scope,
+        ClientTelemetrySignal signal,
+        int maxRecords,
+        ref int records)
     {
+        var countsDataPoints = signal == ClientTelemetrySignal.Metrics;
         var at = 0;
 
         while (at < scope.Length)
         {
-            if (!TryReadField(scope, ref at, out var field, out var wireType, out _, out _))
+            if (!TryReadField(scope, ref at, out var field, out var wireType, out var start, out var length))
             {
                 return false;
             }
@@ -223,7 +240,18 @@ internal static class OtlpExportPayload
                 continue;
             }
 
-            records++;
+            if (!countsDataPoints)
+            {
+                records++;
+            }
+            else if (TryCountDataPoints(scope.Slice(start, length), out var points))
+            {
+                records += points;
+            }
+            else
+            {
+                return false;
+            }
 
             if (records > maxRecords)
             {
@@ -233,6 +261,57 @@ internal static class OtlpExportPayload
 
         return true;
     }
+
+    /// <summary>Counts the data points one metric carries, across whichever payload shape it was reported in.</summary>
+    /// <returns><see langword="true" /> when the metric parsed, otherwise <see langword="false" />.</returns>
+    /// <remarks>
+    /// Every shape a metric's measurements arrive in — a gauge, a sum, either histogram, or a summary — is a message
+    /// holding its points at its own first field, so the count is the same walk in all five and needs nothing of what
+    /// a point contains. A metric reported in none of them counts as one rather than as none, which is what keeps a
+    /// shape OpenTelemetry adds later from arriving uncounted at a bound that exists to be unavoidable.
+    /// </remarks>
+    private static bool TryCountDataPoints(ReadOnlySpan<byte> metric, out int points)
+    {
+        points = 0;
+        var at = 0;
+
+        while (at < metric.Length)
+        {
+            if (!TryReadField(metric, ref at, out var field, out var wireType, out var start, out var length))
+            {
+                return false;
+            }
+
+            if (wireType != LengthDelimitedWireType || !CarriesDataPoints(field))
+            {
+                continue;
+            }
+
+            var payload = metric.Slice(start, length);
+            var within = 0;
+
+            while (within < payload.Length)
+            {
+                if (!TryReadField(payload, ref within, out var pointField, out var pointWireType, out _, out _))
+                {
+                    return false;
+                }
+
+                if (pointField == FirstField && pointWireType == LengthDelimitedWireType)
+                {
+                    points++;
+                }
+            }
+        }
+
+        points = Math.Max(points, 1);
+
+        return true;
+    }
+
+    /// <summary>Reports whether a metric's field is one of the payload shapes measurements are reported in.</summary>
+    /// <remarks>The five are the arms of the one-of a metric's data sits in: a gauge, a sum, a histogram, an exponential histogram, and a summary.</remarks>
+    private static bool CarriesDataPoints(int field) => field is 5 or 7 or 9 or 10 or 11;
 
     /// <summary>Reports whether one key-value entry is written under the key this deployment owns.</summary>
     private static bool NamesTheOwner(ReadOnlySpan<byte> entry, ReadOnlySpan<byte> key)
