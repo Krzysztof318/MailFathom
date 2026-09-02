@@ -250,6 +250,46 @@ public sealed class ClientTelemetryForwarderTests
         Assert.Equal(ClientTelemetryFailure.TimedOut, (await forwarding).Failure);
     }
 
+    /// <summary>The control for the deadline above: a client that hung up is a different condition from a collector that did not answer.</summary>
+    /// <remarks>
+    /// Both arrive as the same exception out of the same linked source, so what tells them apart is which token fired.
+    /// Asserting only the timeout would leave a guard that reported a disconnected browser tab as a slow collector
+    /// passing, which is the one distinction the counter and the line an operator reads are built on.
+    /// </remarks>
+    [Fact]
+    public async Task ForwardAsync_ACallerThatCancelledWhileTheDestinationWasStillPending_ReportsCancellation()
+    {
+        // Arrange
+        var entered = new TaskCompletionSource();
+        using var collector = new FakeHttpMessageHandler(async (_, cancellationToken) =>
+        {
+            entered.TrySetResult();
+
+            var blocked = new TaskCompletionSource();
+            await using var registration = cancellationToken.Register(
+                () => blocked.TrySetCanceled(cancellationToken));
+            await blocked.Task;
+
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+        var forwarder = ForwarderOver(
+            collector,
+            OtlpExportProtocol.HttpProtobuf,
+            headers: null,
+            timeout: TimeSpan.FromSeconds(4),
+            clock: new FakeTimeProvider());
+        using var caller = new CancellationTokenSource();
+
+        // Act
+        var forwarding = forwarder.ForwardAsync(ClientTelemetrySignal.Traces, Batch, caller.Token);
+
+        await entered.Task;
+        await caller.CancelAsync();
+
+        // Assert
+        Assert.Equal(ClientTelemetryFailure.Cancelled, (await forwarding).Failure);
+    }
+
     /// <summary>Composes one gRPC answer: the status in the trailers, and the message inside its frame.</summary>
     private static HttpResponseMessage GrpcAnswer(int status, byte[] message)
     {

@@ -142,8 +142,9 @@ internal static class ClientTelemetryEndpoint
     /// <exception cref="ArgumentNullException">Thrown when any resolved dependency is <see langword="null" />.</exception>
     /// <remarks>
     /// The order is deliberate. The credential is resolved to an owner first, because an export nobody can be
-    /// attributed to must not be read at all; the quota is spent next, so a client past its rate costs this process one
-    /// refusal rather than a parse; and only then is the batch read, bounded, and rewritten.
+    /// attributed to must not be read at all; the media type is read next, which costs one header and settles whether
+    /// this is an export request at all; the quota is spent after that, so a client past its rate costs this process
+    /// one refusal rather than a parse; and only then is the batch read, bounded, and rewritten.
     /// </remarks>
     internal static async Task<IResult> AcceptAsync(
         ClientTelemetrySignal signal,

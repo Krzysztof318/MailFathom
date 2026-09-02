@@ -2,7 +2,9 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Globalization;
 using System.Net;
+using System.Text;
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
@@ -124,6 +126,67 @@ public sealed class ClientTelemetryEndpointTests
         // Assert
         Assert.Equal(StatusCodes.Status400BadRequest, answered);
         Assert.Empty(collector.RecordedRequests);
+    }
+
+    /// <summary>The byte bound, refused whether the client declared the size or only sent it.</summary>
+    /// <remarks>
+    /// Both arrangements are the same behaviour and both are arranged, because the two arrive at the bound by
+    /// different routes: a declared length is refused before the body is read at all, and an undeclared one is refused
+    /// by what was actually copied — which is the one an oversized body without a header takes.
+    /// </remarks>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task AcceptAsync_ABodyPastTheByteBound_RefusesWithoutForwardingAnything(bool declaresItsLength)
+    {
+        // Arrange
+        using var collector = AcceptingCollector();
+        var request = Requesting(new byte[ClientTelemetryEndpoint.MaxRequestBytes + 1]);
+        var body = new MemoryStream();
+        request.Response.Body = body;
+
+        if (!declaresItsLength)
+        {
+            request.Request.ContentLength = null;
+        }
+
+        // Act
+        var answered = await AcceptAsync(request, collector);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status413PayloadTooLarge, answered);
+        Assert.Empty(collector.RecordedRequests);
+        Assert.Contains(
+            ClientTelemetryEndpoint.MaxRequestBytes.ToString(CultureInfo.InvariantCulture),
+            Encoding.UTF8.GetString(body.ToArray()),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>The record bound is the other ceiling, and it answers for itself rather than as the byte one.</summary>
+    /// <remarks>
+    /// The batch is refused whole rather than truncated, and the answer names the bound it met — which is what a
+    /// client acts on, and what tells this refusal from the one above given both are answered <c>413</c>.
+    /// </remarks>
+    [Fact]
+    public async Task AcceptAsync_ABatchPastTheRecordBound_RefusesWithoutForwardingAnything()
+    {
+        // Arrange
+        using var collector = AcceptingCollector();
+        var request = Requesting(
+            OtlpExportRequests.Batch([], ClientTelemetryEndpoint.MaxRecordsPerBatch + 1));
+        var body = new MemoryStream();
+        request.Response.Body = body;
+
+        // Act
+        var answered = await AcceptAsync(request, collector);
+
+        // Assert
+        Assert.Equal(StatusCodes.Status413PayloadTooLarge, answered);
+        Assert.Empty(collector.RecordedRequests);
+        Assert.Contains(
+            ClientTelemetryEndpoint.MaxRecordsPerBatch.ToString(CultureInfo.InvariantCulture),
+            Encoding.UTF8.GetString(body.ToArray()),
+            StringComparison.Ordinal);
     }
 
     /// <summary>The rate bound, and the answer that tells a client to hold rather than to stop.</summary>
