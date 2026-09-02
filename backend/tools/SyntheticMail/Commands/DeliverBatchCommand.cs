@@ -7,6 +7,7 @@ using System.Globalization;
 using MailFathom.SyntheticMail.Configuration;
 using MailFathom.SyntheticMail.Delivery;
 using MailFathom.SyntheticMail.Generation;
+using MimeKit;
 
 namespace MailFathom.SyntheticMail.Commands;
 
@@ -115,6 +116,16 @@ internal static class DeliverBatchCommand
             Description = $"The AI provider to read. Defaults to '{SyntheticAiProviderFile.FileName}' beside the built command.",
         };
 
+        Option<bool> conversationOption = new("--conversation")
+        {
+            Description = "Generate exchanges between the recipient and invented correspondents instead of a flat corpus, delivering one turn at a time and building each reply from the identifier the recipient's server assigned. Needs the 'mailbox' block in the sending account file, because both halves of a thread have to reach the mailbox.",
+        };
+
+        Option<int?> deliveryTimeoutOption = new("--delivery-timeout")
+        {
+            Description = $"Seconds to wait for a submitted message to appear in the recipient's mailbox, 1..{BatchArguments.MaximumDeliveryTimeoutSeconds}. Defaults to {BatchArguments.DefaultDeliveryTimeoutSeconds}. Requires --conversation.",
+        };
+
         RootCommand command = new("Generate invented mail and deliver a batch of it over SMTP to a development mailbox.")
         {
             recipientArgument,
@@ -131,6 +142,8 @@ internal static class DeliverBatchCommand
             languageOption,
             topicOption,
             aiConfigurationOption,
+            conversationOption,
+            deliveryTimeoutOption,
         };
 
         command.SetAction((result, cancellationToken) => RunAsync(
@@ -150,6 +163,8 @@ internal static class DeliverBatchCommand
                 result.GetValue(languageOption),
                 result.GetValue(topicOption),
                 result.GetValue(aiConfigurationOption),
+                result.GetValue(conversationOption),
+                result.GetValue(deliveryTimeoutOption),
                 context.Clock),
             cancellationToken));
 
@@ -164,6 +179,18 @@ internal static class DeliverBatchCommand
         // The account is read before anything is generated, so a run that cannot possibly deliver says so immediately
         // rather than after producing a corpus. A dry run is the one case that needs no credential at all.
         var account = arguments.DryRun ? null : context.ReadAccount(arguments.ConfigurationPath);
+
+        return arguments.Conversation
+            ? await RunConversationsAsync(context, arguments, account, cancellationToken)
+            : await RunFlatBatchAsync(context, arguments, account, cancellationToken);
+    }
+
+    private static async Task<int> RunFlatBatchAsync(
+        SyntheticMailContext context,
+        BatchArguments arguments,
+        SendingAccount? account,
+        CancellationToken cancellationToken)
+    {
         var corpus = arguments.AiContent
             ? await GenerateAiCorpusAsync(context, arguments, cancellationToken)
             : SyntheticEmailGenerator.Generate(arguments.ToPlan());
@@ -178,6 +205,93 @@ internal static class DeliverBatchCommand
         }
 
         return await DeliverAsync(context, arguments, account, corpus, cancellationToken);
+    }
+
+    /// <summary>Generates and delivers the batch as exchanges, one turn at a time.</summary>
+    /// <remarks>
+    /// The watched mailbox is read before anything is generated, for the reason the sending account is: an exchange
+    /// that could not read the mailbox back could not build a single reply, and finding that out after a provider has
+    /// written two hundred messages costs a batch. A dry run needs no credential for it either — the mailbox's own
+    /// address is the recipient the invocation already named, which is all the generator needs to author half the
+    /// turns.
+    /// </remarks>
+    private static async Task<int> RunConversationsAsync(
+        SyntheticMailContext context,
+        BatchArguments arguments,
+        SendingAccount? account,
+        CancellationToken cancellationToken)
+    {
+        var watchedMailbox = arguments.DryRun ? null : ReadWatchedMailbox(context, arguments);
+        var mailboxParticipant = ParticipantOf(arguments.Recipient);
+        var conversations = arguments.AiContent
+            ? await SyntheticEmailGenerator.GenerateConversationsAsync(
+                arguments.ToPlan(),
+                mailboxParticipant,
+                context.OpenAiContentSource(context.ReadAiProvider(arguments.AiConfigurationPath!)),
+                cancellationToken)
+            : SyntheticEmailGenerator.GenerateConversations(arguments.ToPlan(), mailboxParticipant);
+
+        ReportPlan(context, arguments);
+
+        if (account is null || watchedMailbox is null)
+        {
+            ListConversations(context, conversations);
+
+            return SyntheticMailExitCode.Success;
+        }
+
+        return await DeliverConversationsAsync(context, arguments, account, watchedMailbox, conversations, cancellationToken);
+    }
+
+    /// <summary>Reads the watched mailbox, and refuses one that is not the address the exchange is being delivered to.</summary>
+    /// <remarks>
+    /// An exchange delivers to a mailbox, reads that mailbox back, and appends to it, so the three have to be one
+    /// address. Two would fill one mailbox with half a thread and leave the other holding replies to messages it never
+    /// received, which is worse than not running at all and is invisible until somebody opens the client.
+    /// </remarks>
+    private static WatchedMailboxAccount ReadWatchedMailbox(SyntheticMailContext context, BatchArguments arguments)
+    {
+        var watchedMailbox = context.ReadWatchedMailbox(arguments.ConfigurationPath);
+
+        return string.Equals(watchedMailbox.Address.Address, arguments.Recipient.Address, StringComparison.OrdinalIgnoreCase)
+            ? watchedMailbox
+            : throw new SyntheticMailFailure(
+                $"'{arguments.Recipient.Address}' is not the mailbox configured as 'mailbox.address', which is '{watchedMailbox.Address.Address}'. An exchange delivers to a mailbox, reads it back, and files in it, so those are one address.");
+    }
+
+    /// <summary>Reads the invented participant the watched mailbox writes as.</summary>
+    /// <remarks>The address carries a display name only where the invocation wrote one, and a message signed by an address rather than by a person is what a bare address would produce.</remarks>
+    private static SyntheticParticipant ParticipantOf(MailboxAddress address) => new(
+        string.IsNullOrWhiteSpace(address.Name) ? address.Address : address.Name,
+        address.Address);
+
+    private static async Task<int> DeliverConversationsAsync(
+        SyntheticMailContext context,
+        BatchArguments arguments,
+        SendingAccount account,
+        WatchedMailboxAccount watchedMailbox,
+        IReadOnlyList<SyntheticConversation> conversations,
+        CancellationToken cancellationToken)
+    {
+        context.Console.WriteError(string.Create(
+            CultureInfo.InvariantCulture,
+            $"Submitting as {account.Address.Address} to {account.Host}:{account.Port} over {account.Security}, and reading {watchedMailbox.Address.Address} at {watchedMailbox.Host}:{watchedMailbox.Port} over {watchedMailbox.Security}."));
+
+        await using var transport = context.OpenTransport(account);
+        await using var mailbox = context.OpenWatchedMailbox(watchedMailbox);
+
+        await transport.OpenAsync(cancellationToken);
+        await mailbox.OpenAsync(cancellationToken);
+
+        var report = await new SyntheticConversationDelivery(transport, mailbox, context.Clock).DeliverAsync(
+            conversations,
+            account,
+            arguments.Recipient,
+            arguments.Interval,
+            arguments.DeliveryTimeout,
+            cancellationToken);
+
+        return ReportDelivery(context, arguments, report);
     }
 
     private static async Task<IReadOnlyList<SyntheticEmail>> GenerateAiCorpusAsync(
@@ -223,6 +337,12 @@ internal static class DeliverBatchCommand
 
     private static void ReportPlan(SyntheticMailContext context, BatchArguments arguments)
     {
+        var conversation = arguments.Conversation
+            ? string.Create(
+                CultureInfo.InvariantCulture,
+                $" Delivered as exchanges with {arguments.Recipient.Address}, each reply built from the identifier its server assigned, waiting up to {arguments.DeliveryTimeout.TotalSeconds:0} seconds per delivery.")
+            : string.Empty;
+
         var aiContent = arguments.AiContent
             ? string.Create(
                 CultureInfo.InvariantCulture,
@@ -231,7 +351,7 @@ internal static class DeliverBatchCommand
 
         context.Console.WriteError(string.Create(
             CultureInfo.InvariantCulture,
-            $"Seed {arguments.Seed}: {arguments.Count} messages dated {arguments.EarliestDate:yyyy-MM-dd}..{arguments.LatestDate:yyyy-MM-dd}, attachments up to {arguments.MaximumAttachmentBytes} bytes, {arguments.SensitivePercentage}% carrying fabricated sensitive material.{aiContent}"));
+            $"Seed {arguments.Seed}: {arguments.Count} messages dated {arguments.EarliestDate:yyyy-MM-dd}..{arguments.LatestDate:yyyy-MM-dd}, attachments up to {arguments.MaximumAttachmentBytes} bytes, {arguments.SensitivePercentage}% carrying fabricated sensitive material.{conversation}{aiContent}"));
 
         context.Console.WriteError($"Repeat this batch with: {arguments.RepeatCommandLine}");
     }
@@ -241,6 +361,31 @@ internal static class DeliverBatchCommand
         foreach (var email in corpus)
         {
             context.Console.WriteLine(CorpusListing.Describe(email));
+        }
+    }
+
+    /// <summary>Lists the exchanges a run would deliver, one line per turn.</summary>
+    /// <remarks>
+    /// The ancestry every line carries is the one the seed produced rather than the one delivery would write, because
+    /// the identifiers a reply is actually built from come from a server this run never reached. The exchange, its
+    /// order, and its two sides are the seed's and are exactly what a dry run is read for.
+    /// </remarks>
+    private static void ListConversations(
+        SyntheticMailContext context,
+        IReadOnlyList<SyntheticConversation> conversations)
+    {
+        for (var thread = 0; thread < conversations.Count; thread++)
+        {
+            var conversation = conversations[thread];
+
+            for (var turn = 0; turn < conversation.Messages.Count; turn++)
+            {
+                context.Console.WriteLine(CorpusListing.DescribeTurn(
+                    conversation.Messages[turn],
+                    thread,
+                    turn,
+                    SyntheticConversation.SideOf(turn)));
+            }
         }
     }
 

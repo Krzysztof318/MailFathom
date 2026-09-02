@@ -18,7 +18,7 @@ namespace MailFathom.SyntheticMail.Delivery;
 /// The security option is chosen from the account and is never <c>Auto</c> or the opportunistic
 /// <c>StartTlsWhenAvailable</c>. Both of those fall back to an unencrypted session when the server does not offer the
 /// extension, which is precisely the downgrade this tool must refuse: the very next command it sends is the password.
-/// <see cref="SecureSocketOptions.StartTls" /> fails the connection instead, and <see cref="SmtpTransportSecurity" />
+/// <see cref="SecureSocketOptions.StartTls" /> fails the connection instead, and <see cref="MailTransportSecurity" />
 /// offers no third value to reach for.
 /// </para>
 /// <para>
@@ -75,8 +75,8 @@ internal sealed class SmtpSyntheticMailTransport : ISyntheticMailTransport
     /// <see cref="SecureSocketOptions.StartTlsWhenAvailable" />: each of those continues in the clear against a server
     /// that offers no encryption, and the next command this transport sends is the password.
     /// </remarks>
-    internal static SecureSocketOptions ResolveSocketOptions(SmtpTransportSecurity security) =>
-        security == SmtpTransportSecurity.ImplicitTls
+    internal static SecureSocketOptions ResolveSocketOptions(MailTransportSecurity security) =>
+        security == MailTransportSecurity.ImplicitTls
             ? SecureSocketOptions.SslOnConnect
             : SecureSocketOptions.StartTls;
 

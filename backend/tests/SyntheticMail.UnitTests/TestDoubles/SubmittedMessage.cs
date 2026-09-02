@@ -13,6 +13,9 @@ namespace MailFathom.SyntheticMail.UnitTests.TestDoubles;
 /// <param name="ReplyTo">The <c>Reply-To</c> header.</param>
 /// <param name="To">The <c>To</c> header.</param>
 /// <param name="Cc">The <c>Cc</c> header.</param>
+/// <param name="InReplyTo">The <c>In-Reply-To</c> header, or <see langword="null" /> when the message opens a thread.</param>
+/// <param name="References">The <c>References</c> header, oldest first.</param>
+/// <param name="Marker">The value of the header an exchange stamps a submission with, or <see langword="null" /> on a message no exchange submitted.</param>
 /// <remarks>
 /// A snapshot rather than the message itself, because the batch disposes each message immediately after submitting it:
 /// a double that kept the reference would hand every assertion a disposed object.
@@ -25,4 +28,7 @@ internal sealed record SubmittedMessage(
     string? Sender,
     IReadOnlyList<string> ReplyTo,
     IReadOnlyList<string> To,
-    IReadOnlyList<string> Cc);
+    IReadOnlyList<string> Cc,
+    string? InReplyTo,
+    IReadOnlyList<string> References,
+    string? Marker);

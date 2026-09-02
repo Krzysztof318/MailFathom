@@ -5,5 +5,14 @@
   "address": "throwaway@example.test",
   "userName": "throwaway@example.test",
   "password": "the throwaway account's password",
-  "author": "Fabricated"
+  "author": "Fabricated",
+  "mailbox": {
+    "host": "imap.example.test",
+    "port": 993,
+    "security": "ImplicitTls",
+    "address": "developer@example.test",
+    "userName": "developer@example.test",
+    "password": "the watched mailbox's password",
+    "sentFolder": "Sent"
+  }
 }

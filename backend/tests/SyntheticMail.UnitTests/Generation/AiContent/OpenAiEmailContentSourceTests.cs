@@ -86,22 +86,54 @@ public sealed class OpenAiEmailContentSourceTests
     }
 
     [Fact]
-    public void ParseContent_AnAnswerInTheShapeItWasAskedFor_ReadsSubjectAndBody()
+    public void ParseContent_AnAnswerInTheShapeItWasAskedFor_ReadsSubjectAndBothBodyForms()
     {
         // Arrange, Act
-        var content = OpenAiEmailContentSource.ParseContent("""{ "subject": "  Figures  ", "body": "  Hello.\n\nMore. " }""");
+        var content = OpenAiEmailContentSource.ParseContent(
+            """{ "subject": "  Figures  ", "body": "  Hello.\n\nMore. ", "html": " <html><body><h1>Figures</h1></body></html> " }""");
 
         // Assert
         Assert.Equal("Figures", content.Subject);
         Assert.Equal("Hello.\n\nMore.", content.Body);
+        Assert.Equal("<html><body><h1>Figures</h1></body></html>", content.Html);
+    }
+
+    [Theory]
+    [InlineData("<script>alert(1)</script>")]
+    [InlineData("<SCRIPT src=\"x\"></SCRIPT>")]
+    [InlineData("<iframe src=\"x\"></iframe>")]
+    [InlineData("<a href=\"javascript:alert(1)\">x</a>")]
+    [InlineData("<object data=\"x\"></object>")]
+    [InlineData("<embed src=\"x\">")]
+    // An event handler executes without the reader touching anything, and no list of element spellings reaches one:
+    // the attribute is what carries it, so the refusal has to read the attribute.
+    [InlineData("<img src=\"x\" onerror=\"alert(1)\">")]
+    [InlineData("<p ONCLICK = \"alert(1)\">x</p>")]
+    [InlineData("<body onload=\"alert(1)\">x</body>")]
+    public void ParseContent_AnAnswerCarryingAnExecutableConstruct_IsRefusedRatherThanDelivered(string markup)
+    {
+        // Arrange
+        // Escaped here rather than in the data, because the constructs being refused are written with attributes and a
+        // raw quotation mark would make the answer malformed JSON — which is a different refusal from the one under test.
+        var escaped = markup.Replace("\"", "\\\"", StringComparison.Ordinal);
+        var answer = $$"""{ "subject": "Figures", "body": "Hello.", "html": "<html><body>{{escaped}}</body></html>" }""";
+
+        // Act
+        var failure = Assert.Throws<SyntheticMailFailure>(() => OpenAiEmailContentSource.ParseContent(answer));
+
+        // Assert
+        // The endpoint is one a developer named and what it answers is delivered to a real mailbox, so the run stops
+        // rather than reducing the answer into something nobody asked for.
+        Assert.Contains("will not deliver", failure.Message, StringComparison.Ordinal);
     }
 
     [Theory]
     [InlineData("certainly not json")]
     [InlineData("""{ "subject": "Figures" }""")]
     [InlineData("""{ "body": "Hello." }""")]
-    [InlineData("""{ "subject": "  ", "body": "  " }""")]
-    [InlineData("""{ "subject": "\u0000\u001b", "body": "Hello." }""")]
+    [InlineData("""{ "subject": "Figures", "body": "Hello." }""")]
+    [InlineData("""{ "subject": "  ", "body": "  ", "html": "  " }""")]
+    [InlineData("""{ "subject": "\u0000\u001b", "body": "Hello.", "html": "<p>Hello.</p>" }""")]
     public void ParseContent_AnAnswerThatIsNotOne_IsRefusedAsARetry(string contents)
     {
         // Arrange, Act
@@ -117,13 +149,14 @@ public sealed class OpenAiEmailContentSourceTests
     {
         // Arrange, Act
         var content = OpenAiEmailContentSource.ParseContent(
-            """{ "subject": "Figures\r\nSubject: injected", "body": "Hello.\u0000\n\nMore.\t" }""");
+            """{ "subject": "Figures\r\nSubject: injected", "body": "Hello.\u0000\n\nMore.\t", "html": "<p>Hello.\u0000</p>" }""");
 
         // Assert
         // A line break in the subject would end the composed header early and make the rest of the answer a header,
         // so it is removed rather than carried; the body's own line breaks are its structure and stay.
         Assert.Equal("FiguresSubject: injected", content.Subject);
         Assert.Equal("Hello.\n\nMore.", content.Body);
+        Assert.Equal("<p>Hello.</p>", content.Html);
     }
 
     /// <summary>The one member of a provider response the mapping reads, over a type with no public constructor.</summary>

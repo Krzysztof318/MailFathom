@@ -50,6 +50,26 @@ internal sealed class SyntheticEmailGenerator
     /// <summary>How often a message answers an earlier one, in messages per hundred.</summary>
     private const int ReplyPercentage = 40;
 
+    /// <summary>The fewest turns an exchange runs to.</summary>
+    /// <remarks>Two, because one message is not an exchange: the shape a thread view is built against needs a reply for the thing it replies to.</remarks>
+    private const int FewestExchangeTurns = 2;
+
+    /// <summary>The most turns an exchange runs to.</summary>
+    /// <remarks>
+    /// Six, so that a batch of any ordinary size carries threads short enough to read whole and long enough to scroll,
+    /// without one exchange consuming a batch a developer asked for fifty messages of.
+    /// </remarks>
+    private const int MostExchangeTurns = 6;
+
+    /// <summary>The most of a parent message the content source is told about, in characters.</summary>
+    /// <remarks>
+    /// A reply that answers the subject alone reads as a message about the same topic rather than as an answer, which
+    /// is what an exchange exists to produce. The bound is what keeps a long parent from pricing every reply after it:
+    /// the opening paragraphs are what a reply actually responds to, and everything the source is told here was
+    /// invented by the same run.
+    /// </remarks>
+    private const int ParentBodyCharacterBound = 1200;
+
     /// <summary>How often a message carries an attachment, in messages per hundred.</summary>
     private const int AttachmentPercentage = 35;
 
@@ -122,6 +142,71 @@ internal sealed class SyntheticEmailGenerator
         RequireCompleteDistribution(plan);
 
         return await new SyntheticEmailGenerator(plan).ProduceAsync(contentSource, cancellationToken);
+    }
+
+    /// <summary>Produces the corpus a plan describes as exchanges between the watched mailbox and invented correspondents.</summary>
+    /// <param name="plan">What the corpus is, seed included.</param>
+    /// <param name="mailbox">The mailbox MailFathom synchronizes, which writes every second turn.</param>
+    /// <returns>The exchanges, each oldest message first, holding <see cref="SyntheticCorpusPlan.Count" /> messages between them.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when the plan names languages or topics, which is a corpus only <see cref="GenerateConversationsAsync" /> can build, or asks for fewer messages than one exchange holds.</exception>
+    internal static IReadOnlyList<SyntheticConversation> GenerateConversations(
+        SyntheticCorpusPlan plan,
+        SyntheticParticipant mailbox)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(mailbox);
+
+        if (plan.Languages.Count > 0 || plan.Topics.Count > 0)
+        {
+            throw new ArgumentException(
+                "A plan that names languages or topics is one a source writes, and GenerateConversationsAsync is the one that names it.",
+                nameof(plan));
+        }
+
+        RequireRoomForOneExchange(plan);
+
+        return new SyntheticEmailGenerator(plan).ProduceConversations(mailbox);
+    }
+
+    /// <summary>Produces the exchanges a plan describes, reaching the named source for what the seed does not decide.</summary>
+    /// <param name="plan">What the corpus is, seed included.</param>
+    /// <param name="mailbox">The mailbox MailFathom synchronizes, which writes every second turn.</param>
+    /// <param name="contentSource">The source the message content comes from, required when the plan names languages.</param>
+    /// <param name="cancellationToken">Cancels the run.</param>
+    /// <returns>The exchanges, each oldest message first.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="plan" /> or <paramref name="mailbox" /> is <see langword="null" />, or <paramref name="contentSource" /> is when the plan needs one.</exception>
+    /// <exception cref="ArgumentException">Thrown when the plan names topics without naming languages, when its distribution names no topic or one that is not a topic, or when it asks for fewer messages than one exchange holds.</exception>
+    internal static async Task<IReadOnlyList<SyntheticConversation>> GenerateConversationsAsync(
+        SyntheticCorpusPlan plan,
+        SyntheticParticipant mailbox,
+        IAiEmailContentSource? contentSource,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(mailbox);
+
+        if (plan.Languages.Count == 0)
+        {
+            return GenerateConversations(plan, mailbox);
+        }
+
+        ArgumentNullException.ThrowIfNull(contentSource);
+        RequireCompleteDistribution(plan);
+        RequireRoomForOneExchange(plan);
+
+        return await new SyntheticEmailGenerator(plan).ProduceConversationsAsync(mailbox, contentSource, cancellationToken);
+    }
+
+    /// <summary>Refuses a plan too small to hold an exchange, before one is built that would not be one.</summary>
+    private static void RequireRoomForOneExchange(SyntheticCorpusPlan plan)
+    {
+        if (plan.Count < FewestExchangeTurns)
+        {
+            throw new ArgumentException(
+                $"An exchange holds at least {FewestExchangeTurns} messages, and the plan asks for {plan.Count}.",
+                nameof(plan));
+        }
     }
 
     /// <summary>Refuses a distribution the seed could not draw from, before a message is built against it.</summary>
@@ -217,6 +302,169 @@ internal sealed class SyntheticEmailGenerator
         return this.produced;
     }
 
+    private List<SyntheticConversation> ProduceConversations(SyntheticParticipant mailbox)
+    {
+        var conversations = new List<SyntheticConversation>();
+
+        while (this.produced.Count < this.plan.Count)
+        {
+            var correspondent = this.participants[this.source.Next(this.participants.Count)];
+            var turns = this.DrawTurnCount();
+            var messages = new List<SyntheticEmail>(turns);
+
+            for (var turn = 0; turn < turns; turn++)
+            {
+                var message = this.BuildConversationMessage(turn, correspondent, mailbox, messages);
+
+                messages.Add(message);
+                this.produced.Add(message);
+            }
+
+            conversations.Add(new SyntheticConversation(correspondent, messages));
+        }
+
+        return conversations;
+    }
+
+    private async Task<List<SyntheticConversation>> ProduceConversationsAsync(
+        SyntheticParticipant mailbox,
+        IAiEmailContentSource contentSource,
+        CancellationToken cancellationToken)
+    {
+        var conversations = new List<SyntheticConversation>();
+
+        while (this.produced.Count < this.plan.Count)
+        {
+            var correspondent = this.participants[this.source.Next(this.participants.Count)];
+            var turns = this.DrawTurnCount();
+            var messages = new List<SyntheticEmail>(turns);
+
+            for (var turn = 0; turn < turns; turn++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var message = await this.BuildConversationMessageAsync(
+                    turn,
+                    correspondent,
+                    mailbox,
+                    messages,
+                    contentSource,
+                    cancellationToken);
+
+                messages.Add(message);
+                this.produced.Add(message);
+            }
+
+            conversations.Add(new SyntheticConversation(correspondent, messages));
+        }
+
+        return conversations;
+    }
+
+    /// <summary>Draws how many turns the next exchange runs to, without leaving a message that could not be one.</summary>
+    /// <remarks>
+    /// A draw that would leave exactly one message over is corrected rather than accepted, because starting a thread
+    /// with room for no reply puts a single message in the corpus labelled as an exchange, which is the one shape this
+    /// mode exists to stop producing. Which way it is corrected depends on whether absorbing the leftover would take
+    /// the exchange past <see cref="MostExchangeTurns" />: below that it is absorbed, and at exactly one over it the
+    /// exchange gives a turn back instead, which leaves two behind rather than one and keeps the stated ceiling true.
+    /// </remarks>
+    private int DrawTurnCount()
+    {
+        var remaining = this.plan.Count - this.produced.Count;
+        var turns = Math.Min(this.source.Next(FewestExchangeTurns, MostExchangeTurns + 1), remaining);
+
+        if (remaining - turns != 1)
+        {
+            return turns;
+        }
+
+        return remaining <= MostExchangeTurns ? remaining : turns - 1;
+    }
+
+    private SyntheticEmail BuildConversationMessage(
+        int turn,
+        SyntheticParticipant correspondent,
+        SyntheticParticipant mailbox,
+        IReadOnlyList<SyntheticEmail> messages)
+    {
+        var index = this.produced.Count;
+        var author = AuthorOf(turn, correspondent, mailbox);
+        var parent = turn == 0 ? null : messages[^1];
+        var sentAt = this.BuildSentAt(index, parent);
+        var subject = parent is null ? this.BuildSubject() : $"Re: {StripReplyPrefix(parent.Subject)}";
+
+        return new SyntheticEmail(
+            this.BuildMessageId(index, author),
+            parent?.MessageId,
+            parent is null ? [] : [.. parent.References, parent.MessageId],
+            author,
+            // No carbon copies. An exchange is between two people by construction, and a third address on it would be
+            // one the envelope never carries, which reads in a client as a participant who was never written to.
+            [],
+            subject,
+            sentAt,
+            this.BuildBody(),
+            this.BuildAttachment(),
+            null);
+    }
+
+    private async Task<SyntheticEmail> BuildConversationMessageAsync(
+        int turn,
+        SyntheticParticipant correspondent,
+        SyntheticParticipant mailbox,
+        IReadOnlyList<SyntheticEmail> messages,
+        IAiEmailContentSource contentSource,
+        CancellationToken cancellationToken)
+    {
+        var index = this.produced.Count;
+        var author = AuthorOf(turn, correspondent, mailbox);
+        var parent = turn == 0 ? null : messages[^1];
+        var sentAt = this.BuildSentAt(index, parent);
+        var origin = new SyntheticEmailAiOrigin(this.DrawLanguage(), this.DrawTopic());
+        var messageId = this.BuildMessageId(index, author);
+
+        var content = await contentSource.GenerateAsync(
+            new AiEmailContentRequest(
+                origin.Language,
+                origin.Topic,
+                author.DisplayName,
+                parent?.Subject,
+                OpeningOf(parent)),
+            cancellationToken);
+
+        var subject = parent is null ? content.Subject : $"Re: {StripReplyPrefix(parent.Subject)}";
+
+        return new SyntheticEmail(
+            messageId,
+            parent?.MessageId,
+            parent is null ? [] : [.. parent.References, parent.MessageId],
+            author,
+            [],
+            subject,
+            sentAt,
+            this.BuildAiBody(content),
+            this.BuildAttachment(),
+            origin);
+    }
+
+    private static SyntheticParticipant AuthorOf(
+        int turn,
+        SyntheticParticipant correspondent,
+        SyntheticParticipant mailbox) =>
+        SyntheticConversation.SideOf(turn) == SyntheticThreadSide.Correspondent ? correspondent : mailbox;
+
+    /// <summary>Reduces the message being answered to what a reply is written against.</summary>
+    private static string? OpeningOf(SyntheticEmail? parent)
+    {
+        if (parent?.Body.PlainText is not { Length: > 0 } text)
+        {
+            return null;
+        }
+
+        return text.Length <= ParentBodyCharacterBound ? text : text[..ParentBodyCharacterBound];
+    }
+
     private SyntheticEmail BuildEmail(int index)
     {
         var author = this.participants[this.source.Next(this.participants.Count)];
@@ -253,7 +501,12 @@ internal sealed class SyntheticEmailGenerator
         // The envelope is decided before the call, for the reason the question is: the same plan asks the source the
         // same questions in the same order on every run, so what differs between runs is the answer and nothing else.
         var content = await contentSource.GenerateAsync(
-            new AiEmailContentRequest(origin.Language, origin.Topic, author.DisplayName, parent?.Subject),
+            new AiEmailContentRequest(
+                origin.Language,
+                origin.Topic,
+                author.DisplayName,
+                parent?.Subject,
+                OpeningOf(parent)),
             cancellationToken);
 
         // A reply keeps the thread's subject, which the deterministic layer owns: the source answers the body, and
@@ -384,9 +637,10 @@ internal sealed class SyntheticEmailGenerator
     {
         var shape = (SyntheticBodyShape)this.source.Next(3);
 
-        // The source answers with paragraphs separated by blank lines, and the MIME shape is still drawn from the
-        // seed for the reason the deterministic body varies it: both alternatives are built from the same paragraphs,
-        // which is what the extractor's choice between them is meant to read.
+        // The MIME shape is still drawn from the seed for the reason the deterministic body varies it, but the two
+        // alternatives are no longer one text in two wrappings: the source answers the message as text and as the
+        // markup real mail carries, so which of them an extractor chooses is a choice between genuinely different
+        // documents rather than between a paragraph list and the same paragraph list in tags.
         var blocks = content.Body
             .Replace("\r\n", "\n", StringComparison.Ordinal)
             .Split(["\n\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -405,9 +659,30 @@ internal sealed class SyntheticEmailGenerator
         return new SyntheticEmailBody(
             shape,
             string.Join("\n\n", blocks),
-            BuildHtml(blocks),
+            PlantInHtml(content.Html, decoy),
             SyntheticCharacterSet.Utf8,
             decoy);
+    }
+
+    /// <summary>Puts the fabricated sensitive material into the answered document, where a scanner reading HTML meets it.</summary>
+    /// <remarks>
+    /// The two alternatives of one message have to carry the same decoy, because which of them a reader extracts from
+    /// is the extractor's choice rather than the corpus's. It is written as a paragraph before the document's closing
+    /// tag, and appended where the answer carries no <c>&lt;/body&gt;</c> — a source is asked for a document but is
+    /// not trusted to have produced one, and a decoy silently dropped would leave a message the listing says carries
+    /// something that nothing in it does.
+    /// </remarks>
+    private static string PlantInHtml(string html, SensitiveDecoy? decoy)
+    {
+        if (decoy is null)
+        {
+            return html;
+        }
+
+        var paragraph = $"<p>{BodyEncoder.Encode(decoy.Sentence)}</p>";
+        var closing = html.LastIndexOf("</body>", StringComparison.OrdinalIgnoreCase);
+
+        return closing < 0 ? html + paragraph : html.Insert(closing, paragraph);
     }
 
     private SensitiveDecoy? PlantDecoy()

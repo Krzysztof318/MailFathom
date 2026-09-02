@@ -51,4 +51,20 @@ internal static class CorpusListing
             CultureInfo.InvariantCulture,
             $"{email.SentAt:yyyy-MM-dd'T'HH:mm:ssK} | <{email.MessageId}> | in-reply-to={email.InReplyTo ?? "-"} | {email.Body.Shape} | {email.Body.CharacterSet} | from={email.Author.Address} | cc={email.CarbonCopies.Count} | attachment={attachment} | sensitive={sensitive}{aiContent} | {email.Subject}");
     }
+
+    /// <summary>Describes one message as a turn of an exchange.</summary>
+    /// <param name="email">The generated message.</param>
+    /// <param name="thread">Which exchange it belongs to, counted from zero.</param>
+    /// <param name="turn">Its place in that exchange, counted from zero.</param>
+    /// <param name="side">Which of the two participants wrote it.</param>
+    /// <returns>The line.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="email" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The exchange and the turn lead the line because they are what a reader of this listing is checking — that the
+    /// batch is threads rather than messages, and that the two sides alternate. Everything after them is the same
+    /// description a flat corpus produces, so a run in either mode is read the same way and compared with the same
+    /// <c>diff</c>.
+    /// </remarks>
+    internal static string DescribeTurn(SyntheticEmail email, int thread, int turn, SyntheticThreadSide side) =>
+        string.Create(CultureInfo.InvariantCulture, $"thread={thread} turn={turn} side={side} | {Describe(email)}");
 }

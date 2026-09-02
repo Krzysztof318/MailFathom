@@ -590,6 +590,81 @@ touches, and it is the only one the envelope ever carries.
 | `--language` | The languages AI-generated messages are written in, comma-separated, as in `en` or `en,pl,de`. Defaults to `en`. Requires `--ai`. |
 | `--topic` | The topics AI-generated messages are written about, comma-separated, as in `business` or `invoices,technical-support,travel`. Defaults to every supported topic. Requires `--ai`. |
 | `--ai-config` | The AI provider file to read, when it is not the one beside the built command. |
+| `--conversation` | Generate exchanges between the recipient and invented correspondents instead of a flat corpus, delivering one turn at a time. Needs the `mailbox` block below, and at least two messages. |
+| `--delivery-timeout` | Seconds to wait for one submitted message to appear in the recipient's mailbox, 1..600. Defaults to 120. Requires `--conversation`. |
+
+### Threads that are exchanges rather than headers
+
+The corpus above threads its messages by writing `In-Reply-To` and `References` around a `Message-Id` the run invented,
+and that holds only while the submission server leaves the identifier alone. A provider that replaces it leaves every
+reply in the batch referencing a message the mailbox does not hold, so the thread never assembles and the corpus
+silently exercises nothing. The direction is the other half of the problem: every message is delivered *to* the
+recipient and authored by an invented participant, so what a client renders is a run of inbound mail from several
+strangers that happens to share a subject, and the mailbox never holds the half it sent.
+
+`--conversation` produces the shape a thread view is actually built against. The batch becomes exchanges rather than a
+flat corpus, each between the recipient and one invented correspondent, alternating from the correspondent onwards and
+running to between two and six turns drawn from the seed. `--count` still bounds how many messages the run delivers in
+total, and no exchange is ever left holding a single message.
+
+```bash
+dotnet run --project backend/tools/SyntheticMail -- <recipient> --conversation --count 200
+```
+
+**Both halves of a thread reach the mailbox, by different routes.** The correspondent's turns are submitted by the
+sending account and delivered as any message is. The recipient's own turns are appended over IMAP to its Sent folder,
+carrying `\Seen` and dated when the message says it was sent, which is where a mail client puts what it wrote and what
+makes them synchronize like anything else. Nothing is submitted onwards to the sending account: the thread has to
+assemble in the mailbox MailFathom synchronizes, and a copy in the other mailbox is one nothing here reads.
+
+**Each reply is built from the identifier the server assigned.** Every submission carries an
+`X-MailFathom-Synthetic` header whose value is the identifier the run proposed, the run then searches the mailbox for
+that header, and it reads the delivered copy's `Message-Id` back out of the envelope — never out of a body, so nothing
+here can set `\Seen`. That value, not the proposed one, is what the next turn's `In-Reply-To` and `References` are
+written from. An appended turn needs no such lookup, because the copy in the mailbox is the one this run composed.
+
+**Configure the mailbox as well as the sending account.** The `mailbox` block in the same credential file carries the
+IMAP settings of the address the exchange is delivered to, and it is refused before anything is generated when it is
+missing or incomplete, with a message naming the key. Its `address` must be the recipient named on the command line: an
+exchange delivers to a mailbox, reads it back, and files in it, so a run against two addresses would fill one with half
+a thread and leave the other holding replies to messages it never received. `security` is `StartTls` or `ImplicitTls`
+exactly as the sending account's is, `port` defaults to 143 or 993 to match, and `sentFolder` is optional — without it
+the run uses whichever folder the server advertises as its own, and a server advertising none is refused before the
+first submission rather than after half a thread has been delivered.
+
+```json
+{
+  "mailbox": {
+    "host": "imap.example.test",
+    "port": 993,
+    "security": "ImplicitTls",
+    "address": "developer@example.test",
+    "password": "the watched mailbox's password",
+    "sentFolder": "Sent"
+  }
+}
+```
+
+**Use a throwaway mailbox for this one too.** The run authenticates as it, reads its inbox, and writes into its Sent
+folder; nothing about that belongs to an account that reaches anything else.
+
+**Delivery is waited for, within a bound.** A submitted message reaches the mailbox through somebody else's queue, so
+the run looks for it every few seconds until `--delivery-timeout` is spent. A message that never arrives ends its own
+exchange and nothing else: the turns after it answer the one that failed, so continuing would build replies on an
+identifier no mailbox holds — which is exactly the broken threading this mode replaces. Those turns are reported as not
+attempted, the next exchange is delivered normally, and the run exits non-zero because the mailbox is not the one the
+seed describes.
+
+**A dry run lists the exchanges and reaches no server.** Each line carries the thread, the turn, and which side wrote
+it, ahead of the description a flat corpus already produces. The ancestry those lines show is the one the seed
+produced rather than the one delivery would write, because the identifiers a reply is actually built from come from a
+server a dry run never reaches. In AI content mode the provider is still called, for the reason a dry run calls it
+anyway. A dry run needs no `mailbox` block either: the mailbox's address is the recipient the invocation already named,
+which is all the generator needs to author half the turns.
+
+**It works with `--ai`.** The seed still decides the exchanges, the sides, the dates, the attachments, and the
+fabricated sensitive material; the model writes the words, and a reply is written against the previous message of its
+own thread rather than against its subject alone.
 
 ### Mail with something in it to find
 
@@ -683,11 +758,32 @@ The MIME shape a message takes is still drawn from the seed; the charset is not,
 language named is one the vocabulary's three charsets cannot be promised to hold, and `utf-8` is the one that holds
 any of them.
 
+**The message is answered twice, and the second form is the point.** The default mode's HTML alternative is one
+`<p>` per paragraph wrapped around its own text, so MIME extraction and the client's document model are exercised
+against markup this repository wrote. In this mode the model answers the message as text *and* as an HTML document
+carrying the structure real business mail carries — headings, lists, a table where the message reports figures,
+links, emphasis, blockquotes, a horizontal rule, a signature block, and inline styles — and the two say the same
+things in the same order. Which of them a message emits is still the seed's draw between plain text, HTML, and
+`multipart/alternative`, so the axis is unchanged and only what fills it is new. The fabricated sensitive material is
+planted in both, because which alternative a reader extracts from is the extractor's choice rather than the corpus's.
+
+**Model markup is untrusted, and an answer carrying an executable construct is refused.** The endpoint is one a
+developer named rather than one this tool chose, and what it answers is delivered to a real mailbox — so an answer
+whose document holds a `<script>`, an `<iframe>`, an `<object>`, an `<embed>`, a `javascript:` URL, or an inline
+event-handler attribute such as `onerror` stops the run with a line naming what it carried, exactly as an answer that
+was not the JSON object it was asked for does. The handler is read as a pattern rather than as another spelling in
+that list, because an attribute name is what carries it and a list would refuse the few somebody thought of. Refused
+rather than reduced: stripping one would deliver a message nobody asked for and hide that the endpoint answered with
+something it was told not to. Everything an answer survives with is markup a reader has to handle anyway.
+
 **What leaves the machine.** In this mode a run sends the generation prompt to the endpoint and reads the message
 content back. The prompt names the language, the topic, who writes the message, and — for a reply — the subject of
-the thread it answers, and nothing more: no recipient, no body from another message, and nothing the default mode
-would not have invented locally. The answer is message content, and neither the prompt nor the answer reaches a log,
-for the reason the repository keeps both out of one.
+the thread it answers together with the opening of the message being answered, bounded in length, and nothing more:
+no recipient, and nothing the default mode would not have invented locally. That opening is not an exception to what
+this tool keeps off the wire — every word of it was written by the same run, by a model answering an earlier request
+or by the vocabulary in this repository, so nothing in it has been near a real mailbox — and it is what makes a reply
+answer something rather than restate the topic. The answer is message content, and neither the prompt nor the answer
+reaches a log, for the reason the repository keeps both out of one.
 
 **What a refusal says.** A provider that refuses the key, does not serve the named model, rate-limits, times out, or
 fails the request stops the run with one line naming the move — check the key, check the model, wait, retry — and

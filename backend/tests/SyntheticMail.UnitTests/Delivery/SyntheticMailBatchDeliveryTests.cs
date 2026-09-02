@@ -177,7 +177,7 @@ public sealed class SyntheticMailBatchDeliveryTests
     private static SendingAccount Account() => new(
         "smtp.example.test",
         587,
-        SmtpTransportSecurity.StartTls,
+        MailTransportSecurity.StartTls,
         new MailboxAddress("Throwaway", "throwaway@example.test"),
         "throwaway@example.test",
         "not-a-real-password",

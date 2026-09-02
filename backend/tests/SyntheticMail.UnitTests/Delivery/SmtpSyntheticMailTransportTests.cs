@@ -25,8 +25,8 @@ public sealed class SmtpSyntheticMailTransportTests
     private static readonly MailboxAddress Recipient = new("Developer", "developer@example.com");
 
     [Theory]
-    [InlineData(nameof(SmtpTransportSecurity.StartTls), nameof(SecureSocketOptions.StartTls))]
-    [InlineData(nameof(SmtpTransportSecurity.ImplicitTls), nameof(SecureSocketOptions.SslOnConnect))]
+    [InlineData(nameof(MailTransportSecurity.StartTls), nameof(SecureSocketOptions.StartTls))]
+    [InlineData(nameof(MailTransportSecurity.ImplicitTls), nameof(SecureSocketOptions.SslOnConnect))]
     public void ResolveSocketOptions_ASecurity_ChoosesTheOptionThatCannotContinueUnencrypted(
         string securityName,
         string expectedOptionName)
@@ -34,7 +34,7 @@ public sealed class SmtpSyntheticMailTransportTests
         // Arrange
         // The security is named rather than passed: it is internal, and widening it so a public test signature could
         // carry it would change a production type to suit a test.
-        var security = Enum.Parse<SmtpTransportSecurity>(securityName);
+        var security = Enum.Parse<MailTransportSecurity>(securityName);
 
         // Act
         var option = SmtpSyntheticMailTransport.ResolveSocketOptions(security);
@@ -56,7 +56,7 @@ public sealed class SmtpSyntheticMailTransportTests
 
         // Act
         var chosen = Enum
-            .GetValues<SmtpTransportSecurity>()
+            .GetValues<MailTransportSecurity>()
             .Select(SmtpSyntheticMailTransport.ResolveSocketOptions)
             .ToArray();
 
@@ -90,7 +90,7 @@ public sealed class SmtpSyntheticMailTransportTests
     {
         // Arrange
         var client = Substitute.For<ISmtpClient>();
-        var account = Account() with { Security = SmtpTransportSecurity.ImplicitTls, Port = 465 };
+        var account = Account() with { Security = MailTransportSecurity.ImplicitTls, Port = 465 };
 
         // Act
         await using var transport = new SmtpSyntheticMailTransport(account, client);
@@ -367,7 +367,7 @@ public sealed class SmtpSyntheticMailTransportTests
     private static SendingAccount Account() => new(
         "smtp.example.test",
         587,
-        SmtpTransportSecurity.StartTls,
+        MailTransportSecurity.StartTls,
         new MailboxAddress("Throwaway", "throwaway@example.test"),
         "throwaway@example.test",
         "not-a-real-password",

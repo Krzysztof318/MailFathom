@@ -18,7 +18,7 @@ internal sealed record SendingAccountDocument
     /// <summary>The submission port.</summary>
     public int? Port { get; init; }
 
-    /// <summary>How the connection is secured, named after a <see cref="SmtpTransportSecurity" /> value.</summary>
+    /// <summary>How the connection is secured, named after a <see cref="MailTransportSecurity" /> value.</summary>
     public string? Security { get; init; }
 
     /// <summary>The address the run authenticates and submits as.</summary>
@@ -33,6 +33,9 @@ internal sealed record SendingAccountDocument
     /// <summary>Whose address generated mail is from, named after a <see cref="Generation.SyntheticAuthorIdentity" /> value.</summary>
     public string? Author { get; init; }
 
+    /// <summary>The mailbox MailFathom synchronizes, which only a run generating exchanges needs.</summary>
+    public WatchedMailboxDocument? Mailbox { get; init; }
+
     /// <inheritdoc />
     /// <remarks>
     /// Redacted for the reason <see cref="SendingAccount.ToString" /> is, one step earlier in the same pipeline: this
@@ -41,5 +44,5 @@ internal sealed record SendingAccountDocument
     /// into the one kind of output this type exists to produce.
     /// </remarks>
     public override string ToString() =>
-        $"{nameof(SendingAccountDocument)} {{ {nameof(this.Host)} = {this.Host}, {nameof(this.Port)} = {this.Port}, {nameof(this.Security)} = {this.Security}, {nameof(this.Address)} = {this.Address}, {nameof(this.Password)} = ***, {nameof(this.UserName)} = {this.UserName}, {nameof(this.Author)} = {this.Author} }}";
+        $"{nameof(SendingAccountDocument)} {{ {nameof(this.Host)} = {this.Host}, {nameof(this.Port)} = {this.Port}, {nameof(this.Security)} = {this.Security}, {nameof(this.Address)} = {this.Address}, {nameof(this.Password)} = ***, {nameof(this.UserName)} = {this.UserName}, {nameof(this.Author)} = {this.Author}, {nameof(this.Mailbox)} = {this.Mailbox} }}";
 }
