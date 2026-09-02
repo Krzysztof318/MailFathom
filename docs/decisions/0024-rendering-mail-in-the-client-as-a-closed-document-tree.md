@@ -1,13 +1,13 @@
 ---
 status: proposed
 contact: Krzysztof Kasprowicz
-date: 2026-08-31
+date: 2026-09-02
 deciders: Krzysztof Kasprowicz
 consulted:
 informed:
 ---
 
-# Draw mail as the closed document tree the service already reduces it to, in the client's own document with no frame and no sanitizer, and let a remote picture be a request nothing on either side remembers
+# Draw mail as the closed document tree the service already reduces it to, in the client's own document with no frame and no sanitizer, let a remote picture be a request nothing on either side remembers, and show the sender's own markup nowhere at all
 
 <!-- describes: frontend/src/Client.App/src/**, frontend/src/Client.Backend/src/**, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Application/EmailContent/Rendering/Document/** -->
 
@@ -21,6 +21,8 @@ What the question turns out to rest on is a contract the service already publish
 
 Recorded on issue [#1427](https://github.com/Krzysztof318/MailFathom/issues/1427). It implements nothing: [#1428](https://github.com/Krzysztof318/MailFathom/issues/1428) builds what this names, [#1426](https://github.com/Krzysztof318/MailFathom/issues/1426) is the pane it is drawn inside, and [#1430](https://github.com/Krzysztof318/MailFathom/issues/1430) is the parent all three sit under. Nothing in the client renders a body today.
 
+**A second question was asked of this record on [#1477](https://github.com/Krzysztof318/MailFathom/issues/1477), and this record answers it while still `proposed` rather than standing beside a second one.** The design project drew a control on the message head — a `code` glyph titled *show the full HTML version* — opening the message's own markup in a surface of its own, a `srcdoc` frame carrying `sandbox=""` and a footer telling the reader that scripts and remote content are blocked. That is not the question the paragraphs above answered. They answered *what the reading pane draws*, and this asks whether a **second** surface, beside that pane and not replacing it, may show what the sender actually sent — for the reader whose message did not reduce well and who is looking for a document the reduction lost. The need is real and is the only thing here that is; the second surface is refused, and what the reader is owed instead is named below.
+
 ## Decision Drivers
 
 - **The safety property has to be statable, not merely present.** A policy nobody can write down in a sentence is a policy nobody can review, and a rendering path whose safety rests on the completeness of a filter is one whose safety is only as good as this year's bypass.
@@ -30,6 +32,8 @@ Recorded on issue [#1427](https://github.com/Krzysztof318/MailFathom/issues/1427
 - **What is remembered about a reader's override is a record of what they read.** Which messages somebody chose to load pictures for is a list of the messages that mattered to them, and it is personal data wherever it is written down.
 - **A dependency here is the most security-sensitive package in the tree.** Whatever sanitizes mail owns a permanent patch obligation and a licence entry, and it is worth having only if something it does is load-bearing.
 - **The pane is a reading surface, not an embedded document.** [#1426](https://github.com/Krzysztof318/MailFathom/issues/1426) requires that a fragment of the body can be selected and that the selection is application state, and the accessibility obligations require the content to be reachable rather than opaque.
+- **A reader who says the reduction lost something is reporting a defect, and is owed an answer rather than an escape hatch.** A control that hands them the sender's markup answers the complaint by withdrawing the guarantee that made the reduction worth having, and it answers it in the one place nobody can see it happening — on the message where the reduction was worst, which is the message most likely to be hostile.
+- **A second surface is the same client.** Whatever is true of the reading pane's isolation has to be true of anything else in the same application that draws the same message, because a reader does not hold two trust boundaries and a tracking pixel does not care which surface fetched it.
 
 ## Considered Options
 
@@ -39,12 +43,14 @@ Recorded on issue [#1427](https://github.com/Krzysztof318/MailFathom/issues/1427
 - A2 — the sanitized HTML representation the service already produces for `IncludeSanitizedHtml`.
 - A3 — `MailDocument`, drawn with the client's own typed components.
 - A4 — the plain text alone, and no rendering of the sender's layout at all.
+- A5 — the message's own HTML as it arrived, unmodified, which is the only representation that is *what the sender actually sent*.
 
 **B — where the rendered body sits in the document:**
 
 - B1 — in the application's own document, as ordinary React elements.
 - B2 — in a sandboxed `iframe` with `srcdoc`, an opaque origin, and a content security policy of its own.
 - B3 — in an `iframe` served from a second origin the deployment publishes.
+- B4 — B2's frame opened as a second surface *beside* the pane rather than as the pane, on a control the reader presses.
 
 **C — where sanitization happens:**
 
@@ -69,11 +75,19 @@ Recorded on issue [#1427](https://github.com/Krzysztof318/MailFathom/issues/1427
 **F — how the isolation is proven:**
 
 - F1 — by review of the pane.
-- F2 — by a validating parser with its own tests, component tests written as attacks, browser assertions on what the page fetched and what the document holds, and a lint rule making the one call that would undo all of it unwritable.
+- F2 — by a validating parser with its own tests, component tests written as attacks, browser assertions on what the page fetched and what the document holds, and a lint rule making every call that would undo all of it unwritable.
+
+**G — what a reader is given when the reduction lost something they needed:**
+
+- G1 — nothing; the reduction is what there is, and the complaint has nowhere to go.
+- G2 — a wider block catalogue, decided and built in the service, arriving with a schema revision.
+- G3 — the message itself, handed out of the application to be opened in something the reader already chose and already trusts.
 
 ## Decision Outcome
 
 Chosen: **A3, B1, C4, D1, E2, and F2** — the client is handed the closed document tree and never mail HTML, draws it as ordinary elements in the application's own document, sanitizes nothing because nothing sanitizable reaches it, treats a remote picture as a second request nothing on either side of the boundary writes down, falls back to the plain text with the refusal named, and proves the whole of it mechanically rather than by review.
+
+On the second question: **A5 and B4 are refused, and G2 is what a reader who needs what the reduction lost is given.** No surface of this client shows a message's markup, in any representation and in any container — not the reading pane, not a frame beside it, not a modal, and not a window of its own. A message that reduces badly is a defect in the reduction with an address on the service side, and widening the catalogue is how it is answered.
 
 ### The client is never handed mail HTML, so it never renders any
 
@@ -88,7 +102,7 @@ The four properties [#1428](https://github.com/Krzysztof318/MailFathom/issues/14
 | Property | What holds it | Load-bearing, or defence in depth |
 |---|---|---|
 | No script, embedded object, form, or event handler executes | The document contract has nowhere to express one, and React escapes text | **Load-bearing: the shape of the contract.** Nothing about the browser is relied on |
-| The client never turns a message value back into markup | A lint rule refusing `dangerouslySetInnerHTML`, `innerHTML`, `outerHTML`, `insertAdjacentHTML`, and `document.write` under `frontend/src/` | **Load-bearing.** It is the one call that would undo the decision, so it is made unwritable rather than reviewed |
+| The client never turns a message value back into markup | A lint rule under `frontend/src/` refusing every way a value becomes markup: `dangerouslySetInnerHTML`, `innerHTML`, `outerHTML`, `insertAdjacentHTML`, `document.write` and `document.writeln`, `setHTMLUnsafe`, `DOMParser.parseFromString`, `Range.createContextualFragment`, and an `iframe`'s `srcdoc` in either form | **Load-bearing.** Each of these is a call that would undo the decision, so each is made unwritable rather than reviewed |
 | Message style cannot escape the pane | The only presentation a message contributes is an opaque colour, an alignment, and an emphasis flag, each applied by the pane's own component. No selector, position, size, or stacking order crosses the wire | **Load-bearing: the shape of the contract.** There is nothing to escape with |
 | No remote resource is fetched before a person asks | Every remote address is removed while the tree is built; `RemovedRemoteReferenceCount` is what survives in its place | **Load-bearing: the service's removal.** The client holds no address to decline |
 | A link cannot navigate the application | `MailDocumentLink.Target` carries `http`, `https`, or `mailto` and nothing else, and the client opens it out of the application rather than in it | **Load-bearing on both halves**: the scheme allow-list against `javascript:`, and leaving the application against a same-tab navigation that would discard the session |
@@ -104,6 +118,24 @@ B2 is the correct shape for rendering hostile markup, and rendering hostile mark
 - **The content becomes a second document.** Focus order, the pane's own keyboard path, and the reading order a screen reader follows all stop at the frame edge, and the accessibility obligations in [`frontend/src/AGENTS.md`](https://github.com/Krzysztof318/MailFathom/blob/main/frontend/src/AGENTS.md) are written about a surface, not about an embedded page.
 
 B3 costs all of that and a second published origin besides, which is a deployment surface with its own listener, its own certificate, and its own place in the documentation, for the same nothing.
+
+### And no frame beside it either: *show the original* has no representation to show
+
+B4 answers the three objections above by not being the pane — a modal frame needs no selection read across its boundary, measures no height because it scrolls in a window of its own, and takes the focus order of a dialog rather than of a reading surface. So it has to be refused on what it would *carry*, not on where it would sit, and the question becomes which representation crosses the wire. There are three, and each fails before the frame is reached.
+
+- **The sanitized HTML the service already produces (A2) is not what the reader asked for.** `EmailHtmlSanitizer` allows no URI scheme at all, so every `href`, every `src`, and every `cid:` is gone: what would open is the sender's layout with every picture missing and every link inert — strictly less than the document tree beside it, which at least carries inline images as `data:` and links as `MailDocumentLink`. A control called *show the full HTML version* that draws a thinner message than the pane it was pressed from is a control that answers nobody, and it would carry the whole cost of rendering markup to do it.
+- **The message's own HTML (A5) is what the reader asked for, and it is what every load-bearing row was written against.** It is the string this record exists so that nothing hands to a renderer.
+- **A third representation, sanitized differently for this one surface, is C1 and C3 arriving together under a new name.** It would be a second security judgement, taken for a second surface, whose completeness has to be argued separately from the first — which is the thing the whole record is written to avoid having to do once, let alone twice.
+
+**The frame does not close the gap A5 opens, and the specific way it fails is the read receipt.** `sandbox=""` applies every sandboxing flag the HTML Standard defines, and the whole set is about what the framed document may *do*: run script, submit a form, navigate, open a popup, hold an origin, lock the pointer, start a download. Not one flag governs what it may *fetch*. A sandboxed `srcdoc` frame loads remote images, stylesheets, and fonts exactly as an unsandboxed one does, so a message opened in it reports itself read to the sender at the instant the frame is attached — before any control offering to load pictures has been drawn, and on the path a reader took *because* something was wrong with the message. That is the failure D1 exists to make impossible, arriving through the one door left open. The design project's own frame carried a footer telling the reader that scripts and remote content were both blocked; the first half is true and the second is not, and a promise the platform does not keep is worse on this surface than no promise at all.
+
+Nothing recovers it. A policy that would stop the fetch has to reach the framed document, and a `srcdoc` document can only be handed one in its own markup — a `<meta>` element written above a stranger's markup that carries `<meta>` elements of its own. That is a mechanism whose behaviour is the engine's rather than the contract's, which is the divergence between WebView2 and WebKitGTK this record exists to prevent, arriving on the property that matters most. And stripping the addresses out of A5 before it crosses the wire is not A5 any more — it is the reduction, which is where the reader already was.
+
+**So four of the five load-bearing rows stop holding at once, which is the case the *Revisit if* clause below anticipated.** Row one goes because a renderer is handed markup and the contract's shape stops being what holds anything; row three goes because a `<style>` element is back, scoped to a frame rather than to nothing; row four goes for the reason just given; row five goes because a `javascript:` target is no longer filtered by an allow-list but by whatever the frame's navigation flags happen to be.
+
+Row two is the one that holds, and it is what settles this in the tree rather than in a review. The lint rule refuses `srcdoc` in both forms already — as a JSX attribute and as a member written on an element — so the control cannot be built under `frontend/src/` without first relaxing the rule that states this decision, and [`frontend/AGENTS.md`](https://github.com/Krzysztof318/MailFathom/blob/main/frontend/AGENTS.md) is where relaxing a rule to admit the code that failed it is refused. That is the shape F2 was chosen for: the question arrived as a design and met a build failure rather than a reviewer's memory.
+
+**The design that drew the control is corrected rather than the code being written to match it.** The client is built from a design, and where the two disagree the design ordinarily wins — that is what makes it worth having. This is the exception it is held under: where implementation proves a design wrong, the design moves to the shape that actually ships, because a screen fixed only in the code leaves the thing everybody reads still saying the opposite. So the control and the frame behind it come out of the design, and no screen draws them.
 
 ### No sanitizer in the client, and no package to pin
 
@@ -137,6 +169,14 @@ The reader is told what the request reveals before it is made, and the pane says
 
 `Truncated` is not a refusal and does not fall back — a document a bound stopped is a document, drawn as far as it goes with the reader told it was cut short. `Availability` is a third axis again, and its three non-readable states — `EncryptedNotReadableLocally`, `NotStoredExceededSizeLimit`, `NotStoredAwaitingStorageHeadroom` — are each their own state on the screen, since a message nothing can decrypt and a message waiting for storage headroom lead a reader to different actions. E3 is refused for the reason the UX contract already gives: a fallback nobody is told about reads as a message the sender sent badly.
 
+### What a reader who lost something is given instead
+
+G2. A message that reduced badly is a fidelity complaint, and this record already said where such a complaint is answered: in the reduction, on the service side, as a wider block catalogue arriving with a schema revision of its own. That is slower than a control on the message head, and it is slower on purpose — it is the difference between one reader getting their document back and every reader of that kind of message getting it back, and between a judgement taken once in the service and a judgement taken by whoever presses the control.
+
+Two things make it a real answer rather than a deferral. `MailDocumentRefusal` and `Truncated` already tell a reader *which* of the three things happened to their message, so a reduction that failed is reportable as a defect against a named state rather than as a message that looks wrong. And the block catalogue is versioned per block beside `MailDocument.SchemaVersion`, so widening it costs a client that has not caught up one block rather than the message — which is what makes widening it a routine act instead of a breaking one.
+
+G1 is refused because a guarantee with no route for the complaint it creates is a guarantee that gets removed later, under pressure, by somebody who has only the control to reach for. G3 — handing the reader the message itself, to open in a program they already chose — is not refused here and is not decided here either: it moves nothing inside this client's trust boundary, which is why it survives the reasoning above, but it is mail leaving the deployment on a person's instruction, and what that costs belongs with the acts [ADR 0013](0013-what-a-caller-must-do-before-mail-leaves.md) governs rather than in a record about rendering. It has no issue yet, and this record does not open one for it.
+
 ### Both heads draw the same tree, and the one difference belongs to the shell
 
 Nothing in this decision depends on an engine capability, a platform API, or a browser version: it is React elements over a JSON tree, and it renders identically under WebView2 and WebKitGTK because there is nothing in it for the two to implement differently.
@@ -152,7 +192,7 @@ F2, split by what each suite can actually answer, per [`frontend/tests/AGENTS.md
 - **The unit suite proves the parser.** The document parse is pure logic over values, so every refusal is reachable for nothing: a block type that is not in the catalogue, a known type at an unknown revision, a colour in any other notation, a link target carrying `javascript:`, `data:`, or `file:`, an image source that is not a permitted `data:` media type, and each bound exceeded by one. A malformed body is asserted to be refused rather than read as a tree with a hole in it.
 - **The unit suite proves the components as attacks rather than as examples.** A block whose text is `<script>` markup renders as those characters; a link whose `Deception` is `DisplayedHostDiffers` renders as that; an unimplemented block pair renders a placeholder and the rest of the message.
 - **The browser suite proves what only a browser can.** Against the built bundle: that drawing a message issues no request to any host but the page's own origin, that the pane's document holds no `iframe`, `script`, `object`, or `form` element, that message content is reachable by role and by name rather than being an opaque surface, and that following a link opens a new context rather than navigating the application.
-- **The lint rule is the proof that does not depend on anybody writing a test.** `no-restricted-syntax` refusing the five markup-writing calls under `frontend/src/` fails the build rather than the review, which is the same shape the localization rule already takes in `eslint.config.ts`. Adding a restriction is not the configuration relaxation `frontend/AGENTS.md` refuses; it is the opposite, and it belongs to [#1428](https://github.com/Krzysztof318/MailFathom/issues/1428).
+- **The lint rule is the proof that does not depend on anybody writing a test.** `no-restricted-syntax` refusing every markup-writing call under `frontend/src/` — the list in the table above, `srcdoc` included — fails the build rather than the review, which is the same shape the localization rule already takes in `eslint.config.ts`. Adding a restriction is not the configuration relaxation `frontend/AGENTS.md` refuses; it is the opposite, and it belongs to [#1428](https://github.com/Krzysztof318/MailFathom/issues/1428).
 
 ### Consequences
 
@@ -166,10 +206,15 @@ F2, split by what each suite can actually answer, per [`frontend/tests/AGENTS.md
 - Bad, because the client cannot render anything the reduction does not yet cover, and widening it is service work with its own schema revision rather than a change in the pane — which is the right place for it and is still the slower place.
 - Bad, because refusing a durable override means somebody who reads one newsletter every week asks for its pictures every week, and the record offers them nothing else.
 - Bad, because the client page is still served with no content security policy on either head, and this record explains why the pane does not need one without closing that gap for the application around it.
+- Good, on the second question, because the safety property stays one sentence rather than two: there is no surface of this client where a different answer holds, so nobody has to know which surface they are on to know what is true.
+- Bad, on the second question, because a reader whose message reduced badly is told that the fix is a release of the service rather than a control in front of them, and for that reader the honest answer is worse than the dishonest one.
+- Bad, because refusing it costs the design project a control it had already drawn, and a source of truth that has to be corrected by the code it governs is a source of truth that was wrong for as long as nobody read it against this record.
 
 ## Validation
 
 By review of the change that implements it, against the acceptance of [#1428](https://github.com/Krzysztof318/MailFathom/issues/1428), and by the four proofs above — the parser's refusals, the components under attack-shaped input, the browser suite's assertions about what the page fetched and what its document holds, and the lint rule, which fails a build rather than a review and is the one of the four that cannot be forgotten. That the client never asks for markup is held by `ClientMailBodyEndpoint.RequestFor`, which is already asserted on the service side and is the seam that exists for it.
+
+The second question is validated by there being nothing to build: the refusal is held by the same `RequestFor` assertion, since no representation carrying markup is ever requested, and by the browser suite's existing assertion that the pane's document holds no `iframe`. Neither of those covers a frame added on some other screen, and no assertion is added for one — a control drawing a stranger's markup is refused in review against this record, which is where a control that nothing in the tree anticipates has to be caught.
 
 ## Pros and Cons of the Options
 
@@ -190,6 +235,39 @@ By review of the change that implements it, against the acceptance of [#1428](ht
 
 - Good, because it is the smallest surface there is, and the plain text is already a first-class rendering.
 - Bad, because a mailbox is mostly composed mail, and a client that cannot draw a table or a heading is not one somebody moves to.
+
+### A5 — the message's own HTML, unmodified
+
+- Good, because it is the only thing that is actually *what the sender sent*, and it is what a reader asking to see the original is asking for.
+- Neutral, because the service holds it: the message is stored as it arrived, so serving it is a representation to add rather than data to keep.
+- Bad, because it carries every remote address the reduction exists to remove, so opening it is the read receipt this record refuses on every other path.
+- Bad, because it puts a stranger's markup in front of a renderer, which is the single thing the load-bearing rows in the table above are all written against.
+- Bad, because adding it to the client route would make `ClientMailBodyEndpoint.RequestFor` — the one seam that proves the client never asks for markup — a place where the answer depends on which surface asked.
+
+### B4 — the frame as a second surface beside the pane
+
+- Good, because it costs none of the three things B2 costs the pane: no selection crosses it, no height is measured through it, and a dialog's focus order is the right one for it.
+- Neutral, because it works identically on both heads, exactly as B2 does.
+- Bad, because no sandboxing flag governs what the framed document fetches, so it stops script and leaves the tracking pixel — and a footer saying otherwise makes the reader trust it more than the pane they came from.
+- Bad, because the only mechanism that would close that is a policy carried in the framed document's own markup, which is where the two engines diverge and where the sender's markup is a party to the argument.
+- Bad, because building it means relaxing the lint rule that already refuses `srcdoc`, which is the one change `frontend/AGENTS.md` refuses outright — so the option is not merely unwise here, it is unwritable without editing the statement of this decision first.
+
+### G1 — the reduction is what there is
+
+- Good, because it needs nothing built and states the trade-off honestly.
+- Bad, because a guarantee whose complaints have nowhere to go is a guarantee somebody removes later under pressure, with only the refused control to reach for.
+
+### G2 — a wider block catalogue
+
+- Good, because it fixes the message for every reader of that kind of message rather than for the one who pressed a control, and it fixes it where the judgement about what is safe to draw already lives.
+- Good, because the contract is already shaped for it: each block carries its own revision beside `MailDocument.SchemaVersion`, so a client behind the deployment loses one block rather than the message.
+- Bad, because it is service work with a schema revision behind it, so the reader who complained today is answered in a release rather than in a press.
+
+### G3 — hand the reader the message to open elsewhere
+
+- Good, because it moves nothing inside this client's trust boundary: whatever renders it is a program the reader chose, on their own account of the risk.
+- Neutral, because the service already stores the message as it arrived, so there is nothing to derive.
+- Bad, because it is mail leaving the deployment, which is a class of act [ADR 0013](0013-what-a-caller-must-do-before-mail-leaves.md) governs and which is not settled by a record about rendering.
 
 ### B2 — a sandboxed frame with `srcdoc` and an opaque origin
 
@@ -254,4 +332,6 @@ By review of the change that implements it, against the acceptance of [#1428](ht
 - [ADR 0023](0023-where-the-client-keeps-the-credential-it-signs-in-with.md) is where the *application asks the shell, never the platform* shape was decided, and opening a link out of the desktop head is the second operation to take it.
 - [ADR 0016](0016-third-party-licence-obligations-per-artifact.md) is what a sanitizer package would have been reviewed against, and is why the dual licence above is recorded even though no package is added.
 - This record replaces the removed ADR 0019 rather than restoring it. `0018`, `0019`, and `0020` were withdrawn with the client they decided about, and their numbers are not reused.
-- Revisit if the reduction turns out to lose something readers actually miss, at which point the answer is a wider block catalogue with a schema revision rather than markup on this path; if a future body form arrives that is markup by necessity, at which point B2 is the mechanism and this record's reasons for refusing it are the requirements it would have to answer; or if the client is ever asked to render something a deployment did not reduce, at which point every load-bearing row in the table above stops holding at once.
+- [#1477](https://github.com/Krzysztof318/MailFathom/issues/1477) is where the second question was asked and where this amendment was written. It produces no code: the control it was asked about is removed from the design project, and [#1478](https://github.com/Krzysztof318/MailFathom/issues/1478), which redraws the message head that control sat on, is the change that has to arrive without it.
+- The sandboxing flag set is the HTML Standard's, in [§ Sandboxing](https://html.spec.whatwg.org/multipage/browsers.html#sandboxing). It is read here for what it does not contain: no flag governs subresource fetching, which is why `sandbox=""` is not an answer to a remote picture on any surface of this client.
+- Revisit if the reduction turns out to lose something readers actually miss, at which point the answer is a wider block catalogue with a schema revision rather than markup on any path — the pane's, or a second surface beside it; if a reader's need for the message itself turns out to be worth answering, at which point it is answered by handing the message *out* of the application under [ADR 0013](0013-what-a-caller-must-do-before-mail-leaves.md)'s reasoning and never by rendering it inside one; if a future body form arrives that is markup by necessity, at which point B2 is the mechanism and this record's reasons for refusing it are the requirements it would have to answer; or if the client is ever asked to render something a deployment did not reduce, at which point every load-bearing row in the table above stops holding at once.
