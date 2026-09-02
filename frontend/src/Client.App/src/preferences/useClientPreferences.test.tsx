@@ -187,6 +187,90 @@ describe('useClientPreferences', () => {
         expect(requests[1]?.headers['Authorization']).toBe('Basic b3RoZXI=');
     });
 
+    it('holds nothing of the person who signed out, so the next one starts on their own answers', async () => {
+        const { transport } = recording(stored({ telemetryEnabled: false, theme: 'dark', openMailInTabs: true }));
+        const { result, rerender } = reading(transport);
+
+        await waitFor(() => {
+            expect(result.current.preferences.openMailInTabs).toBe(true);
+        });
+
+        rerender({ session: null });
+
+        expect(result.current.preferences.openMailInTabs).toBe(false);
+    });
+
+    it('does not carry the previous person’s document into the next one’s first write', async () => {
+        const { transport, requests } = recording(
+            stored({ telemetryEnabled: false, theme: 'dark', openMailInTabs: true }),
+        );
+        const { result, rerender } = reading(transport);
+
+        await waitFor(() => {
+            expect(result.current.preferences.openMailInTabs).toBe(true);
+        });
+
+        rerender({ session: null });
+        rerender({ session: { ...session, authorization: 'Basic b3RoZXI=' } });
+
+        act(() => {
+            result.current.preferences.chooseTabMode(true);
+        });
+
+        await waitFor(() => {
+            expect(requests.some((asked) => asked.method === 'POST')).toBe(true);
+        });
+
+        // The whole document, composed out of nothing but the defaults and the one thing that was just chosen — the
+        // first person's telemetry decision is not in it.
+        const written = requests.find((asked) => asked.method === 'POST');
+
+        expect(JSON.parse(written?.body ?? '')).toStrictEqual({
+            telemetryEnabled: true,
+            theme: 'system',
+            openMailInTabs: true,
+        });
+    });
+
+    it('lets a choice made while the read is still out stand rather than being read over', async () => {
+        const answered: ((answer: { status: number; body: string; headers: Record<string, string> }) => void)[] = [];
+        const requests: ClientRequest[] = [];
+        const transport: MailFathomTransport = (request) => {
+            requests.push(request);
+
+            return new Promise((settle) => {
+                answered.push(settle);
+            });
+        };
+
+        const { result } = reading(transport);
+
+        await waitFor(() => {
+            expect(requests).toHaveLength(1);
+        });
+
+        act(() => {
+            result.current.preferences.chooseTabMode(true);
+        });
+
+        // The read answers after the choice, with what the deployment held before it. A client that applied it would
+        // put the switch back and leave the write it just sent describing something nobody can see.
+        act(() => {
+            answered[0]?.({
+                status: 200,
+                body: stored({ telemetryEnabled: true, theme: 'dark', openMailInTabs: false }),
+                headers: {},
+            });
+        });
+
+        await waitFor(() => {
+            expect(requests).toHaveLength(2);
+        });
+
+        expect(result.current.preferences.openMailInTabs).toBe(true);
+        expect(result.current.theme.choice).toBe('system');
+    });
+
     it('does not read again because its own answer changed the theme', async () => {
         const { transport, requests } = recording(
             stored({ telemetryEnabled: true, theme: 'dark', openMailInTabs: false }),

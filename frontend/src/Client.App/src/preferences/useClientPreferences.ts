@@ -37,6 +37,20 @@ export interface ClientPreferencesInForce {
     readonly chooseTabMode: (openMailInTabs: boolean) => void;
 }
 
+// What is held, and whose it is. The session is carried beside the document rather than trusted to have stayed the
+// same, because this hook outlives a sign-out: it is mounted by the frame, and the frame is what a person signs out of.
+interface HeldPreferences {
+    readonly session: ClientSession | null;
+    readonly preferences: ClientPreferences;
+    readonly notStated: boolean;
+}
+
+const heldForNobody: HeldPreferences = {
+    session: null,
+    preferences: unsetClientPreferences,
+    notStated: false,
+};
+
 /**
  * Holds what the signed-in person set about their own client.
  *
@@ -51,14 +65,27 @@ export function useClientPreferences(
     transport: MailFathomTransport,
 ): ClientPreferencesInForce {
     const { setThemeChoice } = useTheme();
-    const [stated, setStated] = useState<ClientPreferences>(unsetClientPreferences);
-    const [notStated, setNotStated] = useState(false);
+    const [held, setHeld] = useState<HeldPreferences>(heldForNobody);
 
     // The latest document, reachable from a handler whichever render built it. A handler closes over the render it
     // belongs to, and the answer that replaces this document arrives between renders — so a write composed out of a
     // render's own copy can state a document the deployment has already moved past, turning somebody's telemetry
     // decision back on because a switch beside it moved. Nothing renders this; it is what the two writes below read.
-    const held = useRef(stated);
+    const latest = useRef(held);
+
+    // The read in flight, so that a choice made while it is still out can abandon it. The two are answers to the same
+    // question and the newer one wins: a person who moved a switch before the deployment answered has said what they
+    // want more recently than the document being fetched, and applying that answer on arrival would put the setting
+    // back and then have to be undone by a second write nobody asked for.
+    const reading = useRef<AbortController | null>(null);
+
+    // Everything below reads through this rather than out of the state directly, which is what keeps one person's
+    // answers off the next person's screen without a reset anywhere. Signing out and back in on one tab keeps this
+    // hook mounted, so what was read for the credential before is still in state when the new one arrives — and it
+    // would otherwise be drawn until their own answer landed and, worse, merged into the first write they made, which
+    // states the whole document. Derived rather than cleared, because a value that no longer belongs to anything is
+    // not state to correct: it is state to stop reading.
+    const inForce = held.session === session ? held : heldForNobody;
 
     useEffect(() => {
         if (session === null) {
@@ -70,6 +97,8 @@ export function useClientPreferences(
         const attempted = new AbortController();
         const abandoned = (): boolean => attempted.signal.aborted;
 
+        reading.current = attempted;
+
         void (async () => {
             const answer = await readClientPreferences(session, transport);
 
@@ -77,8 +106,10 @@ export function useClientPreferences(
                 return;
             }
 
-            held.current = answer.value;
-            setStated(answer.value);
+            const read = { session, preferences: answer.value, notStated: false };
+
+            latest.current = read;
+            setHeld(read);
 
             // The deployment's answer replaces the device's, which is the whole of why these two settings are held
             // there: somebody who chose a theme on their laptop has chosen it on this machine too.
@@ -95,27 +126,39 @@ export function useClientPreferences(
     // is why what was last read is kept: a preference this screen does not offer is sent back unchanged rather than
     // reset to its unset answer by a client that had no opinion about it.
     function state(preferences: ClientPreferences): void {
-        held.current = preferences;
-        setStated(preferences);
+        reading.current?.abort();
+
+        const chosen = { session, preferences, notStated: false };
+
+        latest.current = chosen;
+        setHeld(chosen);
 
         if (session === null) {
             return;
         }
 
         void writeClientPreferences(session, transport, preferences).then((answer) => {
-            setNotStated(answer.outcome !== 'read');
+            setHeld((current) =>
+                current.session === session ? { ...current, notStated: answer.outcome !== 'read' } : current,
+            );
         });
     }
 
+    // What the next write is composed out of: the document last read or last chosen, and the unset one where that
+    // belongs to a session this is no longer.
+    function composedFrom(): ClientPreferences {
+        return latest.current.session === session ? latest.current.preferences : unsetClientPreferences;
+    }
+
     return {
-        openMailInTabs: stated.openMailInTabs,
-        notStated,
+        openMailInTabs: inForce.preferences.openMailInTabs,
+        notStated: inForce.notStated,
         chooseTheme: (choice) => {
             setThemeChoice(choice);
-            state({ ...held.current, theme: choice });
+            state({ ...composedFrom(), theme: choice });
         },
         chooseTabMode: (openMailInTabs) => {
-            state({ ...held.current, openMailInTabs });
+            state({ ...composedFrom(), openMailInTabs });
         },
     };
 }

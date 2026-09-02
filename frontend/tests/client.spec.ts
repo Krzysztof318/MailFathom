@@ -407,6 +407,24 @@ async function openAccountMenu(page: Page): Promise<void> {
 }
 
 /**
+ * Every preferences document the page states, collected as it is sent.
+ *
+ * A control reports a choice and the write leaves afterwards, so anything asserted about it — its content, or merely
+ * that it happened before a reload — waits on this list rather than on the click having returned.
+ */
+function statedPreferences(page: Page): string[] {
+    const stated: string[] = [];
+
+    page.on('request', (request) => {
+        if (new URL(request.url()).pathname === '/api/client/preferences' && request.method() === 'POST') {
+            stated.push(request.postData() ?? '');
+        }
+    });
+
+    return stated;
+}
+
+/**
  * One segment of the theme chooser, as the label a pointer actually lands on.
  *
  * The input each segment is built around is hidden from sight rather than from the accessibility tree, so it is a
@@ -668,12 +686,18 @@ test('signs in at the narrowest width a supported head presents', async ({ page 
 });
 
 test('opens again in the theme that was chosen, after the page is loaded afresh', async ({ page }) => {
+    const stated = statedPreferences(page);
+
     await openSignedIn(page);
 
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
 
     await openAccountMenu(page);
     await themeSegment(page, 'Dark').click();
+
+    // Waited for rather than assumed: a click returns once it is dispatched, and navigating away from a document can
+    // cancel a request the previous one had in flight — so a reload here could outrun the write it is about to prove.
+    await expect.poll(() => stated).toHaveLength(1);
     await page.reload();
 
     // Only a real document loaded a second time proves the choice was written and read back. What it is asserted
@@ -684,13 +708,7 @@ test('opens again in the theme that was chosen, after the page is loaded afresh'
 });
 
 test('states the whole preferences document to the deployment when one of them is chosen', async ({ page }) => {
-    const stated: string[] = [];
-
-    page.on('request', (request) => {
-        if (new URL(request.url()).pathname === '/api/client/preferences' && request.method() === 'POST') {
-            stated.push(request.postData() ?? '');
-        }
-    });
+    const stated = statedPreferences(page);
 
     await openSignedIn(page);
     await openAccountMenu(page);

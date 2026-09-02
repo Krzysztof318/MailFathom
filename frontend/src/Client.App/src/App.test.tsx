@@ -1026,7 +1026,13 @@ describe('App sign-in', () => {
 
         // Each of these sentences is inserted in the same commit as its own text, which a live region does not
         // announce — so somebody signed out mid-session would otherwise land in the form with nothing read to them.
-        expect(document.activeElement).toBe(notice.parentElement);
+        //
+        // Waited for rather than read once the sentence is on the screen: placing focus is an effect, and an effect
+        // runs after the commit that inserted the text this awaited. The two are the same commit and not the same
+        // moment, and asserting on the earlier one is how this passes on an idle machine and fails on a busy one.
+        await waitFor(() => {
+            expect(document.activeElement).toBe(notice.parentElement);
+        });
     });
 
     it('places focus on the credential where the deployment is already known', () => {

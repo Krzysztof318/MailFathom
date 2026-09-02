@@ -331,7 +331,8 @@ the choice is read from and written to the deployment over `/api/client/preferen
 the way they read does not set it up again per browser profile. The device still resolves a theme before anything is
 signed in — there is no session to read one over above the sign-in screen, and a client that waited on the network to
 paint itself would open blank — and what the deployment answers replaces that value once a session exists. The language
-is the opposite case and stays on the device, for the reason the section above it gives.
+is the opposite case and stays on the device: it has to be resolved for somebody who has not signed in and may never
+get a session, so there is nothing to read it over.
 
 ## What the build produces
 
