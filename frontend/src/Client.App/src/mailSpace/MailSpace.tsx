@@ -187,9 +187,18 @@ export function MailSpace({
                             </div>
                         )}
 
-                        <div className="min-h-0 flex-1 overflow-y-auto">{mail}</div>
+                        {/* The reading column keeps the width the design draws it at and stops there, so a window
+                            wider than the design's adds margin rather than line length. The ceiling is the one thing a
+                            mail client cannot leave to the viewport: a paragraph running 1900 pixels is past the
+                            measure at which the eye finds the start of the next line. It binds above that width and
+                            nowhere else, so the narrow shape and the workspace shape are untouched by it. */}
+                        <div className="min-h-0 flex-1 overflow-y-auto">
+                            <div className="mx-auto flex min-h-full w-full max-w-reading flex-col">{mail}</div>
+                        </div>
 
-                        {intent}
+                        {/* The question stands under the message rather than under the pane, so the column reads as
+                            one width from the sender's name down to the field the reader asks in. */}
+                        <div className="mx-auto w-full max-w-reading">{intent}</div>
                     </section>
                 ) : null}
             </div>
