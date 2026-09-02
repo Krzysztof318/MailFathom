@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+import { useId } from 'react';
 import type { MailAccount } from '@mailfathom/client-backend';
 import { Icon } from '../controls/Icon';
 import { MailboxMark } from '../controls/MailboxMark';
@@ -135,15 +136,21 @@ export function AccountMenu({
 function Mailboxes({ accounts }: { readonly accounts: readonly MailAccount[] }) {
     const { translate } = useLocalization();
 
+    // The words over the list name the list rather than heading a section: the menu stands inside a space whose own
+    // heading level is the space's, and a heading opened here would be one out of order in a popover.
+    const named = useId();
+
     if (accounts.length === 0) {
         return null;
     }
 
     return (
         <>
-            <h2 className="pt-1.5 text-2xs tracking-widest text-faint uppercase">{translate('shell.mailboxes')}</h2>
+            <p id={named} className="pt-1.5 text-2xs tracking-widest text-faint uppercase">
+                {translate('shell.mailboxes')}
+            </p>
 
-            <ul className="flex flex-col">
+            <ul aria-labelledby={named} className="flex flex-col">
                 {accounts.map((account, ordinal) => (
                     <li key={account.id} className="flex items-center gap-2 py-0.75 text-muted">
                         <MailboxMark ordinal={ordinal + 1} className="size-1.5" />

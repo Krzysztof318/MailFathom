@@ -134,7 +134,6 @@ function parsePreferences(body: string): ClientPreferences | null {
     return { telemetryEnabled, theme, openMailInTabs };
 }
 
-/** Whether the value names one of the three themes this surface publishes. */
-export function isThemePreference(value: unknown): value is ClientThemePreference {
+function isThemePreference(value: unknown): value is ClientThemePreference {
     return typeof value === 'string' && themePreferences.includes(value as ClientThemePreference);
 }

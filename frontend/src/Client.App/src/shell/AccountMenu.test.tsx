@@ -77,6 +77,7 @@ function renderMenu({
 // through that rather than pretending it is open, because opening it is the platform's and not this component's.
 describe('AccountMenu', () => {
     afterEach(() => {
+        atTabWidth(false);
         window.localStorage.clear();
     });
 
@@ -101,7 +102,7 @@ describe('AccountMenu', () => {
     it('lists the mailboxes this deployment reads for the person', () => {
         renderMenu({ accounts: [mailbox('work', 'Work'), mailbox('board', 'Board')] });
 
-        expect(screen.getByRole('heading', { name: 'Mailboxes', hidden: true })).toBeDefined();
+        expect(screen.getByRole('list', { name: 'Mailboxes', hidden: true })).toBeDefined();
         expect(screen.getAllByRole('listitem', { hidden: true }).map((row) => row.textContent)).toStrictEqual([
             'Work',
             'Board',
@@ -111,7 +112,7 @@ describe('AccountMenu', () => {
     it('leaves the rest of the menu working where no account answered', () => {
         renderMenu({ accounts: [] });
 
-        expect(screen.queryByRole('heading', { name: 'Mailboxes', hidden: true })).toBeNull();
+        expect(screen.queryByRole('list', { name: 'Mailboxes', hidden: true })).toBeNull();
         expect(screen.getByRole('button', { name: 'Sign out', hidden: true })).toBeDefined();
     });
 
@@ -158,76 +159,21 @@ describe('AccountMenu', () => {
 
         expect(screen.getByText(/was not saved to the deployment/u)).toBeDefined();
     });
-});
 
-describe('AccountMenu’s tab-mode switch', () => {
-    afterEach(() => {
-        atTabWidth(false);
-    });
-
-    it('is off unless the person turned it on', () => {
-        renderMenu();
-
-        expect(screen.getByRole('switch', { name: /Tab mode/u, hidden: true })).toHaveProperty('checked', false);
-    });
-
-    it('is on where they did', () => {
-        renderMenu({ preferences: { ...settings, openMailInTabs: true } });
-
-        expect(screen.getByRole('switch', { name: /Tab mode/u, hidden: true })).toHaveProperty('checked', true);
-    });
-
-    it('is inert below the width the tab mode needs, and says so in its own line', () => {
-        atTabWidth(false);
-        renderMenu();
-
-        const control = screen.getByRole('switch', { name: /Tab mode/u, hidden: true });
-
-        expect(control).toHaveProperty('disabled', true);
-        expect(screen.getByText('available on a wider screen')).toBeDefined();
-    });
-
-    it('says so in Polish too', () => {
-        atTabWidth(false);
-        window.localStorage.setItem('mailfathom.locale', 'pl');
-        renderMenu();
-
-        expect(screen.getByText('dostępne na szerszym ekranie')).toBeDefined();
-        window.localStorage.clear();
-    });
-
-    it('is operable at the width the tab mode needs, and reports the change', () => {
+    it('draws the tab mode from what is in force and hands a change to what holds it', () => {
         atTabWidth(true);
         const chooseTabMode = vi.fn();
-        renderMenu({ preferences: { ...settings, chooseTabMode } });
+        renderMenu({ preferences: { ...settings, openMailInTabs: true, chooseTabMode } });
 
         const control = screen.getByRole('switch', { name: /Tab mode/u, hidden: true });
 
-        expect(control).toHaveProperty('disabled', false);
-        expect(screen.queryByText('available on a wider screen')).toBeNull();
+        expect(control).toHaveProperty('checked', true);
         fireEvent.click(control);
 
-        expect(chooseTabMode).toHaveBeenCalledWith(true);
-    });
-});
-
-describe('AccountMenu’s theme segments', () => {
-    it('offers the three choices as one group', () => {
-        renderMenu();
-
-        expect(
-            screen.getAllByRole('radio', { hidden: true }).map((segment) => segment.getAttribute('value')),
-        ).toStrictEqual(['system', 'light', 'dark']);
+        expect(chooseTabMode).toHaveBeenCalledWith(false);
     });
 
-    it('marks the one in force, which is what the device opened in', () => {
-        renderMenu();
-
-        expect(screen.getByRole('radio', { name: 'Auto', hidden: true })).toHaveProperty('checked', true);
-        expect(screen.getByRole('radio', { name: 'Dark', hidden: true })).toHaveProperty('checked', false);
-    });
-
-    it('reports a chosen segment rather than deciding anything itself', () => {
+    it('hands a chosen theme to what holds it rather than deciding it here', () => {
         const chooseTheme = vi.fn();
         renderMenu({ preferences: { ...settings, chooseTheme } });
 

@@ -4,7 +4,6 @@
 
 export {
     clientPreferencesRoute,
-    isThemePreference,
     longestPreferencesAnswer,
     readClientPreferences,
     unsetClientPreferences,

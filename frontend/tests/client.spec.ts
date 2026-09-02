@@ -259,6 +259,20 @@ async function servedByADeployment(page: Page): Promise<void> {
         }),
     );
 
+    // The one route this fixture answers from state rather than from a constant. What the client is asked to prove
+    // about the two preferences held on the deployment is that a choice made in one session is in force in the next,
+    // and a route answering a fixed document would prove the read alone while quietly passing a client that wrote
+    // nothing at all.
+    let held = { telemetryEnabled: true, theme: 'system', openMailInTabs: false };
+
+    await page.route('**/api/client/preferences', (route) => {
+        if (route.request().method() === 'POST') {
+            held = JSON.parse(route.request().postData() ?? '{}') as typeof held;
+        }
+
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(held) });
+    });
+
     await page.route('**/api/client/session', (route) =>
         route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(sessionAnswer) }),
     );
@@ -390,6 +404,18 @@ async function signIn(page: Page): Promise<void> {
 async function openAccountMenu(page: Page): Promise<void> {
     await page.getByRole('button', { name: 'Account and preferences' }).click();
     await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+}
+
+/**
+ * One segment of the theme chooser, as the label a pointer actually lands on.
+ *
+ * The input each segment is built around is hidden from sight rather than from the accessibility tree, so it is a
+ * clipped pixel its own label covers — which is right for a person and wrong for a locator aimed at the input. What
+ * receives the click in a browser is the label, so that is what this returns; the input is still what carries the role
+ * and the name, and an assertion about either reaches it through the role.
+ */
+function themeSegment(page: Page, name: string): Locator {
+    return page.getByRole('group', { name: 'Theme' }).getByText(name, { exact: true });
 }
 
 /** The client opened at an address and signed in, which is where every test about the frame starts. */
@@ -590,7 +616,10 @@ test('opens the account menu from its control and hands focus back to it on Esca
     await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
 
     await page.keyboard.press('Tab');
-    await expect(page.getByRole('combobox', { name: 'Theme' })).toBeFocused();
+    await expect(page.getByRole('switch', { name: /Tab mode/u })).toBeFocused();
+
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('radio', { name: 'Auto' })).toBeFocused();
 
     // Escape is pressed from the way out rather than from a chooser, which takes the key for its own list.
     await page.getByRole('button', { name: 'Sign out' }).focus();
@@ -644,12 +673,38 @@ test('opens again in the theme that was chosen, after the page is loaded afresh'
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
 
     await openAccountMenu(page);
-    await page.getByRole('combobox', { name: 'Theme' }).selectOption('dark');
+    await themeSegment(page, 'Dark').click();
     await page.reload();
 
     // Only a real document loaded a second time proves the choice was written and read back. What it is asserted
     // through is the one attribute the whole token layer is declared against, which is what a screen is painted by.
+    // With the deployment answering what it was last told, this reaches past the device store as well: a client that
+    // wrote nothing would be handed `system` on the way back and paint whatever the machine prefers.
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+});
+
+test('states the whole preferences document to the deployment when one of them is chosen', async ({ page }) => {
+    const stated: string[] = [];
+
+    page.on('request', (request) => {
+        if (new URL(request.url()).pathname === '/api/client/preferences' && request.method() === 'POST') {
+            stated.push(request.postData() ?? '');
+        }
+    });
+
+    await openSignedIn(page);
+    await openAccountMenu(page);
+    await themeSegment(page, 'Dark').click();
+
+    // Only a browser proves this: what a screen hands the transport is one thing, and what `fetch` actually puts on
+    // the wire is another — an adapter dropping the body would leave every assertion above green while the deployment
+    // stored an empty document over somebody's telemetry decision.
+    await expect.poll(() => stated).toHaveLength(1);
+    expect(JSON.parse(stated[0] ?? '')).toStrictEqual({
+        telemetryEnabled: true,
+        theme: 'dark',
+        openMailInTabs: false,
+    });
 });
 
 test('opens again in the language that was chosen, after the page is loaded afresh', async ({ page }) => {
