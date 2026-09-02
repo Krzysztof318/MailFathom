@@ -25,6 +25,8 @@ namespace MailFathom.SyntheticMail.Commands;
 /// <param name="Languages">The languages AI-generated messages are written in, and empty when <see cref="AiContent" /> is <see langword="false" />.</param>
 /// <param name="Topics">The topics AI-generated messages are written about, and empty when <see cref="AiContent" /> is <see langword="false" />.</param>
 /// <param name="AiConfigurationPath">Where the AI provider is read from, or <see langword="null" /> when the run generates without one.</param>
+/// <param name="Conversation">Whether the batch is generated and delivered as exchanges between two mailboxes rather than as a flat corpus.</param>
+/// <param name="DeliveryTimeout">How long an exchange waits for a submitted message to appear in the watched mailbox.</param>
 /// <remarks>
 /// Defaults are resolved here rather than left to the point of use, which is what makes
 /// <see cref="RepeatCommandLine" /> possible: a run that chose its own seed and its own end date can print the exact
@@ -44,8 +46,26 @@ internal sealed record BatchArguments(
     bool AiContent,
     IReadOnlyList<string> Languages,
     IReadOnlyList<SyntheticMailTopic> Topics,
-    string? AiConfigurationPath)
+    string? AiConfigurationPath,
+    bool Conversation,
+    TimeSpan DeliveryTimeout)
 {
+    /// <summary>The fewest messages an exchange can be generated from.</summary>
+    /// <remarks>Two, because a thread of one message has nothing in it that a flat corpus does not already produce.</remarks>
+    internal const int FewestConversationMessages = 2;
+
+    /// <summary>The longest an exchange will wait for one submitted message to appear in the watched mailbox, in seconds.</summary>
+    /// <remarks>
+    /// Ten minutes, which is past anything but a greylisting relay holding the first message from an unknown sender.
+    /// A bound rather than none, because a run that waits forever for a message a server silently dropped is one a
+    /// developer has to notice and interrupt.
+    /// </remarks>
+    internal const int MaximumDeliveryTimeoutSeconds = 600;
+
+    /// <summary>How long an exchange waits for one delivered copy when the invocation says nothing, in seconds.</summary>
+    /// <remarks>Two minutes, which covers an ordinary relay's queue and is short enough that a mistyped mailbox is noticed on the first turn rather than after a batch.</remarks>
+    internal const int DefaultDeliveryTimeoutSeconds = 120;
+
     /// <summary>The largest batch one invocation may ask for.</summary>
     /// <remarks>
     /// A ceiling rather than no limit, because the command submits to a real server: a mistyped count is otherwise a
@@ -88,7 +108,19 @@ internal sealed record BatchArguments(
     /// </remarks>
     internal string RepeatCommandLine => string.Create(
         CultureInfo.InvariantCulture,
-        $"{this.Recipient.Address} --seed {this.Seed} --count {this.Count} --days {this.SpanDays} --until {this.LatestDate.ToString(DateFormat, CultureInfo.InvariantCulture)} --attachment-bytes {this.MaximumAttachmentBytes} --sensitive-percentage {this.SensitivePercentage}{this.AiCommandLine}");
+        $"{this.Recipient.Address} --seed {this.Seed} --count {this.Count} --days {this.SpanDays} --until {this.LatestDate.ToString(DateFormat, CultureInfo.InvariantCulture)} --attachment-bytes {this.MaximumAttachmentBytes} --sensitive-percentage {this.SensitivePercentage}{this.ConversationCommandLine}{this.AiCommandLine}");
+
+    /// <summary>The part of the repeat line an exchange adds, and nothing when the run produced a flat corpus.</summary>
+    /// <remarks>
+    /// The delivery bound is part of it because it decides which messages a run gave up on, so a batch repeated with a
+    /// different one is not the batch that was observed — the seed reproduces the content, and this reproduces the
+    /// terms it was delivered under.
+    /// </remarks>
+    private string ConversationCommandLine => this.Conversation
+        ? string.Create(
+            CultureInfo.InvariantCulture,
+            $" --conversation --delivery-timeout {this.DeliveryTimeout.TotalSeconds:0}")
+        : string.Empty;
 
     private string AiCommandLine => this.AiContent
         ? string.Create(
@@ -111,6 +143,8 @@ internal sealed record BatchArguments(
     /// <param name="language">The languages the content is written in, comma-separated, or <see langword="null" /> for the default.</param>
     /// <param name="topic">The topics the content is written about, comma-separated, or <see langword="null" /> for the default.</param>
     /// <param name="aiConfigurationPath">Where to read the AI provider, or <see langword="null" /> for the default.</param>
+    /// <param name="conversation">Whether to generate and deliver exchanges rather than a flat corpus.</param>
+    /// <param name="deliveryTimeoutSeconds">How long to wait for a submitted message to appear in the watched mailbox.</param>
     /// <param name="timeProvider">What today is read from.</param>
     /// <returns>The checked invocation.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="recipient" /> or <paramref name="timeProvider" /> is <see langword="null" />.</exception>
@@ -134,6 +168,8 @@ internal sealed record BatchArguments(
         string? language,
         string? topic,
         string? aiConfigurationPath,
+        bool conversation,
+        int? deliveryTimeoutSeconds,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(recipient);
@@ -141,6 +177,14 @@ internal sealed record BatchArguments(
 
         var latestDate = ParseLatestDate(until, timeProvider);
         var spanDays = Bounded(days, 1, MaximumSpanDays, "--days");
+        var messageCount = Bounded(count, 1, MaximumCount, "--count");
+        var deliveryTimeout = ParseDeliveryTimeout(conversation, deliveryTimeoutSeconds);
+
+        if (conversation && messageCount < FewestConversationMessages)
+        {
+            throw new SyntheticMailFailure(
+                $"'--conversation' generates threads, and a thread holds at least {FewestConversationMessages} messages: raise '--count {messageCount}'.");
+        }
 
         // A range reaching past the first representable day would throw out of DateOnly rather than out of this method,
         // which is a stack trace where a mistyped `--until` deserves a sentence.
@@ -157,7 +201,7 @@ internal sealed record BatchArguments(
             // Random.Shared rather than a seed of its own, because this draw decides nothing a run has to reproduce —
             // it is the value the run then reports so that the *next* run can.
             seed ?? Random.Shared.Next(),
-            Bounded(count, 1, MaximumCount, "--count"),
+            messageCount,
             latestDate,
             spanDays,
             Bounded(attachmentBytes, 0, MaximumAttachmentCeiling, "--attachment-bytes"),
@@ -168,7 +212,9 @@ internal sealed record BatchArguments(
             aiContent,
             languages,
             topics,
-            resolvedAiConfigurationPath);
+            resolvedAiConfigurationPath,
+            conversation,
+            deliveryTimeout);
     }
 
     /// <summary>Builds the plan this invocation describes.</summary>
@@ -183,6 +229,30 @@ internal sealed record BatchArguments(
             this.SensitivePercentage,
             this.Languages,
             this.Topics);
+
+    /// <summary>Resolves how long an exchange waits for a delivery, and refuses the option outside the mode that reads it.</summary>
+    /// <remarks>
+    /// Refused rather than ignored, for the reason naming a language without <c>--ai</c> is: a flat batch never looks
+    /// for what it delivered, so a bound written on one decides nothing and a run that accepted it would report a
+    /// repeat line naming a value that had no effect.
+    /// </remarks>
+    private static TimeSpan ParseDeliveryTimeout(bool conversation, int? deliveryTimeoutSeconds)
+    {
+        if (!conversation)
+        {
+            return deliveryTimeoutSeconds is null
+                ? TimeSpan.Zero
+                : throw new SyntheticMailFailure(
+                    "'--delivery-timeout' bounds the wait for a delivered copy, which only '--conversation' waits for.");
+        }
+
+        return TimeSpan.FromSeconds(
+            Bounded(
+                deliveryTimeoutSeconds ?? DefaultDeliveryTimeoutSeconds,
+                1,
+                MaximumDeliveryTimeoutSeconds,
+                "--delivery-timeout"));
+    }
 
     private static MailboxAddress ParseRecipient(string recipient) =>
         MailboxAddress.TryParse(recipient, out var parsed)

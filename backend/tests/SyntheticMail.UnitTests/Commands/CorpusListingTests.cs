@@ -150,6 +150,27 @@ public sealed class CorpusListingTests
     public void Describe_ANullArgument_IsRefused() =>
         Assert.Throws<ArgumentNullException>(() => CorpusListing.Describe(null!));
 
+    [Fact]
+    public void DescribeTurn_AMessageInAnExchange_LeadsWithTheThreadTheTurnAndTheSide()
+    {
+        // Arrange
+        var email = Build(inReplyTo: "first@synthetic.test", carbonCopies: 0, attachment: null);
+
+        // Act
+        var line = CorpusListing.DescribeTurn(email, thread: 3, turn: 1, SyntheticThreadSide.Mailbox);
+
+        // Assert
+        // What a reader of this listing is checking is that the batch is threads rather than messages and that the two
+        // sides alternate, so those lead; everything after them is the description a flat corpus already produces.
+        Assert.StartsWith("thread=3 turn=1 side=Mailbox | ", line, StringComparison.Ordinal);
+        Assert.EndsWith(CorpusListing.Describe(email), line, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DescribeTurn_ANullArgument_IsRefused() =>
+        Assert.Throws<ArgumentNullException>(
+            () => CorpusListing.DescribeTurn(null!, thread: 0, turn: 0, SyntheticThreadSide.Correspondent));
+
     private static SyntheticEmail Build(string? inReplyTo, int carbonCopies, SyntheticEmailAttachment? attachment) =>
         new(
             MessageId: "first@synthetic.test",

@@ -16,8 +16,9 @@ namespace MailFathom.SyntheticMail.Generation.AiContent;
 /// Nothing about the source's transport crosses this boundary: a provider that refuses the credential, times out, or
 /// fails the request surfaces as a <see cref="SyntheticMailFailure" /> with one line naming the move, for the reason
 /// <see cref="SyntheticMailFailure" /> gives. The prompt and the answer never reach a log, because the prompt names a
-/// language and a topic and the answer is message content — both are what this tool exists to keep out of a
-/// developer's real mail, and a log line is a third copy of the second.
+/// language, a topic, and the opening of the synthetic message being answered, and the answer is message content —
+/// both are what this tool exists to keep out of a developer's real mail, and a log line is a third copy of the
+/// second.
 /// </para>
 /// </remarks>
 internal interface IAiEmailContentSource
@@ -25,7 +26,7 @@ internal interface IAiEmailContentSource
     /// <summary>Generates the content one message carries.</summary>
     /// <param name="request">What the message is: its language, its topic, who writes it, and what it answers.</param>
     /// <param name="cancellationToken">Cancels the generation.</param>
-    /// <returns>The subject and the body, as plain text.</returns>
+    /// <returns>The subject, the body as text, and the body as markup.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="request" /> is <see langword="null" />.</exception>
     /// <exception cref="SyntheticMailFailure">Thrown when the provider cannot or will not answer, with a message naming the move.</exception>
     Task<AiEmailContent> GenerateAsync(AiEmailContentRequest request, CancellationToken cancellationToken);

@@ -37,15 +37,7 @@ internal static class SyntheticMimeComposer
         ArgumentNullException.ThrowIfNull(sendingAccount);
 
         var author = new MailboxAddress(email.Author.DisplayName, email.Author.Address);
-
-        var message = new MimeMessage
-        {
-            Subject = email.Subject,
-            Date = email.SentAt,
-            MessageId = email.MessageId,
-            InReplyTo = email.InReplyTo,
-            Body = BuildBody(email),
-        };
+        var message = ComposeUnaddressed(email);
 
         if (authorIdentity == SyntheticAuthorIdentity.Fabricated)
         {
@@ -68,6 +60,53 @@ internal static class SyntheticMimeComposer
         {
             message.Cc.Add(new MailboxAddress(carbonCopy.DisplayName, carbonCopy.Address));
         }
+
+        return message;
+    }
+
+    /// <summary>Composes one message the watched mailbox itself wrote, which is filed rather than submitted.</summary>
+    /// <param name="email">The generated description.</param>
+    /// <param name="mailbox">The address of the mailbox MailFathom synchronizes, which authors this message.</param>
+    /// <param name="recipient">The address it is written to, which is the other side of the exchange.</param>
+    /// <returns>The message, which the caller disposes.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when an argument is <see langword="null" />.</exception>
+    /// <remarks>
+    /// Neither <c>Sender</c> nor <c>Reply-To</c> is written here, and both are written by <see cref="Compose" />:
+    /// those exist because a submitted message's author and its authenticated submitter disagree, and this message is
+    /// appended by the account that wrote it, so they do not.
+    /// </remarks>
+    internal static MimeMessage ComposeFromMailbox(
+        SyntheticEmail email,
+        MailboxAddress mailbox,
+        MailboxAddress recipient)
+    {
+        ArgumentNullException.ThrowIfNull(email);
+        ArgumentNullException.ThrowIfNull(mailbox);
+        ArgumentNullException.ThrowIfNull(recipient);
+
+        var message = ComposeUnaddressed(email);
+
+        message.From.Add(mailbox);
+        message.To.Add(recipient);
+
+        return message;
+    }
+
+    /// <summary>Builds everything a message carries that does not depend on who is submitting it.</summary>
+    [SuppressMessage(
+        "Reliability",
+        "CA2000:Dispose objects before losing scope",
+        Justification = "Every stream and part built here is owned by the returned message, which the caller disposes.")]
+    private static MimeMessage ComposeUnaddressed(SyntheticEmail email)
+    {
+        var message = new MimeMessage
+        {
+            Subject = email.Subject,
+            Date = email.SentAt,
+            MessageId = email.MessageId,
+            InReplyTo = email.InReplyTo,
+            Body = BuildBody(email),
+        };
 
         foreach (var reference in email.References)
         {

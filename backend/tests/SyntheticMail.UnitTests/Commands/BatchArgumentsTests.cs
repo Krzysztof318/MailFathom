@@ -396,6 +396,82 @@ public sealed class BatchArgumentsTests
         Assert.DoesNotContain("--topic", arguments.RepeatCommandLine, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Parse_AConversation_RepeatsItselfWithTheModeAndTheBoundItWasDeliveredUnder()
+    {
+        // Arrange, Act
+        var arguments = Parse(count: 20, conversation: true, deliveryTimeoutSeconds: 45);
+
+        // Assert
+        // The bound decides which messages a run gave up on, so a batch repeated without it is not the batch that was
+        // observed.
+        Assert.True(arguments.Conversation);
+        Assert.Equal(TimeSpan.FromSeconds(45), arguments.DeliveryTimeout);
+        Assert.Contains("--conversation --delivery-timeout 45", arguments.RepeatCommandLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Parse_AConversationNamingNoBound_TakesTheDefaultAndReportsIt()
+    {
+        // Arrange, Act
+        var arguments = Parse(count: 20, conversation: true);
+
+        // Assert
+        Assert.Equal(TimeSpan.FromSeconds(BatchArguments.DefaultDeliveryTimeoutSeconds), arguments.DeliveryTimeout);
+        Assert.Contains(
+            $"--delivery-timeout {BatchArguments.DefaultDeliveryTimeoutSeconds}",
+            arguments.RepeatCommandLine,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Parse_AFlatBatch_SaysNothingAboutAModeItDidNotRunIn()
+    {
+        // Arrange, Act
+        var arguments = Parse(count: 20);
+
+        // Assert
+        Assert.False(arguments.Conversation);
+        Assert.DoesNotContain("--conversation", arguments.RepeatCommandLine, StringComparison.Ordinal);
+        Assert.DoesNotContain("--delivery-timeout", arguments.RepeatCommandLine, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Parse_ADeliveryBoundWithoutTheModeThatWaits_IsRefusedNamingTheOption()
+    {
+        // Arrange, Act
+        var failure = Assert.Throws<SyntheticMailFailure>(() => Parse(deliveryTimeoutSeconds: 45));
+
+        // Assert
+        // A flat batch never looks for what it delivered, so a bound written on one decides nothing and the repeat
+        // line would name a value that had no effect.
+        Assert.Contains("'--delivery-timeout'", failure.Message, StringComparison.Ordinal);
+        Assert.Contains("--conversation", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(BatchArguments.MaximumDeliveryTimeoutSeconds + 1)]
+    public void Parse_ADeliveryBoundOutsideItsRange_IsRefusedNamingTheOption(int seconds)
+    {
+        // Arrange, Act
+        var failure = Assert.Throws<SyntheticMailFailure>(
+            () => Parse(count: 20, conversation: true, deliveryTimeoutSeconds: seconds));
+
+        // Assert
+        Assert.Contains("--delivery-timeout", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Parse_AConversationWithNoRoomForAReply_IsRefusedNamingTheCount()
+    {
+        // Arrange, Act
+        var failure = Assert.Throws<SyntheticMailFailure>(() => Parse(count: 1, conversation: true));
+
+        // Assert
+        Assert.Contains("--count 1", failure.Message, StringComparison.Ordinal);
+    }
+
     private static BatchArguments Parse(
         string recipient = "developer@example.com",
         int? seed = null,
@@ -408,7 +484,9 @@ public sealed class BatchArgumentsTests
         bool ai = false,
         string? language = null,
         string? topic = null,
-        string? aiConfigurationPath = null) => BatchArguments.Parse(
+        string? aiConfigurationPath = null,
+        bool conversation = false,
+        int? deliveryTimeoutSeconds = null) => BatchArguments.Parse(
             recipient,
             seed,
             count,
@@ -423,5 +501,7 @@ public sealed class BatchArgumentsTests
             language,
             topic,
             aiConfigurationPath,
+            conversation,
+            deliveryTimeoutSeconds,
             new FakeTimeProvider(Today));
 }

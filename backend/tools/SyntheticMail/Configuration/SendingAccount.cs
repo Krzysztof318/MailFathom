@@ -24,7 +24,7 @@ namespace MailFathom.SyntheticMail.Configuration;
 internal sealed record SendingAccount(
     string Host,
     int Port,
-    SmtpTransportSecurity Security,
+    MailTransportSecurity Security,
     MailboxAddress Address,
     string UserName,
     string Password,

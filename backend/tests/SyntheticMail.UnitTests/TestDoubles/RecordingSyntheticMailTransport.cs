@@ -70,7 +70,10 @@ internal sealed class RecordingSyntheticMailTransport : ISyntheticMailTransport
         message.Sender?.Address,
         Addresses(message.ReplyTo),
         Addresses(message.To),
-        Addresses(message.Cc));
+        Addresses(message.Cc),
+        message.InReplyTo,
+        [.. message.References],
+        message.Headers[SyntheticDeliveryMarker.HeaderName]);
 
     private static IReadOnlyList<string> Addresses(InternetAddressList addresses) =>
         [.. addresses.OfType<MailboxAddress>().Select(address => address.Address)];

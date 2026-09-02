@@ -27,8 +27,9 @@ namespace MailFathom.SyntheticMail.Generation.AiContent;
 /// it buys the same answer.
 /// </para>
 /// <para>
-/// The prompt and the answer never reach a log. The prompt names a language and a topic and the answer is message
-/// content; a log line would be a third copy of material this tool exists to keep out of a developer's real mail.
+/// The prompt and the answer never reach a log. The prompt names a language, a topic, and the opening of the
+/// synthetic message being answered, and the answer is message content; a log line would be a third copy of material
+/// this tool exists to keep out of a developer's real mail.
 /// </para>
 /// </remarks>
 internal sealed class OpenAiEmailContentSource : IAiEmailContentSource
@@ -36,9 +37,29 @@ internal sealed class OpenAiEmailContentSource : IAiEmailContentSource
     /// <summary>The most a single email's content may cost in output tokens.</summary>
     /// <remarks>
     /// A ceiling rather than an expectation: an email body is a few hundred tokens, and the bound is what keeps one
-    /// stuck generation from pricing a whole batch like a document.
+    /// stuck generation from pricing a whole batch like a document. It is high enough to carry the message twice,
+    /// because an answer holds the body as text and as the markup around the same content, and a bound that truncated
+    /// the second form would produce an unclosed document rather than a shorter one.
     /// </remarks>
-    private const int MaximumOutputTokens = 1000;
+    private const int MaximumOutputTokens = 2500;
+
+    /// <summary>The constructs an answered document is refused for carrying.</summary>
+    /// <remarks>
+    /// The endpoint is one a developer named rather than one this tool chose, and what comes back is delivered to a
+    /// real mailbox — so an answer is checked for the constructs that execute rather than render. Refused rather than
+    /// stripped: a reduction would leave a message nobody asked for and hide that the endpoint answered with
+    /// something it was told not to, and a run that stops names the move for a developer who can change the model.
+    /// The check is a substring scan because these are the literal spellings a document has to contain to carry them
+    /// at all; markup that merely mentions one in text is escaped and does not.
+    /// </remarks>
+    private static readonly string[] RefusedHtmlConstructs =
+    [
+        "<script",
+        "<iframe",
+        "<object",
+        "<embed",
+        "javascript:",
+    ];
 
     /// <summary>How long one generation may take before the run reports it as timed out.</summary>
     /// <remarks>
@@ -175,14 +196,24 @@ internal sealed class OpenAiEmailContentSource : IAiEmailContentSource
         // same reason, and a body keeps the whitespace that is its structure and nothing else of the control set.
         var subject = ReadableSubject(content?.Subject);
         var body = ReadableBody(content?.Body);
+        var html = ReadableBody(content?.Html);
 
-        if (string.IsNullOrWhiteSpace(subject) || string.IsNullOrWhiteSpace(body))
+        if (string.IsNullOrWhiteSpace(subject) || string.IsNullOrWhiteSpace(body) || string.IsNullOrWhiteSpace(html))
         {
             throw new SyntheticMailFailure(
-                "The model's answer carried no subject or body. Retry; if it persists, name a different model in the AI provider file.");
+                "The model's answer carried no subject, body, or html. Retry; if it persists, name a different model in the AI provider file.");
         }
 
-        return new AiEmailContent(subject, body);
+        var refused = RefusedHtmlConstructs.FirstOrDefault(
+            construct => html.Contains(construct, StringComparison.OrdinalIgnoreCase));
+
+        if (refused is not null)
+        {
+            throw new SyntheticMailFailure(
+                $"The model's answer carried '{refused}' in its html, which this tool will not deliver to a mailbox. Retry; if it persists, name a different model in the AI provider file.");
+        }
+
+        return new AiEmailContent(subject, body, html);
     }
 
     /// <summary>Reduces the answered subject to what a composed header can carry.</summary>
@@ -212,6 +243,11 @@ internal sealed class OpenAiEmailContentSource : IAiEmailContentSource
                 $"This message replies in a thread whose subject is \"{subject}\"; write the body as a reply that continues that conversation, not as a new one.");
         }
 
+        if (request.ParentOpening is { } opening)
+        {
+            user.Add($"The message being replied to opens as follows. Answer what it actually says.\n{opening}");
+        }
+
         return
         [
             ChatMessage.CreateSystemMessage(SystemPrompt),
@@ -227,6 +263,14 @@ internal sealed class OpenAiEmailContentSource : IAiEmailContentSource
 
     /// <summary>The fixed contract every generation is asked under.</summary>
     private const string SystemPrompt = """
-        You write the content of one realistic email for a synthetic test corpus. Answer with a single JSON object and nothing else, with exactly two keys: "subject", one subject line, and "body", the message as plain text with paragraphs separated by blank lines, opening with a natural greeting and closing with a short signature. The email is fiction: every name, company, number, and reference in it is invented, and it must not contain any real personal data, any credential, or anything that identifies a real person or organization. Write exclusively in the language the request names.
+        You write the content of one realistic email for a synthetic test corpus. Answer with a single JSON object and nothing else, with exactly three keys.
+
+        "subject": one subject line.
+
+        "body": the message as plain text, with paragraphs separated by blank lines, opening with a natural greeting and closing with a short signature.
+
+        "html": the same message as an HTML document, carrying the structure real business mail carries rather than one paragraph per line. Use a mixture appropriate to what the message says, drawn from headings, paragraphs, ordered and unordered lists, a table with a header row where the message reports figures or items, links, bold and italic emphasis, blockquotes for anything being quoted back, a horizontal rule, and a signature block. Inline style attributes are welcome and so are simple font, colour, and spacing choices. Say the same things the plain-text body says, in the same order and in the same language. Never include a script, an iframe, an object, an embed, a javascript: URL, a remote image, or a tracking pixel.
+
+        The email is fiction: every name, company, number, and reference in it is invented, and it must not contain any real personal data, any credential, or anything that identifies a real person or organization. Write exclusively in the language the request names.
         """;
 }

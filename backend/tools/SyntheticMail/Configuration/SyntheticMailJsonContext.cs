@@ -21,6 +21,7 @@ namespace MailFathom.SyntheticMail.Configuration;
     ReadCommentHandling = JsonCommentHandling.Skip,
     AllowTrailingCommas = true)]
 [JsonSerializable(typeof(SendingAccountDocument))]
+[JsonSerializable(typeof(WatchedMailboxDocument))]
 [JsonSerializable(typeof(AiProviderConfigurationDocument))]
 [JsonSerializable(typeof(AiEmailContent))]
 internal sealed partial class SyntheticMailJsonContext : JsonSerializerContext;

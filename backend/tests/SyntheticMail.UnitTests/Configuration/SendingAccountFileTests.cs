@@ -36,7 +36,7 @@ public sealed class SendingAccountFileTests
         // Assert
         Assert.Equal("smtp.example.test", account.Host);
         Assert.Equal(2525, account.Port);
-        Assert.Equal(SmtpTransportSecurity.ImplicitTls, account.Security);
+        Assert.Equal(MailTransportSecurity.ImplicitTls, account.Security);
         Assert.Equal("throwaway@example.test", account.Address.Address);
         Assert.Equal("throwaway", account.UserName);
         Assert.Equal("not-a-real-password", account.Password);
@@ -63,7 +63,7 @@ public sealed class SendingAccountFileTests
         var account = Read("""{ "host": "h", "address": "a@example.test", "password": "p" }""");
 
         // Assert
-        Assert.Equal(SmtpTransportSecurity.StartTls, account.Security);
+        Assert.Equal(MailTransportSecurity.StartTls, account.Security);
     }
 
     [Theory]

@@ -215,7 +215,7 @@ public sealed class SyntheticMailRunnerTests
         // Arrange
         var console = new RecordingSyntheticMailConsole();
         await using var transport = new RecordingSyntheticMailTransport();
-        var source = new ScriptedAiEmailContentSource(new AiEmailContent("Quarterly figures", "Hello,\n\nFigures attached.\n\nRegards\nAnna"));
+        var source = new ScriptedAiEmailContentSource(new AiEmailContent("Quarterly figures", "Hello,\n\nFigures attached.\n\nRegards\nAnna", "<html><body><p>Figures attached.</p></body></html>"));
 
         // Act
         var exitCode = await SyntheticMailRunner.RunAsync(
@@ -268,7 +268,7 @@ public sealed class SyntheticMailRunnerTests
         // Arrange
         var console = new RecordingSyntheticMailConsole();
         await using var transport = new RecordingSyntheticMailTransport();
-        var source = new ScriptedAiEmailContentSource(new AiEmailContent("Quarterly figures", "Hello,\n\nFigures attached.\n\nRegards\nAnna"));
+        var source = new ScriptedAiEmailContentSource(new AiEmailContent("Quarterly figures", "Hello,\n\nFigures attached.\n\nRegards\nAnna", "<html><body><p>Figures attached.</p></body></html>"));
 
         // Act
         var exitCode = await SyntheticMailRunner.RunAsync(
@@ -284,12 +284,88 @@ public sealed class SyntheticMailRunnerTests
         Assert.Contains(console.Diagnostics, line => line == "Delivered 4 of 4 to developer@example.com.");
     }
 
+    [Fact]
+    public async Task RunAsync_AConversationDryRun_ListsEveryThreadAndItsTurnsAndConnectsToNothing()
+    {
+        // Arrange
+        var console = new RecordingSyntheticMailConsole();
+        await using var transport = new RecordingSyntheticMailTransport();
+        await using var mailbox = new RecordingWatchedMailbox();
+
+        // Act
+        var exitCode = await SyntheticMailRunner.RunAsync(
+            Context(console, transport, mailbox: mailbox),
+            ["developer@example.com", "--conversation", "--dry-run", "--count", "12", "--seed", "42", "--until", "2026-08-08"],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        // A dry run needs no credential for the mailbox either: its address is the recipient the invocation named,
+        // which is all the generator needs to author half the turns.
+        Assert.Equal(SyntheticMailExitCode.Success, exitCode);
+        Assert.Equal(12, console.Output.Count);
+        Assert.Equal(0, transport.Opened);
+        Assert.Equal(0, mailbox.Opened);
+        Assert.All(console.Output, line => Assert.Contains("thread=", line, StringComparison.Ordinal));
+        Assert.Contains(console.Output, line => line.Contains("side=Mailbox", StringComparison.Ordinal));
+        Assert.Contains(console.Diagnostics, line => line.Contains("Delivered as exchanges with developer@example.com", StringComparison.Ordinal));
+        Assert.Contains(console.Diagnostics, line => line.Contains("--conversation --delivery-timeout 120", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunAsync_AConversationTheServerAccepts_SubmitsOneHalfFilesTheOtherAndReportsThemAll()
+    {
+        // Arrange
+        var console = new RecordingSyntheticMailConsole();
+        await using var transport = new RecordingSyntheticMailTransport();
+        await using var mailbox = new RecordingWatchedMailbox();
+
+        // Act
+        var exitCode = await SyntheticMailRunner.RunAsync(
+            Context(console, transport, mailbox: mailbox),
+            ["developer@example.com", "--conversation", "--count", "10", "--seed", "42", "--interval", "0", "--until", "2026-08-08"],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(SyntheticMailExitCode.Success, exitCode);
+        Assert.Equal(1, transport.Opened);
+        Assert.Equal(1, mailbox.Opened);
+        Assert.Equal(10, transport.Submissions.Count + mailbox.Appended.Count);
+        Assert.NotEmpty(mailbox.Appended);
+        Assert.True(mailbox.Disposed);
+        Assert.Contains(console.Diagnostics, line => line == "Delivered 10 of 10 to developer@example.com.");
+    }
+
+    [Fact]
+    public async Task RunAsync_AConversationToAMailboxTheFileDoesNotConfigure_IsRefusedNamingBothAddresses()
+    {
+        // Arrange
+        var console = new RecordingSyntheticMailConsole();
+        await using var transport = new RecordingSyntheticMailTransport();
+
+        // Act
+        var exitCode = await SyntheticMailRunner.RunAsync(
+            Context(console, transport, readWatchedMailbox: _ => WatchedMailbox("somebody.else@example.com")),
+            ["developer@example.com", "--conversation", "--count", "10", "--seed", "42", "--interval", "0"],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        // An exchange delivers to a mailbox, reads it back, and files in it, so a run against two addresses would fill
+        // one with half a thread and the other with replies to messages it never received.
+        Assert.Equal(SyntheticMailExitCode.Failure, exitCode);
+        Assert.Empty(transport.Submissions);
+        Assert.Contains(console.Diagnostics, line =>
+            line.Contains("developer@example.com", StringComparison.Ordinal)
+            && line.Contains("somebody.else@example.com", StringComparison.Ordinal));
+    }
+
     private static SyntheticMailContext Context(
         RecordingSyntheticMailConsole console,
         ISyntheticMailTransport? transport = null,
         Func<string, SendingAccount>? readAccount = null,
         string? aiConfigurationPath = null,
-        IAiEmailContentSource? aiContentSource = null)
+        IAiEmailContentSource? aiContentSource = null,
+        Func<string, WatchedMailboxAccount>? readWatchedMailbox = null,
+        IWatchedMailbox? mailbox = null)
     {
         // A path named by a test is read by the real reader, which is what makes the missing-file message the one a
         // developer actually gets; a run that names none is handed a configuration that is never used, because a
@@ -305,8 +381,10 @@ public sealed class SyntheticMailRunnerTests
         return new SyntheticMailContext(
             console,
             readAccount ?? (_ => Account()),
+            readWatchedMailbox ?? (_ => WatchedMailbox()),
             readAiProvider,
             _ => transport ?? new RecordingSyntheticMailTransport(),
+            _ => mailbox ?? new RecordingWatchedMailbox(),
             openAiContentSource,
             new FakeTimeProvider(Today));
     }
@@ -314,9 +392,18 @@ public sealed class SyntheticMailRunnerTests
     private static SendingAccount Account() => new(
         "smtp.example.test",
         587,
-        SmtpTransportSecurity.StartTls,
+        MailTransportSecurity.StartTls,
         new MailboxAddress("Throwaway", "throwaway@example.test"),
         "throwaway@example.test",
         "not-a-real-password",
         SyntheticAuthorIdentity.Fabricated);
+
+    private static WatchedMailboxAccount WatchedMailbox(string address = "developer@example.com") => new(
+        "imap.example.test",
+        993,
+        MailTransportSecurity.ImplicitTls,
+        new MailboxAddress("Developer", address),
+        address,
+        "not-a-real-password",
+        SentFolder: null);
 }
