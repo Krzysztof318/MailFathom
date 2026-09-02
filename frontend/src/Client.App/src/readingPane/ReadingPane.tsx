@@ -83,7 +83,7 @@ export function ReadingPane({
     const { translate } = useLocalization();
 
     return (
-        <section className="flex min-h-full flex-col">
+        <section className="flex flex-1 flex-col">
             {storedEmailId === null ? (
                 <p className="flex flex-1 items-center justify-center px-6 py-10 text-base text-muted">
                     {translate('message.nothingOpen')}
