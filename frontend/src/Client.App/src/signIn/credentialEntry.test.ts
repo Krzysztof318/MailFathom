@@ -3,7 +3,18 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import { longestCredentialPart, resolveCredentialEntry, type CredentialEntryRefusal } from './credentialEntry';
+import {
+    longestCredentialPart,
+    resolveCredentialEntry,
+    userNameIn,
+    type CredentialEntryRefusal,
+} from './credentialEntry';
+
+function composed(userName: string, password: string): string {
+    const result = resolveCredentialEntry(userName, password);
+
+    return result.outcome === 'resolved' ? result.authorization : '';
+}
 
 function refusal(userName: string, password: string): CredentialEntryRefusal | 'resolved' {
     const result = resolveCredentialEntry(userName, password);
@@ -63,4 +74,28 @@ describe('resolveCredentialEntry', () => {
             expect(refusal(userName, password)).toBe('resolved');
         },
     );
+});
+
+describe('userNameIn', () => {
+    it('reads back the name a credential was composed from, which is what tells one person on a machine from another', () => {
+        expect(userNameIn(composed('karolina', 'open sesame'))).toBe('karolina');
+    });
+
+    it('reads a name back through UTF-8, so somebody whose name is not US-ASCII is still themselves', () => {
+        expect(userNameIn(composed('zażółć', 'open sesame'))).toBe('zażółć');
+    });
+
+    it('reads back only the name, whatever the password beside it carries', () => {
+        expect(userNameIn(composed('karolina', 'open:sesame'))).toBe('karolina');
+    });
+
+    it.each([
+        ['nobody signed in', null],
+        ['another scheme', 'Bearer abcdef'],
+        ['nothing base64 decodes to', 'Basic not base64 at all'],
+        ['a value with no separator in it', `Basic ${btoa('karolina')}`],
+        ['a value with an empty name', `Basic ${btoa(':open sesame')}`],
+    ])('answers nobody for %s', (_, authorization) => {
+        expect(userNameIn(authorization)).toBeNull();
+    });
 });

@@ -24,6 +24,7 @@ import { LanguageChoice, ThemeChoice } from './shell/Preferences';
 import { Space } from './shell/Space';
 import { SpaceNavigation } from './shell/SpaceNavigation';
 import { useConnection } from './shell/useConnection';
+import { userNameIn } from './signIn/credentialEntry';
 import { CredentialNotices, type CredentialNotice } from './signIn/CredentialNotices';
 import type { CredentialStore } from './signIn/credentialStore';
 import { SignIn } from './signIn/SignIn';
@@ -226,6 +227,10 @@ export function App({
                 ) : (
                     <Space
                         space={space}
+                        // Who is signed in, taken apart in the one module that composes a credential and never here.
+                        // A screen never sees the credential; what it is handed is the name the deployment knows the
+                        // person by, which is what a preference kept per person on this machine is written under.
+                        person={userNameIn(authorization)}
                         // Asking is what the field is for, so a credential that may not ask is not shown one. It is
                         // absent rather than disabled: a control nobody can use says less about why than the sentence
                         // above does. Where it stands is the space's decision, which is why it is handed in rather

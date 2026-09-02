@@ -32,6 +32,7 @@ function inStrictMode(space: SpaceName): ReactNode {
                         folders={<p>{handedTheFolders}</p>}
                         list={<p>{handedTheList}</p>}
                         mail={<p>{handedToMail}</p>}
+                        person="reader"
                     />
                 </WorkspaceProvider>
             </LocalizationProvider>

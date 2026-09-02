@@ -56,6 +56,46 @@ export function resolveCredentialEntry(userName: string, password: string): Cred
     return { outcome: 'resolved', authorization: `Basic ${base64(`${userName}:${password}`)}` };
 }
 
+/**
+ * The user name inside a credential this client composed, or `null` where the value is not one it would have composed.
+ *
+ * It is here rather than at the caller for the reason the module opens with: this is the one implementation of
+ * RFC 7617 in the client, and a second place taking the value apart is a second place that can get the encoding wrong
+ * — with the password sitting beside the name in what it is taking apart. Nothing this answers is a secret; what the
+ * name is for is telling one person on a machine from another.
+ *
+ * @param authorization The finished header value, as {@link resolveCredentialEntry} produced it.
+ * @returns The name, or `null` for a value that is not a Basic credential this client could have written.
+ */
+export function userNameIn(authorization: string | null): string | null {
+    if (authorization?.startsWith('Basic ') !== true) {
+        return null;
+    }
+
+    let decoded: string;
+
+    try {
+        decoded = new TextDecoder().decode(octetsOf(atob(authorization.slice('Basic '.length))));
+    } catch {
+        return null;
+    }
+
+    const separator = decoded.indexOf(':');
+
+    return separator > 0 ? decoded.slice(0, separator) : null;
+}
+
+/** What `atob` answers, read back as the UTF-8 octets {@link base64} encoded rather than as code points. */
+function octetsOf(binary: string): Uint8Array {
+    const octets = new Uint8Array(binary.length);
+
+    for (let index = 0; index < binary.length; index += 1) {
+        octets[index] = binary.charCodeAt(index);
+    }
+
+    return octets;
+}
+
 /** What `btoa` needs: one octet of the UTF-8 encoding per character, rather than the string's own code points. */
 function base64(text: string): string {
     const encoded = new TextEncoder().encode(text);

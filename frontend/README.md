@@ -169,6 +169,23 @@ library is adopted with, and it adds nothing to the bundle and nothing to `THIRD
 `.config/typos.toml` excludes `pl.ts` from the spell check, because a dictionary of English has nothing true to say
 about Polish. Every other file in this workspace stays checked, `en.ts` included.
 
+## What the device holds, and what follows the person
+
+Three things the client keeps belong to the machine somebody is reading on rather than to the person: the theme, the
+language, and how wide the message list is drawn beside the reading pane. `src/Client.App/src/device/deviceStore.ts` is
+the one module they go through — reading a value, writing one, and removing one, under the names it declares, so no
+screen spells a storage key and the handling that a browser or a WebView refusing storage needs is written once.
+
+Which implementation answers follows what the system offers rather than which system it is. The web head and the
+desktop head on either Linux or Windows reach the same origin storage through the WebView they render in, so all three
+resolve to it; a system that refuses it falls back to a store that lasts the run, so the client still mounts and a
+value then lasts the session instead of outliving it. That is the seam a head diverging later is added behind.
+
+The width of the message list is the one of the three kept **per signed-in person**, so two people sharing a machine do
+not inherit each other's split, and the key it is written under folds the name to a digest rather than spelling it out.
+What says how somebody wants to work — rather than how much room this screen has — follows them between machines and is
+the deployment's to hold instead.
+
 ## The two suites
 
 `pnpm test` is the unit suite, and `vitest.config.ts` declares one Vitest project per package because the two are tested

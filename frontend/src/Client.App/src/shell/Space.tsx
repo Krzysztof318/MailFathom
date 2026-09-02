@@ -17,6 +17,7 @@ export function Space({
     folders,
     list,
     mail,
+    person,
 }: {
     readonly space: SpaceName;
 
@@ -29,6 +30,9 @@ export function Space({
     readonly folders: ReactNode;
     readonly list: ReactNode;
     readonly mail: ReactNode;
+
+    /** Who is signed in, which the Mail space keeps its own division of the width under. */
+    readonly person: string | null;
 }) {
     const { translate } = useLocalization();
     const region = useRef<HTMLElement>(null);
@@ -58,7 +62,7 @@ export function Space({
                 aria-label={translate(spaceLabels[space])}
                 className="flex min-h-0 flex-1 flex-col overflow-hidden"
             >
-                <MailSpace folders={folders} list={list} mail={mail} intent={intent} status={status} />
+                <MailSpace folders={folders} list={list} mail={mail} intent={intent} status={status} person={person} />
             </main>
         );
     }

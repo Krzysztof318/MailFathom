@@ -10,6 +10,8 @@ import { useWideWorkspace } from '../shell/useWideWorkspace';
 import { scopeKey } from '../workspace/mailScope';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { AiFilters } from './AiFilters';
+import { ListWidthGrip } from './ListWidthGrip';
+import { listWidthWithin, readListWidth, storeListWidth } from './listWidth';
 import { MailToolbar } from './MailToolbar';
 
 // The Mail space as the design project composes it, out of the three regions a mail client is: the mailboxes, the list
@@ -26,6 +28,10 @@ import { MailToolbar } from './MailToolbar';
 // the list is a view change, and so is going back, and a reader on a keyboard is put at the start of what replaced what
 // they were on rather than left on an element that is no longer there. A resize that changes the shape is not, so the
 // width changing moves nothing.
+//
+// How the wide shape divides its width between the list and the pane is the reader's, and this is where that lives: it
+// is the composition's own number rather than either column's, and only the shape that draws both columns has a
+// boundary to move.
 
 export function MailSpace({
     folders,
@@ -33,6 +39,7 @@ export function MailSpace({
     mail,
     intent,
     status,
+    person,
 }: {
     /** The scope selector, which is the mailbox column's first thing. */
     readonly folders: ReactNode;
@@ -51,16 +58,56 @@ export function MailSpace({
 
     /** What the deployment says about the connection, which stands at the foot of the mailbox column. */
     readonly status: ReactNode;
+
+    /**
+     * Who is signed in, which is what the split is kept under: two people sharing a machine each get their own.
+     *
+     * `null` where the credential this client holds names nobody it composed, which is a split that lasts the run
+     * rather than a screen that refuses to draw.
+     */
+    readonly person: string | null;
 }) {
     const { translate } = useLocalization();
     const { workspace, revise } = useWorkspace();
     const wide = useWideWorkspace();
     const [folded, setFolded] = useState(false);
+    const [listWidth, setListWidth] = useState(() => readListWidth(person));
     const drawer = useRef<HTMLDialogElement>(null);
     const listColumn = useRef<HTMLElement>(null);
     const readingColumn = useRef<HTMLElement>(null);
 
     const readingInFront = !wide && (workspace.selection !== null || workspace.conversation !== null);
+
+    // A width chosen on one screen is read back on whatever screen the client opens on next, so the window is measured
+    // rather than trusted: what the two columns share is what they measure to, and a stored width the window no longer
+    // has room for is brought back to what fits instead of pushing the message off the side.
+    //
+    // An effect because a `ResizeObserver` is something outside React, and it watches both columns because what the
+    // two of them add up to is the measurement — a number nothing this sets can move, since the pane takes back
+    // whatever the list gives up. So it settles in one pass rather than chasing itself.
+    useEffect(() => {
+        const listed = listColumn.current;
+        const reading = readingColumn.current;
+
+        if (!wide || listed === null || reading === null || typeof ResizeObserver !== 'function') {
+            return;
+        }
+
+        const watched = new ResizeObserver(() => {
+            const room = listed.offsetWidth + reading.offsetWidth;
+
+            if (room > 0) {
+                setListWidth((chosen) => listWidthWithin(chosen, room));
+            }
+        });
+
+        watched.observe(listed);
+        watched.observe(reading);
+
+        return () => {
+            watched.disconnect();
+        };
+    }, [wide]);
 
     // Focus is placed on the shape changing what it shows, and not on the width changing the shape: both are recorded
     // and only the first moves anything. A ref rather than state, because what it holds is what was last drawn.
@@ -90,6 +137,15 @@ export function MailSpace({
 
     function goBackToList(): void {
         revise({ selection: null, conversation: null });
+    }
+
+    // Every width a move produces is held inside the same bounds, so a drag and a key cannot disagree about where the
+    // boundary may stand. A room of nothing is a layout that has not happened yet — an environment that computes no
+    // sizes, or the frame before the first one — and is read as an unmeasured window rather than as no room at all.
+    function withinTheRoom(width: number): number {
+        const room = (listColumn.current?.offsetWidth ?? 0) + (readingColumn.current?.offsetWidth ?? 0);
+
+        return listWidthWithin(width, room > 0 ? room : Number.POSITIVE_INFINITY);
     }
 
     return (
@@ -147,7 +203,15 @@ export function MailSpace({
                         ref={listColumn}
                         tabIndex={-1}
                         aria-label={translate('mail.listColumn')}
-                        className={`flex min-h-0 min-w-0 flex-col bg-panel ${wide ? 'w-message-list shrink-0 border-e border-line' : 'flex-1'}`}
+                        className={`flex min-h-0 min-w-0 flex-col bg-panel ${wide ? '' : 'flex-1'}`}
+                        /* The one width in the client a person sets rather than the design, which is why it is drawn
+                           from a value instead of a utility. The narrow shape has no boundary to move, so it takes the
+                           whole column and this says nothing about it.
+                           Left able to shrink on purpose: a width chosen on a wider screen is read back before
+                           anything has measured this one, and a column that refuses to give way in that frame would
+                           push the message off the side. Flexbox holds it inside the window until the measurement
+                           below brings it back to a width that fits. */
+                        style={wide ? { width: `${String(listWidth)}px` } : undefined}
                     >
                         {wide ? null : (
                             <div className="flex items-center px-2 pt-2">
@@ -165,6 +229,23 @@ export function MailSpace({
 
                         {wide ? null : intent}
                     </section>
+                ) : null}
+
+                {/* The boundary is only there where both columns are: one column at a time has nothing between them,
+                    and the line the grip draws is the border the list would otherwise carry. */}
+                {wide ? (
+                    <ListWidthGrip
+                        width={listWidth}
+                        onWidth={(moved) => {
+                            setListWidth(withinTheRoom(moved));
+                        }}
+                        onChosen={(chosen) => {
+                            const settled = withinTheRoom(chosen);
+
+                            setListWidth(settled);
+                            storeListWidth(person, settled);
+                        }}
+                    />
                 ) : null}
 
                 {wide || readingInFront ? (
