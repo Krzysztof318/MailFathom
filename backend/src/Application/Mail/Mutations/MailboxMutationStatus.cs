@@ -6,9 +6,9 @@ namespace MailFathom.Application.Mail.Mutations;
 
 /// <summary>States what asking for a mutation did, which is not always what it asked for.</summary>
 /// <remarks>
-/// Three of the four are outcomes a caller acts on and continues from rather than failures, which is why they are a
-/// result rather than exceptions. A change already made, a change nothing will make, and a change whose outcome cannot
-/// be established are each an ordinary answer to asking twice.
+/// All but one are outcomes a caller acts on and continues from rather than failures, which is why they are a result
+/// rather than exceptions. A change already made, a change nothing will make, a change whose outcome cannot be
+/// established, and a change somebody withdrew are each an ordinary answer to asking.
 /// </remarks>
 public enum MailboxMutationStatus
 {
@@ -25,4 +25,12 @@ public enum MailboxMutationStatus
 
     /// <summary>The mutation reached its terminal failed stage and will not be attempted again.</summary>
     Abandoned = 3,
+
+    /// <summary>The change was withdrawn before any command went out, so nothing was issued and nothing will be.</summary>
+    /// <remarks>
+    /// A convergence pass never reads a withdrawn record, so this is reached only where one was withdrawn between that
+    /// read and this attempt. It is answered rather than performed for the reason the withdrawal existed: the person
+    /// who asked for the change has since said they do not want it.
+    /// </remarks>
+    Withdrawn = 4,
 }

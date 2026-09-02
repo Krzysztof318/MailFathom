@@ -20,9 +20,9 @@ namespace MailFathom.Infrastructure.Persistence.Emails;
 /// <para>
 /// Only a relocation is read. A copy leaves this message where it is and its second occurrence is discovered in the
 /// destination and derived from there, and a pending delete costs at most one cut whose passages the deletion cascades
-/// away — neither derives anything under a mapping the message is leaving. A relocation that has completed or been
-/// abandoned is not converging either: neither will move the message again, so holding a cut back for one would hold it
-/// back for the life of the deployment.
+/// away — neither derives anything under a mapping the message is leaving. A relocation that has completed, been
+/// abandoned, or been withdrawn is not converging either: none of the three will move the message again, so holding a
+/// cut back for one would hold it back for the life of the deployment.
 /// </para>
 /// </remarks>
 internal static class MailAwaitingRelocation
@@ -44,5 +44,6 @@ internal static class MailAwaitingRelocation
         email => !email.Mutations.Any(mutation =>
             mutation.Mutation == RelocateMutationName
             && mutation.Stage != MailboxMutationStage.Completed
-            && mutation.Stage != MailboxMutationStage.Abandoned);
+            && mutation.Stage != MailboxMutationStage.Abandoned
+            && mutation.Stage != MailboxMutationStage.Cancelled);
 }

@@ -119,6 +119,14 @@ public sealed class MailboxMutationPerformer : IMailboxMutationPerformer
             MailboxMutationStatus.Abandoned,
             record.Placement),
 
+        // Withdrawn between a pass reading the account's outstanding work and this attempt. The read already excludes
+        // it, and this is what keeps the exclusion from being the only thing standing between somebody's withdrawal and
+        // a command going out for it anyway.
+        MailboxMutationStage.Cancelled => new MailboxMutationOutcome(
+            record.Id,
+            MailboxMutationStatus.Withdrawn,
+            record.Placement),
+
         // The command that would have placed the email went out and its answer never came back. Issuing it again
         // would put a second message in the destination folder, and nothing there afterwards says whether the first
         // one landed, so the record stays where it is and stays visible.

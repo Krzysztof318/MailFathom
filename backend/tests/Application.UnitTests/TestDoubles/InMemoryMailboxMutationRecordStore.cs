@@ -5,6 +5,7 @@
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
@@ -88,6 +89,47 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
             record.Request.StoredEmailId == storedEmailId
             && record.Request.Mutation == mutation
             && record.Request.Requester.Origin == origin));
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<MailboxMutationRecord>> ReadAsync(
+        MailOwnerId owner,
+        IReadOnlyList<MailboxMutationRecordId> recordIds,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<MailboxMutationRecord> held =
+        [
+            .. recordIds
+                .Distinct()
+                .Select(recordId => this.recordsById.GetValueOrDefault(recordId))
+                .OfType<MailboxMutationRecord>()
+                .Where(record => record.Owner == owner)
+                .OrderBy(record => record.RecordedAt)
+                .ThenBy(record => record.Id.Value),
+        ];
+
+        return Task.FromResult(held);
+    }
+
+    /// <inheritdoc />
+    public Task<MailboxMutationRecord?> WithdrawAsync(
+        IPersistenceSession session,
+        MailOwnerId owner,
+        MailboxMutationRecordId recordId,
+        CancellationToken cancellationToken)
+    {
+        if (this.recordsById.GetValueOrDefault(recordId) is not { } record || record.Owner != owner)
+        {
+            return Task.FromResult<MailboxMutationRecord?>(null);
+        }
+
+        if (record.Stage is MailboxMutationStage.Recorded)
+        {
+            record = record with { Stage = MailboxMutationStage.Cancelled, StageChangedAt = this.Advance() };
+            this.recordsById[recordId] = record;
+        }
+
+        return Task.FromResult<MailboxMutationRecord?>(record);
+    }
 
     /// <inheritdoc />
     public Task<int> CountAttemptAsync(
@@ -233,7 +275,8 @@ internal sealed class InMemoryMailboxMutationRecordStore : IMailboxMutationRecor
 
     private IEnumerable<MailboxMutationRecord> OutstandingOf(MailAccountId accountId) =>
         this.recordsById.Values.Where(record => record.Request.Occurrence.AccountId == accountId &&
-            record.Stage != MailboxMutationStage.Completed);
+            record.Stage != MailboxMutationStage.Completed &&
+            record.Stage != MailboxMutationStage.Cancelled);
 
     private MailFolderResolution BindingOf(MailboxMutationRecord record)
     {

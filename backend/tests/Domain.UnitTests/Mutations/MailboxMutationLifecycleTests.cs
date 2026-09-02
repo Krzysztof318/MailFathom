@@ -33,6 +33,7 @@ public sealed class MailboxMutationLifecycleTests
     [InlineData(MailboxMutationStage.SourceFlaggedDeleted, "converging")]
     [InlineData(MailboxMutationStage.Completed, "completed")]
     [InlineData(MailboxMutationStage.Abandoned, "dead-lettered")]
+    [InlineData(MailboxMutationStage.Cancelled, "cancelled")]
     public void Of_AStage_NamesTheLifecycleAnOperatorReads(MailboxMutationStage stage, string expectedName)
     {
         // Act

@@ -143,6 +143,11 @@ public sealed class ClientApiEndpointsTests
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailMessageEndpoint.MailMessageRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailAttachmentEndpoint.MailAttachmentRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailBodyEndpoint.MailBodyRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientMailMutationsEndpoint.MutationsRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientMailMutationsEndpoint.FlagMutationsRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientMailMutationsEndpoint.FlagWithdrawalsRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientMailMutationsEndpoint.MoveMutationsRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientMailMutationsEndpoint.MoveWithdrawalsRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientOutboxEndpoints.OutboxRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientOutboxEndpoints.OutboxCancellationRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientOutboxEndpoints.OutboxRequeueRoute}",
@@ -211,6 +216,7 @@ public sealed class ClientApiEndpointsTests
                 $"GET {prefix}{ClientMailMessageEndpoint.MailMessageRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailAttachmentEndpoint.MailAttachmentRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailBodyEndpoint.MailBodyRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientMailMutationsEndpoint.MutationsRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientOutboxEndpoints.OutboxRoute} -> {MailFathomPermission.MailSend.Name}",
                 $"GET {prefix}{ClientOutboxEndpoints.OutboxSendRoute} -> {MailFathomPermission.MailSend.Name}",
                 $"GET {prefix}{ClientPreferencesEndpoint.PreferencesRoute} -> {MailFathomPermission.MailRead.Name}",
@@ -220,6 +226,10 @@ public sealed class ClientApiEndpointsTests
                 $"POST {prefix}{ClientDraftEndpoints.DraftsRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"POST {prefix}{ClientDraftEndpoints.DraftAttachmentsRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"POST {prefix}{ClientDraftEndpoints.DraftSendRoute} -> {MailFathomPermission.MailSend.Name}",
+                $"POST {prefix}{ClientMailMutationsEndpoint.FlagMutationsRoute} -> {MailFathomPermission.MailFlagsWrite.Name}",
+                $"POST {prefix}{ClientMailMutationsEndpoint.FlagWithdrawalsRoute} -> {MailFathomPermission.MailFlagsWrite.Name}",
+                $"POST {prefix}{ClientMailMutationsEndpoint.MoveMutationsRoute} -> {MailFathomPermission.MailMove.Name}",
+                $"POST {prefix}{ClientMailMutationsEndpoint.MoveWithdrawalsRoute} -> {MailFathomPermission.MailMove.Name}",
                 $"POST {prefix}{ClientOutboxEndpoints.OutboxCancellationRoute} -> {MailFathomPermission.MailSend.Name}",
                 $"POST {prefix}{ClientOutboxEndpoints.OutboxRequeueRoute} -> {MailFathomPermission.MailSend.Name}",
                 $"POST {prefix}{ClientPreferencesEndpoint.PreferencesRoute} -> {MailFathomPermission.MailRead.Name}",
@@ -260,10 +270,10 @@ public sealed class ClientApiEndpointsTests
     /// <summary>
     /// A read under the reading grant, and every write under a grant that says what it writes, save the two a grant
     /// could not tell apart: the caller's own client preferences, and the client handing over its own telemetry.
-    /// Reading mail, changing the caller's own record, composing a draft, filing one on their server, and sending are
-    /// five separately provisioned powers, so a route that changes anything under <c>mailfathom.mail.read</c> is one
-    /// somebody added without deciding what it costs — and a credential provisioned to read a mailbox would then send
-    /// from it.
+    /// Reading mail, changing the caller's own record, composing a draft, filing one on their server, sending,
+    /// changing a flag, and moving a message are separately provisioned powers, so a route that changes anything under
+    /// <c>mailfathom.mail.read</c> is one somebody added without deciding what it costs — and a credential provisioned
+    /// to read a mailbox would then send from it.
     /// </summary>
     [Fact]
     public void MapClientApi_Always_PublishesEveryWriteUnderAGrantThatSaysWhatItWrites()
@@ -303,7 +313,9 @@ public sealed class ClientApiEndpointsTests
             .Any(published =>
                 published.Permission == MailFathomPermission.MailAccountsWrite
                 || published.Permission == MailFathomPermission.MailDraftsWrite
-                || published.Permission == MailFathomPermission.MailSend);
+                || published.Permission == MailFathomPermission.MailSend
+                || published.Permission == MailFathomPermission.MailFlagsWrite
+                || published.Permission == MailFathomPermission.MailMove);
 
     /// <summary>Reports whether a route is the write of the caller's own client preferences, by the route it is served at.</summary>
     /// <remarks>

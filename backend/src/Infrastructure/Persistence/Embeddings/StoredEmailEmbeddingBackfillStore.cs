@@ -207,7 +207,8 @@ internal sealed class StoredEmailEmbeddingBackfillStore(
                         && !email.Mutations.Any(mutation =>
                             mutation.Mutation == MailAwaitingRelocation.RelocateMutationName
                             && mutation.Stage != MailboxMutationStage.Completed
-                            && mutation.Stage != MailboxMutationStage.Abandoned))),
+                            && mutation.Stage != MailboxMutationStage.Abandoned
+                            && mutation.Stage != MailboxMutationStage.Cancelled))),
             folderParticipation.FoldersGeneratingEmbeddings),
         terms);
 

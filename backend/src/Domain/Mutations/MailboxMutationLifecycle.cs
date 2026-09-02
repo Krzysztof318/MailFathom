@@ -57,10 +57,18 @@ public readonly record struct MailboxMutationLifecycle
     /// </remarks>
     public static MailboxMutationLifecycle DeadLettered { get; } = new("dead-lettered");
 
+    /// <summary>Gets the lifecycle of a change somebody withdrew before any command went out.</summary>
+    /// <remarks>
+    /// It is held apart from <see cref="DeadLettered" /> because only one of the two is a call for attention. A
+    /// withdrawn change asks nothing of anybody and left the mailbox untouched; reporting it as dead-lettered would put
+    /// it in the count an operator reads to find changes that are stuck.
+    /// </remarks>
+    public static MailboxMutationLifecycle Cancelled { get; } = new("cancelled");
+
     /// <summary>Gets every lifecycle a mutation can stand in.</summary>
     /// <remarks>Declared last so the members it lists are already initialized when this initializer runs.</remarks>
     public static IReadOnlyList<MailboxMutationLifecycle> All { get; } =
-        [Pending, Converging, Completed, DeadLettered];
+        [Pending, Converging, Completed, DeadLettered, Cancelled];
 
     /// <summary>Gets whether this value names a lifecycle rather than the unusable struct default.</summary>
     public bool IsSpecified => this.name is not null;
@@ -82,6 +90,7 @@ public readonly record struct MailboxMutationLifecycle
             or MailboxMutationStage.SourceFlaggedDeleted => Converging,
         MailboxMutationStage.Completed => Completed,
         MailboxMutationStage.Abandoned => DeadLettered,
+        MailboxMutationStage.Cancelled => Cancelled,
         _ => throw new ArgumentOutOfRangeException(
             nameof(stage),
             stage,

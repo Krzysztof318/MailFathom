@@ -55,8 +55,9 @@ public sealed class MailFathomPermissionTests
     /// exists. The two contact permissions were allocated under that rule when the contact tools arrived, the flag
     /// permission when the tool that writes a mailbox did, the send permission when the outbox began requiring one, the
     /// drafting permission when the tools that write a draft arrived beside it, the configuration permission when
-    /// the commands that change a persisted setting did, and the mail-account permission when the client surface began
-    /// letting an owner declare which mailboxes this deployment reads for them.
+    /// the commands that change a persisted setting did, the mail-account permission when the client surface began
+    /// letting an owner declare which mailboxes this deployment reads for them, and the moving permission when that
+    /// surface began serving folder moves.
     /// </remarks>
     [Fact]
     public void All_CarriesThePublishedNames() =>
@@ -67,6 +68,7 @@ public sealed class MailFathomPermissionTests
                 "mailfathom.mail.contacts.read",
                 "mailfathom.mail.contacts.write",
                 "mailfathom.mail.flags.write",
+                "mailfathom.mail.move",
                 "mailfathom.mail.drafts.write",
                 "mailfathom.mail.send",
                 "mailfathom.mail.accounts.write",
@@ -122,6 +124,7 @@ public sealed class MailFathomPermissionTests
                 MailFathomPermission.MailContactsRead,
                 MailFathomPermission.MailContactsWrite,
                 MailFathomPermission.MailFlagsWrite,
+                MailFathomPermission.MailMove,
                 MailFathomPermission.MailDraftsWrite,
                 MailFathomPermission.MailSend,
                 MailFathomPermission.MailAccountsWrite,

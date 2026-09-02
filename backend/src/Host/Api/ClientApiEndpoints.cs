@@ -27,9 +27,10 @@ namespace MailFathom.Host.Api;
 /// </para>
 /// <para>
 /// The record routes, which <see cref="ClientOwnerRecordEndpoint" /> describes, are where a person changes what this
-/// deployment reads for them. None of them names an owner: the acting owner comes off the credential, which is what
-/// makes a request about somebody else something a caller cannot express here rather than something the surface has to
-/// refuse.
+/// deployment reads for them, and the mutation routes, which <see cref="ClientMailMutationsEndpoint" /> describes, are
+/// where they change the mailbox itself. None of them names an owner: the acting owner comes off the credential, which
+/// is what makes a request about somebody else something a caller cannot express here rather than something the
+/// surface has to refuse.
 /// </para>
 /// <para>
 /// The preferences routes, which <see cref="ClientPreferencesEndpoint" /> describes, are the surface's other write and
@@ -87,6 +88,7 @@ internal static class ClientApiEndpoints
         api.MapClientMailMessage();
         api.MapClientMailBody();
         api.MapClientMailAttachment();
+        api.MapClientMailMutations();
         api.MapClientDrafts();
         api.MapClientOutbox();
         api.MapClientTelemetry();

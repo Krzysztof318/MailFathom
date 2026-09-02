@@ -656,6 +656,13 @@ one state that looks like success from every screen an operator reads.
 | A delete whose `\Deleted` flag landed | Reissues the expunge alone |
 | A placement whose answer never arrived | Never reissues it — see below |
 | Given up on | Nothing; it stays counted and readable |
+| Withdrawn | Nothing; a run never sees it again |
+
+A withdrawal is the third ending, and it is the person who asked for the change taking it back rather than anything
+here deciding: a record still at *recorded* is moved to *cancelled*, and no run ever reads it. It is reachable from that
+one stage alone, so nothing withdraws a command already issued. [The client
+endpoint](../operations/client-endpoint.md#the-mutation-routes) is where a person does it, which is what makes a change
+against an unreachable account something they can change their mind about rather than something they wait out.
 
 An unacknowledged placement is the one case that cannot simply be resumed, and how it ends depends on which sequence
 issued it. A relocation the server carried with `MOVE` removes the source as part of the same command, so once

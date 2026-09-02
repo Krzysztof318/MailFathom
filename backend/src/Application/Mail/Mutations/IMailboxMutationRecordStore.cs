@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
 using MailFathom.Domain.Failures;
@@ -64,6 +65,48 @@ public interface IMailboxMutationRecordStore
         StoredEmailId storedEmailId,
         MailboxMutation mutation,
         MailboxMutationOrigin origin,
+        CancellationToken cancellationToken);
+
+    /// <summary>Reads the records one owner's own change carries, by the identities that change was answered with.</summary>
+    /// <param name="owner">The owner the records must belong to.</param>
+    /// <param name="recordIds">The records to read, in any order and with repetitions.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The records this owner holds under those identities, ordered by when each was recorded, and empty where they hold none.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="recordIds" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// The owner is a parameter rather than something the caller checks afterwards, because it is what makes an
+    /// identifier somebody else's record unreadable rather than merely unreported: a record that does not belong to the
+    /// asking owner is absent from the answer, so no timing or shape separates one that exists from one that never did.
+    /// A record identity is generated rather than guessable, and this is what keeps that from being the only thing
+    /// standing between two people's mail.
+    /// </para>
+    /// <para>
+    /// Every stage is answered, completed and terminal ones included, because the caller is asking where its own change
+    /// got to and the answer it is waiting for is the one that says the change is done.
+    /// </para>
+    /// </remarks>
+    Task<IReadOnlyList<MailboxMutationRecord>> ReadAsync(
+        MailOwnerId owner,
+        IReadOnlyList<MailboxMutationRecordId> recordIds,
+        CancellationToken cancellationToken);
+
+    /// <summary>Withdraws one of an owner's changes, where nothing has been asked of the mail server for it yet.</summary>
+    /// <param name="session">The session the write joins.</param>
+    /// <param name="owner">The owner the record must belong to.</param>
+    /// <param name="recordId">The record to withdraw.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns>The record as it now stands, unchanged where the change had already been attempted, or <see langword="null" /> where this owner holds no such record.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// A record past <see cref="MailboxMutationRecord.IsWithdrawable" /> is returned rather than refused, because the
+    /// caller's question is what became of the change and "it had already gone out" is the answer to it. That also makes
+    /// the call safe to repeat: withdrawing an already withdrawn record reports it withdrawn and writes nothing.
+    /// </remarks>
+    Task<MailboxMutationRecord?> WithdrawAsync(
+        IPersistenceSession session,
+        MailOwnerId owner,
+        MailboxMutationRecordId recordId,
         CancellationToken cancellationToken);
 
     /// <summary>Counts one attempt against the record before that attempt is made.</summary>
