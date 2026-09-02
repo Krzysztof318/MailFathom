@@ -145,6 +145,26 @@ public sealed class OpenAiEmailContentSourceTests
     }
 
     [Fact]
+    public void ParseContent_AnObjectWrappedInAFencedBlock_IsReadAsTheAnswerItCarries()
+    {
+        // Arrange
+        const string answer = """
+            Here is the email:
+
+            ```json
+            { "subject": "Figures", "body": "Hello.", "html": "<p>Hello.</p>" }
+            ```
+            """;
+
+        // Act
+        var content = OpenAiEmailContentSource.ParseContent(answer);
+
+        // Assert
+        Assert.Equal("Figures", content.Subject);
+        Assert.Equal("<p>Hello.</p>", content.Html);
+    }
+
+    [Fact]
     public void ParseContent_AnAnswerCarryingControlCharacters_IsReducedToWhatItsDestinationsCarry()
     {
         // Arrange, Act

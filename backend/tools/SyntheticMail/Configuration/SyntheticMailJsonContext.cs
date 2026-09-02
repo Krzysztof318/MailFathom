@@ -13,13 +13,15 @@ namespace MailFathom.SyntheticMail.Configuration;
 /// Source-generated for the reason <c>mfctl</c>'s context is: <c>.config/BannedSymbols.txt</c> refuses the reflective
 /// overloads outright, so stating the contract is the only way to read the file at all. Names are matched without
 /// regard to case, because a developer writing their own credential file should not have a run refused over a capital
-/// letter.
+/// letter. A number is read from a string as well, because the <c>dotnet user-secrets</c> store
+/// <see cref="ConfigurationSource" /> falls back to writes every value as one.
 /// </remarks>
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     PropertyNameCaseInsensitive = true,
     ReadCommentHandling = JsonCommentHandling.Skip,
-    AllowTrailingCommas = true)]
+    AllowTrailingCommas = true,
+    NumberHandling = JsonNumberHandling.AllowReadingFromString)]
 [JsonSerializable(typeof(SendingAccountDocument))]
 [JsonSerializable(typeof(WatchedMailboxDocument))]
 [JsonSerializable(typeof(AiProviderConfigurationDocument))]

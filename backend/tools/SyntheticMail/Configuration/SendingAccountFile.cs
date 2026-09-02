@@ -16,7 +16,8 @@ namespace MailFathom.SyntheticMail.Configuration;
 /// address and its password come from a local file that <c>.gitignore</c> covers as <c>*.local.json</c>, while the
 /// recipient stays an argument, because the recipient is the part that changes per invocation. The file carries two
 /// accounts: the sending one every batch submits as, and — for a run generating exchanges — the mailbox MailFathom
-/// synchronizes, which that run reads over IMAP and appends to.
+/// synchronizes, which that run reads over IMAP and appends to. A checkout that wrote no such file reads the same
+/// keys out of the machine's user-secrets store instead, which <see cref="ConfigurationSource" /> is about.
 /// </para>
 /// <para>
 /// Every refusal here names the file and the key to set. A tool nobody has configured yet is the ordinary first
@@ -58,15 +59,13 @@ internal static class SendingAccountFile
     {
         ArgumentNullException.ThrowIfNull(path);
 
-        if (!File.Exists(path))
-        {
-            throw new SyntheticMailFailure(
-                $"No sending account is configured. Write '{path}' as {{ \"host\": \"…\", \"port\": 587, \"security\": \"StartTls\", \"address\": \"…\", \"password\": \"…\" }} and use a throwaway account: this tool fabricates mail and must never hold a credential that reaches anything else. The file is git-ignored.");
-        }
+        var configured = ConfigurationSource.Open(path)
+            ?? throw new SyntheticMailFailure(
+                $"No sending account is configured. Write '{path}' as {{ \"host\": \"…\", \"port\": 587, \"security\": \"StartTls\", \"address\": \"…\", \"password\": \"…\" }}, or set the same keys with `dotnet user-secrets set --project backend/tools/SyntheticMail`, and use a throwaway account: this tool fabricates mail and must never hold a credential that reaches anything else. The file is git-ignored.");
 
-        using var contents = OpenFile(path);
+        using var contents = configured.Contents;
 
-        return ReadFrom(contents, path);
+        return ReadFrom(contents, configured.Origin);
     }
 
     /// <summary>Reads the account from an already-open file, which is where every check on its contents happens.</summary>
@@ -108,15 +107,13 @@ internal static class SendingAccountFile
     {
         ArgumentNullException.ThrowIfNull(path);
 
-        if (!File.Exists(path))
-        {
-            throw new SyntheticMailFailure(
-                $"No sending account is configured. Write '{path}' as {{ \"host\": \"…\", \"port\": 587, \"security\": \"StartTls\", \"address\": \"…\", \"password\": \"…\", \"mailbox\": {{ \"host\": \"…\", \"address\": \"…\", \"password\": \"…\" }} }} and use throwaway accounts for both: this tool fabricates mail and must never hold a credential that reaches anything else. The file is git-ignored.");
-        }
+        var configured = ConfigurationSource.Open(path)
+            ?? throw new SyntheticMailFailure(
+                $"No sending account is configured. Write '{path}' as {{ \"host\": \"…\", \"port\": 587, \"security\": \"StartTls\", \"address\": \"…\", \"password\": \"…\", \"mailbox\": {{ \"host\": \"…\", \"address\": \"…\", \"password\": \"…\" }} }}, or set the same keys with `dotnet user-secrets set --project backend/tools/SyntheticMail`, and use throwaway accounts for both: this tool fabricates mail and must never hold a credential that reaches anything else. The file is git-ignored.");
 
-        using var contents = OpenFile(path);
+        using var contents = configured.Contents;
 
-        return ReadWatchedMailboxFrom(contents, path);
+        return ReadWatchedMailboxFrom(contents, configured.Origin);
     }
 
     /// <summary>Reads the watched mailbox from an already-open file, which is where every check on that block happens.</summary>
@@ -148,18 +145,6 @@ internal static class SendingAccountFile
             string.IsNullOrWhiteSpace(document.UserName) ? address.Address : document.UserName,
             password,
             string.IsNullOrWhiteSpace(document.SentFolder) ? null : document.SentFolder);
-    }
-
-    private static FileStream OpenFile(string path)
-    {
-        try
-        {
-            return File.OpenRead(path);
-        }
-        catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
-        {
-            throw new SyntheticMailFailure($"'{path}' could not be opened: {failure.Message}", failure);
-        }
     }
 
     private static SendingAccountDocument Deserialize(Stream contents, string origin)

@@ -12,7 +12,8 @@ namespace MailFathom.SyntheticMail.Configuration;
 /// The key never reaches an argument. A key typed on a command line lands in the shell history and in the process
 /// list of a shared machine, and this repository is public enough that the pattern would be copied — so the key, the
 /// model, and the endpoint come from a local file that <c>.gitignore</c> covers as <c>*.local.json</c>, beside the
-/// sending account file and on the same terms.
+/// sending account file and on the same terms — including the fall back to the machine's user-secrets store that
+/// <see cref="ConfigurationSource" /> is about.
 /// </para>
 /// <para>
 /// Every refusal here names the file and the key to set, for the reason <see cref="SendingAccountFile" /> gives: a
@@ -42,15 +43,13 @@ internal static class SyntheticAiProviderFile
     {
         ArgumentNullException.ThrowIfNull(path);
 
-        if (!File.Exists(path))
-        {
-            throw new SyntheticMailFailure(
-                $"No AI provider is configured. Write '{path}' as {{ \"apiKey\": \"…\", \"model\": \"…\" }} and treat the key as one that reaches a third party: this mode sends the generation prompt to the endpoint and reads the message content back. The file is git-ignored.");
-        }
+        var configured = ConfigurationSource.Open(path)
+            ?? throw new SyntheticMailFailure(
+                $"No AI provider is configured. Write '{path}' as {{ \"apiKey\": \"…\", \"model\": \"…\" }}, or set the same keys with `dotnet user-secrets set --project backend/tools/SyntheticMail`, and treat the key as one that reaches a third party: this mode sends the generation prompt to the endpoint and reads the message content back. The file is git-ignored.");
 
-        using var contents = OpenFile(path);
+        using var contents = configured.Contents;
 
-        return ReadFrom(contents, path);
+        return ReadFrom(contents, configured.Origin);
     }
 
     /// <summary>Reads the provider configuration from an already-open file, which is where every check on its contents happens.</summary>
@@ -71,18 +70,6 @@ internal static class SyntheticAiProviderFile
             Required(document.ApiKey, "apiKey", origin),
             Required(document.Model, "model", origin),
             ParseEndpoint(document.Endpoint, origin));
-    }
-
-    private static FileStream OpenFile(string path)
-    {
-        try
-        {
-            return File.OpenRead(path);
-        }
-        catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
-        {
-            throw new SyntheticMailFailure($"'{path}' could not be opened: {failure.Message}", failure);
-        }
     }
 
     private static AiProviderConfigurationDocument Deserialize(Stream contents, string origin)
