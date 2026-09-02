@@ -288,7 +288,7 @@ The second surface is validated separately, because it is where the properties a
 - Good, because it costs none of the three things B2 costs the pane: no selection crosses it, no height is measured through it, and a dialog's focus order is the right one for it.
 - Good, because it is where the sender's own CSS can finally run without a way out, which is the isolation the pane genuinely did not need and this surface genuinely does.
 - Neutral, because it works identically on both heads: `sandbox` is not a recently shipped capability, so this is not the platform divergence the drivers warn about.
-- Bad, because it moves two of the five properties onto the browser, so *nothing about the browser is relied on* stops being true of the client as a whole.
+- Bad, because it moves three of the five properties onto the browser — two onto the sandboxing flags and one onto the frame's own browsing context — so *nothing about the browser is relied on* stops being true of the client as a whole.
 - Bad, because it needs the lint rule narrowed to one named file, and a rule with an exception is a rule somebody can widen — which is why the exception is in the configuration rather than at the call site.
 
 ### G1 — the reduction is what there is
