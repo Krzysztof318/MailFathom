@@ -333,7 +333,9 @@ export const en = {
         'This conversation is longer than one read assembles, so what is shown is the beginning of it.',
     'thread.storedIn': 'In {account}, {folder}',
     'thread.openOnItsOwn': 'Open this message on its own',
-    'thread.contributionNotExtracted': 'What this message added has not been read into this deployment yet.',
+    'thread.messageBy': 'Message from {sender}',
+    'thread.showEarlier': 'Show earlier messages ({count})',
+    'thread.hideEarlier': 'Hide earlier messages',
 
     'message.nothingOpen': 'Open a message to read it here.',
     'message.reading': 'Reading this message…',

@@ -17,7 +17,7 @@ import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import type { OpenConversation } from '../workspace/openConversation';
 import { useWorkspace } from '../workspace/useWorkspace';
-import { holdsMessage, messagesOf, openedBy } from './threadOpening';
+import { arrivesAt, holdsMessage, messagesOf } from './threadOpening';
 import { ThreadMessage } from './ThreadMessage';
 
 // A conversation, which is the unit people actually think in and the one mail screen no folder is the scope of: the
@@ -25,10 +25,12 @@ import { ThreadMessage } from './ThreadMessage';
 // is the presentation, and the presentation is the whole difficulty — a long conversation drawn naively is the same
 // paragraph eight times.
 //
-// Three things answer that. Each message is a line until somebody opens it, and opening it is what mounts its body, so
-// a conversation of thirty messages costs one read rather than thirty-one. What each message added is what the line
-// shows, trimmed of the history it quoted by the deployment rather than here. And the history that is quoted inside an
-// opened message is folded away behind a disclosure, because the message it quotes is a row of its own a few lines up.
+// Three things answer that. The conversation shows its latest message and hides everything before it behind one
+// control naming how many there are, so opening a long conversation is reading the message somebody came for rather
+// than first collapsing eight of them — and a message the control does not show is a body nobody asks the deployment
+// for, so a conversation of thirty messages costs one read rather than thirty. What each message says is trimmed of
+// the history it quoted by the deployment rather than here. And the history that is quoted inside a message is folded
+// away behind a disclosure, because the message it quotes is a message of its own a few lines up.
 //
 // It stands in front of the message it was opened from rather than replacing it: the workspace still holds that
 // message, so closing the conversation returns to it and the place it returns to is still there.
@@ -65,11 +67,15 @@ export function Thread({
     const [asked, setAsked] = useState(false);
     const [connected, setConnected] = useState(online);
 
-    // What is open, once the conversation has decided it. `null` until then, which is what tells the decision apart
-    // from a reader having closed everything — and after that it is theirs rather than this screen's.
-    const [expanded, setExpanded] = useState<readonly string[] | null>(null);
+    // Where the reader arrived, once the conversation has decided it, and `null` until then. It is what focus is
+    // placed on, and it never moves afterwards.
+    const [arrival, setArrival] = useState<string | null>(null);
 
-    const summaries = useRef(new Map<string, HTMLElement>());
+    // Whether the messages before the latest are drawn. Decided once by where the reader arrived — a message the
+    // history holds cannot be arrived at while the history is hidden — and theirs from then on.
+    const [historyShown, setHistoryShown] = useState(false);
+
+    const regions = useRef(new Map<string, HTMLElement>());
 
     // Whether arriving in this conversation has already put the reader somewhere. A ref rather than a flag in state
     // because it survives StrictMode's second invocation of the effect below, for the reason the reading pane's own
@@ -102,18 +108,29 @@ export function Thread({
     const wantedCursor = wanted?.cursor ?? null;
     const reading = wanted !== null;
 
-    // What the conversation opens with is decided the moment it has stopped reading, from what is held then, and never
-    // again: a page arriving later would otherwise close the message somebody is reading and open a newer one under
-    // their cursor. React's answer to a value that becomes decidable is to adjust state during the render it became
-    // decidable in rather than in an effect that would draw the undecided screen once first.
+    const latestMessage = held.at(-1);
+
+    // Where the conversation puts the reader is decided the moment it has stopped reading, from what is held then, and
+    // never again: a page arriving later would otherwise move them off the message they came for. React's answer to a
+    // value that becomes decidable is to adjust state during the render it became decidable in rather than in an
+    // effect that would draw the undecided screen once first — which here would be the history drawn hidden and then
+    // shown under a reader who arrived inside it.
     //
     // A search still in progress is not a conversation that has stopped reading, which is why it is asked about
     // separately: a failed page or a network gap stops the reading without ending the search, and deciding there would
     // settle the question from half a conversation and never reopen it — so a reader who came for a message and pressed
     // *Read again* would arrive at whatever the half held instead. The count the answer states is what ends the search
     // where the message is genuinely not there, so this waits for an answer rather than for the message.
-    if (expanded === null && latest !== null && !reading && !searching) {
-        setExpanded(openedBy(held, conversation.openAt));
+    if (arrival === null && !reading && !searching) {
+        const arriveAt = arrivesAt(held, conversation.openAt);
+
+        if (arriveAt !== null) {
+            setArrival(arriveAt);
+
+            if (arriveAt !== latestMessage?.email.id) {
+                setHistoryShown(true);
+            }
+        }
     }
 
     // The one effect that puts a request on the wire, which is what an effect is for. An answer to a read this screen
@@ -147,35 +164,25 @@ export function Thread({
     // whatever opened the conversation. Focus rather than a scroll of our own: placing it is the obligation, a browser
     // scrolls what it focuses into view, and one call cannot leave the two disagreeing about where the reader is.
     //
-    // It is placed once, on arriving, and never again. `expanded` is what a reader changes for the rest of the visit —
-    // every message they open or collapse is a new value of it — and re-placing focus on those would take it off the
-    // disclosure they just operated and put it somewhere they did not ask to be. Collapsing an open message is not a
-    // view change. Arriving somewhere else is, and that is a conversation of its own: `App.tsx` keys this component by
-    // the conversation together with the message it was opened at, so a different arrival is a different mount.
+    // It is placed once, on arriving, and never again. Showing and hiding the history is what a reader does for the
+    // rest of the visit, and re-placing focus on that would take it off the control they just operated and put it
+    // somewhere they did not ask to be. Arriving somewhere else is a view change, and that is a conversation of its
+    // own: `App.tsx` keys this component by the conversation together with the message it was opened at, so a
+    // different arrival is a different mount.
+    //
+    // A conversation holding no message has nothing to arrive at, and the empty state says so where focus already is.
     useEffect(() => {
-        if (expanded === null || arrivedAt.current !== null) {
+        if (arrival === null || arrivedAt.current !== null) {
             return;
         }
 
-        // Where the reader is arriving was decided when the conversation decided what to open: the message somebody
-        // named, where the conversation holds it, and otherwise the first of what it opened for itself — which is what
-        // a message named but never found leaves, and what an arrival with nobody named leaves too. Reading it back
-        // from what is open rather than from what was asked for is what keeps focus and the screen from disagreeing. A
-        // conversation holding no message at all has nothing to arrive at, and the empty state says so where focus
-        // already is.
-        const arriveAt = expanded.at(0) ?? null;
+        const region = regions.current.get(arrival);
 
-        if (arriveAt === null) {
-            return;
+        if (region !== undefined) {
+            arrivedAt.current = arrival;
+            region.focus();
         }
-
-        const summary = summaries.current.get(arriveAt);
-
-        if (summary !== undefined) {
-            arrivedAt.current = arriveAt;
-            summary.focus();
-        }
-    }, [expanded]);
+    }, [arrival]);
 
     function close(): void {
         revise({ conversation: null });
@@ -183,18 +190,6 @@ export function Thread({
 
     function openOnItsOwn(storedEmailId: string): void {
         revise({ conversation: null, selection: storedEmailId });
-    }
-
-    function show(storedEmailId: string, open: boolean): void {
-        setExpanded((current) => {
-            const shown = current ?? [];
-
-            if (open) {
-                return shown.includes(storedEmailId) ? shown : [...shown, storedEmailId];
-            }
-
-            return shown.filter((one) => one !== storedEmailId);
-        });
     }
 
     // Offline is its own sentence rather than a failure worded politely, and it is said only where there is nothing to
@@ -308,30 +303,56 @@ export function Thread({
                     {translate(reading ? 'thread.reading' : 'thread.empty')}
                 </p>
             ) : (
-                <ol className="flex flex-col gap-3">
-                    {held.map((message) => (
-                        <ThreadMessage
-                            key={message.email.id}
-                            session={session}
-                            transport={transport}
-                            message={message}
-                            expanded={expanded?.includes(message.email.id) ?? false}
-                            onExpanded={(open) => {
-                                show(message.email.id, open);
-                            }}
-                            onOpenOnItsOwn={() => {
-                                openOnItsOwn(message.email.id);
-                            }}
-                            onSummary={(element) => {
-                                if (element === null) {
-                                    summaries.current.delete(message.email.id);
-                                } else {
-                                    summaries.current.set(message.email.id, element);
-                                }
-                            }}
-                        />
-                    ))}
-                </ol>
+                <>
+                    {/* The whole history behind one control, which is what a conversation of eight messages is
+                        otherwise eight decisions about. It names how many are behind it, so pressing it is a choice
+                        rather than a guess, and it stands above them because that is where the design project draws
+                        it — between the head of the conversation and the messages themselves. A conversation of one
+                        message has no history to offer, and no control. */}
+                    {held.length < 2 ? null : (
+                        <div className="flex items-center gap-2.5">
+                            <span className="h-px flex-1 bg-line" />
+
+                            <button
+                                type="button"
+                                aria-expanded={historyShown}
+                                className="rounded-full border border-line bg-sunken px-3.5 py-1.75 text-base text-text-soft transition hover:bg-hover"
+                                onClick={() => {
+                                    setHistoryShown(!historyShown);
+                                }}
+                            >
+                                {historyShown
+                                    ? translate('thread.hideEarlier')
+                                    : translate('thread.showEarlier', {
+                                          count: new Intl.NumberFormat(locale).format(held.length - 1),
+                                      })}
+                            </button>
+
+                            <span className="h-px flex-1 bg-line" />
+                        </div>
+                    )}
+
+                    <ol className="flex flex-col gap-4.5">
+                        {(historyShown ? held : held.slice(-1)).map((message) => (
+                            <ThreadMessage
+                                key={message.email.id}
+                                session={session}
+                                transport={transport}
+                                message={message}
+                                onOpenOnItsOwn={() => {
+                                    openOnItsOwn(message.email.id);
+                                }}
+                                onRegion={(element) => {
+                                    if (element === null) {
+                                        regions.current.delete(message.email.id);
+                                    } else {
+                                        regions.current.set(message.email.id, element);
+                                    }
+                                }}
+                            />
+                        ))}
+                    </ol>
+                </>
             )}
 
             {/* A conversation longer than one page says so and is read on, rather than being cut off at the page the

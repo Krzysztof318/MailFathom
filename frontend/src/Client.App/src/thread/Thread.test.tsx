@@ -143,12 +143,33 @@ function bodiesAsked(): string[] {
 }
 
 describe('Thread', () => {
-    it('draws the conversation in order, each message on a line of its own', async () => {
+    it('draws the latest message and hides every earlier one behind the control that names how many there are', async () => {
         drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])));
 
-        expect(await screen.findByText('What one added.')).toBeDefined();
-        expect(screen.getByText('What two added.')).toBeDefined();
+        expect(await screen.findByText('The whole of what three says.')).toBeDefined();
+        expect(screen.getAllByRole('listitem')).toHaveLength(1);
+        expect(screen.getByRole('button', { name: 'Show earlier messages (2)' })).toBeDefined();
+    });
+
+    it('shows the whole history in one press, and hides it again in the next', async () => {
+        drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])));
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Show earlier messages (2)' }));
+
         expect(screen.getAllByRole('listitem')).toHaveLength(3);
+        expect(await screen.findByText('The whole of what one says.')).toBeDefined();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Hide earlier messages' }));
+
+        expect(screen.getAllByRole('listitem')).toHaveLength(1);
+        expect(screen.queryByText('The whole of what one says.')).toBeNull();
+    });
+
+    it('offers no control over a conversation of one message, which has no history behind it', async () => {
+        drawing(deploymentAnswering(pageOf(['one'])));
+
+        expect(await screen.findByText('The whole of what one says.')).toBeDefined();
+        expect(screen.queryByRole('button', { name: /earlier messages/ })).toBeNull();
     });
 
     it('names the conversation by its first message and says how many messages it holds', async () => {
@@ -180,24 +201,24 @@ describe('Thread', () => {
         ).toBeDefined();
     });
 
-    it('reads no body for a message nobody has opened', async () => {
+    it('reads no body for a message the history hides', async () => {
         drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])));
-        await screen.findByText('What one added.');
+        await screen.findByText('The whole of what three says.');
 
-        // The last of them opens, so exactly one body is read out of three messages rather than none or all three.
+        // The latest of them is drawn, so exactly one body is read out of three messages rather than all three.
         await waitFor(() => {
             expect(bodiesAsked()).toHaveLength(1);
         });
         expect(bodiesAsked()[0]).toContain('/messages/three/body');
     });
 
-    it('reads a message the reader opens, and not before', async () => {
+    it('reads a message the reader shows the history for, and not before', async () => {
         drawing(deploymentAnswering(pageOf(['one', 'two'])));
-        const summary = await screen.findByText('What one added.');
+        const control = await screen.findByRole('button', { name: 'Show earlier messages (1)' });
 
         expect(bodiesAsked().some((path) => path.includes('/messages/one/'))).toBe(false);
 
-        fireEvent.click(summary);
+        fireEvent.click(control);
 
         await waitFor(() => {
             expect(bodiesAsked().some((path) => path.includes('/messages/one/'))).toBe(true);
@@ -205,74 +226,62 @@ describe('Thread', () => {
         expect(await screen.findByText('The whole of what one says.')).toBeDefined();
     });
 
-    it('opens a conversation nobody has read at its last word', async () => {
+    it('opens a conversation nobody named a message in at its last word', async () => {
         drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])));
 
-        expect(await screen.findByText('What one added.')).toBeDefined();
-        expect(screen.queryByText('What three added.')).toBeNull();
+        expect(await screen.findByText('The whole of what three says.')).toBeDefined();
+        expect(screen.queryByText('The whole of what one says.')).toBeNull();
     });
 
-    it('opens at what has not been read, so catching up is not scrolling to the bottom', async () => {
-        const unread = { one: { unread: true }, two: { unread: true } };
-        drawing(deploymentAnswering(pageOf(['one', 'two', 'three'], {}, unread)));
-
-        await screen.findByText('What three added.');
-
-        expect(screen.queryByText('What one added.')).toBeNull();
-        expect(screen.queryByText('What two added.')).toBeNull();
-    });
-
-    it('opens at the message it was opened at, and puts the reader there', async () => {
+    it('shows the history and puts the reader at the message it was opened at', async () => {
         drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])), { threadId, openAt: 'two' });
 
-        expect(await screen.findByText('What one added.')).toBeDefined();
-        expect(screen.queryByText('What two added.')).toBeNull();
+        expect(await screen.findByText('The whole of what two says.')).toBeDefined();
+        expect(screen.getAllByRole('listitem')).toHaveLength(3);
 
         await waitFor(() => {
-            expect(document.activeElement?.textContent).toContain('The auditor');
+            expect(document.activeElement?.getAttribute('aria-label')).toBe('Message from The auditor');
         });
+        expect(document.activeElement?.textContent).toContain('The whole of what two says.');
     });
 
-    it('puts the reader at the message it opened itself at, where nobody named one', async () => {
+    it('puts the reader at the latest message, where nobody named one', async () => {
         drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])));
 
-        expect(await screen.findByText('What one added.')).toBeDefined();
+        expect(await screen.findByText('The whole of what three says.')).toBeDefined();
 
         await waitFor(() => {
-            const focused = document.activeElement;
-
-            expect(focused?.tagName).toBe('SUMMARY');
-            expect(focused?.closest('details')?.open).toBe(true);
+            expect(document.activeElement?.textContent).toContain('The whole of what three says.');
         });
+        expect(screen.getByRole('button', { name: 'Show earlier messages (2)' })).toBeDefined();
     });
 
-    it('puts the reader at what it opened instead, where the message it was opened at is not in the conversation', async () => {
+    it('puts the reader at the latest message, where the message it was opened at is not in the conversation', async () => {
         drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])), { threadId, openAt: 'a-message-of-another' });
 
         expect(await screen.findByText('The whole of what three says.')).toBeDefined();
 
         await waitFor(() => {
-            expect(document.activeElement?.tagName).toBe('SUMMARY');
-            expect(document.activeElement?.closest('details')?.open).toBe(true);
+            expect(document.activeElement?.textContent).toContain('The whole of what three says.');
         });
     });
 
-    it('leaves focus where the reader put it when they collapse a message, which is not a view change', async () => {
-        drawing(
-            deploymentAnswering(pageOf(['one', 'two', 'three'], {}, { one: { unread: true }, two: { unread: true } })),
-        );
+    it('leaves focus where the reader put it when they show the history, which is not a view change', async () => {
+        drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])));
 
         await waitFor(() => {
-            expect(document.activeElement?.tagName).toBe('SUMMARY');
+            expect(document.activeElement?.getAttribute('aria-label')).toBe('Message from The auditor');
         });
 
         const arrivedAt = document.activeElement;
+        const control = screen.getByRole('button', { name: 'Show earlier messages (2)' });
 
-        fireEvent.click(arrivedAt ?? document.body);
+        control.focus();
+        fireEvent.click(control);
 
-        // Collapsed again, which is what puts the contribution back on the line and what changes `expanded`.
-        expect(await screen.findByText('What one added.')).toBeDefined();
-        expect(document.activeElement).toBe(arrivedAt);
+        expect(await screen.findByText('The whole of what one says.')).toBeDefined();
+        expect(document.activeElement).toBe(control);
+        expect(document.activeElement).not.toBe(arrivedAt);
     });
 
     it('reads on until the message it was opened at is in hand, keeping the history above it', async () => {
@@ -281,12 +290,12 @@ describe('Thread', () => {
                 pageOf(['one', 'two'], { nextCursor: 'onwards', messageCount: 4 }),
                 pageOf(['three', 'four'], { messageCount: 4 }),
             ),
-            { threadId, openAt: 'four' },
+            { threadId, openAt: 'three' },
         );
 
-        expect(await screen.findByText('What three added.')).toBeDefined();
-        expect(screen.getByText('What one added.')).toBeDefined();
+        expect(await screen.findByText('The whole of what three says.')).toBeDefined();
         expect(screen.getAllByRole('listitem')).toHaveLength(4);
+        expect(screen.getByRole('button', { name: 'Hide earlier messages' })).toBeDefined();
     });
 
     it('reads the rest of a conversation the reader asks for rather than truncating it', async () => {
@@ -299,7 +308,7 @@ describe('Thread', () => {
 
         fireEvent.click(await screen.findByRole('button', { name: 'Read more of this conversation' }));
 
-        expect(await screen.findByText('What three added.')).toBeDefined();
+        expect(await screen.findByText('The whole of what four says.')).toBeDefined();
         expect(screen.getByText('That is the whole of this conversation.')).toBeDefined();
     });
 
@@ -382,7 +391,7 @@ describe('Thread', () => {
         expect(await screen.findByText('The whole of what four says.')).toBeDefined();
 
         await waitFor(() => {
-            expect(document.activeElement?.closest('details')?.textContent).toContain('The whole of what four says.');
+            expect(document.activeElement?.textContent).toContain('The whole of what four says.');
         });
     });
 
@@ -426,8 +435,8 @@ describe('Thread', () => {
         fireEvent.click(await screen.findByRole('button', { name: 'Read more of this conversation' }));
 
         expect(await screen.findByText('Part of this conversation could not be read: unavailable.')).toBeDefined();
-        expect(screen.getByText('What one added.')).toBeDefined();
-        expect(screen.getAllByRole('listitem')).toHaveLength(2);
+        expect(screen.getByText('The whole of what two says.')).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Show earlier messages (1)' })).toBeDefined();
     });
 
     it('offers the way back to the message it was opened from in every state', () => {
