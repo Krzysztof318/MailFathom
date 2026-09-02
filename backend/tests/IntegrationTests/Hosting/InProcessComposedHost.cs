@@ -71,6 +71,14 @@ internal sealed class InProcessComposedHost : IAsyncDisposable
     /// <summary>Gets the services the composition registered, as the running host resolved them.</summary>
     internal IServiceProvider Services => this.app.Services;
 
+    /// <summary>Gets the body-size limit the pipeline applied to the last request it answered.</summary>
+    /// <remarks>
+    /// A server states one and the routing pipeline narrows it to whatever the selected endpoint declared, which is
+    /// the mechanism every write on these surfaces bounds its body with. Reading it back is what tells a route's
+    /// declared bound apart from one that was declared and never reached the server.
+    /// </remarks>
+    internal long? AppliedRequestBodySizeLimit { get; private set; }
+
     /// <summary>Composes one deployment shape and starts it.</summary>
     /// <param name="configuration">The settings the shape is written as, which is the input the composition actually reads.</param>
     /// <param name="cancellationToken">Cancels the start.</param>
@@ -181,10 +189,15 @@ internal sealed class InProcessComposedHost : IAsyncDisposable
 
         await using var body = new MemoryStream();
 
+        // The limit a server carries before an endpoint narrows it, which is Kestrel's own default. It is here so a
+        // route's declared bound has something to reach: without the feature the pipeline has nowhere to write one.
+        var bodySizeLimit = new ServerRequestBodySizeLimit();
+
         var requestFeatures = new FeatureCollection();
         requestFeatures.Set<IHttpRequestFeature>(request);
         requestFeatures.Set<IHttpResponseFeature>(response);
         requestFeatures.Set<IHttpResponseBodyFeature>(new StreamResponseBodyFeature(body));
+        requestFeatures.Set<IHttpMaxRequestBodySizeFeature>(bodySizeLimit);
 
         // The port is what surface isolation matches a listener by, and the address is what the forwarded-header
         // middleware judges as a peer — a shape naming no trusted proxy trusts every address, which is the default this
@@ -198,6 +211,8 @@ internal sealed class InProcessComposedHost : IAsyncDisposable
         });
 
         await this.server.SendAsync(requestFeatures);
+
+        this.AppliedRequestBodySizeLimit = bodySizeLimit.MaxRequestBodySize;
 
         return response;
     }
@@ -218,6 +233,17 @@ internal sealed class InProcessComposedHost : IAsyncDisposable
 
         /// <inheritdoc />
         public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    /// <summary>The body-size limit a server offers the pipeline, which the pipeline then narrows per endpoint.</summary>
+    /// <remarks>It enforces nothing, because enforcement is the server's half and no octets flow here; what it holds is the number the pipeline decided on, which is the part a route's declared bound has to reach.</remarks>
+    private sealed class ServerRequestBodySizeLimit : IHttpMaxRequestBodySizeFeature
+    {
+        /// <inheritdoc />
+        public bool IsReadOnly => false;
+
+        /// <inheritdoc />
+        public long? MaxRequestBodySize { get; set; } = 30 * 1024 * 1024;
     }
 
     /// <summary>Where the framework's data protection keys go while a pipeline is being driven.</summary>

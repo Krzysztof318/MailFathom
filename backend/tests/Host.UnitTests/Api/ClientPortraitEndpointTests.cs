@@ -88,6 +88,27 @@ public sealed class ClientPortraitEndpointTests
     }
 
     /// <summary>
+    /// The kind was proven from a signature rather than by decoding the file, so a picture that opens as one and holds
+    /// markup after that must never be a page the browser sniffs its way into rendering on the deployment's own origin.
+    /// It is the same defence a message's attachments are served with.
+    /// </summary>
+    [Fact]
+    public async Task ReadAsync_APictureItServes_TellsTheBrowserNotToSniffItsTypeFromTheOctets()
+    {
+        // Arrange
+        var context = Requesting();
+
+        // Act
+        await ClientPortraitEndpoint.ReadAsync(
+            SignedIn(StoreHolding([.. Png, .. "<script>alert(1)</script>"u8])),
+            context,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("nosniff", context.Response.Headers.XContentTypeOptions.ToString());
+    }
+
+    /// <summary>
     /// What the acceptance calls avoiding a refetch on every screen that draws it: the served response names the
     /// octets, and a client presenting that name back is answered that nothing changed rather than the picture again.
     /// </summary>

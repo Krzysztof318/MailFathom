@@ -15,9 +15,16 @@ namespace MailFathom.IntegrationTests.Persistence;
 /// <summary>
 /// Proves the one statement a person's portrait is written by against a real database: that a second write replaces
 /// the octets and leaves the instant the first one recorded, that an owner this deployment does not hold affects no
-/// row rather than raising a foreign-key violation, and that a removal leaves nothing behind. None of it is decidable
-/// without PostgreSQL, which is why the store carries the integration-coverage marker.
+/// row rather than raising a foreign-key violation, that a removal leaves nothing behind, and that erasing an owner
+/// takes their picture with them. None of it is decidable without PostgreSQL, which is why the store carries the
+/// integration-coverage marker.
 /// </summary>
+/// <remarks>
+/// Every test here writes against an owner it provisions and erases in a <c>finally</c>, for the reason
+/// <c>OrchestratedForeignOwner</c> states and <c>OrchestratedOwnerSettingsDocumentTests</c> follows: the provisioned
+/// owner is one row shared by every class in this collection, and a portrait left on it would be state a later class
+/// reads without having written it. A test isolates itself through the data it writes.
+/// </remarks>
 [Collection(OrchestratedInfrastructureCollectionDefinition.Name)]
 public sealed class OrchestratedOwnerPortraitStoreTests(MailFathomOrchestrationFixture orchestration)
 {
@@ -32,22 +39,32 @@ public sealed class OrchestratedOwnerPortraitStoreTests(MailFathomOrchestrationF
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var owner = Guid.NewGuid();
 
-        // Act
-        Assert.True(await SaveAsync(services, services.ServedOwner, FirstPicture, cancellationToken));
-        var first = await RowAsync(services, services.ServedOwner, cancellationToken);
+        await OrchestratedForeignOwner.ProvisionAsync(services, owner, cancellationToken);
 
-        Assert.True(await SaveAsync(services, services.ServedOwner, SecondPicture, cancellationToken));
-        var replaced = await RowAsync(services, services.ServedOwner, cancellationToken);
+        try
+        {
+            // Act
+            Assert.True(await SaveAsync(services, Named(owner), FirstPicture, cancellationToken));
+            var first = await RowAsync(services, owner, cancellationToken);
 
-        // Assert
-        Assert.Equal(SecondPicture, replaced!.Content);
-        Assert.Equal(first!.CreatedAt, replaced.CreatedAt);
-        Assert.True(replaced.UpdatedAt >= first.UpdatedAt);
+            Assert.True(await SaveAsync(services, Named(owner), SecondPicture, cancellationToken));
+            var replaced = await RowAsync(services, owner, cancellationToken);
 
-        var read = await ReadAsync(services, services.ServedOwner, cancellationToken);
+            // Assert
+            Assert.Equal(SecondPicture, replaced!.Content);
+            Assert.Equal(first!.CreatedAt, replaced.CreatedAt);
+            Assert.True(replaced.UpdatedAt >= first.UpdatedAt);
 
-        Assert.Equal(SecondPicture, read!.Value.ToArray());
+            var read = await ReadAsync(services, Named(owner), cancellationToken);
+
+            Assert.Equal(SecondPicture, read!.Value.ToArray());
+        }
+        finally
+        {
+            await OrchestratedForeignOwner.EraseAsync(services, owner);
+        }
     }
 
     /// <summary>The caller is a person whose row was erased under a credential that has not yet been withdrawn, so the write reports that there is nothing here of theirs instead of raising a constraint violation.</summary>
@@ -57,10 +74,10 @@ public sealed class OrchestratedOwnerPortraitStoreTests(MailFathomOrchestrationF
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
-        var stranger = MailOwnerId.Create(new Guid("1f6f31d0-5cf8-4a2f-93d9-4d4e2f5a7b61"));
+        var stranger = Guid.NewGuid();
 
         // Act
-        var written = await SaveAsync(services, stranger, FirstPicture, cancellationToken);
+        var written = await SaveAsync(services, Named(stranger), FirstPicture, cancellationToken);
 
         // Assert
         Assert.False(written);
@@ -73,26 +90,57 @@ public sealed class OrchestratedOwnerPortraitStoreTests(MailFathomOrchestrationF
         // Arrange
         var cancellationToken = TestContext.Current.CancellationToken;
         await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var owner = Guid.NewGuid();
 
-        Assert.True(await SaveAsync(services, services.ServedOwner, FirstPicture, cancellationToken));
+        await OrchestratedForeignOwner.ProvisionAsync(services, owner, cancellationToken);
+
+        try
+        {
+            Assert.True(await SaveAsync(services, Named(owner), FirstPicture, cancellationToken));
+
+            // Act
+            await services.InScopeAsync(
+                async (scope, token) =>
+                {
+                    var portraits = scope.GetRequiredService<IOwnerPortraitStore>();
+
+                    await portraits.RemoveAsync(Named(owner), token);
+                    await portraits.RemoveAsync(Named(owner), token);
+
+                    return true;
+                },
+                cancellationToken);
+
+            // Assert
+            Assert.Null(await RowAsync(services, owner, cancellationToken));
+            Assert.Null(await ReadAsync(services, Named(owner), cancellationToken));
+        }
+        finally
+        {
+            await OrchestratedForeignOwner.EraseAsync(services, owner);
+        }
+    }
+
+    /// <summary>The cascade is what makes a picture go with the person, without the erasure walk having to know this table exists.</summary>
+    [Fact]
+    public async Task EraseAsync_AnOwnerWhoSuppliedAPicture_TakesItWithEverythingElseDerivedFromThem()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var owner = Guid.NewGuid();
+
+        await OrchestratedForeignOwner.ProvisionAsync(services, owner, cancellationToken);
+        Assert.True(await SaveAsync(services, Named(owner), FirstPicture, cancellationToken));
 
         // Act
-        await services.InScopeAsync(
-            async (scope, token) =>
-            {
-                var portraits = scope.GetRequiredService<IOwnerPortraitStore>();
-
-                await portraits.RemoveAsync(services.ServedOwner, token);
-                await portraits.RemoveAsync(services.ServedOwner, token);
-
-                return true;
-            },
-            cancellationToken);
+        await OrchestratedForeignOwner.EraseAsync(services, owner);
 
         // Assert
-        Assert.Null(await RowAsync(services, services.ServedOwner, cancellationToken));
-        Assert.Null(await ReadAsync(services, services.ServedOwner, cancellationToken));
+        Assert.Null(await RowAsync(services, owner, cancellationToken));
     }
+
+    private static MailOwnerId Named(Guid owner) => MailOwnerId.Create(owner);
 
     private static Task<bool> SaveAsync(
         OrchestratedMailFathomServices services,
@@ -114,19 +162,15 @@ public sealed class OrchestratedOwnerPortraitStoreTests(MailFathomOrchestrationF
 
     private static Task<StoredPortrait?> RowAsync(
         OrchestratedMailFathomServices services,
-        MailOwnerId owner,
-        CancellationToken cancellationToken)
-    {
-        var ownerValue = owner.Value;
-
-        return services.InScopeAsync(
+        Guid owner,
+        CancellationToken cancellationToken) =>
+        services.InScopeAsync(
             (scope, token) => scope.GetRequiredService<MailFathomDbContext>().OwnerPortraits
                 .AsNoTracking()
-                .Where(portrait => portrait.OwnerId == ownerValue)
+                .Where(portrait => portrait.OwnerId == owner)
                 .Select(portrait => new StoredPortrait(portrait.Content, portrait.CreatedAt, portrait.UpdatedAt))
                 .SingleOrDefaultAsync(token),
             cancellationToken);
-    }
 
     private sealed record StoredPortrait(byte[] Content, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
 }

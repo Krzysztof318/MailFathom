@@ -47,6 +47,12 @@ namespace MailFathom.Host.Api;
 /// revalidation: a portrait is personal data, and a replaced one has to reach the next screen rather than the next
 /// expiry.
 /// </para>
+/// <para>
+/// It is served with <c>X-Content-Type-Options: nosniff</c>, for the reason
+/// <see cref="AttachmentContentResponse" /> sets it on a message's files: the kind was proven from a signature rather
+/// than by decoding the file, so a picture whose signature is a portrait's and whose remaining octets are markup would
+/// otherwise be a page a browser might render on the address the operator publishes MailFathom at.
+/// </para>
 /// </remarks>
 internal static class ClientPortraitEndpoint
 {
@@ -107,6 +113,11 @@ internal static class ClientPortraitEndpoint
         // Private and revalidated rather than freely cacheable: a portrait is personal data, and the entity tag is what
         // turns the second screen drawing it into a 304 instead of the picture again.
         context.Response.GetTypedHeaders().CacheControl = new CacheControlHeaderValue { Private = true, NoCache = true };
+
+        // The kind was proven from a signature rather than by decoding the file, so what follows those few octets is
+        // whatever the person uploaded: the browser is told to serve it as the type stated and never to sniff its way
+        // to another one.
+        context.Response.Headers.XContentTypeOptions = "nosniff";
 
         return TypedResults.File(
             portrait.Content.ToArray(),

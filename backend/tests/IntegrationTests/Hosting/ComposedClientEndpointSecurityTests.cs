@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Globalization;
+using MailFathom.Host.Api;
 using MailFathom.Host.Security.Transport;
 using MailFathom.IntegrationTests.Orchestration;
 using MailFathom.Mcp;
@@ -52,6 +53,8 @@ public sealed class ComposedClientEndpointSecurityTests
     private const string ClientAccountsRoute = "/api/client/accounts";
 
     private const string ClientFoldersRoute = "/api/client/folders";
+
+    private const string ClientPortraitRoute = "/api/client/portrait";
 
     private const string AdminSessionRoute = "/api/admin/session";
 
@@ -126,6 +129,57 @@ public sealed class ComposedClientEndpointSecurityTests
         // Assert
         Assert.Equal(StatusCodes.Status404NotFound, refused.StatusCode);
         Assert.Equal(StatusCodes.Status200OK, served.StatusCode);
+    }
+
+    /// <summary>
+    /// The mechanism every write on this surface bounds its body with, established once against a started pipeline.
+    /// A route declares its bound as endpoint metadata and nothing on this surface runs the MVC filter pipeline, so
+    /// what has to be true is that the routing pipeline itself narrows the server's own limit to what the selected
+    /// endpoint declared — before the handler is entered and before any octets are buffered. Were it not, every bound
+    /// on this surface would be a comment rather than a limit, and the server's default would be what an authenticated
+    /// caller could actually send.
+    /// </summary>
+    [Fact]
+    public async Task ClientEndpoint_AWriteDeclaringABodyBound_NarrowsTheServersLimitToItBeforeTheHandlerIsEntered()
+    {
+        // Arrange
+        await using var host = await InProcessComposedHost.StartAsync(
+            EverySurfaceServed(),
+            TestContext.Current.CancellationToken);
+
+        // Act
+        var answered = await host.SendAsync(
+            HttpMethods.Post,
+            ClientPortraitRoute,
+            ClientPort,
+            (HeaderNames.Authorization, $"Bearer {ClientKey}"));
+
+        // Assert
+        Assert.Equal(ClientPortraitEndpoint.MaxPortraitBytes, host.AppliedRequestBodySizeLimit);
+
+        // The handler was reached and refused the empty body, which is what places the narrowing before it rather than
+        // in it. Nothing here read the database: the refusal precedes the store.
+        Assert.Equal(StatusCodes.Status400BadRequest, answered.StatusCode);
+    }
+
+    /// <summary>A route that declares no bound of its own leaves the server's, so the narrowing above is the endpoint's decision rather than something the pipeline does to every request.</summary>
+    [Fact]
+    public async Task ClientEndpoint_AReadDeclaringNoBodyBound_LeavesTheServersOwnLimitAlone()
+    {
+        // Arrange
+        await using var host = await InProcessComposedHost.StartAsync(
+            EverySurfaceServed(),
+            TestContext.Current.CancellationToken);
+
+        // Act
+        await host.SendAsync(
+            HttpMethods.Get,
+            ClientSessionRoute,
+            ClientPort,
+            (HeaderNames.Authorization, $"Bearer {ClientKey}"));
+
+        // Assert
+        Assert.NotEqual(ClientPortraitEndpoint.MaxPortraitBytes, host.AppliedRequestBodySizeLimit);
     }
 
     [Fact]
