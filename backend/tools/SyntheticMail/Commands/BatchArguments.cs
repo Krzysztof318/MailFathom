@@ -27,6 +27,7 @@ namespace MailFathom.SyntheticMail.Commands;
 /// <param name="AiConfigurationPath">Where the AI provider is read from, or <see langword="null" /> when the run generates without one.</param>
 /// <param name="Conversation">Whether the batch is generated and delivered as exchanges between two mailboxes rather than as a flat corpus.</param>
 /// <param name="DeliveryTimeout">How long an exchange waits for a submitted message to appear in the watched mailbox.</param>
+/// <param name="Concurrency">How many provider answers the generation waits for at once, and one when the run generates without a provider.</param>
 /// <remarks>
 /// Defaults are resolved here rather than left to the point of use, which is what makes
 /// <see cref="RepeatCommandLine" /> possible: a run that chose its own seed and its own end date can print the exact
@@ -48,7 +49,8 @@ internal sealed record BatchArguments(
     IReadOnlyList<SyntheticMailTopic> Topics,
     string? AiConfigurationPath,
     bool Conversation,
-    TimeSpan DeliveryTimeout)
+    TimeSpan DeliveryTimeout,
+    int Concurrency)
 {
     /// <summary>The fewest messages an exchange can be generated from.</summary>
     /// <remarks>Two, because a thread of one message has nothing in it that a flat corpus does not already produce.</remarks>
@@ -65,6 +67,22 @@ internal sealed record BatchArguments(
     /// <summary>How long an exchange waits for one delivered copy when the invocation says nothing, in seconds.</summary>
     /// <remarks>Two minutes, which covers an ordinary relay's queue and is short enough that a mistyped mailbox is noticed on the first turn rather than after a batch.</remarks>
     internal const int DefaultDeliveryTimeoutSeconds = 120;
+
+    /// <summary>How many provider answers a run waits for at once when the invocation says nothing.</summary>
+    /// <remarks>
+    /// Four, which turns an hour of waiting into a quarter of one and is below what any provider's ordinary key is
+    /// rate-limited at. Higher is a number a developer picks against their own key rather than one this tool can know:
+    /// what a provider answers a burst with is a refusal that says nothing about the mail.
+    /// </remarks>
+    internal const int DefaultConcurrency = 4;
+
+    /// <summary>The most provider answers a run may wait for at once.</summary>
+    /// <remarks>
+    /// A ceiling rather than none, for the reason the batch size has one: a mistyped number is otherwise a run opening
+    /// as many connections to a provider as the corpus has messages, which is answered with rate limiting rather than
+    /// with a corpus.
+    /// </remarks>
+    internal const int MaximumConcurrency = 32;
 
     /// <summary>The largest batch one invocation may ask for.</summary>
     /// <remarks>
@@ -145,6 +163,7 @@ internal sealed record BatchArguments(
     /// <param name="aiConfigurationPath">Where to read the AI provider, or <see langword="null" /> for the default.</param>
     /// <param name="conversation">Whether to generate and deliver exchanges rather than a flat corpus.</param>
     /// <param name="deliveryTimeoutSeconds">How long to wait for a submitted message to appear in the watched mailbox.</param>
+    /// <param name="concurrency">How many provider answers the generation waits for at once, or <see langword="null" /> for the default.</param>
     /// <param name="timeProvider">What today is read from.</param>
     /// <returns>The checked invocation.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="recipient" /> or <paramref name="timeProvider" /> is <see langword="null" />.</exception>
@@ -170,6 +189,7 @@ internal sealed record BatchArguments(
         string? aiConfigurationPath,
         bool conversation,
         int? deliveryTimeoutSeconds,
+        int? concurrency,
         TimeProvider timeProvider)
     {
         ArgumentNullException.ThrowIfNull(recipient);
@@ -214,7 +234,8 @@ internal sealed record BatchArguments(
             topics,
             resolvedAiConfigurationPath,
             conversation,
-            deliveryTimeout);
+            deliveryTimeout,
+            ParseConcurrency(aiContent, concurrency));
     }
 
     /// <summary>Builds the plan this invocation describes.</summary>
@@ -229,6 +250,26 @@ internal sealed record BatchArguments(
             this.SensitivePercentage,
             this.Languages,
             this.Topics);
+
+    /// <summary>Resolves how many answers the generation waits for at once, and refuses the option outside the mode that reads it.</summary>
+    /// <remarks>
+    /// Refused outside <c>--ai</c> for the reason <c>--delivery-timeout</c> is refused outside <c>--conversation</c>:
+    /// a corpus the vocabulary writes is produced in the time it takes to draw it, so there is nothing to overlap and
+    /// a number written on one decides nothing. It is absent from the repeat line deliberately — it changes what a run
+    /// costs in time and nothing about what it produces, so the line that reproduces a corpus does not carry it.
+    /// </remarks>
+    private static int ParseConcurrency(bool aiContent, int? concurrency)
+    {
+        if (!aiContent)
+        {
+            return concurrency is null
+                ? 1
+                : throw new SyntheticMailFailure(
+                    "'--concurrency' spreads the provider calls a run makes, which only '--ai' makes.");
+        }
+
+        return Bounded(concurrency ?? DefaultConcurrency, 1, MaximumConcurrency, "--concurrency");
+    }
 
     /// <summary>Resolves how long an exchange waits for a delivery, and refuses the option outside the mode that reads it.</summary>
     /// <remarks>

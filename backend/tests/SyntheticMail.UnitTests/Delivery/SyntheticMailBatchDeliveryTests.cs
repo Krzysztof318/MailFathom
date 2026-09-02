@@ -77,12 +77,38 @@ public sealed class SyntheticMailBatchDeliveryTests
     }
 
     [Fact]
+    public async Task DeliverAsync_ABatch_SaysWhatItIsSubmittingWhileItSubmits()
+    {
+        // Arrange
+        await using var transport = new RecordingSyntheticMailTransport();
+        var console = new RecordingSyntheticMailConsole();
+        var delivery = new SyntheticMailBatchDelivery(transport, console, new FakeTimeProvider());
+
+        // Act
+        await delivery.DeliverAsync(
+            Corpus(3),
+            Account(),
+            Recipient,
+            TimeSpan.Zero,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        // A run that submits two hundred messages over a paced connection says nothing for minutes otherwise, and a
+        // developer cannot tell that from a run that has hung. The corpus is not what carries it: progress belongs to
+        // the stream a run reports itself on.
+        Assert.Equal(
+            ["Submitting 1 of 3 to developer@example.com.", "Submitting 2 of 3 to developer@example.com.", "Submitting 3 of 3 to developer@example.com."],
+            console.Diagnostics);
+        Assert.Empty(console.Output);
+    }
+
+    [Fact]
     public async Task DeliverAsync_AnInterval_WaitsItOutBetweenTwoSubmissions()
     {
         // Arrange
         await using var transport = new RecordingSyntheticMailTransport();
         var timeProvider = new FakeTimeProvider();
-        var delivery = new SyntheticMailBatchDelivery(transport, timeProvider);
+        var delivery = new SyntheticMailBatchDelivery(transport, new RecordingSyntheticMailConsole(), timeProvider);
 
         // Act
         var run = delivery.DeliverAsync(
@@ -109,7 +135,7 @@ public sealed class SyntheticMailBatchDeliveryTests
         // Arrange
         await using var transport = new RecordingSyntheticMailTransport();
         var timeProvider = new FakeTimeProvider();
-        var delivery = new SyntheticMailBatchDelivery(transport, timeProvider);
+        var delivery = new SyntheticMailBatchDelivery(transport, new RecordingSyntheticMailConsole(), timeProvider);
 
         // Act
         var report = await delivery.DeliverAsync(
@@ -142,7 +168,7 @@ public sealed class SyntheticMailBatchDeliveryTests
     {
         // Arrange
         await using var transport = new RecordingSyntheticMailTransport();
-        var delivery = new SyntheticMailBatchDelivery(transport, TimeProvider.System);
+        var delivery = new SyntheticMailBatchDelivery(transport, new RecordingSyntheticMailConsole(), TimeProvider.System);
 
         // Act, Assert
         await Assert.ThrowsAsync<ArgumentNullException>(() => delivery.DeliverAsync(
@@ -156,7 +182,7 @@ public sealed class SyntheticMailBatchDeliveryTests
     private static Task<DeliveryReport> Deliver(
         ISyntheticMailTransport transport,
         IReadOnlyList<SyntheticEmail> corpus) =>
-        new SyntheticMailBatchDelivery(transport, new FakeTimeProvider()).DeliverAsync(
+        new SyntheticMailBatchDelivery(transport, new RecordingSyntheticMailConsole(), new FakeTimeProvider()).DeliverAsync(
             corpus,
             Account(),
             Recipient,

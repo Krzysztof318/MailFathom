@@ -486,7 +486,8 @@ public sealed class BatchArgumentsTests
         string? topic = null,
         string? aiConfigurationPath = null,
         bool conversation = false,
-        int? deliveryTimeoutSeconds = null) => BatchArguments.Parse(
+        int? deliveryTimeoutSeconds = null,
+        int? concurrency = null) => BatchArguments.Parse(
             recipient,
             seed,
             count,
@@ -503,5 +504,6 @@ public sealed class BatchArgumentsTests
             aiConfigurationPath,
             conversation,
             deliveryTimeoutSeconds,
+            concurrency,
             new FakeTimeProvider(Today));
 }

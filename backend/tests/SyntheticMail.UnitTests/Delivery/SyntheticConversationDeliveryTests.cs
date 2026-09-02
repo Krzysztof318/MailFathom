@@ -213,12 +213,45 @@ public sealed class SyntheticConversationDeliveryTests
     }
 
     [Fact]
+    public async Task DeliverAsync_AnExchange_SaysWhichTurnItIsOnAndWhatItIsDoingWithIt()
+    {
+        // Arrange
+        await using var transport = new RecordingSyntheticMailTransport();
+        await using var mailbox = new RecordingWatchedMailbox();
+        var console = new RecordingSyntheticMailConsole();
+
+        // Act
+        await new SyntheticConversationDelivery(transport, mailbox, console, new FakeTimeProvider(Now)).DeliverAsync(
+            [Conversation(2)],
+            Account(),
+            WatchedMailbox,
+            TimeSpan.Zero,
+            TimeSpan.Zero,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        // An exchange spends most of its time waiting for a relay it cannot hurry, so what it is waiting for and how
+        // long it will wait are the two things a developer watching it needs. The two sides reach the mailbox by
+        // different routes, and the report names which one a turn took.
+        Assert.Equal(
+            [
+                "Exchange 1 of 1, turn 1 of 2: submitting to developer@example.com.",
+                "Exchange 1 of 1, turn 1 of 2: waiting up to 0 seconds for it to reach the mailbox.",
+                "Exchange 1 of 1, turn 1 of 2: delivered.",
+                "Exchange 1 of 1, turn 2 of 2: appending to Sent.",
+                "Exchange 1 of 1, turn 2 of 2: appended.",
+            ],
+            console.Diagnostics);
+        Assert.Empty(console.Output);
+    }
+
+    [Fact]
     public async Task DeliverAsync_ANullArgument_IsRefused()
     {
         // Arrange
         await using var transport = new RecordingSyntheticMailTransport();
         await using var mailbox = new RecordingWatchedMailbox();
-        var delivery = new SyntheticConversationDelivery(transport, mailbox, new FakeTimeProvider(Now));
+        var delivery = new SyntheticConversationDelivery(transport, mailbox, new RecordingSyntheticMailConsole(), new FakeTimeProvider(Now));
 
         // Act, Assert
         await Assert.ThrowsAsync<ArgumentNullException>(() => delivery.DeliverAsync(
@@ -251,7 +284,7 @@ public sealed class SyntheticConversationDeliveryTests
         IWatchedMailbox mailbox,
         IReadOnlyList<SyntheticConversation> conversations,
         SendingAccount? account = null) =>
-        new SyntheticConversationDelivery(transport, mailbox, new FakeTimeProvider(Now)).DeliverAsync(
+        new SyntheticConversationDelivery(transport, mailbox, new RecordingSyntheticMailConsole(), new FakeTimeProvider(Now)).DeliverAsync(
             conversations,
             account ?? Account(),
             WatchedMailbox,
