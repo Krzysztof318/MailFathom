@@ -10,6 +10,7 @@ using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Application.Mail.Delivery.Outbox;
+using MailFathom.Application.Persistence;
 using MailFathom.Application.UnitTests.TestDoubles;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -192,6 +193,61 @@ public sealed class AuthoredMailDraftingTests
         Assert.Empty(harness.Drafts.Drafts);
         Assert.Equal(0, harness.AppendCount);
     }
+
+    /// <summary>A file staged against a draft is composed into the next revision of it, rather than the revision losing it.</summary>
+    /// <remarks>
+    /// This is what a file being uploaded against a draft rather than sent with each edit costs: nothing reads the
+    /// octets back except this, so a revision that composed only what its own request carried would take the author's
+    /// attachments off the message every time they edited a word of it.
+    /// </remarks>
+    [Fact]
+    public async Task SaveAsync_ARevisionOfADraftCarryingAStagedFile_ComposesTheFileIntoIt()
+    {
+        // Arrange
+        var harness = Harness(new InMemoryOutgoingEmailStore());
+        var composer = ComposingAuthoredEmails.ThatComposesDrafts(ComposedMime);
+        var drafting = DraftingOver(harness, composer: composer);
+
+        var draft = await drafting.SaveAsync(
+            new MailDraftRequest
+            {
+                Account = MailAccountSelector.For(Account.Id),
+                Subject = "a draft",
+                PlainTextBody = "Hello.",
+                Author = OutgoingEmailRequester.Command("mfctl-4f2a"),
+            },
+            TestContext.Current.CancellationToken);
+
+        await harness.Drafts.StageAttachmentAsync(
+            Substitute.For<IPersistenceSession>(),
+            draft.Id,
+            new AuthoredEmailAttachment("report.pdf", "application/pdf", Encoding.ASCII.GetBytes("%PDF-1.7").AsMemory()),
+            Moment,
+            TestContext.Current.CancellationToken);
+
+        // Act
+        await drafting.SaveAsync(
+            new MailDraftRequest
+            {
+                Account = MailAccountSelector.For(Account.Id),
+                Subject = "a draft, edited",
+                PlainTextBody = "Hello again.",
+                Author = OutgoingEmailRequester.Command("mfctl-4f2a"),
+                Revises = draft.Id,
+            },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var composed = LastComposed(composer);
+        Assert.Equal("a draft, edited", composed.Subject);
+        Assert.Equal(["report.pdf"], composed.Attachments.Select(file => file.FileName));
+    }
+
+    /// <summary>Reads the message the last composition was handed, which is what a test about the draft's files asserts on.</summary>
+    private static AuthoredEmail LastComposed(IAuthoredEmailComposer composer) => (AuthoredEmail)composer
+        .ReceivedCalls()
+        .Last(call => call.GetMethodInfo().Name == nameof(IAuthoredEmailComposer.ComposeDraft))
+        .GetArguments()[1]!;
 
     private static MailDraftHarness Harness(InMemoryOutgoingEmailStore outgoingEmails)
     {

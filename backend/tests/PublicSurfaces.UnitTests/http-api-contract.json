@@ -1276,6 +1276,49 @@
         ],
         "type": "object"
       },
+      "ClientPreferencesRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "openMailInTabs": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "telemetryEnabled": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "theme": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "ClientPreferencesResponse": {
+        "properties": {
+          "openMailInTabs": {
+            "type": "boolean"
+          },
+          "telemetryEnabled": {
+            "type": "boolean"
+          },
+          "theme": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "telemetryEnabled",
+          "theme",
+          "openMailInTabs"
+        ],
+        "type": "object"
+      },
       "ClientSessionResponse": {
         "properties": {
           "permissions": {
@@ -8758,6 +8801,72 @@
             "description": "OK"
           },
           "404": {
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/preferences": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientPreferencesResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientPreferencesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientPreferencesResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
             "description": "Not Found"
           }
         },

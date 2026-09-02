@@ -514,6 +514,27 @@ public sealed class InMemoryMailDraftStoreTests
         Assert.Empty(await store.ReadAttachmentContentAsync(draft.Id, TestContext.Current.CancellationToken));
     }
 
+    /// <summary>Reading the staged files of a draft nobody holds answers with none rather than refusing.</summary>
+    /// <remarks>
+    /// The real store reads a table by a foreign key and finds no rows, so a draft that is gone reads as one carrying
+    /// nothing. A double that threw here instead would turn the ownership refusal above it into an exception of a
+    /// different kind, and a test about that refusal would then be passing on the double's behaviour.
+    /// </remarks>
+    [Fact]
+    public async Task ReadAttachmentContentAsync_ADraftNobodyHolds_AnswersWithNoFilesRatherThanRefusing()
+    {
+        // Arrange
+        var store = new InMemoryMailDraftStore();
+
+        // Act
+        var content = await store.ReadAttachmentContentAsync(
+            MailDraftId.Create(Guid.CreateVersion7(Moment)),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(content);
+    }
+
     private static Task<MailDraftRecord> OpenAsync(
         InMemoryMailDraftStore store,
         MailAccountIdentity? account = null) =>

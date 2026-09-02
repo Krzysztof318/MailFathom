@@ -13,21 +13,21 @@ using MailFathom.Domain.Emails;
 
 namespace MailFathom.Mcp.Tools;
 
-/// <summary>Reads the arguments the tools that author mail, the tools that ask about a send, and the tools that anchor a request to one stored email share.</summary>
+/// <summary>Reads the identifiers, the idempotency key, and the account name that the tools authoring mail, asking about a send, and anchoring a request to one stored email share.</summary>
 /// <remarks>
 /// <para>
-/// Three tools send and two write a draft, and each of them takes a list of addresses in the same shape and refuses the
-/// same values, as the three that send take an idempotency key. Reading them once is what keeps the five from drifting
-/// into five answers to one question: a key a fourth character longer, a blank address admitted by one tool and refused
-/// by the next, a recipient ceiling applied after the list was expanded rather than before it. The same holds of the
-/// identifiers: an email named for a read, for a flag change, or for an answer is the same identifier, so it is read
-/// here rather than at each tool that takes one.
+/// An email named for a read, for a flag change, or for an answer is the same identifier, and so are a queued send and
+/// a held draft; the three tools that send take an idempotency key in the same shape. Reading each of them once is what
+/// keeps one question from drifting into as many answers as there are tools — a key a fourth character longer here than
+/// there, an identifier one tool parses and the next scans unbounded. The address lists those tools take are not read
+/// here: <see cref="Application.Mail.Delivery.Addressing.AuthoredRecipientHeaders" /> holds them, so a recipient
+/// shape is decided once for every surface rather than once for this one.
 /// </para>
 /// <para>
 /// Everything here is checked in front of the use case rather than instead of it. The domain bounds the same key where
-/// its column is bounded and the composition parses the same addresses where a message is built, so what these
-/// refusals buy is a caller meeting a statement about the argument it sent rather than an argument failure naming a
-/// parameter it never wrote.
+/// its column is bounded, and the use case decides whether an account this text could name is one this deployment
+/// serves, so what these refusals buy is a caller meeting a statement about the argument it sent rather than an
+/// argument failure naming a parameter it never wrote.
 /// </para>
 /// </remarks>
 internal static class AuthoredMailArguments

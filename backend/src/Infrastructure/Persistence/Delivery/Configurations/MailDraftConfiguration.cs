@@ -48,10 +48,6 @@ internal sealed class MailDraftConfiguration : IEntityTypeConfiguration<MailDraf
         // subject is only in its stored MIME is listed under no subject rather than refusing to be listed.
         entity.Property(draft => draft.Subject).IsRequired().HasDefaultValue(string.Empty);
 
-        // The default is what a row written before the column existed reads as, and it is true because drafting
-        // reached one mail server before there was a way to ask for it not to. It also answers an ordinary insert of a
-        // server draft, which EF Core leaves out of the statement; a local draft is the row that states its answer.
-
         // See the stored-email mapping: this is the PostgreSQL `xmin` system column, not a user-defined column.
         entity.Property(draft => draft.ConcurrencyVersion).IsRowVersion();
 

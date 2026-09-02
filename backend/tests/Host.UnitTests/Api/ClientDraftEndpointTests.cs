@@ -133,6 +133,31 @@ public sealed class ClientDraftEndpointTests
         Assert.Equal("Hello.", reading.Value.PlainTextBody);
     }
 
+    /// <summary>A draft another owner holds is opened as one nobody holds, so a refusal says nothing about who else writes mail here.</summary>
+    [Fact]
+    public async Task ReadDraftAsync_ADraftAnotherOwnerHolds_AnswersAsOneNobodyHolds()
+    {
+        // Arrange
+        var drafts = new InMemoryMailDraftStore();
+        var contents = new InMemoryMailDraftContentStore();
+        var theirs = await OpenAsync(drafts, SyntheticMailOwner.Another);
+
+        await contents.SaveMailDraftContentAsync(
+            Substitute.For<IPersistenceSession>(),
+            theirs.Id,
+            PlacedEmailContent.InDatabase(Encoding.ASCII.GetBytes("Subject: theirs\r\n\r\nPrivate.").AsMemory()),
+            TestContext.Current.CancellationToken);
+
+        // Act
+        var result = await ClientDraftEndpoints.ReadDraftAsync(
+            theirs.Id.Value,
+            DirectoryOver(drafts, contents),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.IsType<NotFound>(result.Result);
+    }
+
     /// <summary>An upload with no body attaches nothing, and says so rather than staging an empty file.</summary>
     [Fact]
     public async Task StageAttachmentAsync_ARequestCarryingNoOctets_IsRefusedAndStagesNothing()
@@ -262,6 +287,34 @@ public sealed class ClientDraftEndpointTests
         // Assert
         var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
         Assert.Equal(StatusCodes.Status400BadRequest, refusal.StatusCode);
+    }
+
+    /// <summary>Taking a file off a draft another owner holds answers as one nobody holds, and leaves their file where it is.</summary>
+    [Fact]
+    public async Task UnstageAttachmentAsync_ADraftAnotherOwnerHolds_AnswersAsOneNobodyHoldsAndRemovesNothing()
+    {
+        // Arrange
+        var drafts = new InMemoryMailDraftStore();
+        var theirs = await OpenAsync(drafts, SyntheticMailOwner.Another);
+
+        var staged = await drafts.StageAttachmentAsync(
+            Substitute.For<IPersistenceSession>(),
+            theirs.Id,
+            new AuthoredEmailAttachment("theirs.txt", "text/plain", new byte[8].AsMemory()),
+            Moment,
+            TestContext.Current.CancellationToken);
+
+        // Act
+        var result = await ClientDraftEndpoints.UnstageAttachmentAsync(
+            theirs.Id.Value,
+            staged.Id.Value,
+            AttachmentsOver(drafts),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var refusal = Assert.IsType<ProblemHttpResult>(result.Result);
+        Assert.Equal(StatusCodes.Status404NotFound, refusal.StatusCode);
+        Assert.Equal([staged.Id], drafts.Peek(theirs.Id)!.Attachments.Select(attachment => attachment.Id));
     }
 
     /// <summary>Taking a file off answers the same whether or not the draft carried it, because the outcome asked for holds either way.</summary>
