@@ -3,6 +3,12 @@
     <OutputType>Exe</OutputType>
     <RootNamespace>MailFathom.SyntheticMail</RootNamespace>
 
+    <!-- What the `dotnet user-secrets` command writes this project's store under, and what ConfigurationSource falls
+         back to when no local credential file was written. The identifier is repeated in that type, because recovering
+         it from the generated assembly attribute would mean referencing a configuration package for one constant
+         string. -->
+    <UserSecretsId>mailfathom-synthetic-mail-5c4b9288-c758-4871-8c58-d869809d8808</UserSecretsId>
+
     <!-- A run must produce the same corpus on every machine, and a machine's locale is the one input nothing here
          passes explicitly: the dates the command parses and the ones it prints would otherwise follow whatever culture
          the shell was started under. Turning globalization off pins both to the invariant culture, which is what the

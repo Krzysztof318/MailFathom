@@ -37,12 +37,14 @@ internal sealed partial class OpenAiEmailContentSource : IAiEmailContentSource
 {
     /// <summary>The most a single email's content may cost in output tokens.</summary>
     /// <remarks>
-    /// A ceiling rather than an expectation: an email body is a few hundred tokens, and the bound is what keeps one
-    /// stuck generation from pricing a whole batch like a document. It is high enough to carry the message twice,
-    /// because an answer holds the body as text and as the markup around the same content, and a bound that truncated
-    /// the second form would produce an unclosed document rather than a shorter one.
+    /// A ceiling rather than an expectation: the bound is what keeps one stuck generation from pricing a whole batch
+    /// like a document. It has to carry the message twice over, because an answer holds the body as text and the same
+    /// content again as the markup real mail carries, and a message in a language whose words cost more tokens than
+    /// English pays that twice as well. Measured against real answers, a rich HTML message runs to about two thousand
+    /// output tokens, so the earlier bound cut one in the middle — and a cut answer arrives as an incomplete JSON
+    /// object, which reads as a model that cannot write the answer rather than as a ceiling that stopped it.
     /// </remarks>
-    private const int MaximumOutputTokens = 2500;
+    private const int MaximumOutputTokens = 6000;
 
     /// <summary>The constructs an answered document is refused for carrying.</summary>
     /// <remarks>
@@ -132,6 +134,14 @@ internal sealed partial class OpenAiEmailContentSource : IAiEmailContentSource
                 throw new SyntheticMailFailure("The model refused to write the message. Retry, or name a different topic or language.");
             }
 
+            // A truncated answer is an incomplete JSON object, and reporting it as a malformed one sends a developer
+            // to the model when the ceiling above is what cut it: the same prompt reaches it again on every retry.
+            if (completion.FinishReason == ChatFinishReason.Length)
+            {
+                throw new SyntheticMailFailure(
+                    $"The model's answer was cut off at the {MaximumOutputTokens}-token output ceiling, so it is not a complete message. Retry, or name a model that writes a shorter one.");
+            }
+
             var text = string.Concat(completion.Content.Select(part => part.Text));
 
             return string.IsNullOrWhiteSpace(text)
@@ -196,7 +206,7 @@ internal sealed partial class OpenAiEmailContentSource : IAiEmailContentSource
 
         try
         {
-            content = JsonSerializer.Deserialize(text, SyntheticMailJsonContext.Default.AiEmailContent);
+            content = JsonSerializer.Deserialize(JsonObjectIn(text), SyntheticMailJsonContext.Default.AiEmailContent);
         }
         catch (JsonException)
         {
@@ -234,6 +244,22 @@ internal sealed partial class OpenAiEmailContentSource : IAiEmailContentSource
         }
 
         return new AiEmailContent(subject, body, html);
+    }
+
+    /// <summary>Reduces an answer to the JSON object in it, which is the whole of it unless the model wrapped one.</summary>
+    /// <remarks>
+    /// The request asks for a single JSON object and states the response format, and a model that honours both answers
+    /// with one and nothing else. An endpoint a developer named is not required to: a fenced code block or a sentence
+    /// in front of the object is the common way one is spelled instead, and refusing that reports a formatting habit
+    /// as a model that cannot write the answer. An answer carrying no object at all is left as it was, so what is
+    /// refused is refused for the reason it deserves.
+    /// </remarks>
+    private static string JsonObjectIn(string text)
+    {
+        var opening = text.IndexOf('{');
+        var closing = text.LastIndexOf('}');
+
+        return opening >= 0 && closing > opening ? text[opening..(closing + 1)] : text;
     }
 
     /// <summary>Reduces the answered subject to what a composed header can carry.</summary>

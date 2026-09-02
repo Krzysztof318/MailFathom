@@ -529,9 +529,24 @@ shell history and in the process list of a shared machine. `.gitignore` covers t
 }
 ```
 
+**Or keep it in `dotnet user-secrets`.** A checkout that has never written the file reads the machine's user-secrets
+store for this project instead, so a developer who already keeps development credentials there writes no second copy
+into the tree:
+
+```bash
+dotnet user-secrets --project backend/tools/SyntheticMail set host smtp.example.test
+dotnet user-secrets --project backend/tools/SyntheticMail set address throwaway@example.test
+dotnet user-secrets --project backend/tools/SyntheticMail set password "the throwaway account's password"
+dotnet user-secrets --project backend/tools/SyntheticMail set mailbox:host imap.example.test
+```
+
+The keys are the file's keys, and a block is reached through the `:` the command already separates a key with. Nothing
+is merged across the two: the file wins wherever one exists, and the store is what a run falls back to rather than an
+overlay on it. Every value the store holds is a string, including `port`, which is read as the number it spells.
+
 **Use a throwaway account.** The command authenticates as whatever this file names and submits a few hundred messages
 under it; nothing about that belongs to an account that reaches anything else. Startup refuses a missing or incomplete
-file with a message naming the key to set.
+configuration with a message naming the key to set.
 
 `security` is `StartTls` or `ImplicitTls`, and there is no third value: the run authenticates with a password, so an
 endpoint that cannot secure the connection is refused rather than downgraded to. `port` defaults to 587 or 465 to match,
@@ -745,7 +760,8 @@ beside it shows the shape:
 `endpoint` is optional and defaults to the provider's own address; written, it must be an absolute https address,
 because the key travels in a header and there is no unsecured option. A run that finds the file missing or
 incomplete says so with the file and the key to set, before it generates anything, for the reason the sending
-account does.
+account does. The same keys are read from the project's `dotnet user-secrets` store when no file was written, on the
+terms the sending account's are.
 
 **What the seed still decides, and what it no longer does.** The envelope is still the seed's: author, participants,
 threading, dates, attachments, and the fabricated sensitive material are drawn exactly as in the default mode, and
