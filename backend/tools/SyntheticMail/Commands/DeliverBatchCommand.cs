@@ -7,6 +7,7 @@ using System.Globalization;
 using MailFathom.SyntheticMail.Configuration;
 using MailFathom.SyntheticMail.Delivery;
 using MailFathom.SyntheticMail.Generation;
+using MailFathom.SyntheticMail.Generation.AiContent;
 using MimeKit;
 
 namespace MailFathom.SyntheticMail.Commands;
@@ -121,6 +122,11 @@ internal static class DeliverBatchCommand
             Description = "Generate exchanges between the recipient and invented correspondents instead of a flat corpus, delivering one turn at a time and building each reply from the identifier the recipient's server assigned. Needs the 'mailbox' block in the sending account file, because both halves of a thread have to reach the mailbox.",
         };
 
+        Option<int?> concurrencyOption = new("--concurrency")
+        {
+            Description = $"How many provider answers the generation waits for at once, 1..{BatchArguments.MaximumConcurrency}. Defaults to {BatchArguments.DefaultConcurrency}, changes what the run costs in time and nothing about the corpus a seed produces, and requires --ai.",
+        };
+
         Option<int?> deliveryTimeoutOption = new("--delivery-timeout")
         {
             Description = $"Seconds to wait for a submitted message to appear in the recipient's mailbox, 1..{BatchArguments.MaximumDeliveryTimeoutSeconds}. Defaults to {BatchArguments.DefaultDeliveryTimeoutSeconds}. Requires --conversation.",
@@ -144,6 +150,7 @@ internal static class DeliverBatchCommand
             aiConfigurationOption,
             conversationOption,
             deliveryTimeoutOption,
+            concurrencyOption,
         };
 
         command.SetAction((result, cancellationToken) => RunAsync(
@@ -165,6 +172,7 @@ internal static class DeliverBatchCommand
                 result.GetValue(aiConfigurationOption),
                 result.GetValue(conversationOption),
                 result.GetValue(deliveryTimeoutOption),
+                result.GetValue(concurrencyOption),
                 context.Clock),
             cancellationToken));
 
@@ -227,7 +235,8 @@ internal static class DeliverBatchCommand
             ? await SyntheticEmailGenerator.GenerateConversationsAsync(
                 arguments.ToPlan(),
                 mailboxParticipant,
-                context.OpenAiContentSource(context.ReadAiProvider(arguments.AiConfigurationPath!)),
+                OpenReportingContentSource(context, arguments),
+                arguments.Concurrency,
                 cancellationToken)
             : SyntheticEmailGenerator.GenerateConversations(arguments.ToPlan(), mailboxParticipant);
 
@@ -283,7 +292,7 @@ internal static class DeliverBatchCommand
         await transport.OpenAsync(cancellationToken);
         await mailbox.OpenAsync(cancellationToken);
 
-        var report = await new SyntheticConversationDelivery(transport, mailbox, context.Clock).DeliverAsync(
+        var report = await new SyntheticConversationDelivery(transport, mailbox, context.Console, context.Clock).DeliverAsync(
             conversations,
             account,
             arguments.Recipient,
@@ -299,16 +308,26 @@ internal static class DeliverBatchCommand
         BatchArguments arguments,
         CancellationToken cancellationToken)
     {
-        // The provider is read before anything is generated, for the reason the account is: a run that cannot
-        // possibly generate says so immediately rather than after the corpus has been half-answered. A dry run
-        // reads it too, because the content is what a dry run lists.
-        var provider = context.ReadAiProvider(arguments.AiConfigurationPath!);
-
         return await SyntheticEmailGenerator.GenerateAsync(
             arguments.ToPlan(),
-            context.OpenAiContentSource(provider),
+            OpenReportingContentSource(context, arguments),
+            arguments.Concurrency,
             cancellationToken);
     }
+
+    /// <summary>Opens the source the run generates through, wrapped in the one that reports each answer as it lands.</summary>
+    /// <remarks>
+    /// The provider is read here, before anything is generated, for the reason the account is: a run that cannot
+    /// possibly generate says so immediately rather than after the corpus has been half-answered. A dry run reads it
+    /// too, because the content is what a dry run lists.
+    /// </remarks>
+    private static ReportingAiEmailContentSource OpenReportingContentSource(
+        SyntheticMailContext context,
+        BatchArguments arguments) =>
+        new(
+            context.OpenAiContentSource(context.ReadAiProvider(arguments.AiConfigurationPath!)),
+            context.Console,
+            arguments.Count);
 
     private static async Task<int> DeliverAsync(
         SyntheticMailContext context,
@@ -325,7 +344,7 @@ internal static class DeliverBatchCommand
 
         await transport.OpenAsync(cancellationToken);
 
-        var report = await new SyntheticMailBatchDelivery(transport, context.Clock).DeliverAsync(
+        var report = await new SyntheticMailBatchDelivery(transport, context.Console, context.Clock).DeliverAsync(
             corpus,
             account,
             arguments.Recipient,
@@ -346,7 +365,7 @@ internal static class DeliverBatchCommand
         var aiContent = arguments.AiContent
             ? string.Create(
                 CultureInfo.InvariantCulture,
-                $" AI content in {string.Join(", ", arguments.Languages)} over {string.Join(", ", arguments.Topics.Select(topic => topic.Name))}, generated by the configured provider.")
+                $" AI content in {string.Join(", ", arguments.Languages)} over {string.Join(", ", arguments.Topics.Select(topic => topic.Name))}, generated by the configured provider {arguments.Concurrency} answers at a time.")
             : string.Empty;
 
         context.Console.WriteError(string.Create(

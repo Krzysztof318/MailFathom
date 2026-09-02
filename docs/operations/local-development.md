@@ -757,6 +757,31 @@ beside it shows the shape:
 }
 ```
 
+**A run overlaps its provider calls, and says how far it has got.** One message costs whatever the endpoint takes to
+write it — around twenty seconds for a rich HTML message in a language whose words cost more tokens than English does —
+so a corpus of two hundred generated one at a time is over an hour before the first submission. `--concurrency` is how
+many answers a run waits for at once, four by default and up to 32:
+
+```bash
+dotnet run --project backend/tools/SyntheticMail -- <recipient> --count 200 --ai --concurrency 8
+```
+
+It changes what the run costs in time and nothing about what it produces. The whole corpus is drawn from the seed
+before a single call goes out, and the answers land at the position they were drawn under, so the same seed produces
+the same envelope — every author, thread, date, language, topic, attachment, MIME shape, and planted decoy — whatever
+degree it was generated at. The option is absent from the repeat line for that reason, and it is refused without
+`--ai`, because a corpus the vocabulary writes is produced in the time it takes to draw it.
+
+What is not overlapped is a reply. A reply's prompt carries the subject and the opening of the message it answers, so
+it cannot be asked for until that message has been answered: in a flat batch the calls spread across everything that
+answers nothing, and in `--conversation` they spread across exchanges while the turns inside one stay in order. The
+pacing between submissions is untouched by any of it — `--interval` is what a submission server sees, and generation
+finishes before delivery starts.
+
+Both halves report what they are doing on standard error as they do it: `Generated 12 of 200 messages.` while the
+provider is being waited on, and then one line per submission, or per turn in an exchange — submitting, waiting for
+the copy to reach the mailbox, and what became of it. Standard output stays the corpus and carries none of it.
+
 `endpoint` is optional and defaults to the provider's own address; written, it must be an absolute https address,
 because the key travels in a header and there is no unsecured option. A run that finds the file missing or
 incomplete says so with the file and the key to set, before it generates anything, for the reason the sending

@@ -12,6 +12,7 @@ namespace MailFathom.SyntheticMail.Delivery;
 /// <summary>Delivers generated exchanges one turn at a time, so each reply answers the message that actually arrived.</summary>
 /// <param name="transport">The open submission session the correspondent's half is sent through.</param>
 /// <param name="mailbox">The open session against the mailbox MailFathom synchronizes.</param>
+/// <param name="console">Where the run reports what it is doing, which is standard error and never the corpus.</param>
 /// <param name="timeProvider">What the pacing and the delivery wait run on.</param>
 /// <remarks>
 /// <para>
@@ -31,6 +32,7 @@ namespace MailFathom.SyntheticMail.Delivery;
 internal sealed class SyntheticConversationDelivery(
     ISyntheticMailTransport transport,
     IWatchedMailbox mailbox,
+    ISyntheticMailConsole console,
     TimeProvider timeProvider)
 {
     /// <summary>How long the run waits between two looks for a delivered copy.</summary>
@@ -66,8 +68,10 @@ internal sealed class SyntheticConversationDelivery(
         var attempted = 0;
         var delivered = 0;
 
-        foreach (var conversation in conversations)
+        for (var index = 0; index < conversations.Count; index++)
         {
+            var conversation = conversations[index];
+
             var deliveredTurns = await this.DeliverConversationAsync(
                 conversation,
                 account,
@@ -76,6 +80,7 @@ internal sealed class SyntheticConversationDelivery(
                 deliveryTimeout,
                 attempted > 0,
                 failures,
+                string.Create(CultureInfo.InvariantCulture, $"Exchange {index + 1} of {conversations.Count}"),
                 cancellationToken);
 
             attempted += conversation.Messages.Count;
@@ -99,6 +104,7 @@ internal sealed class SyntheticConversationDelivery(
         TimeSpan deliveryTimeout,
         bool paceFirstTurn,
         List<DeliveryFailure> failures,
+        string exchange,
         CancellationToken cancellationToken)
     {
         var correspondent = new MailboxAddress(
@@ -136,6 +142,7 @@ internal sealed class SyntheticConversationDelivery(
                 repliedTo,
                 deliveryTimeout,
                 failures,
+                string.Create(CultureInfo.InvariantCulture, $"{exchange}, turn {turn + 1} of {conversation.Messages.Count}"),
                 cancellationToken);
 
             if (assignedMessageId is null)
@@ -161,20 +168,27 @@ internal sealed class SyntheticConversationDelivery(
         MailboxAddress repliedTo,
         TimeSpan deliveryTimeout,
         List<DeliveryFailure> failures,
+        string turn,
         CancellationToken cancellationToken)
     {
         try
         {
             if (side == SyntheticThreadSide.Mailbox)
             {
+                console.WriteError($"{turn}: appending to Sent.");
+
                 using var written = SyntheticMimeComposer.ComposeFromMailbox(email, watchedMailbox, repliedTo);
 
                 await mailbox.AppendToSentAsync(written, cancellationToken);
+
+                console.WriteError($"{turn}: appended.");
 
                 // The appended copy is the one this run composed, so nothing rewrote its identifier on the way in and
                 // there is nothing to read back.
                 return email.MessageId;
             }
+
+            console.WriteError($"{turn}: submitting to {watchedMailbox.Address}.");
 
             using var submitted = SyntheticMimeComposer.Compose(
                 email,
@@ -186,7 +200,13 @@ internal sealed class SyntheticConversationDelivery(
 
             await transport.SendAsync(submitted, watchedMailbox, cancellationToken);
 
+            console.WriteError(string.Create(
+                CultureInfo.InvariantCulture,
+                $"{turn}: waiting up to {deliveryTimeout.TotalSeconds:0} seconds for it to reach the mailbox."));
+
             var assigned = await this.AwaitDeliveredMessageIdAsync(email.MessageId, deliveryTimeout, cancellationToken);
+
+            console.WriteError(assigned is null ? $"{turn}: never arrived." : $"{turn}: delivered.");
 
             if (assigned is null)
             {
@@ -202,6 +222,7 @@ internal sealed class SyntheticConversationDelivery(
         }
         catch (SyntheticMailFailure failure)
         {
+            console.WriteError($"{turn}: failed.");
             failures.Add(new DeliveryFailure(email.MessageId, email.Subject, failure.Message));
 
             return null;

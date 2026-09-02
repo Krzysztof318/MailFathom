@@ -34,8 +34,8 @@ public sealed class SyntheticEmailGeneratorAiModeTests
         var second = new ScriptedAiEmailContentSource(Answer);
 
         // Act
-        await SyntheticEmailGenerator.GenerateAsync(Plan(["en", "pl"], [SyntheticMailTopic.Business, SyntheticMailTopic.Travel]), first, CancellationToken.None);
-        await SyntheticEmailGenerator.GenerateAsync(Plan(["en", "pl"], [SyntheticMailTopic.Business, SyntheticMailTopic.Travel]), second, CancellationToken.None);
+        await SyntheticEmailGenerator.GenerateAsync(Plan(["en", "pl"], [SyntheticMailTopic.Business, SyntheticMailTopic.Travel]), first, 1, CancellationToken.None);
+        await SyntheticEmailGenerator.GenerateAsync(Plan(["en", "pl"], [SyntheticMailTopic.Business, SyntheticMailTopic.Travel]), second, 1, CancellationToken.None);
 
         // Assert
         Assert.Equal(first.Requests.Select(RequestFingerprint), second.Requests.Select(RequestFingerprint));
@@ -74,6 +74,7 @@ public sealed class SyntheticEmailGeneratorAiModeTests
         var corpus = await SyntheticEmailGenerator.GenerateAsync(
             Plan(["pl"], [SyntheticMailTopic.Travel]),
             new ScriptedAiEmailContentSource(Answer),
+            1,
             CancellationToken.None);
 
         // Assert
@@ -87,7 +88,7 @@ public sealed class SyntheticEmailGeneratorAiModeTests
         var plan = Plan(["en"], [SyntheticMailTopic.Business], count: 1);
 
         // Act
-        var corpus = await SyntheticEmailGenerator.GenerateAsync(plan, new ScriptedAiEmailContentSource(Answer), CancellationToken.None);
+        var corpus = await SyntheticEmailGenerator.GenerateAsync(plan, new ScriptedAiEmailContentSource(Answer), 1, CancellationToken.None);
 
         // Assert
         Assert.Equal(Answer.Subject, corpus.Single().Subject);
@@ -98,13 +99,15 @@ public sealed class SyntheticEmailGeneratorAiModeTests
     public async Task GenerateAsync_AReply_KeepsTheThreadSubjectAndSaysWhatItAnswers()
     {
         // Arrange
-        // One request per message, in message order, so the reply's request is the one at the reply's index.
+        // One request per message, and this run waits for one answer at a time, so the requests arrive in message
+        // order and the reply's is the one at the reply's index.
         var source = new ScriptedAiEmailContentSource(Answer);
 
         // Act
         var corpus = await SyntheticEmailGenerator.GenerateAsync(
             Plan(["en"], [SyntheticMailTopic.Business], count: 40),
             source,
+            1,
             CancellationToken.None);
         var reply = corpus.First(email => email.InReplyTo is not null);
         var replyIndex = corpus.ToList().IndexOf(reply);
@@ -122,7 +125,7 @@ public sealed class SyntheticEmailGeneratorAiModeTests
         var plan = Plan(["en"], [SyntheticMailTopic.Business], sensitivePercentage: 100);
 
         // Act
-        var corpus = await SyntheticEmailGenerator.GenerateAsync(plan, new ScriptedAiEmailContentSource(Answer), CancellationToken.None);
+        var corpus = await SyntheticEmailGenerator.GenerateAsync(plan, new ScriptedAiEmailContentSource(Answer), 1, CancellationToken.None);
 
         // Assert
         // Every message carries the answer's paragraphs and, beside them, the decoy the seed planted — recorded on
@@ -146,6 +149,7 @@ public sealed class SyntheticEmailGeneratorAiModeTests
         var corpus = await SyntheticEmailGenerator.GenerateAsync(
             Plan(["en"], [SyntheticMailTopic.Business]),
             new ScriptedAiEmailContentSource(Answer),
+            1,
             CancellationToken.None);
 
         // Assert
@@ -159,6 +163,7 @@ public sealed class SyntheticEmailGeneratorAiModeTests
         var corpus = await SyntheticEmailGenerator.GenerateAsync(
             Plan(["en"], [SyntheticMailTopic.Business], count: 60),
             new ScriptedAiEmailContentSource(Answer),
+            1,
             CancellationToken.None);
 
         // Assert
@@ -185,6 +190,7 @@ public sealed class SyntheticEmailGeneratorAiModeTests
         await Assert.ThrowsAsync<SyntheticMailFailure>(() => SyntheticEmailGenerator.GenerateAsync(
             Plan(["en"], [SyntheticMailTopic.Business]),
             new ScriptedAiEmailContentSource(failure),
+            1,
             CancellationToken.None));
     }
 
@@ -199,6 +205,7 @@ public sealed class SyntheticEmailGeneratorAiModeTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => SyntheticEmailGenerator.GenerateAsync(
             Plan(["en"], [SyntheticMailTopic.Business], count: 10),
             new ScriptedAiEmailContentSource(Answer),
+            1,
             cancellation.Token));
     }
 
@@ -228,6 +235,7 @@ public sealed class SyntheticEmailGeneratorAiModeTests
         await Assert.ThrowsAsync<ArgumentException>(() => SyntheticEmailGenerator.GenerateAsync(
             Plan([], [SyntheticMailTopic.Business]),
             source,
+            1,
             CancellationToken.None));
         Assert.Empty(source.Requests);
     }
@@ -239,6 +247,7 @@ public sealed class SyntheticEmailGeneratorAiModeTests
         await Assert.ThrowsAsync<ArgumentException>(() => SyntheticEmailGenerator.GenerateAsync(
             Plan(["en"], []),
             new ScriptedAiEmailContentSource(Answer),
+            1,
             CancellationToken.None));
     }
 
@@ -249,6 +258,7 @@ public sealed class SyntheticEmailGeneratorAiModeTests
         await Assert.ThrowsAsync<ArgumentException>(() => SyntheticEmailGenerator.GenerateAsync(
             Plan(["en"], [default]),
             new ScriptedAiEmailContentSource(Answer),
+            1,
             CancellationToken.None));
     }
 
@@ -259,7 +269,7 @@ public sealed class SyntheticEmailGeneratorAiModeTests
     {
         var source = new ScriptedAiEmailContentSource(Answer);
 
-        await SyntheticEmailGenerator.GenerateAsync(Plan(languages, topics, count), source, CancellationToken.None);
+        await SyntheticEmailGenerator.GenerateAsync(Plan(languages, topics, count), source, 1, CancellationToken.None);
 
         return source;
     }
@@ -272,7 +282,7 @@ public sealed class SyntheticEmailGeneratorAiModeTests
         var source = new ScriptedAiEmailContentSource(Answer);
 
         // Act
-        var corpus = await SyntheticEmailGenerator.GenerateAsync(plan, source, CancellationToken.None);
+        var corpus = await SyntheticEmailGenerator.GenerateAsync(plan, source, 1, CancellationToken.None);
 
         // Assert
         // The deterministic generator wraps its own text in one paragraph per block, which exercises the extractor
@@ -288,7 +298,7 @@ public sealed class SyntheticEmailGeneratorAiModeTests
         var source = new ScriptedAiEmailContentSource(Answer);
 
         // Act
-        var corpus = await SyntheticEmailGenerator.GenerateAsync(plan, source, CancellationToken.None);
+        var corpus = await SyntheticEmailGenerator.GenerateAsync(plan, source, 1, CancellationToken.None);
 
         // Assert
         // Which alternative a reader extracts from is the extractor's choice, so a decoy in only one of them would
@@ -310,7 +320,7 @@ public sealed class SyntheticEmailGeneratorAiModeTests
         var source = new ScriptedAiEmailContentSource(Answer);
 
         // Act
-        await SyntheticEmailGenerator.GenerateAsync(plan, source, CancellationToken.None);
+        await SyntheticEmailGenerator.GenerateAsync(plan, source, 1, CancellationToken.None);
 
         // Assert
         // A request that named the subject alone produced a second message about the same topic, which reads as a

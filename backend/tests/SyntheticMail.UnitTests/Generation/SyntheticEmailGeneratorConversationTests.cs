@@ -201,6 +201,7 @@ public sealed class SyntheticEmailGeneratorConversationTests
             plan,
             Mailbox,
             source,
+            1,
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -230,6 +231,7 @@ public sealed class SyntheticEmailGeneratorConversationTests
             plan,
             Mailbox,
             source,
+            1,
             TestContext.Current.CancellationToken);
 
         // Assert

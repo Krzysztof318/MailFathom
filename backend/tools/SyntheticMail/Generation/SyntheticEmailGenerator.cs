@@ -122,16 +122,20 @@ internal sealed class SyntheticEmailGenerator
     /// <summary>Produces the corpus a plan describes, reaching the named source for what the seed does not decide.</summary>
     /// <param name="plan">What the corpus is, seed included.</param>
     /// <param name="contentSource">The source the message content comes from, required when the plan names languages.</param>
+    /// <param name="concurrency">How many answers the run waits for at once, which changes what it costs in time and nothing about what it produces.</param>
     /// <param name="cancellationToken">Cancels the run.</param>
     /// <returns>The messages, oldest first.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="plan" /> is <see langword="null" />, or <paramref name="contentSource" /> is when the plan needs one.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="concurrency" /> is below one.</exception>
     /// <exception cref="ArgumentException">Thrown when the plan names topics without naming languages, or when its distribution names no topic or one that is not a topic.</exception>
     internal static async Task<IReadOnlyList<SyntheticEmail>> GenerateAsync(
         SyntheticCorpusPlan plan,
         IAiEmailContentSource? contentSource,
+        int concurrency,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(plan);
+        ArgumentOutOfRangeException.ThrowIfLessThan(concurrency, 1);
 
         if (plan.Languages.Count == 0)
         {
@@ -141,7 +145,7 @@ internal sealed class SyntheticEmailGenerator
         ArgumentNullException.ThrowIfNull(contentSource);
         RequireCompleteDistribution(plan);
 
-        return await new SyntheticEmailGenerator(plan).ProduceAsync(contentSource, cancellationToken);
+        return await new SyntheticEmailGenerator(plan).ProduceAsync(contentSource, concurrency, cancellationToken);
     }
 
     /// <summary>Produces the corpus a plan describes as exchanges between the watched mailbox and invented correspondents.</summary>
@@ -173,18 +177,22 @@ internal sealed class SyntheticEmailGenerator
     /// <param name="plan">What the corpus is, seed included.</param>
     /// <param name="mailbox">The mailbox MailFathom synchronizes, which writes every second turn.</param>
     /// <param name="contentSource">The source the message content comes from, required when the plan names languages.</param>
+    /// <param name="concurrency">How many answers the run waits for at once, spread across exchanges rather than within one.</param>
     /// <param name="cancellationToken">Cancels the run.</param>
     /// <returns>The exchanges, each oldest message first.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="plan" /> or <paramref name="mailbox" /> is <see langword="null" />, or <paramref name="contentSource" /> is when the plan needs one.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="concurrency" /> is below one.</exception>
     /// <exception cref="ArgumentException">Thrown when the plan names topics without naming languages, when its distribution names no topic or one that is not a topic, or when it asks for fewer messages than one exchange holds.</exception>
     internal static async Task<IReadOnlyList<SyntheticConversation>> GenerateConversationsAsync(
         SyntheticCorpusPlan plan,
         SyntheticParticipant mailbox,
         IAiEmailContentSource? contentSource,
+        int concurrency,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(mailbox);
+        ArgumentOutOfRangeException.ThrowIfLessThan(concurrency, 1);
 
         if (plan.Languages.Count == 0)
         {
@@ -195,7 +203,7 @@ internal sealed class SyntheticEmailGenerator
         RequireCompleteDistribution(plan);
         RequireRoomForOneExchange(plan);
 
-        return await new SyntheticEmailGenerator(plan).ProduceConversationsAsync(mailbox, contentSource, cancellationToken);
+        return await new SyntheticEmailGenerator(plan).ProduceConversationsAsync(mailbox, contentSource, concurrency, cancellationToken);
     }
 
     /// <summary>Refuses a plan too small to hold an exchange, before one is built that would not be one.</summary>
@@ -226,6 +234,25 @@ internal sealed class SyntheticEmailGenerator
                 nameof(plan));
         }
     }
+
+    /// <summary>Everything about one message the seed decides, drawn before any content is asked for.</summary>
+    /// <remarks>
+    /// The split an overlapping run rests on: what the seed decides is drawn for the whole corpus in one sequential
+    /// pass, and what a provider decides is asked for afterwards, so the number of calls in flight is not one of the
+    /// inputs to the sequence. <see cref="ParentIndex" /> is a position in that pass rather than a message, because
+    /// the message it names has usually not been answered yet when the envelope is drawn.
+    /// </remarks>
+    private sealed record MessageEnvelope(
+        int Index,
+        SyntheticParticipant Author,
+        IReadOnlyList<SyntheticParticipant> CarbonCopies,
+        int? ParentIndex,
+        DateTimeOffset SentAt,
+        SyntheticEmailAiOrigin Origin,
+        string MessageId,
+        SyntheticBodyShape BodyShape,
+        SensitiveDecoy? Decoy,
+        SyntheticEmailAttachment? Attachment);
 
     private static IReadOnlyList<SyntheticParticipant> BuildParticipantPool(Random source) =>
     [
@@ -289,17 +316,28 @@ internal sealed class SyntheticEmailGenerator
         return this.produced;
     }
 
-    private async Task<List<SyntheticEmail>> ProduceAsync(
+    /// <summary>Draws the whole corpus's envelopes, then answers them.</summary>
+    /// <remarks>
+    /// Every draw is made in index order before a single call goes out, so the sequence the seed produces is the one
+    /// it always produced and how many answers a run waits for at once cannot reach it.
+    /// </remarks>
+    private async Task<IReadOnlyList<SyntheticEmail>> ProduceAsync(
         IAiEmailContentSource contentSource,
+        int concurrency,
         CancellationToken cancellationToken)
     {
+        var envelopes = new List<MessageEnvelope>(this.plan.Count);
+
         for (var index = 0; index < this.plan.Count; index++)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            this.produced.Add(await this.BuildEmailAsync(index, contentSource, cancellationToken));
+            var author = this.participants[this.source.Next(this.participants.Count)];
+            var carbonCopies = this.BuildCarbonCopies(author);
+            var parent = this.PickParent(envelopes);
+
+            envelopes.Add(this.DrawEnvelope(index, author, carbonCopies, parent));
         }
 
-        return this.produced;
+        return await this.FillAsync(envelopes, contentSource, concurrency, cancellationToken);
     }
 
     private List<SyntheticConversation> ProduceConversations(SyntheticParticipant mailbox)
@@ -309,7 +347,7 @@ internal sealed class SyntheticEmailGenerator
         while (this.produced.Count < this.plan.Count)
         {
             var correspondent = this.participants[this.source.Next(this.participants.Count)];
-            var turns = this.DrawTurnCount();
+            var turns = this.DrawTurnCount(this.produced.Count);
             var messages = new List<SyntheticEmail>(turns);
 
             for (var turn = 0; turn < turns; turn++)
@@ -326,39 +364,56 @@ internal sealed class SyntheticEmailGenerator
         return conversations;
     }
 
-    private async Task<List<SyntheticConversation>> ProduceConversationsAsync(
+    /// <summary>Draws every exchange's envelopes, then answers them: the turns of one exchange in order, the exchanges beside each other.</summary>
+    /// <remarks>
+    /// A turn answers the turn before it, so its prompt carries what that one was answered with and the chain inside
+    /// an exchange is the one thing nothing overlaps. Exchanges depend on nothing but the seed, which is the axis the
+    /// calls are spread across.
+    /// </remarks>
+    private async Task<IReadOnlyList<SyntheticConversation>> ProduceConversationsAsync(
         SyntheticParticipant mailbox,
         IAiEmailContentSource contentSource,
+        int concurrency,
         CancellationToken cancellationToken)
     {
-        var conversations = new List<SyntheticConversation>();
+        var exchanges = new List<(SyntheticParticipant Correspondent, List<MessageEnvelope> Turns)>();
+        var drawn = 0;
 
-        while (this.produced.Count < this.plan.Count)
+        while (drawn < this.plan.Count)
         {
             var correspondent = this.participants[this.source.Next(this.participants.Count)];
-            var turns = this.DrawTurnCount();
-            var messages = new List<SyntheticEmail>(turns);
+            var turns = this.DrawTurnCount(drawn);
+            var envelopes = new List<MessageEnvelope>(turns);
 
             for (var turn = 0; turn < turns; turn++)
             {
-                cancellationToken.ThrowIfCancellationRequested();
+                // No carbon copies. An exchange is between two people by construction, and a third address on it
+                // would be one the envelope never carries, which reads in a client as a participant who was never
+                // written to.
+                envelopes.Add(this.DrawEnvelope(
+                    drawn,
+                    AuthorOf(turn, correspondent, mailbox),
+                    [],
+                    turn == 0 ? null : envelopes[^1]));
 
-                var message = await this.BuildConversationMessageAsync(
-                    turn,
-                    correspondent,
-                    mailbox,
-                    messages,
-                    contentSource,
-                    cancellationToken);
-
-                messages.Add(message);
-                this.produced.Add(message);
+                drawn++;
             }
 
-            conversations.Add(new SyntheticConversation(correspondent, messages));
+            exchanges.Add((correspondent, envelopes));
         }
 
-        return conversations;
+        var answered = await this.FillAsync(
+            [.. exchanges.SelectMany(exchange => exchange.Turns)],
+            contentSource,
+            concurrency,
+            cancellationToken);
+
+        return
+        [
+            .. exchanges.Select(exchange => new SyntheticConversation(
+                exchange.Correspondent,
+                [.. exchange.Turns.Select(turn => answered[turn.Index])])),
+        ];
     }
 
     /// <summary>Draws how many turns the next exchange runs to, without leaving a message that could not be one.</summary>
@@ -369,9 +424,9 @@ internal sealed class SyntheticEmailGenerator
     /// the exchange past <see cref="MostExchangeTurns" />: below that it is absorbed, and at exactly one over it the
     /// exchange gives a turn back instead, which leaves two behind rather than one and keeps the stated ceiling true.
     /// </remarks>
-    private int DrawTurnCount()
+    private int DrawTurnCount(int produced)
     {
-        var remaining = this.plan.Count - this.produced.Count;
+        var remaining = this.plan.Count - produced;
         var turns = Math.Min(this.source.Next(FewestExchangeTurns, MostExchangeTurns + 1), remaining);
 
         if (remaining - turns != 1)
@@ -391,7 +446,7 @@ internal sealed class SyntheticEmailGenerator
         var index = this.produced.Count;
         var author = AuthorOf(turn, correspondent, mailbox);
         var parent = turn == 0 ? null : messages[^1];
-        var sentAt = this.BuildSentAt(index, parent);
+        var sentAt = this.BuildSentAt(index, parent?.SentAt);
         var subject = parent is null ? this.BuildSubject() : $"Re: {StripReplyPrefix(parent.Subject)}";
 
         return new SyntheticEmail(
@@ -407,45 +462,6 @@ internal sealed class SyntheticEmailGenerator
             this.BuildBody(),
             this.BuildAttachment(),
             null);
-    }
-
-    private async Task<SyntheticEmail> BuildConversationMessageAsync(
-        int turn,
-        SyntheticParticipant correspondent,
-        SyntheticParticipant mailbox,
-        IReadOnlyList<SyntheticEmail> messages,
-        IAiEmailContentSource contentSource,
-        CancellationToken cancellationToken)
-    {
-        var index = this.produced.Count;
-        var author = AuthorOf(turn, correspondent, mailbox);
-        var parent = turn == 0 ? null : messages[^1];
-        var sentAt = this.BuildSentAt(index, parent);
-        var origin = new SyntheticEmailAiOrigin(this.DrawLanguage(), this.DrawTopic());
-        var messageId = this.BuildMessageId(index, author);
-
-        var content = await contentSource.GenerateAsync(
-            new AiEmailContentRequest(
-                origin.Language,
-                origin.Topic,
-                author.DisplayName,
-                parent?.Subject,
-                OpeningOf(parent)),
-            cancellationToken);
-
-        var subject = parent is null ? content.Subject : $"Re: {StripReplyPrefix(parent.Subject)}";
-
-        return new SyntheticEmail(
-            messageId,
-            parent?.MessageId,
-            parent is null ? [] : [.. parent.References, parent.MessageId],
-            author,
-            [],
-            subject,
-            sentAt,
-            this.BuildAiBody(content),
-            this.BuildAttachment(),
-            origin);
     }
 
     private static SyntheticParticipant AuthorOf(
@@ -469,8 +485,8 @@ internal sealed class SyntheticEmailGenerator
     {
         var author = this.participants[this.source.Next(this.participants.Count)];
         var carbonCopies = this.BuildCarbonCopies(author);
-        var parent = this.PickParent();
-        var sentAt = this.BuildSentAt(index, parent);
+        var parent = this.PickParent(this.produced);
+        var sentAt = this.BuildSentAt(index, parent?.SentAt);
         var subject = parent is null ? this.BuildSubject() : $"Re: {StripReplyPrefix(parent.Subject)}";
 
         return new SyntheticEmail(
@@ -486,45 +502,116 @@ internal sealed class SyntheticEmailGenerator
             null);
     }
 
-    private async Task<SyntheticEmail> BuildEmailAsync(
+    /// <summary>Draws everything about one message that the seed decides, which is everything but the words.</summary>
+    /// <remarks>
+    /// The draws are made in the order the sequential builder made them, including the two that used to happen after
+    /// the call — the body's MIME shape and its decoy — because neither reads the answer. Moving them in front of the
+    /// call is what lets the whole corpus be drawn before any of it is asked for, and it leaves the sequence the seed
+    /// produces unchanged.
+    /// </remarks>
+    private MessageEnvelope DrawEnvelope(
         int index,
-        IAiEmailContentSource contentSource,
-        CancellationToken cancellationToken)
+        SyntheticParticipant author,
+        IReadOnlyList<SyntheticParticipant> carbonCopies,
+        MessageEnvelope? parent)
     {
-        var author = this.participants[this.source.Next(this.participants.Count)];
-        var carbonCopies = this.BuildCarbonCopies(author);
-        var parent = this.PickParent();
-        var sentAt = this.BuildSentAt(index, parent);
+        var sentAt = this.BuildSentAt(index, parent?.SentAt);
         var origin = new SyntheticEmailAiOrigin(this.DrawLanguage(), this.DrawTopic());
         var messageId = this.BuildMessageId(index, author);
+        var bodyShape = (SyntheticBodyShape)this.source.Next(3);
+        var decoy = this.PlantDecoy();
 
-        // The envelope is decided before the call, for the reason the question is: the same plan asks the source the
-        // same questions in the same order on every run, so what differs between runs is the answer and nothing else.
-        var content = await contentSource.GenerateAsync(
-            new AiEmailContentRequest(
-                origin.Language,
-                origin.Topic,
-                author.DisplayName,
-                parent?.Subject,
-                OpeningOf(parent)),
-            cancellationToken);
-
-        // A reply keeps the thread's subject, which the deterministic layer owns: the source answers the body, and
-        // a subject it invented would break the In-Reply-To chain a corpus exists to exercise.
-        var subject = parent is null ? content.Subject : $"Re: {StripReplyPrefix(parent.Subject)}";
-
-        return new SyntheticEmail(
-            messageId,
-            parent?.MessageId,
-            parent is null ? [] : [.. parent.References, parent.MessageId],
+        return new MessageEnvelope(
+            index,
             author,
             carbonCopies,
-            subject,
+            parent?.Index,
             sentAt,
-            this.BuildAiBody(content),
-            this.BuildAttachment(),
-            origin);
+            origin,
+            messageId,
+            bodyShape,
+            decoy,
+            this.BuildAttachment());
     }
+
+    /// <summary>Asks the source for every drawn message, waiting for no more than the named number of answers at once.</summary>
+    /// <remarks>
+    /// <para>
+    /// One task per message, each awaiting the message it answers before it asks anything: a reply's prompt carries
+    /// the subject and the opening of what it replies to, so that message has to have been answered first. Everything
+    /// else in a corpus depends on nothing, which is what the calls overlap across, and the semaphore is what keeps a
+    /// batch of two hundred from opening two hundred connections to a provider at once.
+    /// </para>
+    /// <para>
+    /// The answers land in the array at the index they were drawn under, so what comes back is in corpus order however
+    /// the calls finished. That is the whole of what makes the degree of concurrency invisible in the output.
+    /// </para>
+    /// </remarks>
+    private async Task<SyntheticEmail[]> FillAsync(
+        IReadOnlyList<MessageEnvelope> envelopes,
+        IAiEmailContentSource contentSource,
+        int concurrency,
+        CancellationToken cancellationToken)
+    {
+        using var answering = new SemaphoreSlim(concurrency);
+        var filled = new Task<SyntheticEmail>[envelopes.Count];
+
+        for (var index = 0; index < envelopes.Count; index++)
+        {
+            var envelope = envelopes[index];
+
+            filled[index] = FillOneAsync(
+                envelope,
+                envelope.ParentIndex is { } parent ? filled[parent] : null);
+        }
+
+        return await Task.WhenAll(filled);
+
+        async Task<SyntheticEmail> FillOneAsync(MessageEnvelope envelope, Task<SyntheticEmail>? answeringParent)
+        {
+            var parent = answeringParent is null ? null : await answeringParent;
+
+            await answering.WaitAsync(cancellationToken);
+
+            AiEmailContent content;
+
+            try
+            {
+                content = await contentSource.GenerateAsync(
+                    new AiEmailContentRequest(
+                        envelope.Origin.Language,
+                        envelope.Origin.Topic,
+                        envelope.Author.DisplayName,
+                        parent?.Subject,
+                        OpeningOf(parent)),
+                    cancellationToken);
+            }
+            finally
+            {
+                answering.Release();
+            }
+
+            return Compose(envelope, parent, content);
+        }
+    }
+
+    /// <summary>Builds the message the envelope described around the content the source answered.</summary>
+    /// <remarks>
+    /// A reply keeps the thread's subject, which the deterministic layer owns: the source answers the body, and a
+    /// subject it invented would break the In-Reply-To chain a corpus exists to exercise.
+    /// </remarks>
+    private static SyntheticEmail Compose(MessageEnvelope envelope, SyntheticEmail? parent, AiEmailContent content) =>
+        new(
+            envelope.MessageId,
+            parent?.MessageId,
+            parent is null ? [] : [.. parent.References, parent.MessageId],
+            envelope.Author,
+            envelope.CarbonCopies,
+            parent is null ? content.Subject : $"Re: {StripReplyPrefix(parent.Subject)}",
+            envelope.SentAt,
+            ComposeAiBody(envelope, content),
+            envelope.Attachment,
+            envelope.Origin);
 
     private string DrawLanguage() => this.plan.Languages[this.source.Next(this.plan.Languages.Count)];
 
@@ -549,19 +636,26 @@ internal sealed class SyntheticEmailGenerator
         return chosen;
     }
 
-    private SyntheticEmail? PickParent()
+    /// <summary>Draws the message a new one answers, or nothing.</summary>
+    /// <remarks>
+    /// Written over what has been produced rather than over the produced messages, because the AI path draws every
+    /// envelope before a single message exists. The draws are the same two either way, which is what keeps one seed
+    /// producing one thread structure in both modes.
+    /// </remarks>
+    private TProduced? PickParent<TProduced>(IReadOnlyList<TProduced> produced)
+        where TProduced : class
     {
-        if (this.produced.Count == 0 || this.source.Next(100) >= ReplyPercentage)
+        if (produced.Count == 0 || this.source.Next(100) >= ReplyPercentage)
         {
             return null;
         }
 
-        var window = Math.Min(ThreadWindow, this.produced.Count);
+        var window = Math.Min(ThreadWindow, produced.Count);
 
-        return this.produced[this.produced.Count - 1 - this.source.Next(window)];
+        return produced[produced.Count - 1 - this.source.Next(window)];
     }
 
-    private DateTimeOffset BuildSentAt(int index, SyntheticEmail? parent)
+    private DateTimeOffset BuildSentAt(int index, DateTimeOffset? parentSentAt)
     {
         var earliest = this.plan.LatestSentAt.AddDays(-this.plan.SpanDays);
         var spanSeconds = (this.plan.LatestSentAt - earliest).TotalSeconds;
@@ -573,8 +667,8 @@ internal sealed class SyntheticEmailGenerator
 
         // One slot's worth of jitter can still put a message a little before the one it answers, which no mail client
         // would ever show. Pushing it past the parent costs one branch and keeps every thread readable.
-        return parent is not null && sentAt <= parent.SentAt
-            ? parent.SentAt.AddMinutes(this.source.Next(5, 240))
+        return parentSentAt is { } answered && sentAt <= answered
+            ? answered.AddMinutes(this.source.Next(5, 240))
             : sentAt;
     }
 
@@ -633,35 +727,33 @@ internal sealed class SyntheticEmailGenerator
             decoy);
     }
 
-    private SyntheticEmailBody BuildAiBody(AiEmailContent content)
+    /// <summary>Wraps an answered message in the body form the envelope drew for it.</summary>
+    /// <remarks>
+    /// The MIME shape is still drawn from the seed for the reason the deterministic body varies it, but the two
+    /// alternatives are no longer one text in two wrappings: the source answers the message as text and as the markup
+    /// real mail carries, so which of them an extractor chooses is a choice between genuinely different documents
+    /// rather than between a paragraph list and the same paragraph list in tags. The charset is the one axis the seed
+    /// does not draw here: a body written in the language the invocation names is one the vocabulary's three charsets
+    /// cannot be promised to hold, and utf-8 is the one that holds any of them.
+    /// </remarks>
+    private static SyntheticEmailBody ComposeAiBody(MessageEnvelope envelope, AiEmailContent content)
     {
-        var shape = (SyntheticBodyShape)this.source.Next(3);
-
-        // The MIME shape is still drawn from the seed for the reason the deterministic body varies it, but the two
-        // alternatives are no longer one text in two wrappings: the source answers the message as text and as the
-        // markup real mail carries, so which of them an extractor chooses is a choice between genuinely different
-        // documents rather than between a paragraph list and the same paragraph list in tags.
         var blocks = content.Body
             .Replace("\r\n", "\n", StringComparison.Ordinal)
             .Split(["\n\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .ToList();
 
-        // The charset is the one axis the seed does not draw here: a body written in the language the invocation names
-        // is one the vocabulary's three charsets cannot be promised to hold, and utf-8 is the one that holds any of
-        // them.
-        var decoy = this.PlantDecoy();
-
-        if (decoy is not null)
+        if (envelope.Decoy is not null)
         {
-            blocks.Add(decoy.Sentence);
+            blocks.Add(envelope.Decoy.Sentence);
         }
 
         return new SyntheticEmailBody(
-            shape,
+            envelope.BodyShape,
             string.Join("\n\n", blocks),
-            PlantInHtml(content.Html, decoy),
+            PlantInHtml(content.Html, envelope.Decoy),
             SyntheticCharacterSet.Utf8,
-            decoy);
+            envelope.Decoy);
     }
 
     /// <summary>Puts the fabricated sensitive material into the answered document, where a scanner reading HTML meets it.</summary>
