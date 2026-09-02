@@ -978,8 +978,9 @@ else's mail server to redraw, a change asked for while the account is unreachabl
 process that dies between a copy and a delete leaves a record saying what was half done.
 
 **A submission is a batch, and the answer is per message.** At most 200 messages per request — and at most 100 records
-per read, because a read names them in the request line and a longer one is refused by the server before any route sees
-it. A refusal about one of the messages is that message's own result rather than the request's — so a batch composed from a list that has moved on since
+per read, because a read names them in the request line. The route enforces that hundred itself, answering a longer one
+with an ordinary `400`; it is set well under the request line Kestrel will actually accept, so a longer path or a proxy
+that rewrites the prefix never turns a documented read into a raw `414` nobody can act on. A refusal about one of the messages is that message's own result rather than the request's — so a batch composed from a list that has moved on since
 the screen drew it reports exactly which entries did not apply and writes the rest down. `requestId` is the caller's own
 identity for the request: repeating a request under the same one is the same request and produces the same records
 rather than a second set, and omitting it has one generated, which makes every submission distinct.
