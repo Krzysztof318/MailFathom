@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using System.Text;
+using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Persistence;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
@@ -68,6 +70,7 @@ public sealed class InMemoryMailDraftStoreTests
             Session,
             draft.Id,
             [],
+            "a draft",
             mimeByteLength: 32,
             Moment.AddMinutes(5),
             TestContext.Current.CancellationToken);
@@ -88,7 +91,7 @@ public sealed class InMemoryMailDraftStoreTests
         var draft = await OpenAsync(store);
 
         // Act
-        await store.ReviseAsync(Session, draft.Id, [], 32, Moment, TestContext.Current.CancellationToken);
+        await store.ReviseAsync(Session, draft.Id, [], "a draft", 32, Moment, TestContext.Current.CancellationToken);
 
         // Assert
         Assert.Equal(1, draft.Revision);
@@ -109,6 +112,7 @@ public sealed class InMemoryMailDraftStoreTests
             Session,
             draft.Id,
             [],
+            "a draft",
             32,
             Moment,
             TestContext.Current.CancellationToken);
@@ -383,6 +387,154 @@ public sealed class InMemoryMailDraftStoreTests
         Assert.Equal(MailDraftStage.Composed, recorded.Stage);
     }
 
+    /// <summary>A reading for one owner answers with that owner's drafts, newest first, and with nobody else's.</summary>
+    [Fact]
+    public async Task ReadForOwnerAsync_DraftsOfSeveralOwners_AnswersTheOnesTheOwnerAskedForHolds()
+    {
+        // Arrange
+        var store = new InMemoryMailDraftStore();
+        var mine = await OpenAsync(store);
+        await OpenAsync(
+            store,
+            MailAccountIdentity.Create(SyntheticMailOwner.Another, MailAccountId.Create("work")));
+
+        // Act
+        var held = await store.ReadForOwnerAsync(
+            SyntheticMailOwner.Deployment,
+            account: null,
+            maxCount: 10,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([mine.Id], held.Select(draft => draft.Id));
+    }
+
+    /// <summary>A reading narrowed to one account answers with that account's drafts alone.</summary>
+    [Fact]
+    public async Task ReadForOwnerAsync_NarrowedToOneAccount_AnswersWithThatAccountsDraftsAlone()
+    {
+        // Arrange
+        var store = new InMemoryMailDraftStore();
+        var atWork = await OpenAsync(store);
+        await OpenAsync(
+            store,
+            MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal")));
+
+        // Act
+        var held = await store.ReadForOwnerAsync(
+            SyntheticMailOwner.Deployment,
+            Account.Id,
+            maxCount: 10,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal([atWork.Id], held.Select(draft => draft.Id));
+    }
+
+    /// <summary>A staged file joins the draft as it was uploaded, and its octets are read back for the next composition.</summary>
+    [Fact]
+    public async Task StageAttachmentAsync_AFileOnADraftBeingWritten_JoinsItAndKeepsItsOctets()
+    {
+        // Arrange
+        var store = new InMemoryMailDraftStore();
+        var draft = await OpenAsync(store);
+
+        // Act
+        var staged = await store.StageAttachmentAsync(
+            Session,
+            draft.Id,
+            new AuthoredEmailAttachment("note.txt", "text/plain", "Remember."u8.ToArray()),
+            Moment,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var content = await store.ReadAttachmentContentAsync(draft.Id, TestContext.Current.CancellationToken);
+        Assert.Equal([staged.Id], store.Peek(draft.Id)!.Attachments.Select(attachment => attachment.Id));
+        Assert.Equal("note.txt", staged.FileName);
+        Assert.Equal(["Remember."], content.Select(file => Encoding.UTF8.GetString(file.Content.Span)));
+    }
+
+    /// <summary>Staging a file counts as a change to the draft, which is what an ordered listing and the race both read.</summary>
+    /// <remarks>
+    /// The real store moves the draft's own row when a file is staged, so two uploads racing each other conflict over
+    /// its concurrency token instead of both committing past the count bound. A double that left the row untouched
+    /// would let a test of that bound pass while never having exercised what enforces it.
+    /// </remarks>
+    [Fact]
+    public async Task StageAttachmentAsync_AFileOnADraftBeingWritten_MovesTheDraftsOwnLastChange()
+    {
+        // Arrange
+        var store = new InMemoryMailDraftStore();
+        var draft = await OpenAsync(store);
+        var later = Moment.AddMinutes(5);
+
+        // Act
+        await store.StageAttachmentAsync(
+            Session,
+            draft.Id,
+            new AuthoredEmailAttachment("note.txt", "text/plain", "Remember."u8.ToArray()),
+            later,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal(Moment, draft.RevisedAt);
+        Assert.Equal(later, store.Peek(draft.Id)!.RevisedAt);
+    }
+
+    /// <summary>Taking a file off removes it once, and taking it off again reports that the draft carries no such file.</summary>
+    [Fact]
+    public async Task UnstageAttachmentAsync_AFileTakenOffTwice_RemovesItOnceAndReportsTheSecondAsCarryingNone()
+    {
+        // Arrange
+        var store = new InMemoryMailDraftStore();
+        var draft = await OpenAsync(store);
+        var staged = await store.StageAttachmentAsync(
+            Session,
+            draft.Id,
+            new AuthoredEmailAttachment("note.txt", "text/plain", "Remember."u8.ToArray()),
+            Moment,
+            TestContext.Current.CancellationToken);
+
+        // Act
+        var first = await store.UnstageAttachmentAsync(
+            Session,
+            draft.Id,
+            staged.Id,
+            TestContext.Current.CancellationToken);
+        var second = await store.UnstageAttachmentAsync(
+            Session,
+            draft.Id,
+            staged.Id,
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(first);
+        Assert.False(second);
+        Assert.Empty(store.Peek(draft.Id)!.Attachments);
+        Assert.Empty(await store.ReadAttachmentContentAsync(draft.Id, TestContext.Current.CancellationToken));
+    }
+
+    /// <summary>Reading the staged files of a draft nobody holds answers with none rather than refusing.</summary>
+    /// <remarks>
+    /// The real store reads a table by a foreign key and finds no rows, so a draft that is gone reads as one carrying
+    /// nothing. A double that threw here instead would turn the ownership refusal above it into an exception of a
+    /// different kind, and a test about that refusal would then be passing on the double's behaviour.
+    /// </remarks>
+    [Fact]
+    public async Task ReadAttachmentContentAsync_ADraftNobodyHolds_AnswersWithNoFilesRatherThanRefusing()
+    {
+        // Arrange
+        var store = new InMemoryMailDraftStore();
+
+        // Act
+        var content = await store.ReadAttachmentContentAsync(
+            MailDraftId.Create(Guid.CreateVersion7(Moment)),
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Empty(content);
+    }
+
     private static Task<MailDraftRecord> OpenAsync(
         InMemoryMailDraftStore store,
         MailAccountIdentity? account = null) =>
@@ -391,6 +543,7 @@ public sealed class InMemoryMailDraftStoreTests
             account ?? Account,
             OutgoingEmailRequester.Command("one-act"),
             [],
+            "a draft",
             mimeByteLength: 16,
             Moment,
             TestContext.Current.CancellationToken);

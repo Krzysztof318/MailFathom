@@ -2,9 +2,11 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Application.Persistence;
 using MailFathom.CodeCoverage;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
@@ -48,6 +50,7 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
         MailAccountIdentity account,
         OutgoingEmailRequester author,
         IReadOnlyList<MailDraftRecipient> recipients,
+        string subject,
         long mimeByteLength,
         DateTimeOffset composedAt,
         CancellationToken cancellationToken)
@@ -55,6 +58,7 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(author);
         ArgumentNullException.ThrowIfNull(recipients);
+        ArgumentNullException.ThrowIfNull(subject);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(mimeByteLength);
 
         var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
@@ -68,6 +72,7 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
             OwnerId = account.Owner.Value,
             RequesterOrigin = author.Origin,
             RequesterIdentity = author.Identity,
+            Subject = subject,
             Revision = FirstRevision,
             MimeByteLength = mimeByteLength,
             ComposedAt = composedAt,
@@ -86,12 +91,14 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
         IPersistenceSession session,
         MailDraftId draftId,
         IReadOnlyList<MailDraftRecipient> recipients,
+        string subject,
         long mimeByteLength,
         DateTimeOffset revisedAt,
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(recipients);
+        ArgumentNullException.ThrowIfNull(subject);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(mimeByteLength);
 
         var entity = await RequireAsync(session, draftId, cancellationToken);
@@ -107,6 +114,7 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
         // append and the removal leaves one draft in the folder rather than two or none.
         entity.Revision++;
         entity.MimeByteLength = mimeByteLength;
+        entity.Subject = subject;
         entity.RevisedAt = revisedAt;
 
         // Replaced outright rather than amended, so the list is the composed message's own rather than an accumulation
@@ -175,6 +183,142 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
             .ToArrayAsync(cancellationToken);
 
         return [.. entities.Select(MailDraftRecordMapping.ToRecord)];
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Narrowed on the owner first and the account second, which is the order the index over this table leads with, so
+    /// an owner's listing is a range scan whether or not it names an account. Drafts on their way out are left out at
+    /// the database rather than filtered afterwards: what a person means by their drafts is what they can still edit.
+    /// </remarks>
+    public async Task<IReadOnlyList<MailDraftRecord>> ReadForOwnerAsync(
+        MailOwnerId owner,
+        MailAccountId? account,
+        int maxCount,
+        CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxCount);
+
+        var ownerValue = owner.Value;
+        var accountValue = account?.Value;
+
+        var entities = await this.ReadDrafts()
+            .Where(draft => draft.OwnerId == ownerValue
+                && (accountValue == null || draft.MailboxAccountId == accountValue)
+                && draft.DiscardedAt == null
+                && draft.PromotedToOutgoingEmailId == null)
+            .OrderByDescending(draft => draft.RevisedAt)
+            .ThenBy(draft => draft.Id)
+            .Take(maxCount)
+            .ToArrayAsync(cancellationToken);
+
+        return [.. entities.Select(MailDraftRecordMapping.ToRecord)];
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The one read here that joins the payload table, and it projects rather than materializing the entity so nothing
+    /// but the three values a composition needs is loaded. The octets are copied into memory the composer owns,
+    /// because the array EF Core materialized is this query's and the message is built after the context is done.
+    /// </remarks>
+    public async Task<IReadOnlyList<AuthoredEmailAttachment>> ReadAttachmentContentAsync(
+        MailDraftId draftId,
+        CancellationToken cancellationToken)
+    {
+        var files = await readContext.MailDraftAttachments
+            .AsNoTracking()
+            .Where(attachment => attachment.MailDraftId == draftId.Value && attachment.Content != null)
+            .OrderBy(attachment => attachment.StagedAt)
+            .ThenBy(attachment => attachment.Id)
+            .Select(attachment => new
+            {
+                attachment.FileName,
+                attachment.MediaType,
+                Content = attachment.Content!.Content,
+            })
+            .ToArrayAsync(cancellationToken);
+
+        return [.. files.Select(file => new AuthoredEmailAttachment(
+            file.FileName,
+            file.MediaType,
+            file.Content))];
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The description and the octets are added as one graph through the draft's own collection, so a file is never
+    /// committed against a draft that is not there and its payload is never committed without the row that says what
+    /// it is called.
+    /// </remarks>
+    public async Task<MailDraftAttachment> StageAttachmentAsync(
+        IPersistenceSession session,
+        MailDraftId draftId,
+        AuthoredEmailAttachment file,
+        DateTimeOffset stagedAt,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(file);
+
+        var entity = await RequireAsync(session, draftId, cancellationToken);
+
+        // Moved so the draft's own row takes part in the write, which is what makes two uploads racing each other
+        // conflict: adding a child row alone touches no concurrency token, so both would commit and the count bound
+        // the application checked would be exceeded by exactly the pair that never saw each other. It is also what an
+        // attachment is — a listing orders drafts by when each last changed, and attaching a file changed this one.
+        entity.RevisedAt = stagedAt;
+
+        var attachment = new MailDraftAttachmentEntity
+        {
+            Id = Guid.CreateVersion7(stagedAt),
+            MailDraftId = entity.Id,
+            MailDraft = entity,
+            FileName = file.FileName,
+            MediaType = file.MediaType,
+            ByteLength = file.Content.Length,
+            StagedAt = stagedAt,
+        };
+
+        attachment.Content = new MailDraftAttachmentContentEntity
+        {
+            MailDraftAttachmentId = attachment.Id,
+            Attachment = attachment,
+            Content = file.Content.ToArray(),
+        };
+
+        entity.Attachments.Add(attachment);
+
+        return MailDraftRecordMapping.ToAttachment(attachment);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The draft is named beside the file, so an identifier belonging to another draft removes nothing rather than
+    /// removing that draft's file. The octets go by the cascade declared on the payload's own foreign key.
+    /// </remarks>
+    public async Task<bool> UnstageAttachmentAsync(
+        IPersistenceSession session,
+        MailDraftId draftId,
+        MailDraftAttachmentId attachmentId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+
+        var writeContext = await EfCorePersistenceSessionAccessor.JoinAsync(session, cancellationToken);
+
+        var attachment = await writeContext.MailDraftAttachments
+            .SingleOrDefaultAsync(
+                candidate => candidate.Id == attachmentId.Value && candidate.MailDraftId == draftId.Value,
+                cancellationToken);
+
+        if (attachment is null)
+        {
+            return false;
+        }
+
+        writeContext.MailDraftAttachments.Remove(attachment);
+
+        return true;
     }
 
     /// <inheritdoc />
@@ -314,8 +458,8 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
         // the object holding the revision the author is discarding.
         await ReleasedContentObjects.ReleaseForMailDraftAsync(session, draftId.Value, cancellationToken);
 
-        // The copies, the recipients, and the stored message go with it through the cascades declared on their foreign
-        // keys, which is what makes erasing a draft one act rather than four.
+        // The copies, the recipients, the stored message, and every file staged against the draft go with it through
+        // the cascades declared on their foreign keys, which is what makes erasing a draft one act rather than five.
         writeContext.MailDrafts.Remove(entity);
     }
 
@@ -353,14 +497,27 @@ internal sealed class MailDraftStore(MailFathomDbContext readContext) : IMailDra
 
     /// <summary>Reads drafts with everything a record is rebuilt from, and without the message they hold.</summary>
     /// <remarks>
+    /// <para>
     /// The stored MIME is deliberately not included. Listing what a mailbox holds must not pull every draft's bytes
     /// into memory, and whatever is going to append or transmit one reads it through the content store by identifier.
+    /// </para>
+    /// <para>
+    /// Split rather than joined, because three collections off one row multiply: a draft naming the 256 recipients a
+    /// request may name, carrying a copy per unsettled revision and the files an author attached, is one row of the
+    /// draft repeated once per combination — and a listing of two hundred such drafts would read that product from the
+    /// server to rebuild the same two hundred records. Four bounded statements cost four round trips and read each row
+    /// once. What they give up is one statement's consistency: a revision committed between them can leave a record
+    /// carrying one revision's recipients beside another's copies, which is a draft this owner is editing rather than
+    /// mail, and every caller that acts on a draft re-reads it under the write's own transaction anyway.
+    /// </para>
     /// </remarks>
     private IQueryable<MailDraftEntity> ReadDrafts() =>
         readContext.MailDrafts
             .AsNoTracking()
+            .AsSplitQuery()
             .Include(draft => draft.Recipients)
-            .Include(draft => draft.Copies);
+            .Include(draft => draft.Copies)
+            .Include(draft => draft.Attachments);
 
     /// <summary>Writes the recipients of one revision as the rows that belong to the draft.</summary>
     /// <remarks>

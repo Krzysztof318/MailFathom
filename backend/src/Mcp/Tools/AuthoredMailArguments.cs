@@ -3,8 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Emails.Mailboxes;
-using MailFathom.Application.Mail.Delivery.Addressing;
-using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Application.Mail.Delivery.Submission;
 using MailFathom.Application.Mail.Delivery.Tracking;
@@ -12,25 +10,24 @@ using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
 using MailFathom.Domain.Emails;
-using MailFathom.Domain.Failures;
 
 namespace MailFathom.Mcp.Tools;
 
-/// <summary>Reads the arguments the tools that author mail, the tools that ask about a send, and the tools that anchor a request to one stored email share.</summary>
+/// <summary>Reads the identifiers, the idempotency key, and the account name that the tools authoring mail, asking about a send, and anchoring a request to one stored email share.</summary>
 /// <remarks>
 /// <para>
-/// Three tools send and two write a draft, and each of them takes a list of addresses in the same shape and refuses the
-/// same values, as the three that send take an idempotency key. Reading them once is what keeps the five from drifting
-/// into five answers to one question: a key a fourth character longer, a blank address admitted by one tool and refused
-/// by the next, a recipient ceiling applied after the list was expanded rather than before it. The same holds of the
-/// identifiers: an email named for a read, for a flag change, or for an answer is the same identifier, so it is read
-/// here rather than at each tool that takes one.
+/// An email named for a read, for a flag change, or for an answer is the same identifier, and so are a queued send and
+/// a held draft; the three tools that send take an idempotency key in the same shape. Reading each of them once is what
+/// keeps one question from drifting into as many answers as there are tools — a key a fourth character longer here than
+/// there, an identifier one tool parses and the next scans unbounded. The address lists those tools take are not read
+/// here: <see cref="Application.Mail.Delivery.Addressing.AuthoredRecipientHeaders" /> holds them, so a recipient
+/// shape is decided once for every surface rather than once for this one.
 /// </para>
 /// <para>
 /// Everything here is checked in front of the use case rather than instead of it. The domain bounds the same key where
-/// its column is bounded and the composition parses the same addresses where a message is built, so what these
-/// refusals buy is a caller meeting a statement about the argument it sent rather than an argument failure naming a
-/// parameter it never wrote.
+/// its column is bounded, and the use case decides whether an account this text could name is one this deployment
+/// serves, so what these refusals buy is a caller meeting a statement about the argument it sent rather than an
+/// argument failure naming a parameter it never wrote.
 /// </para>
 /// </remarks>
 internal static class AuthoredMailArguments
@@ -140,46 +137,6 @@ internal static class AuthoredMailArguments
         return OutgoingEmailRequester.Command(idempotencyKey);
     }
 
-    /// <summary>Collects the three headers into the one recipient list every author writes.</summary>
-    /// <param name="to">The addresses named in the <c>To</c> header, or <see langword="null" /> where the act names none.</param>
-    /// <param name="cc">The addresses named in the <c>Cc</c> header, or <see langword="null" />.</param>
-    /// <param name="bcc">The addresses named in the <c>Bcc</c> header, or <see langword="null" />.</param>
-    /// <param name="tooManyRecipients">Raises the caller's own refusal for a list longer than a record holds.</param>
-    /// <param name="fieldUnusable">Raises the caller's own refusal for a header carrying an entry that names nobody.</param>
-    /// <returns>The recipients the author named, in the order the headers are read in.</returns>
-    /// <remarks>
-    /// <para>
-    /// The order is the order the headers are read in, which is the order the composition writes them in. Nothing is
-    /// deduplicated or parsed here: whether text names a mailbox is the composition's question, and how many people a
-    /// message may actually reach is the deployment's number, both asked once for every way a message is authored.
-    /// What is answered here is only how long the caller's own lists are, because that is what decides whether they are
-    /// expanded at all, and the check therefore belongs in front of the expansion rather than after it.
-    /// </para>
-    /// <para>
-    /// A send and a draft read the same headers and refuse the same values, and differ only in the failure they raise:
-    /// a caller told its <em>submission</em> was refused while saving a draft would read that as a message having been
-    /// offered to a server and turned down, which is the one thing that certainly did not happen. So the act supplies
-    /// the two refusals rather than the reading being written twice, and the code and the sentence stay the same either
-    /// way because both are published from one place.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="MailFathomException">Thrown as whichever refusal the act supplied, when the three headers name more people than a record holds or an entry carries no address.</exception>
-    public static IReadOnlyList<NamedRecipient> NamedRecipients(
-        IReadOnlyList<string>? to,
-        IReadOnlyList<string>? cc,
-        IReadOnlyList<string>? bcc,
-        Func<MailFathomException> tooManyRecipients,
-        Func<AuthoredEmailRefusal, MailFathomException> fieldUnusable)
-    {
-        if (Counted(to, cc, bcc) > OutgoingEmailRequest.MaximumRecipientCount)
-        {
-            throw tooManyRecipients();
-        }
-
-        return Collect(to, cc, bcc, out var unusableField)
-            ?? throw fieldUnusable(new AuthoredEmailRefusal(AuthoredEmailRefusalReason.FieldUnusable, unusableField));
-    }
-
     /// <summary>Reports whether text could name an account at all, before anything looks for one it names.</summary>
     /// <param name="account">The text the caller named the account by.</param>
     /// <returns><see langword="true" /> when an account could be named by that text.</returns>
@@ -193,66 +150,4 @@ internal static class AuthoredMailArguments
         !string.IsNullOrWhiteSpace(account)
         && account.Length <= MailAccountSelector.MaximumLength
         && !account.Any(char.IsControl);
-
-    /// <summary>Counts what the three headers name together, which is what decides whether they are expanded at all.</summary>
-    private static int Counted(
-        IReadOnlyList<string>? to,
-        IReadOnlyList<string>? cc,
-        IReadOnlyList<string>? bcc) =>
-        (to?.Count ?? 0) + (cc?.Count ?? 0) + (bcc?.Count ?? 0);
-
-    /// <summary>Reads the three headers into one list, or reports the header carrying an entry that names nobody.</summary>
-    /// <returns>The recipients, or <see langword="null" /> when an entry carried no address.</returns>
-    /// <remarks>
-    /// Blank text stops the reading because an authored recipient is built from an address and a blank one names
-    /// nothing to build from — a defect in whoever called rather than an author's mistake, and this is the boundary
-    /// that keeps it from becoming one. Everything else the text may be wrong about travels unparsed to the
-    /// composition, which is the single place an address is read and refused.
-    /// </remarks>
-    private static List<NamedRecipient>? Collect(
-        IReadOnlyList<string>? to,
-        IReadOnlyList<string>? cc,
-        IReadOnlyList<string>? bcc,
-        out AuthoredEmailField unusableField)
-    {
-        var named = new List<NamedRecipient>(Counted(to, cc, bcc));
-
-        if (AddNamed(named, to, OutgoingRecipientRole.To, AuthoredEmailField.To, out unusableField)
-            && AddNamed(named, cc, OutgoingRecipientRole.Cc, AuthoredEmailField.Cc, out unusableField)
-            && AddNamed(named, bcc, OutgoingRecipientRole.Bcc, AuthoredEmailField.Bcc, out unusableField))
-        {
-            return named;
-        }
-
-        return null;
-    }
-
-    /// <summary>Adds one header's addresses, stopping at an entry that names nobody at all.</summary>
-    /// <returns><see langword="true" /> when every entry named somebody.</returns>
-    private static bool AddNamed(
-        List<NamedRecipient> named,
-        IReadOnlyList<string>? addresses,
-        OutgoingRecipientRole role,
-        AuthoredEmailField field,
-        out AuthoredEmailField unusableField)
-    {
-        unusableField = field;
-
-        if (addresses is null)
-        {
-            return true;
-        }
-
-        foreach (var address in addresses)
-        {
-            if (string.IsNullOrWhiteSpace(address))
-            {
-                return false;
-            }
-
-            named.Add(NamedRecipient.AtAddress(role, address));
-        }
-
-        return true;
-    }
 }

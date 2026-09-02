@@ -562,6 +562,7 @@ public sealed class MailOutboxPassTests
                             OutgoingRecipient.Create(recipient, OutgoingRecipientRole.To),
                             AuthoredRecipientProvenance.NamedByCaller),
                     ],
+                    "a draft",
                     InternetMessageId.Mint("example.test"),
                     RawMime),
                 revises: null,

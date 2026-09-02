@@ -825,6 +825,52 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.ToTable("mail_answering_audited_emails", (string)null);
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailDraftAttachmentContentEntity", b =>
+                {
+                    b.Property<Guid>("MailDraftAttachmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("Content")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.HasKey("MailDraftAttachmentId");
+
+                    b.ToTable("mail_draft_attachment_contents", (string)null);
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailDraftAttachmentEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("ByteLength")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<Guid>("MailDraftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("MediaType")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<DateTimeOffset>("StagedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MailDraftId", "StagedAt")
+                        .HasDatabaseName("ix_mail_draft_attachments_draft_staged");
+
+                    b.ToTable("mail_draft_attachments", (string)null);
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailDraftContentEntity", b =>
                 {
                     b.Property<Guid>("MailDraftId")
@@ -978,6 +1024,12 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("Revision")
                         .HasColumnType("integer");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("");
 
                     b.HasKey("Id");
 
@@ -2685,6 +2737,30 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailDraftAttachmentContentEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.MailDraftAttachmentEntity", "Attachment")
+                        .WithOne("Content")
+                        .HasForeignKey("MailFathom.Infrastructure.Persistence.Entities.MailDraftAttachmentContentEntity", "MailDraftAttachmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_mail_draft_attachment_contents_attachments");
+
+                    b.Navigation("Attachment");
+                });
+
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailDraftAttachmentEntity", b =>
+                {
+                    b.HasOne("MailFathom.Infrastructure.Persistence.Entities.MailDraftEntity", "MailDraft")
+                        .WithMany("Attachments")
+                        .HasForeignKey("MailDraftId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_mail_draft_attachments_drafts");
+
+                    b.Navigation("MailDraft");
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailDraftContentEntity", b =>
                 {
                     b.HasOne("MailFathom.Infrastructure.Persistence.Entities.MailDraftEntity", "MailDraft")
@@ -2925,8 +3001,15 @@ namespace MailFathom.Infrastructure.Persistence.Migrations
                     b.Navigation("Emails");
                 });
 
+            modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailDraftAttachmentEntity", b =>
+                {
+                    b.Navigation("Content");
+                });
+
             modelBuilder.Entity("MailFathom.Infrastructure.Persistence.Entities.MailDraftEntity", b =>
                 {
+                    b.Navigation("Attachments");
+
                     b.Navigation("Content");
 
                     b.Navigation("Copies");

@@ -336,6 +336,22 @@ internal static class PersistenceConstraintNames
     /// <remarks>Named for the reason above: the composed name would be truncated and permanent.</remarks>
     internal const string MailDraftContentForeignKeyName = "fk_mail_draft_contents_drafts";
 
+    /// <summary>The foreign key that removes the files staged against a draft with the draft.</summary>
+    /// <remarks>Named for the reason above: the composed name would be truncated and permanent.</remarks>
+    internal const string MailDraftAttachmentForeignKeyName = "fk_mail_draft_attachments_drafts";
+
+    /// <summary>The index the files of one draft are read and composed in upload order through.</summary>
+    /// <remarks>
+    /// Unfiltered and leading with the draft, because every reading of it is already narrowed to one draft: what a
+    /// listing wants is that draft's files in the order a composition attaches them, and what a composition wants is
+    /// the same set with its octets.
+    /// </remarks>
+    internal const string MailDraftAttachmentDraftIndexName = "ix_mail_draft_attachments_draft_staged";
+
+    /// <summary>The foreign key that removes a staged file's octets with the row describing the file.</summary>
+    /// <remarks>Named for the reason above: the composed name would be truncated and permanent.</remarks>
+    internal const string MailDraftAttachmentContentForeignKeyName = "fk_mail_draft_attachment_contents_attachments";
+
     /// <summary>The uniqueness a job's idempotency rests on, which spans every state a row can reach.</summary>
     internal const string JobIdentityUniqueIndexName = "ix_jobs_identity";
 

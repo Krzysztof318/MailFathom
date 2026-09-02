@@ -12,6 +12,7 @@ using MailFathom.Application.Synchronization.Checkpoints;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Api;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Transport;
 using MailFathom.Host.UnitTests.TestDoubles;
@@ -22,6 +23,7 @@ using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
 using Xunit;
@@ -125,12 +127,24 @@ public sealed class ClientApiEndpointsTests
         Assert.Equal(
             [
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailAccountsEndpoint.MailAccountsRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientDraftEndpoints.DraftsRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientDraftEndpoints.DraftsRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientDraftEndpoints.DraftRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientDraftEndpoints.DraftRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientDraftEndpoints.DraftRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientDraftEndpoints.DraftAttachmentsRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientDraftEndpoints.DraftAttachmentRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientDraftEndpoints.DraftSendRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailTimelineEndpoint.MailTimelineRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailSearchEndpoint.MailSearchRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailFoldersEndpoint.MailFoldersRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailMessageEndpoint.MailMessageRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailAttachmentEndpoint.MailAttachmentRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailBodyEndpoint.MailBodyRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientOutboxEndpoints.OutboxRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientOutboxEndpoints.OutboxCancellationRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientOutboxEndpoints.OutboxRequeueRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientOutboxEndpoints.OutboxSendRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientPreferencesEndpoint.PreferencesRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientPreferencesEndpoint.PreferencesRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientOwnerRecordEndpoint.RecordRoute}",
@@ -180,21 +194,33 @@ public sealed class ClientApiEndpointsTests
         // Assert
         Assert.Equal(
             [
+                $"DELETE {prefix}{ClientDraftEndpoints.DraftRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
+                $"DELETE {prefix}{ClientDraftEndpoints.DraftAttachmentRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"GET {prefix}{ClientMailAccountsEndpoint.MailAccountsRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientDraftEndpoints.DraftsRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
+                $"GET {prefix}{ClientDraftEndpoints.DraftRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"GET {prefix}{ClientMailTimelineEndpoint.MailTimelineRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailSearchEndpoint.MailSearchRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailFoldersEndpoint.MailFoldersRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailMessageEndpoint.MailMessageRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailAttachmentEndpoint.MailAttachmentRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailBodyEndpoint.MailBodyRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientOutboxEndpoints.OutboxRoute} -> {MailFathomPermission.MailSend.Name}",
+                $"GET {prefix}{ClientOutboxEndpoints.OutboxSendRoute} -> {MailFathomPermission.MailSend.Name}",
                 $"GET {prefix}{ClientPreferencesEndpoint.PreferencesRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientOwnerRecordEndpoint.RecordRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientApiEndpoints.SessionRoute} -> none",
                 $"GET {prefix}{ClientMailThreadEndpoint.MailThreadRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"POST {prefix}{ClientDraftEndpoints.DraftsRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
+                $"POST {prefix}{ClientDraftEndpoints.DraftAttachmentsRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
+                $"POST {prefix}{ClientDraftEndpoints.DraftSendRoute} -> {MailFathomPermission.MailSend.Name}",
+                $"POST {prefix}{ClientOutboxEndpoints.OutboxCancellationRoute} -> {MailFathomPermission.MailSend.Name}",
+                $"POST {prefix}{ClientOutboxEndpoints.OutboxRequeueRoute} -> {MailFathomPermission.MailSend.Name}",
                 $"POST {prefix}{ClientPreferencesEndpoint.PreferencesRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientOwnerRecordEndpoint.RecordRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
                 $"POST {prefix}{ClientOwnerRecordEndpoint.MailAccountsRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
                 $"POST {prefix}{ClientOwnerRecordEndpoint.MailAccountRemovalRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
+                $"PUT {prefix}{ClientDraftEndpoints.DraftRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
             ],
             PublishedAllocation(endpoints).Order(StringComparer.Ordinal));
     }
@@ -222,13 +248,14 @@ public sealed class ClientApiEndpointsTests
     }
 
     /// <summary>
-    /// A read, or a write to something of the caller's own and nothing else. Everything this surface serves about mail
-    /// is a <c>GET</c>, and the only things a client changes here are what this deployment reads for the person signed
-    /// in and what that person set about their own client — so a write anywhere else is a route somebody added without
-    /// deciding what it costs.
+    /// A read under the reading grant, and every write under a grant that says what it writes, save the one write of
+    /// the caller's own client preferences. Reading mail, changing the caller's own record, composing a draft, filing
+    /// one on their server, and sending are five separately provisioned powers, so a route that changes anything under
+    /// <c>mailfathom.mail.read</c> is one somebody added without deciding what it costs — and a credential provisioned
+    /// to read a mailbox would then send from it.
     /// </summary>
     [Fact]
-    public void MapClientApi_Always_PublishesReadsAndWritesToTheCallersOwnRecordOrPreferencesAlone()
+    public void MapClientApi_Always_PublishesEveryWriteUnderAGrantThatSaysWhatItWrites()
     {
         // Arrange
         var endpoints = BuildRouteBuilder();
@@ -251,17 +278,20 @@ public sealed class ClientApiEndpointsTests
                     verbs.HttpMethods,
                     method => Assert.True(
                         method == "GET"
-                        || (method == "POST"
-                            && (WritesTheCallersOwnRecord(endpoint) || WritesTheCallersOwnPreferences(endpoint))),
-                        $"{method} {endpoint} is published as neither a read nor a write to something of the caller's own."));
+                        || IsPublishedAsAWrite(endpoint)
+                        || WritesTheCallersOwnPreferences(endpoint),
+                        $"{method} {endpoint} changes something under a grant that does not say so."));
             });
     }
 
-    /// <summary>Reports whether a route is one of the caller's own record's writes, by the grant it was published under.</summary>
-    /// <remarks>The grant rather than the path, because what makes such a write admissible on an owner-facing surface is that it is separately provisioned: a path renamed keeps the claim, and a route quietly published under the read grant breaks it.</remarks>
-    private static bool WritesTheCallersOwnRecord(Endpoint endpoint) =>
+    /// <summary>Reports whether a route was published under one of the grants a write is provisioned by.</summary>
+    /// <remarks>The grant rather than the path, because what makes a write admissible on an owner-facing surface is that it is separately provisioned: a path renamed keeps the claim, and a route quietly published under the read grant breaks it.</remarks>
+    private static bool IsPublishedAsAWrite(Endpoint endpoint) =>
         endpoint.Metadata.GetOrderedMetadata<RoutePermission>()
-            .Any(published => published.Permission == MailFathomPermission.MailAccountsWrite);
+            .Any(published =>
+                published.Permission == MailFathomPermission.MailAccountsWrite
+                || published.Permission == MailFathomPermission.MailDraftsWrite
+                || published.Permission == MailFathomPermission.MailSend);
 
     /// <summary>Reports whether a route is the write of the caller's own client preferences, by the route it is served at.</summary>
     /// <remarks>
@@ -393,6 +423,7 @@ public sealed class ClientApiEndpointsTests
         services.AddScoped(_ => Substitute.For<IAuthorizedPrincipalSource>());
         services.AddScoped(_ => granted);
         services.AddSingleton(Substitute.For<IAuthorizationRefusalTelemetry>());
+        services.AddSingleton(Options.Create(new MailDeliveryOptions()));
         services.AddScoped(_ => UnreachedFreshnessReader(granted));
         services.AddScoped(_ => new MailFolderDirectoryReader(
             UnreachedFreshnessReader(granted),

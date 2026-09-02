@@ -139,6 +139,11 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<MailDraftContentEntity> MailDraftContents => this.Set<MailDraftContentEntity>();
 
+    internal DbSet<MailDraftAttachmentEntity> MailDraftAttachments => this.Set<MailDraftAttachmentEntity>();
+
+    internal DbSet<MailDraftAttachmentContentEntity> MailDraftAttachmentContents =>
+        this.Set<MailDraftAttachmentContentEntity>();
+
     internal DbSet<MailboxMutationAuditEntryEntity> MailboxMutationAuditEntries =>
         this.Set<MailboxMutationAuditEntryEntity>();
 
@@ -212,6 +217,8 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.ApplyConfiguration(new MailDraftRecipientConfiguration());
         modelBuilder.ApplyConfiguration(new MailDraftCopyConfiguration());
         modelBuilder.ApplyConfiguration(new MailDraftContentConfiguration());
+        modelBuilder.ApplyConfiguration(new MailDraftAttachmentConfiguration());
+        modelBuilder.ApplyConfiguration(new MailDraftAttachmentContentConfiguration());
         modelBuilder.ApplyConfiguration(new MailboxMutationAuditEntryConfiguration());
         modelBuilder.ApplyConfiguration(new MailAnsweringAuditEntryConfiguration());
         modelBuilder.ApplyConfiguration(new MailAnsweringAuditedEmailConfiguration());

@@ -80,12 +80,18 @@ public sealed class AuthoredMailDrafting(
             throw MailDraftRefusedException.From(recipientRefusal);
         }
 
+        // Read from the draft being revised rather than from the request, because a file is uploaded against a draft
+        // and belongs to it: a revision that composed only what its own body carried would take the author's
+        // attachments off the message every time they edited a word of it.
+        var attachments = await drafts.ReadStagedAttachmentsAsync(account.Identity.Id, request.Revises, cancellationToken);
+
         var authored = new AuthoredEmail
         {
             Recipients = resolution.Recipients,
             Subject = request.Subject,
             PlainTextBody = request.PlainTextBody,
             HtmlBody = request.HtmlBody,
+            Attachments = attachments,
         };
 
         var composition = composer.ComposeDraft(

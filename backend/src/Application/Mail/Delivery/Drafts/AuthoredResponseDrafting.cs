@@ -80,9 +80,17 @@ public sealed class AuthoredResponseDrafting(
             throw MailDraftRefusedException.From(refusal);
         }
 
+        // Appended to what the authoring produced rather than replacing it: a forward already carries the answered
+        // message's own files, and what an author uploaded against the draft comes after them.
+        var staged = await drafts.ReadStagedAttachmentsAsync(response.AccountId, request.Revises, cancellationToken);
+
+        var authored = staged.Count == 0
+            ? response.Email!
+            : response.Email! with { Attachments = [.. response.Email!.Attachments, .. staged] };
+
         var composition = composer.ComposeDraft(
             response.Account,
-            response.Email!,
+            authored,
             MailDeliveryCapabilities.BeforeAnyServerHasSpoken);
 
         if (composition.Draft is not { } composed)

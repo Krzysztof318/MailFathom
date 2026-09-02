@@ -174,6 +174,26 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
                         await context.EmailMessageContents
                             .CountAsync(content => content.StoredEmail.MailboxAccountId == SurvivingAccount, token));
 
+                    // The two tables the cascade reaches through a draft rather than through an account. Neither names
+                    // one, so the counts above say nothing about them: the erased owner's staged file and its octets
+                    // are gone with the draft, and the other owner's are still where they were put.
+                    Assert.Equal(
+                        0,
+                        await context.Set<MailDraftAttachmentEntity>()
+                            .CountAsync(attachment => attachment.MailDraft.OwnerId == erasedOwnerId, token));
+                    Assert.Equal(
+                        0,
+                        await context.Set<MailDraftAttachmentContentEntity>()
+                            .CountAsync(octets => octets.Attachment.MailDraft.OwnerId == erasedOwnerId, token));
+                    Assert.Equal(
+                        1,
+                        await context.Set<MailDraftAttachmentEntity>()
+                            .CountAsync(attachment => attachment.MailDraft.OwnerId == survivingOwnerId, token));
+                    Assert.Equal(
+                        1,
+                        await context.Set<MailDraftAttachmentContentEntity>()
+                            .CountAsync(octets => octets.Attachment.MailDraft.OwnerId == survivingOwnerId, token));
+
                     return 0;
                 },
                 cancellationToken);
@@ -356,16 +376,19 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
             FolderPath = "Sent",
             AppendedAt = now,
         });
-        context.MailDrafts.Add(new MailDraftEntity
+        var draft = new MailDraftEntity
         {
             Id = Guid.CreateVersion7(),
             OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             RequesterIdentity = "owner-erasure",
+            Subject = string.Empty,
             MimeByteLength = RepresentativeRawMime.Length,
             ComposedAt = now,
             RevisedAt = now,
-        });
+        };
+        context.MailDrafts.Add(draft);
+        StageAFileOn(context, draft, now);
         context.RecurringSends.Add(new RecurringSendEntity
         {
             Id = Guid.CreateVersion7(),
@@ -439,6 +462,35 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
     }
 
     /// <summary>Writes one person into an owner's book, with the one address row that hangs off them.</summary>
+    /// <summary>Stages one file and its octets against a draft, which is what a cascade two tables deep is read from.</summary>
+    /// <remarks>
+    /// Neither table names an account, so nothing the erasure seam issues itself reaches them: the file hangs off the
+    /// draft and the octets hang off the file, and both go only because PostgreSQL takes them with their parent. That
+    /// is the claim, and a foreign key declared without a cascading action would leave a person's staged files behind
+    /// after their erasure while every count the seam takes still read zero.
+    /// </remarks>
+    private static void StageAFileOn(MailFathomDbContext context, MailDraftEntity draft, DateTimeOffset stagedAt)
+    {
+        var attachment = new MailDraftAttachmentEntity
+        {
+            Id = Guid.CreateVersion7(stagedAt),
+            MailDraftId = draft.Id,
+            MailDraft = draft,
+            FileName = "report.pdf",
+            MediaType = "application/pdf",
+            ByteLength = RepresentativeRawMime.Length,
+            StagedAt = stagedAt,
+        };
+
+        context.Set<MailDraftAttachmentEntity>().Add(attachment);
+        context.Set<MailDraftAttachmentContentEntity>().Add(new MailDraftAttachmentContentEntity
+        {
+            MailDraftAttachmentId = attachment.Id,
+            Attachment = attachment,
+            Content = RepresentativeRawMime,
+        });
+    }
+
     private static void AddContact(MailFathomDbContext context, Guid ownerId, string displayName, string address)
     {
         var contact = new ContactEntity
@@ -524,16 +576,19 @@ public sealed class OrchestratedOwnerErasureTests(MailFathomOrchestrationFixture
             Sha256Hash = new byte[32],
             StoredAt = now,
         });
-        context.MailDrafts.Add(new MailDraftEntity
+        var draft = new MailDraftEntity
         {
             Id = Guid.CreateVersion7(),
             OwnerId = account.OwnerId,
             MailboxAccountId = account.Id,
             RequesterIdentity = "owner-erasure-bystander",
+            Subject = string.Empty,
             MimeByteLength = RepresentativeRawMime.Length,
             ComposedAt = now,
             RevisedAt = now,
-        });
+        };
+        context.MailDrafts.Add(draft);
+        StageAFileOn(context, draft, now);
         context.MailboxRefreshTokens.Add(new MailboxRefreshTokenEntity
         {
             OwnerId = account.OwnerId,

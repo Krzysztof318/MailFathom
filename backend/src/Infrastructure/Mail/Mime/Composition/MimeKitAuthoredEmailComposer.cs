@@ -568,8 +568,10 @@ internal sealed class MimeKitAuthoredEmailComposer(
                 capabilities.MaxMessageBytes);
         }
 
+        // Read off the assembled message rather than off what the author supplied, so the row a draft is listed by and
+        // the message a mail client shows can never name it differently.
         return MailDraftComposition.Composed(
-            new ComposedMailDraft(recipients, messageId, composed.ToArray()));
+            new ComposedMailDraft(recipients, message.Subject ?? string.Empty, messageId, composed.ToArray()));
     }
 
     /// <summary>Writes the two headers a receiving client threads the message by, for a message that answers another.</summary>

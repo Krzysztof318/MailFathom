@@ -56,6 +56,7 @@ internal static class ComposingAuthoredEmails
                 Arg.Any<MailDeliveryCapabilities>())
             .Returns(call => MailDraftComposition.Composed(new ComposedMailDraft(
                 DraftRecipientsOf(call.ArgAt<AuthoredEmail>(1)),
+                call.ArgAt<AuthoredEmail>(1).Subject,
                 InternetMessageId.Mint("example.test"),
                 mime)));
 
