@@ -11,55 +11,45 @@ import { SenderAvatar } from '../controls/SenderAvatar';
 import { useLocalization } from '../localization/useLocalization';
 import { Message } from '../messageBody/Message';
 
-// One message of a conversation, collapsed to a line or opened to what it says. It is its own component for the reason
-// a list row is: it is what carries the expansion, the keyboard path, and the read.
+// One message of a conversation, as a head and what it says. It is its own component for the reason a list row is: it
+// is what carries the read and the way out to the message on its own.
 //
-// The read is the point. A conversation of thirty messages is thirty bodies nobody asked for, which is the defect the
-// withdrawn client carried here — every row built its whole expanded body before anybody expanded it, on every render.
-// So `Message` is mounted by the expansion rather than hidden by it: a collapsed message costs one line of markup and
-// no request at all, and the request it does cost is made when somebody opens it.
+// A message the pane draws is open, which is what the design project draws and what leaves the pane with one decision
+// rather than one per message. The economy that used to sit here sits on the conversation instead: the history is
+// hidden until somebody asks for it, so a conversation of thirty messages mounts one body rather than thirty. Nothing
+// here collapses, so there is no disclosure, no contribution line, and no card — the border and the panel fill belong
+// to a collapsed message, which this pane no longer has.
 //
-// The disclosure is the browser's own, for the reason `readingPane/MessageHeaders.tsx` gives: it is reached by the
-// keyboard in document order, it is operated by Enter and by Space without anything here handling a key, and it
-// announces whether it is open. What is added to it is that this one is controlled — a conversation decides which of
-// its messages open when it is first drawn, and after that the reader does.
-//
-// It is drawn as the card the design project draws a message of a conversation as: flat on the surface while it is a
-// line, and raised on the panel once it is open.
+// It is a region of its own so that arriving at a conversation can place the reader on the message they came for, for
+// the reason `readingPane/ReadingPane.tsx` names its opened message: focus has to land on something a screen reader
+// announces by more than its tag.
 
 export function ThreadMessage({
     session,
     transport,
     message,
-    expanded,
-    onExpanded,
     onOpenOnItsOwn,
-    onSummary,
+    onRegion,
 }: {
     readonly session: ClientSession;
     readonly transport: MailFathomTransport;
     readonly message: MailThreadMessage;
-    readonly expanded: boolean;
-    readonly onExpanded: (expanded: boolean) => void;
     readonly onOpenOnItsOwn: () => void;
-    readonly onSummary: (element: HTMLElement | null) => void;
+    readonly onRegion: (element: HTMLElement | null) => void;
 }) {
     const { translate } = useLocalization();
     const email = message.email;
+    const sender = email.senderDisplayName ?? email.senderAddress ?? translate('list.senderUnknown');
 
     return (
         <li>
-            <details
-                className="overflow-hidden rounded-2xl border border-line bg-sunken open:bg-panel open:shadow-raised"
-                open={expanded}
-                onToggle={(event) => {
-                    onExpanded(event.currentTarget.open);
-                }}
+            <article
+                ref={onRegion}
+                tabIndex={-1}
+                aria-label={translate('thread.messageBy', { sender })}
+                className="flex flex-col gap-2.75"
             >
-                <summary
-                    ref={onSummary}
-                    className="flex cursor-pointer items-center gap-2.5 px-3.75 py-3 transition hover:bg-hover"
-                >
+                <div className="flex items-center gap-2.75">
                     <SenderAvatar displayName={email.senderDisplayName} address={email.senderAddress} place="card" />
 
                     {email.unread ? (
@@ -68,49 +58,29 @@ export function ThreadMessage({
                         </span>
                     ) : null}
 
-                    {/* Who wrote is what a conversation is scanned by, so it keeps its width and the contribution
-                        behind it is what gives way. */}
+                    {/* Who wrote is what a conversation is scanned by, so it keeps its width and everything beside it
+                        is what gives way. */}
                     <span className={`shrink-0 text-md font-semibold ${email.unread ? 'text-text' : 'text-text-soft'}`}>
-                        {email.senderDisplayName ?? email.senderAddress ?? translate('list.senderUnknown')}
+                        {sender}
                     </span>
 
                     <Organisation address={email.senderAddress} />
 
-                    {/* What this message added, trimmed of the history it quoted by the deployment rather than here.
-                        It gives way to the body once the message is open, where drawing it again would be the same
-                        words twice on one screen. */}
-                    {expanded ? null : (
-                        <span className="truncate text-sm text-muted">
-                            {email.preview ?? translate('thread.contributionNotExtracted')}
-                        </span>
-                    )}
-
                     <MessageMarkers email={email} />
 
                     <ReceivedAt at={email.receivedAt} />
-                </summary>
+                </div>
 
-                {/* Mounted by the expansion rather than hidden by it, which is what makes a collapsed message cost no
-                    body read. Nothing below is drawn — and nothing is asked of the deployment — until it is open. */}
-                {expanded ? (
-                    <div className="flex flex-col gap-3 px-3.75 pt-1 pb-3.75">
-                        <p className="text-sm text-muted">
-                            {translate('thread.storedIn', { account: email.account, folder: email.folder })}
-                        </p>
+                <p className="text-sm text-muted">
+                    {translate('thread.storedIn', { account: email.account, folder: email.folder })}
+                </p>
 
-                        <Message
-                            session={session}
-                            transport={transport}
-                            storedEmailId={email.id}
-                            quotedHistoryOnRequest
-                        />
+                <Message session={session} transport={transport} storedEmailId={email.id} quotedHistoryOnRequest />
 
-                        <div>
-                            <SecondaryButton label={translate('thread.openOnItsOwn')} onActivate={onOpenOnItsOwn} />
-                        </div>
-                    </div>
-                ) : null}
-            </details>
+                <div>
+                    <SecondaryButton label={translate('thread.openOnItsOwn')} onActivate={onOpenOnItsOwn} />
+                </div>
+            </article>
         </li>
     );
 }

@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
     ClientRequest,
@@ -61,11 +61,10 @@ function message(overrides: Partial<MailThreadMessage['email']> = {}): MailThrea
 }
 
 function drawing(
-    expanded: boolean,
     held: MailThreadMessage = message(),
     handlers: {
-        readonly onExpanded?: (expanded: boolean) => void;
         readonly onOpenOnItsOwn?: () => void;
+        readonly onRegion?: (element: HTMLElement | null) => void;
     } = {},
 ): void {
     render(
@@ -76,10 +75,8 @@ function drawing(
                         session={session}
                         transport={answersNothing}
                         message={held}
-                        expanded={expanded}
-                        onExpanded={handlers.onExpanded ?? (() => undefined)}
                         onOpenOnItsOwn={handlers.onOpenOnItsOwn ?? (() => undefined)}
-                        onSummary={() => undefined}
+                        onRegion={handlers.onRegion ?? (() => undefined)}
                     />
                 </ul>
             </LinkOpenerContext>
@@ -88,105 +85,93 @@ function drawing(
 }
 
 describe('ThreadMessage', () => {
-    it('draws a collapsed message as who wrote it and what it added', () => {
-        drawing(false);
+    it('draws a message as who wrote it, reads what it says, and names where in the mailbox it stands', () => {
+        drawing();
 
         expect(screen.getByText('The auditor')).toBeDefined();
-        expect(screen.getByText('The figures you asked for are attached.')).toBeDefined();
-    });
-
-    it('asks the deployment for nothing while the message is collapsed', () => {
-        drawing(false);
-
-        expect(asked).toEqual([]);
-    });
-
-    it('reads the message once it is open, and says where in the mailbox it stands', () => {
-        drawing(true);
-
         expect(screen.getByText('In work, Sent')).toBeDefined();
         expect(asked.some((request) => request.path.includes('/messages/a-message/body'))).toBe(true);
     });
 
-    it('draws the contribution only while the message is collapsed, rather than twice on one screen', () => {
-        drawing(true);
+    it('draws no contribution line, which the body below it would be saying twice on one screen', () => {
+        drawing();
 
         expect(screen.queryByText('The figures you asked for are attached.')).toBeNull();
     });
 
-    it('says what a message added is not extracted rather than drawing an empty line', () => {
-        drawing(false, message({ preview: null }));
+    it('carries no card, which the design project draws on a collapsed message alone', () => {
+        drawing();
 
-        expect(screen.getByText('What this message added has not been read into this deployment yet.')).toBeDefined();
+        const region = screen.getByRole('article');
+
+        expect(region.className).not.toContain('border');
+        expect(region.className).not.toContain('bg-panel');
+    });
+
+    it('names the region it puts a reader in, so arriving at a message announces more than a tag', () => {
+        drawing();
+
+        expect(screen.getByRole('article', { name: 'Message from The auditor' })).toBeDefined();
+    });
+
+    it('hands out the element a conversation places the reader on', () => {
+        const onRegion = vi.fn();
+        drawing(message(), { onRegion });
+
+        expect(onRegion).toHaveBeenCalledWith(screen.getByRole('article'));
     });
 
     it('names a message nobody wrote a sender for by something rather than by nothing', () => {
-        drawing(false, message({ senderDisplayName: null, senderAddress: null }));
+        drawing(message({ senderDisplayName: null, senderAddress: null }));
 
         expect(screen.getByText('No sender')).toBeDefined();
     });
 
     it('names a message whose sender wrote no display name by the address they wrote from', () => {
-        drawing(false, message({ senderDisplayName: null }));
+        drawing(message({ senderDisplayName: null }));
 
         expect(screen.getByText('auditor@example.invalid')).toBeDefined();
     });
 
     it('marks a message nobody has read', () => {
-        drawing(false, message({ unread: true }));
+        drawing(message({ unread: true }));
 
         expect(screen.getByText('Unread')).toBeDefined();
     });
 
-    it('reports the expansion a reader asked for, without deciding it here', async () => {
-        const onExpanded = vi.fn();
-        drawing(false, message(), { onExpanded });
-
-        const summary = screen.getByText('The auditor').closest('summary');
-
-        expect(summary).not.toBeNull();
-        fireEvent.click(summary ?? screen.getByText('The auditor'));
-
-        // The browser toggles the disclosure and reports it afterwards, so what this waits on is the report rather
-        // than the click.
-        await waitFor(() => {
-            expect(onExpanded).toHaveBeenCalledWith(true);
-        });
-    });
-
     it('recognises a sender by their initials, which is what a conversation of several people is scanned down', () => {
-        drawing(false);
+        drawing();
 
         expect(screen.getByText('TA')).toBeDefined();
     });
 
     it('takes the one initial a sender who wrote a single-word name offers, rather than two', () => {
-        drawing(false, message({ senderDisplayName: 'Prince' }));
+        drawing(message({ senderDisplayName: 'Prince' }));
 
         expect(screen.getByText('P')).toBeDefined();
     });
 
     it('takes the initials from the address where the sender wrote no name', () => {
-        drawing(false, message({ senderDisplayName: null }));
+        drawing(message({ senderDisplayName: null }));
 
         expect(screen.getByText('A')).toBeDefined();
     });
 
     it('invents no initials for a sender this deployment could not name', () => {
-        drawing(false, message({ senderDisplayName: null, senderAddress: null }));
+        drawing(message({ senderDisplayName: null, senderAddress: null }));
 
         expect(screen.queryByText('NS')).toBeNull();
     });
 
-    it('says a collapsed message carries files, which is what a reader opens it for', () => {
-        drawing(false, message({ hasAttachments: true, attachmentCount: 2 }));
+    it('says a message carries files, which is what a reader looks for on its head', () => {
+        drawing(message({ hasAttachments: true, attachmentCount: 2 }));
 
         expect(screen.getByText('2 attached')).toBeDefined();
     });
 
     it('offers the way to the message on its own, where everything a conversation does not draw is', () => {
         const onOpenOnItsOwn = vi.fn();
-        drawing(true, message(), { onOpenOnItsOwn });
+        drawing(message(), { onOpenOnItsOwn });
 
         fireEvent.click(screen.getByRole('button', { name: 'Open this message on its own' }));
 

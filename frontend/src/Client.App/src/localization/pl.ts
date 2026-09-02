@@ -334,7 +334,9 @@ export const pl: Catalogue = {
     'thread.moreNotAssembled': 'Ta rozmowa jest dłuższa, niż obejmuje jeden odczyt, więc pokazany jest jej początek.',
     'thread.storedIn': 'W koncie {account}, folder {folder}',
     'thread.openOnItsOwn': 'Otwórz tę wiadomość osobno',
-    'thread.contributionNotExtracted': 'To, co dodała ta wiadomość, nie zostało jeszcze wczytane do tego wdrożenia.',
+    'thread.messageBy': 'Wiadomość od: {sender}',
+    'thread.showEarlier': 'Pokaż wcześniejsze wiadomości ({count})',
+    'thread.hideEarlier': 'Ukryj wcześniejsze wiadomości',
 
     'message.nothingOpen': 'Otwórz wiadomość, aby ją tutaj przeczytać.',
     'message.reading': 'Trwa otwieranie tej wiadomości…',

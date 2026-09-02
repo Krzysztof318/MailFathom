@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { MailThreadMessage, MailThreadPage } from '@mailfathom/client-backend';
-import { holdsMessage, messagesOf, openedBy } from './threadOpening';
+import { arrivesAt, holdsMessage, messagesOf } from './threadOpening';
 
 function message(id: string, position: number, unread = false): MailThreadMessage {
     return {
@@ -67,44 +67,26 @@ describe('holdsMessage', () => {
     });
 });
 
-describe('openedBy', () => {
-    it('opens at the message somebody arrived at, which is the context they came for', () => {
+describe('arrivesAt', () => {
+    it('arrives at the message somebody was sent to, which is the context they came for', () => {
         const messages = [message('one', 0, true), message('two', 1), message('three', 2)];
 
-        expect(openedBy(messages, 'two')).toStrictEqual(['two']);
+        expect(arrivesAt(messages, 'two')).toBe('two');
     });
 
-    it('opens at what has not been read where nobody named a message', () => {
-        const messages = [message('one', 0), message('two', 1, true), message('three', 2, true)];
+    it('arrives at the latest of a conversation nobody named a message in', () => {
+        const messages = [message('one', 0), message('two', 1, true), message('three', 2)];
 
-        expect(openedBy(messages, null)).toStrictEqual(['two', 'three']);
+        expect(arrivesAt(messages, null)).toBe('three');
     });
 
-    it('opens at the last word of a conversation everybody has read', () => {
-        const messages = [message('one', 0), message('two', 1), message('three', 2)];
-
-        expect(openedBy(messages, null)).toStrictEqual(['three']);
-    });
-
-    it('opens at what has not been read where the message named is not among those read', () => {
+    it('arrives at the latest where the message named is not among those read', () => {
         const messages = [message('one', 0), message('two', 1, true)];
 
-        expect(openedBy(messages, 'somewhere-else')).toStrictEqual(['two']);
+        expect(arrivesAt(messages, 'somewhere-else')).toBe('two');
     });
 
-    it('opens the most recent of what has not been read rather than all of it, because each open message is a read', () => {
-        const messages = [
-            message('one', 0, true),
-            message('two', 1, true),
-            message('three', 2, true),
-            message('four', 3, true),
-            message('five', 4, true),
-        ];
-
-        expect(openedBy(messages, null)).toStrictEqual(['three', 'four', 'five']);
-    });
-
-    it('opens nothing in a conversation holding no message anybody may see', () => {
-        expect(openedBy([], 'two')).toStrictEqual([]);
+    it('arrives nowhere in a conversation holding no message anybody may see', () => {
+        expect(arrivesAt([], 'two')).toBeNull();
     });
 });
