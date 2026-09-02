@@ -4877,7 +4877,8 @@ obligation_index_leaves_out_client_paths_no_test_can_cover() {
 }
 
 # The client's pin family owes the same register row a service pin does, and it is a pair of its own
-# so the trigger names what actually moved.
+# so the trigger names what actually moved. An npm pin owes a second register nothing else in this
+# repository owes: the notice the bundle itself carries, which names the versions it redistributes.
 obligation_index_reports_a_moved_client_pin_with_no_register_row() {
   local fixture_root="$test_directory/obligations-client-pin"
   local files_json="$test_directory/obligations-client-pin-files.json"
@@ -4892,6 +4893,28 @@ obligation_index_reports_a_moved_client_pin_with_no_register_row() {
   assert_json '1' '[.registers[] | select(.register == "THIRD_PARTY_LICENSES.md")] | length' "$output_file"
   assert_json 'false' '.registers[0].register_changed' "$output_file"
   assert_contains 'frontend/pnpm-lock.yaml' "$output_file"
+  assert_json 'false' \
+    '[.registers[] | select(.register == "frontend/src/Client.App/public/THIRD-PARTY-NOTICES.txt")] | first | .register_changed' \
+    "$output_file"
+}
+
+# The same move with the notice rewritten beside it: the pair still reports, saying the obligation is
+# discharged rather than disappearing, which is what lets a reviewer read the file instead of
+# inferring from an empty section that no bundled pin moved.
+obligation_index_records_the_bundle_notice_a_client_pin_move_updated() {
+  local fixture_root="$test_directory/obligations-client-pin-notice"
+  local files_json="$test_directory/obligations-client-pin-notice-files.json"
+  local output_file="$test_directory/obligations-client-pin-notice.json"
+
+  create_client_obligation_fixture "$fixture_root"
+  printf '%s\n' '[{"filename":"frontend/src/Client.App/package.json","status":"modified","patch":"@@ -1 +1,2 @@\n+// changed"},{"filename":"frontend/src/Client.App/public/THIRD-PARTY-NOTICES.txt","status":"modified","patch":"@@ -1 +1,2 @@\n+react 19.2.9"}]' \
+    > "$files_json"
+
+  run_obligation_index "$fixture_root" "$files_json" "$output_file"
+
+  assert_json 'true' \
+    '[.registers[] | select(.register == "frontend/src/Client.App/public/THIRD-PARTY-NOTICES.txt")] | first | .register_changed' \
+    "$output_file"
 }
 
 # The desktop shell's crates are the client's second pin family and owe the same row. They are the
@@ -4911,6 +4934,11 @@ obligation_index_reports_a_moved_desktop_crate_pin_with_no_register_row() {
   assert_json '1' '[.registers[] | select(.register == "THIRD_PARTY_LICENSES.md")] | length' "$output_file"
   assert_json 'false' '.registers[0].register_changed' "$output_file"
   assert_contains 'Cargo.toml' "$output_file"
+  # The crates reach no bundle, so the notice the bundle carries is not theirs to answer for. A pair
+  # emitted here would ask for an edit to a file a crate bump cannot invalidate.
+  assert_json '0' \
+    '[.registers[] | select(.register == "frontend/src/Client.App/public/THIRD-PARTY-NOTICES.txt")] | length' \
+    "$output_file"
 }
 
 obligation_index_maps_a_changed_path_to_the_page_that_describes_it() {
@@ -8803,6 +8831,7 @@ run_test obligation_index_reports_a_client_source_with_no_sibling_test
 run_test obligation_index_credits_a_client_test_the_change_adds
 run_test obligation_index_leaves_out_client_paths_no_test_can_cover
 run_test obligation_index_reports_a_moved_client_pin_with_no_register_row
+run_test obligation_index_records_the_bundle_notice_a_client_pin_move_updated
 run_test obligation_index_reports_a_moved_desktop_crate_pin_with_no_register_row
 run_test obligation_index_maps_a_changed_path_to_the_page_that_describes_it
 run_test obligation_index_credits_a_path_directly_under_a_double_star

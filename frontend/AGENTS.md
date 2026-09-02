@@ -59,6 +59,11 @@ exactly as `Directory.Packages.props` and the `packages.lock.json` files are for
 - A pin that moves costs the register a second thing the service's does not. Both client closures are recorded there as
   a census as well as a row — § _The client's two dependency closures_ — and nothing recomputes one, so re-run that
   section's enumeration commands in the same change and write what they printed.
+- An npm pin costs a third thing, and it is the one that ships. `src/Client.App/public/THIRD-PARTY-NOTICES.txt` is the
+  notice the bundle carries: `pnpm build` copies it verbatim into the output every published image and every desktop
+  package redistributes, and it names each redistributed package and its version. So a moved npm pin is read against
+  that file too, and a package that newly reaches the bundle is added to it. `pnpm licenses list --prod` from this
+  directory says which packages those are. The crate pins below owe nothing here — they reach no bundle.
 - `package.json`'s `version` field is inert, and so is `Cargo.toml`'s, which the desktop shell therefore omits.
   `<VersionPrefix>` in `Version.props` is the only application version number in this repository:
   `Client.App/vite.config.ts` is how it reaches the bundle, and `src-tauri/run-tauri.ts` is how it reaches the desktop

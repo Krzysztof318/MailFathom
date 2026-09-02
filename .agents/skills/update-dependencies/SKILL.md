@@ -66,6 +66,14 @@ own. Noticing one while doing something else is worth a sentence in the report, 
    that moved resolved a new graph. Re-run that section's enumeration commands and write what they printed; the script
    says so when it moves one, and nothing else will.
 
+   **An npm pin costs a second file, and that one ships.** `frontend/src/Client.App/public/THIRD-PARTY-NOTICES.txt` is
+   the notice the bundle itself carries — `pnpm build` copies it into the output that every image and every desktop
+   package redistributes — and it names each redistributed package and its version. So a bump that moved `react`,
+   `react-dom`, `scheduler`, or either Tauri npm package leaves a published artifact naming a version it no longer
+   carries until that file is rewritten too, and a bump that put a new package into the bundle leaves it naming one
+   package too few. `pnpm --dir frontend licenses list --prod` says which packages the bundle actually redistributes.
+   The desktop shell's crates reach no bundle and owe nothing here.
+
 6. **`$review-change`, `$check-docs-licenses`, `$finish-change`**, as any other task. Never touch `CHANGELOG.md`.
 
 ## What decides whether a pin moves

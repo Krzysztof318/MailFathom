@@ -1833,6 +1833,16 @@ catches alone is the half no survey computes — the census the register records
 for each of the client's two closures, which a moved pin invalidates without
 changing a line of any manifest.
 
+The client's npm family obliges a third pair, and its register is the only one
+here that a user meets rather than a reader:
+`frontend/src/Client.App/public/THIRD-PARTY-NOTICES.txt`, the notice the bundle
+carries. `pnpm build` copies it verbatim into the output every published image
+and every desktop package redistributes, and it names each redistributed package
+and its version, so a moved npm pin can leave a shipped artifact naming a version
+it no longer carries — which neither the register row nor the census would show.
+The crate family is excluded rather than overlooked: those crates are a separate
+component that reaches no bundle, so a `Cargo.toml` bump owes the register alone.
+
 A source path to the page that documents it is **declared**, because nothing
 derives it: documentation is written about configuration keys and behavior rather
 than about type names, so no name match finds the edge. Each page names its own
