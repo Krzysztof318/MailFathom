@@ -105,7 +105,13 @@ export function Thread({
     // again: a page arriving later would otherwise close the message somebody is reading and open a newer one under
     // their cursor. React's answer to a value that becomes decidable is to adjust state during the render it became
     // decidable in rather than in an effect that would draw the undecided screen once first.
-    if (expanded === null && latest !== null && !reading) {
+    //
+    // A search still in progress is not a conversation that has stopped reading, which is why it is asked about
+    // separately: a failed page or a network gap stops the reading without ending the search, and deciding there would
+    // settle the question from half a conversation and never reopen it — so a reader who came for a message and pressed
+    // *Read again* would arrive at whatever the half held instead. The count the answer states is what ends the search
+    // where the message is genuinely not there, so this waits for an answer rather than for the message.
+    if (expanded === null && latest !== null && !reading && !searching) {
         setExpanded(openedBy(held, conversation.openAt));
     }
 
@@ -288,8 +294,15 @@ export function Thread({
                 </div>
             )}
 
+            {/* Nothing in hand is two different things, and saying the wrong one is worse than saying nothing: a page
+                that held no message a reader may see while the next one is already on the wire is a conversation still
+                being read, and calling that empty is a screen that looks finished mid-read. The sentence below the list
+                says the same thing for a conversation that has something to show, which is why it does not say it
+                here. */}
             {held.length === 0 ? (
-                <p className="text-sm text-muted">{translate('thread.empty')}</p>
+                <p className="text-sm text-muted" role="status">
+                    {translate(reading ? 'thread.reading' : 'thread.empty')}
+                </p>
             ) : (
                 <ol className="flex flex-col">
                     {held.map((message) => (

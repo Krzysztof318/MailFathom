@@ -333,6 +333,59 @@ describe('Thread', () => {
         ).toBeDefined();
     });
 
+    it('says it is still reading where the page it holds shows nothing, rather than calling the conversation empty', async () => {
+        let served = 0;
+        const stalling: MailFathomTransport = (request) => {
+            asked.push(request);
+            served += 1;
+
+            return served === 1
+                ? Promise.resolve({
+                      status: 200,
+                      body: pageOf([], { nextCursor: 'onwards', messageCount: 4 }),
+                      headers: {},
+                  })
+                : new Promise<ClientResponse>(() => undefined);
+        };
+
+        render(inTheFrame(stalling, { threadId, openAt: 'four' }, true));
+
+        expect(await screen.findByText('Reading this conversation…')).toBeDefined();
+        expect(screen.queryByText('There is no message in this conversation that you are allowed to see.')).toBeNull();
+    });
+
+    it('takes the reader to the message they came for when a failed page is read again, not to half a conversation', async () => {
+        const answers: readonly { readonly status: number; readonly body: string }[] = [
+            { status: 200, body: pageOf(['one', 'two'], { nextCursor: 'onwards', messageCount: 4 }) },
+            { status: 503, body: '' },
+            { status: 200, body: pageOf(['three', 'four'], { messageCount: 4 }) },
+        ];
+
+        let served = 0;
+        const failingMidSearch: MailFathomTransport = (request) => {
+            asked.push(request);
+
+            if (request.path.includes('/body')) {
+                return Promise.resolve({ status: 200, body: bodyAsWords(request.path), headers: {} });
+            }
+
+            const answer = answers[Math.min(served, answers.length - 1)] ?? { status: 500, body: '' };
+            served += 1;
+
+            return Promise.resolve({ ...answer, headers: {} });
+        };
+
+        render(inTheFrame(failingMidSearch, { threadId, openAt: 'four' }, true));
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+
+        expect(await screen.findByText('The whole of what four says.')).toBeDefined();
+
+        await waitFor(() => {
+            expect(document.activeElement?.closest('details')?.textContent).toContain('The whole of what four says.');
+        });
+    });
+
     it('says what failed, and offers the one way out a deployment that did not answer has', async () => {
         drawing(deploymentRefusing(503));
 
