@@ -298,6 +298,26 @@ describe('Thread', () => {
         expect(screen.getByRole('button', { name: 'Hide earlier messages' })).toBeDefined();
     });
 
+    it('keeps the message the reader is standing on when a further page arrives, rather than unmounting it under their focus', async () => {
+        drawing(
+            deploymentAnswering(
+                pageOf(['one', 'two'], { nextCursor: 'onwards', messageCount: 4 }),
+                pageOf(['three', 'four'], { messageCount: 4 }),
+            ),
+        );
+
+        await screen.findByText('The whole of what two says.');
+        await waitFor(() => {
+            expect(document.activeElement?.textContent).toContain('The whole of what two says.');
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Read more of this conversation' }));
+
+        expect(await screen.findByText('The whole of what four says.')).toBeDefined();
+        expect(screen.getAllByRole('listitem')).toHaveLength(4);
+        expect(document.activeElement?.textContent).toContain('The whole of what two says.');
+    });
+
     it('reads the rest of a conversation the reader asks for rather than truncating it', async () => {
         drawing(
             deploymentAnswering(
@@ -436,7 +456,7 @@ describe('Thread', () => {
 
         expect(await screen.findByText('Part of this conversation could not be read: unavailable.')).toBeDefined();
         expect(screen.getByText('The whole of what two says.')).toBeDefined();
-        expect(screen.getByRole('button', { name: 'Show earlier messages (1)' })).toBeDefined();
+        expect(screen.getAllByRole('listitem')).toHaveLength(2);
     });
 
     it('offers the way back to the message it was opened from in every state', () => {

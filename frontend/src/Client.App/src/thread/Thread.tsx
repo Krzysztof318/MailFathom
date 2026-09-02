@@ -368,10 +368,19 @@ export function Thread({
                 <p className="text-sm text-faint">{translate('thread.wholeConversationRead')}</p>
             ) : (
                 <div>
+                    {/* Reading further shows the history with it, and that is a correctness rule rather than a
+                        convenience. A page arriving moves the conversation's latest message on, so a history left
+                        hidden would take the message the reader is standing on out of what is drawn and unmount the
+                        element focus was placed on — and focus is placed once, so nothing would put it back. Asking
+                        for more of a conversation is asking to see more of it, so the answer is to keep what is
+                        already there rather than to replace it, and the control above still hides it again. This is
+                        the only way a page arrives after the reader has arrived: the search that pages forward to a
+                        named message ends before the arrival is decided. */}
                     <SecondaryButton
                         label={translate('thread.readMore')}
                         onActivate={() => {
                             setAsked(true);
+                            setHistoryShown(true);
                         }}
                     />
                 </div>
