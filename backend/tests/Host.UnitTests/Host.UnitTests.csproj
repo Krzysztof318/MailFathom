@@ -48,6 +48,11 @@
     <!-- The redaction contract is stated once and asserted in every project that has a telemetry name to hold against
          it. This one holds the names every assembly declares, so it needs the rules and not the recorder. -->
     <Compile Include="..\shared\TelemetryRedactionContract.cs" Link="TelemetryRedactionContract.cs" />
+
+    <!-- The client telemetry proxy is the one thing this composition root speaks HTTP from, so it is tested through
+         the suite's one HTTP double rather than through a second one written here. -->
+    <Compile Include="..\shared\FakeHttpMessageHandler.cs" Link="FakeHttpMessageHandler.cs" />
+    <Compile Include="..\shared\RecordedHttpRequest.cs" Link="RecordedHttpRequest.cs" />
   </ItemGroup>
 
   <ItemGroup>

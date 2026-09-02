@@ -38,6 +38,12 @@ namespace MailFathom.Host.Api;
 /// an administrator maintains writes there while writing nothing to the record.
 /// </para>
 /// <para>
+/// The telemetry routes, which <see cref="ClientTelemetryEndpoint" /> describes, are the one family here that is not
+/// about mail: they take the client's own OTLP export and forward it to the collector this deployment already exports
+/// to, because the collector's address and its credential belong to the deployment and a browser bundle holding either
+/// would be publishing them. They exist only where a destination is configured.
+/// </para>
+/// <para>
 /// Every route is mapped into one group so the requirement the endpoint attaches covers everything the surface serves,
 /// including a route added later, and so the one filter that reads each route's published grant covers them all too.
 /// </para>
@@ -83,6 +89,7 @@ internal static class ClientApiEndpoints
         api.MapClientMailAttachment();
         api.MapClientDrafts();
         api.MapClientOutbox();
+        api.MapClientTelemetry();
 
         return api;
     }

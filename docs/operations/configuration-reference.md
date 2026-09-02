@@ -75,7 +75,7 @@ belong to the platform rather than to MailFathom:
 
 | Variable | What it does |
 | --- | --- |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | Attaches the OTLP exporter for logs, metrics, and traces — startup records included. Unset exports nothing. [Telemetry](telemetry.md) is the page, including the sibling `OTEL_*` variables the exporter reads itself |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Attaches the OTLP exporter for logs, metrics, and traces — startup records included — and serves [the client endpoint's OTLP routes](client-endpoint.md#the-telemetry-routes), which forward a client's own telemetry to the same destination. Unset exports nothing and serves neither. [Telemetry](telemetry.md) is the page, including the sibling `OTEL_*` variables the exporter reads itself |
 | `OTEL_SERVICE_NAME` | The service identity the startup records and every exported record carry. Unset reports the host assembly's own name |
 | `OTEL_TRACES_SAMPLER` / `OTEL_TRACES_SAMPLER_ARG` | How much of a trace is recorded. Unset records every trace this process starts and honors the decision on one it did not; [telemetry](telemetry.md#how-much-of-a-trace-is-recorded) holds the values and why that is the default |
 | `ASPNETCORE_URLS` / `ASPNETCORE_HTTP_PORTS` / `ASPNETCORE_HTTPS_PORTS` | Nothing — [each surface states where it is served](configuration-endpoints.md#where-each-surface-is-served), and setting one of these fails startup with a message naming the key that replaces it |

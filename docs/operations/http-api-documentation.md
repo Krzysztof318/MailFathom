@@ -105,6 +105,12 @@ MAILFATHOM_UPDATE_PUBLIC_SURFACES=1 dotnet test --project backend/tests/PublicSu
 and committed in the change that moved the contract, together with the release-note entry naming what a client has to
 do about it.
 
+One route family is deliberately not recorded either. The client endpoint's [OTLP telemetry
+routes](client-endpoint.md#the-telemetry-routes) are mapped only where a deployment names a collector, and that address
+is read from the environment rather than from configuration — so the rendering, whose configuration is composed in
+memory, describes a deployment that names none. A running instance that does name one serves them and describes them in
+its own document; what the record leaves out is the family rather than any operation's shape.
+
 Two values are deliberately not recorded. `info.version` is the running release, which every build stamps and which a
 pipeline build extends further, so the record carries a placeholder rather than a number that would move under an
 unchanged contract; and `servers` is absent, because it describes the address a process answered on rather than what it

@@ -127,9 +127,16 @@ internal static class ClientTransportSecurityExtensions
     /// CORS specification forbids outright.
     /// </para>
     /// <para>
-    /// The methods and headers are what this surface serves rather than what an HTTP API might: one read, one
-    /// <c>Authorization</c> header, and JSON. A route added later adds its method here, which is the direction that
-    /// fails visibly — a policy written wide in advance is a policy nobody narrows afterwards.
+    /// The methods and headers are what this surface serves rather than what an HTTP API might: the two verbs its
+    /// routes are mapped under, one <c>Authorization</c> header, and a declared content type. A route added later adds
+    /// its method here, which is the direction that fails visibly — a policy written wide in advance is a policy nobody
+    /// narrows afterwards.
+    /// </para>
+    /// <para>
+    /// Two response headers are exposed rather than one. A browser cannot read a header the policy does not name, so
+    /// without <c>WWW-Authenticate</c> the one answer telling a page how to proceed is the one it cannot see, and
+    /// without <c>Retry-After</c> a client told to hold cannot read for how long — which on the telemetry routes is the
+    /// difference between a client that backs off and one that keeps exporting into a refusal.
     /// </para>
     /// </remarks>
     private static void ConfigureCorsPolicy(CorsPolicyBuilder policy, BrowserOriginPolicy originPolicy)
@@ -144,12 +151,8 @@ internal static class ClientTransportSecurityExtensions
         }
 
         policy
-            .WithMethods(HttpMethods.Get)
+            .WithMethods(HttpMethods.Get, HttpMethods.Post)
             .WithHeaders(HeaderNames.Authorization, HeaderNames.ContentType, HeaderNames.Accept)
-
-            // A refusal says where to authorize, and a browser cannot read a response header the policy does not name.
-            // Without this the one answer that tells a page how to proceed is the one it cannot see, and a client that
-            // could have started discovery only learns that something failed.
-            .WithExposedHeaders(HeaderNames.WWWAuthenticate);
+            .WithExposedHeaders(HeaderNames.WWWAuthenticate, HeaderNames.RetryAfter);
     }
 }

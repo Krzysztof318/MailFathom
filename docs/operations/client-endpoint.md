@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientOwnerRecordEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientOwnerRecordEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Observability/ClientTelemetry/** -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -86,10 +86,15 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `POST /api/client/outbox/requeue` | `mailfathom.mail.send` |
 | `GET /api/client/preferences` | `mailfathom.mail.read` |
 | `POST /api/client/preferences` | `mailfathom.mail.read` |
+| `POST /api/client/telemetry/v1/traces` | none |
+| `POST /api/client/telemetry/v1/metrics` | none |
+| `POST /api/client/telemetry/v1/logs` | none |
 
-There is no version segment in either path: the major version is `0` and
+No path here carries a version segment MailFathom chose: the major version is `0` and
 [ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
-permits breaking the contract outright, so `/v1` would be scaffolding for a promise this project has not made.
+permits breaking the contract outright, so `/v1` would be scaffolding for a promise this project has not made. The
+`/v1` in the three [telemetry routes](#the-telemetry-routes) is not one: those paths are fixed by the OTLP
+specification, so a client points its exporter at the prefix above them and appends nothing itself.
 
 ### The session route
 
@@ -1163,6 +1168,77 @@ an unknown number of duplicates asked for in one request.
 **Every route here is `mailfathom.mail.send`, the two readings included.** What an outbox says is what this owner is
 sending, so a credential granted to read a mailbox learns nothing here, and withdrawing a send is part of sending
 rather than a power beside it.
+
+### The telemetry routes
+
+These three are an OTLP receiver, served for the client's own instrumentation and for nothing else. A client exports to
+`/api/client/telemetry` the way it would export to a collector — the paths beneath it are the OTLP specification's own,
+so the exporter is pointed at the prefix and appends nothing — and what it sends is forwarded to wherever this
+deployment already exports [its own telemetry](telemetry.md#the-one-switch-otel_exporter_otlp_endpoint).
+
+| Route | What it takes |
+| --- | --- |
+| `POST /api/client/telemetry/v1/traces` | One `ExportTraceServiceRequest` as `application/x-protobuf` |
+| `POST /api/client/telemetry/v1/metrics` | One `ExportMetricsServiceRequest`, same encoding |
+| `POST /api/client/telemetry/v1/logs` | One `ExportLogsServiceRequest`, same encoding |
+
+**A deployment that named no collector does not serve them at all.** The routes are mapped only where
+`OTEL_EXPORTER_OTLP_ENDPOINT` is set, so a client exporting to a deployment that exports nothing is answered `404` and
+learns from the answer rather than from a setting it would have to be told about. That is the same shape the rest of
+this surface uses for an endpoint that is off, and it is what keeps the default a privacy default: a deployment that
+decided its own signals stay in the process does not become a relay for somebody else's.
+
+**They authenticate exactly as every other route here does**, on this surface's own credentials, and they add no name to
+[the published permission set](permissions.md) — like the session route, and for a narrower reason: a permission would
+have to be granted to every client that reports anything, which makes it a component of every grant rather than a
+decision anybody takes. What the credential does decide is whose telemetry this is. The resource attributes naming the
+owner are written here from the authenticated credential and **replace** whatever the client put in their place, so a
+page cannot report as somebody else however its bundle was modified. Nothing else in the payload is transformed: the
+batch is forwarded as it arrived, so a signal a client's own instrumentation names arrives at the collector under that
+name.
+
+**Read attribution off the resource, which is the level this holds at.** A client is free to write anything into a
+span, a log record, or a metric data point, a key spelled like the owner one included, exactly as it is free to write
+anything into a span's name — those are its own words about its own work, they are forwarded untouched like every other
+field it sends, and nothing here reads them. Reaching them would mean decoding all three signals against their schemas,
+which is what would make this a processor rather than a proxy. So a dashboard, a query, or a retention rule that has to
+know whose telemetry it is reads the **resource** attribute, and that one is the deployment's own and cannot be
+influenced from a browser.
+
+**What it forwards to is the deployment's, never the client's.** There is no second destination setting, and the
+collector's address and its credential never leave the process — a client holding either would be publishing them to
+whoever opened the developer tools. The endpoint, the protocol, the headers, and the per-export timeout are the ones
+the deployment's own exporter reads.
+
+**Everything is bounded**, per credential, and a refusal names the bound rather than truncating the batch:
+
+| Bound | What it is | What a client is answered |
+| --- | --- | --- |
+| Request body | 4 MiB | `413`, carrying the specification's own status message |
+| Records in one batch | 10 000 spans, metric points, or log records | `413`, with nothing forwarded |
+| Export rate | 120 requests a minute for one signed-in person, and the same again for the next | `429` with `Retry-After: 60` |
+
+A batch the endpoint cannot read as a protocol-buffers export request is answered `400` and forwarded nowhere: a
+deployment's collector is not the place to find out whether a client's encoder works. A collector that answered a
+partial success is relayed verbatim rather than reported as a success, because a client that was told everything
+arrived stops holding what did not. A collector that refused the batch outright is answered in this endpoint's own
+words instead: what it said is about this deployment's own export — a version it does not speak, a message it could not
+read — and is not a document to hand to a browser. Anything transient — a collector that is down, unreachable, slower
+than the configured timeout, or refusing this deployment's own collector credential — is answered `503`, which is what
+leaves the batch where the client can still send it again. That last one is a deployment fault rather than a client
+one, so it is reported to the operator as [its own
+condition](telemetry.md#what-the-client-telemetry-proxy-emits) rather than folded into the others.
+
+**Accepting and forwarding writes no log record at any level.** A signed-in client exports every few seconds for as
+long as it is open, so a line per batch would make a deployment's own logs unreadable within a day. A forwarding
+failure does write one, aggregated per condition rather than per batch and repeated at most every five minutes, naming
+the condition and how many batches it has cost since it was last reported; it carries no part of a payload. What the
+proxy accepted, refused, forwarded, and failed to forward is [reported as
+metrics](telemetry.md#what-the-client-telemetry-proxy-emits) instead, which is where a rate belongs.
+
+**A browser reaches them under the origins this surface already declares.** The preflight is answered from
+[the same list](#browser-origins) every other route here is served to, and no origin is admitted here that the rest of
+the surface refuses.
 
 ## Credentials do not cross surfaces
 

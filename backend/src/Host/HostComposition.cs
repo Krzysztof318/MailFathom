@@ -67,6 +67,7 @@ using MailFathom.Host.Hosting;
 using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.Hosting.Warnings;
 using MailFathom.Host.Hosting.Workers;
+using MailFathom.Host.Observability.ClientTelemetry;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Mcp;
 using MailFathom.Host.Security.Transport;
@@ -81,6 +82,7 @@ using MailFathom.Infrastructure.Rules;
 using MailFathom.Infrastructure.Secrets.Resolution;
 using MailFathom.Mcp;
 using Microsoft.Extensions.Options;
+using OpenTelemetry.Exporter;
 
 namespace MailFathom.Host;
 
@@ -1293,6 +1295,7 @@ internal static class HostComposition
         if (clientEndpointSettings.Enabled)
         {
             builder.Services.AddClientTransportSecurity(clientEndpointSettings);
+            AddClientTelemetryProxy(builder);
         }
 
         // A separate callback from the listener binding below, and outside its condition, because the two decide different
@@ -1352,5 +1355,41 @@ internal static class HostComposition
             mcpRequestTimeout,
             adminRequestTimeout,
             clientRequestTimeout);
+    }
+
+    /// <summary>Registers what forwards a signed-in client's own telemetry, where this deployment named somewhere to forward it.</summary>
+    /// <remarks>
+    /// <para>
+    /// The destination variable is the whole switch. There is no key of its own, so a deployment cannot end up
+    /// forwarding a client's telemetry somewhere its own signals do not go — and where nothing is registered here,
+    /// <see cref="ClientTelemetryEndpoint.MapClientTelemetry" /> maps no route, which is how a deployment that
+    /// configured no collector answers a client that tried.
+    /// </para>
+    /// <para>
+    /// The destination is read once, through the same options type the SDK's own exporter is configured from, because
+    /// the exporter reads its configuration while the host is being built and a proxy re-reading it per request could
+    /// come to disagree with where this process's own signals are going.
+    /// </para>
+    /// <para>
+    /// The forwarding client keeps the standard resilience handler the service defaults give every client, and refuses
+    /// redirects: a collector answering a redirect would move somebody's telemetry and the deployment's own collector
+    /// credential to whatever host the answer named. Its ceiling is not set here, because the one that applies is the
+    /// exporter's own configured timeout and the forwarder holds it.
+    /// </para>
+    /// </remarks>
+    private static void AddClientTelemetryProxy(IHostApplicationBuilder builder)
+    {
+        if (!ServiceDefaultsExtensions.ExportsOverOtlp(builder.Configuration))
+        {
+            return;
+        }
+
+        builder.Services.AddSingleton(ClientTelemetryDestination.From(new OtlpExporterOptions()));
+        builder.Services.AddSingleton<ClientTelemetryQuota>();
+        builder.Services.AddSingleton<ClientTelemetryProxyTelemetry>();
+        builder.Services.AddSingleton<ClientTelemetryForwarder>();
+
+        builder.Services.AddHttpClient(ClientTelemetryForwarder.HttpClientName)
+            .ConfigurePrimaryHttpMessageHandler(static () => new SocketsHttpHandler { AllowAutoRedirect = false });
     }
 }

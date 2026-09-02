@@ -6,6 +6,7 @@ using System.Text.Json.Nodes;
 using MailFathom.Host;
 using MailFathom.Host.Api;
 using MailFathom.Host.Api.Documentation;
+using MailFathom.Host.Configuration;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Configuration.RootSettings;
 using MailFathom.Host.Hosting;
@@ -46,6 +47,15 @@ namespace MailFathom.PublicSurfaces.UnitTests;
 /// deleted. The last two of those are the reason the deployment below configures an authorization server as well as a
 /// key: a surface allowing no OAuth maps no metadata document, so leaving that out would have made two of these
 /// absences mean nothing.
+/// </para>
+/// <para>
+/// One route family is absent for a reason the deployment below cannot repair: the client endpoint's OTLP proxy is
+/// mapped only where a collector is named, and <see cref="EnvironmentOnlySettings" /> refuses an <c>OTEL_*</c> value
+/// from any source but the process environment. Naming one in the in-memory configuration would therefore record a
+/// deployment the product itself rejects, and setting the variable for real would attach live exporters to a suite
+/// that reaches no network. What those routes publish is asserted where they are mapped, in
+/// <c>ClientTelemetryEndpointTests</c>, and a client discovers them from the specification's own paths rather than
+/// from this document.
 /// </para>
 /// <para>
 /// Nothing here starts a host. The routes are read from the mapping, which is the boundary

@@ -94,7 +94,7 @@ public sealed class ClientTransportSecurityExtensionsTests
         var policy = ClientCorsPolicyOf(EnabledEndpoint());
 
         // Assert
-        Assert.Equal([HttpMethods.Get], policy.Methods);
+        Assert.Equal([HttpMethods.Get, HttpMethods.Post], policy.Methods);
         Assert.Equal(
             [HeaderNames.Authorization, HeaderNames.ContentType, HeaderNames.Accept],
             policy.Headers);
@@ -104,6 +104,11 @@ public sealed class ClientTransportSecurityExtensionsTests
     [Fact]
     public void AddClientTransportSecurity_ThePolicy_LetsAPageReadTheChallengeThatTellsItWhereToAuthorize() =>
         Assert.Contains(HeaderNames.WWWAuthenticate, ClientCorsPolicyOf(EnabledEndpoint()).ExposedHeaders);
+
+    /// <summary>A client told to hold cannot obey an interval its own browser hid from it.</summary>
+    [Fact]
+    public void AddClientTransportSecurity_ThePolicy_LetsAPageReadHowLongItWasAskedToHoldFor() =>
+        Assert.Contains(HeaderNames.RetryAfter, ClientCorsPolicyOf(EnabledEndpoint()).ExposedHeaders);
 
     /// <summary>An endpoint resolves exactly one policy by name, so two surfaces sharing one would let either deployment's origins decide what the other answers.</summary>
     [Fact]
