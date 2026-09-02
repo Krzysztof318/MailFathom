@@ -429,15 +429,32 @@ emit_register 'a dependency pin moved in backend/Directory.Packages.props or a p
 # does not: the register records each of those graphs as a census, and `scripts/update-dependencies.sh`
 # rewrites pins without recomputing one. So the survey catches a pin that is behind and the review
 # catches a census that no longer describes what the lock file resolves.
-client_pins_changed='false'
+client_npm_pins_changed='false'
 if grep -qE '^frontend/(src/[^/]+/)?package\.json$' "$work_directory/changed-paths" \
-  || grep -qxF 'frontend/pnpm-lock.yaml' "$work_directory/changed-paths" \
-  || grep -qE '^frontend/src-tauri/Cargo\.(toml|lock)$' "$work_directory/changed-paths"; then
+  || grep -qxF 'frontend/pnpm-lock.yaml' "$work_directory/changed-paths"; then
+  client_npm_pins_changed='true'
+fi
+
+client_pins_changed="$client_npm_pins_changed"
+if grep -qE '^frontend/src-tauri/Cargo\.(toml|lock)$' "$work_directory/changed-paths"; then
   client_pins_changed='true'
 fi
 
 emit_register 'a client dependency pin moved in a frontend package.json, in frontend/pnpm-lock.yaml, or in the desktop shell'"'"'s Cargo.toml or Cargo.lock' \
   'THIRD_PARTY_LICENSES.md' "$client_pins_changed"
+
+# The npm family alone obliges a second register, which is the only one in this repository that is
+# not a file a reader consults: the bundle carries it. `pnpm build` copies
+# `frontend/src/Client.App/public/` verbatim into the output, the image and every desktop package
+# redistribute that output, and the notice reproduces the licence text of the packages inside it
+# under names and versions of their own. So a moved npm pin can leave a published artifact naming a
+# version it no longer carries, which no register row and no census would show.
+#
+# The crate family is excluded rather than forgotten. The desktop shell's crates are a separate
+# component under separate terms, they reach no bundle, and `THIRD_PARTY_LICENSES.md` carries them as
+# a closure row of their own — so a `Cargo.toml` bump owes the register above and nothing here.
+emit_register 'an npm pin that can reach the client bundle moved in a frontend package.json or in frontend/pnpm-lock.yaml' \
+  'frontend/src/Client.App/public/THIRD-PARTY-NOTICES.txt' "$client_npm_pins_changed"
 
 exception_added='false'
 if jq -e '[.[] | select(.status == "added") | select(.filename | test("^backend/src/.*Exception\\.cs$"))] | length > 0' \
