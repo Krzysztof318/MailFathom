@@ -10,6 +10,7 @@ using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Rendering;
 using MailFathom.Application.EmailContent.Repair;
 using MailFathom.Application.EmailContent.Storage;
+using MailFathom.Application.Emails.Extraction;
 using MailFathom.Application.Emails.Mailboxes;
 using MailFathom.Application.Emails.Summaries;
 using MailFathom.Application.Mail.Delivery.Addressing;
@@ -120,8 +121,10 @@ public sealed class AuthoredResponseDraftingTests
     /// <summary>A file staged against the draft joins the files the answered message already carried, rather than replacing them.</summary>
     /// <remarks>
     /// A revision re-authors from the answered email every time, so what the author uploaded is not in what the
-    /// authoring produced and has to be appended to it. A forward that carried the original's own files and then lost
-    /// them on the first edit, or one that lost the uploaded file instead, are both what this holds against.
+    /// authoring produced and has to be appended to it. The message being forwarded carries a file of its own here, so
+    /// a revision that lost the original's file, one that lost the uploaded file, and one that composed them the other
+    /// way round are all held against — an author who attaches something to a forward means it to arrive after what
+    /// they forwarded rather than in front of it.
     /// </remarks>
     [Fact]
     public async Task SaveAsync_ARevisionOfADraftCarryingAStagedFile_ComposesItAfterWhatTheAnsweredMessageCarried()
@@ -130,7 +133,7 @@ public sealed class AuthoredResponseDraftingTests
         var harness = Harness();
         var drafting = DraftingOverAnsweredMail(harness, out var composer);
 
-        var draft = await drafting.SaveAsync(Request(), TestContext.Current.CancellationToken);
+        var draft = await drafting.SaveAsync(Forward(), TestContext.Current.CancellationToken);
 
         await harness.Drafts.StageAttachmentAsync(
             Substitute.For<IPersistenceSession>(),
@@ -141,7 +144,7 @@ public sealed class AuthoredResponseDraftingTests
 
         // Act
         await drafting.SaveAsync(
-            Request() with { Revises = draft.Id, PlainTextBody = "Thank you, again." },
+            Forward() with { Revises = draft.Id, PlainTextBody = "Thank you, again." },
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -150,7 +153,7 @@ public sealed class AuthoredResponseDraftingTests
             .Last(call => call.GetMethodInfo().Name == nameof(IAuthoredEmailComposer.ComposeDraft))
             .GetArguments()[1]!;
 
-        Assert.Equal(["report.pdf"], composed.Attachments.Select(file => file.FileName));
+        Assert.Equal(["carried.pdf", "report.pdf"], composed.Attachments.Select(file => file.FileName));
     }
 
     private static MailResponseDraftRequest Request() => new()
@@ -159,6 +162,13 @@ public sealed class AuthoredResponseDraftingTests
         Act = AuthoredResponseAct.Reply,
         PlainTextBody = "Thank you.",
         Author = OutgoingEmailRequester.Command("mfctl-4f2a"),
+    };
+
+    /// <summary>Asks to forward the answered message, which is the act that carries that message's own files.</summary>
+    private static MailResponseDraftRequest Forward() => Request() with
+    {
+        Act = AuthoredResponseAct.Forward,
+        Recipients = [NamedRecipient.AtAddress(OutgoingRecipientRole.To, "someone@example.test")],
     };
 
     private static MailDraftHarness Harness()
@@ -260,17 +270,22 @@ public sealed class AuthoredResponseDraftingTests
                 new EmailBodyForms(PlainText: true, Html: false),
                 false,
                 EmailAttachmentSummary.Create(
-                    [],
+                    [Carried],
                     inlineResourceCount: 0,
                     false,
                     carriesUnverifiedSignature: false,
                     containsUnexpandedTnefPart: false),
-                []))));
+                [Carried]))));
 
         var senderIdentities = Substitute.For<IOutgoingSenderIdentityReader>();
         senderIdentities
             .FindSenderIdentity(Arg.Any<MailAccountId>())
             .Returns(OutgoingSenderIdentity.Create(Account, Address("owner@example.test")));
+
+        var attachmentContents = Substitute.For<IEmailAttachmentContentReader>();
+        attachmentContents
+            .OpenAsync(Arg.Any<StoredEmailContent>(), Arg.Any<int>(), Arg.Any<CancellationToken>())
+            .Returns(_ => Task.FromResult(OpenedEmailAttachmentResult.Opened(new StubOpenedEmailAttachment())));
 
         var catalog = Substitute.For<ICallerMailAccountCatalog>();
         catalog.OwnedAccounts.Returns([SyntheticServedAccount.Of(Account)]);
@@ -279,7 +294,7 @@ public sealed class AuthoredResponseDraftingTests
             summaries,
             contentStore,
             renderer,
-            Substitute.For<IEmailAttachmentContentReader>(),
+            attachmentContents,
             Substitute.For<IEmailContentRepairRequestStore>(),
             new MailboxScopeResolver(
                 catalog,
@@ -297,6 +312,12 @@ public sealed class AuthoredResponseDraftingTests
         return new AuthoredResponseDrafting(authoring, composer, harness.Book, granted);
     }
 
+    /// <summary>The one file the answered message carries, which a forward brings into the draft ahead of any upload.</summary>
+    private static ExtractedEmailAttachment Carried => new(
+        AttachmentFileName.TryNormalize("carried.pdf", out var normalized) ? normalized : null,
+        "application/pdf",
+        8);
+
     /// <summary>Reads one address, failing the suite rather than the code when the literal names no mailbox.</summary>
     private static EmailAddress Address(string address)
     {
@@ -313,4 +334,19 @@ public sealed class AuthoredResponseDraftingTests
         MaxAttachmentBytes = 128,
         MaxMessageBytes = 300,
     };
+
+    /// <summary>The answered message's own file as the authoring opens it, which is what a forward writes into the draft.</summary>
+    private sealed class StubOpenedEmailAttachment : IOpenedEmailAttachment
+    {
+        public ExtractedEmailAttachment Description => Carried;
+
+        public Task WriteContentToAsync(Stream destination, CancellationToken cancellationToken)
+        {
+            ArgumentNullException.ThrowIfNull(destination);
+
+            return destination.WriteAsync(Encoding.UTF8.GetBytes("carried!!"), cancellationToken).AsTask();
+        }
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
 }
