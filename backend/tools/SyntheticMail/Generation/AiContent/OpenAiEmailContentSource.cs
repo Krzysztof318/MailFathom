@@ -5,6 +5,7 @@
 using System.ClientModel;
 using System.Net.Sockets;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using MailFathom.SyntheticMail.Configuration;
 using OpenAI;
 using OpenAI.Chat;
@@ -32,7 +33,7 @@ namespace MailFathom.SyntheticMail.Generation.AiContent;
 /// this tool exists to keep out of a developer's real mail.
 /// </para>
 /// </remarks>
-internal sealed class OpenAiEmailContentSource : IAiEmailContentSource
+internal sealed partial class OpenAiEmailContentSource : IAiEmailContentSource
 {
     /// <summary>The most a single email's content may cost in output tokens.</summary>
     /// <remarks>
@@ -50,7 +51,9 @@ internal sealed class OpenAiEmailContentSource : IAiEmailContentSource
     /// stripped: a reduction would leave a message nobody asked for and hide that the endpoint answered with
     /// something it was told not to, and a run that stops names the move for a developer who can change the model.
     /// The check is a substring scan because these are the literal spellings a document has to contain to carry them
-    /// at all; markup that merely mentions one in text is escaped and does not.
+    /// at all; markup that merely mentions one in text is escaped and does not. It is only half the refusal:
+    /// <see cref="InlineEventHandler" /> answers the constructs an attribute name carries, which no fixed list of
+    /// element spellings reaches.
     /// </remarks>
     private static readonly string[] RefusedHtmlConstructs =
     [
@@ -60,6 +63,17 @@ internal sealed class OpenAiEmailContentSource : IAiEmailContentSource
         "<embed",
         "javascript:",
     ];
+
+    /// <summary>Matches an inline event handler, which executes exactly as a script element does.</summary>
+    /// <remarks>
+    /// A pattern rather than another entry in the list above, because a handler is spelled as an attribute name and
+    /// there are dozens of them: <c>onerror</c> on an image that fails to load runs without the reader touching
+    /// anything, so a list that named a few would refuse the ones somebody thought of and deliver the rest. What it
+    /// matches is what a document has to contain to carry one at all — a separator, <c>on</c>, a name, and an
+    /// assignment — and it cannot backtrack, so no answer can price the check.
+    /// </remarks>
+    [GeneratedRegex(@"\son[a-z]+\s*=", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex InlineEventHandler();
 
     /// <summary>How long one generation may take before the run reports it as timed out.</summary>
     /// <remarks>
@@ -213,6 +227,12 @@ internal sealed class OpenAiEmailContentSource : IAiEmailContentSource
                 $"The model's answer carried '{refused}' in its html, which this tool will not deliver to a mailbox. Retry; if it persists, name a different model in the AI provider file.");
         }
 
+        if (InlineEventHandler().IsMatch(html))
+        {
+            throw new SyntheticMailFailure(
+                "The model's answer carried an inline event handler in its html, which this tool will not deliver to a mailbox. Retry; if it persists, name a different model in the AI provider file.");
+        }
+
         return new AiEmailContent(subject, body, html);
     }
 
@@ -269,7 +289,7 @@ internal sealed class OpenAiEmailContentSource : IAiEmailContentSource
 
         "body": the message as plain text, with paragraphs separated by blank lines, opening with a natural greeting and closing with a short signature.
 
-        "html": the same message as an HTML document, carrying the structure real business mail carries rather than one paragraph per line. Use a mixture appropriate to what the message says, drawn from headings, paragraphs, ordered and unordered lists, a table with a header row where the message reports figures or items, links, bold and italic emphasis, blockquotes for anything being quoted back, a horizontal rule, and a signature block. Inline style attributes are welcome and so are simple font, colour, and spacing choices. Say the same things the plain-text body says, in the same order and in the same language. Never include a script, an iframe, an object, an embed, a javascript: URL, a remote image, or a tracking pixel.
+        "html": the same message as an HTML document, carrying the structure real business mail carries rather than one paragraph per line. Use a mixture appropriate to what the message says, drawn from headings, paragraphs, ordered and unordered lists, a table with a header row where the message reports figures or items, links, bold and italic emphasis, blockquotes for anything being quoted back, a horizontal rule, and a signature block. Inline style attributes are welcome and so are simple font, colour, and spacing choices. Say the same things the plain-text body says, in the same order and in the same language. Never include a script, an iframe, an object, an embed, a javascript: URL, an inline event-handler attribute such as onclick or onerror, a remote image, or a tracking pixel.
 
         The email is fiction: every name, company, number, and reference in it is invented, and it must not contain any real personal data, any credential, or anything that identifies a real person or organization. Write exclusively in the language the request names.
         """;

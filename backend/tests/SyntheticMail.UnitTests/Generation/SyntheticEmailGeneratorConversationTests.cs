@@ -55,6 +55,26 @@ public sealed class SyntheticEmailGeneratorConversationTests
         Assert.All(conversations, conversation => Assert.True(conversation.Messages.Count >= 2));
     }
 
+    [Theory]
+    [InlineData(7)]
+    [InlineData(13)]
+    [InlineData(61)]
+    [InlineData(100)]
+    public void GenerateConversations_AnyCount_KeepsEveryThreadInsideTheStatedTurnRange(int count)
+    {
+        // Arrange
+        // Seven is the count that catches the ceiling: a draw of six leaves exactly one over, and absorbing that
+        // leftover rather than giving a turn back would produce a seven-turn thread the documentation says cannot
+        // exist. The other counts reach the same correction from batches that keep drawing afterwards.
+        var plans = Enumerable.Range(0, 40).Select(seed => Plan(seed, count));
+
+        // Act
+        var conversations = plans.SelectMany(plan => SyntheticEmailGenerator.GenerateConversations(plan, Mailbox));
+
+        // Assert
+        Assert.All(conversations, conversation => Assert.InRange(conversation.Messages.Count, 2, 6));
+    }
+
     [Fact]
     public void GenerateConversations_ASeededPlan_AlternatesTheTwoSidesFromTheCorrespondentOnwards()
     {

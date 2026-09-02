@@ -769,8 +769,10 @@ planted in both, because which alternative a reader extracts from is the extract
 
 **Model markup is untrusted, and an answer carrying an executable construct is refused.** The endpoint is one a
 developer named rather than one this tool chose, and what it answers is delivered to a real mailbox — so an answer
-whose document holds a `<script>`, an `<iframe>`, an `<object>`, an `<embed>`, or a `javascript:` URL stops the run
-with a line naming what it carried, exactly as an answer that was not the JSON object it was asked for does. Refused
+whose document holds a `<script>`, an `<iframe>`, an `<object>`, an `<embed>`, a `javascript:` URL, or an inline
+event-handler attribute such as `onerror` stops the run with a line naming what it carried, exactly as an answer that
+was not the JSON object it was asked for does. The handler is read as a pattern rather than as another spelling in
+that list, because an attribute name is what carries it and a list would refuse the few somebody thought of. Refused
 rather than reduced: stripping one would deliver a message nobody asked for and hide that the endpoint answered with
 something it was told not to. Everything an answer survives with is markup a reader has to handle anyway.
 

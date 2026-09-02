@@ -103,6 +103,13 @@ public sealed class OpenAiEmailContentSourceTests
     [InlineData("<SCRIPT src=\"x\"></SCRIPT>")]
     [InlineData("<iframe src=\"x\"></iframe>")]
     [InlineData("<a href=\"javascript:alert(1)\">x</a>")]
+    [InlineData("<object data=\"x\"></object>")]
+    [InlineData("<embed src=\"x\">")]
+    // An event handler executes without the reader touching anything, and no list of element spellings reaches one:
+    // the attribute is what carries it, so the refusal has to read the attribute.
+    [InlineData("<img src=\"x\" onerror=\"alert(1)\">")]
+    [InlineData("<p ONCLICK = \"alert(1)\">x</p>")]
+    [InlineData("<body onload=\"alert(1)\">x</body>")]
     public void ParseContent_AnAnswerCarryingAnExecutableConstruct_IsRefusedRatherThanDelivered(string markup)
     {
         // Arrange

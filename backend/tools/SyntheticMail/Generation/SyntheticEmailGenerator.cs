@@ -362,15 +362,24 @@ internal sealed class SyntheticEmailGenerator
     }
 
     /// <summary>Draws how many turns the next exchange runs to, without leaving a message that could not be one.</summary>
+    /// <remarks>
+    /// A draw that would leave exactly one message over is corrected rather than accepted, because starting a thread
+    /// with room for no reply puts a single message in the corpus labelled as an exchange, which is the one shape this
+    /// mode exists to stop producing. Which way it is corrected depends on whether absorbing the leftover would take
+    /// the exchange past <see cref="MostExchangeTurns" />: below that it is absorbed, and at exactly one over it the
+    /// exchange gives a turn back instead, which leaves two behind rather than one and keeps the stated ceiling true.
+    /// </remarks>
     private int DrawTurnCount()
     {
         var remaining = this.plan.Count - this.produced.Count;
         var turns = Math.Min(this.source.Next(FewestExchangeTurns, MostExchangeTurns + 1), remaining);
 
-        // A draw that would leave exactly one message over takes it as well. Starting a thread with room for no reply
-        // would put a single message in the corpus labelled as an exchange, which is the one shape this mode exists
-        // to stop producing.
-        return remaining - turns == 1 ? remaining : turns;
+        if (remaining - turns != 1)
+        {
+            return turns;
+        }
+
+        return remaining <= MostExchangeTurns ? remaining : turns - 1;
     }
 
     private SyntheticEmail BuildConversationMessage(

@@ -19,8 +19,9 @@ namespace MailFathom.SyntheticMail.Generation.AiContent;
 /// <para>
 /// Model-produced markup is untrusted by construction, which is what
 /// <see cref="OpenAiEmailContentSource.ParseContent" /> checks before a message is built around it: an answer carrying
-/// an executable construct is refused rather than reduced, because a corpus is delivered to a real mailbox and a
-/// development tool is not the place to invent an attack. Everything the answer survives with is markup a reader has
+/// an executable construct — an element that runs, a <c>javascript:</c> URL, or an inline event handler — is refused
+/// rather than reduced, because a corpus is delivered to a real mailbox and a development tool is not the place to
+/// invent an attack. Everything the answer survives with is markup a reader has
 /// to handle anyway.
 /// </para>
 /// <para>

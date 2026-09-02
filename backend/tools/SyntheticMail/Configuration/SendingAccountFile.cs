@@ -91,7 +91,7 @@ internal static class SendingAccountFile
 
         return new SendingAccount(
             host,
-            ParsePort(document.Port, security, SubmissionStartTlsPort, SubmissionImplicitTlsPort, origin),
+            ParsePort(document.Port, security, SubmissionStartTlsPort, SubmissionImplicitTlsPort, "port", origin),
             security,
             address,
             string.IsNullOrWhiteSpace(document.UserName) ? address.Address : document.UserName,
@@ -142,7 +142,7 @@ internal static class SendingAccountFile
 
         return new WatchedMailboxAccount(
             host,
-            ParsePort(document.Port, security, ImapStartTlsPort, ImapImplicitTlsPort, origin),
+            ParsePort(document.Port, security, ImapStartTlsPort, ImapImplicitTlsPort, "mailbox.port", origin),
             security,
             address,
             string.IsNullOrWhiteSpace(document.UserName) ? address.Address : document.UserName,
@@ -236,6 +236,7 @@ internal static class SendingAccountFile
         MailTransportSecurity security,
         int startTlsPort,
         int implicitTlsPort,
+        string key,
         string path)
     {
         if (port is not { } configured)
@@ -246,6 +247,6 @@ internal static class SendingAccountFile
         return configured is >= 0 and <= 65535
             ? configured
             : throw new SyntheticMailFailure(
-                $"'port' in '{path}' is {configured}, which is outside 0 to 65535.");
+                $"'{key}' in '{path}' is {configured}, which is outside 0 to 65535.");
     }
 }

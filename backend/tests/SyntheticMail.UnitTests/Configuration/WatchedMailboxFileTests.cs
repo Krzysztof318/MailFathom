@@ -133,6 +133,21 @@ public sealed class WatchedMailboxFileTests
     }
 
     [Fact]
+    public void ReadWatchedMailboxFrom_ABlockNamingAPortOutsideTheRange_IsRefusedNamingTheNestedKey()
+    {
+        // Arrange
+        var contents = """{ "mailbox": { "host": "h", "port": 70000, "address": "a@example.test", "password": "p" } }""";
+
+        // Act
+        var failure = Assert.Throws<SyntheticMailFailure>(() => Read(contents));
+
+        // Assert
+        // The nested key rather than the submission account's own: a developer told to check 'port' would look at the
+        // top of the file, where the value they mistyped is not.
+        Assert.Contains($"'mailbox.port' in '{Origin}' is 70000", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ReadWatchedMailboxFrom_ABlockNamingSomethingThatIsNotAnAddress_IsRefusedNamingTheKey()
     {
         // Arrange

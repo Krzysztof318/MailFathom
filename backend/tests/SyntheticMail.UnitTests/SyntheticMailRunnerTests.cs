@@ -336,6 +336,37 @@ public sealed class SyntheticMailRunnerTests
     }
 
     [Fact]
+    public async Task RunAsync_AConversationInAiMode_ReachesTheSourceForEveryTurnAndDeliversWhatItAnswered()
+    {
+        // Arrange
+        var console = new RecordingSyntheticMailConsole();
+        await using var transport = new RecordingSyntheticMailTransport();
+        await using var mailbox = new RecordingWatchedMailbox();
+        var source = new ScriptedAiEmailContentSource(new AiEmailContent(
+            "Quarterly figures",
+            "Hello,\n\nFigures attached.\n\nRegards\nAnna",
+            "<html><body><h1>Quarterly figures</h1><p>Figures attached.</p></body></html>"));
+
+        // Act
+        var exitCode = await SyntheticMailRunner.RunAsync(
+            Context(console, transport, mailbox: mailbox, aiContentSource: source),
+            ["developer@example.com", "--conversation", "--ai", "--count", "8", "--seed", "42", "--interval", "0", "--until", "2026-08-08"],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        // The two modes compose rather than merely coexisting: the seed still decides the exchanges and the sides, and
+        // every turn of every one of them is content the source answered — including the replies, which is what the
+        // parent opening in each request after a thread's first is for.
+        Assert.Equal(SyntheticMailExitCode.Success, exitCode);
+        Assert.Equal(8, source.Requests.Count);
+        Assert.Equal(8, transport.Submissions.Count + mailbox.Appended.Count);
+        Assert.NotEmpty(mailbox.Appended);
+        Assert.Contains(source.Requests, request => request.ParentOpening is not null);
+        Assert.All(transport.Submissions, submission =>
+            Assert.Contains("Quarterly figures", submission.Subject, StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task RunAsync_AConversationToAMailboxTheFileDoesNotConfigure_IsRefusedNamingBothAddresses()
     {
         // Arrange
