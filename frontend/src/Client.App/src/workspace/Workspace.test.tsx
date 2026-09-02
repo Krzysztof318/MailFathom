@@ -101,6 +101,69 @@ describe('WorkspaceProvider', () => {
     });
 });
 
+// A conversation stands in front of the message it was opened from, so the two are revised together whatever a screen
+// asked for. Two revisions in sequence is what proves it, which the single-change probe above cannot express.
+function Revisions({ changes }: { readonly changes: readonly Partial<Workspace>[] }) {
+    const { workspace, revise } = useWorkspace();
+
+    return (
+        <div>
+            {changes.map((change, at) => (
+                <button
+                    key={at}
+                    type="button"
+                    onClick={() => {
+                        revise(change);
+                    }}
+                >
+                    {String(at)}
+                </button>
+            ))}
+            <output>{JSON.stringify(workspace)}</output>
+        </div>
+    );
+}
+
+function applying(changes: readonly Partial<Workspace>[]): void {
+    render(
+        <WorkspaceProvider>
+            <Revisions changes={changes} />
+        </WorkspaceProvider>,
+    );
+
+    changes.forEach((_, at) => {
+        fireEvent.click(screen.getByRole('button', { name: String(at) }));
+    });
+}
+
+describe('the conversation beside the selection', () => {
+    const conversation = { threadId: 'a-conversation', openAt: 'the-message-it-was-opened-from' };
+
+    it('closes the conversation when a different message is picked, so the click has an effect', () => {
+        applying([{ selection: 'the-message-it-was-opened-from' }, { conversation }, { selection: 'another-message' }]);
+
+        expect(carried().conversation).toBeNull();
+        expect(carried().selection).toBe('another-message');
+    });
+
+    it('keeps the conversation where the same message is picked again, which changes nothing', () => {
+        applying([
+            { selection: 'the-message-it-was-opened-from' },
+            { conversation },
+            { selection: 'the-message-it-was-opened-from' },
+        ]);
+
+        expect(carried().conversation).toEqual(conversation);
+    });
+
+    it('leaves a revision naming both alone, because that is a conversation being opened rather than abandoned', () => {
+        applying([{ selection: 'another-message', conversation }]);
+
+        expect(carried().conversation).toEqual(conversation);
+        expect(carried().selection).toBe('another-message');
+    });
+});
+
 describe('useWorkspace', () => {
     it('refuses to answer outside the provider rather than inventing a workspace of its own', () => {
         expect(() => {

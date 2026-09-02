@@ -498,6 +498,11 @@ describe('App', () => {
 
         expect(await screen.findByText('A drawn message.')).toBeDefined();
         expect(screen.queryByRole('region', { name: 'Conversation' })).toBeNull();
+
+        // Returning to the message is a navigation rather than a landing, so it places the reader in what it drew.
+        await waitFor(() => {
+            expect(document.activeElement).toBe(screen.getByRole('article', { name: /Quarterly invoice/ }));
+        });
     });
 
     it('draws no message until a row of the list opens one', async () => {

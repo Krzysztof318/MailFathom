@@ -62,11 +62,21 @@ export function ReadingPane({
     transport,
     storedEmailId,
     online,
+    arriving = false,
 }: {
     readonly session: ClientSession;
     readonly transport: MailFathomTransport;
     readonly storedEmailId: string | null;
     readonly online: boolean;
+
+    /**
+     * Whether the reader is arriving at this message rather than landing on it, which decides whether focus is placed.
+     *
+     * A pane mounts afresh both when a space opens on whatever was last read and when a conversation standing in front
+     * of that message is closed. The first is a landing and the second is a navigation, and nothing in the mount itself
+     * tells them apart — so what does is the one component that watched the conversation go.
+     */
+    readonly arriving?: boolean;
 }) {
     const { translate } = useLocalization();
 
@@ -75,7 +85,13 @@ export function ReadingPane({
             {storedEmailId === null ? (
                 <p className="text-sm text-muted">{translate('message.nothingOpen')}</p>
             ) : (
-                <OpenMessage session={session} transport={transport} storedEmailId={storedEmailId} online={online} />
+                <OpenMessage
+                    session={session}
+                    transport={transport}
+                    storedEmailId={storedEmailId}
+                    online={online}
+                    arriving={arriving}
+                />
             )}
         </section>
     );
@@ -89,11 +105,13 @@ function OpenMessage({
     transport,
     storedEmailId,
     online,
+    arriving,
 }: {
     readonly session: ClientSession;
     readonly transport: MailFathomTransport;
     readonly storedEmailId: string;
     readonly online: boolean;
+    readonly arriving: boolean;
 }) {
     const { translate } = useLocalization();
     const { revise } = useWorkspace();
@@ -103,7 +121,10 @@ function OpenMessage({
 
     const opened = useRef<HTMLElement>(null);
     const body = useRef<HTMLDivElement>(null);
-    const focusedOn = useRef(storedEmailId);
+    // The message focus was last placed on, which starts as the one this pane mounted with so that landing on a message
+    // does not steal focus. A reader arriving back from the conversation that stood in front of it is not landing, so
+    // that mount starts having focused nothing and the effect below places it once the message is drawable.
+    const focusedOn = useRef(arriving ? null : storedEmailId);
 
     // A message changing under this component invalidates what is being read, which React answers by adjusting state
     // during the render rather than in an effect that would draw the previous message's answer once first.
@@ -181,7 +202,7 @@ function OpenMessage({
     //
     // Not for the message this pane opened with, for the reason `shell/Space.tsx` gives: landing on a message is not a
     // navigation, and a ref holding the message last focused survives StrictMode's second invocation where a flag would
-    // not.
+    // not. Closing a conversation is the one mount that is a navigation, and `arriving` is how it says so.
     useEffect(() => {
         if (drawable && focusedOn.current !== storedEmailId) {
             focusedOn.current = storedEmailId;

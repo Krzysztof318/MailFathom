@@ -69,7 +69,11 @@ export function Thread({
     const [expanded, setExpanded] = useState<readonly string[] | null>(null);
 
     const summaries = useRef(new Map<string, HTMLElement>());
-    const focusedOn = useRef<string | null>(null);
+
+    // Whether arriving in this conversation has already put the reader somewhere. A ref rather than a flag in state
+    // because it survives StrictMode's second invocation of the effect below, for the reason the reading pane's own
+    // focus guard is one.
+    const arrivedAt = useRef<string | null>(null);
 
     // A failure the network gap itself caused goes with the gap, so what stands while there is no network is the
     // sentence below rather than a refusal to try again that a reader would have to press through — and coming back
@@ -132,11 +136,17 @@ export function Thread({
         };
     }, [session, transport, conversation.threadId, reading, wantedCursor]);
 
-    // Arriving at a message inside a conversation is a view change, so focus goes to it rather than staying on whatever
-    // opened the conversation. Focus rather than a scroll of our own: placing it is the obligation, a browser scrolls
-    // what it focuses into view, and one call cannot leave the two disagreeing about where the reader is.
+    // Arriving in a conversation is a view change, so focus goes to the message it opened at rather than staying on
+    // whatever opened the conversation. Focus rather than a scroll of our own: placing it is the obligation, a browser
+    // scrolls what it focuses into view, and one call cannot leave the two disagreeing about where the reader is.
+    //
+    // It is placed once, on arriving, and never again. `expanded` is what a reader changes for the rest of the visit —
+    // every message they open or collapse is a new value of it — and re-placing focus on those would take it off the
+    // disclosure they just operated and put it somewhere they did not ask to be. Collapsing an open message is not a
+    // view change. Arriving somewhere else is, and that is a conversation of its own: `App.tsx` keys this component by
+    // the conversation together with the message it was opened at, so a different arrival is a different mount.
     useEffect(() => {
-        if (expanded === null) {
+        if (expanded === null || arrivedAt.current !== null) {
             return;
         }
 
@@ -146,14 +156,14 @@ export function Thread({
         // where focus already is.
         const arriveAt = conversation.openAt ?? expanded.at(0) ?? null;
 
-        if (arriveAt === null || focusedOn.current === arriveAt) {
+        if (arriveAt === null) {
             return;
         }
 
         const summary = summaries.current.get(arriveAt);
 
         if (summary !== undefined) {
-            focusedOn.current = arriveAt;
+            arrivedAt.current = arriveAt;
             summary.focus();
         }
     }, [conversation.openAt, expanded]);

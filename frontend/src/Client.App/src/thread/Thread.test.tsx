@@ -246,6 +246,24 @@ describe('Thread', () => {
         });
     });
 
+    it('leaves focus where the reader put it when they collapse a message, which is not a view change', async () => {
+        drawing(
+            deploymentAnswering(pageOf(['one', 'two', 'three'], {}, { one: { unread: true }, two: { unread: true } })),
+        );
+
+        await waitFor(() => {
+            expect(document.activeElement?.tagName).toBe('SUMMARY');
+        });
+
+        const arrivedAt = document.activeElement;
+
+        fireEvent.click(arrivedAt ?? document.body);
+
+        // Collapsed again, which is what puts the contribution back on the line and what changes `expanded`.
+        expect(await screen.findByText('What one added.')).toBeDefined();
+        expect(document.activeElement).toBe(arrivedAt);
+    });
+
     it('reads on until the message it was opened at is in hand, keeping the history above it', async () => {
         drawing(
             deploymentAnswering(

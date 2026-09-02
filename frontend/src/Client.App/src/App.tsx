@@ -319,8 +319,27 @@ function OpenMail({
     readonly storedEmailId: string | null;
     readonly online: boolean;
 }) {
+    // Whether the pane below is being arrived at rather than landed on. Closing a conversation swaps this position from
+    // one component to the other, so the pane mounts afresh exactly as it does on a cold start and cannot tell the two
+    // apart from anything it holds itself — this is the only place that saw the conversation go. Adjusted during render,
+    // which is React's answer to state that a changed prop invalidates, rather than read from a ref written during one:
+    // a ref would be written twice under StrictMode and the second pass would report no conversation had been there.
+    const [reading, setReading] = useState(conversation !== null);
+    const [arriving, setArriving] = useState(false);
+
+    if (reading !== (conversation !== null)) {
+        setReading(conversation !== null);
+        setArriving(conversation === null);
+    }
+
     return conversation === null ? (
-        <ReadingPane session={session} transport={transport} storedEmailId={storedEmailId} online={online} />
+        <ReadingPane
+            session={session}
+            transport={transport}
+            storedEmailId={storedEmailId}
+            online={online}
+            arriving={arriving}
+        />
     ) : (
         <Thread
             key={conversationKey(conversation)}
