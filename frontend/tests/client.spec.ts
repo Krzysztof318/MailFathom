@@ -957,6 +957,34 @@ test('draws the three columns of the Mail space without the page scrolling sidew
     }
 });
 
+test('stops a message’s own content at the reading ceiling and leaves everything around it the pane', async ({
+    page,
+}) => {
+    // Wider than the width the design draws the pane at, which is the only regime where the ceiling binds at all: at
+    // the width the composition was drawn against the pane is already narrower than it, and a pane that had lost the
+    // ceiling entirely would look identical there.
+    await page.setViewportSize({ width: 1920, height: 1080 });
+
+    await openTheFirstMessage(page);
+    await expect(page.getByRole('heading', messageHeading)).toBeVisible();
+
+    // The sender's own heading stands inside the message's content and the attachments heading beside it does not, so
+    // the two boxes are the whole comparison — same left edge, different widths. What the ceiling is worth in pixels
+    // is the token's business rather than this suite's; what is asserted is the shape, because both ways of getting it
+    // wrong are visible here and nowhere jsdom can reach. A ceiling dropped again draws the two at one width, and a
+    // centred one moves the content's left edge off the edge everything around it keeps.
+    const content = await boxOf(page.getByRole('heading', messageHeading));
+    const aroundIt = await boxOf(page.getByRole('heading', { name: 'Files this message carries' }));
+
+    expect(content.width).toBeLessThan(aroundIt.width);
+    expect(content.x).toBeCloseTo(aroundIt.x, 0);
+
+    // And the region the pane draws the message in keeps the pane's own width, which is what the ceiling stopped
+    // binding: a head laid out to a measure meant for paragraphs is the defect this asserts against.
+    const region = await boxOf(page.getByRole('article', messageRegion));
+    expect(region.width).toBeGreaterThan(content.width);
+});
+
 test('holds a window of rows in the document however far down the folder it is scrolled', async ({ page }) => {
     await openSignedIn(page, '/#/mail');
 

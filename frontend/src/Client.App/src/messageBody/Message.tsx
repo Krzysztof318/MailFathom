@@ -18,7 +18,7 @@ import { MessageBody } from './MessageBody';
 
 // One message's body, read and drawn. Which message that is, and everything the reading pane lays out around it, is
 // `readingPane/ReadingPane.tsx`'s; what this owns is the body read itself, the reader's own ask for pictures from the
-// sender, and the five states a surface that waits owes somebody.
+// sender, the five states a surface that waits owes somebody, and the width all of it is read at.
 //
 // Asking for pictures re-reads that one message with the ask in the query, and neither this component nor anything
 // beneath it writes the answer down: leaving the message and coming back asks again, which is the whole of what
@@ -59,19 +59,31 @@ function drawableUnder(answer: Answered | null, read: Read): Answered | null {
     return answer.read.remotePictures && !read.remotePictures ? null : answer;
 }
 
-export function Message({
-    session,
-    transport,
-    storedEmailId,
-    quotedHistoryOnRequest = false,
-}: {
+interface MessageToDraw {
     readonly session: ClientSession;
     readonly transport: MailFathomTransport;
     readonly storedEmailId: string;
 
     /** Whether the conversation this message quoted is folded away until a reader asks for it, which a thread does. */
     readonly quotedHistoryOnRequest?: boolean;
-}) {
+}
+
+// The ceiling every message's own content is read under, stated here rather than where a message is laid out, so that
+// it holds wherever one is drawn and for whatever the content later becomes: the reading pane draws one message and a
+// conversation draws several, and neither has to know the width. It binds the content alone — the head above it, the
+// verdict about who sent it, the files it carries, the actions, and the field the reader asks in have no measure to
+// keep and take the pane's own width — and what it binds is ranged left, so a window wider than the content's ceiling
+// leaves its margin on the empty side of the pane rather than pushing the words away from the list they were opened
+// from.
+export function Message(message: MessageToDraw) {
+    return (
+        <div className="max-w-reading">
+            <MessageRead {...message} />
+        </div>
+    );
+}
+
+function MessageRead({ session, transport, storedEmailId, quotedHistoryOnRequest = false }: MessageToDraw) {
     const { translate } = useLocalization();
     const [read, setRead] = useState<Read>({ storedEmailId, remotePictures: false, attempt: 0 });
 
