@@ -109,7 +109,7 @@ export function FolderTree({
         const reason = answered.result.failure.reason;
 
         return (
-            <div className="flex flex-col items-start gap-2">
+            <div className="flex flex-col items-start gap-2 px-2.75 py-2">
                 <p className="text-sm text-warning">
                     {translate('folders.failed', { reason: translate(failureLabels[reason]) })}
                 </p>
@@ -149,6 +149,13 @@ export function FolderTree({
     // The row the keyboard is on, which is the first one until somebody moves it, and the first one again whenever the
     // row it was on has been folded away with its parent.
     const carryingFocus = visible.find((visibleRow) => visibleRow.row.key === focused) ?? visible[0];
+
+    // Which group each first-level row heads, counted from the whole workspace, which is what colours its mark.
+    const groupOrdinals = new Map(
+        visible
+            .filter((visibleRow) => visibleRow.row.level === 1)
+            .map((visibleRow, ordinal) => [visibleRow.row.key, ordinal] as const),
+    );
 
     function focusRow(at: number): void {
         const moved = visible[Math.min(Math.max(at, 0), visible.length - 1)];
@@ -242,6 +249,7 @@ export function FolderTree({
                     expanded={visibleRow.expanded}
                     selected={visibleRow.row.key === inScope}
                     focusable={visibleRow.row.key === carryingFocus?.row.key}
+                    groupOrdinal={groupOrdinals.get(visibleRow.row.key) ?? null}
                     onSelect={() => {
                         setFocused(visibleRow.row.key);
 
@@ -274,7 +282,7 @@ export function FolderTree({
 
 function Note({ announced = false, children }: { readonly announced?: boolean; readonly children: ReactNode }) {
     return (
-        <p className="text-sm text-muted" role={announced ? 'status' : undefined}>
+        <p className="px-2.75 py-2 text-sm text-muted" role={announced ? 'status' : undefined}>
             {children}
         </p>
     );

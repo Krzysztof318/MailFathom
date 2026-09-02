@@ -172,13 +172,13 @@ describe('FolderTree', () => {
         expect(screen.queryByRole('treeitem', { name: /Odebrane/ })).toBeNull();
     });
 
-    it('reports what is unread and what is held, in the words a reader hears rather than as bare numbers', async () => {
+    it('reports what is unread in the words a reader hears, and not what is held, which the design leaves off', async () => {
         renderTree(answering(JSON.stringify(tree)));
 
         await drawn();
 
         expect(row(/^Inbox12 unread/).textContent).toContain('12 unread');
-        expect(row(/^Inbox12 unread/).textContent).toContain('4,213 held here');
+        expect(row(/^Inbox12 unread/).textContent).not.toContain('4,213');
     });
 
     it('offers every mailbox at once as the scope everything else is read under', async () => {
@@ -197,7 +197,7 @@ describe('FolderTree', () => {
         await drawn();
         const acrossMailboxes = row(/^Inbox15 unread/);
 
-        expect(acrossMailboxes.textContent).toContain('4,263 held here');
+        expect(acrossMailboxes.textContent).toContain('15 unread');
 
         fireEvent.click(acrossMailboxes);
 
@@ -327,7 +327,7 @@ describe('FolderTree', () => {
 
         // The control that opens a row is hidden from the accessibility tree deliberately — a tree says whether a row
         // is open and opens one from the keyboard — so this is the one thing here that cannot be found by its role.
-        fireEvent.click(row(/^Work/).firstElementChild as HTMLElement);
+        fireEvent.click(row(/^Work/).lastElementChild as HTMLElement);
 
         expect(row(/^Work/).getAttribute('aria-expanded')).toBe('false');
         expect(carried().scope).toEqual({ kind: 'everything' });
@@ -338,7 +338,7 @@ describe('FolderTree', () => {
 
         await drawn();
 
-        fireEvent.click(row(/^Work/).firstElementChild as HTMLElement);
+        fireEvent.click(row(/^Work/).lastElementChild as HTMLElement);
 
         expect(row(/^Work/).getAttribute('tabindex')).toBe('0');
     });

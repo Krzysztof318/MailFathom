@@ -429,7 +429,7 @@ export function MessageList({
 
     if (rowCount === 0 && failure !== null) {
         return (
-            <div className="flex flex-col items-start gap-2">
+            <div className="flex flex-col items-start gap-2 px-3 py-3">
                 {/* Announced rather than merely drawn, for the reason the reading pane's failure is: a reader who
                     heard the list say it was reading hears nothing at all when it stops, and the way out sits under a
                     sentence they were never told about. */}
@@ -451,42 +451,44 @@ export function MessageList({
     }
 
     return (
-        <div className="flex min-h-0 flex-col gap-2">
-            <ListSettings
-                listing={listing}
-                junkAskable={scope.kind !== 'folder' && scope.kind !== 'role'}
-                onRead={readWith}
-            />
-
-            <div className="flex flex-wrap items-center gap-2">
-                {/* Under a finger there is no modifier key, so picking out several messages is a mode rather than a
-                    chord. It is offered at every width and to every pointer, because a mode a reader can see is easier
-                    than a chord they have to know — and because nothing in this tree asks which head it runs on. */}
-                <CheckControl
-                    label={translate('list.selectSeveral')}
-                    on={selecting}
-                    onChange={(on) => {
-                        setSelecting(on);
-                    }}
+        <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex flex-col gap-1 border-b border-line px-3 py-1.5">
+                <ListSettings
+                    listing={listing}
+                    junkAskable={scope.kind !== 'folder' && scope.kind !== 'role'}
+                    onRead={readWith}
                 />
 
-                {workspace.selected.length === 0 ? null : (
-                    <p className="text-sm text-muted" role="status">
-                        {translate('list.selectedCount', { count: String(workspace.selected.length) })}
-                    </p>
-                )}
+                <div className="flex flex-wrap items-center gap-1.5">
+                    {/* Under a finger there is no modifier key, so picking out several messages is a mode rather than a
+                        chord. It is offered at every width and to every pointer, because a mode a reader can see is easier
+                        than a chord they have to know — and because nothing in this tree asks which head it runs on. */}
+                    <CheckControl
+                        label={translate('list.selectSeveral')}
+                        on={selecting}
+                        onChange={(on) => {
+                            setSelecting(on);
+                        }}
+                    />
 
-                {/* A read that failed with rows already drawn is the partial state: what is on the screen stays, and
-                    what is missing is said above it rather than replacing it. */}
-                {failure === null ? null : (
-                    <p className="text-sm text-warning" role="alert">
-                        {translate('list.partiallyFailed', { reason: translate(failureLabels[failure.reason]) })}
-                    </p>
-                )}
+                    {workspace.selected.length === 0 ? null : (
+                        <p className="text-sm text-muted" role="status">
+                            {translate('list.selectedCount', { count: String(workspace.selected.length) })}
+                        </p>
+                    )}
 
-                {failure?.reason === 'unavailable' ? (
-                    <SecondaryButton label={translate('connection.retry')} onActivate={tryAgain} />
-                ) : null}
+                    {/* A read that failed with rows already drawn is the partial state: what is on the screen stays, and
+                        what is missing is said above it rather than replacing it. */}
+                    {failure === null ? null : (
+                        <p className="text-sm text-warning" role="alert">
+                            {translate('list.partiallyFailed', { reason: translate(failureLabels[failure.reason]) })}
+                        </p>
+                    )}
+
+                    {failure?.reason === 'unavailable' ? (
+                        <SecondaryButton label={translate('connection.retry')} onActivate={tryAgain} />
+                    ) : null}
+                </div>
             </div>
 
             {rowCount === 0 ? (
@@ -494,7 +496,7 @@ export function MessageList({
             ) : (
                 <div
                     ref={scroller}
-                    className="h-message-list min-h-0 overflow-y-auto overscroll-contain"
+                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
                     onScroll={(event) => {
                         scrolledTo(event.currentTarget.scrollTop);
                     }}
@@ -614,7 +616,7 @@ function ArrivingRow({ position }: { readonly position: number }) {
 
 function Note({ announced = false, children }: { readonly announced?: boolean; readonly children: ReactNode }) {
     return (
-        <p className="text-sm text-muted" role={announced ? 'status' : undefined}>
+        <p className="px-3 py-3 text-sm text-muted" role={announced ? 'status' : undefined}>
             {children}
         </p>
     );

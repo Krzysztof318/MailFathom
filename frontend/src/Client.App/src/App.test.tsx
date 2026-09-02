@@ -401,14 +401,32 @@ async function goTo(space: string): Promise<void> {
     // own accessible name, and this helper is used to reach both kinds.
     fireEvent.click(screen.getByRole('link', { name: new RegExp(`^${space}`, 'u') }));
 
-    await screen.findByRole('heading', { name: space, level: 1 });
+    await screen.findByRole('main', { name: space });
 }
+
+// The frame is read at the width the workspace opens out at, which is what every composition below was written
+// against: jsdom lays nothing out, so the width is answered here rather than measured. A query about anything else —
+// the machine's colour scheme — is answered the way the suite's own setup answers it, with nothing matching.
+const declaredMatchMedia = Object.getOwnPropertyDescriptor(window, 'matchMedia');
 
 beforeEach(() => {
     openingAt('/');
+    Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: (query: string) => ({
+            media: query,
+            matches: query.includes('min-width'),
+            addEventListener: () => undefined,
+            removeEventListener: () => undefined,
+        }),
+    });
 });
 
 afterEach(() => {
+    if (declaredMatchMedia !== undefined) {
+        Object.defineProperty(window, 'matchMedia', declaredMatchMedia);
+    }
+
     vi.useRealTimers();
     vi.restoreAllMocks();
     openingAt('/');
@@ -467,7 +485,7 @@ describe('App', () => {
 
         renderApp();
 
-        expect(await screen.findByRole('heading', { name: space, level: 1 })).toBeDefined();
+        expect(await screen.findByRole('main', { name: space })).toBeDefined();
     });
 
     it('draws the message a row of the list opened, which is what the frame wires the two together for', async () => {
@@ -657,7 +675,7 @@ describe('App session', () => {
 
         renderApp(servedFrom, heldCredential, granting('mailfathom.mail.read'));
 
-        expect(await screen.findByRole('heading', { name: 'Mail', level: 1 })).toBeDefined();
+        expect(await screen.findByRole('main', { name: 'Mail' })).toBeDefined();
         await waitFor(() => {
             expect(window.location.hash).toBe('#/mail');
         });
@@ -736,11 +754,11 @@ describe('App session', () => {
         vi.spyOn(window.navigator, 'onLine', 'get').mockReturnValue(false);
         fireEvent(window, new Event('offline'));
 
-        fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Sign out', hidden: true }));
         signIn('somebody', 'else');
         await screen.findByText(/This machine is offline\./);
 
-        expect(screen.queryByRole('navigation', { name: 'Spaces' })).toBeNull();
+        expect(within(screen.getByRole('navigation', { name: 'Spaces' })).queryAllByRole('link')).toEqual([]);
     });
 
     it('reports the deployment it is reading from beside the client it is running', async () => {
@@ -942,7 +960,7 @@ describe('App sign-in', () => {
         signIn();
         await framed();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Sign out', hidden: true }));
 
         expect(screen.getByRole('textbox', { name: 'User name' })).toBeDefined();
         expect(screen.queryByRole('navigation', { name: 'Spaces' })).toBeNull();
@@ -959,7 +977,7 @@ describe('App sign-in', () => {
         });
         fireEvent.change(screen.getByRole('combobox', { name: 'Mailbox in scope' }), { target: { value: 'work' } });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Sign out', hidden: true }));
         signIn();
         await framed();
 
@@ -988,7 +1006,7 @@ describe('App sign-in', () => {
         signIn();
         await framed();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Sign out', hidden: true }));
 
         // Signing out told them the password would be removed, so a store that refused has to say so rather than let
         // the next start read it back while they believe it is gone.
@@ -1068,7 +1086,7 @@ describe('App deployment', () => {
         renderApp(chose('https://mail.example.invalid'));
         await framed();
 
-        expect(screen.getByRole('button', { name: 'Point somewhere else' })).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Point somewhere else', hidden: true })).toBeDefined();
     });
 
     it('offers a way out of the sign-in screen a chosen deployment left behind', () => {
@@ -1076,7 +1094,7 @@ describe('App deployment', () => {
 
         // A chosen address renders no address field, and it is read back out of storage on every later start — so
         // without this, somebody whose password no longer works has no way to point the client anywhere else.
-        fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else', hidden: true }));
 
         expect(screen.getByRole('textbox', { name: 'Deployment address' })).toBeDefined();
     });
@@ -1084,21 +1102,21 @@ describe('App deployment', () => {
     it('offers nothing to change on the sign-in screen the origin that served the client left', () => {
         renderApp(servedFrom, null);
 
-        expect(screen.queryByRole('button', { name: 'Point somewhere else' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Point somewhere else', hidden: true })).toBeNull();
     });
 
     it('offers nothing to change where the origin that served the client is the deployment', async () => {
         renderApp();
         await framed();
 
-        expect(screen.queryByRole('button', { name: 'Point somewhere else' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Point somewhere else', hidden: true })).toBeNull();
     });
 
     it('asks for an address again, and shows no space, once it is pointed somewhere else', async () => {
         renderApp(chose('https://mail.example.invalid'));
         await framed();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else', hidden: true }));
 
         expect(screen.getByRole('textbox', { name: 'Deployment address' })).toBeDefined();
         expect(screen.queryByRole('navigation', { name: 'Spaces' })).toBeNull();
@@ -1133,7 +1151,7 @@ describe('App deployment', () => {
         // The way out of a chosen address sits above the form and stays live while an attempt runs. An answer for the
         // address somebody has just pointed away from would sign them back in to it and write the credential into the
         // store that was asked to clear it.
-        fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else', hidden: true }));
         answering = true;
         for (const answer of held) {
             answer();
@@ -1154,7 +1172,7 @@ describe('App deployment', () => {
         renderApp(chosen, heldCredential, deploymentAnswering(), credentials);
         await framed();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else', hidden: true }));
 
         expect([...credentials.kept]).toEqual([]);
     });
@@ -1172,7 +1190,7 @@ describe('App deployment', () => {
         renderApp(chose('https://mail.example.invalid'));
         await framed();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else', hidden: true }));
 
         expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Deployment address' }));
     });
@@ -1204,7 +1222,7 @@ describe('App deployment', () => {
         renderApp(chose('https://first.example.invalid'));
         await framed();
 
-        fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else', hidden: true }));
         typeAddress('second.example.invalid');
         signIn();
         await framed();
@@ -1222,7 +1240,7 @@ describe('App language', () => {
     it('offers each language under its own name, and no other', () => {
         renderApp();
 
-        const choice = screen.getByRole('combobox', { name: 'Language' });
+        const choice = screen.getByRole('combobox', { name: 'Language', hidden: true });
         expect([...choice.querySelectorAll('option')].map((option) => option.textContent)).toEqual(
             locales.map((locale) => localeNames[locale]),
         );
@@ -1232,7 +1250,7 @@ describe('App language', () => {
         renderApp();
         await screen.findByRole('heading', { name: 'Discover', level: 1 });
 
-        fireEvent.change(screen.getByRole('combobox', { name: 'Language' }), { target: { value: 'pl' } });
+        fireEvent.change(screen.getByRole('combobox', { name: 'Language', hidden: true }), { target: { value: 'pl' } });
 
         expect(screen.getByRole('heading', { name: 'Odkrywaj', level: 1 })).toBeDefined();
         expect(document.documentElement.lang).toBe('pl');
@@ -1241,7 +1259,7 @@ describe('App language', () => {
     it('remembers the choice, so a later run of either head opens in it', () => {
         renderApp();
 
-        fireEvent.change(screen.getByRole('combobox', { name: 'Language' }), { target: { value: 'pl' } });
+        fireEvent.change(screen.getByRole('combobox', { name: 'Language', hidden: true }), { target: { value: 'pl' } });
 
         expect(readStoredLocale()).toBe('pl');
     });

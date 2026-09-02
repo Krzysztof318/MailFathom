@@ -14,8 +14,9 @@ import { savedAs } from './savedFileName';
 // be, and how large it is — so that opening a message costs the same whether the sender attached a note or a video, and
 // so that a reader decides whether a file is worth having before it starts arriving.
 //
-// The row is its own component because it is what gains state: a download in flight, how much of it has arrived, a way
-// to stop it, and what became of it.
+// It is drawn as the design project draws it: a chip naming the kind of file, its name, and its size, which is the
+// control that fetches it. The row is its own component because it is what gains state: a download in flight, how much
+// of it has arrived, a way to stop it, and what became of it.
 
 const refusalMessages: Readonly<Record<Exclude<AttachmentDeliveryOutcome, 'delivered'>, MessageKey>> = {
     abandoned: 'attachment.abandoned',
@@ -24,6 +25,10 @@ const refusalMessages: Readonly<Record<Exclude<AttachmentDeliveryOutcome, 'deliv
     unavailable: 'attachment.refusedUnavailable',
     largerThanDescribed: 'attachment.refusedLargerThanDescribed',
 };
+
+// The most of a kind the chip shows. A kind is a file's extension where the name has one and the media subtype where it
+// does not, and either can be long enough to be a sentence; the chip is a glance rather than a description.
+const longestKind = 8;
 
 /** What the row is doing, which is one piece of state rather than a flag beside a count that has to agree with it. */
 type Downloading =
@@ -83,24 +88,24 @@ export function Attachment({
     }
 
     return (
-        <li className="flex flex-col gap-1 rounded-md border border-line bg-sunken px-3 py-2 text-sm">
-            <div className="flex flex-wrap items-center gap-2">
-                <span className="font-medium break-all text-text">{shown}</span>
-                <span className="text-muted">{attachment.mediaType}</span>
-                <span className="text-muted">{sizeOf(attachment.sizeOctets, locale)}</span>
-
-                {/* `aria-disabled` rather than `disabled` while a download runs, for the reason the body's own button
-                    gives: a disabled control is not focusable, so disabling the one somebody has just pressed drops
-                    their focus to the top of the document. The handler is what refuses the second press. */}
-                <button
-                    aria-disabled={arriving}
-                    className="ms-auto rounded-md bg-accent px-3 py-1 font-medium text-on-accent aria-disabled:opacity-60"
-                    type="button"
-                    onClick={start}
-                >
-                    {translate('attachment.download', { name: shown })}
-                </button>
-            </div>
+        <li className="flex max-w-full flex-col gap-1 text-sm">
+            {/* `aria-disabled` rather than `disabled` while a download runs, for the reason the body's own button
+                gives: a disabled control is not focusable, so disabling the one somebody has just pressed drops their
+                focus to the top of the document. The handler is what refuses the second press. */}
+            <button
+                aria-disabled={arriving}
+                aria-label={translate('attachment.download', { name: shown })}
+                title={attachment.mediaType}
+                className="flex max-w-full cursor-pointer items-center gap-2.25 rounded-md border border-line bg-sunken px-3 py-2.25 text-start transition hover:border-accent hover:bg-hover aria-disabled:opacity-60"
+                type="button"
+                onClick={start}
+            >
+                <span className="shrink-0 text-xs font-semibold tracking-wide text-muted uppercase">
+                    {kindOf(attachment.fileName, attachment.mediaType)}
+                </span>
+                <span className="min-w-0 truncate text-md text-text">{shown}</span>
+                <span className="shrink-0 text-faint">{sizeOf(attachment.sizeOctets, locale)}</span>
+            </button>
 
             {/* Said where a sender wrote a name this client would not use. It is the case worth drawing carefully
                 rather than one to hide: what is on the screen is not what the message wrote. */}
@@ -130,6 +135,14 @@ export function Attachment({
             ) : null}
         </li>
     );
+}
+
+/** The kind of file the chip names: the name's extension where it has one, and the declared subtype otherwise. */
+function kindOf(fileName: string | null, mediaType: string): string {
+    const extension = fileName?.match(/\.([A-Za-z0-9]{1,8})$/)?.[1];
+    const subtype = mediaType.split('/')[1]?.split(/[+.;]/)[0] ?? '';
+
+    return (extension ?? subtype).slice(0, longestKind);
 }
 
 // How much has arrived and the way to stop it, said in the place the file will appear. `progress` is the element the

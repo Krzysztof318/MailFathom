@@ -77,7 +77,10 @@ describe('Attachment', () => {
         drawing(invoice, () => Promise.resolve('delivered'));
 
         expect(screen.getByText('invoice.pdf')).toBeDefined();
-        expect(screen.getByText('application/pdf')).toBeDefined();
+        expect(screen.getByText('pdf')).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Download invoice.pdf' }).getAttribute('title')).toBe(
+            'application/pdf',
+        );
         expect(screen.getByText(sizeReadAs(2_048))).toBeDefined();
     });
 
@@ -85,6 +88,12 @@ describe('Attachment', () => {
         drawing({ ...invoice, fileName: null }, () => Promise.resolve('delivered'));
 
         expect(screen.getByRole('button', { name: 'Download Unnamed file' })).toBeDefined();
+    });
+
+    it('names the kind of an unnamed part from what it declares itself to be', () => {
+        drawing({ ...invoice, fileName: null, mediaType: 'image/svg+xml' }, () => Promise.resolve('delivered'));
+
+        expect(screen.getByText('svg')).toBeDefined();
     });
 
     it('says where the sender wrote a file name the deployment would not use', () => {

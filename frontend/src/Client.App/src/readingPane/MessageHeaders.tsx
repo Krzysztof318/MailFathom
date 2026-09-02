@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { MailMessageHeaders, MailParticipant, MailParticipantRole } from '@mailfathom/client-backend';
-import { SenderAvatar } from '../controls/SenderAvatar';
+import { PlannedControl } from '../controls/PlannedControl';
 import type { MessageKey } from '../localization/en';
 import { wordInstant } from '../localization/instants';
 import { useLocalization } from '../localization/useLocalization';
@@ -12,6 +12,9 @@ import { useLocalization } from '../localization/useLocalization';
 // author stands on its own line because it is what a reader checks first, and the rest is a disclosure the platform
 // already has an element for — a message addressed to two hundred people would otherwise be a screen of addresses in
 // front of the words somebody opened it to read.
+//
+// Beside the subject stand the three things the design project offers to do with a message from its head. None of them
+// exists in the client yet, so each is drawn as what it is: a control the product will have, inert until it does.
 //
 // Every value here is text a sender chose. It is drawn as text and never as markup, so a display name written to look
 // like an address, a heading, or a control arrives as the characters it is.
@@ -36,47 +39,44 @@ export function MessageHeaders({ headers }: { readonly headers: MailMessageHeade
 
     const authors = headers.participants.filter((participant) => participant.role === 'From');
     const others = headers.participants.filter((participant) => participant.role !== 'From');
-    const author = authors.at(0) ?? null;
     const sentAt = wordInstant(headers.sentAt, locale, 'full');
     const receivedAt = wordInstant(headers.receivedAt, locale, 'full');
 
     return (
-        <header className="flex flex-col gap-3 border-b border-line-soft pb-4">
-            <h2 className="text-4xl font-semibold tracking-tight text-balance">
-                {headers.subject ?? translate('message.noSubject')}
-            </h2>
+        <header className="flex flex-col gap-1.5 border-b border-line px-5.5 py-4">
+            <div className="flex flex-wrap items-start gap-x-3 gap-y-1.5">
+                <h2 className="min-w-0 flex-1 basis-64 text-3xl font-semibold text-balance">
+                    {headers.subject ?? translate('message.noSubject')}
+                </h2>
 
-            <div className="flex items-center gap-3">
-                <SenderAvatar displayName={author?.displayName ?? null} address={author?.address ?? null} />
-
-                <div className="flex min-w-0 flex-col gap-0.5">
-                    <p className="text-md font-semibold text-text">
-                        {authors.length === 0
-                            ? translate('message.noAuthor')
-                            : authors.map((one) => named(one)).join(', ')}
-                    </p>
-
-                    {/* Two instants rather than one, because they answer different questions and disagree whenever a
-                        message sat somewhere: when the author says they wrote it, and when this deployment's last
-                        receiving hop actually recorded it. Each is placed against the reader's own clock, and each
-                        keeps the machine-readable form the service sent beside it. */}
-                    <p className="flex flex-wrap gap-x-3 text-sm text-muted">
-                        {sentAt === null ? (
-                            translate('message.sentAtUnknown')
-                        ) : (
-                            <time dateTime={headers.sentAt ?? undefined}>
-                                {translate('message.sentAt', { when: sentAt })}
-                            </time>
-                        )}
-
-                        {receivedAt === null ? null : (
-                            <time dateTime={headers.receivedAt ?? undefined}>
-                                {translate('message.receivedAt', { when: receivedAt })}
-                            </time>
-                        )}
-                    </p>
+                <div className="flex shrink-0 items-center gap-0.5">
+                    <PlannedControl label={translate('mail.reply')} icon="reply" />
+                    <PlannedControl label={translate('mail.forward')} icon="forward" />
+                    <PlannedControl label={translate('mail.flag')} icon="flag" />
                 </div>
             </div>
+
+            <p className="text-md font-semibold text-text">
+                {authors.length === 0 ? translate('message.noAuthor') : authors.map((one) => named(one)).join(', ')}
+            </p>
+
+            {/* Two instants rather than one, because they answer different questions and disagree whenever a message
+                sat somewhere: when the author says they wrote it, and when this deployment's last receiving hop
+                actually recorded it. Each is placed against the reader's own clock, and each keeps the
+                machine-readable form the service sent beside it. */}
+            <p className="flex flex-wrap gap-x-3 text-base text-muted">
+                {sentAt === null ? (
+                    translate('message.sentAtUnknown')
+                ) : (
+                    <time dateTime={headers.sentAt ?? undefined}>{translate('message.sentAt', { when: sentAt })}</time>
+                )}
+
+                {receivedAt === null ? null : (
+                    <time dateTime={headers.receivedAt ?? undefined}>
+                        {translate('message.receivedAt', { when: receivedAt })}
+                    </time>
+                )}
+            </p>
 
             {others.length === 0 ? null : <OtherParticipants participants={others} />}
         </header>
@@ -89,7 +89,7 @@ function OtherParticipants({ participants }: { readonly participants: readonly M
     const { locale, translate } = useLocalization();
 
     return (
-        <details className="text-sm">
+        <details className="text-base">
             <summary className="cursor-pointer text-muted">
                 {translate('message.otherParticipants', {
                     count: new Intl.NumberFormat(locale).format(participants.length),

@@ -7,6 +7,7 @@ import type { MailTimelineEntry } from '@mailfathom/client-backend';
 import { MessageMarkers } from '../controls/MessageMarkers';
 import { Organisation } from '../controls/Organisation';
 import { ReceivedAt } from '../controls/ReceivedAt';
+import { SenderAvatar } from '../controls/SenderAvatar';
 import { useLocalization } from '../localization/useLocalization';
 
 // One row of mail, which is its own component for the reason a tree's row is: it is what carries state, a keyboard
@@ -19,10 +20,10 @@ import { useLocalization } from '../localization/useLocalization';
 //
 // Its height is fixed by the token rather than by its contents, and that is load-bearing rather than cosmetic: the
 // window above it is arithmetic over one height, and a row that grew with a long subject would put every row below it
-// somewhere other than where the list drew the space for it. The third line is what that height reserves for a
-// sentence about the message rather than from it — why a search result is in the list today, and what MailFathom made
-// of the message when stage 3 lands. A row given none keeps the space, so the row that gains one is this row rather
-// than a taller one.
+// somewhere other than where the list drew the space for it. The three lines are the design project's: who wrote and
+// when, what about, and a line for a sentence about the message rather than from it — why a search result is in the
+// list today, and what MailFathom made of the message when stage 3 lands. A row given none keeps the space, so the row
+// that gains one is this row rather than a taller one.
 
 export function MessageRow({
     email,
@@ -66,23 +67,31 @@ export function MessageRow({
             onPointerEnter={onPointerEnter}
             onDoubleClick={onOpen}
             // Flush and square rather than a card: the rows are one continuous list, each separated from the next by
-            // the line it carries, which is what the window's arithmetic needs them to be as well.
-            className={`flex h-message-row cursor-pointer flex-col justify-center gap-0.5 overflow-hidden border-b border-line-soft px-3 transition ${
-                selected ? 'bg-accent-soft text-accent-strong' : 'text-text-soft hover:bg-hover'
-            } ${open ? 'ring-1 ring-inset ring-accent' : ''}`}
+            // the line it carries, which is what the window's arithmetic needs them to be as well. The row that is
+            // open, and the rows picked out for a question, are marked at the edge rather than by a ring around them,
+            // which is the design project's mark and keeps the row's own lines where they were.
+            className={`flex h-message-row cursor-pointer flex-col justify-center gap-0.75 overflow-hidden border-b border-s-4 border-b-sunken ps-2.5 pe-3.5 transition ${
+                selected
+                    ? 'border-s-accent bg-accent-soft'
+                    : open
+                      ? 'border-s-accent-line bg-accent-soft'
+                      : 'border-s-transparent hover:bg-hover'
+            }`}
         >
-            <div className="flex items-baseline gap-2">
+            <div className="flex items-center gap-2">
                 {email.unread ? (
                     <span className="size-2 shrink-0 rounded-full bg-accent">
                         <span className="sr-only">{translate('list.unread')}</span>
                     </span>
                 ) : null}
 
+                <SenderAvatar displayName={email.senderDisplayName} address={email.senderAddress} place="row" />
+
                 {/* Who wrote is read before where they wrote from, so the name keeps up to half the line and the host
                     is what gives way. Half rather than more because the marks and the time hold their own width: a
                     name allowed past it would push the time out of a row that clips rather than wraps. */}
                 <span
-                    className={`max-w-1/2 shrink-0 truncate text-sm ${email.unread ? 'font-semibold text-text' : ''}`}
+                    className={`max-w-1/2 shrink-0 truncate text-md font-semibold ${email.unread ? 'text-text' : 'text-text-soft'}`}
                 >
                     {correspondent(email) ?? translate('list.senderUnknown')}
                 </span>
@@ -94,19 +103,16 @@ export function MessageRow({
                 <ReceivedAt at={email.receivedAt} />
             </div>
 
-            <div className="flex items-baseline gap-2 text-sm">
-                {/* What the message is about is read before how it opens, so it keeps up to half the line whatever
-                    the preview behind it is long enough to ask for, and the preview is what gives way. */}
-                <span className={`max-w-1/2 shrink-0 truncate ${email.unread ? 'font-medium text-text' : ''}`}>
-                    {email.subject ?? translate('list.noSubject')}
-                </span>
-
-                {email.preview === null ? null : <span className="truncate text-faint">{email.preview}</span>}
+            <div className={`truncate text-md ${email.unread ? 'text-text' : 'text-text-soft'}`}>
+                {email.subject ?? translate('list.noSubject')}
             </div>
 
             {/* The reserved line. Hidden from the accessibility tree where it holds nothing, so a row with nothing
                 to say about itself is not announced as one with an empty line in it. */}
-            <div aria-hidden={note === undefined ? 'true' : undefined} className="h-4 overflow-hidden text-xs">
+            <div
+                aria-hidden={note === undefined ? 'true' : undefined}
+                className="h-4 overflow-hidden text-xs text-muted"
+            >
                 {note}
             </div>
         </li>

@@ -18,6 +18,10 @@ export const en = {
     'shell.signOut': 'Sign out',
     'shell.clientVersion': 'Client {client}',
     'shell.versions': 'Client {client}, deployment {deployment}',
+    'shell.account': 'Account and preferences',
+    'shell.accountMenu': 'Account',
+    'control.notBuiltYet': '{control} — not built yet',
+    'ai.badge': 'AI',
 
     'theme.system': 'Follow the system',
     'theme.light': 'Light',
@@ -36,6 +40,7 @@ export const en = {
 
     'intent.label': 'Ask your mail',
     'intent.placeholder': 'What do you want to ask your mail?',
+    'intent.ask': 'Ask',
 
     'scope.mailbox': 'Mailbox in scope',
     'scope.allMailboxes': 'All mailboxes',
@@ -129,7 +134,31 @@ export const en = {
     'folders.reading': 'Reading mailboxes and folders…',
     'folders.failed': 'The mailboxes and folders could not be read: {reason}.',
     'folders.unread': '{count} unread',
-    'folders.stored': '{count} held here',
+
+    'mailboxes.heading': 'Folders',
+    'mailboxes.fold': 'Collapse the mailbox column',
+    'mailboxes.unfold': 'Expand the mailbox column',
+    'mailboxes.open': 'Folders and filters',
+    'mailboxes.close': 'Close the folders',
+
+    'aiFilters.heading': 'AI filters',
+    'aiFilters.needsDecision': 'Needs a decision',
+    'aiFilters.commitments': 'Commitments',
+    'aiFilters.deadlinesThisWeek': 'Deadlines this week',
+
+    'mail.toolbar': 'Mail actions',
+    'mail.compose': 'New message',
+    'mail.reply': 'Reply',
+    'mail.replyAll': 'Reply all',
+    'mail.forward': 'Forward',
+    'mail.archive': 'Archive',
+    'mail.delete': 'Delete',
+    'mail.flag': 'Flag',
+    'mail.markUnread': 'Mark unread',
+    'mail.move': 'Move',
+    'mail.backToList': 'Back to the list',
+    'mail.listColumn': 'Message list',
+    'mail.readingColumn': 'What is open',
 
     'folder.inbox': 'Inbox',
     'folder.drafts': 'Drafts',

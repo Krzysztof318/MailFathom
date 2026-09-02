@@ -120,6 +120,11 @@
     --color-highlight: oklch(0.945 0.07 88);
     --color-highlight-line: oklch(0.775 0.145 85);
 
+    /* What tells one mailbox from the next in the column that lists them: a mark beside each account's name, in one of
+       two hues taken in turn, and the two blended for the row standing for every account at once. */
+    --color-mailbox-mark: oklch(0.555 0.185 262);
+    --color-mailbox-mark-alternate: oklch(0.63 0.08 205);
+
     /* Not surfaces but light: the hairline that lifts a raised surface off the one behind it, what a shadow is cast in
        at two depths, and what the page is dimmed to behind something modal. */
     --color-inset: rgb(255 255 255 / 0.65);
@@ -182,19 +187,23 @@
        reaching for a width of its own is the same drift as one reaching for a colour. */
     --breakpoint-split: 58.75rem;
 
-    /* One row of the message list, and the room the list itself takes. The row height is declared here rather than in
-       the list because it is a density decision like any other — and because the list is arithmetic over it: the
-       window that keeps a mailbox of two hundred thousand messages costing what a screenful costs measures this value
-       off a rendered row rather than holding a second copy of it. It is three lines and the space around them: who
-       wrote, what about, and a line for a sentence about the message rather than from it — why a search result
-       matched, and what MailFathom made of the message once stage 3 lands. */
+    /* One row of the message list. Declared here rather than in the list because it is a density decision like any
+       other — and because the list is arithmetic over it: the window that keeps a mailbox of two hundred thousand
+       messages costing what a screenful costs measures this value off a rendered row rather than holding a second
+       copy of it. It is three lines and the space around them: who wrote, what about, and a line for a sentence about
+       the message rather than from it — why a search result matched, and what MailFathom made of the message once
+       stage 3 lands. */
     --spacing-message-row: 4.75rem;
-    --spacing-message-list: 70dvh;
 
-    /* How wide the rail is, and how wide the column beside it that holds the mailbox tree. Both are the project's, and
-       both are here rather than on the components because the two have to add up to a composition. */
-    --spacing-rail: 5.5rem;
-    --spacing-mailboxes: 15rem;
+    /* How wide the rail is, how wide the column beside it that holds the mailbox tree is when it is open and when it
+       is folded to a strip, how wide the message list beside that is, and how wide the drawer the narrow shape holds
+       the mailboxes in is. All five are the project's, and they are here rather than on the components because the
+       first four have to add up to a composition. */
+    --spacing-rail: 6rem;
+    --spacing-mailboxes: 13.125rem;
+    --spacing-mailboxes-folded: 3.625rem;
+    --spacing-message-list: 21.25rem;
+    --spacing-drawer: 16.375rem;
 
     /* What a notch, a rounded corner, or a system bar takes out of the viewport. Zero everywhere a window has none,
        which is every head this repository builds today; declaring it as a token is what keeps a screen from reaching
@@ -250,6 +259,9 @@
 
     --color-highlight: oklch(0.345 0.055 85);
     --color-highlight-line: oklch(0.72 0.13 85);
+
+    --color-mailbox-mark: oklch(0.615 0.175 262);
+    --color-mailbox-mark-alternate: oklch(0.7 0.08 205);
 
     --color-inset: rgb(255 255 255 / 0.045);
     --color-shadow-soft: oklch(0.1 0.03 262 / 0.5);

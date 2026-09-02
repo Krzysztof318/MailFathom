@@ -17,6 +17,10 @@ export const pl: Catalogue = {
     'shell.signOut': 'Wyloguj się',
     'shell.clientVersion': 'Klient {client}',
     'shell.versions': 'Klient {client}, wdrożenie {deployment}',
+    'shell.account': 'Konto i ustawienia',
+    'shell.accountMenu': 'Konto',
+    'control.notBuiltYet': '{control} — jeszcze niezbudowane',
+    'ai.badge': 'AI',
 
     'theme.system': 'Zgodnie z systemem',
     'theme.light': 'Jasny',
@@ -35,6 +39,7 @@ export const pl: Catalogue = {
 
     'intent.label': 'Zapytaj swoją pocztę',
     'intent.placeholder': 'O co chcesz zapytać swoją pocztę?',
+    'intent.ask': 'Zapytaj',
 
     'scope.mailbox': 'Skrzynka w zakresie',
     'scope.allMailboxes': 'Wszystkie skrzynki',
@@ -129,7 +134,31 @@ export const pl: Catalogue = {
     'folders.reading': 'Odczytywanie skrzynek i folderów…',
     'folders.failed': 'Nie udało się odczytać skrzynek i folderów: {reason}.',
     'folders.unread': 'nieprzeczytane: {count}',
-    'folders.stored': 'przechowywane tutaj: {count}',
+
+    'mailboxes.heading': 'Katalogi',
+    'mailboxes.fold': 'Zwiń panel skrzynek',
+    'mailboxes.unfold': 'Rozwiń panel skrzynek',
+    'mailboxes.open': 'Katalogi i filtry',
+    'mailboxes.close': 'Zamknij katalogi',
+
+    'aiFilters.heading': 'Filtry AI',
+    'aiFilters.needsDecision': 'Wymaga decyzji',
+    'aiFilters.commitments': 'Zobowiązania',
+    'aiFilters.deadlinesThisWeek': 'Terminy w tym tygodniu',
+
+    'mail.toolbar': 'Działania na poczcie',
+    'mail.compose': 'Nowa wiadomość',
+    'mail.reply': 'Odpowiedz',
+    'mail.replyAll': 'Odpowiedz wszystkim',
+    'mail.forward': 'Prześlij dalej',
+    'mail.archive': 'Archiwizuj',
+    'mail.delete': 'Usuń',
+    'mail.flag': 'Flaga',
+    'mail.markUnread': 'Nieprzeczytana',
+    'mail.move': 'Przenieś',
+    'mail.backToList': 'Wróć do listy',
+    'mail.listColumn': 'Lista wiadomości',
+    'mail.readingColumn': 'To, co otwarte',
 
     'folder.inbox': 'Odebrane',
     'folder.drafts': 'Kopie robocze',
