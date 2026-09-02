@@ -185,6 +185,7 @@ public sealed class MailDraftPassTests
             OutgoingEmailRequester.Command("mfctl-4f2a"),
             new ComposedMailDraft(
                 [Recipient()],
+                "a draft",
                 InternetMessageId.Mint("example.test"),
                 Encoding.ASCII.GetBytes($"Subject: a draft\r\n\r\n{body}").AsMemory()),
             revises: null,

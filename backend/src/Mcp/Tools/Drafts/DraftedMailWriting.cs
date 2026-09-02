@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Authoring;
 using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Domain.Accounts;
@@ -74,7 +75,7 @@ internal sealed class DraftedMailWriting(AuthoredMailDrafting drafting, Authored
         var request = new MailDraftRequest
         {
             Account = NamedAccount(fields.Account),
-            Recipients = AuthoredMailArguments.NamedRecipients(
+            Recipients = AuthoredRecipientHeaders.NamedRecipients(
                 fields.To,
                 fields.Cc,
                 fields.Bcc,
@@ -108,7 +109,7 @@ internal sealed class DraftedMailWriting(AuthoredMailDrafting drafting, Authored
             Act = AuthoredAct(answer),
             PlainTextBody = fields.PlainTextBody,
             HtmlBody = fields.HtmlBody,
-            Recipients = AuthoredMailArguments.NamedRecipients(
+            Recipients = AuthoredRecipientHeaders.NamedRecipients(
                 fields.To,
                 fields.Cc,
                 fields.Bcc,

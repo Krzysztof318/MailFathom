@@ -458,6 +458,28 @@ public sealed class MimeKitAuthoredEmailComposerTests
         Assert.Equal(ComposedAt, message.Date);
     }
 
+    /// <summary>The subject the composition reports is the one the message carries, which is what a draft is listed by.</summary>
+    /// <remarks>
+    /// Read off the assembled message rather than off what the author supplied, so a row somebody's drafts are listed
+    /// by and the message their mail client shows can never name the same draft differently.
+    /// </remarks>
+    [Fact]
+    public void ComposeDraft_AuthoredMessage_ReportsTheSubjectTheMessageItselfCarries()
+    {
+        // Arrange
+        var composer = CreateComposer();
+
+        // Act
+        var composition = composer.ComposeDraft(
+            Account,
+            Authored() with { Subject = "Third-quarter numbers" },
+            Capabilities());
+
+        // Assert
+        Assert.Equal("Third-quarter numbers", composition.Draft!.Subject);
+        Assert.Equal(ParseDraft(composition).Subject, composition.Draft.Subject);
+    }
+
     /// <summary>Every bound a send is refused for refuses a draft too, because a draft is one command away from one.</summary>
     [Fact]
     public void ComposeDraft_BodyLongerThanTheDeploymentComposes_IsRefused()

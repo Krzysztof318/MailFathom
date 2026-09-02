@@ -40,6 +40,7 @@ internal static class MailDraftRecordMapping
                 MailAccountId.Create(entity.MailboxAccountId)),
             Author = OutgoingEmailRequester.Create(entity.RequesterOrigin, entity.RequesterIdentity),
             Recipients = recipients,
+            Subject = entity.Subject,
             MimeByteLength = entity.MimeByteLength,
             Revision = entity.Revision,
             ComposedAt = entity.ComposedAt,
@@ -49,10 +50,32 @@ internal static class MailDraftRecordMapping
                 ? OutgoingEmailId.Create(promoted)
                 : null,
             Copies = [.. entity.Copies.Select(ToCopy).OrderByDescending(copy => copy.Revision)],
+
+            // Ordered here rather than trusted from the collection, for the reason the recipients are: this is the
+            // order a composition attaches the files in, and a navigation loaded by EF Core carries no order of its
+            // own. The identifier breaks a tie, so two files staged in the same instant still order the same way twice.
+            Attachments =
+            [
+                .. entity.Attachments
+                    .OrderBy(attachment => attachment.StagedAt)
+                    .ThenBy(attachment => attachment.Id)
+                    .Select(ToAttachment),
+            ],
             Divergence = ToDivergence(entity),
             LastFailure = StoredFailureCode.ToErrorCode(entity.LastFailureCode),
         };
     }
+
+    /// <summary>Rebuilds what one row says about a file an author staged against a draft.</summary>
+    /// <param name="entity">The stored row, without the octets it describes.</param>
+    /// <returns>The staged file that row states.</returns>
+    internal static MailDraftAttachment ToAttachment(MailDraftAttachmentEntity entity) =>
+        new(
+            MailDraftAttachmentId.Create(entity.Id),
+            entity.FileName,
+            entity.MediaType,
+            entity.ByteLength,
+            entity.StagedAt);
 
     /// <summary>Rebuilds what one row says about a copy of the draft this deployment put into a folder.</summary>
     internal static MailDraftServerCopy ToCopy(MailDraftCopyEntity entity) =>

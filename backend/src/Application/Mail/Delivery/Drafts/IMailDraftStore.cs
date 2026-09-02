@@ -2,7 +2,9 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
@@ -37,6 +39,7 @@ public interface IMailDraftStore
     /// <param name="account">The account the draft belongs to, named by its owner and its identifier.</param>
     /// <param name="author">The authored act that wrote it.</param>
     /// <param name="recipients">The people it is addressed to, which may be nobody, each with where its address came from.</param>
+    /// <param name="subject">The subject line the composed message carries.</param>
     /// <param name="mimeByteLength">How many bytes the stored message is.</param>
     /// <param name="composedAt">When it was written down.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
@@ -47,6 +50,7 @@ public interface IMailDraftStore
         MailAccountIdentity account,
         OutgoingEmailRequester author,
         IReadOnlyList<MailDraftRecipient> recipients,
+        string subject,
         long mimeByteLength,
         DateTimeOffset composedAt,
         CancellationToken cancellationToken);
@@ -55,6 +59,7 @@ public interface IMailDraftStore
     /// <param name="session">The session the write joins, which is the one the new message is stored in.</param>
     /// <param name="draftId">The draft being revised.</param>
     /// <param name="recipients">The people the new revision is addressed to, each with where its address came from.</param>
+    /// <param name="subject">The subject line the new composed message carries.</param>
     /// <param name="mimeByteLength">How many bytes the new stored message is.</param>
     /// <param name="revisedAt">When the revision was written down.</param>
     /// <param name="cancellationToken">Cancels the write.</param>
@@ -71,6 +76,7 @@ public interface IMailDraftStore
         IPersistenceSession session,
         MailDraftId draftId,
         IReadOnlyList<MailDraftRecipient> recipients,
+        string subject,
         long mimeByteLength,
         DateTimeOffset revisedAt,
         CancellationToken cancellationToken);
@@ -91,6 +97,68 @@ public interface IMailDraftStore
     /// </remarks>
     Task<MailDraftRecord?> FindPromotedToAsync(
         OutgoingEmailId outgoingEmailId,
+        CancellationToken cancellationToken);
+
+    /// <summary>Reads the drafts one owner is still writing, newest edit first.</summary>
+    /// <param name="owner">The owner whose drafts are read.</param>
+    /// <param name="account">The account to narrow to, or <see langword="null" /> for every account this owner owns.</param>
+    /// <param name="maxCount">The greatest number of drafts to answer with.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The drafts, ordered by when each last changed, newest first, bounded by <paramref name="maxCount" />.</returns>
+    /// <remarks>
+    /// It is the owner's own listing rather than a pass's, so what it answers with is what a person would recognize as
+    /// their drafts: one that has been given up is on its way out and one that has been promoted is a queued message,
+    /// and neither is something to go on editing. Bounded rather than paged, because the set is what one person has
+    /// open at a time — an owner who reaches the bound has more drafts than a screen shows and is told so by the count
+    /// rather than handed a cursor into their own composition.
+    /// </remarks>
+    Task<IReadOnlyList<MailDraftRecord>> ReadForOwnerAsync(
+        MailOwnerId owner,
+        MailAccountId? account,
+        int maxCount,
+        CancellationToken cancellationToken);
+
+    /// <summary>Reads the octets of every file staged against one draft, in the order a composition attaches them.</summary>
+    /// <param name="draftId">The draft whose files are read.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The files with their content, empty where the draft has none.</returns>
+    /// <remarks>
+    /// The one read here that loads octets, and it is reached only where a message is about to be composed. Everything
+    /// that lists a draft reads <see cref="MailDraftRecord.Attachments" /> instead, which is why the description and the
+    /// content are separate rows.
+    /// </remarks>
+    Task<IReadOnlyList<AuthoredEmailAttachment>> ReadAttachmentContentAsync(
+        MailDraftId draftId,
+        CancellationToken cancellationToken);
+
+    /// <summary>Stages one file against a draft, so every later revision is composed with it.</summary>
+    /// <param name="session">The session the write joins.</param>
+    /// <param name="draftId">The draft the file is attached to.</param>
+    /// <param name="file">What the file is called, what it declares itself to be, and the octets it is made of.</param>
+    /// <param name="stagedAt">When the upload was taken in.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns>The staged file as the write left it.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> or <paramref name="file" /> is <see langword="null" />.</exception>
+    /// <exception cref="InvalidOperationException">Thrown when no draft is held under <paramref name="draftId" />.</exception>
+    Task<MailDraftAttachment> StageAttachmentAsync(
+        IPersistenceSession session,
+        MailDraftId draftId,
+        AuthoredEmailAttachment file,
+        DateTimeOffset stagedAt,
+        CancellationToken cancellationToken);
+
+    /// <summary>Takes one staged file back off a draft.</summary>
+    /// <param name="session">The session the write joins.</param>
+    /// <param name="draftId">The draft the file was attached to.</param>
+    /// <param name="attachmentId">The file to take off.</param>
+    /// <param name="cancellationToken">Cancels the write.</param>
+    /// <returns><see langword="true" /> when a file was taken off; <see langword="false" /> when the draft held none under that identifier.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="session" /> is <see langword="null" />.</exception>
+    /// <remarks>The octets go with the row, which is what makes cancelling an upload leave nothing of the file behind.</remarks>
+    Task<bool> UnstageAttachmentAsync(
+        IPersistenceSession session,
+        MailDraftId draftId,
+        MailDraftAttachmentId attachmentId,
         CancellationToken cancellationToken);
 
     /// <summary>Reads the drafts of one account that still owe the mail server something.</summary>

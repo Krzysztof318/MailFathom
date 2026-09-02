@@ -32,6 +32,9 @@ public sealed class MailDraftBookTests
     private static readonly MailAccountIdentity Account =
         MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("work"));
 
+    private static readonly MailAccountIdentity OtherAccount =
+        MailAccountIdentity.Create(SyntheticMailOwner.Deployment, MailAccountId.Create("personal"));
+
     private static readonly DateTimeOffset Moment = new(2026, 8, 19, 9, 0, 0, TimeSpan.Zero);
 
     /// <summary>A saved draft is stored and appended in one call, and needs nobody to be addressed to.</summary>
@@ -505,6 +508,49 @@ public sealed class MailDraftBookTests
         TimeSpan.FromHours(1),
         TimeSpan.FromHours(8));
 
+    /// <summary>
+    /// A revision naming another account's draft reads none of its files, so a foreign identifier answers exactly as
+    /// one nobody holds rather than by the size of somebody else's attachments.
+    /// </summary>
+    [Fact]
+    public async Task ReadStagedAttachmentsAsync_ADraftAnotherAccountHolds_IsRefusedBeforeAnyOctetIsRead()
+    {
+        // Arrange
+        var harness = Harness();
+        harness.MapDraftsFolder(Account.Id);
+        var theirs = await harness.Book.SaveAsync(
+            OtherAccount,
+            OutgoingEmailRequester.Command("mfctl-9c31"),
+            Composed("their first version"),
+            revises: null,
+            CancellationToken.None);
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
+            () => harness.Book.ReadStagedAttachmentsAsync(Account.Id, theirs.Id, CancellationToken.None));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.MailDraftNotFound, refusal.ErrorCode);
+    }
+
+    /// <summary>A draft nobody holds is refused the same way, which is what makes the two indistinguishable.</summary>
+    [Fact]
+    public async Task ReadStagedAttachmentsAsync_ADraftNobodyHolds_IsRefusedTheSameWay()
+    {
+        // Arrange
+        var harness = Harness();
+
+        // Act
+        var refusal = await Assert.ThrowsAsync<MailDraftRefusedException>(
+            () => harness.Book.ReadStagedAttachmentsAsync(
+                Account.Id,
+                MailDraftId.Create(Guid.CreateVersion7()),
+                CancellationToken.None));
+
+        // Assert
+        Assert.Equal(MailFathomErrorCode.MailDraftNotFound, refusal.ErrorCode);
+    }
+
     private static Task<MailDraftRecord> SaveAsync(MailDraftHarness harness, string body) =>
         harness.Book.SaveAsync(
             Account,
@@ -516,6 +562,7 @@ public sealed class MailDraftBookTests
     private static ComposedMailDraft Composed(string body, IReadOnlyList<MailDraftRecipient>? recipients = null) =>
         new(
             recipients ?? [Recipient()],
+            "a draft",
             InternetMessageId.Mint("example.test"),
             Encoding.ASCII.GetBytes($"Subject: a draft\r\n\r\n{body}").AsMemory());
 

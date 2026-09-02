@@ -1162,6 +1162,7 @@ twice mean something for a record that is not being sent at all.
 | `OwnerId`, `MailboxAccountId` | The account the draft belongs to and whose drafts folder holds its copy, as the pair. Plain columns for the reason an outgoing record's are: an account configured only to send need never have synchronized anything |
 | `RequesterOrigin`, `RequesterIdentity` | The authored act that wrote it down, by kind and by text, exactly as an outgoing record carries them. There is no unique index over the pair here: a draft is not idempotent, because saving the same draft twice is what editing it *is* |
 | `Revision` | Which version of the draft the row currently describes, counted from one. It is what a copy row is keyed by, so the record and the folder cannot disagree about which version is the standing one |
+| `Subject` | The subject line the current revision carries, empty where the author wrote none. The one thing the message says that the row repeats, and it is here for the reason the recipients are: a person's drafts are listed by what each is about, and reading that out of the stored MIME would load every draft's message to draw a list. Added by the `AddDraftSubjectAndStagedAttachments` migration, defaulting to the empty string, which is what a row written before the column existed reads as until its next revision |
 | `MimeByteLength` | How many bytes the current revision's MIME is, kept beside the record so a promotion can be refused against the deployment's size bound without reading the message |
 | `ComposedAt`, `RevisedAt` | When the draft was first written and when it last changed. The second is the order an account's drafts are read in |
 | `DiscardedAt` | When the draft was given up, null while it stands. It is written **before** anything is issued against the folder, which is what makes the removal resumable rather than a message nothing can name |
@@ -1187,6 +1188,8 @@ caller chose the address itself. A revision replaces the whole list
 rather than amending it, so the row set is the composed message's own rather than everybody the draft was ever
 addressed to — and a draft addressed to nobody at all is an empty set here rather than an invalid record, which is what
 saving an unfinished message means.
+
+`mail_draft_attachments` holds one row per file staged against a draft, keyed by its own UUID and carrying the draft it belongs to, the `FileName` and `MediaType` the author declared, the `ByteLength` stored for it, and the `StagedAt` that orders the files a composition attaches. **The identity is a surrogate rather than the name**, because a name is the author's and two files an author attached may share one, so a removal names the row and takes off the file the author meant rather than whichever the ordering put first. `mail_draft_attachment_contents` holds the octets beside it, one row per file, split for the reason every other content table is split from its description: listing a draft says what is attached to it, and a listing that carried the octets would load every file of every draft to answer what they are called. Both cascade from the draft, so giving one up destroys the files with the message. A file is uploaded once and composed into every later revision, which is what keeps editing a message with a large attachment from re-sending that attachment on each edit.
 
 `mail_draft_copies` holds one row per revision that has reached the owner's drafts folder, keyed by the draft and the
 revision. **The key is what makes a replacement expressible.** IMAP has no command that changes a stored message, so a
@@ -1266,6 +1269,7 @@ account reach these four tables through the same cascade every other table is re
 | `ix_recurring_sends_active` | `(DeclaredAt)` where `CancelledAt` is null | The declarations a dispatch pass reads, oldest first. The filter is what keeps that read proportionate to what still repeats rather than to every repetition the deployment has ever declared |
 | `ix_mail_drafts_owner_account_revised` | `(OwnerId, MailboxAccountId, RevisedAt)` | An account's drafts in the order the pass settles them, oldest change first. No filter, because the read that uses it is already narrowed by the copy predicates beneath it and a deployment's whole set of held drafts is what an owner is editing rather than a history that accumulates |
 | `ix_mail_drafts_promoted` | `(PromotedToOutgoingEmailId)` where it is not null | Two questions with one answer: which draft, if any, a finished delivery came from, and which promoted drafts a pass still has to give up. Both read the same rows, and the filter is what keeps the index the size of the drafts that have been promoted rather than of every draft ever written, since a draft that was never promoted can never answer either |
+| `ix_mail_draft_attachments_draft_staged` | `(MailDraftId, StagedAt)` | One draft's staged files in the order a composition attaches them, which is the only way this table is ever read: a file is never looked up except through the draft it belongs to |
 | `ix_mail_rule_executions_owner_account_evaluated` | `(OwnerId, MailboxAccountId, EvaluatedAt, Id)` | An account's rule history newest first, and the retention pass that erases what has outlived its window. The identifier is in the key because two executions of one batch share an instant and a keyset page needs a total order to continue from |
 | `ix_mail_rule_executions_owner_account_rule_evaluated` | `(OwnerId, MailboxAccountId, RuleName, EvaluatedAt, Id)` | What one rule has been concluding, which is the question a rule that never seems to fire is investigated with |
 | `ix_mail_rule_executions_email_evaluated` | `(StoredEmailId, EvaluatedAt, Id)` | Why one message is where it is, and the rows the cascade removes when that message is erased |
@@ -1367,15 +1371,17 @@ are, and the same two cascades make erasure structural — deleting a declaratio
 with it. Nothing in any of them reaches a log, a metric, a trace, or an exception message either; a failure about a
 declaration names the declaration, and the schedule it carries is an operator's own phrase rather than anybody's data.
 
-`mail_drafts`, `mail_draft_recipients`, `mail_draft_copies`, and `mail_draft_contents` are read exactly as the three
+`mail_drafts`, `mail_draft_recipients`, `mail_draft_copies`, `mail_draft_attachments`, `mail_draft_attachment_contents`, and `mail_draft_contents` are read exactly as the three
 tables above are, and for a stronger reason: a draft is a message the owner is writing to somebody, and one drafted as
 an answer to stored mail is composed in part from that mail. It is derived personal data of the same classification as
 the message it came from and carries the same retention, access, export, and erasure obligations, which the cascades
-from `mail_drafts` make structural — erasing the draft destroys the recipients, the copy rows, and the stored message
-in one statement, and erasing the account reaches every draft of it. The copy rows are the one part that says anything
+from `mail_drafts` make structural — erasing the draft destroys the recipients, the copy rows, the staged files with
+their octets, and the stored message in one statement, and erasing the account reaches every draft of it. The copy rows are the one part that says anything
 about a mailbox rather than about a message, and what they hold is a folder alias, a path, a UID, and an identity
-MailFathom minted. Nothing in any of the four reaches a log, a metric, a trace, or an exception message: a failure
-names the draft's identifier and the folder alias, never a subject, an address, or a line of what was written.
+MailFathom minted. The staged files are the other part that is the author's own rather than the message's, and
+what they hold is a name that person typed, a media type they declared, and the octets they uploaded. Nothing in
+any of the six reaches a log, a metric, a trace, or an exception message: a failure names the draft's identifier
+and the folder alias, never a subject, an address, a file name, or a line of what was written.
 
 `settings_accounts` is personal data of a kind nothing else on this page holds: it is the record of a person rather than of their mail, and its document is what they configured MailFathom to do on their behalf. It is therefore the row a data-subject erasure is aimed at, and the cascade beneath it is what discharges the rest — which is also why the tables that record a mail account without keying onto one are taken by the same operation rather than left for somebody to remember. The contact book is reached by the cascade rather than by that derived list: `contacts` and `contact_addresses` record no mail account, but `contacts` keys onto the owner directly and `contact_addresses` keys onto `contacts` through `(ContactId, OwnerId)`, so erasing the owner takes the whole book with them in two hops — which is what an erasure request owes about an assembled record of third parties this owner wrote down. `stored_secrets` keys onto the owner directly as well, so the sealed material behind every reference in their document leaves through that cascade. The refresh token of an account that was authorized but never synchronized is reached by the explicit owner predicate over `mailbox_refresh_tokens`; it no longer survives for lack of a `mailbox_accounts` row. Nothing in the owner row reaches a log, a metric, a trace, or an exception message: a failure names the owner's identifier, which is a value MailFathom generated, and never the document beside it.
 

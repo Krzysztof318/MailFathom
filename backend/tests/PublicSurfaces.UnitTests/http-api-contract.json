@@ -27,6 +27,336 @@
         ],
         "type": "object"
       },
+      "ClientDraftAttachmentResponse": {
+        "properties": {
+          "attachmentId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "mediaType": {
+            "type": "string"
+          },
+          "sizeOctets": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "stagedAt": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "attachmentId",
+          "fileName",
+          "mediaType",
+          "sizeOctets",
+          "stagedAt"
+        ],
+        "type": "object"
+      },
+      "ClientDraftDiscardResponse": {
+        "properties": {
+          "divergence": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "draftId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "failureCode": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "outcome": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "draftId",
+          "outcome",
+          "divergence",
+          "failureCode"
+        ],
+        "type": "object"
+      },
+      "ClientDraftListResponse": {
+        "properties": {
+          "drafts": {
+            "items": {
+              "$ref": "#/components/schemas/ClientDraftResponse"
+            },
+            "type": "array"
+          },
+          "maximumCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "drafts",
+          "maximumCount"
+        ],
+        "type": "object"
+      },
+      "ClientDraftReadingResponse": {
+        "properties": {
+          "draft": {
+            "$ref": "#/components/schemas/ClientDraftResponse"
+          },
+          "htmlBody": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "plainTextBody": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "draft",
+          "plainTextBody",
+          "htmlBody"
+        ],
+        "type": "object"
+      },
+      "ClientDraftRecipientResponse": {
+        "properties": {
+          "address": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "provenance": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "address",
+          "displayName",
+          "provenance"
+        ],
+        "type": "object"
+      },
+      "ClientDraftResponse": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "attachments": {
+            "items": {
+              "$ref": "#/components/schemas/ClientDraftAttachmentResponse"
+            },
+            "type": "array"
+          },
+          "composedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "divergence": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "draftId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "lastFailureCode": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "recipients": {
+            "items": {
+              "$ref": "#/components/schemas/ClientDraftRecipientResponse"
+            },
+            "type": "array"
+          },
+          "revisedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "revision": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "sentAs": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "serverCopy": {
+            "type": "string"
+          },
+          "sizeOctets": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "subject": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "draftId",
+          "account",
+          "subject",
+          "recipients",
+          "attachments",
+          "serverCopy",
+          "revision",
+          "sizeOctets",
+          "composedAt",
+          "revisedAt",
+          "sentAs",
+          "divergence",
+          "lastFailureCode"
+        ],
+        "type": "object"
+      },
+      "ClientDraftSendResponse": {
+        "properties": {
+          "draftId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "outgoingEmail": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "stage": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "draftId",
+          "outgoingEmail",
+          "stage"
+        ],
+        "type": "object"
+      },
+      "ClientDraftWriteRequest": {
+        "properties": {
+          "account": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "answeredEmailId": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "answers": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "bcc": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "cc": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          },
+          "htmlBody": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "plainTextBody": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "subject": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "to": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          }
+        },
+        "required": [
+          "account",
+          "subject",
+          "plainTextBody",
+          "htmlBody",
+          "to",
+          "cc",
+          "bcc",
+          "answeredEmailId",
+          "answers"
+        ],
+        "type": "object"
+      },
       "ClientMailAccountResponse": {
         "properties": {
           "behind": {
@@ -943,49 +1273,6 @@
           "nextCursor",
           "previousCursor",
           "pageSize"
-        ],
-        "type": "object"
-      },
-      "ClientPreferencesRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "openMailInTabs": {
-            "type": [
-              "null",
-              "boolean"
-            ]
-          },
-          "telemetryEnabled": {
-            "type": [
-              "null",
-              "boolean"
-            ]
-          },
-          "theme": {
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "type": "object"
-      },
-      "ClientPreferencesResponse": {
-        "properties": {
-          "openMailInTabs": {
-            "type": "boolean"
-          },
-          "telemetryEnabled": {
-            "type": "boolean"
-          },
-          "theme": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "telemetryEnabled",
-          "theme",
-          "openMailInTabs"
         ],
         "type": "object"
       },
@@ -7589,6 +7876,321 @@
         ]
       }
     },
+    "/api/client/drafts": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "account",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientDraftListResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      },
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ClientDraftWriteRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientDraftResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/drafts/{draftId}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draftId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientDraftDiscardResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draftId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientDraftReadingResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      },
+      "put": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draftId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ClientDraftWriteRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientDraftResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/drafts/{draftId}/attachments": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draftId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fileName",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "$ref": "#/components/schemas/Stream"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientDraftAttachmentResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/drafts/{draftId}/attachments/{attachmentId}": {
+      "delete": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draftId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "attachmentId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/drafts/{draftId}/send": {
+      "post": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draftId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientDraftSendResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
     "/api/client/emails": {
       "get": {
         "parameters": [
@@ -7992,14 +8594,49 @@
         ]
       }
     },
-    "/api/client/preferences": {
+    "/api/client/outbox": {
       "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "account",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stage",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "pageSize",
+            "schema": {
+              "format": "int32",
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": [
+                "integer",
+                "string"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ClientPreferencesResponse"
+                  "$ref": "#/components/schemas/OutboxPageResponse"
                 }
               }
             },
@@ -8014,37 +8651,113 @@
         "tags": [
           "Client"
         ]
-      },
+      }
+    },
+    "/api/client/outbox/cancellation": {
       "post": {
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ClientPreferencesRequest"
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/OutboxCancellationRequest"
+                  }
+                ]
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ClientPreferencesResponse"
+                  "$ref": "#/components/schemas/OutboxDecisionResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/outbox/requeue": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/OutboxRequeueRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutboxDecisionResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/outbox/{outgoingEmailId}": {
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "outgoingEmailId",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutboxSendResponse"
                 }
               }
             },
             "description": "OK"
           },
           "404": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
             "description": "Not Found"
           }
         },

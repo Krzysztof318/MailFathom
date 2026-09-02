@@ -271,6 +271,7 @@ public sealed class MailDraftFilerTests
             Account,
             OutgoingEmailRequester.Command("mfctl-4f2a"),
             [Recipient()],
+            "a draft",
             mime.Length,
             Moment,
             CancellationToken.None);
@@ -296,6 +297,7 @@ public sealed class MailDraftFilerTests
             session,
             draftId,
             [Recipient()],
+            "a draft",
             mime.Length,
             Moment.AddMinutes(1),
             CancellationToken.None);

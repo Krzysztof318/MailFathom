@@ -26,6 +26,12 @@
     <Compile Include="..\shared\RecordingDerivedWorkGateTelemetry.cs" Link="RecordingDerivedWorkGateTelemetry.cs" />
     <Compile Include="..\shared\StubMailFolderMappings.cs" Link="StubMailFolderMappings.cs" />
     <Compile Include="..\shared\SyntheticServedAccount.cs" Link="SyntheticServedAccount.cs" />
+    <!-- The draft routes take a file in and read a draft back, so the two client-facing acts a request decides
+         anything about are exercised over the same in-memory account the application suite writes drafts into. -->
+    <Compile Include="..\shared\OwnedMailAccountCatalogs.cs" Link="OwnedMailAccountCatalogs.cs" />
+    <Compile Include="..\shared\InMemoryMailDraftStore.cs" Link="InMemoryMailDraftStore.cs" />
+    <Compile Include="..\shared\InMemoryMailDraftContentStore.cs" Link="InMemoryMailDraftContentStore.cs" />
+    <Compile Include="..\shared\InMemoryOutgoingEmailStore.cs" Link="InMemoryOutgoingEmailStore.cs" />
     <!-- The mail list is a route that publishes mail text, so the use case behind it composes the egress guard even
          where the deployment under test scans nothing. The four arrive together, as they do in every suite that
          builds one: the inactive guard names the scanning deployment in its own documentation. -->

@@ -5,6 +5,7 @@
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Authoring;
 using MailFathom.Application.Mail.Delivery.Submission;
 using MailFathom.Domain.Access;
@@ -135,7 +136,7 @@ internal sealed class ReplyToEmailTool(AuthoredResponseSubmission submission)
             Act = AuthoredAct(audience),
             PlainTextBody = plainTextBody,
             HtmlBody = htmlBody,
-            Recipients = AuthoredMailArguments.NamedRecipients(
+            Recipients = AuthoredRecipientHeaders.NamedRecipients(
                 to: null,
                 cc,
                 bcc: null,

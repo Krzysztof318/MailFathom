@@ -4,6 +4,7 @@
 
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
+using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Submission;
 using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
@@ -129,7 +130,7 @@ internal sealed class SendEmailTool(AuthoredMailSubmission submission)
         var request = new MailSubmissionRequest
         {
             Account = NamedAccount(account),
-            Recipients = AuthoredMailArguments.NamedRecipients(
+            Recipients = AuthoredRecipientHeaders.NamedRecipients(
                 to, cc, bcc, MailSubmissionRefusedException.TooManyRecipients, MailSubmissionRefusedException.From),
             Subject = subject,
             PlainTextBody = plainTextBody,

@@ -72,6 +72,14 @@ public sealed record MailDraftRecord
     /// </remarks>
     public required IReadOnlyList<MailDraftRecipient> Recipients { get; init; }
 
+    /// <summary>Gets the subject line the current revision carries, which is empty where the author wrote none.</summary>
+    /// <remarks>
+    /// It is the one thing the message says that the record repeats, and it is here for the reason the recipients are:
+    /// a person's drafts are listed by what each one is about, and reading that out of the stored MIME would load every
+    /// draft's message to draw a list. Everything else the message says stays in the message.
+    /// </remarks>
+    public required string Subject { get; init; }
+
     /// <summary>Gets how many bytes of MIME are stored for the current revision.</summary>
     /// <remarks>
     /// It is kept beside the record for the reason an outgoing record keeps its own: a promotion compares it against
@@ -110,6 +118,14 @@ public sealed record MailDraftRecord
 
     /// <summary>Gets every copy of this draft MailFathom has appended, newest revision first.</summary>
     public required IReadOnlyList<MailDraftServerCopy> Copies { get; init; }
+
+    /// <summary>Gets the files staged against this draft, oldest upload first, which is ordinarily none.</summary>
+    /// <remarks>
+    /// They are the files every revision is composed with, so the order is the order the composed message carries them
+    /// in. Only what each one is called, declares itself to be, and measures is here; the octets are read where a
+    /// composition needs them and nowhere else.
+    /// </remarks>
+    public required IReadOnlyList<MailDraftAttachment> Attachments { get; init; }
 
     /// <summary>Gets why the tracked copy stopped being one MailFathom may touch, or <see langword="null" /> while none has.</summary>
     public required MailDraftDivergence? Divergence { get; init; }

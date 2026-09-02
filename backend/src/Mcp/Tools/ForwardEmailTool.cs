@@ -5,6 +5,7 @@
 using System.ComponentModel;
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Emails.Mailboxes;
+using MailFathom.Application.Mail.Delivery.Addressing;
 using MailFathom.Application.Mail.Delivery.Authoring;
 using MailFathom.Application.Mail.Delivery.Submission;
 using MailFathom.Domain.Access;
@@ -136,7 +137,7 @@ internal sealed class ForwardEmailTool(AuthoredResponseSubmission submission)
             Act = AuthoredResponseAct.Forward,
             PlainTextBody = plainTextBody,
             HtmlBody = htmlBody,
-            Recipients = AuthoredMailArguments.NamedRecipients(
+            Recipients = AuthoredRecipientHeaders.NamedRecipients(
                 to, cc, bcc, MailSubmissionRefusedException.TooManyRecipients, MailSubmissionRefusedException.From),
             Requester = AuthoredMailArguments.Requester(idempotencyKey),
         };

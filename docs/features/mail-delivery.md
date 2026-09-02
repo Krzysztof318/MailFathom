@@ -1029,6 +1029,22 @@ saving something half-written means. It is not what [a repeated send](#a-message
 stores under the same word: that draft is a template an occasion is composed from and reaches no folder, while this one
 is a message somebody is writing and is the message the owner's own client shows them.
 
+**Every draft reaches the owner's own drafts folder, whichever surface wrote it.** There is no second kind held only
+here: a draft is a message the owner is meant to find in the mail client they already open, and one this deployment
+kept to itself would be a message prepared where its owner never looks — with two places to look for the same thing,
+which is the divergence the arrangement exists to avoid. What that costs is a round trip to a mail server per revision,
+so a revision is what an author asks for rather than what a keystroke produces: a client saves when somebody says to
+save, and the writing between those moments is the client's own.
+
+**Files are staged against the draft rather than sent with each edit.** An upload is taken in once and the draft keeps
+it, so an author revising a subject re-uploads nothing and a large attachment is composed into the message rather than
+re-transmitted per edit. What bounds an upload is what bounds a composed message — how many files one may carry and how
+large one may be are the deployment's own numbers — and a file this refuses is one no composition of that draft could
+have carried anyway. Staging a file changes no stored message: the octets join the message where the next revision is
+composed, which is what keeps a large file from being appended on the strength of an upload the author may still take
+back. Cancelling an upload leaves nothing behind, and a file already taken in is removed by naming the identifier the
+upload reported for it rather than the name the author gave it, because two files an author attached may share a name.
+
 **The record and the message cross one transaction, and the mailbox follows.** A draft whose message was never stored
 describes a version nothing can append or send, and a message stored under no draft is bytes nothing will ever read, so
 both are committed together and the drafts folder is brought into step afterwards. A crash in between leaves a draft
@@ -1112,8 +1128,9 @@ back into step.
 
 **A draft is derived personal data.** It is a message addressed to people, and one drafted as an answer is composed in
 part from mail this deployment holds, so it carries the classification of what it came from and is reached by the same
-retention and erasure. [Stored email schema § The drafts nothing will
-send](../architecture/stored-email-schema.md#the-drafts-nothing-will-send) holds the four tables and the cascades that
+retention and erasure. The files staged against it are the same: a name the author typed, a media type they declared,
+and octets they uploaded, all of it theirs. [Stored email schema § The drafts nothing will
+send](../architecture/stored-email-schema.md#the-drafts-nothing-will-send) holds the six tables and the cascades that
 make that structural.
 
 **[The MCP surface](mcp-tools.md#the-drafting-surface) reaches all of this through four tools**, and the split between
@@ -1122,6 +1139,15 @@ it, and give it up under `mailfathom.mail.drafts.write`; `send_draft` promotes o
 is the grant every act that causes mail to leave is admitted by. So a deployment can hand an agent the whole of the
 writing above and none of the promotion, which is what makes a draft the arrangement to reach for where a person
 belongs between an agent and a recipient.
+
+**[The client endpoint](../operations/client-endpoint.md#the-drafts-routes) reaches the same drafts as a person rather
+than as an agent**, under the same two grants and with the same meaning: composing, listing, opening, revising, giving
+up, and attaching are `mailfathom.mail.drafts.write`, and promoting one is `mailfathom.mail.send`. Every route there is
+scoped to the caller's own owner, so a draft another owner holds answers exactly as one nobody holds — and because a
+draft is a row, a stored message, and a copy in the owner's folder rather than anything a client keeps, the one
+somebody started in the browser is the one the desktop shell opens and the one their phone's mail client shows.
+[The outbox routes](../operations/client-endpoint.md#the-outbox-routes) beside them are where that client watches what
+became of a send, withdraws one still queued, and offers a failed one again.
 
 ## What an operator sees while mail is leaving
 

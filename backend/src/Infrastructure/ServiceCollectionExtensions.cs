@@ -1102,6 +1102,14 @@ public static class ServiceCollectionExtensions
         // every bound this deployment sets is asked again at the moment the message would leave rather than only when
         // it was written.
         services.AddScoped<MailDraftPromotion>();
+        // The owner-facing half of everything above, registered beside what each one delegates to. They exist because
+        // the acts above admit a caller on the grant alone, which is what a deployment holding one owner needs and not
+        // what a surface serving a person may rely on: these are where an identifier becomes a draft, or a send, that
+        // the caller's own owner holds. Scoped with the catalog that answers which owner that is.
+        services.AddScoped<MailDraftDirectory>();
+        services.AddScoped<MailDraftAttachments>();
+        services.AddScoped<OwnerMailDrafts>();
+        services.AddScoped<OwnerOutbox>();
     }
 
     /// <summary>Registers what a finished mutation leaves behind, the pass that converges an unfinished one, and the gauges both publish.</summary>

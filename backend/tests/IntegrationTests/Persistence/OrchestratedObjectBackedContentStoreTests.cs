@@ -697,6 +697,7 @@ public sealed class OrchestratedObjectBackedContentStoreTests(MailFathomOrchestr
                     OwnerId = SyntheticMailAccount.Owner.Value,
                     MailboxAccountId = SyntheticMailAccount.AccountId.Value,
                     RequesterIdentity = RequesterIdentity,
+                    Subject = string.Empty,
                     MimeByteLength = mimeByteLength,
                     ComposedAt = now,
                     RevisedAt = now,

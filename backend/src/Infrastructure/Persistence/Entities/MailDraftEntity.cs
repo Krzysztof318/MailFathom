@@ -77,7 +77,19 @@ internal sealed class MailDraftEntity
     /// assembled at the failure site and may repeat what a remote server wrote.</remarks>
     public int? LastFailureCode { get; set; }
 
+    /// <summary>Gets or sets the subject line the current revision carries, empty where the author wrote none.</summary>
+    /// <remarks>
+    /// The one thing the message says that this row repeats, kept for the reason the recipient rows are kept: a
+    /// person's drafts are listed by what each is about, and reading that out of the stored MIME would load every
+    /// draft's message to draw a list. It is written from the composed message rather than from what the author typed,
+    /// so the row and the message cannot come to name it differently.
+    /// </remarks>
+    public required string Subject { get; set; }
+
     public ICollection<MailDraftRecipientEntity> Recipients { get; } = [];
+
+    /// <summary>Gets the files an author staged against this draft, which every revision is composed with.</summary>
+    public ICollection<MailDraftAttachmentEntity> Attachments { get; } = [];
 
     /// <summary>Gets every copy of this draft MailFathom has appended, including the ones a revision replaced.</summary>
     public ICollection<MailDraftCopyEntity> Copies { get; } = [];

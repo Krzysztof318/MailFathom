@@ -9,6 +9,7 @@ namespace MailFathom.Application.Mail.Delivery.Composition;
 
 /// <summary>Carries one composed draft: who it is addressed to, the identity it carries, and the bytes to store.</summary>
 /// <param name="Recipients">The people the draft names, which may be nobody, each with where its address came from.</param>
+/// <param name="Subject">The subject line as the composed message carries it, which is empty where the author wrote none.</param>
 /// <param name="MessageId">The identity minted for this revision of the draft.</param>
 /// <param name="RawMime">The RFC 822 bytes to store and to append, built once and never rebuilt.</param>
 /// <remarks>
@@ -28,8 +29,14 @@ namespace MailFathom.Application.Mail.Delivery.Composition;
 /// server — IMAP has no command that changes a stored one — and two messages sharing a <c>Message-ID</c> is what a mail
 /// client reads as one message it has seen twice.
 /// </para>
+/// <para>
+/// The subject travels beside the bytes for the reason the recipients do: the draft's own row keeps it, so a listing
+/// of what somebody is writing names each draft without loading a single message. It is what the composed message
+/// carries rather than what the author typed, so the row and the message can never disagree about it.
+/// </para>
 /// </remarks>
 public sealed record ComposedMailDraft(
     IReadOnlyList<MailDraftRecipient> Recipients,
+    string Subject,
     InternetMessageId MessageId,
     ReadOnlyMemory<byte> RawMime);

@@ -42,6 +42,16 @@ internal sealed class MailDraftConfiguration : IEntityTypeConfiguration<MailDraf
         entity.Property(draft => draft.RequesterOrigin).HasConversion<string>().HasMaxLength(64).IsRequired();
         entity.Property(draft => draft.DivergenceReason).HasConversion<string>().HasMaxLength(64);
 
+        // Unbounded text with a stored default of the empty string. No length is declared because nothing bounds a
+        // subject on its own — what bounds it is the size of the composed message, which the composition already
+        // refuses against — and the default is what a row written before the column existed reads as: a draft whose
+        // subject is only in its stored MIME is listed under no subject rather than refusing to be listed.
+        entity.Property(draft => draft.Subject).IsRequired().HasDefaultValue(string.Empty);
+
+        // The default is what a row written before the column existed reads as, and it is true because drafting
+        // reached one mail server before there was a way to ask for it not to. It also answers an ordinary insert of a
+        // server draft, which EF Core leaves out of the statement; a local draft is the row that states its answer.
+
         // See the stored-email mapping: this is the PostgreSQL `xmin` system column, not a user-defined column.
         entity.Property(draft => draft.ConcurrencyVersion).IsRowVersion();
 

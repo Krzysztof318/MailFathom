@@ -2,8 +2,10 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Mail.Delivery.Composition;
 using MailFathom.Application.Mail.Delivery.Drafts;
 using MailFathom.Application.Persistence;
+using MailFathom.Domain.Access;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Delivery.Drafts;
@@ -23,6 +25,7 @@ namespace MailFathom.TestSupport;
 internal sealed class InMemoryMailDraftStore : IMailDraftStore
 {
     private readonly Dictionary<MailDraftId, MailDraftRecord> drafts = [];
+    private readonly Dictionary<MailDraftAttachmentId, AuthoredEmailAttachment> staged = [];
 
     /// <summary>Gets every draft still held, which is what a deletion is asserted against.</summary>
     internal IReadOnlyCollection<MailDraftRecord> Drafts => [.. this.drafts.Values];
@@ -47,6 +50,7 @@ internal sealed class InMemoryMailDraftStore : IMailDraftStore
         MailAccountIdentity account,
         OutgoingEmailRequester author,
         IReadOnlyList<MailDraftRecipient> recipients,
+        string subject,
         long mimeByteLength,
         DateTimeOffset composedAt,
         CancellationToken cancellationToken)
@@ -57,6 +61,8 @@ internal sealed class InMemoryMailDraftStore : IMailDraftStore
             Account = account,
             Author = author,
             Recipients = [.. recipients],
+            Subject = subject,
+            Attachments = [],
             MimeByteLength = mimeByteLength,
             Revision = 1,
             ComposedAt = composedAt,
@@ -78,6 +84,7 @@ internal sealed class InMemoryMailDraftStore : IMailDraftStore
         IPersistenceSession session,
         MailDraftId draftId,
         IReadOnlyList<MailDraftRecipient> recipients,
+        string subject,
         long mimeByteLength,
         DateTimeOffset revisedAt,
         CancellationToken cancellationToken)
@@ -94,6 +101,7 @@ internal sealed class InMemoryMailDraftStore : IMailDraftStore
         var revised = draft with
         {
             Recipients = [.. recipients],
+            Subject = subject,
             MimeByteLength = mimeByteLength,
             RevisedAt = revisedAt,
         };
@@ -107,6 +115,90 @@ internal sealed class InMemoryMailDraftStore : IMailDraftStore
     /// <inheritdoc />
     public Task<MailDraftRecord?> FindAsync(MailDraftId draftId, CancellationToken cancellationToken) =>
         Task.FromResult(this.Peek(draftId));
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<MailDraftRecord>> ReadForOwnerAsync(
+        MailOwnerId owner,
+        MailAccountId? account,
+        int maxCount,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<MailDraftRecord>>(
+        [
+            .. this.drafts.Values
+                .Where(draft => draft.Account.Owner == owner)
+                .Where(draft => account is not { } narrowed || draft.AccountId == narrowed)
+                .Where(draft => !draft.IsDiscarded && draft.PromotedTo is null)
+                .OrderByDescending(draft => draft.RevisedAt)
+                .ThenBy(draft => draft.Id.Value)
+                .Take(maxCount),
+        ]);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// A draft nobody holds answers with nothing rather than refusing, which is what the real store does: the query
+    /// reads the file rows of one draft, and there are none. Refusing here instead would make a caller that reads the
+    /// files before it establishes the draft exists fail in this double and pass against PostgreSQL.
+    /// </remarks>
+    public Task<IReadOnlyList<AuthoredEmailAttachment>> ReadAttachmentContentAsync(
+        MailDraftId draftId,
+        CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<AuthoredEmailAttachment>>(
+            this.drafts.TryGetValue(draftId, out var draft)
+                ? [.. draft.Attachments.Select(attachment => this.staged[attachment.Id])]
+                : []);
+
+    /// <inheritdoc />
+    public Task<MailDraftAttachment> StageAttachmentAsync(
+        IPersistenceSession session,
+        MailDraftId draftId,
+        AuthoredEmailAttachment file,
+        DateTimeOffset stagedAt,
+        CancellationToken cancellationToken)
+    {
+        var draft = this.Require(draftId);
+
+        var attachment = new MailDraftAttachment(
+            MailDraftAttachmentId.Create(Guid.CreateVersion7(stagedAt)),
+            file.FileName,
+            file.MediaType,
+            file.Content.Length,
+            stagedAt);
+
+        this.staged[attachment.Id] = file;
+
+        // Moved with the file, matching the real store: staging takes part in the draft's own row so that two uploads
+        // racing each other conflict, and a listing ordered by the last change has to see an attached file as one.
+        this.drafts[draftId] = draft with
+        {
+            Attachments = [.. draft.Attachments, attachment],
+            RevisedAt = stagedAt,
+        };
+
+        return Task.FromResult(attachment);
+    }
+
+    /// <inheritdoc />
+    public Task<bool> UnstageAttachmentAsync(
+        IPersistenceSession session,
+        MailDraftId draftId,
+        MailDraftAttachmentId attachmentId,
+        CancellationToken cancellationToken)
+    {
+        var draft = this.Require(draftId);
+
+        if (draft.Attachments.All(attachment => attachment.Id != attachmentId))
+        {
+            return Task.FromResult(false);
+        }
+
+        this.staged.Remove(attachmentId);
+        this.drafts[draftId] = draft with
+        {
+            Attachments = [.. draft.Attachments.Where(attachment => attachment.Id != attachmentId)],
+        };
+
+        return Task.FromResult(true);
+    }
 
     /// <inheritdoc />
     public Task<MailDraftRecord?> FindPromotedToAsync(

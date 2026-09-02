@@ -186,6 +186,7 @@ public sealed class OrchestratedMailDraftTests(MailFathomOrchestrationFixture or
                 SyntheticMailAccount.Account,
                 OutgoingEmailRequester.Command($"provenance-{Guid.NewGuid():N}"),
                 recipients,
+                "Provenance survives a revision",
                 mimeByteLength: 128,
                 DateTimeOffset.UnixEpoch,
                 token),
@@ -201,6 +202,102 @@ public sealed class OrchestratedMailDraftTests(MailFathomOrchestrationFixture or
             recipients.Select(recipient => (recipient.Recipient.Address.Address, recipient.Provenance)),
             stored.Recipients.Select(recipient => (recipient.Recipient.Address.Address, recipient.Provenance)));
     }
+
+    /// <summary>A draft with a file staged against it: what the row keeps, what the octets come back as, and what reads it.</summary>
+    /// <remarks>
+    /// Every claim here is the database's rather than a store double's. A staged file is a second table, a cascade, and
+    /// a projection that no application-level test composes: the description a listing draws is read without the
+    /// octets, and the octets a composition needs are read separately and have to survive the round trip through
+    /// <c>bytea</c> byte for byte. The two reads that reach the draft are asserted beside it, because which drafts a
+    /// pass settles and which an owner is shown are predicates PostgreSQL evaluates over the row and its copies rather
+    /// than domain properties a double could answer differently.
+    /// </remarks>
+    [Fact]
+    public async Task StageAttachmentAsync_ADraftCarryingAStagedFile_KeepsItsDescriptionAndItsOctetsAcrossEveryRead()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var subject = $"Local draft {Guid.NewGuid():N}";
+
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+
+        MailDraftRecord? opened = null;
+
+        // Act
+        var commit = await services.CommitAsync(
+            async (scope, session, token) =>
+            {
+                var drafts = scope.GetRequiredService<IMailDraftStore>();
+
+                opened = await drafts.OpenAsync(
+                    session,
+                    SyntheticMailAccount.Account,
+                    OutgoingEmailRequester.Command(subject),
+                    [RecipientAtTheMailbox()],
+                    subject,
+                    mimeByteLength: 128,
+                    DateTimeOffset.UnixEpoch,
+                    token);
+
+                await drafts.StageAttachmentAsync(
+                    session,
+                    opened.Id,
+                    new AuthoredEmailAttachment("note.txt", "text/plain", "Remember the milk."u8.ToArray()),
+                    DateTimeOffset.UnixEpoch,
+                    token);
+            },
+            cancellationToken);
+
+        // Assert
+        Assert.Equal(PersistenceCommitResult.Committed, commit);
+        Assert.NotNull(opened);
+
+        var stored = await FindAsync(services, opened.Id, cancellationToken);
+        Assert.NotNull(stored);
+        Assert.Equal(subject, stored.Subject);
+        Assert.Equal(
+            [("note.txt", "text/plain", 18L)],
+            stored.Attachments.Select(file => (file.FileName, file.MediaType, file.ByteLength)));
+
+        var content = await services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IMailDraftStore>()
+                .ReadAttachmentContentAsync(opened.Id, token),
+            cancellationToken);
+
+        Assert.Equal(
+            ["Remember the milk."],
+            content.Select(file => Encoding.UTF8.GetString(file.Content.Span)));
+
+        Assert.Contains(opened.Id, await OutstandingAsync(services, cancellationToken));
+        Assert.Contains(opened.Id, await HeldForOwnerAsync(services, cancellationToken));
+    }
+
+    /// <summary>Reads which of this account's drafts owe the mail server something, as the pass reads it.</summary>
+    private static async Task<IReadOnlyList<MailDraftId>> OutstandingAsync(
+        OrchestratedMailFathomServices services,
+        CancellationToken cancellationToken) =>
+    [
+        .. (await services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IMailDraftStore>().ReadOutstandingAsync(
+                SyntheticMailAccount.Account,
+                maxCount: 50,
+                token),
+            cancellationToken)).Select(draft => draft.Id),
+    ];
+
+    /// <summary>Reads which drafts this owner is still writing, as the client's own listing reads them.</summary>
+    private static async Task<IReadOnlyList<MailDraftId>> HeldForOwnerAsync(
+        OrchestratedMailFathomServices services,
+        CancellationToken cancellationToken) =>
+    [
+        .. (await services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<IMailDraftStore>().ReadForOwnerAsync(
+                SyntheticMailAccount.Account.Owner,
+                SyntheticMailAccount.Account.Id,
+                maxCount: 50,
+                token),
+            cancellationToken)).Select(draft => draft.Id),
+    ];
 
     /// <summary>Recognizes one of this test's own messages among whatever the folder holds.</summary>
     private static Predicate<ObservedEmail> Named(string subject) => message => message.Subject == subject;
@@ -223,7 +320,7 @@ public sealed class OrchestratedMailDraftTests(MailFathomOrchestrationFixture or
             (scope, token) => scope.GetRequiredService<MailDraftBook>().SaveAsync(
                 SyntheticMailAccount.Account,
                 OutgoingEmailRequester.Command(subject),
-                new ComposedMailDraft([RecipientAtTheMailbox()], messageId, MimeOf(subject, messageId)),
+                new ComposedMailDraft([RecipientAtTheMailbox()], subject, messageId, MimeOf(subject, messageId)),
                 revises,
                 token),
             [MailFathomPermission.MailDraftsWrite],

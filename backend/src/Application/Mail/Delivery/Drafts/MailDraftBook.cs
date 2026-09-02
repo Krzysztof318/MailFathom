@@ -142,6 +142,7 @@ public sealed class MailDraftBook
                         session,
                         draftId,
                         composed.Recipients,
+                        composed.Subject,
                         composed.RawMime.Length,
                         writtenAt,
                         attemptCancellationToken)
@@ -150,6 +151,7 @@ public sealed class MailDraftBook
                         account,
                         author,
                         composed.Recipients,
+                        composed.Subject,
                         composed.RawMime.Length,
                         writtenAt,
                         attemptCancellationToken);
@@ -167,6 +169,42 @@ public sealed class MailDraftBook
         await this.filer.SettleAsync(draft, cancellationToken);
 
         return await this.drafts.FindAsync(draft.Id, cancellationToken) ?? draft;
+    }
+
+    /// <summary>Reads the files staged against the draft a revision replaces, so the new revision carries them too.</summary>
+    /// <param name="account">The account the caller's own resolution named, which the draft has to belong to.</param>
+    /// <param name="revises">The draft being revised, or <see langword="null" /> where a new one is being written.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The staged files with their octets, empty for a new draft and for one nothing is attached to.</returns>
+    /// <exception cref="MailDraftRefusedException">Thrown when <paramref name="revises" /> names no draft this account still holds as a revisable one.</exception>
+    /// <remarks>
+    /// <para>
+    /// A file is uploaded once and belongs to the draft rather than to one revision of it, so every composition after
+    /// the upload has to carry it. Reading them here rather than in each author is what keeps that true of every
+    /// boundary that composes a draft.
+    /// </para>
+    /// <para>
+    /// <b>The draft is established as this account's before a single octet is read.</b> The identifier arrived from
+    /// whoever asked, and the write beneath this establishes ownership too — but it does so after a composition that
+    /// these files are part of, so a read placed before it would carry another owner's attachments into this request
+    /// and answer a bound-exceeded refusal where a foreign identifier has to answer exactly as an unknown one. Reading
+    /// nothing until the check has passed is what leaves the two indistinguishable, in the size of the answer as well
+    /// as in its code.
+    /// </para>
+    /// </remarks>
+    public async Task<IReadOnlyList<AuthoredEmailAttachment>> ReadStagedAttachmentsAsync(
+        MailAccountId account,
+        MailDraftId? revises,
+        CancellationToken cancellationToken)
+    {
+        if (revises is not { } draftId)
+        {
+            return [];
+        }
+
+        await this.RequireRevisableAsync(account, draftId, cancellationToken);
+
+        return await this.drafts.ReadAttachmentContentAsync(draftId, cancellationToken);
     }
 
     /// <summary>Gives up one draft and takes the copies of it back out of the mailbox.</summary>

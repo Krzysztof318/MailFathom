@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientOwnerRecordEndpoint.cs -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientOwnerRecordEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -72,6 +72,18 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `POST /api/client/record` | `mailfathom.mail.accounts.write` |
 | `POST /api/client/record/mail-accounts` | `mailfathom.mail.accounts.write` |
 | `POST /api/client/record/mail-accounts/removal` | `mailfathom.mail.accounts.write` |
+| `GET /api/client/drafts` | `mailfathom.mail.drafts.write` |
+| `POST /api/client/drafts` | `mailfathom.mail.drafts.write` |
+| `GET /api/client/drafts/{draftId}` | `mailfathom.mail.drafts.write` |
+| `PUT /api/client/drafts/{draftId}` | `mailfathom.mail.drafts.write` |
+| `DELETE /api/client/drafts/{draftId}` | `mailfathom.mail.drafts.write` |
+| `POST /api/client/drafts/{draftId}/attachments` | `mailfathom.mail.drafts.write` |
+| `DELETE /api/client/drafts/{draftId}/attachments/{attachmentId}` | `mailfathom.mail.drafts.write` |
+| `POST /api/client/drafts/{draftId}/send` | `mailfathom.mail.send` |
+| `GET /api/client/outbox` | `mailfathom.mail.send` |
+| `GET /api/client/outbox/{outgoingEmailId}` | `mailfathom.mail.send` |
+| `POST /api/client/outbox/cancellation` | `mailfathom.mail.send` |
+| `POST /api/client/outbox/requeue` | `mailfathom.mail.send` |
 | `GET /api/client/preferences` | `mailfathom.mail.read` |
 | `POST /api/client/preferences` | `mailfathom.mail.read` |
 
@@ -1058,6 +1070,99 @@ their preferences with everything else derived from them.
 
 **A deployment that proxies no telemetry still serves these routes** and stores the switch unchanged. What a client
 draws when there is nothing behind the switch is the client's own question.
+### The drafts routes
+
+These are what a person writes mail through, and the first thing to know about them is that **a draft here is the one
+in the owner's own drafts folder**. Composing one writes a row and a stored message in this deployment and files a copy
+on their mail server in the same act, so there is no second kind held only here for somebody to go looking for, and no
+route to promote one into the other.
+
+| Route | What it does |
+| --- | --- |
+| `GET /api/client/drafts` | Lists what the signed-in owner is writing, newest first, optionally narrowed to one account |
+| `POST /api/client/drafts` | Writes one new draft, as a message of its own or as an answer to stored mail |
+| `GET /api/client/drafts/{draftId}` | Opens one draft with the words its stored message carries |
+| `PUT /api/client/drafts/{draftId}` | Replaces one draft with what the author has written since |
+| `DELETE /api/client/drafts/{draftId}` | Gives one draft up, and takes its copies back out of the folder |
+| `POST /api/client/drafts/{draftId}/attachments` | Stages one file against a draft, the octets being the request body |
+| `DELETE /api/client/drafts/{draftId}/attachments/{attachmentId}` | Takes one staged file back off |
+| `POST /api/client/drafts/{draftId}/send` | Queues the message the draft holds, which is the one act here that reaches anybody else |
+
+**Every route is scoped to the caller's own owner, and a draft another owner holds answers exactly as one nobody
+holds.** A save names the account it belongs to and that name is resolved against the accounts the caller's owner owns;
+every other act names a draft, and the identifier becomes a draft this owner holds before anything acts on it. So a
+`404` here says nothing about whether such a draft exists somewhere in the deployment.
+
+**A draft survives a restart and is reachable from another head**, because it is a row, a stored message, and a copy in
+the owner's own drafts folder rather than anything the client holds: the desktop shell and the browser sign in to the
+same deployment and list the same drafts, and the owner's phone shows them from their mail server.
+
+**The grants are two rather than one, because writing a draft and sending it are different powers.** Writing, listing,
+opening, revising, giving up, and attaching are `mailfathom.mail.drafts.write`, whose effect reaches the owner's own
+mailbox and nobody else's; sending is `mailfathom.mail.send`, which puts a message in somebody else's mailbox and is
+the one act here that cannot be taken back. A client granted the first alone composes freely and sends nothing. They
+are the same two names [the drafting tools](../features/mcp-tools.md#the-drafting-surface) are published under, because
+a draft written here and a draft written by an agent are the same thing in the same folder.
+
+**Every save is an `APPEND` and a removal against the owner's mail server**, since IMAP has no command that changes a
+stored message. So a revision is what an author asks for rather than what a keystroke produces: the client saves when
+somebody says to save, and holds what they are typing until then.
+
+**An answer is written by naming what it answers rather than by quoting it.** A save carries either `account` with
+`subject`, which is a message of its own, or `answeredEmailId` with `answers` — `senderOnly`, `everyone`, or `forward`
+— which reads the account, the subject, and the threading identifiers from the message being answered, so an edited
+reply stays a reply. One of that pair without the other names nothing and is refused. Answering stored mail needs
+`mailfathom.mail.read` beneath the drafting grant, because an answer is derived from the message it answers.
+
+**An upload is the request body and nothing else.** There is no form to parse and no boundary to trust: the octets are
+the body, the file's name is the `fileName` query value, and what it declares itself to be is the request's own
+`Content-Type` without its parameters — a request declaring none is read as `application/octet-stream` rather than
+having its content examined. The bound is the deployment's own configured attachment size, applied by the routing
+pipeline as well as by the use case, so a body past it is refused before it is buffered; how many files a draft may
+carry is the deployment's configured attachment count. Cancelling an upload leaves nothing behind, and a file already
+taken in is removed by naming it.
+
+**A refused send says which rule refused it and never what triggered it.** Screening, the recipient policy, and the
+spending ceilings each answer with their own error code beside a sentence written for an operator to read, and the
+sentence carries no recipient, no subject, and no fragment of the message. `409` is a rule of this deployment about
+what the author already wrote, so no rewriting of the request would help; `503` is the one temporary refusal here and
+the only one worth retrying, and means the message was neither refused nor sent because what would have judged it could
+not be reached. Nothing on any of these routes reaches a log, a span attribute, or a telemetry event.
+
+**Nothing has been transmitted when a send answers.** The message is queued, and the outbox routes below are where a
+client watches what becomes of it.
+
+### The outbox routes
+
+These are what a client draws after a message has been sent: the send the owner just asked for has not left yet, and
+this is where the screen watches it go, takes one back while it is still queued, or offers a failed one another chance.
+
+| Route | What it does |
+| --- | --- |
+| `GET /api/client/outbox` | Reads one page of the named account's outbox, optionally narrowed to one stage |
+| `GET /api/client/outbox/{outgoingEmailId}` | Reads one send, with what the server told this deployment about each recipient |
+| `POST /api/client/outbox/cancellation` | Withdraws one send that has not begun transmitting |
+| `POST /api/client/outbox/requeue` | Offers one send again |
+
+**A listing names an account and never the deployment.** The narrowing is required rather than optional, so there is no
+unnarrowed reading here at all: one that fell back to every account would page through every owner's outgoing mail,
+which is the deployment-wide catalog an owner-facing surface must never compose. An account another owner owns is
+refused exactly as one nobody configured, and a send another owner made answers exactly as one nobody made.
+
+**What the answers carry is what [the administrative outbox](admin-endpoint.md) already settled.** A page names no
+recipient and no subject, because a page of an outbox would otherwise be an export of who this owner writes to, a page
+at a time; one send read by identity names its recipients and what the server said about each, because that is the
+question it was asked. Neither reads the message, at any size.
+
+**A decision reports what became of the send it named rather than refusing.** A send that has gone past the point of
+recall, and one this owner does not hold, are outcomes in the answer — which is exactly what somebody acting on a
+screen a moment old needs. Only a request naming no send at all is refused. Each decision names one send and never a
+set, because a message whose outcome nobody knows may already be in somebody's mailbox, so a filtered re-queue would be
+an unknown number of duplicates asked for in one request.
+
+**Every route here is `mailfathom.mail.send`, the two readings included.** What an outbox says is what this owner is
+sending, so a credential granted to read a mailbox learns nothing here, and withdrawing a send is part of sending
+rather than a power beside it.
 
 ## Credentials do not cross surfaces
 
