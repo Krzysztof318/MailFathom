@@ -594,6 +594,11 @@ test('signs in at the narrowest width a supported head presents', async ({ page 
     await expect(page.getByLabel('Password', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
 
+    // The heading is asked for here rather than in jsdom because what would take it away is a breakpoint: the brand
+    // half drops its claim below the split, and a top-level heading that went with it would leave a screen reader
+    // starting at the form's own `h2` at exactly the widths a phone presents. Only a browser lays that out.
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+
     // The document's own overflow rather than the body's box: `body` is a block element with no width rule, so its
     // used width is the viewport's whatever a child inside it does, and an assertion on it could not fail.
     // Asked as an expression rather than as a function, because this suite is compiled without a DOM declaration on

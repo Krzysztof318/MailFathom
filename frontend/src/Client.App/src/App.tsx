@@ -395,13 +395,17 @@ function SignInScreen({
                 it the claim goes and what is left is a strip naming the product, because a narrow window's room
                 belongs to the form somebody came here to fill rather than to a sentence about it. */}
             <aside className="flex shrink-0 items-center gap-3 border-b border-line bg-rail px-4 py-4 split:basis-2/5 split:flex-col split:items-start split:justify-center split:gap-10 split:border-e split:border-b-0 split:px-12">
+                {/* The product's name is the screen's heading at every width, rather than the claim beneath it: the
+                    claim is the half a narrow window drops, and a heading that disappears with the composition would
+                    leave the form's own `h2` as the first heading on the page below the split. What is decided by
+                    width here is what is drawn, never what the document is made of. */}
                 <div className="flex items-center gap-3 split:self-start">
                     <BrandMark className="size-9 split:size-10" />
-                    <p className="text-2xl font-semibold tracking-tight">{translate('shell.title')}</p>
+                    <h1 className="text-2xl font-semibold tracking-tight">{translate('shell.title')}</h1>
                 </div>
 
                 <div className="hidden max-w-sm flex-col gap-4 split:flex">
-                    <h1 className="text-5xl font-semibold tracking-tight text-balance">{translate('signIn.claim')}</h1>
+                    <p className="text-5xl font-semibold tracking-tight text-balance">{translate('signIn.claim')}</p>
                     <p className="text-lg text-muted text-pretty">{translate('signIn.claimExplanation')}</p>
                 </div>
             </aside>

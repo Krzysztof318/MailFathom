@@ -38,16 +38,24 @@ export const iconNames = [
 
 export type IconName = (typeof iconNames)[number];
 
-// Material Symbols draws on a 960-unit square whose origin sits at the top of the descender, which is why the box is
-// offset rather than starting at zero. It is the upstream viewBox and is the same for every file.
-export const glyphBox = '0 -960 960 960';
+/** One symbol as it was exported: the coordinate system its outline was drawn in, and the outline. */
+export interface Glyph {
+    readonly box: string;
+    readonly outline: string;
+}
 
-// The committed files, read at build time rather than at run time: Vite inlines each one as a string, so the outline
-// below is a constant in the bundle and no request is made for a symbol. Each file is a single path, which is what the
-// upstream export is, so the outline is the one `d` in it.
-const outlines: Readonly<Record<string, string | undefined>> = Object.fromEntries(
+// The committed files, read at build time rather than at run time: Vite inlines each one as a string, so a symbol is a
+// constant in the bundle and no request is made for one. Each file is a single path, which is what the upstream export
+// is, so the outline is the one `d` in it.
+//
+// **The box is read from the file rather than assumed**, and that is not defensiveness. Most of the upstream
+// `wght300_24px` exports are drawn on a 960-unit square whose origin sits at the top of the descender —
+// `viewBox="0 -960 960 960"` — but not all of them are: `auto_awesome` at the commit the register names carries no
+// `viewBox` at all and is drawn on the 24-unit box its `width` and `height` declare. A fixed box would render that
+// glyph as a speck in a corner, silently, and the same would happen to the next file upstream exports the older way.
+const symbols: Readonly<Record<string, Glyph | undefined>> = Object.fromEntries(
     Object.entries(import.meta.glob('../assets/icons/*.svg', { query: '?raw', import: 'default', eager: true })).map(
-        ([path, source]) => [nameOf(path), /\sd="([^"]+)"/u.exec(source)?.[1]],
+        ([path, source]) => [nameOf(path), glyphIn(source)],
     ),
 );
 
@@ -56,7 +64,29 @@ export function nameOf(path: string): string {
     return path.slice(path.lastIndexOf('/') + 1, -'.svg'.length);
 }
 
-/** The outline a symbol is drawn from, or nothing where no file in the tree carries it. */
-export function outlineOf(name: string): string | undefined {
-    return outlines[name];
+/** The symbol a committed file holds, or nothing where the file is not one path in a box this can read. */
+export function glyphIn(source: string): Glyph | undefined {
+    const outline = /\sd="([^"]+)"/u.exec(source)?.[1];
+
+    if (outline === undefined) {
+        return undefined;
+    }
+
+    const declared = /\sviewBox="([^"]+)"/u.exec(source)?.[1];
+
+    if (declared !== undefined) {
+        return { box: declared, outline };
+    }
+
+    // An export with no `viewBox` is drawn on the square its own attributes declare, which is what the SVG default
+    // user space is. Both are always present in these files, so a file carrying neither is one this cannot read.
+    const width = /\swidth="(\d+)"/u.exec(source)?.[1];
+    const height = /\sheight="(\d+)"/u.exec(source)?.[1];
+
+    return width === undefined || height === undefined ? undefined : { box: `0 0 ${width} ${height}`, outline };
+}
+
+/** The symbol drawn under a name, or nothing where no file in the tree carries it. */
+export function glyphOf(name: string): Glyph | undefined {
+    return symbols[name];
 }

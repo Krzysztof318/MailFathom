@@ -547,4 +547,48 @@ describe('SignIn', () => {
             ),
         ).toBeDefined();
     });
+    // The screen the design project draws says three things about the connection before a password is typed into it:
+    // what port will be reached, what it costs to turn TLS off, and whether the password about to be entered can be
+    // read back. None of the three is decoration, so each is asserted here rather than looked at once.
+
+    it('says which port the address will reach, so a deployment on one of its own is visible before signing in', () => {
+        renderScreen(signedIn);
+        typeAddress('mail.example.test:8443');
+
+        expect(screen.getByText('port 8443')).toBeDefined();
+    });
+
+    it('says the port is optional and which one it would reach, where the address named none', () => {
+        renderScreen(signedIn);
+        typeAddress('mail.example.test');
+
+        expect(screen.getByText(/The port is optional — without one this client reaches 443\./u)).toBeDefined();
+    });
+
+    it('keeps what turning TLS off costs out of the way until it is turned off', () => {
+        renderScreen(signedIn);
+
+        expect(screen.queryByText(/^TLS is off\./u)).toBeNull();
+
+        permitClearText();
+
+        expect(screen.getByText(/^TLS is off\./u)).toBeDefined();
+    });
+
+    it('lets somebody read back the password they typed, and put it away again', () => {
+        renderScreen(signedIn);
+        typeCredential();
+
+        // A password field carries no role, so it being findable as a textbox is exactly what revealed means: the
+        // characters are on the screen and a screen reader will read them.
+        expect(screen.queryByRole('textbox', { name: 'Password' })).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Show the password' }));
+
+        expect(screen.getByRole('textbox', { name: 'Password' })).toBeDefined();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Hide the password' }));
+
+        expect(screen.queryByRole('textbox', { name: 'Password' })).toBeNull();
+    });
 });

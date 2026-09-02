@@ -15,7 +15,7 @@ import type { MessageKey } from '../localization/en';
 // one. A fragment is never sent to a server at all, so every address below reloads on both heads with nothing
 // configured, and the desktop shell's WebView needs no rule of its own either.
 
-// The order is the design project's, and it is the order the rail draws them in at either width. Four of the seven have
+// The order is the design project's, and it is the order the rail draws them in at either width. Six of the seven have
 // nothing behind them yet and are placeholders rather than screens — the project shows them, so leaving them out would
 // make the client a different product from the one that was designed, and drawing them as though they worked would be
 // worse. `Space` is what renders them as what they are.
