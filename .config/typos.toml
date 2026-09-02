@@ -130,6 +130,14 @@ extend-ignore-re = [
   # reading data rather than prose. Entered as the whole entity name rather than as the run inside it,
   # so nothing else in the repository is silenced by it.
   '\bNG_NIN\b',
+  # A Unicode code point, and a range of them, in the `U+0100-02BA` notation CSS `unicode-range`
+  # descriptors are written in. The client's `@font-face` rules carry the subset ranges the upstream
+  # stylesheet publishes, and hexadecimal is built out of the first six letters — so a dictionary
+  # reads `02BA` as a misspelling of `BY`, which it never was. Ignoring the whole token rather than
+  # the run inside it keeps `BA` catchable everywhere else, and the ranges are copied from upstream
+  # rather than chosen here, so rewriting one would change which characters a font file is fetched
+  # for.
+  'U\+[0-9A-Fa-f]{4,6}(?:-[0-9A-Fa-f]{4,6})?',
   # The base64 of the Latin alphabet, which the synthetic secrets are padded and built out of so that
   # no committed line carries a string shaped like a live credential. Encoding a run of letters is
   # what puts `Iz` in the middle of it.

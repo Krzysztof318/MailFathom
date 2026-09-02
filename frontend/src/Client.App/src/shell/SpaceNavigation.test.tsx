@@ -17,7 +17,7 @@ function renderNavigation(offered: readonly Space[] = spaces): void {
 }
 
 describe('SpaceNavigation', () => {
-    it('offers the three spaces as links, each at an address of its own', () => {
+    it('offers every space as a link, each at an address of its own', () => {
         renderNavigation();
 
         const spaces = screen.getAllByRole('link');
@@ -25,7 +25,23 @@ describe('SpaceNavigation', () => {
             ['Discover', '#/discover'],
             ['Mail', '#/mail'],
             ['Cases', '#/cases'],
+            ['Agent', '#/agent'],
+            ['Tasks', '#/tasks'],
+            ['Calendar', '#/calendar'],
+            ['People', '#/people'],
         ]);
+    });
+
+    it('says in a placeholder link’s own name that there is nothing behind it yet', () => {
+        renderNavigation();
+
+        expect(screen.getByRole('link', { name: 'Tasks — not built yet' })).toBeDefined();
+    });
+
+    it('leaves a space that is built to be named by what it is, with nothing appended', () => {
+        renderNavigation();
+
+        expect(screen.getByRole('link', { name: 'Mail' })).toBeDefined();
     });
 
     it('marks the space being shown as the current one, and no other', () => {

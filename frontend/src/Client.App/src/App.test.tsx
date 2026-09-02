@@ -397,7 +397,9 @@ function openingAt(address: string): void {
 }
 
 async function goTo(space: string): Promise<void> {
-    fireEvent.click(screen.getByRole('link', { name: space }));
+    // Matched on the start of the name rather than the whole of it: a space with nothing behind it yet says so in its
+    // own accessible name, and this helper is used to reach both kinds.
+    fireEvent.click(screen.getByRole('link', { name: new RegExp(`^${space}`, 'u') }));
 
     await screen.findByRole('heading', { name: space, level: 1 });
 }
@@ -613,7 +615,13 @@ describe('App session', () => {
         renderApp(servedFrom, heldCredential, granting('mailfathom.mail.read'));
         await framed();
 
-        expect(screen.getAllByRole('link').map((space) => space.textContent)).toEqual(['Mail', 'Cases']);
+        expect(screen.getAllByRole('link').map((space) => space.textContent)).toEqual([
+            'Mail',
+            'Cases',
+            'Tasks',
+            'Calendar',
+            'People',
+        ]);
     });
 
     it('says what the credential may not do, so an absence is not read as a client that is broken', async () => {

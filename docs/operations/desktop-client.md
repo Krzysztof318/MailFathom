@@ -41,8 +41,8 @@ Nothing is published for macOS, and neither Android nor iOS is a head this proje
 
 - **It installs the application and its own bundle**, which is the client's compiled web assets and the Rust shell that
   opens a window over them. MailFathom's own `LICENSE` and `NOTICE` are installed with it, in the application's
-  resource directory, and the notice covering the five packages the bundle itself carries travels inside the bundle
-  as `THIRD-PARTY-NOTICES.txt`.
+  resource directory, and the notice covering everything the bundle itself carries — the five packages, the typeface,
+  and the icon outlines — travels inside the bundle as `THIRD-PARTY-NOTICES.txt`.
 - **It brings no rendering engine on Linux.** Both packages link against the WebKitGTK and GTK your distribution
   ships and patches rather than carrying a copy. The `.deb` names `libwebkit2gtk-4.1-0` and `libgtk-3-0` as
   dependencies, so `apt` installs them with it; the `.rpm` names none, because those same libraries carry different

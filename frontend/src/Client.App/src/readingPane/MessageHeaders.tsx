@@ -3,8 +3,9 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { MailMessageHeaders, MailParticipant, MailParticipantRole } from '@mailfathom/client-backend';
+import { SenderAvatar } from '../controls/SenderAvatar';
 import type { MessageKey } from '../localization/en';
-import type { Locale } from '../localization/locale';
+import { wordInstant } from '../localization/instants';
 import { useLocalization } from '../localization/useLocalization';
 
 // What a message displays above its body: what it is called, who wrote it, when, and everybody else it names. The
@@ -35,23 +36,47 @@ export function MessageHeaders({ headers }: { readonly headers: MailMessageHeade
 
     const authors = headers.participants.filter((participant) => participant.role === 'From');
     const others = headers.participants.filter((participant) => participant.role !== 'From');
-    const sentAt = instantOf(headers.sentAt, locale);
+    const author = authors.at(0) ?? null;
+    const sentAt = wordInstant(headers.sentAt, locale, 'full');
+    const receivedAt = wordInstant(headers.receivedAt, locale, 'full');
 
     return (
-        <header className="flex flex-col gap-2 border-b border-line-soft pb-4">
-            <h2 className="text-xl font-semibold tracking-tight">
+        <header className="flex flex-col gap-3 border-b border-line-soft pb-4">
+            <h2 className="text-4xl font-semibold tracking-tight text-balance">
                 {headers.subject ?? translate('message.noSubject')}
             </h2>
 
-            <p className="text-sm text-text-soft">
-                {authors.length === 0
-                    ? translate('message.noAuthor')
-                    : authors.map((author) => named(author)).join(', ')}
-            </p>
+            <div className="flex items-center gap-3">
+                <SenderAvatar displayName={author?.displayName ?? null} address={author?.address ?? null} />
 
-            <p className="text-sm text-muted">
-                {sentAt === null ? translate('message.sentAtUnknown') : translate('message.sentAt', { when: sentAt })}
-            </p>
+                <div className="flex min-w-0 flex-col gap-0.5">
+                    <p className="text-md font-semibold text-text">
+                        {authors.length === 0
+                            ? translate('message.noAuthor')
+                            : authors.map((one) => named(one)).join(', ')}
+                    </p>
+
+                    {/* Two instants rather than one, because they answer different questions and disagree whenever a
+                        message sat somewhere: when the author says they wrote it, and when this deployment's last
+                        receiving hop actually recorded it. Each is placed against the reader's own clock, and each
+                        keeps the machine-readable form the service sent beside it. */}
+                    <p className="flex flex-wrap gap-x-3 text-sm text-muted">
+                        {sentAt === null ? (
+                            translate('message.sentAtUnknown')
+                        ) : (
+                            <time dateTime={headers.sentAt ?? undefined}>
+                                {translate('message.sentAt', { when: sentAt })}
+                            </time>
+                        )}
+
+                        {receivedAt === null ? null : (
+                            <time dateTime={headers.receivedAt ?? undefined}>
+                                {translate('message.receivedAt', { when: receivedAt })}
+                            </time>
+                        )}
+                    </p>
+                </div>
+            </div>
 
             {others.length === 0 ? null : <OtherParticipants participants={others} />}
         </header>
@@ -95,18 +120,4 @@ function named(participant: MailParticipant): string {
     return participant.displayName === null
         ? participant.address
         : `${participant.displayName} <${participant.address}>`;
-}
-
-// The instant as the platform words it under the active language, rather than as anything a catalogue holds. A date the
-// sender wrote that this client cannot read is an absence rather than a value to repair.
-function instantOf(instant: string | null, locale: Locale): string | null {
-    if (instant === null) {
-        return null;
-    }
-
-    const at = Date.parse(instant);
-
-    return Number.isNaN(at)
-        ? null
-        : new Intl.DateTimeFormat(locale, { dateStyle: 'long', timeStyle: 'short' }).format(at);
 }

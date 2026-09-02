@@ -13,10 +13,13 @@ import {
     type DeploymentEntryResult,
     type SignInRefusal,
 } from '@mailfathom/client-backend';
+import { Icon } from '../controls/Icon';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { DeploymentTransport } from '../deployment/sendToDeployment';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { ConnectionDetails } from './ConnectionDetails';
+import { portOf, resolveConnection } from './connection';
 import { resolveCredentialEntry, type CredentialEntryRefusal } from './credentialEntry';
 import { CredentialNotices, type CredentialNotice } from './CredentialNotices';
 import type { CredentialLifetime } from './credentialStore';
@@ -86,7 +89,13 @@ const lifetimeMessages: Readonly<Record<CredentialLifetime, MessageKey>> = {
     untilTheClientCloses: 'signIn.keptUntilTheClientCloses',
 };
 
-const fieldStyle = 'rounded-md border border-line bg-panel px-3 py-2 text-text';
+// One shape for every field on this screen, stated once. The focus treatment is the design project's — the line goes
+// to the accent and the tint widens behind it — and it is written with `focus-within` on the box rather than on the
+// input, because the box is what the reveal control and the port hint stand inside.
+const fieldBox =
+    'flex items-center gap-2 rounded-xl border border-line-strong bg-panel px-3 transition focus-within:border-accent focus-within:ring-4 focus-within:ring-accent-soft';
+
+const fieldInput = 'min-h-11 min-w-0 flex-1 bg-transparent text-md text-text outline-none';
 
 export function SignIn({
     deployment,
@@ -106,6 +115,7 @@ export function SignIn({
     const [clearTextPermitted, setClearTextPermitted] = useState(false);
     const [userName, setUserName] = useState('');
     const [password, setPassword] = useState('');
+    const [revealed, setRevealed] = useState(false);
     const [presenting, setPresenting] = useState(false);
     const [refusal, setRefusal] = useState<SignInScreenRefusal | null>(null);
     const address = useRef<HTMLInputElement>(null);
@@ -269,11 +279,16 @@ export function SignIn({
         attempt.current?.abort();
     }
 
+    // What the typed address resolves to, computed during render rather than held beside the entry: it is a pure
+    // function of two values this component already has, and a second piece of state kept in step with them is the
+    // pair that eventually disagrees. It is `null` on this screen wherever no address is being typed at all.
+    const connection = deployment === null ? resolveConnection(entry, clearTextPermitted) : null;
+
     return (
         <section className="flex flex-col gap-6">
-            <div className="flex flex-col gap-2">
-                <h2 className="text-xl font-semibold text-text">{translate('signIn.title')}</h2>
-                <p className="text-sm">{translate('signIn.explanation')}</p>
+            <div className="flex flex-col gap-1">
+                <h2 className="text-4xl font-semibold tracking-tight text-text">{translate('signIn.title')}</h2>
+                <p className="text-base text-muted">{translate('signIn.explanation')}</p>
             </div>
 
             <CredentialNotices notices={notices} ref={notified} />
@@ -287,49 +302,91 @@ export function SignIn({
             >
                 {deployment === null ? (
                     <>
-                        <div className="flex flex-col gap-2">
-                            <label className="text-sm font-medium text-text" htmlFor="sign-in-address">
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-sm font-medium text-text-soft" htmlFor="sign-in-address">
                                 {translate('connect.address')}
                             </label>
-                            <input
-                                // The refusal joins the hint rather than replacing it, so somebody reading the field
-                                // hears why it was refused and what it wants, in that order, without moving off it.
-                                aria-describedby={describedBy('sign-in-address-hint')}
-                                aria-invalid={marks('address')}
-                                autoComplete="off"
-                                className={fieldStyle}
-                                id="sign-in-address"
-                                inputMode="url"
-                                ref={address}
-                                spellCheck={false}
-                                type="text"
-                                value={entry}
-                                onChange={(event) => {
-                                    setEntry(event.target.value);
-                                    setRefusal(null);
-                                }}
-                            />
-                            <p className="text-sm text-muted" id="sign-in-address-hint">
-                                {translate('connect.addressHint')}
+                            <div className={fieldBox}>
+                                <input
+                                    // The refusal joins the hint rather than replacing it, so somebody reading the
+                                    // field hears why it was refused and what it wants, in that order, without moving
+                                    // off it.
+                                    aria-describedby={describedBy('sign-in-address-hint')}
+                                    aria-invalid={marks('address')}
+                                    autoComplete="off"
+                                    className={fieldInput}
+                                    id="sign-in-address"
+                                    inputMode="url"
+                                    ref={address}
+                                    spellCheck={false}
+                                    type="text"
+                                    value={entry}
+                                    onChange={(event) => {
+                                        setEntry(event.target.value);
+                                        setRefusal(null);
+                                    }}
+                                />
+
+                                {/* The port this will actually reach, said beside the field while it is being typed.
+                                    Out of the accessibility tree because the sentence under the field says the same
+                                    thing in words, and hearing a bare number after every keystroke is noise. */}
+                                {connection === null ? null : (
+                                    <span aria-hidden="true" className="shrink-0 text-xs whitespace-nowrap text-faint">
+                                        {translate('connect.portHint', { port: portOf(connection) })}
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-xs text-muted" id="sign-in-address-hint">
+                                {translate('connect.addressHint')}{' '}
+                                {connection?.port === null
+                                    ? translate('connect.portDefaultNote', { port: portOf(connection) })
+                                    : null}
                             </p>
                         </div>
 
+                        {/* The one control on this screen that gives something away, drawn as the design project draws
+                            it: a bordered row that turns to the warning weight once it is on, with the sentence about
+                            what it costs revealed underneath rather than standing there permanently. The row is a
+                            `label` around a real checkbox, so it is operable from the keyboard and announced as one. */}
                         <div className="flex flex-col gap-2">
-                            <label className="flex items-center gap-2 text-sm font-medium text-text">
+                            <label
+                                className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${
+                                    clearTextPermitted
+                                        ? 'border-warning bg-warning-soft'
+                                        : 'border-line bg-panel hover:border-line-strong'
+                                }`}
+                            >
                                 <input
                                     aria-describedby="sign-in-clear-text-explanation"
+                                    // The name is pinned rather than taken from the label's contents, because the
+                                    // label wraps the whole row — which is what makes the row a target somebody can
+                                    // hit — and the sentence about what this costs would otherwise be read twice: once
+                                    // as the name of the control and again as its description.
+                                    aria-label={translate('connect.clearText')}
                                     checked={clearTextPermitted}
+                                    className="mt-0.5 size-4 shrink-0 accent-warning"
                                     type="checkbox"
                                     onChange={(event) => {
                                         setClearTextPermitted(event.target.checked);
                                         setRefusal(null);
                                     }}
                                 />
-                                {translate('connect.clearText')}
+                                <span className="flex flex-col gap-1">
+                                    <span className="text-base font-medium text-text">
+                                        {translate('connect.clearText')}
+                                    </span>
+                                    <span className="text-xs text-muted" id="sign-in-clear-text-explanation">
+                                        {translate('connect.clearTextExplanation')}
+                                    </span>
+                                </span>
                             </label>
-                            <p className="text-sm text-warning" id="sign-in-clear-text-explanation">
-                                {translate('connect.clearTextExplanation')}
-                            </p>
+
+                            {clearTextPermitted ? (
+                                <p className="flex items-start gap-2 rounded-lg border border-warning bg-warning-soft px-3 py-2 text-xs text-warning-text">
+                                    <Icon name="warning" className="mt-px size-4" />
+                                    {translate('connect.clearTextInForce')}
+                                </p>
+                            ) : null}
                         </div>
                     </>
                 ) : null}
@@ -337,53 +394,76 @@ export function SignIn({
                 {/* Neither field carries a `maxLength`, deliberately: it truncates a paste without saying so, and a
                     password silently shortened is refused by the deployment and read back as a wrong password.
                     `resolveCredentialEntry` refuses what is too long by name instead. */}
-                <div className="flex flex-col gap-2">
-                    <label className="text-sm font-medium text-text" htmlFor="sign-in-user-name">
+                <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-medium text-text-soft" htmlFor="sign-in-user-name">
                         {translate('signIn.userName')}
                     </label>
-                    <input
-                        aria-describedby={describedBy('sign-in-kept')}
-                        aria-invalid={marks('userName')}
-                        autoComplete="username"
-                        className={fieldStyle}
-                        id="sign-in-user-name"
-                        ref={name}
-                        spellCheck={false}
-                        type="text"
-                        value={userName}
-                        onChange={(event) => {
-                            setUserName(event.target.value);
-                            setRefusal(null);
-                        }}
-                    />
+                    <div className={fieldBox}>
+                        <input
+                            aria-describedby={describedBy('sign-in-kept')}
+                            aria-invalid={marks('userName')}
+                            autoComplete="username"
+                            className={fieldInput}
+                            id="sign-in-user-name"
+                            ref={name}
+                            spellCheck={false}
+                            type="text"
+                            value={userName}
+                            onChange={(event) => {
+                                setUserName(event.target.value);
+                                setRefusal(null);
+                            }}
+                        />
+                    </div>
                 </div>
 
-                <div className="flex flex-col gap-2">
-                    <label className="text-sm font-medium text-text" htmlFor="sign-in-password">
+                <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-medium text-text-soft" htmlFor="sign-in-password">
                         {translate('signIn.password')}
                     </label>
-                    <input
-                        aria-describedby={describedBy('sign-in-kept')}
-                        aria-invalid={marks('password')}
-                        autoComplete="current-password"
-                        className={fieldStyle}
-                        id="sign-in-password"
-                        type="password"
-                        value={password}
-                        onChange={(event) => {
-                            setPassword(event.target.value);
-                            setRefusal(null);
-                        }}
-                    />
+                    <div className={fieldBox}>
+                        <input
+                            aria-describedby={describedBy('sign-in-kept')}
+                            aria-invalid={marks('password')}
+                            autoComplete="current-password"
+                            className={fieldInput}
+                            id="sign-in-password"
+                            type={revealed ? 'text' : 'password'}
+                            value={password}
+                            onChange={(event) => {
+                                setPassword(event.target.value);
+                                setRefusal(null);
+                            }}
+                        />
+
+                        {/* A real button rather than a word somebody clicks, so it is reachable from the keyboard and
+                            announced as what it does. Its accessible name says the action; the word beside it is what
+                            the design shows and is out of the accessibility tree because it would be read twice. */}
+                        <button
+                            aria-label={translate(
+                                revealed ? 'signIn.hidePasswordControl' : 'signIn.revealPasswordControl',
+                            )}
+                            className="-me-2 shrink-0 rounded-lg px-2 py-1 text-sm text-muted transition hover:bg-hover hover:text-text"
+                            type="button"
+                            onClick={() => {
+                                setRevealed(!revealed);
+                            }}
+                        >
+                            <span aria-hidden="true">
+                                {translate(revealed ? 'signIn.hidePassword' : 'signIn.revealPassword')}
+                            </span>
+                        </button>
+                    </div>
                 </div>
 
                 <div className="flex items-center gap-3">
                     <button
-                        className="rounded-md bg-accent px-4 py-2 font-medium text-on-accent transition disabled:opacity-60"
+                        className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-accent px-4 text-md font-semibold text-on-accent transition hover:bg-accent-strong disabled:opacity-70"
                         disabled={presenting}
                         ref={submit}
                         type="submit"
                     >
+                        {presenting ? <Spinner /> : null}
                         {translate('signIn.submit')}
                     </button>
 
@@ -391,20 +471,43 @@ export function SignIn({
                         <SecondaryButton label={translate('signIn.abandon')} shape="form" onActivate={abandon} />
                     ) : null}
                 </div>
+
+                {/* Only where an address is being typed: a client served by its own deployment is not being pointed
+                    anywhere, so there is no connection for a reader to check before handing over a password. */}
+                {deployment === null ? <ConnectionDetails connection={connection} /> : null}
             </form>
 
-            <p className="text-sm text-muted" id="sign-in-kept">
+            <p className="text-xs text-muted" id="sign-in-kept">
                 {translate(lifetimeMessages[lifetime])}
             </p>
 
-            {presenting ? <p role="status">{translate('signIn.presenting')}</p> : null}
+            {presenting ? (
+                <p className="text-sm text-muted" role="status">
+                    {translate('signIn.presenting')}
+                </p>
+            ) : null}
 
             {shown === null || presenting ? null : (
-                <p className="text-warning" id="sign-in-refusal" role="alert">
+                <p
+                    className="rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning-text"
+                    id="sign-in-refusal"
+                    role="alert"
+                >
                     {translate(shown.message)}
                 </p>
             )}
         </section>
+    );
+}
+
+// What a submit says while it is waiting. Out of the accessibility tree because the sentence below the form is what
+// announces the wait; this is the same statement drawn, for a reader who is looking at the button they just pressed.
+function Spinner() {
+    return (
+        <span
+            aria-hidden="true"
+            className="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
+        />
     );
 }
 

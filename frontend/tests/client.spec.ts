@@ -4,7 +4,7 @@
 
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Browser, type Locator, type Page } from '@playwright/test';
 
 // What the unit suite structurally cannot answer, asked of the directory of static files `pnpm build` writes, in a
 // browser: the bundle is the built one rather than the source, the document is a real one with a history, the window
@@ -380,7 +380,7 @@ async function readOnward(page: Page, list: Locator): Promise<void> {
 
 async function signIn(page: Page): Promise<void> {
     await page.getByRole('textbox', { name: 'User name' }).fill(userName);
-    await page.getByLabel('Password').fill(password);
+    await page.getByLabel('Password', { exact: true }).fill(password);
     await page.getByRole('button', { name: 'Sign in' }).click();
 
     await expect(page.getByRole('navigation', { name: 'Spaces' })).toBeVisible();
@@ -575,12 +575,12 @@ test('stays usable at the narrowest width a supported head presents', async ({ p
     await openSignedIn(page);
 
     // 320 CSS pixels is the bar `frontend/src/AGENTS.md` sets, and what is asked of it is that the frame still holds
-    // everything rather than that it looks the same: the space, the intent field, its scope, and all three
-    // destinations. Nothing is dropped by width, and the window it is measured in is the width alone.
+    // everything rather than that it looks the same: the space, the intent field, its scope, and every destination the
+    // design project shows. Nothing is dropped by width, and the window it is measured in is the width alone.
     await expect(page.getByRole('heading', { name: 'Discover', level: 1 })).toBeVisible();
     await expect(page.getByRole('searchbox', { name: 'Ask your mail' })).toBeVisible();
     await expect(page.getByRole('combobox', { name: 'Mailbox in scope' })).toBeVisible();
-    await expect(page.getByRole('navigation', { name: 'Spaces' }).getByRole('link')).toHaveCount(3);
+    await expect(page.getByRole('navigation', { name: 'Spaces' }).getByRole('link')).toHaveCount(7);
 });
 
 test('signs in at the narrowest width a supported head presents', async ({ page }) => {
@@ -591,8 +591,13 @@ test('signs in at the narrowest width a supported head presents', async ({ page 
     // The screen in front of the frame meets the same bar the frame does, and it is the one screen nobody can go
     // around: a form that overflowed at this width would be a client somebody could not sign in to at all.
     await expect(page.getByRole('textbox', { name: 'User name' })).toBeVisible();
-    await expect(page.getByLabel('Password')).toBeVisible();
+    await expect(page.getByLabel('Password', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
+
+    // The heading is asked for here rather than in jsdom because what would take it away is a breakpoint: the brand
+    // half drops its claim below the split, and a top-level heading that went with it would leave a screen reader
+    // starting at the form's own `h2` at exactly the widths a phone presents. Only a browser lays that out.
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
 
     // The document's own overflow rather than the body's box: `body` is a block element with no width rule, so its
     // used width is the viewport's whatever a child inside it does, and an assertion on it could not fail.
@@ -633,6 +638,63 @@ test('opens again in the language that was chosen, after the page is loaded afre
     // object to.
     await expect(discover).toHaveCount(0);
     await expect(page.locator('html')).toHaveAttribute('lang', 'pl');
+});
+
+// What language the client opens in when nobody has chosen one. Only a browser can answer it: `navigator.languages` is
+// the machine's own preference list, jsdom reports whatever the process was started with, and what this asks is that a
+// real head reads a real preference. Each case gets a context of its own because the preference is a property of the
+// browser context rather than of the page.
+async function openedPreferring(browser: Browser, languages: readonly string[]): Promise<Page> {
+    const context = await browser.newContext({ locale: languages[0] ?? 'en-US' });
+
+    // `locale` sets the first entry alone. The rule being proven walks the whole list, so the list itself is what is
+    // put in front of the client — and an empty one is the head that reports no preference at all.
+    await context.addInitScript(
+        `Object.defineProperty(navigator, 'languages', { get: () => ${JSON.stringify(languages)} })`,
+    );
+
+    const page = await context.newPage();
+    await servedByADeployment(page);
+    await page.goto('/');
+
+    return page;
+}
+
+test('opens in Polish on a machine that prefers Polish, with nothing configured', async ({ browser }) => {
+    const page = await openedPreferring(browser, ['pl-PL', 'en-US']);
+
+    await expect(page.locator('html')).toHaveAttribute('lang', 'pl');
+    await expect(page.getByRole('button', { name: 'Sign in' })).toHaveCount(0);
+});
+
+test('opens in English on a machine preferring a language the client does not carry', async ({ browser }) => {
+    const page = await openedPreferring(browser, ['de-DE', 'fr-FR']);
+
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+    await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
+});
+
+test('opens in English on a head that reports no language preference at all', async ({ browser }) => {
+    const page = await openedPreferring(browser, []);
+
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+});
+
+test('lets a choice outrank the machine preference, and keeps it across a reload', async ({ browser }) => {
+    const page = await openedPreferring(browser, ['pl-PL']);
+    await expect(page.locator('html')).toHaveAttribute('lang', 'pl');
+
+    // Found by the one string the client deliberately never translates — a language is named in its own language, so
+    // somebody who landed in one they cannot read finds their own — rather than by a label this page is showing in
+    // Polish, which would put a second copy of the catalogue in this file.
+    const language = page.getByRole('combobox').filter({ has: page.getByRole('option', { name: 'Polski' }) });
+
+    await language.selectOption('en');
+    await page.reload();
+
+    // The machine still prefers Polish and the client still opens in English, which is the whole of what "explicit
+    // outranks detected" means — and the reload is what proves the choice was written rather than held in memory.
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 });
 
 test('keeps the folder tree as it was left, across a reload', async ({ page }) => {

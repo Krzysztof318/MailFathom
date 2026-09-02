@@ -195,26 +195,31 @@ client's file types. Prettier reads it: its CLI respects `.editorconfig` by defa
 those values in a second file that would drift. Prettier's own configuration here is `.prettierignore` and nothing
 more.
 
-## Three spaces, one frame, and no router
+## Seven spaces, one frame, and no router
 
-The client is **Discover**, **Mail**, and **Cases**, and they are one application rather than three: `src/App.tsx` is
-the frame that holds them, and it is what a person carries their question, their scope, and their selection across.
+The client is **Discover**, **Mail**, **Cases**, **Agent**, **Tasks**, **Calendar**, and **People**, and they are one
+application rather than seven: `src/App.tsx` is the frame that holds them, and it is what a person carries their
+question, their scope, and their selection across. Only **Mail** is built — `src/routing/spaces.ts` names that in
+`implementedSpaces` — and the other six are present, named as placeholders, and say in a sentence that there is nothing
+behind them yet. They are drawn rather than hidden because the design project is what the client is measured against
+and it shows all seven; a rail with three destinations would be a different product from the one that was designed.
 The frame is one tree laid out two ways by the width it is given — a navigation rail beside the workspace at or above
 the `workspace` breakpoint, bottom navigation under a stack of screens below it — and nothing in it reads which head or
 which platform it is running on.
 
 Two questions are answered before the frame is drawn at all: which deployment this client belongs to, and who is
 asking it. `src/signIn/` is where both are, as one form rather than two screens, because a person was handed the
-address and the credential together — and it stands in front of the frame rather than inside it, because three spaces
-with nothing behind them are a frame around nothing. Where the origin that served the client is the deployment, the
+address and the credential together — and it stands in front of the frame rather than inside it, because a frame
+with nothing behind it is a frame around nothing. Where the origin that served the client is the deployment, the
 address half is simply not rendered. One form is still two requests wherever the address was typed: the client asks
 what is at it before handing it a password, so a mistyped host is told apart from a refused credential and receives
 nothing. Once somebody is signed in, focus moves to the start of the workspace rather than staying on the control that
 reached it.
 
-Each space is reached at a **fragment address** of its own: `#/discover`, `#/mail`, `#/cases`. `src/routing/` is the
-whole of it, and it is deliberately not a package — three addresses with no segment, no parameter, and no nested tree
-are what `location.hash` and `hashchange` already are, and the browser keeps the history for us. A fragment rather than
+Each space is reached at a **fragment address** of its own: `#/discover`, `#/mail`, and one per space after them.
+`src/routing/` is the whole of it, and it is deliberately not a package — a handful of addresses with no segment, no
+parameter, and no nested tree are what `location.hash` and `hashchange` already are, and the browser keeps the history
+for us. A fragment rather than
 a path because a path would have to be reloadable, and the service serves the bundle with no fallback mapping an
 unmatched path onto the entry document; a fragment never reaches a server, so every address reloads on both heads with
 nothing configured.
@@ -300,14 +305,22 @@ something to write into.
 
 ## Styling, and the two themes
 
-Tailwind is wired CSS-first through `@tailwindcss/vite`. The palette, the type scale, the breakpoint the composition
-changes at, the safe-area insets, and the motion defaults are `@theme` tokens in `src/Client.App/src/styles.css`, and
-there is no JavaScript configuration file.
+Tailwind is wired CSS-first through `@tailwindcss/vite`. The palette, the type scale, the radii, the shadow steps, the
+breakpoints the composition changes at, the safe-area insets, and the motion defaults are `@theme` tokens in
+`src/Client.App/src/styles.css`, and there is no JavaScript configuration file.
 
-The colours come in two layers. `--color-fathom-*` is MailFathom's own ramp, sampled from the product icon; everything
-a screen actually composes against is a **semantic** name set from it — a panel, a rail, a sunken region, two line
+Every value there is the design project's rather than this repository's, declared in OKLCH under two themes. What a
+screen composes against is never a hue but a **semantic** name — a page, a panel, a rail, a sunken region, three line
 weights, four text weights, an accent, a healthy state, a warning. Both themes declare the same names, which is what
 lets the light and the dark client be one set of utilities rather than a `dark:` variant on every one of them.
+
+The typeface and the symbols are in the bundle for the same reason the credential never leaves it: **no screen reaches
+an external origin.** Instrument Sans is committed under `src/Client.App/src/assets/fonts/` and declared by
+`@font-face` rules pointing at those files, and the Material Symbols Rounded outlines under
+`src/Client.App/src/assets/icons/` are inlined at build time by `src/Client.App/src/controls/icons.ts`, which is the
+only place the client draws a symbol from. A deployment on a private network therefore renders the way it was designed,
+a reader hands no font CDN a request per screen, and the browser suite asserts that the built bundle asks for nothing
+off its own origin.
 
 `src/theme/` decides which of the two is painted, from the person's choice of light, dark, or following the machine.
 It writes one `data-theme` attribute on the document before the first paint, so nothing on a screen ever asks which
@@ -320,9 +333,10 @@ deployment shape: the container image builds this in a stage of its own and copi
 what a deployment gains is files and a setting rather than a second service.
 
 `src/Client.App/public/` is copied into that directory verbatim, and it holds one file:
-`THIRD-PARTY-NOTICES.txt`, the MIT notice of the five packages the bundle actually redistributes. The build minifies
-every module into one chunk and none of the five carries a banner of its own, so the notice travels as text beside
-the code rather than inside it. [The third-party register](../THIRD_PARTY_LICENSES.md) is where the review behind it
+`THIRD-PARTY-NOTICES.txt`, the notices of everything the bundle actually redistributes — the MIT text of the five
+packages, the SIL Open Font License the typeface is under, and the Apache-2.0 grant the icon outlines are under. The
+build minifies every module into one chunk and none of the five carries a banner of its own, and a `woff2` file and an
+inlined path carry nothing at all, so the notices travel as text beside the code rather than inside it. [The third-party register](../THIRD_PARTY_LICENSES.md) is where the review behind it
 lives, and it is what says which packages that file has to name.
 
 The version the client displays comes from `<VersionPrefix>` in `Version.props`, read at build time through

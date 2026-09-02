@@ -4,10 +4,10 @@
 
 import { useEffect, useRef, type ReactNode } from 'react';
 import { useLocalization } from '../localization/useLocalization';
-import { spaceLabels, type Space as SpaceName } from '../routing/spaces';
+import { implementedSpaces, spaceLabels, type Space as SpaceName } from '../routing/spaces';
 
-// The region the address decides the contents of. What each of the three spaces actually holds is built by its own
-// issue; what this owns permanently is where a space is rendered and what happens to focus when the address changes.
+// The region the address decides the contents of. What each space actually holds is built by its own issue; what this
+// owns permanently is where a space is rendered and what happens to focus when the address changes.
 
 export function Space({
     space,
@@ -43,14 +43,16 @@ export function Space({
                 measure that keeps prose readable is the wrong bound for a scope selector beside a list beside a
                 message. */}
             <div className={`flex flex-col gap-3 ${space === 'mail' ? '' : 'max-w-3xl'}`}>
-                <h1 className="text-2xl font-semibold tracking-tight">{translate(spaceLabels[space])}</h1>
+                <h1 className="text-4xl font-semibold tracking-tight">{translate(spaceLabels[space])}</h1>
 
                 {/* The note belongs to a space that holds nothing, which Mail no longer is: it reads its own mail now,
                     and a sentence saying otherwise above a working list is a screen contradicting itself. What Mail
                     holds is composed above rather than reached for here, because this region owns where a space is
                     drawn and what happens to focus, and a space that read something of its own would make that true of
-                    one of the three and not the others. */}
-                {space === 'mail' ? null : <p className="text-sm text-muted">{translate('space.pending')}</p>}
+                    one space and not the others. */}
+                {implementedSpaces.includes(space) ? null : (
+                    <p className="text-base text-muted">{translate('space.pending')}</p>
+                )}
 
                 {/* Mail is the one space with anything in it, and what it has is the three regions a mail client is:
                     the scope selector, the list of what is in that scope, and the message being read. Stacked under a
@@ -58,7 +60,7 @@ export function Space({
                     breakpoint rather than one composition per head. */}
                 {space === 'mail' ? (
                     <div className="flex flex-col gap-6 workspace:flex-row workspace:flex-wrap workspace:items-start">
-                        <div className="workspace:w-64 workspace:shrink-0">{folders}</div>
+                        <div className="workspace:w-mailboxes workspace:shrink-0">{folders}</div>
                         {/* Wider than the folder tree beside it because a row carries four things on one line — who
                             wrote, where from, what the server marked it with, and when — and a column that cannot
                             hold them cuts short the two that are read first. It is the column that gives way where

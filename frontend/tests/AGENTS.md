@@ -108,9 +108,17 @@ question is answered again rather than reworded.
 - **Assert the words, not a key.** A test reads what a person reads, so it queries the sentence the catalogue carries.
   Writing that sentence out is the clearer form where it is short and English; importing the entry out of `en.ts` or
   `pl.ts` is the clearer form where the point of the test is that the _other_ language reached the screen.
-- **A formatted value is asserted by asking `Intl` the same question the screen asked it.** The machine's own time zone
-  decides what a date reads as, so an expectation spelled out by hand would be an expectation about the machine rather
-  than about the locale reaching the formatter — and it would fail on a runner in another zone.
+- **A formatted value is asserted by asking `Intl` the same question the screen asked it**, wherever the zone is not
+  part of what is being proven. A number, a list, or a plural reads the same everywhere, so an expectation spelled out
+  by hand there would be an expectation about the catalogue rather than about the locale reaching the formatter.
+- **An instant is the exception, and is asserted by pinning a zone and writing the spelling out.** The rule above cannot
+  prove the one thing that matters about a date — that the screen placed it against the _reader's_ day — because a
+  formatter the test built the same way passes identically for a screen that named `timeZone: 'UTC'` and for one that
+  named nothing, which is the defect. So a test for `localization/instants.ts` or for anything wording an instant sets
+  `process.env['TZ']` before it formats, restores it in an `afterEach` of the same file for the reason a fake clock is
+  released, and asserts the literal string that zone produces — the same instant read in two zones, so that a screen
+  that stopped honouring the runtime's zone fails rather than agreeing with itself. Node re-reads the variable at
+  assignment, which is what makes this work at all and why a zone is never passed to `Intl` to simulate one.
 - `LocalizationProvider` is mounted above whatever is rendered, the way `main.tsx` mounts it. `useLocalization` throws
   without it rather than falling back to English, so a test that forgets it fails loudly instead of proving a screen
   against an arrangement the application does not use.

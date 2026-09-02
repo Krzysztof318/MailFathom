@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import { addressOf, isSpace, spaceAt, spaces } from './spaces';
+import { addressOf, implementedSpaces, isSpace, spaceAt, spaces } from './spaces';
 
 describe('addressOf', () => {
     it.each(spaces)('writes %s as a fragment, so the address reloads without a server rule', (space) => {
@@ -26,9 +26,15 @@ describe('spaceAt', () => {
 });
 
 describe('isSpace', () => {
-    it('refuses a value that is not one of the three, whatever its type', () => {
-        expect(isSpace('agent')).toBe(false);
+    it('refuses a value the client carries no space for, whatever its type', () => {
+        expect(isSpace('archive')).toBe(false);
         expect(isSpace(null)).toBe(false);
         expect(isSpace(0)).toBe(false);
+    });
+});
+
+describe('implementedSpaces', () => {
+    it('names only spaces the client actually carries, so nothing is drawn as working that is not', () => {
+        expect(implementedSpaces.every((space) => spaces.includes(space))).toBe(true);
     });
 });

@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ClientSession, DeploymentAddress, MailFathomTransport } from '@mailfathom/client-backend';
+import { BrandMark } from './controls/BrandMark';
 import { SecondaryButton } from './controls/SecondaryButton';
 import { forgetDeployment, storeDeployment, type AdoptedDeployment } from './deployment/adoptedDeployment';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
@@ -35,7 +36,7 @@ import { emptyWorkspace, useWorkspace } from './workspace/useWorkspace';
 // stack of screens — and nothing in it asks which head or which platform it is running on.
 //
 // In front of it stands what every run answers first: which deployment this client belongs to, and who is asking it.
-// That is a screen rather than a state of the frame, because three spaces with nothing behind them are a frame around
+// That is a screen rather than a state of the frame, because a frame with nothing behind it is a frame around
 // nothing — and the two halves of the answer are one screen because a person was handed all of it together.
 //
 // What the frame holds is then the session's answer rather than a fixed set: the deployment says what this credential
@@ -389,35 +390,52 @@ function SignInScreen({
     const { translate } = useLocalization();
 
     return (
-        <main className="min-h-dvh bg-page px-4 py-8 pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left">
-            <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
-                <header className="flex flex-wrap items-center justify-between gap-3 border-b border-line-soft pb-4">
+        <div className="flex min-h-dvh flex-col bg-page pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left split:flex-row">
+            {/* The brand half. Above the split it is a column standing beside the form and carrying the claim; below
+                it the claim goes and what is left is a strip naming the product, because a narrow window's room
+                belongs to the form somebody came here to fill rather than to a sentence about it. */}
+            <aside className="flex shrink-0 items-center gap-3 border-b border-line bg-rail px-4 py-4 split:basis-2/5 split:flex-col split:items-start split:justify-center split:gap-10 split:border-e split:border-b-0 split:px-12">
+                {/* The product's name is the screen's heading at every width, rather than the claim beneath it: the
+                    claim is the half a narrow window drops, and a heading that disappears with the composition would
+                    leave the form's own `h2` as the first heading on the page below the split. What is decided by
+                    width here is what is drawn, never what the document is made of. */}
+                <div className="flex items-center gap-3 split:self-start">
+                    <BrandMark className="size-9 split:size-10" />
                     <h1 className="text-2xl font-semibold tracking-tight">{translate('shell.title')}</h1>
+                </div>
 
-                    <div className="flex items-center gap-2">
-                        <p className="font-mono text-xs text-faint">{__MAILFATHOM_VERSION__}</p>
+                <div className="hidden max-w-sm flex-col gap-4 split:flex">
+                    <p className="text-5xl font-semibold tracking-tight text-balance">{translate('signIn.claim')}</p>
+                    <p className="text-lg text-muted text-pretty">{translate('signIn.claimExplanation')}</p>
+                </div>
+            </aside>
+
+            <main className="flex flex-1 justify-center overflow-y-auto px-4 py-8 split:items-center split:px-12">
+                <div className="flex w-full max-w-sm flex-col gap-6">
+                    <div className="flex items-center justify-end gap-2">
+                        <p className="me-auto font-mono text-2xs text-faint">{__MAILFATHOM_VERSION__}</p>
                         <ThemeChoice />
                         <LanguageChoice />
                     </div>
-                </header>
 
-                {/* The way out of an address somebody named themselves, offered here rather than only inside the
-                    frame: a deployment that stopped accepting the credential, or one whose password is gone, leaves a
-                    person on this screen with no address field to correct — and a chosen address is read back out of
-                    storage on every later start, so reloading returns to the same one. */}
-                {chosen && deployment !== null ? (
-                    <ChosenDeployment address={deployment.baseAddress} onChange={onPointSomewhereElse} />
-                ) : null}
+                    {/* The way out of an address somebody named themselves, offered here rather than only inside the
+                        frame: a deployment that stopped accepting the credential, or one whose password is gone,
+                        leaves a person on this screen with no address field to correct — and a chosen address is read
+                        back out of storage on every later start, so reloading returns to the same one. */}
+                    {chosen && deployment !== null ? (
+                        <ChosenDeployment address={deployment.baseAddress} onChange={onPointSomewhereElse} />
+                    ) : null}
 
-                <SignIn
-                    deployment={deployment}
-                    lifetime={lifetime}
-                    notices={notices}
-                    send={send}
-                    onSignedIn={onSignedIn}
-                />
-            </div>
-        </main>
+                    <SignIn
+                        deployment={deployment}
+                        lifetime={lifetime}
+                        notices={notices}
+                        send={send}
+                        onSignedIn={onSignedIn}
+                    />
+                </div>
+            </main>
+        </div>
     );
 }
 

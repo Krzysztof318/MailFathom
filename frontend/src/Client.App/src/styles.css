@@ -6,67 +6,181 @@
 
 /*
  * The whole of the client's styling configuration. Tailwind is wired CSS-first through its Vite plugin, so the palette,
- * the type scale, the breakpoints, and the motion defaults are `@theme` tokens here and there is no JavaScript
- * configuration file to keep in step with them.
+ * the type scale, the radii, the shadow steps, the breakpoints, and the motion defaults are `@theme` tokens here and
+ * there is no JavaScript configuration file to keep in step with them.
  *
- * Two layers of colour, and only the first one names a hue. `--color-fathom-*` is MailFathom's own ramp, sampled from
- * `assets/icon-900.png` rather than picked by eye: the near-black navy the mark sits on, the blue across it, the pale
- * blue of the lettering, and the gold of the star. Everything below it is *semantic* — a panel, a rail, a line, a text
- * weight, a healthy state — and a screen composes against those names alone, which is what lets the second theme exist
- * as a block of values rather than as a `dark:` variant on every utility a screen writes.
+ * Every value below is the design project's rather than this file's. The project is the single source of truth for what
+ * MailFathom looks like, and it declares its palette in OKLCH under two themes; what this file adds is the semantic
+ * name each value is reached by, so a screen composes against `panel`, `line`, or `faint` and never learns a hue. Where
+ * a screen and the project disagree the project wins and the screen changes — the icon-sampled ramp that used to stand
+ * here was replaced by this one for exactly that reason, accent included.
  *
  * The light values are the ones declared in `@theme`; the block after it redeclares exactly the same names for dark and
  * nothing else. It sits outside every cascade layer deliberately: Tailwind emits `@theme` into its own `theme` layer,
  * and an unlayered declaration wins over any layered one whatever its specificity, so the override cannot be reordered
  * out of effect by a later import.
+ *
+ * The two families are served from the bundle and from nowhere else. A deployment that keeps mail on its own server
+ * does not hand a font CDN a request per reader, and the desktop head has to render with no route out at all, so the
+ * files sit under `assets/` and the `@font-face` rules below point at them relatively — which is what makes the built
+ * bundle carry them. `THIRD_PARTY_LICENSES.md` records both, and the icons beside them.
  */
 
 @import 'tailwindcss';
 
-@theme {
-    /* MailFathom's own ramp. Nothing outside this file uses these directly — they are what the semantic names below
-       are set from, so the brand lives in one place and a screen never learns a hue. */
-    --color-fathom-950: #010d33;
-    --color-fathom-800: #0028a0;
-    --color-fathom-600: #0048e0;
-    --color-fathom-500: #0068f8;
-    --color-fathom-200: #a8c8f8;
-    --color-fathom-star: #f8d848;
+/* Instrument Sans, the project's typeface, as the two variable faces Google Fonts publishes it in — one upright, one
+   italic, each covering the whole 400–700 range so a weight is an axis position rather than a second file. The two
+   subsets are split by `unicode-range` the way the upstream stylesheet splits them, so a reader whose mail is entirely
+   Latin-1 never pulls the extended file that Polish needs. */
+@font-face {
+    font-family: 'Instrument Sans';
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url('./assets/fonts/instrument-sans-latin.woff2') format('woff2');
+    unicode-range:
+        U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F,
+        U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 
+@font-face {
+    font-family: 'Instrument Sans';
+    font-style: normal;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url('./assets/fonts/instrument-sans-latin-ext.woff2') format('woff2');
+    unicode-range:
+        U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF,
+        U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+    font-family: 'Instrument Sans';
+    font-style: italic;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url('./assets/fonts/instrument-sans-italic-latin.woff2') format('woff2');
+    unicode-range:
+        U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F,
+        U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+    font-family: 'Instrument Sans';
+    font-style: italic;
+    font-weight: 400 700;
+    font-display: swap;
+    src: url('./assets/fonts/instrument-sans-italic-latin-ext.woff2') format('woff2');
+    unicode-range:
+        U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF,
+        U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@theme {
     /* Surfaces, from the page underneath everything to the chrome that sits on it. `sunken` is a region set into a
        panel — a side column, a summary strip — and `hover` is what any of them becomes under a pointer. */
-    --color-page: #f6f7fb;
-    --color-panel: #ffffff;
-    --color-rail: #eef0f7;
-    --color-sunken: #f1f3f9;
-    --color-hover: #e4e8f3;
+    --color-page: oklch(0.98 0.004 88);
+    --color-panel: oklch(1 0 0);
+    --color-rail: oklch(0.951 0.006 88);
+    --color-sunken: oklch(0.969 0.005 88);
+    --color-hover: oklch(0.906 0.01 88);
 
-    /* Two line weights and no more: one that separates regions, one that separates rows inside a region. */
-    --color-line: #d7dced;
-    --color-line-soft: #e8ebf5;
+    /* Three line weights: one that separates regions, one that separates rows inside a region, and one that draws the
+       edge of a control a person is meant to aim at — a field, a checkbox, a secondary button. */
+    --color-line: oklch(0.906 0.008 88);
+    --color-line-soft: oklch(0.949 0.005 88);
+    --color-line-strong: oklch(0.856 0.01 88);
 
     /* Four text weights, from what a sentence is written in down to what a timestamp is. */
-    --color-text: #0b1020;
-    --color-text-soft: #38405a;
-    --color-muted: #515a72;
-    --color-faint: #666f8a;
+    --color-text: oklch(0.24 0.014 262);
+    --color-text-soft: oklch(0.42 0.012 240);
+    --color-muted: oklch(0.565 0.01 200);
+    --color-faint: oklch(0.69 0.009 160);
 
-    /* The accent is MailFathom's blue, `strong` is what it becomes as text on its own tint, and `soft` is that tint. */
-    --color-accent: var(--color-fathom-600);
-    --color-accent-strong: var(--color-fathom-800);
-    --color-accent-soft: #e6edfd;
-    --color-on-accent: #ffffff;
+    /* The accent, and the three things it has to be able to be: the fill a primary control takes, the weight it becomes
+       under a pointer, the weight it has to reach to be read as text on its own tint, and that tint with the line that
+       bounds it. */
+    --color-accent: oklch(0.555 0.185 262);
+    --color-accent-strong: oklch(0.465 0.175 262);
+    --color-accent-deep: oklch(0.385 0.15 262);
+    --color-accent-soft: oklch(0.945 0.038 258);
+    --color-accent-line: oklch(0.87 0.062 258);
+    --color-on-accent: oklch(1 0 0);
 
-    /* The two states a mail client cannot avoid saying out loud: everything is current, or something is not. */
-    --color-healthy: #1a7f4b;
-    --color-healthy-soft: #e6f4ec;
-    --color-warning: #b45309;
-    --color-warning-soft: #fdf0e2;
+    /* The two states a mail client cannot avoid saying out loud: everything is current, or something is not. Each is
+       three values, because the fill a dot takes is not the weight the same statement needs as words on its own tint. */
+    --color-healthy: oklch(0.56 0.14 155);
+    --color-healthy-text: oklch(0.44 0.11 155);
+    --color-healthy-soft: oklch(0.945 0.038 155);
+    --color-warning: oklch(0.62 0.155 62);
+    --color-warning-text: oklch(0.46 0.135 55);
+    --color-warning-soft: oklch(0.955 0.045 75);
+
+    /* What a matched run of text is drawn on, and the rule that marks a quoted fragment as the one that was cited. */
+    --color-highlight: oklch(0.945 0.07 88);
+    --color-highlight-line: oklch(0.775 0.145 85);
+
+    /* Not surfaces but light: the hairline that lifts a raised surface off the one behind it, what a shadow is cast in
+       at two depths, and what the page is dimmed to behind something modal. */
+    --color-inset: rgb(255 255 255 / 0.65);
+    --color-shadow-soft: oklch(0.3 0.025 262 / 0.14);
+    --color-shadow-strong: oklch(0.28 0.03 262 / 0.28);
+    --color-scrim: oklch(0.26 0.03 262 / 0.36);
+
+    /* Three depths and no more: something raised off a panel, something floating over the workspace, and something
+       modal in front of the whole page. */
+    --shadow-raised: 0 1px 0 var(--color-inset) inset, 0 1px 3px var(--color-shadow-soft);
+    --shadow-overlay:
+        0 1px 0 var(--color-inset) inset, 0 10px 24px var(--color-shadow-soft), 0 2px 6px var(--color-shadow-soft);
+    --shadow-dialog: 0 20px 48px var(--color-shadow-strong);
+
+    /* The project's type ladder, in the order it climbs. It is finer and lower than a stock scale because a mail client
+       is dense: the row a mailbox is scanned down sets at `base`, everything said about a row sets below it, and only a
+       screen's own title reaches the top three steps. */
+    --text-2xs: 0.625rem;
+    --text-2xs--line-height: 1.4;
+    --text-xs: 0.6875rem;
+    --text-xs--line-height: 1.45;
+    --text-sm: 0.75rem;
+    --text-sm--line-height: 1.5;
+    --text-base: 0.8125rem;
+    --text-base--line-height: 1.5;
+    --text-md: 0.875rem;
+    --text-md--line-height: 1.5;
+    --text-lg: 0.9375rem;
+    --text-lg--line-height: 1.55;
+    --text-xl: 1rem;
+    --text-xl--line-height: 1.4;
+    --text-2xl: 1.0625rem;
+    --text-2xl--line-height: 1.35;
+    --text-3xl: 1.1875rem;
+    --text-3xl--line-height: 1.3;
+    --text-4xl: 1.375rem;
+    --text-4xl--line-height: 1.25;
+    --text-5xl: 2.125rem;
+    --text-5xl--line-height: 1.15;
+
+    /* The project's corners. A control takes one of the first three, a panel or a card one of the next two, and the
+       last is what a sheet rising from the bottom of a narrow window is cut with. */
+    --radius-xs: 0.25rem;
+    --radius-sm: 0.3125rem;
+    --radius-md: 0.4375rem;
+    --radius-lg: 0.5rem;
+    --radius-xl: 0.625rem;
+    --radius-2xl: 0.75rem;
+    --radius-3xl: 0.875rem;
+    --radius-4xl: 1.125rem;
 
     /* The one width the composition changes at: below it the workspace is a stack of screens under bottom navigation,
        and at or above it a rail beside columns. Declared here so the point where narrow stops is one decision rather
-       than one per screen. The number is the prototype's, and it is a width rather than a device. */
+       than one per screen. The number is the project's, and it is a width rather than a device. */
     --breakpoint-workspace: 48.75rem;
+
+    /* The second and last width the client changes at, and it belongs to one screen: the sign-in split stands as two
+       columns above it and stacks below it, which is wider than the workspace opens out at because a claim beside a
+       form needs more room than a rail beside a list. Declared here for the same reason the first one is — a screen
+       reaching for a width of its own is the same drift as one reaching for a colour. */
+    --breakpoint-split: 58.75rem;
 
     /* One row of the message list, and the room the list itself takes. The row height is declared here rather than in
        the list because it is a density decision like any other — and because the list is arithmetic over it: the
@@ -76,6 +190,11 @@
        matched, and what MailFathom made of the message once stage 3 lands. */
     --spacing-message-row: 4.75rem;
     --spacing-message-list: 70dvh;
+
+    /* How wide the rail is, and how wide the column beside it that holds the mailbox tree. Both are the project's, and
+       both are here rather than on the components because the two have to add up to a composition. */
+    --spacing-rail: 5.5rem;
+    --spacing-mailboxes: 15rem;
 
     /* What a notch, a rounded corner, or a system bar takes out of the viewport. Zero everywhere a window has none,
        which is every head this repository builds today; declaring it as a token is what keeps a screen from reaching
@@ -87,40 +206,55 @@
 
     /* Motion is decided once. A component writes `transition` and gets these; one that writes a duration of its own is
        the same drift as one that writes a hexadecimal colour. */
-    --default-transition-duration: 140ms;
+    --default-transition-duration: 120ms;
     --default-transition-timing-function: ease;
 
     --font-sans:
-        'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        'Instrument Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+        sans-serif;
     --font-mono: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
 }
 
 /* The same names, dark. `data-theme` is written by `theme/Theme.tsx`, which resolves the follow-the-system choice
    before the first paint, so nothing on a screen ever asks which theme is in force. */
 :root[data-theme='dark'] {
-    --color-page: #070d20;
-    --color-panel: #0f1730;
-    --color-rail: #0a1128;
-    --color-sunken: #0c142c;
-    --color-hover: #182242;
+    --color-page: oklch(0.183 0.016 262);
+    --color-panel: oklch(0.246 0.016 262);
+    --color-rail: oklch(0.212 0.017 262);
+    --color-sunken: oklch(0.277 0.016 262);
+    --color-hover: oklch(0.325 0.021 262);
 
-    --color-line: #232e4d;
-    --color-line-soft: #182140;
+    --color-line: oklch(0.336 0.018 262);
+    --color-line-soft: oklch(0.283 0.015 262);
+    --color-line-strong: oklch(0.416 0.022 262);
 
-    --color-text: #e9edf8;
-    --color-text-soft: #c2c9dc;
-    --color-muted: #9aa2ba;
-    --color-faint: #7e87a1;
+    --color-text: oklch(0.945 0.007 262);
+    --color-text-soft: oklch(0.835 0.011 262);
+    --color-muted: oklch(0.705 0.013 262);
+    --color-faint: oklch(0.585 0.015 262);
 
-    --color-accent: var(--color-fathom-500);
-    --color-accent-strong: var(--color-fathom-200);
-    --color-accent-soft: #0c1c3f;
-    --color-on-accent: #ffffff;
+    /* The accent inverts its direction here rather than keeping its light values: on a dark panel the weight that has
+       to be reachable as text is lighter than the fill, not darker, which is why `strong` and `deep` climb. */
+    --color-accent: oklch(0.615 0.175 262);
+    --color-accent-strong: oklch(0.735 0.15 262);
+    --color-accent-deep: oklch(0.865 0.085 262);
+    --color-accent-soft: oklch(0.32 0.07 262);
+    --color-accent-line: oklch(0.43 0.095 262);
 
-    --color-healthy: #4ec98a;
-    --color-healthy-soft: #10291d;
-    --color-warning: #f0a14a;
-    --color-warning-soft: #2e2013;
+    --color-healthy: oklch(0.72 0.14 155);
+    --color-healthy-text: oklch(0.82 0.12 155);
+    --color-healthy-soft: oklch(0.3 0.045 155);
+    --color-warning: oklch(0.74 0.13 55);
+    --color-warning-text: oklch(0.87 0.1 62);
+    --color-warning-soft: oklch(0.315 0.05 50);
+
+    --color-highlight: oklch(0.345 0.055 85);
+    --color-highlight-line: oklch(0.72 0.13 85);
+
+    --color-inset: rgb(255 255 255 / 0.045);
+    --color-shadow-soft: oklch(0.1 0.03 262 / 0.5);
+    --color-shadow-strong: oklch(0.09 0.035 262 / 0.64);
+    --color-scrim: oklch(0.12 0.045 262 / 0.66);
 }
 
 @layer base {
@@ -134,9 +268,14 @@
         color-scheme: dark;
     }
 
+    /* The ladder's own base rather than the browser's 16px, so text nothing sized reads at the size the project draws
+       body text at instead of a step and a half above everything around it. The tokens stay in `rem` against the root,
+       which this does not move, so spacing and the breakpoints are unaffected by it. */
     body {
         background-color: var(--color-rail);
         color: var(--color-text);
+        font-size: var(--text-base);
+        line-height: var(--text-base--line-height);
     }
 
     /* Focus is always visible, and it is decided once here rather than by every control remembering a ring utility.
