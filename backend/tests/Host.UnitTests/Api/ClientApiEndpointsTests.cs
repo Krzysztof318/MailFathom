@@ -129,6 +129,8 @@ public sealed class ClientApiEndpointsTests
         Assert.Equal(
             [
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailAccountsEndpoint.MailAccountsRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientDisplayNameEndpoint.DisplayNameRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientDisplayNameEndpoint.DisplayNameRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientDraftEndpoints.DraftsRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientDraftEndpoints.DraftsRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientDraftEndpoints.DraftRoute}",
@@ -208,6 +210,7 @@ public sealed class ClientApiEndpointsTests
                 $"DELETE {prefix}{ClientDraftEndpoints.DraftRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"DELETE {prefix}{ClientDraftEndpoints.DraftAttachmentRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"GET {prefix}{ClientMailAccountsEndpoint.MailAccountsRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientDisplayNameEndpoint.DisplayNameRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientDraftEndpoints.DraftsRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"GET {prefix}{ClientDraftEndpoints.DraftRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"GET {prefix}{ClientMailTimelineEndpoint.MailTimelineRoute} -> {MailFathomPermission.MailRead.Name}",
@@ -223,6 +226,7 @@ public sealed class ClientApiEndpointsTests
                 $"GET {prefix}{ClientOwnerRecordEndpoint.RecordRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientApiEndpoints.SessionRoute} -> none",
                 $"GET {prefix}{ClientMailThreadEndpoint.MailThreadRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"POST {prefix}{ClientDisplayNameEndpoint.DisplayNameRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
                 $"POST {prefix}{ClientDraftEndpoints.DraftsRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"POST {prefix}{ClientDraftEndpoints.DraftAttachmentsRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"POST {prefix}{ClientDraftEndpoints.DraftSendRoute} -> {MailFathomPermission.MailSend.Name}",
@@ -391,6 +395,33 @@ public sealed class ClientApiEndpointsTests
 
         Assert.Equal(
             ClientPreferencesEndpoint.MaxWriteRequestBytes,
+            write.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata>()!.MaxRequestBodySize);
+    }
+
+    /// <summary>
+    /// The name write carries a bound of its own for the same reason the preferences write does. The body is one
+    /// string bounded at the length the envelope stores, so a bound sized for a page of mail-account declarations
+    /// would be one nobody decided on.
+    /// </summary>
+    [Fact]
+    public void MapClientApi_TheDisplayNameWrite_CarriesItsOwnRequestBodyBound()
+    {
+        // Arrange
+        var endpoints = BuildRouteBuilder();
+
+        // Act
+        endpoints.MapClientApi();
+
+        // Assert
+        var write = endpoints.Materialize()
+            .OfType<RouteEndpoint>()
+            .Single(endpoint =>
+                $"/{endpoint.RoutePattern.RawText?.TrimStart('/')}"
+                    == $"{ClientEndpointOptions.RoutePrefix}{ClientDisplayNameEndpoint.DisplayNameRoute}"
+                && endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Contains("POST"));
+
+        Assert.Equal(
+            ClientDisplayNameEndpoint.MaxWriteRequestBytes,
             write.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata>()!.MaxRequestBodySize);
     }
 

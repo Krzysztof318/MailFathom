@@ -84,6 +84,23 @@ internal sealed class ServedMailOwners : IDeploymentMailOwnerSource
     /// <summary>Lets the next owner-document write validate against the roster this one published.</summary>
     internal void ReleaseRosterPublication() => this.rosterPublication.Release();
 
+    /// <summary>Reads where one owner's mail accounts come from, which is their own record for an owner the roster does not hold.</summary>
+    /// <param name="owner">The owner asked about.</param>
+    /// <returns>The source their accounts are read from.</returns>
+    /// <remarks>
+    /// An owner not yet published to this process, and one the deployment holds and no source declares, have no
+    /// configuration section a write into their record could be replacing. Both are ordinary owners here, which keeps
+    /// the narrow interval between provisioning the row and publishing the runtime roster writable.
+    /// <para>
+    /// It is here rather than beside either caller because two gates read it and neither may come to a different
+    /// answer than the other: what refuses a change to an owner's record is what refuses a change to the label on the
+    /// envelope beside it.
+    /// </para>
+    /// </remarks>
+    internal MailOwnerAccountSource SourceFor(MailOwnerId owner) =>
+        this.Owners.FirstOrDefault(served => served.Owner == owner)?.Source
+        ?? MailOwnerAccountSource.OwnerDocument;
+
     /// <summary>Gets whether any served owner's mail accounts are their own rather than the deployment's section.</summary>
     /// <returns><see langword="true" /> when at least one owner is served from their own declaration or their own document.</returns>
     /// <remarks>

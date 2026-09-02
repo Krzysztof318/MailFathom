@@ -764,15 +764,8 @@ internal sealed class OwnerRecordAdministration(
         }
         .OfType<string>();
 
-    /// <summary>Reads where one owner's mail accounts come from, which is their own record for an owner the roster does not hold.</summary>
-    /// <remarks>
-    /// An owner not yet published to this process, and one the deployment holds and no source declares, have no
-    /// configuration section a write into their record could be replacing. Both are ordinary owners here, which keeps
-    /// the narrow interval between provisioning the row and publishing the runtime roster writable.
-    /// </remarks>
-    private MailOwnerAccountSource SourceOf(MailOwnerId owner) =>
-        servedOwners.Owners.FirstOrDefault(served => served.Owner == owner)?.Source
-        ?? MailOwnerAccountSource.OwnerDocument;
+    /// <summary>Reads where one owner's mail accounts come from, which the roster answers for this gate and for the label's.</summary>
+    private MailOwnerAccountSource SourceOf(MailOwnerId owner) => servedOwners.SourceFor(owner);
 
     /// <summary>The path a refusal about an owner's own record names, which is the record rather than a file.</summary>
     /// <remarks>The same word the startup gate uses for an adopted owner, because an operator reading either one is being told there is no configuration key to go and correct.</remarks>

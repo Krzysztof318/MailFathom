@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientOwnerRecordEndpoint.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Observability/ClientTelemetry/** -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientOwnerRecordEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Configuration/OwnerSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Observability/ClientTelemetry/** -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -77,6 +77,8 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `POST /api/client/record` | `mailfathom.mail.accounts.write` |
 | `POST /api/client/record/mail-accounts` | `mailfathom.mail.accounts.write` |
 | `POST /api/client/record/mail-accounts/removal` | `mailfathom.mail.accounts.write` |
+| `GET /api/client/display-name` | `mailfathom.mail.read` |
+| `POST /api/client/display-name` | `mailfathom.mail.accounts.write` |
 | `GET /api/client/drafts` | `mailfathom.mail.drafts.write` |
 | `POST /api/client/drafts` | `mailfathom.mail.drafts.write` |
 | `GET /api/client/drafts/{draftId}` | `mailfathom.mail.drafts.write` |
@@ -1172,6 +1174,51 @@ this surface can perform that move: which decisions leave a deployment's own fil
 **An accepted record change is published to the running process.** A mailbox declared here is stored and scheduled
 without a restart. The coordinator drains work already in flight against the immutable document version it began with,
 then starts the replacement supervisor, so one run never reads two answers.
+
+### The name routes
+
+These two are how a client draws the person signed in. Until they existed it held a finished credential and nothing
+the person is called, so the account menu and the Settings screen had an anonymous icon where a name belongs.
+
+| Route | What it does |
+| --- | --- |
+| `GET /api/client/display-name` | Hands over the name this deployment records the signed-in person under, and says whether it would accept a change of it |
+| `POST /api/client/display-name` | Records them under the name they corrected theirs to |
+
+```json
+{ "displayName": "Ada Lovelace", "changeable": true }
+```
+
+**The name is the envelope rather than the record.** It is the same label `mfctl owner list` shows and
+[the record routes](#the-record-routes) do not serve: a column beside the document, unique across the deployment, that
+nothing resolves anybody by. A client reading the record alone would still have nothing to draw a person with, which is
+why this is a route of its own rather than a key in that document.
+
+**The read says whether the write would be accepted, so the client never has to find out by trying.** `changeable` is
+false for somebody whose credential was not granted `mailfathom.mail.accounts.write`, and false for somebody whose mail
+accounts a configuration source still declares. It does not say which of the two: a client draws the same read-only
+field either way, and naming the grant a credential lacks would report a deployment's own entries back to a page
+holding a token.
+
+**A person a configuration source declares is refused, and told what to correct.** A start writes every declared
+owner's name back from the declaration, so a change made here would stand until the next restart and then revert. What
+comes back names the entry to change instead, or `mfctl owner adopt` to move the accounts into the person's own record.
+
+**The name is bound exactly as the envelope binds it.** Blank is refused, so is anything past 128 characters, and so is
+a name somebody else on this deployment already carries — each naming what to correct. Surrounding white space is
+trimmed, and the answer carries the name as it was stored rather than as it was sent. The body is bounded like every
+other on this surface, and one past the bound is answered `413`.
+
+**It carries no version.** The version the record's writes state guards the document a change was composed over, and
+the name is not part of that document, so nothing here is refused as superseded.
+
+**Neither route names an owner**, exactly as no record route does: the name read and written is that of the credential
+that authenticated, resolved from the request rather than out of the body or the path. Neither adds a name to
+[the published permission set](permissions.md).
+
+**Reading is `mailfathom.mail.read` and writing is `mailfathom.mail.accounts.write`.** The write is the record's own
+grant because it writes the same row an administrator maintains, and the read is the grant every signed-in person
+already holds — somebody whose mailboxes an administrator maintains still sees their own name.
 
 ### The preferences routes
 

@@ -51,4 +51,31 @@ internal sealed class PersistedMailOwnerDirectory(MailFathomDbContext dbContext)
                 owner.DocumentWrittenAtRuntime)),
         ];
     }
+
+    /// <inheritdoc />
+    public async Task<MailOwnerRecord?> ReadOwnerAsync(MailOwnerId owner, CancellationToken cancellationToken)
+    {
+        if (!owner.IsSpecified)
+        {
+            throw new ArgumentException("An owner envelope is read for a named owner.", nameof(owner));
+        }
+
+        var ownerId = owner.Value;
+
+        // The same projection the roster read makes, on the primary key: the document beside the envelope is the
+        // owner's own record and nothing asking what this deployment records about a person materializes one.
+        var held = await dbContext.OwnerAccounts
+            .AsNoTracking()
+            .Where(record => record.Id == ownerId)
+            .Select(record => new
+            {
+                record.DisplayName,
+                record.DocumentWrittenAtRuntime,
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        return held is null
+            ? null
+            : new MailOwnerRecord(owner, held.DisplayName, held.DocumentWrittenAtRuntime);
+    }
 }

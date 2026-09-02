@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Domain.Access;
+
 namespace MailFathom.Application.Access;
 
 /// <summary>Reads the owners this deployment holds records for.</summary>
@@ -25,4 +27,18 @@ public interface IMailOwnerDirectory
     /// about the same owner both times.
     /// </remarks>
     Task<IReadOnlyList<MailOwnerRecord>> ReadOwnersAsync(int limit, CancellationToken cancellationToken);
+
+    /// <summary>Reads the envelope of one owner this deployment holds.</summary>
+    /// <param name="owner">The owner whose envelope is read.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The owner's envelope, or <see langword="null" /> when this deployment holds no such owner.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="owner" /> names nobody.</exception>
+    /// <remarks>
+    /// It stands beside the roster rather than being composed from it, because the two answer for different callers.
+    /// An owner-facing surface asks what this deployment records about the person who authenticated, and reading the
+    /// roster to filter it down to one would compose a deployment-wide catalog of people to answer a question about
+    /// one of them. The label is what such a surface is after: it is the one thing the envelope holds that a person is
+    /// shown, and it is not in the document beside it.
+    /// </remarks>
+    Task<MailOwnerRecord?> ReadOwnerAsync(MailOwnerId owner, CancellationToken cancellationToken);
 }
