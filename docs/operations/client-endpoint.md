@@ -72,6 +72,8 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `POST /api/client/record` | `mailfathom.mail.accounts.write` |
 | `POST /api/client/record/mail-accounts` | `mailfathom.mail.accounts.write` |
 | `POST /api/client/record/mail-accounts/removal` | `mailfathom.mail.accounts.write` |
+| `GET /api/client/preferences` | `mailfathom.mail.read` |
+| `POST /api/client/preferences` | `mailfathom.mail.read` |
 
 There is no version segment in either path: the major version is `0` and
 [ADR 0004](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0004-versioning-and-release-policy.md)
@@ -1005,6 +1007,57 @@ this surface can perform that move: which decisions leave a deployment's own fil
 **An accepted record change is published to the running process.** A mailbox declared here is stored and scheduled
 without a restart. The coordinator drains work already in flight against the immutable document version it began with,
 then starts the replacement supervisor, so one run never reads two answers.
+
+### The preferences routes
+
+These two hold what a person set about their own client, so that it follows them rather than the machine they set it
+on. Somebody who turns telemetry off on their laptop has not agreed to anything on the next machine they sign in from,
+and somebody who set the client up the way they work should not have to set it up again per browser profile.
+
+| Route | What it does |
+| --- | --- |
+| `GET /api/client/preferences` | Hands over the signed-in person's preferences, with every one they never set answered by its default |
+| `POST /api/client/preferences` | Replaces all of them, as one document |
+
+```json
+{ "telemetryEnabled": true, "theme": "system", "openMailInTabs": false }
+```
+
+**It holds three preferences and nothing else.** Whether this deployment may be told what the person's client is doing;
+what the client is painted in, which is `system`, `light`, or `dark`; and whether opening a message opens a tab rather
+than replacing what is on the screen. Each of them says how somebody wants to work, which is why it belongs to the
+person. The language does not, and stays on the device: it is resolved for somebody who has not signed in and may never
+get a session. Neither does the width a person drags the message list to, which describes the screen in front of them.
+
+**Unset reads as telemetry on, the theme following the machine, and tabs off.** A person who has set nothing is
+answered a document rather than a refusal, so a first run draws a screen. The theme is still resolved on the device
+before sign-in — the client cannot wait on the network to paint itself, and there is no session to read this over above
+the sign-in screen — and what this answers replaces that device value once a session exists.
+
+**A write states the whole document.** It is a closed set rather than a patch: a key nothing binds is refused rather
+than stored, a theme this deployment does not publish is refused naming the three that are, and a preference the body
+omits is committed as its own default rather than left at whatever was there. The body is bounded like every other on
+this surface, and one past the bound is answered `413`.
+
+**It carries no version, and the last write wins.** The only writers are one person's own devices, so there is nobody
+whose change could be lost — and a superseded refusal here would be a conflict screen over a checkbox. That is the one
+way these routes differ from [the record routes](#the-record-routes), which are written by an administrator too.
+
+**No route here names an owner**, exactly as no record route does: the preferences acted on are those of the credential
+that authenticated, resolved from the request rather than read out of the body or the path.
+
+**Reading and writing are both `mailfathom.mail.read`.** The write is deliberately not
+`mailfathom.mail.accounts.write`, which every record write is: that grant decides which mailboxes this deployment
+connects to and under whose credentials, somebody whose mail accounts an administrator maintains does not hold it, and
+what may be said about a person must not be decided by a grant over their mail configuration. Neither route adds a name
+to [the published permission set](permissions.md).
+
+**Nothing here reports when anything was set, or from where.** This deployment keeps no record of the machines somebody
+signed in from, and a response saying when a switch last moved would be the beginning of one. Erasing an owner erases
+their preferences with everything else derived from them.
+
+**A deployment that proxies no telemetry still serves these routes** and stores the switch unchanged. What a client
+draws when there is nothing behind the switch is the client's own question.
 
 ## Credentials do not cross surfaces
 

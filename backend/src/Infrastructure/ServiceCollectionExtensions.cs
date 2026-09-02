@@ -60,6 +60,7 @@ using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Observability;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Preferences;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
 using MailFathom.Application.Retrieval.AskMail;
@@ -111,6 +112,7 @@ using MailFathom.Infrastructure.Persistence.Embeddings;
 using MailFathom.Infrastructure.Persistence.Jobs;
 using MailFathom.Infrastructure.Persistence.Mutations;
 using MailFathom.Infrastructure.Persistence.Owners;
+using MailFathom.Infrastructure.Persistence.Preferences;
 using MailFathom.Infrastructure.Persistence.Rules;
 using MailFathom.Infrastructure.Persistence.Secrets;
 using MailFathom.Infrastructure.Persistence.Sessions;
@@ -501,6 +503,14 @@ public static class ServiceCollectionExtensions
         // never administers an owner still reads one on every start, and the two are granted separately in the
         // database.
         services.AddSingleton<IOwnerSettingsDocumentWriter, PersistedOwnerSettingsDocumentWriter>();
+        // What one person set about their own client, which is beside the record above rather than in it: this is a
+        // preference about the client and that document is configuration. Scoped because both the read and the upsert
+        // are ordinary statements on the request's own context, and registered unconditionally because it is a store
+        // rather than a capability a deployment switches on.
+        services.AddScoped<IClientPreferencesStore, ClientPreferencesStore>();
+        // The caller-facing use case over it, separate from the store for the reason the contact book's two are: it
+        // carries the grant a caller has to hold and the owner the act is resolved for, and the store carries neither.
+        services.AddScoped<OwnClientPreferences>();
         // Taking an owner off the deployment, with everything it recorded for them. Scoped because the whole walk runs
         // in one of the request's own transactions, and separate from the provisioning above because provisioning runs
         // on every start and is idempotent while this runs when a person asked for it and cannot be undone.

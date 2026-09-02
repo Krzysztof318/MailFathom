@@ -131,6 +131,8 @@ public sealed class ClientApiEndpointsTests
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailMessageEndpoint.MailMessageRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailAttachmentEndpoint.MailAttachmentRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailBodyEndpoint.MailBodyRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientPreferencesEndpoint.PreferencesRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientPreferencesEndpoint.PreferencesRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientOwnerRecordEndpoint.RecordRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientOwnerRecordEndpoint.RecordRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientOwnerRecordEndpoint.MailAccountsRoute}",
@@ -185,9 +187,11 @@ public sealed class ClientApiEndpointsTests
                 $"GET {prefix}{ClientMailMessageEndpoint.MailMessageRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailAttachmentEndpoint.MailAttachmentRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailBodyEndpoint.MailBodyRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientPreferencesEndpoint.PreferencesRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientOwnerRecordEndpoint.RecordRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientApiEndpoints.SessionRoute} -> none",
                 $"GET {prefix}{ClientMailThreadEndpoint.MailThreadRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"POST {prefix}{ClientPreferencesEndpoint.PreferencesRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientOwnerRecordEndpoint.RecordRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
                 $"POST {prefix}{ClientOwnerRecordEndpoint.MailAccountsRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
                 $"POST {prefix}{ClientOwnerRecordEndpoint.MailAccountRemovalRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
@@ -218,12 +222,13 @@ public sealed class ClientApiEndpointsTests
     }
 
     /// <summary>
-    /// A read, or a write to the caller's own record and nothing else. Everything this surface serves about mail is a
-    /// <c>GET</c>, and the only thing a client changes here is what this deployment reads for the person signed in — so
-    /// a write arriving under any other grant is a route somebody added without deciding what it costs.
+    /// A read, or a write to something of the caller's own and nothing else. Everything this surface serves about mail
+    /// is a <c>GET</c>, and the only things a client changes here are what this deployment reads for the person signed
+    /// in and what that person set about their own client — so a write anywhere else is a route somebody added without
+    /// deciding what it costs.
     /// </summary>
     [Fact]
-    public void MapClientApi_Always_PublishesReadsAndWritesToTheCallersOwnRecordAlone()
+    public void MapClientApi_Always_PublishesReadsAndWritesToTheCallersOwnRecordOrPreferencesAlone()
     {
         // Arrange
         var endpoints = BuildRouteBuilder();
@@ -246,8 +251,9 @@ public sealed class ClientApiEndpointsTests
                     verbs.HttpMethods,
                     method => Assert.True(
                         method == "GET"
-                        || (method == "POST" && WritesTheCallersOwnRecord(endpoint)),
-                        $"{method} {endpoint} is published as neither a read nor a write to the caller's own record."));
+                        || (method == "POST"
+                            && (WritesTheCallersOwnRecord(endpoint) || WritesTheCallersOwnPreferences(endpoint))),
+                        $"{method} {endpoint} is published as neither a read nor a write to something of the caller's own."));
             });
     }
 
@@ -256,6 +262,19 @@ public sealed class ClientApiEndpointsTests
     private static bool WritesTheCallersOwnRecord(Endpoint endpoint) =>
         endpoint.Metadata.GetOrderedMetadata<RoutePermission>()
             .Any(published => published.Permission == MailFathomPermission.MailAccountsWrite);
+
+    /// <summary>Reports whether a route is the write of the caller's own client preferences, by the route it is served at.</summary>
+    /// <remarks>
+    /// The route rather than the grant, which is the one place this file cannot use the test above's reasoning. That
+    /// write is deliberately admitted under the grant every read here holds — a person whose mail accounts an
+    /// administrator maintains does not hold <see cref="MailFathomPermission.MailAccountsWrite" /> and still turns
+    /// their own telemetry off — so nothing about the permission tells it apart from a <c>GET</c>. Naming the one route
+    /// keeps the claim narrow: a second write published under the read grant fails this rather than joining it.
+    /// </remarks>
+    private static bool WritesTheCallersOwnPreferences(Endpoint endpoint) =>
+        endpoint is RouteEndpoint route
+        && $"/{route.RoutePattern.RawText?.TrimStart('/')}"
+            == $"{ClientEndpointOptions.RoutePrefix}{ClientPreferencesEndpoint.PreferencesRoute}";
 
     /// <summary>
     /// The bound on each record-route body, which the routes carry as metadata the routing pipeline reads. This surface
@@ -284,6 +303,32 @@ public sealed class ClientApiEndpointsTests
 
         Assert.Equal(
             OwnerRecordEndpoints.MaxWriteRequestBytes,
+            write.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata>()!.MaxRequestBodySize);
+    }
+
+    /// <summary>
+    /// The preferences write carries a bound of its own rather than the record's. The document is three scalars, so a
+    /// body sized for a page of mail-account declarations would be a bound nobody decided on.
+    /// </summary>
+    [Fact]
+    public void MapClientApi_ThePreferencesWrite_CarriesItsOwnRequestBodyBound()
+    {
+        // Arrange
+        var endpoints = BuildRouteBuilder();
+
+        // Act
+        endpoints.MapClientApi();
+
+        // Assert
+        var write = endpoints.Materialize()
+            .OfType<RouteEndpoint>()
+            .Single(endpoint =>
+                $"/{endpoint.RoutePattern.RawText?.TrimStart('/')}"
+                    == $"{ClientEndpointOptions.RoutePrefix}{ClientPreferencesEndpoint.PreferencesRoute}"
+                && endpoint.Metadata.GetMetadata<HttpMethodMetadata>()!.HttpMethods.Contains("POST"));
+
+        Assert.Equal(
+            ClientPreferencesEndpoint.MaxWriteRequestBytes,
             write.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata>()!.MaxRequestBodySize);
     }
 
