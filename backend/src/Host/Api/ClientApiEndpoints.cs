@@ -26,10 +26,16 @@ namespace MailFathom.Host.Api;
 /// will serve it.
 /// </para>
 /// <para>
-/// The record routes, which <see cref="ClientOwnerRecordEndpoint" /> describes, are the surface's only writes and the
-/// one place a person changes what this deployment reads for them. None of them names an owner: the acting owner comes
-/// off the credential, which is what makes a request about somebody else something a caller cannot express here rather
-/// than something the surface has to refuse.
+/// The record routes, which <see cref="ClientOwnerRecordEndpoint" /> describes, are where a person changes what this
+/// deployment reads for them. None of them names an owner: the acting owner comes off the credential, which is what
+/// makes a request about somebody else something a caller cannot express here rather than something the surface has to
+/// refuse.
+/// </para>
+/// <para>
+/// The preferences routes, which <see cref="ClientPreferencesEndpoint" /> describes, are the surface's other write and
+/// are deliberately not part of that record. What they hold is how somebody wants to work rather than what this
+/// deployment reads for them, so it is granted, bound, and refused on its own terms — and a person whose mail accounts
+/// an administrator maintains writes there while writing nothing to the record.
 /// </para>
 /// <para>
 /// Every route is mapped into one group so the requirement the endpoint attaches covers everything the surface serves,
@@ -66,6 +72,7 @@ internal static class ClientApiEndpoints
             .RequireNoPermission();
 
         api.MapClientOwnerRecord();
+        api.MapClientPreferences();
         api.MapClientMailAccounts();
         api.MapClientMailFolders();
         api.MapClientMailTimeline();

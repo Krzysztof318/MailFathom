@@ -264,6 +264,35 @@ beside the key would narrow nothing.
 
 On a deployment storing payloads in a bucket the erasure reaches that store as well. The locators are read at the start of the same transaction, before any row goes, because the cascade is what takes the content rows and the locator on one is the only thing naming its object; the objects are then removed once the transaction has committed. [An object nothing points at is reclaimed](../features/email-content.md#an-object-nothing-points-at-is-reclaimed) states what happens where the endpoint refuses.
 
+## What a person set about their own client
+
+`client_preferences` holds one row per owner, carrying what that person set about
+[their own client](../operations/client-endpoint.md#the-preferences-routes) so that it follows them between machines
+rather than staying in the browser profile or the desktop install they set it in. There are three of them today: whether
+this deployment may be told what their client is doing, what the client is painted in, and whether opening a message
+opens a tab.
+
+| Column of `client_preferences` | What it records |
+|---|---|
+| `OwnerId` | The owner whose preferences these are, and the primary key. It is also the foreign key onto `settings_accounts` with `ON DELETE CASCADE`: one person has one set of preferences and nothing else identifies them, so the key a caller already holds is the key the row is written under |
+| `Document` | The preferences, as one sparse `jsonb` document. Nothing queries into it. A key the document does not carry reads as that preference's own default rather than as an empty value, which is what lets a build publishing one more preference read a document written before it existed |
+| `CreatedAt`, `UpdatedAt` | When the person first set anything about their client, and when they last changed it — which is the first instant until they do |
+
+**It is a table of its own rather than a second column on `settings_accounts`**, because what it holds is not
+configuration. Nothing binds it against a deployment's files, nothing about it decides which mailboxes are read, and a
+person whose mail accounts an administrator still maintains writes here freely while the record above refuses them
+until an adoption moves them.
+
+**There is no version column, and that is the contract.** A write is an upsert on the key and the last one wins,
+because the only writers are one person's own devices: two of them disagreeing about a switch they both set is not a
+loss, and a superseded refusal would be a conflict screen over a checkbox. The write is one statement — an
+`INSERT … SELECT` from the owner row with `ON CONFLICT … DO UPDATE` — so an owner this deployment no longer holds
+affects no row rather than raising a constraint violation, and two devices arriving at once cannot both read nothing
+and then collide on the key.
+
+**Erasing an owner takes it with the cascade**, like the contact book and unlike the tables the erasure names by hand:
+it keys onto the owner row and records no mail account, so nothing has to know this table exists.
+
 ## What an owner signs in with
 
 `owner_credentials` holds every credential an owner authenticates to
