@@ -251,8 +251,10 @@ function parsePage(body: string, asked: number): MailTimelinePage | null {
 /**
  * Reads one row of a mail listing, or `null` for a row with anything wrong in it.
  *
- * Exported inside this package rather than published, because the search route answers the same row with two fields
- * added: one parser for one row shape is what keeps the two from drifting apart a field at a time.
+ * Exported inside this package rather than published, because two other routes answer with this same row: the search
+ * route adds two fields to it, and the thread route publishes each of a conversation's messages as it field for field.
+ * One parser for one row shape is what keeps the three surfaces from drifting apart a field at a time, so the bounds a
+ * row is held to belong here rather than to whichever route asked for it.
  *
  * @param value The row as the deployment sent it.
  * @returns The row, or `null` where it is not one.

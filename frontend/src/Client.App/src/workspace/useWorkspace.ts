@@ -4,6 +4,7 @@
 
 import { createContext, useContext } from 'react';
 import { everything, type MailScope } from './mailScope';
+import type { OpenConversation } from './openConversation';
 
 // What a person carries between the spaces. Discover, Mail, and Cases are one application rather than three, and this
 // is what makes them one: the frame owns it, so moving to another space re-renders what is under the frame and leaves
@@ -26,6 +27,14 @@ export interface Workspace {
 
     /** What the person has open, once a space offers something to open. */
     readonly selection: string | null;
+
+    /**
+     * The conversation being read in front of what is open, or `null` where a single message is what is being read.
+     *
+     * Beside the selection rather than instead of it, because the way out of a conversation is the message it was
+     * opened from: holding both is what makes closing one a return rather than a second thing to remember.
+     */
+    readonly conversation: OpenConversation | null;
 
     /**
      * The part of what is open that a question would be asked about, or `null` where the whole of it is.
@@ -70,6 +79,7 @@ export const emptyWorkspace: Workspace = {
     scope: everything,
     collapsed: [],
     selection: null,
+    conversation: null,
     fragment: null,
     selected: [],
     question: '',

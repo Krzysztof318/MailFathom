@@ -90,6 +90,15 @@ export {
     type MailSemanticSearch,
 } from './mailSearch';
 export {
+    longestThreadPage,
+    mailThreadRoute,
+    readMailThread,
+    threadQueryString,
+    type MailThreadMessage,
+    type MailThreadPage,
+    type MailThreadParticipant,
+} from './mailThread';
+export {
     longestTimelinePage,
     mailTimelineRoute,
     readMailTimeline,

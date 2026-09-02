@@ -12,6 +12,7 @@ const kept: Workspace = {
     scope: { kind: 'folder', accountId: 'work', alias: 'INBOX' },
     collapsed: ['account:personal'],
     selection: 'AAMkAD-42',
+    conversation: { threadId: '9b2a1c74-4a4e-4c93-9a2e-3f6f0a1b2c3d', openAt: 'AAMkAD-42' },
     fragment: null,
     selected: ['AAMkAD-42', 'AAMkAD-43'],
     question: 'what did Nordwind send',
@@ -159,9 +160,39 @@ describe('rememberedWorkspace', () => {
                 selected: Array.from({ length: 1_025 }, (_, at) => `message-${String(at)}`),
             }),
         },
+        {
+            shape: 'a conversation that is not a conversation',
+            value: JSON.stringify({ ...emptyWorkspace, conversation: 'a-conversation' }),
+        },
+        {
+            shape: 'a conversation naming no thread',
+            value: JSON.stringify({ ...emptyWorkspace, conversation: { openAt: 'message-1' } }),
+        },
+        {
+            shape: 'a conversation opened at something longer than any identifier the client wrote there',
+            value: JSON.stringify({
+                ...emptyWorkspace,
+                conversation: { threadId: 'a-conversation', openAt: 'a'.repeat(257) },
+            }),
+        },
     ])('opens on nothing rather than on $shape', ({ value }) => {
         window.sessionStorage.setItem(storageKey, value);
 
         expect(rememberedWorkspace()).toEqual(emptyWorkspace);
+    });
+
+    it('opens on the conversation this tab had open, at the message it was opened at', () => {
+        rememberWorkspace(kept);
+
+        expect(rememberedWorkspace().conversation).toEqual({
+            threadId: '9b2a1c74-4a4e-4c93-9a2e-3f6f0a1b2c3d',
+            openAt: 'AAMkAD-42',
+        });
+    });
+
+    it('opens on no conversation where a tab was reading one message', () => {
+        rememberWorkspace({ ...kept, conversation: null });
+
+        expect(rememberedWorkspace().conversation).toBeNull();
     });
 });

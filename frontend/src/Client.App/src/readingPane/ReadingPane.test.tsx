@@ -345,6 +345,22 @@ describe('ReadingPane selection', () => {
             screen.queryByText('Asking about the part of this message you selected: “The invoice is attached.”'),
         ).toBeNull();
     });
+
+    it('offers the way into the conversation where the service threaded the message', async () => {
+        asked.length = 0;
+        drawing(deploymentDescribing(description({ threadId: '9b2a1c74-4a4e-4c93-9a2e-3f6f0a1b2c3d' })));
+
+        expect(await screen.findByRole('button', { name: 'Show the whole conversation' })).toBeDefined();
+    });
+
+    it('offers no conversation for a message the service threaded with nothing', async () => {
+        asked.length = 0;
+        drawing(deploymentDescribing());
+
+        await screen.findByRole('heading', { name: 'Quarterly invoice' });
+
+        expect(screen.queryByRole('button', { name: 'Show the whole conversation' })).toBeNull();
+    });
 });
 
 function select(within: Element): void {
