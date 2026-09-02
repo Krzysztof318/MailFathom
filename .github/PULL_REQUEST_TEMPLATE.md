@@ -18,7 +18,7 @@ Closes #
 - [ ] `bash scripts/review-obligations.sh` was run, and every row it reported is answered — by a test, by a page, or by why nothing is owed there.
 - [ ] `CHANGELOG.md` is untouched — it is written by the release pull request alone.
 - [ ] Every new C# file carries the repository's standard header, applied by `scripts/verify-fast.sh` rather than typed, and no file gained a second copyright line, an author tag, a name, or a contact detail.
-- [ ] Nothing here is under terms MailFathom could not distribute under Apache-2.0. A new dependency, service, container image, or externally sourced sample has its row in `THIRD_PARTY_LICENSES.md` in this change set.
+- [ ] Nothing here is under terms MailFathom could not distribute under AGPL-3.0-only, and nothing here is copyleft — MailFathom's own copyleft grant admits no copyleft dependency, because the closed-source distribution model has to survive. A new dependency, service, container image, or externally sourced sample has its row in `THIRD_PARTY_LICENSES.md` in this change set.
 - [ ] No credential, token, private key, real mailbox data, or personal information is in the diff.
 
 <!-- First contribution? CONTRIBUTING.md covers all of the above, including how contributions are

@@ -356,7 +356,7 @@ Two more things belong to the same decision:
 
 **Authorization is unchanged.** A browser is an untrusted client wherever it was served from, so whatever
 `ClientEndpoint:Authentication` requires is still required of it. Serving the page grants nobody anything; what it
-exposes is the application's own code, which is published under Apache-2.0 in this repository.
+exposes is the application's own code, which is published under AGPL-3.0-only in this repository.
 
 ## Security defaults
 

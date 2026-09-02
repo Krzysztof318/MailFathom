@@ -39,7 +39,7 @@ MailFathom is developed and run on Linux.
 
 [`docs/operations/local-development.md`](docs/operations/local-development.md) is the full setup: tool versions and install commands, running the app model, development secrets, and the migration workflow. Read it once before your first change.
 
-**`frontend/` needs Node and pnpm rather than the .NET SDK.** It is a pnpm workspace of React and TypeScript, and [`frontend/README.md`](frontend/README.md) is its page; the commands below fetch the server's solution alone, which is Apache-2.0 and permissive throughout.
+**`frontend/` needs Node and pnpm rather than the .NET SDK.** It is a pnpm workspace of React and TypeScript, and [`frontend/README.md`](frontend/README.md) is its page; the commands below fetch the server's solution alone, whose dependencies are permissive throughout.
 
 ## From a clone to a green run
 
@@ -180,16 +180,13 @@ A separate `Fathom review` workflow may post an automated review on a published 
 
 ## Licensing your contribution
 
-MailFathom is licensed under the [Apache License, Version 2.0](LICENSE), and **your contribution is offered under the same license by the act of submitting it.** Section 5 of the license says so directly:
+MailFathom is licensed under the [GNU Affero General Public License, Version 3](LICENSE), SPDX identifier `AGPL-3.0-only`, and **your contribution is offered under the same license.** Unlike Apache-2.0, which MailFathom carried until 2026, the AGPL has no clause of its own placing a contribution under the project's terms by the act of submitting it, so the mechanism that does it is this repository's [contributor licence agreement](CLA.md), which you accept once, on your first pull request. **You keep the copyright in what you write** — the agreement is a licence, not a transfer, and it is non-exclusive, so your own rights in your work are undiminished and you may do anything you like with it elsewhere.
 
-> Unless You explicitly state otherwise, any Contribution intentionally submitted for inclusion in the Work by You to the Licensor shall be under the terms and conditions of this License, without any additional terms or conditions.
+It carries three things, and it is worth knowing which:
 
-That is what makes your contribution usable, and it is not quite the whole mechanism. This repository also asks you to accept its [contributor licence agreement](CLA.md) once, on your first pull request. **You keep the copyright in what you write** — the agreement is a licence, not a transfer, and it is non-exclusive, so your own rights in your work are undiminished and you may do anything you like with it elsewhere.
-
-It exists for the two things section 5 does not carry, and it is worth knowing which:
-
-- **The freedom to publish MailFathom under other terms later.** Section 5 grants the right to distribute your contribution under Apache-2.0 and nothing wider. Without the agreement, one merged contribution would make any later licensing decision — a different open-source licence, or a commercial licence sold beside it — impossible to take without finding and asking every past contributor individually. The agreement keeps that decision available. It does not announce one: MailFathom is Apache-2.0, it stays Apache-2.0, and this changes nothing about what you or anyone else may do with it.
-- **Your statement that the code was yours to give.** Section 5 says which licence a contribution arrives under. It never says the person submitting it was entitled to submit it, and that is the subject of the next section.
+- **The licence that lets MailFathom use your contribution at all.** This is the part Apache-2.0 section 5 used to do by itself, and no AGPL clause replaces it.
+- **The freedom to publish MailFathom under other terms later.** Without the agreement, one merged contribution would make any later licensing decision — a different open-source licence, or a commercial licence sold beside it — impossible to take without finding and asking every past contributor individually. The agreement keeps that decision available, and the move from Apache-2.0 to AGPL-3.0-only is the first time it was taken. It announces no further one.
+- **Your statement that the code was yours to give.** A licence says which terms a contribution arrives under. It never says the person submitting it was entitled to submit it, and that is the subject of the next section.
 
 Accepting is one comment on your pull request, from the account that opened it:
 
@@ -199,18 +196,18 @@ I have read the MailFathom Contributor Licence Agreement and I accept it.
 
 Post it as the whole of your comment — casing, surrounding whitespace, and a trailing full stop are ignored, but nothing else is, because the sentence quoted inside a question about whether to accept is not an acceptance. The `Contributor licence` workflow reads it, records the acceptance, and turns the `license/cla` status green. What it records — your GitHub account and its numeric id, the pull request and the comment, the version of the agreement, and the exact revision of `CLA.md` you accepted — is written to the [`cla-signatures`](https://github.com/Krzysztof318/MailFathom/tree/cla-signatures) branch of this repository, in the open. Nothing is sent to a third-party service, and the record holds no more about you than the pull request already does. You are asked once, not per pull request; a bot, the owner, and anyone with write access here are not asked at all. The one thing that asks again is a revision of the agreement itself, because a later version is a new acceptance — the comment then opens by saying so, and nothing you already accepted is withdrawn by it. [ADR 0015](docs/decisions/0015-contributor-licence-agreement-and-where-assent-is-recorded.md) records why the agreement exists and why the register lives where it does.
 
-The patent grant in section 3 of the licence travels with your contribution because section 5 pulls the whole license in, and clause 2.2 of the agreement restates it so that it survives a change of licence made under clause 2.1.
+Clause 2.2 of the agreement is the patent grant that travels with your contribution. It matches section 11 of the licence and is stated in its own right so that it survives a change of licence made under clause 2.1.
 
 What the license cannot check for you is whether the code was yours to give. Before you open a pull request, satisfy yourself that:
 
-- you wrote the contribution, or you have the right to submit it under Apache-2.0;
-- any third-party code, snippet, asset, or generated output in it is compatible with Apache-2.0 and is identified in the pull request;
+- you wrote the contribution, or you have the right to submit it under AGPL-3.0-only;
+- any third-party code, snippet, asset, or generated output in it is permissively licensed, is compatible with AGPL-3.0-only, and is identified in the pull request;
 - your employer's agreements do not claim it, if you wrote it on their time or equipment;
 - it contains no credential, token, private key, real mailbox data, or anyone's personal information.
 
-**Bringing anything into this repository that MailFathom could not distribute under Apache-2.0 is the one mistake that cannot be fixed by a follow-up commit** — it has to be removed from the history. Copying a function from a GPL project, pasting a snippet from an answer with restrictive terms, or vendoring a file whose license nobody checked all land there. When in doubt, ask in the pull request before it is reviewed.
+**Bringing anything into this repository that MailFathom could not distribute under AGPL-3.0-only, or that would stop it being relicensed later, is the one mistake that cannot be fixed by a follow-up commit** — it has to be removed from the history. Copying a function from a GPL project, pasting a snippet from an answer with restrictive terms, or vendoring a file whose license nobody checked all land there. That MailFathom is itself copyleft does not admit copyleft code into it: the register below is what states the allowed set, and it is unchanged by the licence this project carries. When in doubt, ask in the pull request before it is reviewed.
 
-Adding a dependency, a service, a container image, or an externally sourced code sample also requires a row in [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) in the same pull request. Copyleft and source-available licenses — GPL, AGPL, SSPL, BUSL, Commons Clause, and similar — are refused without the owner's explicit approval, because MailFathom must stay distributable under both open-source and commercial closed-source terms. The register's acceptance policy states the allowed set.
+Adding a dependency, a service, a container image, or an externally sourced code sample also requires a row in [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) in the same pull request. Copyleft and source-available licenses — GPL, AGPL, SSPL, BUSL, Commons Clause, and similar — are refused without the owner's explicit approval, because MailFathom must stay distributable under commercial closed-source terms as well as these. **MailFathom being AGPL itself changes none of that**, which is the one thing about the register worth reading twice: the project's own grant is the owner's to change and a dependency's is not, so a copyleft dependency would end the closed-source arm permanently. The register's acceptance policy states the allowed set.
 
 ### The file header
 
@@ -218,7 +215,7 @@ Every file in this repository carries the same three lines, and a new file is no
 
 ```csharp
 // Copyright © 2026 Krzysztof Kasprowicz
-// Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+// Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 ```
 
@@ -231,7 +228,7 @@ Every file in this repository carries the same three lines, and a new file is no
 | `.yml` and `.yaml` | Three `#` comment lines, first in the file, then a blank line |
 | `.sh` | The same three `#` lines, directly under the shebang, which has to stay first |
 | `deploy/helm/mailfathom/templates/` | A `{{- /* ... */ -}}` comment, so the header stays in the template instead of being rendered into every Kubernetes object the chart applies |
-| A skill's `SKILL.md` | `license: Apache-2.0` and a `metadata` block naming the author and the repository, which is where the [Agent Skills](https://agentskills.io/specification) format puts them |
+| A skill's `SKILL.md` | `license: AGPL-3.0-only` and a `metadata` block naming the author and the repository, which is where the [Agent Skills](https://agentskills.io/specification) format puts them |
 | `.ts`, `.tsx`, `.js`, `.mjs`, and `.cjs` under `frontend/` | Three `// ` lines, first in the file, then a blank line before the imports |
 | `.css` | One `/* ... */` block holding all three lines, because CSS has no line comment to use instead |
 | `.html` | One `<!-- ... -->` comment, first in the document |
@@ -244,7 +241,7 @@ A `.json` file carries no header. A `package.json` is strict JSON and has no com
 
 This is a consistency rule, not a claim about who wrote which line. The header states one project, one copyright holder of record, one license, and one place the project lives, so that a reader of any file — and a tool scanning the tree — gets the same answer everywhere, including from a file that has travelled far from this repository. It transfers nothing: **you keep the copyright in what you write**, exactly as the section above and the root [`NOTICE`](NOTICE) say, and the `NOTICE` is explicit that it claims nothing about contributions by other copyright holders. Authorship is recorded where it is actually durable and verifiable — in the commit history and in the pull request — rather than in a comment that the next refactor moves to a different file.
 
-The files that carry the licensing decision itself are not merely off limits by convention — `LICENSE`, `NOTICE`, and `.editorconfig` are all on the `Protected paths` list above, so a pull request touching one fails that check before a reviewer reads it. Editing `LICENSE` turns GitHub's detected `Apache-2.0` into `NOASSERTION`, and editing the `file_header_template` line rewrites every source file in the repository. Propose a change to any of them in an issue instead.
+The files that carry the licensing decision itself are not merely off limits by convention — `LICENSE`, `NOTICE`, and `.editorconfig` are all on the `Protected paths` list above, so a pull request touching one fails that check before a reviewer reads it. Editing `LICENSE` turns GitHub's detected `AGPL-3.0` into `NOASSERTION`, and editing the `file_header_template` line rewrites every source file in the repository. Propose a change to any of them in an issue instead.
 
 ## Where the detailed rules live
 

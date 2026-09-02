@@ -1,7 +1,7 @@
 ---
 name: finish-change
 description: Use when repository work is implemented and must be verified, committed, pushed, and submitted as a pull request.
-license: Apache-2.0
+license: AGPL-3.0-only
 metadata:
   author: Krzysztof Kasprowicz
   repository: https://github.com/Krzysztof318/MailFathom

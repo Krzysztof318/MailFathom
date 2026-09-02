@@ -1,5 +1,5 @@
 # Copyright © 2026 Krzysztof Kasprowicz
-# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 # Project repository: https://github.com/Krzysztof318/MailFathom
 
 name: Protected paths
@@ -63,10 +63,10 @@ name: Protected paths
 #                             repository may do with everything merged after it, proposed by
 #                             somebody it would bind
 #   `LICENSE`                 the grant MailFathom is distributed under. GitHub detects it by
-#                             matching the file against the known Apache-2.0 text, so any edit at all
-#                             turns a detected `Apache-2.0` into `NOASSERTION`
-#   `NOTICE`                  the attribution Apache-2.0 section 4(d) asks a derivative distribution
-#                             to preserve
+#                             matching the file against the known AGPL-3.0 text, so any edit at all
+#                             turns a detected `AGPL-3.0` into `NOASSERTION`
+#   `NOTICE`                  the original-author attribution, which AGPL-3.0 section 7(b) permits a
+#                             distribution to require be preserved
 #   `NuGet.config`            which feeds a package may come from. It clears the inherited source
 #                             list, so adding a source is a supply-chain and licensing decision
 #                             rather than a configuration tweak

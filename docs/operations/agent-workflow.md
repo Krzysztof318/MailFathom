@@ -614,7 +614,7 @@ The canonical skills are:
 
 - `get-started-contributors` takes somebody from arriving to a first green run: a
   welcome, then an orientation in what MailFathom is, how this repository is
-  worked, where things live, what Apache-2.0 section 5 does and does not ask, the
+  worked, what the AGPL grant and the contributor licence agreement each ask, the
   one part of the client graph that arrives under somebody else's proprietary
   terms, the file header that carries no name, and what a public repository is
   careful about

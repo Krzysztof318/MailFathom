@@ -202,7 +202,7 @@ ARG IMAGE_DOCUMENTATION_VERSION=v${IMAGE_VERSION}
 # `io.artifacthub.package.logo-url` is the one label here that OCI does not define: the specification has no field for a
 # project icon, so a listing reads a vendor label instead. It names the same asset as the Helm chart's `icon`, and it is
 # a URL rather than a copied file because a label carries no payload.
-LABEL org.opencontainers.image.licenses="Apache-2.0" \
+LABEL org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.title="MailFathom" \
       org.opencontainers.image.description="A brain for your mail: self-hosted and AI-native, IMAP synchronized and served over MCP." \
       org.opencontainers.image.source="https://github.com/Krzysztof318/MailFathom" \

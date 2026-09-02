@@ -13,19 +13,19 @@ replaces it.
 
 ## Why this exists
 
-MailFathom is published under the [Apache License, Version 2.0](LICENSE), and it stays there. Section 5
-of that licence already places a contribution under the same terms by the act of submitting it, so this
-agreement is not what makes your contribution usable. It exists for the two things section 5 does not
-carry.
+MailFathom is published under the [GNU Affero General Public License, Version 3](LICENSE), SPDX
+identifier `AGPL-3.0-only`. That licence has no clause placing an inbound contribution under the
+project's own terms — Apache-2.0, which MailFathom carried until 2026, had one in its section 5 and
+the AGPL has no equivalent. So this agreement carries the first of the three things below rather than
+merely adding to it, and clause 2.1 is what makes your contribution usable.
 
-The first is the freedom to publish MailFathom under other terms later — a different open-source licence,
-or a commercial licence sold beside it. Section 5 grants the right to distribute your contribution under
-Apache-2.0 and nothing wider, so without this agreement a single merged contribution would make that
-decision impossible to take without finding and asking every past contributor individually. This
-agreement keeps the decision open. It does not announce one: MailFathom is Apache-2.0 today and this
-document changes nothing about that.
+The second is the freedom to publish MailFathom under other terms later — a different open-source
+licence, or a commercial licence sold beside it. Without this agreement a single merged contribution
+would make that decision impossible to take without finding and asking every past contributor
+individually. This agreement keeps the decision open, and the move from Apache-2.0 to AGPL-3.0-only is
+the first time it was taken. It announces no further one.
 
-The second is your statement that the code was yours to give. Section 5 says which licence a contribution
+The third is your statement that the code was yours to give. A licence says which terms a contribution
 arrives under; it does not say that the person submitting it was entitled to submit it. Section 3 below
 is where you say so.
 
@@ -59,16 +59,16 @@ perform, sublicense, and distribute your Contribution and such derivative works,
 terms the Owner chooses**, including terms that differ from the licence MailFathom carries when you
 submit it and including proprietary terms.
 
-This is the clause that keeps future licensing decisions available, and it is the whole of what this
-agreement asks beyond Apache-2.0. It is non-exclusive: your own rights in your Contribution are
-undiminished, and you may use, license, and distribute it however you wish, to anyone, on any terms.
+This is the clause that carries your contribution into MailFathom and that keeps future licensing
+decisions available. It is non-exclusive: your own rights in your Contribution are undiminished, and you
+may use, license, and distribute it however you wish, to anyone, on any terms.
 
 **2.2 Patent licence.** You grant the Owner and every recipient of MailFathom a perpetual, worldwide,
 non-exclusive, irrevocable, royalty-free patent licence to make, have made, use, offer to sell, sell,
 import, and otherwise transfer your Contribution, covering only those claims of your patents that are
 necessarily infringed by your Contribution alone or by its combination with MailFathom. This grant
-matches section 3 of the Apache License; it is restated here so it survives a change of licence made
-under clause 2.1.
+matches section 11 of the GNU Affero General Public License; it is stated here in its own right so it
+survives a change of licence made under clause 2.1.
 
 If you institute patent litigation against anyone alleging that MailFathom or a Contribution in it
 constitutes patent infringement, the patent licences granted to you under this agreement terminate on the

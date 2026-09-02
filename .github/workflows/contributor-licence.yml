@@ -1,5 +1,5 @@
 # Copyright © 2026 Krzysztof Kasprowicz
-# Licensed under the Apache License, Version 2.0. See LICENSE in the project root for license information.
+# Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 # Project repository: https://github.com/Krzysztof318/MailFathom
 
 name: Contributor licence
@@ -432,7 +432,7 @@ jobs:
           $marker
           $opening
 
-          **You keep the copyright in what you wrote.** The agreement asks for two things Apache-2.0 section 5 does not carry: a licence broad enough that MailFathom can be published under other terms in future without tracing every past contributor, and your statement that the code was yours to give. It is worth the two minutes it takes to read.
+          **You keep the copyright in what you wrote.** MailFathom is AGPL-3.0-only, and that licence has no clause of its own placing a contribution under the project's terms, so the agreement is what carries three things: the licence that lets MailFathom use your contribution at all, a licence broad enough that MailFathom can be published under other terms in future without tracing every past contributor, and your statement that the code was yours to give. It is worth the two minutes it takes to read.
 
           To accept, reply on this pull request with this sentence as the whole of your comment — nothing before it and nothing after, because an acceptance has to be unmistakable:
 
