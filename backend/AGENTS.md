@@ -125,7 +125,7 @@ The root file states which stack owns which build contract and how the two meet.
 - `AI` owns retrieval, chunking, embeddings, and agent-framework composition without leaking provider-specific types into `Application` or `Domain`.
 - `Mcp` maps protocol inputs and outputs to application use cases. It contains no persistence or email-protocol logic.
 - `Host` is a composition root only: configuration, dependency injection, middleware, endpoints, workers, and process lifetime.
-- Keep email retrieval read-only. Synchronization and content retrieval must never set the remote IMAP `\Seen` flag. A change the mailbox owner authored may move it, and reaches the server only through the write session ADR 0007 defines, which no read path can obtain — a rule, the spam verdict, or an MCP caller.
+- Keep email retrieval read-only. Synchronization and content retrieval must never set the remote IMAP `\Seen` flag. A change the mailbox owner authored may move it, and reaches the server only through the write session ADR 0007 defines, which no read path can obtain — a rule, the spam verdict, an MCP caller, or the owner themselves opening a message in the client, which is [ADR 0026](../docs/decisions/0026-marking-a-message-read-when-a-person-opens-it-in-the-client.md).
 
 ## Reliability and performance
 
