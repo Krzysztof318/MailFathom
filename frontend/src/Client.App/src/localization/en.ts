@@ -20,10 +20,14 @@ export const en = {
     'shell.versions': 'Client {client}, deployment {deployment}',
     'shell.account': 'Account and preferences',
     'shell.accountMenu': 'Account',
+    'shell.mailboxes': 'Mailboxes',
+    'shell.tabMode': 'Tab mode',
+    'shell.tabModeTooNarrow': 'available on a wider screen',
     'control.notBuiltYet': '{control} — not built yet',
     'ai.badge': 'AI',
 
     'theme.system': 'Follow the system',
+    'theme.automatic': 'Auto',
     'theme.light': 'Light',
     'theme.dark': 'Dark',
 
@@ -110,6 +114,9 @@ export const en = {
         'That address is plain HTTP, which this client will not send a password over until you say it may.',
     'connect.unavailable': 'Nothing answered there. Check the address, and check that the deployment is running.',
     'connect.unreadable': 'Something answered there, but not as MailFathom.',
+
+    'preferences.notStated':
+        'That change was not saved to the deployment, so it holds on this machine alone until the next one succeeds.',
 
     'deployment.reachedAt': 'Reading from {address}',
     'deployment.change': 'Point somewhere else',

@@ -19,10 +19,14 @@ export const pl: Catalogue = {
     'shell.versions': 'Klient {client}, wdrożenie {deployment}',
     'shell.account': 'Konto i ustawienia',
     'shell.accountMenu': 'Konto',
+    'shell.mailboxes': 'Skrzynki',
+    'shell.tabMode': 'Tryb zakładek',
+    'shell.tabModeTooNarrow': 'dostępne na szerszym ekranie',
     'control.notBuiltYet': '{control} — jeszcze niezbudowane',
     'ai.badge': 'AI',
 
     'theme.system': 'Zgodnie z systemem',
+    'theme.automatic': 'Auto',
     'theme.light': 'Jasny',
     'theme.dark': 'Ciemny',
 
@@ -110,6 +114,9 @@ export const pl: Catalogue = {
         'Ten adres używa zwykłego protokołu HTTP, a ten klient nie wyśle nim hasła, dopóki na to nie zezwolisz.',
     'connect.unavailable': 'Nic tam nie odpowiedziało. Sprawdź adres oraz to, czy wdrożenie jest uruchomione.',
     'connect.unreadable': 'Coś tam odpowiedziało, ale nie jako MailFathom.',
+
+    'preferences.notStated':
+        'Ta zmiana nie została zapisana na wdrożeniu, więc obowiązuje tylko na tym urządzeniu do czasu, aż kolejna się powiedzie.',
 
     'deployment.reachedAt': 'Odczyt z {address}',
     'deployment.change': 'Wskaż inne wdrożenie',

@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useLayoutEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import {
     machinePrefersDark,
     preferredThemeChoice,
@@ -31,16 +31,18 @@ export function ThemeProvider({ children }: { readonly children: ReactNode }) {
         document.documentElement.dataset['theme'] = theme;
     }, [theme]);
 
+    // Held steady across renders rather than rebuilt inside the value below, because what a person chose is written
+    // from two places now: the controls on the screen, and the answer the deployment gives once a session exists. The
+    // second reads it inside an effect, and a setter that changed identity whenever the choice did would restart that
+    // read every time it succeeded.
+    const chooseTheme = useCallback((chosen: ThemeChoice) => {
+        storeThemeChoice(chosen);
+        setChoice(chosen);
+    }, []);
+
     const themed = useMemo<Themed>(
-        () => ({
-            choice,
-            theme,
-            setThemeChoice: (chosen: ThemeChoice) => {
-                storeThemeChoice(chosen);
-                setChoice(chosen);
-            },
-        }),
-        [choice, theme],
+        () => ({ choice, theme, setThemeChoice: chooseTheme }),
+        [choice, theme, chooseTheme],
     );
 
     return <ThemeContext value={themed}>{children}</ThemeContext>;

@@ -4,9 +4,18 @@
 
 /** One request this package asks its caller to put on the wire. */
 export interface ClientRequest {
-    readonly method: 'GET';
+    readonly method: 'GET' | 'POST';
     readonly path: string;
     readonly headers: Readonly<Record<string, string>>;
+
+    /**
+     * What the request states, for a method that carries one, and nothing for a method that does not.
+     *
+     * It is already a finished string rather than a value to be serialized, because what a route accepts is that
+     * route's contract: the operation composing it is the only thing here that knows the shape, and a transport that
+     * serialized on its behalf would be a second opinion about the wire in the one module that must have none.
+     */
+    readonly body?: string;
 
     /**
      * The most of this one answer the transport reads, in bytes, where the operation knows better than the backstop.

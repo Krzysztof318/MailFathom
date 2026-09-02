@@ -1053,6 +1053,7 @@ describe('App deployment', () => {
         expect(routesAsked()).toEqual([
             'https://elsewhere.example.invalid/api/client/session',
             'https://elsewhere.example.invalid/api/client/accounts',
+            'https://elsewhere.example.invalid/api/client/preferences',
         ]);
     });
 
@@ -1079,6 +1080,7 @@ describe('App deployment', () => {
         expect(routesAsked()).toEqual([
             'https://mail.example.test/api/client/session',
             'https://mail.example.test/api/client/accounts',
+            'https://mail.example.test/api/client/preferences',
         ]);
     });
 
@@ -1230,8 +1232,10 @@ describe('App deployment', () => {
         expect(routesAsked()).toEqual([
             'https://first.example.invalid/api/client/session',
             'https://first.example.invalid/api/client/accounts',
+            'https://first.example.invalid/api/client/preferences',
             'https://second.example.invalid/api/client/session',
             'https://second.example.invalid/api/client/accounts',
+            'https://second.example.invalid/api/client/preferences',
         ]);
     });
 });

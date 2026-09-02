@@ -4,41 +4,63 @@
 
 import { useSyncExternalStore } from 'react';
 
-// Whether the window is at or above the width the workspace opens out at — the one width `styles.css` declares as the
-// point where a stack of screens becomes a rail beside columns. A stylesheet answers that for anything CSS can lay out
-// two ways from one tree, and that is almost everything; what it cannot do is decide *which* of two screens is in the
-// document, and the narrow Mail space is that case: it draws the list or the message, never both, so a row that is
-// not on the screen is not in the document either.
+// The two widths a component has to ask about rather than compose against. A stylesheet answers a width question for
+// anything CSS can lay out two ways from one tree, and that is almost everything; what it cannot do is decide *which*
+// of two screens is in the document, or whether a control is one a person may operate at all.
 //
-// The query is built from the token rather than from a second copy of the number, so the breakpoint stays one
-// decision.
+// Both queries are built from the tokens in `styles.css` rather than from a second copy of either number, so each
+// breakpoint stays one decision.
 
-function workspaceQuery(): MediaQueryList | null {
-    if (typeof window.matchMedia !== 'function') {
-        return null;
+function widthAtLeast(token: string, fallback: string) {
+    function query(): MediaQueryList | null {
+        if (typeof window.matchMedia !== 'function') {
+            return null;
+        }
+
+        const width = getComputedStyle(document.documentElement).getPropertyValue(token).trim();
+
+        return window.matchMedia(`(min-width: ${width === '' ? fallback : width})`);
     }
 
-    const width = getComputedStyle(document.documentElement).getPropertyValue('--breakpoint-workspace').trim();
+    return {
+        /** Whether the window is at least this wide. A runtime that cannot answer is read as wide. */
+        matches: (): boolean => query()?.matches ?? true,
 
-    return window.matchMedia(`(min-width: ${width === '' ? '48.75rem' : width})`);
-}
+        watch: (changed: () => void): (() => void) => {
+            const watched = query();
 
-/** Whether the window is wide enough for the rail beside columns. A runtime that cannot answer is read as wide. */
-function isWide(): boolean {
-    return workspaceQuery()?.matches ?? true;
-}
+            watched?.addEventListener('change', changed);
 
-function watchWidth(changed: () => void): () => void {
-    const watched = workspaceQuery();
-
-    watched?.addEventListener('change', changed);
-
-    return () => {
-        watched?.removeEventListener('change', changed);
+            return () => {
+                watched?.removeEventListener('change', changed);
+            };
+        },
     };
 }
 
-/** Whether the workspace is laid out wide right now, kept current as the window is resized across the breakpoint. */
+// Built once each, because `useSyncExternalStore` compares the two functions it is handed by identity and a pair
+// rebuilt per render would resubscribe on every one of them.
+const workspaceWidth = widthAtLeast('--breakpoint-workspace', '48.75rem');
+const tabsWidth = widthAtLeast('--breakpoint-tabs', '73.75rem');
+
+/**
+ * Whether the window is at or above the width the workspace opens out at, kept current as it is resized across that
+ * breakpoint.
+ *
+ * The narrow Mail space is what needs asking: it draws the list or the message and never both, so a row that is not on
+ * the screen is not in the document either.
+ */
 export function useWideWorkspace(): boolean {
-    return useSyncExternalStore(watchWidth, isWide);
+    return useSyncExternalStore(workspaceWidth.watch, workspaceWidth.matches);
+}
+
+/**
+ * Whether the window is wide enough for the tab mode to be worth offering.
+ *
+ * It is a second and wider breakpoint than the workspace's, because a rail beside two columns fits long before a row
+ * of tabs above them does. Below it the switch is inert rather than absent: a control that vanished by width alone
+ * would leave somebody who had turned it on with no way to reach it, and the row says why instead.
+ */
+export function useWideEnoughForTabs(): boolean {
+    return useSyncExternalStore(tabsWidth.watch, tabsWidth.matches);
 }

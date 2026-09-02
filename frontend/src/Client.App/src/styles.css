@@ -176,16 +176,21 @@
     --radius-3xl: 0.875rem;
     --radius-4xl: 1.125rem;
 
-    /* The one width the composition changes at: below it the workspace is a stack of screens under bottom navigation,
-       and at or above it a rail beside columns. Declared here so the point where narrow stops is one decision rather
-       than one per screen. The number is the project's, and it is a width rather than a device. */
+    /* The width the workspace itself changes at: below it the workspace is a stack of screens under bottom
+       navigation, and at or above it a rail beside columns. Declared here so the point where narrow stops is one
+       decision rather than one per screen. The number is the project's, and it is a width rather than a device. */
     --breakpoint-workspace: 48.75rem;
 
-    /* The second and last width the client changes at, and it belongs to one screen: the sign-in split stands as two
+    /* The second width the client changes at, and it belongs to one screen: the sign-in split stands as two
        columns above it and stacks below it, which is wider than the workspace opens out at because a claim beside a
-       form needs more room than a rail beside a list. Declared here for the same reason the first one is — a screen
-       reaching for a width of its own is the same drift as one reaching for a colour. */
+       form needs more room than a rail beside a list. Declared here for the same reason the first one is. */
     --breakpoint-split: 58.75rem;
+
+    /* The third and last, and the only one that decides whether a control may be operated rather than how something is
+       laid out: below it the tab mode is inert, because a row of tabs above the columns needs room a rail beside two
+       of them does not. Declared here for the same reason the other two are — a screen reaching for a width of its own
+       is the same drift as one reaching for a colour. */
+    --breakpoint-tabs: 73.75rem;
 
     /* One row of the message list. Declared here rather than in the list because it is a density decision like any
        other — and because the list is arithmetic over it: the window that keeps a mailbox of two hundred thousand

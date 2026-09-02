@@ -12,6 +12,7 @@ import { FolderTree } from './folders/FolderTree';
 import { useLocalization } from './localization/useLocalization';
 import { MessageList } from './messageList/MessageList';
 import { forgetListings } from './messageList/rememberedListings';
+import { useClientPreferences } from './preferences/useClientPreferences';
 import { ReadingPane } from './readingPane/ReadingPane';
 import { useSpace } from './routing/useSpace';
 import { MailSearch } from './search/MailSearch';
@@ -126,12 +127,23 @@ export function App({
     // makes a credential unable to outlive the deployment it was presented to: pointing the client somewhere else, or
     // signing out, runs this again with nothing to present, and nothing of the previous one's answers survives it.
     const connection = useConnection(baseAddress, authorization, send, credentialRefused);
+
     const deploymentSession = connection.session?.outcome === 'read' ? connection.session.value : null;
     const offeredSpaces = deploymentSession === null ? [] : spacesOffered(deploymentSession);
     const space = useSpace(offeredSpaces);
     const withheld = deploymentSession === null ? [] : withheldFrom(deploymentSession);
     const mailAccounts = connection.accounts?.outcome === 'read' ? connection.accounts.value.accounts : [];
     const readsMail = deploymentSession !== null && offers(deploymentSession, 'readMail');
+
+    // The two settings that follow the person rather than this machine. They are read here rather than in the menu that
+    // shows them because the tab mode decides what opening a message does, which is the frame's rather than a menu's —
+    // #1494 is where that half lands, and this is where it will already be.
+    //
+    // Asked for on the same three conditions the mail itself is: somebody signed in, a machine with a network, and a
+    // credential the deployment lets read. The route is admitted under the grant a reader already holds, so a
+    // credential without it would meet a refusal the screen has nothing to do about, and a machine with no network
+    // would meet nothing at all.
+    const preferences = useClientPreferences(readsMail && connection.online ? session : null, readMail);
 
     function signedIn(reached: DeploymentAddress, presented: string): void {
         if (adopted === null) {
@@ -294,8 +306,10 @@ export function App({
                 current={space}
                 account={
                     <AccountMenu
+                        accounts={mailAccounts}
                         deploymentVersion={deploymentSession?.version ?? null}
                         readingFrom={adopted?.chosen === true ? baseAddress : null}
+                        preferences={preferences}
                         onPointSomewhereElse={pointSomewhereElse}
                         onSignOut={signOut}
                     />
