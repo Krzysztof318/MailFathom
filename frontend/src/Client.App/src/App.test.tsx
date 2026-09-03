@@ -1349,6 +1349,16 @@ describe('App deployment', () => {
         expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull();
     });
 
+    // The form somebody was on their way to filling is gone, which is a view change like any other: focus left on the
+    // document would tab past the one sentence saying why there is nothing to fill.
+    it('puts focus at the start of the refusal, rather than leaving it where the form would have been', () => {
+        renderApp({ outcome: 'refused', refusal: 'addressMalformed' }, null);
+
+        expect(document.activeElement).toBe(
+            screen.getByRole('heading', { name: 'This client is configured wrongly' }).parentElement,
+        );
+    });
+
     it('says where the two settings are read from, there being no way out of that screen from inside the client', () => {
         renderApp({ outcome: 'refused', refusal: 'addressMalformed' }, null);
 
@@ -1485,7 +1495,12 @@ describe('App deployment', () => {
     it('forgets the credential of the deployment it is pointed away from', async () => {
         const credentials = storeKeeping();
         const chosen = chose('https://mail.example.invalid');
-        await credentials.keep(servingAddress, heldCredential);
+        const pointedAt = (chosen.outcome === 'resolved' ? chosen.adopted?.deployment : null) ?? servingAddress;
+
+        // Seeded against the address this test itself chose rather than against the serving fixture that happens to
+        // spell the same one: the two are different origins, and a test that passed on the coincidence would stop
+        // proving what its name says the moment either literal moved.
+        await credentials.keep(pointedAt, heldCredential);
 
         renderApp(chosen, heldCredential, deploymentAnswering(), credentials);
         await framed();

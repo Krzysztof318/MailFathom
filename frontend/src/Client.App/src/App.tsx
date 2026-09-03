@@ -605,9 +605,17 @@ const configurationRefusals: Readonly<Record<ConfigurationRefusal, MessageKey>> 
 
 function ConfigurationRefused({ refusal }: { readonly refusal: ConfigurationRefusal }) {
     const { translate } = useLocalization();
+    const refused = useRef<HTMLElement>(null);
+
+    // This is drawn in place of the form somebody was on their way to filling, which is a view change like any other:
+    // a keyboard left on the document would tab into whatever follows and never meet the sentence saying why there is
+    // no form. The alert announces it to a screen reader; this is what puts anybody else at the start of it.
+    useEffect(() => {
+        refused.current?.focus();
+    }, []);
 
     return (
-        <section className="flex flex-col gap-3" role="alert">
+        <section className="flex flex-col gap-3" ref={refused} role="alert" tabIndex={-1}>
             <h2 className="text-4xl font-semibold tracking-tight text-text">{translate('configuration.refused')}</h2>
             <p className="text-base text-text-soft">{translate(configurationRefusals[refusal])}</p>
             <p className="text-sm text-muted">{translate('configuration.whereItIsStated')}</p>

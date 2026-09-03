@@ -348,6 +348,21 @@ describe('SignIn', () => {
         expect(credentialsSent(asked)).toEqual([undefined, 'Basic b3duZXI6b3BlbiBzZXNhbWU=']);
     });
 
+    // The fields stay editable while an attempt runs, so somebody who spots a typo can correct it without waiting.
+    // What must not follow is the screen renaming the attempt: the request already went to the address it was
+    // started against, and a status naming the one being typed would be reporting something that is not happening.
+    it('keeps naming the address the attempt was started against while it is being edited', () => {
+        renderScreen(() => new Promise(() => undefined));
+        typeAddress('first.example.test');
+        typeCredential();
+        submit();
+
+        typeAddress('second.example.test');
+
+        expect(screen.getAllByText('Connecting to first.example.test…').length).toBeGreaterThan(0);
+        expect(screen.queryByText('Connecting to second.example.test…')).toBeNull();
+    });
+
     it('says it is signing in while the answer has not arrived', () => {
         renderScreen(() => new Promise(() => undefined), servingDeployment);
 

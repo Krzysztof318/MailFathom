@@ -20,7 +20,7 @@ import type { DeploymentTransport } from '../deployment/sendToDeployment';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { AdvancedConnection } from './AdvancedConnection';
-import { portForPermission, portOf, resolveConnection } from './connection';
+import { portForPermission, portOf, resolveConnection, type ResolvedConnection } from './connection';
 import { resolveCredentialEntry, type CredentialEntryRefusal } from './credentialEntry';
 import { CredentialNotices, type CredentialNotice } from './CredentialNotices';
 import type { CredentialLifetime } from './credentialStore';
@@ -145,6 +145,12 @@ export function SignIn({
     const [password, setPassword] = useState('');
     const [revealed, setRevealed] = useState(false);
     const [presenting, setPresenting] = useState(false);
+
+    // The address the attempt in flight was started against, which is the one case on this screen where a value is
+    // held rather than computed: nothing on the form still says it. The fields stay editable while an attempt runs —
+    // deliberately, so a person who sees their mistake can correct it without waiting — and a screen that re-derived
+    // this from the entry would then name the address being typed while the request goes to the one that was.
+    const [reaching, setReaching] = useState<ResolvedConnection | null>(null);
     const [refusal, setRefusal] = useState<SignInScreenRefusal | null>(null);
     const address = useRef<HTMLInputElement>(null);
     const name = useRef<HTMLInputElement>(null);
@@ -231,6 +237,10 @@ export function SignIn({
         );
 
         setRefusal(null);
+
+        // Read back permitting clear text, the way the summary reads a handed address: what is being asked here is
+        // what this attempt's address resolved *to*, and it only became one by having been resolved already.
+        setReaching(resolveConnection(reached.deployment.baseAddress, true));
         setPresenting(true);
 
         // An abandoned attempt has no answer, whatever the wire eventually said: the screen is already back where the
@@ -320,11 +330,6 @@ export function SignIn({
     // address this run uses by being resolved, and what is being asked here is what it resolved *to*.
     const connection =
         shownAddress === undefined ? null : resolveConnection(shownAddress, configured || clearTextPermitted);
-
-    // What the connect control names while an attempt runs. It is the authority rather than the whole address because
-    // that is what a person recognises, and it is read back the same way the summary is so the two cannot disagree —
-    // including where the address is not on this form at all, which is the one case `connection` answers nothing for.
-    const reaching = connection ?? (deployment === null ? null : resolveConnection(deployment.baseAddress, true));
 
     return (
         <section className="flex flex-col gap-6">
