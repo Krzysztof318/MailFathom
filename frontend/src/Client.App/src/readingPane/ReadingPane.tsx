@@ -20,7 +20,7 @@ import { useLocalization } from '../localization/useLocalization';
 import { useReadMarking } from '../readMarking/useReadMarking';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { Message } from '../messageBody/Message';
-import { Attachment } from './Attachment';
+import { Attachments } from './Attachments';
 import { MessageHeaders } from './MessageHeaders';
 import { sizeOf } from '../localization/octets';
 import { SenderVerdict } from './SenderVerdict';
@@ -367,20 +367,11 @@ function OpenMessage({
                     </div>
 
                     {message.attachments.length === 0 ? null : (
-                        <section className="flex flex-col gap-2 border-t border-line-soft pt-3">
-                            <h3 className="text-sm font-medium text-text-soft">{translate('attachments.heading')}</h3>
-
-                            <ul className="flex flex-wrap gap-2">
-                                {message.attachments.map((attachment) => (
-                                    <Attachment
-                                        key={attachment.position}
-                                        session={session}
-                                        storedEmailId={storedEmailId}
-                                        attachment={attachment}
-                                    />
-                                ))}
-                            </ul>
-                        </section>
+                        <Attachments
+                            session={session}
+                            storedEmailId={storedEmailId}
+                            attachments={message.attachments}
+                        />
                     )}
                 </div>
 

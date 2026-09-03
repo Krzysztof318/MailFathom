@@ -551,7 +551,8 @@ export const pl: Catalogue = {
         'Uwierzytelniona przez {domain} — to ona naprawdę ją wysłała, a nie nazwa widoczna powyżej.',
     'sender.authenticatedByNobody': 'Nic nie uwierzytelniło nadawcy tej wiadomości.',
 
-    'attachments.heading': 'Pliki dołączone do tej wiadomości',
+    'attachments.list': 'Pliki dołączone do tej wiadomości',
+    'attachments.downloadAll': 'Pobierz wszystkie',
     'attachment.unnamed': 'Plik bez nazwy',
     'attachment.download': 'Pobierz {name}',
     'attachment.nameWasRewritten':

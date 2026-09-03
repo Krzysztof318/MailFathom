@@ -543,7 +543,8 @@ export const en = {
     'sender.authenticatedBy': 'Authenticated by {domain}, which is who actually sent it rather than the name above.',
     'sender.authenticatedByNobody': 'Nothing authenticated a sender for this message.',
 
-    'attachments.heading': 'Files this message carries',
+    'attachments.list': 'Files this message carries',
+    'attachments.downloadAll': 'Download all',
     'attachment.unnamed': 'Unnamed file',
     'attachment.download': 'Download {name}',
     'attachment.nameWasRewritten':

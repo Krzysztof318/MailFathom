@@ -2,23 +2,11 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { act, fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
-import type { ClientRequest, ClientSession, MailAttachment } from '@mailfathom/client-backend';
-import {
-    AttachmentDeliveryContext,
-    type AttachmentDelivery,
-    type AttachmentDeliveryOutcome,
-} from '../deployment/attachmentDelivery';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import type { MailAttachment } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
-import { Attachment } from './Attachment';
-
-const session: ClientSession = {
-    baseAddress: 'https://mail.example.invalid',
-    authorization: 'Basic dGVzdA==',
-};
-
-const messageId = '00000000-0000-4000-8000-000000000000';
+import { Attachment, type Downloading } from './Attachment';
 
 const invoice: MailAttachment = {
     position: 1,
@@ -28,53 +16,26 @@ const invoice: MailAttachment = {
     sizeOctets: 2_048,
 };
 
-/** What a download was asked to do, so a test asserts on the request and the name rather than on a call being made. */
-interface Asked {
-    readonly request: ClientRequest;
-    readonly fileName: string;
-    readonly arrived: (octets: number) => void;
-    readonly abandoned: AbortSignal;
-}
+function drawing(
+    attachment: MailAttachment,
+    downloading?: Downloading,
+): { onDownload: () => void; onStop: () => void } {
+    const controls = { onDownload: vi.fn(), onStop: vi.fn() };
 
-/** A delivery that records what it was asked and answers when the test says so, never on its own. */
-function deliveryHeldOpen(): {
-    deliver: AttachmentDelivery;
-    asked: Asked[];
-    answer: (outcome: AttachmentDeliveryOutcome) => void;
-} {
-    const asked: Asked[] = [];
-    let settle: ((outcome: AttachmentDeliveryOutcome) => void) | null = null;
-
-    return {
-        asked,
-        answer: (outcome) => {
-            settle?.(outcome);
-        },
-        deliver: (request, fileName, arrived, abandoned) => {
-            asked.push({ request, fileName, arrived, abandoned });
-
-            return new Promise<AttachmentDeliveryOutcome>((resolve) => {
-                settle = resolve;
-            });
-        },
-    };
-}
-
-function drawing(attachment: MailAttachment, deliver: AttachmentDelivery): void {
     render(
         <LocalizationProvider>
-            <AttachmentDeliveryContext value={deliver}>
-                <ul>
-                    <Attachment session={session} storedEmailId={messageId} attachment={attachment} />
-                </ul>
-            </AttachmentDeliveryContext>
+            <ul>
+                <Attachment attachment={attachment} downloading={downloading} {...controls} />
+            </ul>
         </LocalizationProvider>,
     );
+
+    return controls;
 }
 
 describe('Attachment', () => {
     it('describes the file before anything is fetched, so a reader decides before it arrives', () => {
-        drawing(invoice, () => Promise.resolve('delivered'));
+        drawing(invoice);
 
         expect(screen.getByText('invoice.pdf')).toBeDefined();
         expect(screen.getByText('pdf')).toBeDefined();
@@ -85,19 +46,19 @@ describe('Attachment', () => {
     });
 
     it('names an unnamed part rather than offering a control with nothing to say', () => {
-        drawing({ ...invoice, fileName: null }, () => Promise.resolve('delivered'));
+        drawing({ ...invoice, fileName: null });
 
         expect(screen.getByRole('button', { name: 'Download Unnamed file' })).toBeDefined();
     });
 
-    it('names the kind of an unnamed part from what it declares itself to be', () => {
-        drawing({ ...invoice, fileName: null, mediaType: 'image/svg+xml' }, () => Promise.resolve('delivered'));
+    it('names the kind of a part from what the message declared it to be', () => {
+        drawing({ ...invoice, fileName: 'photo.jpg', mediaType: 'image/jpeg' });
 
-        expect(screen.getByText('svg')).toBeDefined();
+        expect(screen.getByText('image')).toBeDefined();
     });
 
     it('says where the sender wrote a file name the deployment would not use', () => {
-        drawing({ ...invoice, wasFileNameNormalized: true }, () => Promise.resolve('delivered'));
+        drawing({ ...invoice, wasFileNameNormalized: true });
 
         expect(
             screen.getByText(
@@ -106,68 +67,40 @@ describe('Attachment', () => {
         ).toBeDefined();
     });
 
-    it('fetches nothing until the download is asked for', () => {
-        const held = deliveryHeldOpen();
-        drawing(invoice, held.deliver);
+    it('asks for the file when the chip is pressed', () => {
+        const controls = drawing(invoice);
 
-        expect(held.asked).toEqual([]);
+        fireEvent.click(screen.getByRole('button', { name: 'Download invoice.pdf' }));
+
+        expect(controls.onDownload).toHaveBeenCalledTimes(1);
     });
 
-    it('asks for the file at the position the message described it at, under the size it stated', () => {
-        const held = deliveryHeldOpen();
-        drawing(invoice, held.deliver);
+    it('asks for nothing more while the file is still arriving', () => {
+        const controls = drawing(invoice, { stage: 'arriving', octets: 0 });
 
         fireEvent.click(screen.getByRole('button', { name: 'Download invoice.pdf' }));
 
-        expect(held.asked[0]?.request).toEqual({
-            method: 'GET',
-            path: `https://mail.example.invalid/api/client/messages/${messageId}/attachments/1`,
-            headers: { Accept: 'application/octet-stream', Authorization: 'Basic dGVzdA==' },
-            longestAnswer: 2_048,
-        });
+        expect(controls.onDownload).not.toHaveBeenCalled();
     });
 
-    it('says how much has arrived while the file is still arriving', async () => {
-        const held = deliveryHeldOpen();
-        drawing(invoice, held.deliver);
+    it('says how much has arrived while the file is still arriving', () => {
+        drawing(invoice, { stage: 'arriving', octets: 1_024 });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Download invoice.pdf' }));
-
-        act(() => {
-            held.asked[0]?.arrived(1_024);
-        });
-
-        expect(await screen.findByText(`${sizeReadAs(1_024)} of ${sizeReadAs(2_048)}`)).toBeDefined();
+        expect(screen.getByText(`${sizeReadAs(1_024)} of ${sizeReadAs(2_048)}`)).toBeDefined();
     });
 
-    it('starts one download however often the control is pressed while that one is arriving', () => {
-        const held = deliveryHeldOpen();
-        drawing(invoice, held.deliver);
+    it('offers a way out of a download in flight', () => {
+        const controls = drawing(invoice, { stage: 'arriving', octets: 1_024 });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Download invoice.pdf' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Download invoice.pdf' }));
-
-        expect(held.asked.length).toBe(1);
-    });
-
-    it('offers a way out of a download in flight, and abandons it when that is taken', () => {
-        const held = deliveryHeldOpen();
-        drawing(invoice, held.deliver);
-
-        fireEvent.click(screen.getByRole('button', { name: 'Download invoice.pdf' }));
         fireEvent.click(screen.getByRole('button', { name: 'Stop downloading' }));
 
-        expect(held.asked[0]?.abandoned.aborted).toBe(true);
+        expect(controls.onStop).toHaveBeenCalledTimes(1);
     });
 
-    it('says the file was downloaded once it has been', async () => {
-        const held = deliveryHeldOpen();
-        drawing(invoice, held.deliver);
+    it('says the file was downloaded once it has been', () => {
+        drawing(invoice, { stage: 'finished', outcome: 'delivered' });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Download invoice.pdf' }));
-        held.answer('delivered');
-
-        expect(await screen.findByText('invoice.pdf was downloaded.')).toBeDefined();
+        expect(screen.getByText('invoice.pdf was downloaded.')).toBeDefined();
     });
 
     it.each([
@@ -182,14 +115,10 @@ describe('Attachment', () => {
             'The deployment sent more than this message said the file holds, so nothing was saved. Report this as a defect.',
         ],
         ['abandoned', 'The download was stopped, so nothing was saved.'],
-    ] as const)('says what became of a download that answered %s', async (outcome, said) => {
-        const held = deliveryHeldOpen();
-        drawing(invoice, held.deliver);
+    ] as const)('says what became of a download that answered %s', (outcome, said) => {
+        drawing(invoice, { stage: 'finished', outcome });
 
-        fireEvent.click(screen.getByRole('button', { name: 'Download invoice.pdf' }));
-        held.answer(outcome);
-
-        expect(await screen.findByText(said)).toBeDefined();
+        expect(screen.getByRole('alert').textContent).toBe(said);
     });
 });
 
