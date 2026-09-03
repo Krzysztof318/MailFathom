@@ -192,9 +192,16 @@ the deployment's to hold instead.
 The client carries one OpenTelemetry pipeline for all three signals, composed once in `src/Client.App/src/main.tsx`
 beside the deployment and the credential, and handed down as a value: `src/Client.App/src/telemetry/clientTelemetry.ts`
 publishes it, and a screen that reports something takes it out of context rather than registering anything of its own.
-`src/Client.Backend/src/telemetry.ts` is the other half — every request that package makes goes through it, so one span
-and two measurements per request happen in one place whatever the operation did with the answer. That package pins
+`src/Client.Backend/src/telemetry.ts` is the other half — every request that package composes goes through it, so one
+span and two measurements per request happen in one place whatever the operation did with the answer. That package pins
 `@opentelemetry/api` and nothing else, which names no browser API and so crosses none of the boundary above.
+
+**Composes rather than sends, because four of those requests are put on the wire by this package instead.** A file a
+message carries and the picture the signed-in person is drawn by answer in octets, so the `fetch` for each of them is
+in `src/Client.App/src/deployment/`. `Client.Backend` still owns the record: it publishes an operation for each, and
+not the request builder behind it, which opens the span, composes the request inside it, hands that request to the
+adapter, and closes on the reason the adapter read off the answer. A request composed outside a span would carry no
+trace context and leave no record, so composing one is not something this package lets a caller do.
 
 **That span is also what the request travels under.** It is the active context while the operation composes its
 request, so `headersFor` writes the W3C trace context into the headers and the span the deployment opens is this one's

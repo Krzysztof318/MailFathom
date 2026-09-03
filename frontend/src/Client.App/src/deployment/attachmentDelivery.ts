@@ -3,7 +3,12 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { createContext, useContext } from 'react';
-import { attachmentRefusalForStatus, longestResponseBody, type ClientRequest } from '@mailfathom/client-backend';
+import {
+    attachmentRefusalForStatus,
+    longestResponseBody,
+    type ClientFailureReason,
+    type ClientRequest,
+} from '@mailfathom/client-backend';
 import { readBoundedContent } from './boundedBody';
 
 // Fetching one file a message carries and handing it to the person, which is one operation rather than two: nothing
@@ -17,6 +22,28 @@ import { readBoundedContent } from './boundedBody';
 /** What happened to a download, where an expected failure is a value rather than an exception. */
 export type AttachmentDeliveryOutcome =
     'delivered' | 'abandoned' | 'unauthenticated' | 'unauthorized' | 'unavailable' | 'largerThanDescribed';
+
+/**
+ * Which failure a download amounts to, for the record `Client.Backend` keeps of the request it composed.
+ *
+ * Two of the six are not failures of the request. A delivered file plainly is not, and neither is a download somebody
+ * stopped: it ended because the person asked it to, and recording that as `unavailable` would put their change of mind
+ * in the dimension an operator reads for a deployment that is not answering. An answer larger than the message
+ * described is `unreadable` — the body was refused rather than absent, which is the reason that word already carries.
+ */
+export function deliveryFailureOf(outcome: AttachmentDeliveryOutcome): ClientFailureReason | null {
+    switch (outcome) {
+        case 'delivered':
+        case 'abandoned':
+            return null;
+        case 'largerThanDescribed':
+            return 'unreadable';
+        case 'unauthenticated':
+        case 'unauthorized':
+        case 'unavailable':
+            return outcome;
+    }
+}
 
 /**
  * Downloads one file and hands it to the person as a file to keep.

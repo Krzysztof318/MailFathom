@@ -3,8 +3,14 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import { attachmentRefusalForStatus, mailAttachmentRequest, mailAttachmentRoute } from './mailAttachment';
+import {
+    attachmentRefusalForStatus,
+    mailAttachmentRequest,
+    mailAttachmentRoute,
+    readMailAttachment,
+} from './mailAttachment';
 import type { ClientSession } from './session';
+import type { ClientRequest } from './transport';
 
 const session: ClientSession = {
     baseAddress: 'https://mail.example.invalid',
@@ -35,6 +41,43 @@ describe('mailAttachmentRequest', () => {
 
     it('reads the answer under the size the message said the file holds, so a larger one is refusable', () => {
         expect(mailAttachmentRequest(session, messageId, 0, 17).longestAnswer).toBe(17);
+    });
+});
+
+// What the download records is asserted in `telemetry.test.ts`, which is where a span can be read back from; what is
+// asserted here is that the adapter is handed the request this module composes and that its answer travels back
+// untouched, this package having no vocabulary for a download somebody stopped.
+describe('readMailAttachment', () => {
+    it('hands the composed download to the adapter that puts it on the wire', async () => {
+        const asked: ClientRequest[] = [];
+
+        await readMailAttachment(
+            session,
+            messageId,
+            1,
+            2_048,
+            (request) => {
+                asked.push(request);
+
+                return Promise.resolve('delivered');
+            },
+            () => null,
+        );
+
+        expect(asked).toEqual([mailAttachmentRequest(session, messageId, 1, 2_048)]);
+    });
+
+    it('answers exactly what the adapter answered', async () => {
+        const answer = await readMailAttachment(
+            session,
+            messageId,
+            0,
+            17,
+            () => Promise.resolve('abandoned'),
+            () => null,
+        );
+
+        expect(answer).toBe('abandoned');
     });
 });
 

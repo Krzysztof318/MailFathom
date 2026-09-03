@@ -2,15 +2,19 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+import type { ClientFailureReason } from './failure';
 import { headersFor, routeFor, type ClientSession } from './session';
+import { reported } from './telemetry';
 import type { ClientRequest } from './transport';
 
 // The one operation on this surface that is not read through a transport, because what it answers with is octets and a
-// `MailFathomTransport` answers with text. So this module composes the request and stops there: putting it on the wire
-// with a progress report and a way to abandon it is the application's adapter, exactly as calling `fetch` at all is.
+// `MailFathomTransport` answers with text. So this module composes the request and hands it to an adapter to send:
+// putting it on the wire with a progress report and a way to abandon it is the application's, exactly as calling
+// `fetch` at all is.
 //
-// What stays here is everything the boundary owns — the route, the credential, the header the answer is asked in, and
-// the bound the answer is read under — so no screen and no adapter above learns a path or a header name.
+// What stays here is everything the boundary owns — the route, the credential, the header the answer is asked in, the
+// bound the answer is read under, and the record kept of the request — so no screen and no adapter above learns a path
+// or a header name, and none of them decides what a download is called in a trace.
 
 /** The route one file a message carries is served at, relative to the client prefix. */
 export function mailAttachmentRoute(storedEmailId: string, position: number): string {
@@ -43,6 +47,35 @@ export function mailAttachmentRequest(
         headers: { ...headersFor(session), Accept: 'application/octet-stream' },
         longestAnswer: describedSizeOctets,
     };
+}
+
+/**
+ * Downloads one file a message carries, through an adapter, and reports the request the way every other one is.
+ *
+ * The composition and the send are one operation here rather than two because the record is: a span named outside this
+ * package would be named by whichever caller sent first, and a request composed outside the span would carry no trace
+ * context at all — the header is written from whatever span is active when `mailAttachmentRequest` runs, which is why
+ * that call sits inside this one.
+ *
+ * @param deliver Puts the composed request on the wire and answers whatever the application makes of it, which is
+ * where a progress report and a way to abandon the download belong.
+ * @param failureOf Which failure that answer amounts to, or `null` where the client got an answer it acts on. The
+ * adapter reads it, this package having no vocabulary for a download somebody stopped.
+ */
+export function readMailAttachment<TOutcome>(
+    session: ClientSession,
+    storedEmailId: string,
+    position: number,
+    describedSizeOctets: number,
+    deliver: (request: ClientRequest) => Promise<TOutcome>,
+    failureOf: (outcome: TOutcome) => ClientFailureReason | null,
+): Promise<TOutcome> {
+    return reported(
+        // A template rather than the composed route: an identifier and a position in a span name are one name per file.
+        'GET /messages/{storedEmailId}/attachments/{position}',
+        () => deliver(mailAttachmentRequest(session, storedEmailId, position, describedSizeOctets)),
+        failureOf,
+    );
 }
 
 /**

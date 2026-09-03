@@ -3,10 +3,14 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { useEffect, useRef, useState } from 'react';
-import { mailAttachmentRequest, type ClientSession, type MailAttachment } from '@mailfathom/client-backend';
+import { readMailAttachment, type ClientSession, type MailAttachment } from '@mailfathom/client-backend';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
-import { useAttachmentDelivery, type AttachmentDeliveryOutcome } from '../deployment/attachmentDelivery';
+import {
+    deliveryFailureOf,
+    useAttachmentDelivery,
+    type AttachmentDeliveryOutcome,
+} from '../deployment/attachmentDelivery';
 import { sizeOf } from './octets';
 import { savedAs } from './savedFileName';
 
@@ -74,13 +78,24 @@ export function Attachment({
         running.current = abandoning;
         setDownloading({ stage: 'arriving', octets: 0 });
 
-        void deliver(
-            mailAttachmentRequest(session, storedEmailId, attachment.position, attachment.sizeOctets),
-            savedAs(attachment.fileName, attachment.position),
-            (octets) => {
-                setDownloading({ stage: 'arriving', octets });
-            },
-            abandoning.signal,
+        // The request is composed by `Client.Backend` inside the span it opens around the whole download, which is
+        // what puts this row's wait in the same trace as the deployment's work on it. What this component supplies is
+        // the part that is the screen's: where the file is saved, how much of it has arrived, and the way out.
+        void readMailAttachment(
+            session,
+            storedEmailId,
+            attachment.position,
+            attachment.sizeOctets,
+            (request) =>
+                deliver(
+                    request,
+                    savedAs(attachment.fileName, attachment.position),
+                    (octets) => {
+                        setDownloading({ stage: 'arriving', octets });
+                    },
+                    abandoning.signal,
+                ),
+            deliveryFailureOf,
         ).then((outcome) => {
             running.current = null;
             setDownloading({ stage: 'finished', outcome });

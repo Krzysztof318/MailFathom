@@ -93,6 +93,9 @@ describe('readOwnDisplayName', () => {
     });
 });
 
+// What the correction records is asserted in `telemetry.test.ts`, which is where a span can be read back from — a
+// refused name among them, that being an answer the person acts on rather than a failure. What is asserted here is
+// what the operation answers, which the record does not change.
 describe('changeOwnDisplayName', () => {
     it('states the name as a document on the name route', async () => {
         const { transport, requests } = recording({ status: 200, body: recordedBody });
