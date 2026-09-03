@@ -10,7 +10,8 @@ namespace MailFathom.Application.Synchronization.Administration;
 /// It is the classification a failing folder is read by, and it is deliberately a closed set of names rather than
 /// anything the failure itself carried. An administrative surface must publish neither an exception message nor a
 /// remote folder path, and what an operator acts on is which of these happened: two of them are corrected by editing a
-/// folder mapping, two are waited out, one is a credential to replace, and one is a defect to report.
+/// folder mapping, two are waited out, one is resumed by the next start after a shutdown interrupted it, one is a
+/// credential to replace, and one is a defect to report.
 /// </para>
 /// <para>
 /// The members mirror the branches the supervisor already separates when it logs a folder, so a value here and the line

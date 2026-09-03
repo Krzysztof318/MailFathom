@@ -137,7 +137,7 @@ internal static class PersistenceConcurrencyConflicts
     /// both answers name one rotatable secret rather than exposing a persistence constraint.
     /// </para>
     /// <para>
-    /// The last is one message identifier bound to a thread by two arrivals. Two runs storing two messages of one
+    /// The next is one message identifier bound to a thread by two arrivals. Two runs storing two messages of one
     /// conversation read that nothing binds the identifier yet, and each assembles a thread and binds it; the loser
     /// violates the key. The retry is what converges them: it re-reads, finds the winner's thread bound to the
     /// identifier, and joins it — so two halves of one conversation reach one thread rather than the second run
