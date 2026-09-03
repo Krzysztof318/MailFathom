@@ -91,6 +91,14 @@ export function useOwnProfile(
     // only become true at the second. The name read needs no ref beside it, because nothing re-issues one.
     const readingPicture = useRef<AbortController | null>(null);
 
+    // Which correction of the name is the current one, for the same reason the read above is held: a person who
+    // corrects their name and corrects it again before the first answer lands has two writes in flight, and nothing
+    // orders the two answers. The older one arriving second would draw the name they have just changed it away from,
+    // and would say so about a refusal that belongs to a correction nobody is waiting on any more. It is a count
+    // rather than a controller because there is nothing to abandon — the write has already gone, and what is decided
+    // here is only which answer is still worth folding in.
+    const corrections = useRef(0);
+
     // Everything below reads through this rather than out of the state directly, which is what keeps one person's name
     // and picture off the next person's screen without a reset anywhere.
     const inForce = held.session === session ? held : heldForNobody;
@@ -186,7 +194,14 @@ export function useOwnProfile(
                 return;
             }
 
+            corrections.current += 1;
+            const attempted = corrections.current;
+
             void changeOwnDisplayName(session, transport, displayName).then((answer) => {
+                if (attempted !== corrections.current) {
+                    return;
+                }
+
                 setHeld((current) => {
                     if (current.session !== session) {
                         return current;

@@ -226,6 +226,53 @@ describe('useOwnProfile', () => {
         expect(held.latest().nameNotAcceptable).toBe(false);
     });
 
+    it('draws the correction made last rather than an answer to one it replaced', async () => {
+        let answerTheFirstCorrection = (): void => undefined;
+        const firstCorrection = new Promise<void>((resolve) => {
+            answerTheFirstCorrection = () => {
+                resolve();
+            };
+        });
+        let corrections = 0;
+
+        // The first correction is answered last, which is the ordering nothing between two writes guarantees: its
+        // answer names the name the person has since changed away from.
+        const transport: MailFathomTransport = async (request) => {
+            if (request.method !== 'POST') {
+                return { status: 200, body: JSON.stringify({ displayName: 'Ada Lovelace', changeable: true }), headers: {} };
+            }
+
+            corrections += 1;
+
+            if (corrections > 1) {
+                return {
+                    status: 200,
+                    body: JSON.stringify({ displayName: 'Katherine Johnson', changeable: true }),
+                    headers: {},
+                };
+            }
+
+            await firstCorrection;
+
+            return { status: 200, body: JSON.stringify({ displayName: 'Grace Hopper', changeable: true }), headers: {} };
+        };
+
+        const held = await renderProfile(drawing({ outcome: 'none' }), transport);
+
+        act(() => {
+            held.latest().correctName('Grace Hopper');
+        });
+        act(() => {
+            held.latest().correctName('Katherine Johnson');
+        });
+        await settled();
+
+        act(answerTheFirstCorrection);
+        await settled();
+
+        expect(held.latest().displayName).toBe('Katherine Johnson');
+    });
+
     it('draws the picture the deployment stored rather than the file that was sent', async () => {
         const answers: PortraitRead[] = [{ outcome: 'none' }, { outcome: 'drawn', picture }];
         const held = await renderProfile({
