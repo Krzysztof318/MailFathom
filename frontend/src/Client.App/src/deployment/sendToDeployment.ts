@@ -23,6 +23,9 @@ export const sendToDeployment: DeploymentTransport = (abandoned) => async (reque
     const response = await fetch(request.path, {
         method: request.method,
         headers: { ...request.headers },
+        // `null` rather than the absent property, because the compiler is told an optional property is genuinely
+        // absent rather than present and undefined — and `fetch` reads the two the same way.
+        body: request.body ?? null,
         signal: abandoned,
     });
 

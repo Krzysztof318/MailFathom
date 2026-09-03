@@ -326,6 +326,14 @@ off its own origin.
 It writes one `data-theme` attribute on the document before the first paint, so nothing on a screen ever asks which
 theme is in force — the same rule that keeps a screen from asking which language it is in.
 
+Which of the three is chosen follows the person rather than the machine, and `src/preferences/` is what makes it so:
+the choice is read from and written to the deployment over `/api/client/preferences`, so somebody who set the client up
+the way they read does not set it up again per browser profile. The device still resolves a theme before anything is
+signed in — there is no session to read one over above the sign-in screen, and a client that waited on the network to
+paint itself would open blank — and what the deployment answers replaces that value once a session exists. The language
+is the opposite case and stays on the device: it has to be resolved for somebody who has not signed in and may never
+get a session, so there is nothing to read it over.
+
 ## What the build produces
 
 `pnpm build` writes `src/Client.App/dist/` — a directory of static files and nothing else. No Node process joins any

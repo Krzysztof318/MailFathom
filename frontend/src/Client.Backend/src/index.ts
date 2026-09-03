@@ -2,6 +2,15 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+export {
+    clientPreferencesRoute,
+    longestPreferencesAnswer,
+    readClientPreferences,
+    unsetClientPreferences,
+    writeClientPreferences,
+    type ClientPreferences,
+    type ClientThemePreference,
+} from './clientPreferences';
 export { resolveDeploymentEntry, type DeploymentEntryRefusal, type DeploymentEntryResult } from './deployment';
 export {
     deploymentSessionRoute,

@@ -5,6 +5,7 @@
 import type { KeyboardEvent } from 'react';
 import type { MailFolderRole } from '@mailfathom/client-backend';
 import { Icon } from '../controls/Icon';
+import { MailboxMark } from '../controls/MailboxMark';
 import type { IconName } from '../controls/icons';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
@@ -98,7 +99,7 @@ export function FolderRow({
             }`}
         >
             {group ? (
-                <GroupMark ordinal={groupOrdinal} />
+                <MailboxMark ordinal={groupOrdinal} />
             ) : (
                 <Icon
                     name={row.role === null ? 'folder' : roleIcons[row.role]}
@@ -127,19 +128,6 @@ function nameOf(row: FolderTreeRow, translate: (key: MessageKey) => string): str
     }
 
     return row.role === null ? row.name : translate(folderRoleLabels[row.role]);
-}
-
-// The mark in front of a group, which is how the design project tells one mailbox's folders from the next mailbox's:
-// the workspace as a whole takes both colours, and the mailboxes alternate between them.
-function GroupMark({ ordinal }: { readonly ordinal: number }) {
-    const fill =
-        ordinal === 0
-            ? 'bg-linear-to-br from-mailbox-mark from-50% to-mailbox-mark-alternate to-50%'
-            : ordinal % 2 === 1
-              ? 'bg-mailbox-mark'
-              : 'bg-mailbox-mark-alternate';
-
-    return <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${fill}`} />;
 }
 
 // The control that opens a row, absent where there is nothing to open. It is hidden from the accessibility tree because

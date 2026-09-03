@@ -183,7 +183,7 @@ the answer; dropping it is not, and neither is asserting it in jsdom where it wo
   text a person would read. Playwright's `getByRole` is the same query React Testing Library's is. No CSS selector, no
   `data-testid`, no coordinate, and no assertion on a class name.
 - **The service is not started, and the credential belongs to nobody.** The preview server serves the bundle and
-  answers nothing else, so the two routes the client reaches are fulfilled by Playwright's own routing — a browser
+  answers nothing else, so the routes the client reaches are fulfilled by Playwright's own routing — a browser
   feature rather than a package, and the reason a mocking library is refused here as it is above. What that fakes is
   one side of a real exchange: the request is composed, sent, and read by the built bundle exactly as it would be
   against a deployment, which is what lets this suite assert the header the bundle put on the wire. The password typed
