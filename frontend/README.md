@@ -351,6 +351,22 @@ measured off a rendered row rather than written down twice, and the assertion th
 request. A row that ever stops being one height is the argument for reopening this, and it fails a test rather than
 degrading quietly.
 
+`src/fullHtml/` is the second surface [ADR 0024](../docs/decisions/0024-rendering-mail-in-the-client-as-a-closed-document-tree.md)
+takes, and it stands in front of the message the same way a conversation does. What the reading pane draws is a closed
+document tree; what this draws is the markup the sender actually wrote, and two different mechanisms are what make that
+safe rather than one. The frame it is drawn in carries a `sandbox` attribute naming neither `allow-scripts` nor
+`allow-same-origin`, so nothing in the markup runs whatever the markup holds; and what is drawn in it is the
+self-contained representation the service composes, whose every remote address is already gone, so nothing in it
+reaches the sender until a reader asks for that one message's pictures. The footer states those two separately and
+credits each to what actually holds it, because a reader who is told the frame stops both learns nothing about what
+asking for the pictures gives up.
+
+Reaching it is a question rather than a control: pressing the one on the message's head opens a confirmation, and
+neither answer is written down — per message, per reader, or at all. `workspace/rememberedWorkspace.ts` is what keeps
+that true across a reload, by refusing to keep the value and refusing to read one back. `messageBody/MessageMarkupFrame.tsx`
+is the one file in this tree permitted to write `srcdoc` at all, and `eslint.config.ts` names it by path rather than
+letting a call site suppress the rule.
+
 `src/search/` stands above that list rather than on a screen of its own, because that is where somebody reaches for
 it: they are looking at a folder and the message is not in front of them. It reads `/api/client/emails/search`, which
 ranks by words and by meaning at once and says in its answer which of the two happened — so a page ranked by words

@@ -44,6 +44,17 @@ export interface OpenTabsInForce {
     /** Opens a message — in a tab of its own where the person works in tabs, and in the pane where they do not. */
     readonly openMail: (storedEmailId: string, subject: string | null) => void;
 
+    /**
+     * Opens the surface that draws one message's own markup, the reader having been asked first.
+     *
+     * A tab of its own where the person works in tabs, so closing it returns to whatever else was open rather than to
+     * the message it was opened from; in front of the message where they do not, so closing it returns to the message.
+     */
+    readonly openFullHtml: (storedEmailId: string, subject: string | null) => void;
+
+    /** Closes that surface, whichever of the two shapes it was drawn in. */
+    readonly closeFullHtml: () => void;
+
     /** Brings a tab forward, returning the reading column to where that tab was left. */
     readonly activate: (key: string) => void;
 
@@ -81,7 +92,37 @@ export function useOpenTabs(inTabs: boolean): OpenTabsInForce {
     // Where the tab being left is left: what the workspace holds at the moment somebody moves off it. Read here rather
     // than kept beside the tab, because the active tab's place is the workspace itself and a second copy of it would be
     // the pair that disagrees.
-    const here = { selection: workspace.selection, conversation: workspace.conversation };
+    const here = {
+        selection: workspace.selection,
+        conversation: workspace.conversation,
+        fullHtml: workspace.fullHtml,
+    };
+
+    // Opening one thing, whatever kind it is: the tab set gains it, and the reading column goes where that tab was
+    // last left. Written once because the two things a person opens differ in what they hold rather than in what
+    // opening one does, and a second copy of this is how the two would come to disagree about where a tab returns to.
+    function open(tab: OpenTab): void {
+        setHeld((current) => opened(current, tab, here, inTabs));
+        setEmptiedByClosing(false);
+        revise(tabIn(held, tab.key)?.opened ?? tab.opened);
+    }
+
+    function closeTab(key: string): void {
+        const after = closed(held, key);
+        const going = tabIn(held, key);
+
+        setHeld(after);
+        setEmptiedByClosing(after.tabs.length === 0);
+
+        if (held.active !== key) {
+            return;
+        }
+
+        // Where it was left rather than where it was opened, so the one way back reopens the conversation the
+        // reader had in front of the message as well as the message.
+        setLastRead(going === null ? null : { ...going, opened: here });
+        revise(after.active === null ? nothingOpened : (tabIn(after, after.active)?.opened ?? nothingOpened));
+    }
 
     return {
         tabs: held.tabs,
@@ -89,7 +130,11 @@ export function useOpenTabs(inTabs: boolean): OpenTabsInForce {
         emptiedByClosing,
 
         openMail: (storedEmailId, subject) => {
-            const tab = tabFor('thread', storedEmailId, subject, { selection: storedEmailId, conversation: null });
+            const tab = tabFor('thread', storedEmailId, subject, {
+                selection: storedEmailId,
+                conversation: null,
+                fullHtml: null,
+            });
 
             // The message already being read is already open, so opening it again is nothing — and doing the work
             // anyway would put the reading column back where this tab was opened, closing a conversation the reader
@@ -98,12 +143,38 @@ export function useOpenTabs(inTabs: boolean): OpenTabsInForce {
                 return;
             }
 
-            setHeld((current) => opened(current, tab, here, inTabs));
-            setEmptiedByClosing(false);
+            open(tab);
+        },
 
-            // A tab already open is brought forward at the place it was left, so returning to a message returns to the
-            // conversation somebody had in front of it rather than to the message on its own.
-            revise(tabIn(held, tab.key)?.opened ?? tab.opened);
+        // The surface is a tab of its own only where a person works in tabs. Where they do not there is one reading
+        // column and nothing to put a second tab beside, so the surface stands in front of the message the way a
+        // conversation does — which is what makes closing it a return to that message rather than to nothing.
+        openFullHtml: (storedEmailId, subject) => {
+            if (!inTabs) {
+                revise({ fullHtml: storedEmailId });
+
+                return;
+            }
+
+            open(
+                tabFor('fullHtml', storedEmailId, subject, {
+                    selection: storedEmailId,
+                    conversation: null,
+                    fullHtml: storedEmailId,
+                }),
+            );
+        },
+
+        closeFullHtml: () => {
+            const active = held.active === null ? null : tabIn(held, held.active);
+
+            if (active?.kind === 'fullHtml') {
+                closeTab(active.key);
+
+                return;
+            }
+
+            revise({ fullHtml: null });
         },
 
         activate: (key) => {
@@ -117,22 +188,7 @@ export function useOpenTabs(inTabs: boolean): OpenTabsInForce {
             revise(tab.opened);
         },
 
-        close: (key) => {
-            const after = closed(held, key);
-            const going = tabIn(held, key);
-
-            setHeld(after);
-            setEmptiedByClosing(after.tabs.length === 0);
-
-            if (held.active !== key) {
-                return;
-            }
-
-            // Where it was left rather than where it was opened, so the one way back reopens the conversation the
-            // reader had in front of the message as well as the message.
-            setLastRead(going === null ? null : { ...going, opened: here });
-            revise(after.active === null ? nothingOpened : (tabIn(after, after.active)?.opened ?? nothingOpened));
-        },
+        close: closeTab,
 
         closeEverything: () => {
             const going = held.active === null ? null : tabIn(held, held.active);
@@ -147,9 +203,7 @@ export function useOpenTabs(inTabs: boolean): OpenTabsInForce {
             lastRead === null
                 ? null
                 : () => {
-                      setHeld((current) => opened(current, lastRead, here, inTabs));
-                      setEmptiedByClosing(false);
-                      revise(lastRead.opened);
+                      open(lastRead);
                   },
     };
 }

@@ -17,6 +17,7 @@ import type { PortraitExchange } from './deployment/portraitExchange';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { telemetryForwardedBy } from './deployment/telemetryForwarding';
 import { FolderTree } from './folders/FolderTree';
+import { FullHtmlSurface } from './fullHtml/FullHtmlSurface';
 import type { MessageKey } from './localization/en';
 import { useLocalization } from './localization/useLocalization';
 import { NothingOpen } from './mailSpace/NothingOpen';
@@ -291,9 +292,12 @@ export function App({
                 session={session}
                 transport={readMail}
                 conversation={workspace.conversation}
+                fullHtml={workspace.fullHtml}
                 storedEmailId={workspace.selection}
                 online={connection.online}
                 expandWholeThread={preferences.expandWholeThread}
+                onShowFullHtml={openTabs.openFullHtml}
+                onCloseFullHtml={openTabs.closeFullHtml}
             />
         );
     }
@@ -442,9 +446,13 @@ export function App({
     );
 }
 
-// What is being read on the right of the mail space: one message, or the conversation it belongs to standing in front
-// of it. The conversation is in front rather than instead, which is why the message it was opened from is still what
-// this component is holding — closing the conversation draws it again with nothing having had to remember it.
+// What is being read on the right of the mail space: one message, the conversation it belongs to, or the sender's own
+// markup — the last two standing in front of the message rather than instead of it, which is why the message they were
+// opened from is still what this component is holding. Closing either draws it again with nothing having had to
+// remember it.
+//
+// The markup surface is in front of the conversation as well as of the message, because it is opened from a message's
+// head and returns to whatever that head was drawn in.
 //
 // Keyed by the conversation together with the message it was opened at, because what a conversation opens with is
 // decided once from what it holds then: opening the same conversation at another message is a screen of its own rather
@@ -453,15 +461,21 @@ function OpenMail({
     session,
     transport,
     conversation,
+    fullHtml,
     storedEmailId,
     online,
     expandWholeThread,
+    onShowFullHtml,
+    onCloseFullHtml,
 }: {
     readonly session: ClientSession;
     readonly transport: MailFathomTransport;
     readonly conversation: OpenConversation | null;
+    readonly fullHtml: string | null;
     readonly storedEmailId: string | null;
     readonly online: boolean;
+    readonly onShowFullHtml: (storedEmailId: string, subject: string | null) => void;
+    readonly onCloseFullHtml: () => void;
 
     /** Whether the reader asked for conversations to open with every message drawn, which only the conversation reads. */
     readonly expandWholeThread: boolean;
@@ -479,12 +493,25 @@ function OpenMail({
         setArriving(conversation === null);
     }
 
+    if (fullHtml !== null) {
+        return (
+            <FullHtmlSurface
+                key={fullHtml}
+                session={session}
+                transport={transport}
+                storedEmailId={fullHtml}
+                onClose={onCloseFullHtml}
+            />
+        );
+    }
+
     return conversation === null ? (
         <ReadingPane
             session={session}
             transport={transport}
             storedEmailId={storedEmailId}
             online={online}
+            onShowFullHtml={onShowFullHtml}
             arriving={arriving}
         />
     ) : (

@@ -8,9 +8,14 @@ import { activated, closed, nothingOpen, nothingOpened, opened, tabFor, tabIn, t
 const quarterly = tabFor('thread', 'message-1', 'The quarterly figures', {
     selection: 'message-1',
     conversation: null,
+    fullHtml: null,
 });
 
-const invoice = tabFor('thread', 'message-2', 'The invoice', { selection: 'message-2', conversation: null });
+const invoice = tabFor('thread', 'message-2', 'The invoice', {
+    selection: 'message-2',
+    conversation: null,
+    fullHtml: null,
+});
 
 const nowhere = nothingOpened;
 
@@ -45,9 +50,9 @@ describe('opened', () => {
 
     it('leaves the tab it moved off holding where the reader had got to in it', () => {
         const conversation = { threadId: 'thread-1', openAt: 'message-1' };
-        const open = opened(twoOpen(), quarterly, { selection: 'message-2', conversation }, true);
+        const open = opened(twoOpen(), quarterly, { selection: 'message-2', conversation, fullHtml: null }, true);
 
-        expect(tabIn(open, invoice.key)?.opened).toEqual({ selection: 'message-2', conversation });
+        expect(tabIn(open, invoice.key)?.opened).toEqual({ selection: 'message-2', conversation, fullHtml: null });
     });
 
     it('replaces what is open where the person is not working in tabs, so one tab is what is on the screen', () => {
@@ -60,10 +65,18 @@ describe('opened', () => {
 
 describe('activated', () => {
     it('reads the tab named and leaves the one it moved off holding where it was', () => {
-        const open = activated(twoOpen(), quarterly.key, { selection: 'message-2', conversation: null });
+        const open = activated(twoOpen(), quarterly.key, {
+            selection: 'message-2',
+            conversation: null,
+            fullHtml: null,
+        });
 
         expect(open.active).toBe(quarterly.key);
-        expect(tabIn(open, invoice.key)?.opened).toEqual({ selection: 'message-2', conversation: null });
+        expect(tabIn(open, invoice.key)?.opened).toEqual({
+            selection: 'message-2',
+            conversation: null,
+            fullHtml: null,
+        });
     });
 
     it('changes nothing where no tab carries the key', () => {

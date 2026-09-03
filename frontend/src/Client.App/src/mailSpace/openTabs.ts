@@ -14,19 +14,22 @@ import type { OpenConversation } from '../workspace/openConversation';
 // step: the pane reads the workspace exactly as it did before tabs existed, and every screen that opens or closes a
 // conversation goes on doing it without knowing a tab is holding its place.
 
-/** What the reading column draws: the message open, and the conversation standing in front of it. */
+/** What the reading column draws: the message open, and whichever surface stands in front of it. */
 export interface OpenedMail {
     readonly selection: string | null;
     readonly conversation: OpenConversation | null;
+
+    /** The message whose own markup is being shown, or `null` where the reduced tree is what is being read. */
+    readonly fullHtml: string | null;
 }
 
 /**
  * The four things the design project gives a tab of its own.
  *
- * Three of them have no screen behind them yet — a message's full HTML is #1485, a draft is the composer of #1210, and
- * an attachment opens as a download rather than as a surface — so nothing constructs one today. They are named here
- * rather than added later because the strip is what draws whichever kind a tab has, and a kind it could not draw would
- * be a strip rewritten by each of those changes instead of a tab handed to it.
+ * Two of them have no screen behind them yet — a draft is the composer of #1210, and an attachment opens as a download
+ * rather than as a surface — so nothing constructs one today. They are named here rather than added later because the
+ * strip is what draws whichever kind a tab has, and a kind it could not draw would be a strip rewritten by each of
+ * those changes instead of a tab handed to it.
  */
 export type OpenTabKind = 'thread' | 'attachment' | 'fullHtml' | 'draft';
 
@@ -54,7 +57,7 @@ export interface OpenTabs {
 export const nothingOpen: OpenTabs = { tabs: [], active: null };
 
 /** Nothing being read, which is what a tab that is not a message was opened beside. */
-export const nothingOpened: OpenedMail = { selection: null, conversation: null };
+export const nothingOpened: OpenedMail = { selection: null, conversation: null, fullHtml: null };
 
 /**
  * One tab, identified by what it holds.

@@ -24,9 +24,9 @@ const readOutAttributeMessage =
 
 // The calls that turn a value back into markup: `dangerouslySetInnerHTML`, `innerHTML`, `outerHTML`,
 // `insertAdjacentHTML`, `document.write`, `document.writeln`, `setHTMLUnsafe` on an element or a shadow root,
-// `DOMParser.parseFromString`, `Range.createContextualFragment`, and an `iframe`'s `srcdoc` in either form. The client is handed no markup and writes none, which is the
-// whole of ADR 0024's safety statement and the reason no sanitizer is pinned: a message reaches a screen as a closed
-// tree of typed values, and React escapes every one of them. Writing any of these is the single change that would
+// `DOMParser.parseFromString`, and `Range.createContextualFragment`. The client is handed no markup and writes none,
+// which is the whole of ADR 0024's safety statement and the reason no sanitizer is pinned: a message reaches a screen
+// as a closed tree of typed values, and React escapes every one of them. Writing any of these is the change that would
 // undo that, so it is made unwritable rather than left to a reviewer — the same shape the localization rule takes.
 //
 // They are declared here because `no-restricted-syntax` is replaced rather than merged when a later configuration
@@ -62,15 +62,75 @@ const markupWritingSyntax = [
         message:
             'This parses a string into nodes, which is the parser ADR 0024 exists not to have: a message reaches a screen as a closed tree of typed values and nothing here builds one from markup.',
     },
+];
+
+// The path the exception below is written against: the one component a message's own markup is drawn as markup in.
+// ADR 0024 names it as the single exception rather than leaving it to a suppression at the call site, so moving or
+// renaming that file is a change to this line and therefore to the record — which is the whole point of stating it
+// here.
+const theOneMarkupSurface = 'src/Client.App/src/messageBody/MessageMarkupFrame.tsx';
+
+// `srcdoc` is the tenth way a value becomes markup, and the only one with an exception. It is separated from the nine
+// above so the exception can be stated as *this rule minus these two selectors* on one named file, rather than as a
+// second list somebody would have to keep in step with the first.
+//
+// The exception is narrowed, not lifted. Every other file under `src/` is refused a frame, and the file that is not
+// carries the reasoning for both mechanisms it depends on.
+const srcdocSyntax = [
     {
-        selector: 'JSXAttribute[name.name="srcdoc"]',
-        message:
-            "srcdoc is a document written from a value and parsed as markup. ADR 0024 draws a message with typed components in the application's own document, and neither a frame nor a second parser is part of that.",
+        // Both spellings, because they are two different things to two different readers: the DOM attribute is
+        // `srcdoc` and React's prop for it is `srcDoc`, and a selector naming one of them would refuse the form
+        // nobody writes while passing the form everybody writes.
+        selector: 'JSXAttribute[name.name=/^(srcdoc|srcDoc)$/]',
+        message: `srcdoc is a document written from a value and parsed as markup. ADR 0024 draws a message with typed components in the application's own document, and the one frame it permits is ${theOneMarkupSurface}.`,
     },
     {
-        selector: 'MemberExpression[property.name="srcdoc"]',
+        selector: 'MemberExpression[property.name=/^(srcdoc|srcDoc)$/]',
+        message: `srcdoc is a document written from a value and parsed as markup. ADR 0024 draws a message with typed components in the application's own document, and the one frame it permits is ${theOneMarkupSurface}.`,
+    },
+];
+
+// Every user-visible string leaves the component that shows it, which is the one rule that decides whether a third
+// language is a catalogue or a sweep through every screen written before it. A literal in markup is refused here
+// rather than noticed in review, because review is exactly what stops catching it once there are enough screens to
+// read. `no-restricted-syntax` is what states it: `Intl` and the catalogues are the whole of the mechanism, so there
+// is no plugin to install for this and nothing joins the bundle.
+//
+// Declared beside the two lists above for the same reason they are: the rule is replaced rather than merged, so every
+// configuration object naming it has to carry all of it.
+const localizationSyntax = [
+    {
+        selector: 'JSXText[value=/\\S/]',
         message:
-            "srcdoc is a document written from a value and parsed as markup. ADR 0024 draws a message with typed components in the application's own document, and neither a frame nor a second parser is part of that.",
+            'A user-visible string belongs in src/Client.App/src/localization/en.ts, with its Polish counterpart, and reaches the screen through translate().',
+    },
+    {
+        selector: ':matches(JSXElement, JSXFragment) > JSXExpressionContainer > Literal[value=/\\S/]',
+        message:
+            'A user-visible string belongs in src/Client.App/src/localization/en.ts and reaches the screen through translate(); a number is written with Intl under the active locale.',
+    },
+    {
+        selector: ':matches(JSXElement, JSXFragment) > JSXExpressionContainer > TemplateLiteral',
+        message:
+            'A sentence assembled in markup cannot be reordered by a translator. Write it as one catalogue entry with a {name} hole and fill it through translate().',
+    },
+    // The same attribute in its three written forms, because a selector is matched against the syntax
+    // rather than against the value: `alt="…"` puts the literal directly under the attribute, while
+    // `alt={'…'}` and ``alt={`…`}`` put it one level down inside an expression container. A rule catching
+    // only the first would pass the two a person reaches for after being refused once. The step is
+    // deliberately not a descendant match: `aria-label={translate('shell.language')}` carries a string
+    // literal too, and it is the catalogue key rather than a sentence.
+    {
+        selector: `${readOutAttribute} > Literal`,
+        message: readOutAttributeMessage,
+    },
+    {
+        selector: `${readOutAttribute} > JSXExpressionContainer > Literal[value=/\\S/]`,
+        message: readOutAttributeMessage,
+    },
+    {
+        selector: `${readOutAttribute} > JSXExpressionContainer > TemplateLiteral`,
+        message: readOutAttributeMessage,
     },
 ];
 
@@ -134,7 +194,7 @@ export default defineConfig(
         // screen against an arrangement the application refuses.
         files: ['src/*/**/*.{ts,tsx}'],
         rules: {
-            'no-restricted-syntax': ['error', ...markupWritingSyntax],
+            'no-restricted-syntax': ['error', ...markupWritingSyntax, ...srcdocSyntax],
         },
     },
     {
@@ -142,50 +202,19 @@ export default defineConfig(
         extends: [reactHooks.configs.flat.recommended, reactRefresh.configs.vite],
     },
     {
-        // Every user-visible string leaves the component that shows it, which is the one rule that decides whether a
-        // third language is a catalogue or a sweep through every screen written before it. A literal in markup is
-        // refused here rather than noticed in review, because review is exactly what stops catching it once there are
-        // enough screens to read. `no-restricted-syntax` is what states it: `Intl` and the catalogues are the whole of
-        // the mechanism, so there is no plugin to install for this and nothing joins the bundle.
         files: ['src/Client.App/**/*.tsx'],
         rules: {
-            'no-restricted-syntax': [
-                'error',
-                ...markupWritingSyntax,
-                {
-                    selector: 'JSXText[value=/\\S/]',
-                    message:
-                        'A user-visible string belongs in src/Client.App/src/localization/en.ts, with its Polish counterpart, and reaches the screen through translate().',
-                },
-                {
-                    selector: ':matches(JSXElement, JSXFragment) > JSXExpressionContainer > Literal[value=/\\S/]',
-                    message:
-                        'A user-visible string belongs in src/Client.App/src/localization/en.ts and reaches the screen through translate(); a number is written with Intl under the active locale.',
-                },
-                {
-                    selector: ':matches(JSXElement, JSXFragment) > JSXExpressionContainer > TemplateLiteral',
-                    message:
-                        'A sentence assembled in markup cannot be reordered by a translator. Write it as one catalogue entry with a {name} hole and fill it through translate().',
-                },
-                // The same attribute in its three written forms, because a selector is matched against the syntax
-                // rather than against the value: `alt="…"` puts the literal directly under the attribute, while
-                // `alt={'…'}` and ``alt={`…`}`` put it one level down inside an expression container. A rule catching
-                // only the first would pass the two a person reaches for after being refused once. The step is
-                // deliberately not a descendant match: `aria-label={translate('shell.language')}` carries a string
-                // literal too, and it is the catalogue key rather than a sentence.
-                {
-                    selector: `${readOutAttribute} > Literal`,
-                    message: readOutAttributeMessage,
-                },
-                {
-                    selector: `${readOutAttribute} > JSXExpressionContainer > Literal[value=/\\S/]`,
-                    message: readOutAttributeMessage,
-                },
-                {
-                    selector: `${readOutAttribute} > JSXExpressionContainer > TemplateLiteral`,
-                    message: readOutAttributeMessage,
-                },
-            ],
+            'no-restricted-syntax': ['error', ...markupWritingSyntax, ...srcdocSyntax, ...localizationSyntax],
+        },
+    },
+    {
+        // The one exception ADR 0024 grants, written here rather than waived at the call site. This file draws a
+        // message's own markup in a frame, so it is the only place under `src/` where `srcdoc` is writable — and the
+        // exception is stated as the block above minus `srcdocSyntax`, so every other rule still holds on it and a
+        // rule added to either list reaches it without anybody remembering to.
+        files: [theOneMarkupSurface],
+        rules: {
+            'no-restricted-syntax': ['error', ...markupWritingSyntax, ...localizationSyntax],
         },
     },
     prettier,

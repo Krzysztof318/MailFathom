@@ -4,6 +4,7 @@
 
 import type { MailMessageHeaders, MailParticipant, MailParticipantRole } from '@mailfathom/client-backend';
 import { PlannedControl } from '../controls/PlannedControl';
+import { ShowFullHtml } from '../fullHtml/ShowFullHtml';
 import type { MessageKey } from '../localization/en';
 import { wordInstant } from '../localization/instants';
 import { useLocalization } from '../localization/useLocalization';
@@ -14,7 +15,10 @@ import { useLocalization } from '../localization/useLocalization';
 // front of the words somebody opened it to read.
 //
 // Beside the subject stand the three things the design project offers to do with a message from its head. None of them
-// exists in the client yet, so each is drawn as what it is: a control the product will have, inert until it does.
+// exists in the client yet, so each is drawn as what it is: a control the product will have, inert until it does. The
+// fourth beside them does exist: the control that opens the sender's own markup on a surface of its own, which is the
+// message head's because that is where the design project draws it and because it is a fact about this message rather
+// than about the body underneath it.
 //
 // Every value here is text a sender chose. It is drawn as text and never as markup, so a display name written to look
 // like an address, a heading, or a control arrives as the characters it is.
@@ -34,7 +38,15 @@ const roleLabels: Readonly<Record<DisclosedRole, MessageKey>> = {
     Bcc: 'participant.bcc',
 };
 
-export function MessageHeaders({ headers }: { readonly headers: MailMessageHeaders }) {
+export function MessageHeaders({
+    headers,
+    onShowFullHtml,
+}: {
+    readonly headers: MailMessageHeaders;
+
+    /** Opens this message's own markup on the surface that draws it, the reader having confirmed it first. */
+    readonly onShowFullHtml: () => void;
+}) {
     const { locale, translate } = useLocalization();
 
     const authors = headers.participants.filter((participant) => participant.role === 'From');
@@ -53,6 +65,7 @@ export function MessageHeaders({ headers }: { readonly headers: MailMessageHeade
                     <PlannedControl label={translate('mail.reply')} icon="reply" />
                     <PlannedControl label={translate('mail.forward')} icon="forward" />
                     <PlannedControl label={translate('mail.flag')} icon="flag" />
+                    <ShowFullHtml onShow={onShowFullHtml} />
                 </div>
             </div>
 

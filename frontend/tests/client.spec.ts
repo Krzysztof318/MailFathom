@@ -147,7 +147,25 @@ function messageBlocks(pictureSource: string) {
     ];
 }
 
-function messageBody(remoteImages: boolean): string {
+// The sender's own markup, as the self-contained representation serves it: the pictures inlined and every remote
+// address gone, unless the reader asked for this one message's pictures.
+//
+// It carries a script deliberately, which the representation itself never would. What that stands in for is the second
+// mechanism ADR 0024 keeps on this surface: the frame permits no script whatever the markup holds, so a representation
+// that ever stopped removing one would still not run it. The script fetches from a host of its own, so a browser says
+// whether it ran without anything having to read inside a frame it cannot reach into.
+function senderMarkup(remoteImages: boolean): string {
+    const picture = remoteImages ? 'https://pictures.invalid/mark.png' : transparentPicture;
+
+    return (
+        '<html><body><h1>This week at Example</h1>' +
+        '<script>new Image().src = "https://ranscript.invalid/beacon.png";</script>' +
+        `<img src="${picture}" alt="A mark">` +
+        '</body></html>'
+    );
+}
+
+function messageBody(remoteImages: boolean, fullHtml: boolean): string {
     return JSON.stringify({
         storedEmailId: '00000000-0000-4000-8000-000000000000',
         availability: 'Readable',
@@ -166,6 +184,9 @@ function messageBody(remoteImages: boolean): string {
             undrawnInlineImageCount: 0,
             truncated: false,
         },
+        selfContainedHtml: fullHtml
+            ? { text: senderMarkup(remoteImages), originalCharacterCount: 320, truncation: 'None' }
+            : null,
         remoteImagesRequested: remoteImages,
     });
 }
@@ -320,7 +341,10 @@ async function servedByADeployment(page: Page): Promise<void> {
         route.fulfill({
             status: 200,
             contentType: 'application/json',
-            body: messageBody(new URL(route.request().url()).searchParams.get('remoteImages') === 'true'),
+            body: messageBody(
+                new URL(route.request().url()).searchParams.get('remoteImages') === 'true',
+                new URL(route.request().url()).searchParams.get('fullHtml') === 'true',
+            ),
         }),
     );
 }
@@ -1079,6 +1103,71 @@ test('fetches nothing from the sender until the reader asks, and asks again next
     // Nothing on either side wrote the ask down, so the message opens asking again. Only a real document reloaded
     // proves that: browser storage is what a durable answer would have been kept in.
     await expect(page.getByRole('button', { name: 'Load pictures from the sender' })).toBeVisible();
+});
+
+// What only a browser can say about the second surface ADR 0024 takes: what the built bundle put in the document, and
+// what it did and did not fetch. Everything else about it — the confirmation, the footer, the states, and every
+// sentence — is jsdom's and lives in the unit suite beside the source.
+
+/** The frame the sender's markup is drawn in, named by what a reader is told it is. */
+const markupFrame = "The sender's own markup, drawn in isolation";
+
+async function showTheSenderMarkup(page: Page): Promise<void> {
+    await page.getByRole('button', { name: 'Show the full HTML version' }).click();
+    await page.getByRole('button', { name: 'Show the HTML' }).click();
+}
+
+test('draws the sender own markup in a frame that permits neither script nor an origin', async ({ page }) => {
+    await openTheFirstMessage(page);
+    await showTheSenderMarkup(page);
+
+    const frame = page.locator(`iframe[title="${markupFrame}"]`);
+
+    await expect(frame).toHaveAttribute('sandbox', '');
+    await expect(frame).toHaveAttribute('srcdoc', /This week at Example/);
+});
+
+test('runs nothing the markup carries, and reaches no host but its own until the reader asks', async ({ page }) => {
+    const hosts = new Set<string>();
+
+    page.on('request', (request) => {
+        hosts.add(new URL(request.url()).hostname);
+    });
+
+    await openTheFirstMessage(page);
+    await showTheSenderMarkup(page);
+    await expect(page.locator(`iframe[title="${markupFrame}"]`)).toBeVisible();
+
+    // The script inside the frame fetches from a host of its own, so a request to it would be that script having run.
+    // The picture's host is the other half: the representation carries no address for it until the reader asks, so a
+    // frame that fetched one would be drawing markup this client composed rather than the one it was served.
+    await expect(page.getByText(/permits no script at all/)).toBeVisible();
+    expect([...hosts]).not.toContain('ranscript.invalid');
+    expect([...hosts]).not.toContain('pictures.invalid');
+
+    await page.getByRole('button', { name: 'Load pictures from the sender' }).click();
+
+    // Asking is what makes the request, on this surface exactly as in the pane. The script is unaffected by it: the
+    // consent restores addresses and never restores anything that runs.
+    await expect(page.getByText(/their servers can tell it was opened/)).toBeVisible();
+    await expect.poll(() => [...hosts]).toContain('pictures.invalid');
+    expect([...hosts]).not.toContain('ranscript.invalid');
+});
+
+test('leaves the markup surface for the message it was opened from, and asks again next time', async ({ page }) => {
+    await openTheFirstMessage(page);
+    await showTheSenderMarkup(page);
+    await expect(page.locator(`iframe[title="${markupFrame}"]`)).toBeVisible();
+
+    await page.getByRole('button', { name: 'Close this view' }).click();
+
+    await expect(page.getByRole('heading', messageHeading)).toBeVisible();
+    await expect(page.locator(`iframe[title="${markupFrame}"]`)).toHaveCount(0);
+
+    // Nothing on either side wrote the answer down, so the control asks again rather than reopening what was shown.
+    await page.getByRole('button', { name: 'Show the full HTML version' }).click();
+
+    await expect(page.getByRole('heading', { name: 'Show the full HTML?' })).toBeVisible();
 });
 
 // What only a browser can say about the message list: every row is one height, the document holds a window of rows
