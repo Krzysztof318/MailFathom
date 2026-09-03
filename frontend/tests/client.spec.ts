@@ -1280,7 +1280,11 @@ test('starts the list at its leading end when the order changes under a reader w
         await readOnward(page, list);
     }
 
-    await page.getByLabel('Order').selectOption('oldestFirst');
+    // The order is behind the list's filter disclosure, and the element that opens one is reached by name rather than
+    // by role: Playwright's role engine reports a `summary` as `generic`, so `getByRole` matches nothing however the
+    // browser announces it. Its own name is visually hidden, which leaves the element and the text it holds.
+    await page.locator('summary').filter({ hasText: 'Filters' }).click();
+    await page.getByRole('group', { name: 'Order' }).getByText('Oldest first', { exact: true }).click();
 
     // Changing the order empties the list, which takes the scroller out of the document, so the one that comes back is
     // at the top however far down the reader had been. A window still computed from where they were draws the far end

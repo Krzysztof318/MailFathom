@@ -19,6 +19,8 @@ const leadingPage: MailTimelineQuery = {
     unread: null,
     flagged: null,
     hasAttachments: null,
+    receivedOnOrAfter: null,
+    receivedBefore: null,
     order: 'newestFirst',
     direction: 'forward',
     pageSize: 50,
@@ -103,6 +105,24 @@ describe('timelineQueryString', () => {
         expect(asked).not.toContain('unread');
         expect(asked).not.toContain('flagged');
         expect(asked).not.toContain('hasAttachments');
+    });
+
+    it('carries the received range as the two instants that bound it', () => {
+        const asked = timelineQueryString({
+            ...leadingPage,
+            receivedOnOrAfter: '2026-08-01T00:00:00.000Z',
+            receivedBefore: '2026-09-01T00:00:00.000Z',
+        });
+
+        expect(asked).toContain('receivedOnOrAfter=2026-08-01T00%3A00%3A00.000Z');
+        expect(asked).toContain('receivedBefore=2026-09-01T00%3A00%3A00.000Z');
+    });
+
+    it('leaves out an end of the range the list is not narrowed by', () => {
+        const asked = timelineQueryString({ ...leadingPage, receivedOnOrAfter: '2026-08-01T00:00:00.000Z' });
+
+        expect(asked).toContain('receivedOnOrAfter=');
+        expect(asked).not.toContain('receivedBefore');
     });
 
     it('escapes the cursor a previous page answered with', () => {

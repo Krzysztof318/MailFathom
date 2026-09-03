@@ -401,7 +401,13 @@ describe('what the whole of this package records', () => {
         await removeOwnPortrait(session, delivered, nothingFailed);
         await readMailAccounts(session, refusing);
         await readMailFolders(session, refusing);
-        await readMailTimeline(session, refusing, { ...window, order: 'newestFirst', direction: 'forward' });
+        await readMailTimeline(session, refusing, {
+            ...window,
+            order: 'newestFirst',
+            direction: 'forward',
+            receivedOnOrAfter: null,
+            receivedBefore: null,
+        });
         await readMailSearch(session, refusing, {
             ...window,
             text: searchText,

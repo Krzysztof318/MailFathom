@@ -4,7 +4,15 @@
 
 import type { MailTimelineOrder, MailTimelinePageDirection } from '@mailfathom/client-backend';
 import { scopeKey, type MailScope } from '../workspace/mailScope';
-import { openingListing, rowsPerPage, type MailListFilters, type MailListing } from './listing';
+import {
+    dateRanges,
+    openingListing,
+    rowsPerPage,
+    selectableRange,
+    type MailListDateRange,
+    type MailListFilters,
+    type MailListing,
+} from './listing';
 
 // Where a folder's reading position survives leaving it and reloading. Outside React deliberately: the position moves
 // while somebody scrolls, and holding it in state would re-render everything under the workspace provider on the one
@@ -187,16 +195,47 @@ function filtersIn(value: unknown): MailListFilters | null {
     const flagged = record['flagged'] ?? null;
     const hasAttachments = record['hasAttachments'] ?? null;
     const includeJunk = record['includeJunk'];
+    const dateRange = record['dateRange'] ?? null;
+    const receivedFrom = record['receivedFrom'] ?? null;
+    const receivedTo = record['receivedTo'] ?? null;
 
     if (!isWanted(unread) || !isWanted(flagged) || !isWanted(hasAttachments) || typeof includeJunk !== 'boolean') {
         return null;
     }
 
-    return { unread, flagged, hasAttachments, includeJunk };
+    if (!isRange(dateRange) || !isMinute(receivedFrom) || !isMinute(receivedTo)) {
+        return null;
+    }
+
+    // A span resolves to a start and no end the moment it is picked, so a record pairing one with a missing start or
+    // with an end is a record this client never wrote. Both are refused rather than read: the panel draws neither
+    // field while a span is lit, so a bound arriving that way would narrow the folder where nothing shows it.
+    if (dateRange !== null && (receivedFrom === null || receivedTo !== null)) {
+        return null;
+    }
+
+    // A pair the date control refused is one this client never wrote either, and reading it back would put the folder
+    // on a bound the deployment answers with a refusal — which the screen offers to retry, sending the same pair
+    // again. Held to the same test the control is held to rather than to a second spelling of it.
+    if (!selectableRange(receivedFrom, receivedTo)) {
+        return null;
+    }
+
+    return { unread, flagged, hasAttachments, includeJunk, dateRange, receivedFrom, receivedTo };
 }
 
 function isWanted(value: unknown): value is boolean | null {
     return value === null || typeof value === 'boolean';
+}
+
+function isRange(value: unknown): value is MailListDateRange | null {
+    return value === null || (typeof value === 'string' && dateRanges.includes(value as MailListDateRange));
+}
+
+// The spelling the date control writes, which is what the filter is asked with. Anything else is somebody's writing
+// rather than this client's, and a bound it did not compose never reaches the deployment.
+function isMinute(value: unknown): value is string | null {
+    return value === null || (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value));
 }
 
 function isOrder(value: unknown): value is MailTimelineOrder {

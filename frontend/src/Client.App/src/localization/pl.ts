@@ -340,6 +340,20 @@ export const pl: Catalogue = {
     'list.emptyWhileFailing':
         'Ta skrzynka przestała się synchronizować, więc może tu być mniej wiadomości, niż ma serwer pocztowy.',
 
+    'list.filters': 'Filtry',
+    'list.filtersInForce': 'Aktywne filtry: {count}',
+    'list.noFiltersInForce': 'Brak aktywnych filtrów',
+    'list.clearFilters': 'Wyczyść filtry',
+    'list.dateRange': 'Zakres dat',
+    'list.rangeToday': 'Dziś',
+    'list.rangeLastSevenDays': 'Ostatnie 7 dni',
+    'list.rangeLastThirtyDays': 'Ostatnie 30 dni',
+    'list.rangeThisYear': 'Ten rok',
+    'list.receivedFromField': 'od',
+    'list.receivedToField': 'do',
+    'list.rangeSelectsNothing':
+        'Koniec zakresu wypada przed jego początkiem, więc nic nie mogło przyjść pomiędzy nimi.',
+
     'list.order': 'Kolejność',
     'list.newestFirst': 'Najnowsze na górze',
     'list.oldestFirst': 'Najstarsze na górze',

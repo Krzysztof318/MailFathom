@@ -10,7 +10,7 @@ import { LocalizationProvider } from '../localization/Localization';
 import { everything, type MailScope } from '../workspace/mailScope';
 import { WorkspaceProvider } from '../workspace/Workspace';
 import { useWorkspace, type Workspace } from '../workspace/useWorkspace';
-import { rowsPerPage } from './listing';
+import { openingListing, rowsPerPage } from './listing';
 import { MessageList } from './MessageList';
 import { rememberedListing, rememberListing } from './rememberedListings';
 
@@ -141,8 +141,13 @@ function renderList(transport: MailFathomTransport, drawn: Partial<Drawn> = {}):
     return render(listUnder(transport, drawn));
 }
 
-// Inside the list rather than in the document, because the order control is a `select` and its choices are options
-// too — a query across the document would answer with those first.
+// Inside the list rather than in the document, because the list's own rows are the only options on the screen and a
+// query across the document would have to be told so.
+// Every narrowing is folded away behind one control, so a test reaching for one opens the disclosure first.
+function openFilters(): void {
+    fireEvent.click(screen.getByText('Filters'));
+}
+
 async function rows(): Promise<HTMLElement[]> {
     const list = await screen.findByRole('listbox', { name: 'Messages' });
 
@@ -213,7 +218,7 @@ describe('MessageList', () => {
     it('continues from the cursor the folder was left at rather than from its leading end', async () => {
         rememberListing(session.baseAddress, everything, {
             order: 'newestFirst',
-            filters: { unread: null, flagged: null, hasAttachments: null, includeJunk: false },
+            filters: openingListing.filters,
             cursor: 'where-they-were',
             readAs: 'forward',
             rowInPage: 3,
@@ -271,6 +276,7 @@ describe('MessageList', () => {
         renderList(answering(pageOf([])));
 
         await screen.findByText('There is no mail in this folder.');
+        openFilters();
         fireEvent.click(screen.getByLabelText('Only unread'));
 
         expect(
@@ -291,6 +297,7 @@ describe('MessageList', () => {
 
         renderList(transport);
         await rows();
+        openFilters();
         fireEvent.click(screen.getByLabelText('Only unread'));
         await rows();
 
@@ -303,7 +310,8 @@ describe('MessageList', () => {
 
         renderList(transport);
         await rows();
-        fireEvent.change(screen.getByLabelText('Order'), { target: { value: 'oldestFirst' } });
+        openFilters();
+        fireEvent.click(screen.getByRole('radio', { name: 'Oldest first' }));
         await rows();
 
         expect(requests.at(-1)?.path).toContain('order=oldestFirst');
@@ -313,7 +321,8 @@ describe('MessageList', () => {
         renderList(answering(wholeFolder));
 
         await rows();
-        fireEvent.change(screen.getByLabelText('Order'), { target: { value: 'oldestFirst' } });
+        openFilters();
+        fireEvent.click(screen.getByRole('radio', { name: 'Oldest first' }));
         await rows();
 
         expect(rememberedListing(session.baseAddress, everything).order).toBe('oldestFirst');
@@ -483,6 +492,7 @@ describe('MessageList', () => {
 
         renderList(transport);
         await rows();
+        openFilters();
         fireEvent.click(screen.getByLabelText(control));
         await rows();
 
