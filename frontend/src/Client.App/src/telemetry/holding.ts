@@ -67,6 +67,16 @@ export interface Held<TDestination> {
 
     /** Returns to holding. Nothing reaches the network again until a destination is named. */
     readonly hold: () => void;
+
+    /**
+     * Returns to holding and throws away what was already held, without addressing any of it.
+     *
+     * This is what somebody saying they do not want to be reported on does to the records made before they were asked.
+     * A person who has never answered stands on the deployment's unset answer, so a fresh client records into the
+     * buffer above from the composition root; the answer that arrives as off has to reach those records too, or the
+     * switch would be a filter on the way out with a transcript sitting behind it.
+     */
+    readonly discard: () => void;
 }
 
 /** Holds spans until somebody signs in, and exports to the deployment that session is signed in to afterwards. */
@@ -123,7 +133,15 @@ export function heldMetricExporter(): PushMetricExporter & Held<PushMetricExport
             return Promise.resolve();
         },
 
+        // Nothing is buffered here, for the reason above, so throwing away what was held is holding. What the
+        // instruments themselves carry is not reset with it — the totals are cumulative and the provider belongs to
+        // the run — which is the ceiling the same `ponytail:` note in `exporting.ts` already names against #1227.
+        // Nothing personal is in them either way: they count moves between a closed set of space names.
         hold() {
+            destination = null;
+        },
+
+        discard() {
             destination = null;
         },
     };
@@ -221,6 +239,12 @@ function heldRecords<TRecord>(signal: Signal, sizeOf: (record: TRecord) => numbe
 
         hold() {
             destination = null;
+        },
+
+        discard() {
+            destination = null;
+            held = [];
+            heldBytes = 0;
         },
     };
 }

@@ -5,6 +5,7 @@
 using MailFathom.Application.Access;
 using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Endpoints;
+using MailFathom.Host.Observability.ClientTelemetry;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Versioning;
 
@@ -83,10 +84,16 @@ internal static class ClientApiEndpoints
         // depends on this line staying first.
         api.AddEndpointFilter(RouteAuthorization.RefusingUnpermitted(ProtectedSurface.Mail));
 
+        // Whether the telemetry routes are served at all, read once where they are mapped rather than per request: the
+        // destination is resolved while the host is composed, so a request could only ever get the same answer more
+        // expensively. It is reported because a client cannot find out any other way without exporting a batch to see
+        // whether it is refused, and a switch over a deployment that forwards nothing is a control deciding nothing.
+        var forwardsTelemetry = endpoints.ServiceProvider.GetService<ClientTelemetryDestination>() is not null;
+
         // TypedResults rather than Results, so the response type reaches the endpoint's metadata and the generated
         // OpenAPI document describes what this answers with rather than an untyped 200.
         api.MapGet(SessionRoute, (IAuthorizedPrincipalSource principals) =>
-                TypedResults.Ok(ClientSessionResponse.For(principals.Current)))
+                TypedResults.Ok(ClientSessionResponse.For(principals.Current, forwardsTelemetry)))
             .RequireNoPermission();
 
         api.MapClientOwnerRecord();
@@ -114,6 +121,7 @@ internal static class ClientApiEndpoints
 /// <param name="Service">The product this is, so a client can tell it reached MailFathom rather than something else answering the port.</param>
 /// <param name="Version">The running version, which is what tells a client which contract it is talking to.</param>
 /// <param name="Permissions">The published names of what this caller's grant carries, in the order this repository publishes them, and empty for a credential granted nothing.</param>
+/// <param name="Telemetry">Whether this deployment forwards a client's own telemetry, which is the same answer for every caller because it is a deployment's configuration rather than a grant.</param>
 /// <remarks>
 /// <para>
 /// It names no credential, which is the one way it differs from what the administrative surface answers. That surface's
@@ -127,19 +135,28 @@ internal static class ClientApiEndpoints
 /// ask about itself. A request that established no principal reports an empty grant rather than failing, which is the
 /// accurate answer to what such a caller may do.
 /// </para>
+/// <para>
+/// Whether telemetry is forwarded stands beside the grant rather than inside it, because it is not one: every caller
+/// gets the same answer, and what decides it is whether the deployment named a collector. It is reported so that a
+/// client can say there is nothing behind its own telemetry switch instead of offering a control that decides nothing
+/// — the alternative being to export a batch and read the <c>404</c>, which is finding out by doing the thing.
+/// </para>
 /// </remarks>
 internal sealed record ClientSessionResponse(
     string Service,
     string Version,
-    IReadOnlyList<string> Permissions)
+    IReadOnlyList<string> Permissions,
+    bool Telemetry)
 {
     /// <summary>Describes what the credential that reached this route was granted.</summary>
     /// <param name="principal">What the application layer was told admitted this request, or nothing where the transport established none.</param>
+    /// <param name="forwardsTelemetry">Whether this deployment serves the telemetry routes, which it does where it named a collector of its own.</param>
     /// <returns>The response body.</returns>
-    internal static ClientSessionResponse For(AuthorizedPrincipal? principal) => new(
+    internal static ClientSessionResponse For(AuthorizedPrincipal? principal, bool forwardsTelemetry) => new(
         "MailFathom",
         StampedAssemblyVersion.ReadFrom(typeof(ClientSessionResponse).Assembly).Version,
-        GrantOf(principal));
+        GrantOf(principal),
+        forwardsTelemetry);
 
     /// <summary>Names what the caller holds, in the order this repository publishes the set.</summary>
     /// <remarks>The published order rather than the grant's own, so two credentials granted the same permissions are reported identically whichever order an operator wrote them in.</remarks>

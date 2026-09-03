@@ -13,7 +13,7 @@ function answering(response: Partial<ClientResponse>): MailFathomTransport {
 }
 
 function sessionBody(permissions: unknown, version: unknown = '0.8.0', service: unknown = 'MailFathom'): string {
-    return JSON.stringify({ service, version, permissions });
+    return JSON.stringify({ service, version, permissions, telemetry: true });
 }
 
 describe('readDeploymentSession', () => {
@@ -43,14 +43,42 @@ describe('readDeploymentSession', () => {
 
         expect(result).toEqual({
             outcome: 'read',
-            value: { version: '0.8.1', permissions: ['mailfathom.mail.read', 'mailfathom.mail.ask'] },
+            value: {
+                version: '0.8.1',
+                permissions: ['mailfathom.mail.read', 'mailfathom.mail.ask'],
+                telemetryForwarded: true,
+            },
         });
     });
 
     it('reads a credential granted nothing as one holding an empty grant rather than as a refusal', async () => {
         const result = await readDeploymentSession(session, answering({ body: sessionBody([]) }));
 
-        expect(result).toEqual({ outcome: 'read', value: { version: '0.8.0', permissions: [] } });
+        expect(result).toEqual({
+            outcome: 'read',
+            value: { version: '0.8.0', permissions: [], telemetryForwarded: true },
+        });
+    });
+
+    it.each([
+        ['a deployment that forwards telemetry', true, true],
+        ['a deployment that forwards none', false, false],
+        // Read as not forwarded rather than refusing the answer, so a deployment older than this client still signs
+        // somebody in — and the direction it is wrong in is the one that sends nothing.
+        ['a deployment answering nothing about it', undefined, false],
+        ['an answer stating something that is not a decision', 'yes', false],
+    ])('reads %s', async (_, telemetry, forwarded) => {
+        const result = await readDeploymentSession(
+            session,
+            answering({
+                body: JSON.stringify({ service: 'MailFathom', version: '0.8.0', permissions: [], telemetry }),
+            }),
+        );
+
+        expect(result).toEqual({
+            outcome: 'read',
+            value: { version: '0.8.0', permissions: [], telemetryForwarded: forwarded },
+        });
     });
 
     it('keeps the names it knows out of an answer that also carries one it does not', async () => {
@@ -59,7 +87,10 @@ describe('readDeploymentSession', () => {
             answering({ body: sessionBody(['mailfathom.mail.read', 'mailfathom.mail.telepathy']) }),
         );
 
-        expect(result).toEqual({ outcome: 'read', value: { version: '0.8.0', permissions: ['mailfathom.mail.read'] } });
+        expect(result).toEqual({
+            outcome: 'read',
+            value: { version: '0.8.0', permissions: ['mailfathom.mail.read'], telemetryForwarded: true },
+        });
     });
 
     it('names an administrative permission nowhere, that half being one this surface never grants', async () => {
@@ -68,7 +99,10 @@ describe('readDeploymentSession', () => {
             answering({ body: sessionBody(['mailfathom.admin.read']) }),
         );
 
-        expect(result).toEqual({ outcome: 'read', value: { version: '0.8.0', permissions: [] } });
+        expect(result).toEqual({
+            outcome: 'read',
+            value: { version: '0.8.0', permissions: [], telemetryForwarded: true },
+        });
     });
 
     it('names a permission once however many times the answer repeated it', async () => {
@@ -77,7 +111,10 @@ describe('readDeploymentSession', () => {
             answering({ body: sessionBody(['mailfathom.mail.read', 'mailfathom.mail.read']) }),
         );
 
-        expect(result).toEqual({ outcome: 'read', value: { version: '0.8.0', permissions: ['mailfathom.mail.read'] } });
+        expect(result).toEqual({
+            outcome: 'read',
+            value: { version: '0.8.0', permissions: ['mailfathom.mail.read'], telemetryForwarded: true },
+        });
     });
 
     it.each([

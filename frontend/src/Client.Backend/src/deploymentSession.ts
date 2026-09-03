@@ -49,6 +49,16 @@ export interface DeploymentSession {
      * be turned away.
      */
     readonly permissions: readonly MailFathomPermission[];
+
+    /**
+     * Whether this deployment forwards a client's own telemetry to a collector of its own.
+     *
+     * It is not part of the grant and never varies by credential: what decides it is whether the deployment named a
+     * collector at all. A client reads it so that it can say there is nothing behind its telemetry switch rather than
+     * offering a control that decides nothing — the only other way to find out being to export a batch and read the
+     * refusal, which is finding out by doing the thing.
+     */
+    readonly telemetryForwarded: boolean;
 }
 
 // The most names one answer may carry. The published set is smaller than this by a wide margin and may grow; what the
@@ -146,7 +156,11 @@ export function parseDeploymentSession(body: string): DeploymentSession | null {
         }
     }
 
-    return { version, permissions };
+    // Absent reads as not forwarded rather than refusing the whole answer, which is the same leniency the unknown
+    // permission name above gets and for the same reason: a deployment older than this client answers without it, and
+    // refusing there would stop somebody signing in over a field about a switch. Absent therefore fails towards
+    // sending nothing, which is the direction a privacy answer is allowed to be wrong in.
+    return { version, permissions, telemetryForwarded: answered['telemetry'] === true };
 }
 
 function isMailPermission(value: string): value is MailFathomPermission {

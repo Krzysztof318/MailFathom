@@ -13,6 +13,7 @@ import {
 } from '@mailfathom/client-backend';
 import type { ThemeChoice } from '../theme/themeChoice';
 import { useTheme } from '../theme/useTheme';
+import { rememberedTelemetry, rememberTelemetry } from './rememberedTelemetry';
 
 // The settings that follow the person rather than the machine, read from the deployment once there is a session to
 // read it with and written back whole whenever one of them changes.
@@ -40,7 +41,13 @@ export interface ClientPreferencesInForce {
      */
     readonly markReadOnOpen: boolean;
 
-    /** Whether this deployment may be told what the person's client is doing. */
+    /**
+     * Whether this deployment may be told what the person's client is doing.
+     *
+     * Answered before the deployment has said anything about this person, from what this device was last told about
+     * them, so that a client which had been turned off does not record and export for the second the first read takes.
+     * Everything else here is the deployment's answer alone.
+     */
     readonly telemetryEnabled: boolean;
 
     /** Whether the deployment refused the last change, which is the one thing about this a screen has to say out loud. */
@@ -72,11 +79,17 @@ const heldForNobody: HeldPreferences = {
  * or a credential this deployment does not let read — in which case nothing is read and both settings are the
  * device's alone.
  * @param transport How a request reaches the deployment.
+ * @param person Who is signed in, or `null` where nobody is. It is asked for beside the session rather than read out
+ * of it because the two are absent at different moments: a session is withheld from this hook while the client is
+ * offline or the grant does not let it read, and somebody is still signed in through all of that. It decides one thing
+ * only — whose remembered telemetry answer the device is asked for — and getting it wrong is what would hand the next
+ * person the last person's answer.
  * @returns The settings in force, and the two ways of changing one.
  */
 export function useClientPreferences(
     session: ClientSession | null,
     transport: MailFathomTransport,
+    person: string | null,
 ): ClientPreferencesInForce {
     const { setThemeChoice } = useTheme();
     const [held, setHeld] = useState<HeldPreferences>(heldForNobody);
@@ -123,6 +136,7 @@ export function useClientPreferences(
             const read = { session, preferences: answer.value, notStated: false };
 
             latest.current = read;
+            rememberTelemetry(person, answer.value.telemetryEnabled);
             setHeld(read);
 
             // The deployment's answer replaces the device's, which is the whole of why these two settings are held
@@ -133,7 +147,7 @@ export function useClientPreferences(
         return () => {
             attempted.abort();
         };
-    }, [session, transport, setThemeChoice]);
+    }, [session, transport, person, setThemeChoice]);
 
     // What is on the screen changes because a person pressed something, so it changes in the handler rather than in an
     // effect watching what the handler set. The write states the whole document — the route takes nothing less — which
@@ -145,6 +159,7 @@ export function useClientPreferences(
         const chosen = { session, preferences, notStated: false };
 
         latest.current = chosen;
+        rememberTelemetry(person, preferences.telemetryEnabled);
         setHeld(chosen);
 
         if (session === null) {
@@ -160,14 +175,34 @@ export function useClientPreferences(
 
     // What the next write is composed out of: the document last read or last chosen, and the unset one where that
     // belongs to a session this is no longer.
+    //
+    // One value is not taken from the unset document there, and it is the same one the return below derives rather
+    // than holds. A write states the whole document, and the account menu offers the theme and the tab mode from the
+    // moment it is drawn — so somebody who had declined telemetry and changes either of those before the read comes
+    // back would send `telemetryEnabled: true` under their own credential, abandon the read that would have said
+    // otherwise, and have the device's copy rewritten to match. Nobody stated that value; it is the shape of the
+    // route's answer standing in for an answer, and the device is holding the one they actually gave.
     function composedFrom(): ClientPreferences {
-        return latest.current.session === session ? latest.current.preferences : unsetClientPreferences;
+        if (latest.current.session === session) {
+            return latest.current.preferences;
+        }
+
+        return { ...unsetClientPreferences, telemetryEnabled: rememberedTelemetry(person) };
     }
 
     return {
         openMailInTabs: inForce.preferences.openMailInTabs,
         markReadOnOpen: inForce.preferences.markReadOnOpen,
-        telemetryEnabled: inForce.preferences.telemetryEnabled,
+        // The one setting answered from the device while the deployment has said nothing about this person, for the
+        // reason `rememberedTelemetry.ts` gives. Every other one takes its unset answer, which a screen can draw.
+        //
+        // Derived here rather than held in state, and asked for under the person rather than for the machine. Both
+        // halves are the same rule `inForce` above is: a value that no longer belongs to whoever is signed in is not
+        // state to correct but state to stop reading, and holding this one would mean carrying the last person's
+        // answer across a sign-out on the same tab — which is the one direction a privacy answer may not be wrong in.
+        // It costs a storage read on the renders before an answer has arrived and none afterwards, the branch not
+        // being taken once there is one.
+        telemetryEnabled: inForce.session === null ? rememberedTelemetry(person) : inForce.preferences.telemetryEnabled,
         notStated: inForce.notStated,
         chooseTheme: (choice) => {
             setThemeChoice(choice);

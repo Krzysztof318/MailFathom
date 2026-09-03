@@ -46,6 +46,15 @@ export interface ClientPipeline {
     readonly hold: () => Promise<void>;
 
     /**
+     * Returns to holding and throws away what the three signals were holding, addressing none of it.
+     *
+     * This is what a person who does not want to be reported on does to the records made before they were asked. The
+     * providers go on being registered, because the answer is a person's rather than a run's and can be given again
+     * the other way; what leaves is the transcript, which is what makes the switch a switch rather than a filter.
+     */
+    readonly discard: () => Promise<void>;
+
+    /**
      * Stops recording altogether and lets the three providers go.
      *
      * The client itself never reaches this: a run records for as long as it is open, and closing the page is what ends
@@ -130,6 +139,20 @@ export function startRecording(): ClientPipeline {
             // meter provider per session, which the global registry refuses to re-register; #1227 is where that would
             // be taken up if a deployment reads a person's own totals rather than the deployment's.
             await releaseDestinations();
+        },
+
+        async discard() {
+            // The destination goes first and nothing is flushed into one, which is the whole difference from holding
+            // above: what the two processors still have queued then drains into a buffer that addresses nothing, and
+            // emptying that buffer afterwards is what leaves nothing for a later session to carry. Flushing first, as
+            // holding does, would put exactly the records somebody is refusing onto the wire under the credential
+            // they are refusing it with.
+            await releaseDestinations();
+            await Promise.all([traces.forceFlush(), meters.forceFlush(), loggers.forceFlush()]);
+
+            spans.discard();
+            measurements.discard();
+            records.discard();
         },
 
         async shutdown() {

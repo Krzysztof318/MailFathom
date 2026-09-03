@@ -7,6 +7,7 @@ import type { MailAccount } from '@mailfathom/client-backend';
 import { Icon } from '../controls/Icon';
 import { MailboxMark } from '../controls/MailboxMark';
 import { PersonAvatar } from '../controls/PersonAvatar';
+import type { TelemetryForwarding } from '../deployment/telemetryForwarding';
 import { useLocalization } from '../localization/useLocalization';
 import type { ClientPreferencesInForce } from '../preferences/useClientPreferences';
 import type { OwnProfileInForce } from '../profile/useOwnProfile';
@@ -27,6 +28,7 @@ export function AccountMenu({
     accounts,
     deploymentVersion,
     readingFrom,
+    telemetryForwarding,
     preferences,
     profile,
     onPointSomewhereElse,
@@ -40,6 +42,14 @@ export function AccountMenu({
 
     /** The address somebody named for the deployment, or `null` where the origin that served the client is it. */
     readonly readingFrom: string | null;
+
+    /**
+     * What this deployment has said about forwarding this client's own records, which the settings screen behind this
+     * menu's own row words. A forwarded one carries the deployment's address whether or not somebody typed it, because
+     * what that screen has to name is where the records actually go rather than how the client came to be pointed
+     * there.
+     */
+    readonly telemetryForwarding: TelemetryForwarding;
 
     /** The settings that follow the person, and the three ways of changing one. */
     readonly preferences: ClientPreferencesInForce;
@@ -158,7 +168,13 @@ export function AccountMenu({
 
             {/* Outside the popover rather than inside it, because the menu is folded away while this is open and a
                 dialog inside something the platform sets `display: none` on is a dialog nobody can see. */}
-            <Settings open={settingsOpen} profile={profile} preferences={preferences} onClose={closeSettings} />
+            <Settings
+                open={settingsOpen}
+                profile={profile}
+                preferences={preferences}
+                telemetryForwarding={telemetryForwarding}
+                onClose={closeSettings}
+            />
         </>
     );
 }

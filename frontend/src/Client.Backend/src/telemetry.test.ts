@@ -17,13 +17,24 @@ import {
     SimpleSpanProcessor,
     type ReadableSpan,
 } from '@opentelemetry/sdk-trace-base';
+import { readClientPreferences, unsetClientPreferences, writeClientPreferences } from './clientPreferences';
+import { readDeploymentSession } from './deploymentSession';
 import { failed, read, type ClientFailureReason } from './failure';
+import { readMailAccounts } from './mailAccounts';
 import { readMailAttachment } from './mailAttachment';
-import { changeOwnDisplayName } from './ownDisplayName';
+import { readMailBody } from './mailBody';
+import { readMailFolders } from './mailFolders';
+import { readMailMessage } from './mailMessage';
+import { markMailRead } from './mailMutations';
+import { readMailSearch } from './mailSearch';
+import { readMailThread } from './mailThread';
+import { readMailTimeline } from './mailTimeline';
+import { changeOwnDisplayName, readOwnDisplayName } from './ownDisplayName';
 import { readOwnPortrait, removeOwnPortrait, replaceOwnPortrait } from './ownPortrait';
 import type { ClientSession } from './session';
+import { reachDeployment, signIn } from './signIn';
 import { reported, spanned, telemetryEndpoints, telemetryName } from './telemetry';
-import type { ClientRequest } from './transport';
+import type { ClientRequest, MailFathomTransport } from './transport';
 
 // The SDK is here and nowhere in this package's source: what a test needs is somewhere to read a span and a
 // measurement back from, and the registries the source publishes to are global. Every one of them is released in the
@@ -329,5 +340,130 @@ describe('every request this package composes', () => {
         await removeOwnPortrait(session, delivered, nothingFailed);
 
         expect(onlySpan().name).toBe('DELETE /portrait');
+    });
+});
+
+// Everything this package can be asked to do, driven with mail in every argument that takes one, so that the promise
+// #1232 makes about the client is a test rather than a sentence in a document. Every operation records through
+// `spanned` or `reported` and this package records nowhere else, so covering the operations covers the whole of the
+// surface — and an operation added later that named a composed path rather than a route template fails the shape
+// assertion below rather than shipping one span name per message.
+//
+// The values below are what a real screen would pass and are exactly the things that must never leave: a message
+// identifier, a thread identifier, a folder somebody named, an address, the name a person goes by, a search somebody
+// typed, the credential the session presents, and the deployment it presents it to. None of them comes from a real
+// mailbox, which `frontend/AGENTS.md` requires of anything standing in for mail here.
+//
+// The block above asserts what each operation names its own span; this one asserts what none of them may carry, over
+// all of them at once. Reading an operation into both is the point rather than a duplication: the drive is what makes
+// the promise hold for whatever is recorded next rather than for what happened to be recorded when it was written.
+describe('what the whole of this package records', () => {
+    const storedEmailId = '018f2c31-2f2c-7c1e-9f0e-3a1b6f9c0d21';
+    const threadId = '018f2c31-2f2c-7c1e-9f0e-000000000002';
+    const folder = 'INBOX/Clients/Acme';
+    const address = 'anna.kowalska@example.test';
+    const searchText = 'salary review';
+    const credential = 'Basic QWxhZGRpbjpvcGVuIHNlc2FtZQ==';
+    const ownName = 'Anna Kowalska';
+    const session: ClientSession = { baseAddress: 'https://mail.example.invalid', authorization: credential };
+
+    // What this package could have read is not what the test is about, so every answer is refused: the operation then
+    // reports a failure, which is the branch carrying the failure dimension as well and therefore the wider of the two.
+    const refusing: MailFathomTransport = () => Promise.resolve({ status: 500, body: '', headers: {} });
+
+    // The operations that compose a request instead of sending one are handed the composer the application hands
+    // them, and it answers with the request itself — which is what puts the composed path in front of the assertions
+    // below rather than only the template the span was named after.
+    const delivered = (request: ClientRequest): Promise<ClientRequest> => Promise.resolve(request);
+    const nothingFailed = (): ClientFailureReason | null => null;
+
+    const window = {
+        account: 'work',
+        folder,
+        includeJunk: false,
+        unread: null,
+        flagged: null,
+        hasAttachments: null,
+        pageSize: 50,
+        cursor: null,
+    };
+
+    async function driveTheWholeSurface(): Promise<void> {
+        await reachDeployment(session, refusing);
+        await signIn(session, refusing);
+        await readDeploymentSession(session, refusing);
+        await readClientPreferences(session, refusing);
+        await writeClientPreferences(session, refusing, unsetClientPreferences);
+        await readOwnDisplayName(session, refusing);
+        await changeOwnDisplayName(session, refusing, ownName);
+        await readOwnPortrait(session, delivered, nothingFailed);
+        await replaceOwnPortrait(session, 'image/png', delivered, nothingFailed);
+        await removeOwnPortrait(session, delivered, nothingFailed);
+        await readMailAccounts(session, refusing);
+        await readMailFolders(session, refusing);
+        await readMailTimeline(session, refusing, { ...window, order: 'newestFirst', direction: 'forward' });
+        await readMailSearch(session, refusing, {
+            ...window,
+            text: searchText,
+            sender: address,
+            recipient: address,
+            receivedOnOrAfter: null,
+            receivedBefore: null,
+        });
+        await readMailThread(session, refusing, threadId, 'a cursor');
+        await readMailMessage(session, refusing, storedEmailId);
+        await readMailBody(session, refusing, storedEmailId, true);
+        await readMailAttachment(session, storedEmailId, 1, 2_048, delivered, nothingFailed);
+        await markMailRead(session, refusing, [storedEmailId, threadId]);
+    }
+
+    it.each([
+        ['a message identifier', storedEmailId],
+        ['a thread identifier', threadId],
+        ['a folder somebody named', folder],
+        ['an address', address],
+        ['the name the signed-in person goes by', ownName],
+        ['a search somebody typed', searchText],
+        ['the credential', credential],
+        ['the deployment it is signed in to', 'mail.example.invalid'],
+    ])('carries no %s into a span or a measurement', async (_, forbidden) => {
+        await driveTheWholeSurface();
+
+        const recorded = JSON.stringify([
+            spans.getFinishedSpans().map((span) => [span.name, span.attributes, span.status.message]),
+            await recordedMeasurements(),
+        ]);
+
+        expect(recorded).not.toContain(forbidden);
+    });
+
+    // The stronger half of the same claim, and the half that survives a value nobody thought to forbid: every request
+    // this package names itself is a method and a route template, whose segments are literals or `{placeholder}` holes
+    // and nothing else. A composed path would put one value per message into a span name and into a metric dimension,
+    // which is a cardinality defect as well as a disclosure.
+    //
+    // A literal segment is lower-case words joined by hyphens and carries no digit, which is what makes the pattern an
+    // assertion rather than a shape: an identifier, an address, a folder name, and a percent-encoded search term each
+    // fail it on a character a route this package publishes never has.
+    const literalSegment = String.raw`[a-z][a-zA-Z]*(-[a-z][a-zA-Z]*)*`;
+    const routeTemplate = new RegExp(String.raw`^(GET|POST|PUT|DELETE) (\/(${literalSegment}|\{[a-zA-Z]+\}))+$`);
+
+    it('names every request it makes by a route template rather than by a path it composed', async () => {
+        await driveTheWholeSurface();
+
+        const named = spans.getFinishedSpans().map((span) => span.name);
+
+        expect(named.length).toBeGreaterThan(0);
+        expect(named.filter((name) => !routeTemplate.test(name))).toEqual([]);
+    });
+
+    it('names a span after exactly what it put in the dimension beside it', async () => {
+        await driveTheWholeSurface();
+
+        const disagreeing = spans
+            .getFinishedSpans()
+            .filter((span) => span.attributes['mailfathom.client.request'] !== span.name);
+
+        expect(disagreeing).toEqual([]);
     });
 });

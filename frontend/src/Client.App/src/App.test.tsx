@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientResponse, ClientSession } from '@mailfathom/client-backend';
 import { App } from './App';
 import type { AdoptedDeployment } from './deployment/adoptedDeployment';
+import { telemetryKey } from './device/deviceStore';
 import { AttachmentDeliveryContext, type AttachmentDelivery } from './deployment/attachmentDelivery';
 import type { PortraitExchange } from './deployment/portraitExchange';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
@@ -30,11 +31,15 @@ type Answer = Omit<ClientResponse, 'headers'> & { readonly headers?: Readonly<Re
 /** What a deployment answers a caller it accepts, which is what proves the address is MailFathom and the password works. */
 const accepted = sessionAnswering(['mailfathom.mail.read', 'mailfathom.mail.ask']);
 
-/** A deployment reporting itself and what it grants the credential that just reached it. */
-function sessionAnswering(permissions: readonly string[]): Answer {
+/**
+ * A deployment reporting itself, what it grants the credential that just reached it, and whether it forwards the
+ * client's own telemetry. The last of those is what decides whether the client records anything at all, so a test
+ * about telemetry states it and every other test takes a deployment that forwards it.
+ */
+function sessionAnswering(permissions: readonly string[], telemetry = true): Answer {
     return {
         status: 200,
-        body: JSON.stringify({ service: 'MailFathom', version: '0.8.7', permissions }),
+        body: JSON.stringify({ service: 'MailFathom', version: '0.8.7', permissions, telemetry }),
     };
 }
 
@@ -52,6 +57,9 @@ const workAccount = {
 
 /** What a run opens already holding, where something was kept for it. */
 const heldCredential = 'Basic dGVzdDpzZWNyZXQ=';
+
+/** Who `heldCredential` names, which is what the device's remembered telemetry answer is kept under. */
+const heldPerson = 'test';
 
 /** What the screen composes out of what `signIn` below types, which is what a test asserts was kept and presented. */
 const typedCredential = 'Basic b3duZXI6b3BlbiBzZXNhbWU=';
@@ -80,10 +88,17 @@ const emptyFolder: Answer = {
     body: JSON.stringify({ emails: [], nextCursor: null, previousCursor: null, pageSize: 100 }),
 };
 
-/** A deployment that accepts any credential and answers the session and the accounts with what a test named. */
+/**
+ * A deployment that accepts any credential and answers the session and the accounts with what a test named.
+ *
+ * The preferences route answers nothing readable unless a test states it, which is what every test that is not about
+ * a preference wants: the client then draws the unset document rather than one this file would have to keep in step
+ * with the deployment's own. A test about a preference states the answer and gets it.
+ */
 function deploymentAnswering(
     accounts: Answer = directory(true, [workAccount]),
     session: Answer = accepted,
+    preferences: Answer | null = null,
 ): DeploymentTransport {
     return () => (request) => {
         asked.push(request);
@@ -92,7 +107,19 @@ function deploymentAnswering(
             return Promise.resolve(complete(emptyFolder));
         }
 
+        if (preferences !== null && request.path.endsWith('/preferences')) {
+            return Promise.resolve(complete(preferences));
+        }
+
         return Promise.resolve(complete(request.path.endsWith('/session') ? session : accounts));
+    };
+}
+
+/** The whole preferences document, because the route answers all of it whether or not anything was ever set. */
+function preferencesAnswering(telemetryEnabled: boolean): Answer {
+    return {
+        status: 200,
+        body: JSON.stringify({ telemetryEnabled, theme: 'system', openMailInTabs: false, markReadOnOpen: true }),
     };
 }
 
@@ -447,16 +474,20 @@ function renderApp(
 function telemetryRecording(): {
     readonly telemetry: ClientTelemetry;
     readonly exportedFor: (ClientSession | null)[];
+    readonly permitted: boolean[];
     readonly stopped: number[];
     readonly events: ClientEvent[];
 } {
     const exportedFor: (ClientSession | null)[] = [];
+    const permitted: boolean[] = [];
     const stopped: number[] = [];
     const events: ClientEvent[] = [];
 
     return {
         telemetry: {
-            exportFor: (session) => {
+            exportFor: (session, allowed) => {
+                permitted.push(allowed);
+
                 const started = exportedFor.push(session);
 
                 return () => stopped.push(started);
@@ -467,6 +498,7 @@ function telemetryRecording(): {
             },
         },
         exportedFor,
+        permitted,
         stopped,
         events,
     };
@@ -1472,8 +1504,9 @@ describe('App deployment', () => {
     });
 });
 
-// Inside the frame the language is chosen on the settings screen rather than in the menu that leads to it, which is
-// where the design project puts it — so a test about the language opens that screen the way a person does.
+// Inside the frame the language and the telemetry decision are made on the settings screen rather than in the menu
+// that leads to it, which is where the design project puts them — so a test about either opens that screen the way a
+// person does.
 function openSettings(): void {
     fireEvent.click(screen.getByRole('button', { name: 'Settings', hidden: true }));
 }
@@ -1554,5 +1587,90 @@ describe('App telemetry', () => {
         await screen.findByText('This deployment has stopped accepting the password that was kept. Sign in again.');
 
         expect(recording.events).toContain('credential_no_longer_accepted');
+    });
+
+    // A deployment that forwards nothing is not known to forward nothing until it says so, and until then the client
+    // records into the buffer #1230 holds — which is why what is asserted is where this ends rather than that it never
+    // permitted anything. The pipeline throws away what it held when that answer arrives, which `exporting.test.ts`
+    // and `holding.test.ts` are what prove.
+    it('stops recording against a deployment that says it forwards no telemetry', async () => {
+        const recording = telemetryRecording();
+
+        renderApp(
+            servedFrom,
+            heldCredential,
+            deploymentAnswering(undefined, sessionAnswering(['mailfathom.mail.read', 'mailfathom.mail.ask'], false)),
+            storeKeeping(),
+            recording.telemetry,
+        );
+        await framed();
+
+        expect(recording.permitted.at(-1)).toBe(false);
+    });
+
+    // What a restart owes somebody who turned it off on this machine: the decision is honoured from the first effect
+    // rather than for the second it takes an answer to come back, and it stands for as long as no answer does.
+    it('honours a decision this device remembers while the deployment has answered nothing', async () => {
+        window.localStorage.setItem(telemetryKey(heldPerson), 'false');
+
+        const recording = telemetryRecording();
+
+        renderApp(servedFrom, heldCredential, deploymentAnswering(), storeKeeping(), recording.telemetry);
+        await framed();
+
+        expect(recording.permitted).not.toContain(true);
+        expect(recording.events).not.toContain('session_started');
+    });
+
+    // The other half of that: the device's copy is a cache and not a second opinion, so the deployment's own answer
+    // replaces it — which is what makes a decision taken on one machine reach this one.
+    it('lets the deployment replace what this device remembers once it answers', async () => {
+        window.localStorage.setItem(telemetryKey(heldPerson), 'false');
+
+        const recording = telemetryRecording();
+
+        renderApp(
+            servedFrom,
+            heldCredential,
+            deploymentAnswering(undefined, accepted, preferencesAnswering(true)),
+            storeKeeping(),
+            recording.telemetry,
+        );
+        await framed();
+
+        expect(recording.permitted[0]).toBe(false);
+        await waitFor(() => {
+            expect(recording.permitted.at(-1)).toBe(true);
+        });
+    });
+
+    // What began is the session rather than the recording, so moving the switch off and on again reports nothing a
+    // second time. The guard is a ref rather than a derived value because the record is an event and not a state.
+    it('reports a session beginning once across a switch moved twice', async () => {
+        const recording = telemetryRecording();
+
+        renderApp(
+            servedFrom,
+            heldCredential,
+            deploymentAnswering(undefined, accepted, preferencesAnswering(true)),
+            storeKeeping(),
+            recording.telemetry,
+        );
+        await framed();
+        openSettings();
+
+        const withhold = screen.getByRole('switch', { name: /Do not send telemetry/ });
+
+        fireEvent.click(withhold);
+        await waitFor(() => {
+            expect(recording.permitted.at(-1)).toBe(false);
+        });
+
+        fireEvent.click(withhold);
+        await waitFor(() => {
+            expect(recording.permitted.at(-1)).toBe(true);
+        });
+
+        expect(recording.events.filter((event) => event === 'session_started')).toHaveLength(1);
     });
 });

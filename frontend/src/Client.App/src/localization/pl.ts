@@ -140,6 +140,12 @@ export const pl: Catalogue = {
     'settings.telemetryExplanation': 'Diagnostyka błędów i statystyki użycia zostają na tym urządzeniu.',
     'settings.telemetryWithheldWarning':
         'Bez telemetrii pomoc techniczna będzie utrudniona — zgłoszenia trzeba będzie opisywać ręcznie, a części błędów nie da się odtworzyć po stronie wsparcia.',
+    'settings.telemetryDestination':
+        'Wysyłane do {address}, które przekazuje je dalej do skonfigurowanego kolektora. Zawierają to, które ekrany otwierasz i jak długo się otwierały — nigdy Twojej poczty, adresów, folderów ani hasła.',
+    'settings.telemetryNotForwarded':
+        'To wdrożenie nie przekazuje telemetrii, więc ten klient jej nie wysyła i nie ma czego wyłączać.',
+    'settings.telemetryUnanswered':
+        'Czekamy, aż to wdrożenie powie, czy przekazuje telemetrię. Dopóki nie odpowie, obowiązuje Twoja własna decyzja.',
 
     'deployment.reachedAt': 'Odczyt z {address}',
     'deployment.change': 'Wskaż inne wdrożenie',

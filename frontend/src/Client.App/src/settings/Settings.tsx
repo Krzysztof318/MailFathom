@@ -6,6 +6,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Icon } from '../controls/Icon';
 import { PersonAvatar } from '../controls/PersonAvatar';
 import { Switch } from '../controls/Switch';
+import type { TelemetryForwarding } from '../deployment/telemetryForwarding';
 import { useLocalization } from '../localization/useLocalization';
 import type { ClientPreferencesInForce } from '../preferences/useClientPreferences';
 import type { OwnProfileInForce } from '../profile/useOwnProfile';
@@ -29,6 +30,7 @@ export function Settings({
     open,
     profile,
     preferences,
+    telemetryForwarding,
     onClose,
 }: {
     readonly open: boolean;
@@ -38,6 +40,9 @@ export function Settings({
 
     /** The settings that follow the person, of which this screen edits one. */
     readonly preferences: ClientPreferencesInForce;
+
+    /** What this deployment has said about forwarding this client's telemetry, including that it has said nothing. */
+    readonly telemetryForwarding: TelemetryForwarding;
 
     readonly onClose: () => void;
 }) {
@@ -102,7 +107,7 @@ export function Settings({
                 <Divider />
 
                 <SectionName>{translate('settings.privacy')}</SectionName>
-                <Telemetry preferences={preferences} />
+                <Telemetry preferences={preferences} forwarding={telemetryForwarding} />
             </div>
         </dialog>
     );
@@ -266,9 +271,42 @@ function PictureNotice({
 
 // Whether this deployment may be told what the client is doing, drawn the way the design project states it: as the
 // decision to withhold rather than the decision to permit, so that the switch being on is the private answer.
-function Telemetry({ preferences }: { readonly preferences: ClientPreferencesInForce }) {
+//
+// Three things stand beside the switch that the design project does not draw, all of them the acceptance of #1232 and
+// all about the same thing — that a decision is only a decision if what is being decided is stated. Where the records
+// go is named, because "telemetry" says nothing about who ends up holding it, and this client sends to the deployment
+// somebody signed in to rather than anywhere else. A deployment that forwards none is said out loud instead of being
+// drawn as a switch: there is nothing behind it there, so moving it would decide nothing. And a deployment that has
+// not answered yet says that instead of either, because the frame records under the person's own answer while it
+// waits — so drawing "nothing to turn off" over that state would be telling somebody nothing is being sent at exactly
+// the moment something is.
+function Telemetry({
+    preferences,
+    forwarding,
+}: {
+    readonly preferences: ClientPreferencesInForce;
+    readonly forwarding: TelemetryForwarding;
+}) {
     const { translate } = useLocalization();
     const withheld = !preferences.telemetryEnabled;
+
+    if (!forwarding.answered) {
+        return (
+            <p className="rounded-xl border border-line bg-sunken px-2.5 py-2.25 text-xs text-muted">
+                {translate('settings.telemetryUnanswered')}
+            </p>
+        );
+    }
+
+    const { destination } = forwarding;
+
+    if (destination === null) {
+        return (
+            <p className="rounded-xl border border-line bg-sunken px-2.5 py-2.25 text-xs text-muted">
+                {translate('settings.telemetryNotForwarded')}
+            </p>
+        );
+    }
 
     return (
         <>
@@ -285,6 +323,10 @@ function Telemetry({ preferences }: { readonly preferences: ClientPreferencesInF
                     }}
                 />
             </label>
+
+            <p className="text-2xs text-faint">
+                {translate('settings.telemetryDestination', { address: destination })}
+            </p>
 
             {withheld ? (
                 <p className="flex items-start gap-2 rounded-xl border border-warning bg-warning-soft px-2.5 py-2.25 text-xs text-warning-text">

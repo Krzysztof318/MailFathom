@@ -76,11 +76,14 @@ Four things may never cross, in either direction:
   the next machine; what they set **before signing in is kept on the device**, because the sign-in screen has no session
   to ask with. A setting offered on both sides of signing in is placed by the earlier of the two, which is why the
   language stays on the device although the settings screen offers it as well. An exception exists only where the issue
-  asking for the setting asked for one explicitly and said why, and two stand today: the theme is held in **both**
+  asking for the setting asked for one explicitly and said why, and three stand today: the theme is held in **both**
   stores — the device answers first so that something is painted above the sign-in screen, and the deployment's answer
-  replaces it once a session exists — and the list/pane split is kept on the device alone, because a pane width says how
-  much room this screen has rather than how somebody wants to work. The theme is the only setting held in both, and a
-  setting that belongs to neither store is session state rather than a third place to keep one.
+  replaces it once a session exists; whether telemetry may be recorded is held in both for a stronger reason, that a
+  client which has not yet been told anything has to honour a refusal rather than record until an answer arrives, so the
+  device's copy is keyed per person and read only until the deployment answers; and the list/pane split is kept on the
+  device alone, because a pane width says how much room this screen has rather than how somebody wants to work. Those
+  two are the only settings held in both, and a setting that belongs to neither store is session state rather than a
+  third place to keep one.
 - **Store the smallest thing you cannot compute.** Everything computable from stored state is computed during render,
   not stored beside it and kept in step. Two pieces of state that must agree are one piece of state and a function; the
   bug this prevents is the pair that disagrees, which no type catches and no test finds unless somebody thought of it.

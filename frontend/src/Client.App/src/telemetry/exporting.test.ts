@@ -21,6 +21,7 @@ import { startRecording, type ClientPipeline } from './exporting';
 
 const destinations = vi.hoisted(() => {
     const built: { readonly url: string; readonly authorization: string }[] = [];
+    const exported: { readonly url: string; readonly records: number }[] = [];
     const shutDown: string[] = [];
 
     class FakeDestination {
@@ -31,7 +32,8 @@ const destinations = vi.hoisted(() => {
             built.push({ url: options.url, authorization: options.headers['Authorization'] ?? '' });
         }
 
-        export(_records: unknown, done: (result: { code: ExportResultCode }) => void): void {
+        export(records: unknown, done: (result: { code: ExportResultCode }) => void): void {
+            exported.push({ url: this.url, records: Array.isArray(records) ? records.length : 1 });
             done({ code: ExportResultCode.SUCCESS });
         }
 
@@ -46,7 +48,7 @@ const destinations = vi.hoisted(() => {
         }
     }
 
-    return { built, shutDown, FakeDestination };
+    return { built, exported, shutDown, FakeDestination };
 });
 
 vi.mock('@opentelemetry/exporter-trace-otlp-proto', () => ({ OTLPTraceExporter: destinations.FakeDestination }));
@@ -59,6 +61,7 @@ let running: ClientPipeline | null = null;
 
 beforeEach(() => {
     destinations.built.length = 0;
+    destinations.exported.length = 0;
     destinations.shutDown.length = 0;
 });
 
@@ -211,6 +214,25 @@ describe('startRecording', () => {
         await running.exportTo({ ...session, authorization: 'Basic c29tZWJvZHkgZWxzZQ==' });
 
         expect(destinations.built).toHaveLength(6);
+    });
+
+    it('throws away what it held rather than exporting it, once somebody refuses to be reported on', async () => {
+        running = startRecording();
+
+        record();
+
+        await running.discard();
+
+        // Signing in afterwards is what makes the absence provable: a buffer that had merely gone back to holding
+        // would empty into this destination, and this destination is the first one that has ever existed.
+        await running.exportTo(session);
+
+        // The measurements are the one signal with nothing to throw away — cumulative totals in the instruments rather
+        // than a buffer — which is the ceiling the `ponytail:` note beside `hold` names against #1227. What a person
+        // refusing to be reported on must not have exported is what was written about them, and both of the signals
+        // that carry that are empty.
+        expect(destinations.built).toHaveLength(3);
+        expect(destinations.exported.filter((batch) => !batch.url.endsWith('/metrics'))).toEqual([]);
     });
 
     it('stops recording when the run that composed it lets it go', async () => {
