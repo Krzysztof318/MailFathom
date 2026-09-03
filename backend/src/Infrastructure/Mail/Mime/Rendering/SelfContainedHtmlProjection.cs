@@ -67,11 +67,14 @@ internal static partial class SelfContainedHtmlProjection
     /// the same mechanism that removes an attribute nobody thought of.
     /// </para>
     /// <para>
-    /// <c>srcset</c> and <c>sizes</c> are deliberately absent. A candidate list is several addresses in one attribute
-    /// value, so it is neither resolvable to one picture nor removable one address at a time; dropping it costs the
-    /// reader the alternative resolutions and keeps the <c>src</c> beside it, which is the picture the message would
-    /// have drawn anyway. <c>source</c> falls with them for the same reason, while <c>picture</c> stays so the
-    /// <c>img</c> inside it survives.
+    /// <c>srcset</c> and <c>sizes</c> are deliberately absent, and admitting them is not a choice this file is free to
+    /// make: a candidate list is several addresses in one attribute value, and the sanitizer hands none of them to
+    /// <see cref="Resolved" /> — measured against the pinned version, an <c>img</c> keeps its whole <c>srcset</c>
+    /// verbatim while its <c>src</c> is filtered. So the attribute cannot be admitted even for a message's own
+    /// pictures, because admitting it would carry a remote address through the read that asked for none. Dropping it
+    /// costs the reader the alternative resolutions and keeps the <c>src</c> beside it, which is the picture the
+    /// message would have drawn anyway. <c>source</c> falls with them for the same reason, while <c>picture</c> stays
+    /// so the <c>img</c> inside it survives.
     /// </para>
     /// </remarks>
     private static readonly string[] AllowedAttributes =
@@ -108,23 +111,60 @@ internal static partial class SelfContainedHtmlProjection
         }
 
         var joined = string.Join('\n', htmlParts);
-        var source = MailTextBounds.TruncateAtTextElementBoundary(joined, allowance.MaxCharacters);
+        var maxCharacters = allowance.MaxCharacters;
 
         var bounds = MailDocumentBounds.Default;
         var images = await MailInlineImages.ResolveAsync(
             message,
-            ReferencesIn(source),
+            ReferencesIn(MailTextBounds.TruncateAtTextElementBoundary(joined, maxCharacters)),
             bounds.MaximumInlineImages,
             bounds.MaximumInlineImageOctets,
             Math.Min(bounds.MaximumInlineImageOctetsPerDocument, maximumImageOctets),
             cancellationToken);
 
-        var html = PolicyFor(images, retainRemoteReferences).Sanitize(source);
+        var policy = PolicyFor(images, retainRemoteReferences);
+        var sourceBudget = maxCharacters;
+        string source;
+        string html;
+        int markupCharacters;
+
+        do
+        {
+            source = MailTextBounds.TruncateAtTextElementBoundary(joined, sourceBudget);
+            html = policy.Sanitize(source);
+            markupCharacters = MarkupCharactersIn(html);
+
+            // Scaled by how far the markup overshot rather than reduced by the overshoot, because closing tags are
+            // proportional to what opened them: subtracting would undershoot to nothing on exactly the markup this
+            // loop exists for. The explicit decrement is what guarantees the budget still falls when the scaling
+            // rounds to the figure it started from.
+            sourceBudget = Math.Min(
+                sourceBudget - 1,
+                (int)((long)source.Length * maxCharacters / Math.Max(markupCharacters, 1)));
+        }
+        while (markupCharacters > maxCharacters && sourceBudget > 0);
 
         return NothingRunsIn(html)
             ? new EmailBodyRepresentation(html, joined.Length, TruncationOf(source, joined, images, allowance))
             : null;
     }
+
+    /// <summary>Reads how much of the result is markup the sender wrote, which is what the character bound governs.</summary>
+    /// <remarks>
+    /// <para>
+    /// The pictures are discounted because this representation is meant to exceed a character bound by exactly their
+    /// encoding: they are bounded in octets instead, and comparing the whole string against the character bound would
+    /// report every message carrying a logo as markup too long to serve.
+    /// </para>
+    /// <para>
+    /// What is left is the part a bound written for words can hold: a source that fits can still serialize past it,
+    /// because deeply nested markup spends its allowance on opening tags and needs as much again to close them, and
+    /// that growth is the sender's decision rather than the deployment's. It is the same failure the sanitized
+    /// representation defends against, measured the same way.
+    /// </para>
+    /// </remarks>
+    private static int MarkupCharactersIn(string html) =>
+        html.Length - (int)Math.Min(SelfContainedHtmlImages.CharactersInlinedBy(html), html.Length);
 
     /// <summary>Answers whether the serialized result carries nothing a renderer would execute.</summary>
     /// <remarks>
@@ -238,9 +278,12 @@ internal static partial class SelfContainedHtmlProjection
     /// already inside.
     /// </para>
     /// <para>
-    /// <c>@import</c> is refused whatever the reader asked for, and it is the one address the consent does not restore.
-    /// What it fetches is a stylesheet, and a stylesheet fetched at render time is a document nothing here parsed, so
-    /// admitting it would hand the frame CSS that never met an allow-list.
+    /// <c>@import</c> is refused whatever the reader asked for, and the reason is measured rather than preferred: the
+    /// address inside it never reaches <see cref="Resolved" />. Admitting the rule would therefore leave an address in
+    /// the output that nothing judged — which is a scripting scheme surviving as readily as a host, since the only
+    /// thing that reads a scheme here is the filter the rule bypasses. Consent widens what that filter decides and
+    /// cannot widen what it is never asked about, which is why this one refusal outlives the reader's answer. What it
+    /// would have fetched is a stylesheet nothing here parsed, and that is the second reason rather than the first.
     /// </para>
     /// <para>
     /// <c>@font-face</c> is refused on the same terms as any other remote reference, but by removing the rule rather

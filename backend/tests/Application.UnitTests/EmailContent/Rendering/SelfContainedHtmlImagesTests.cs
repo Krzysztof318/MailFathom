@@ -79,4 +79,53 @@ public sealed class SelfContainedHtmlImagesTests
         // Act and assert
         Assert.Throws<ArgumentNullException>(() => SelfContainedHtmlImages.OctetsIn(null!));
     }
+
+    /// <summary>The characters a picture occupies are what the character bound discounts, so the reference is measured as written.</summary>
+    [Fact]
+    public void CharactersInlinedBy_MarkupCarryingAPicture_CountsTheWholeReference()
+    {
+        // Arrange
+        var reference = $"data:image/png;base64,{Convert.ToBase64String(new byte[120])}";
+        var markup = $"""<p>Body</p><img src="{reference}">""";
+
+        // Act
+        var characters = SelfContainedHtmlImages.CharactersInlinedBy(markup);
+
+        // Assert
+        Assert.Equal(reference.Length, characters);
+    }
+
+    /// <summary>One picture named twice is in the string twice, which is what a bound on the string's length is about.</summary>
+    [Fact]
+    public void CharactersInlinedBy_OnePictureNamedTwice_CountsBothOccurrences()
+    {
+        // Arrange
+        var reference = $"data:image/png;base64,{Convert.ToBase64String(new byte[90])}";
+        var markup = $"""<img src="{reference}"><img src="{reference}">""";
+
+        // Act
+        var characters = SelfContainedHtmlImages.CharactersInlinedBy(markup);
+
+        // Assert
+        Assert.Equal(reference.Length * 2, characters);
+    }
+
+    /// <summary>Markup that inlined nothing discounts nothing, so the whole of it is measured against the character bound.</summary>
+    [Fact]
+    public void CharactersInlinedBy_MarkupInliningNothing_CountsNothing()
+    {
+        // Act
+        var characters = SelfContainedHtmlImages.CharactersInlinedBy("<p>Body</p>");
+
+        // Assert
+        Assert.Equal(0, characters);
+    }
+
+    /// <summary>Nothing is read out of an absent representation here either.</summary>
+    [Fact]
+    public void CharactersInlinedBy_NullMarkup_IsRefused()
+    {
+        // Act and assert
+        Assert.Throws<ArgumentNullException>(() => SelfContainedHtmlImages.CharactersInlinedBy(null!));
+    }
 }

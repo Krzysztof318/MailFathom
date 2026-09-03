@@ -161,16 +161,19 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
                 cancellationToken)
             : null;
 
-        // The octets are the same budget the document draws on rather than a second one, so what the document inlined
-        // is taken off before the markup is asked for. One caller asks for both — the client's reading pane requests
-        // the tree it draws and, where the reader opened the full-markup surface, the markup beside it — and handing
-        // each the whole per-document allowance would answer one message with twice the pictures the bound names.
+        // Both budgets the document drew on are the same budgets rather than a second pair, so what it returned is
+        // taken off each of them before the markup is asked for. One caller asks for both — the client's reading pane
+        // requests the tree it draws and, where the reader opened the full-markup surface, the markup beside it — and
+        // handing each the whole allowance would answer one message with twice the words and twice the pictures the
+        // bounds name.
         var selfContainedHtmlBody = bounds.IncludeSelfContainedHtml && !bodyIsUnreadable
             ? await SelfContainedHtmlProjection.ProduceAsync(
                 message,
                 htmlParts,
                 bounds.RetainRemoteImageReferences,
-                EmailBodyCharacterAllowance.Of(bounds.MaxCharactersPerRepresentation, remainingCharacters),
+                EmailBodyCharacterAllowance.Of(
+                    bounds.MaxCharactersPerRepresentation,
+                    remainingCharacters - CharactersIn(document)),
                 RemainingImageOctetsAfter(document, bounds.RemainingInlineImageOctetsForRead),
                 cancellationToken)
             : null;
@@ -199,6 +202,14 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
         document is null
             ? remaining
             : (int)Math.Max(remaining - MailDocumentImages.OctetsIn(document), 0);
+
+    /// <summary>Reads what a produced document spent of the read's character budget, which is the words it holds.</summary>
+    /// <remarks>
+    /// The same reading the use case charges the call with, so the figure taken off here and the figure taken off after
+    /// the email is answered are one number. Its pictures are not in it, because they are spent in octets instead.
+    /// </remarks>
+    private static int CharactersIn(MailDocument? document) =>
+        document is null ? 0 : MailDocumentTexts.Collect(document).Sum(text => text.Length);
 
     /// <summary>Names which forms of its own body the message wrote, out of the branch the walk settled on.</summary>
     /// <remarks>

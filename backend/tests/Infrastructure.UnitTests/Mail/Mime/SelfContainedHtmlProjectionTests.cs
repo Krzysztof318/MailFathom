@@ -289,6 +289,44 @@ public sealed class SelfContainedHtmlProjectionTests
         Assert.Equal(markup.Length, representation.OriginalCharacterCount);
     }
 
+    /// <summary>Markup that serializes past the bound its source fitted is brought back inside it, because closing tags are growth too.</summary>
+    /// <remarks>
+    /// Deeply nested markup spends its allowance on opening tags and needs as much again to close them, so a source cut
+    /// to the bound can serialize well past it. The bound is what a caller relies on, so it governs the result rather
+    /// than the input it was produced from.
+    /// </remarks>
+    [Fact]
+    public async Task ProduceAsync_DeeplyNestedMarkup_HoldsTheResultToTheCharacterBound()
+    {
+        // Arrange
+        const int maxBodyCharacters = 2_000;
+        var markup = string.Concat(Enumerable.Repeat("<div>", 600))
+            + "Readable"
+            + string.Concat(Enumerable.Repeat("</div>", 600));
+
+        // Act
+        var representation = await RepresentationOf(markup, maxBodyCharacters: maxBodyCharacters);
+
+        // Assert
+        Assert.True(
+            representation.Text.Length <= maxBodyCharacters,
+            $"the result held {representation.Text.Length} characters against a bound of {maxBodyCharacters}");
+        Assert.Equal(EmailBodyTruncation.BodyCharacterLimit, representation.Truncation);
+    }
+
+    /// <summary>A message's own pictures are discounted from the character bound, because they are bounded in octets instead.</summary>
+    [Fact]
+    public async Task ProduceAsync_PictureLongerThanTheCharacterBound_IsStillInlined()
+    {
+        // Act
+        var representation = await RepresentationOf(
+            MessageCarryingItsOwnPicture("<p>Readable</p><img src=\"cid:logo@example.test\">"),
+            maxBodyCharacters: 60);
+
+        // Assert
+        Assert.Contains("data:image/png;base64,", representation.Text, StringComparison.Ordinal);
+    }
+
     /// <summary>A picture past the octet bound is left out, and that is reported rather than drawn as an absent picture.</summary>
     [Fact]
     public async Task ProduceAsync_PicturePastTheOctetBound_ReportsThatItWasLeftOut()

@@ -38,6 +38,22 @@ public static partial class SelfContainedHtmlImages
         return InlinedPictures().Matches(markup).Sum(match => MailDocumentImages.OctetsBehind(match.Value));
     }
 
+    /// <summary>Reads how many characters of the markup are the pictures inlined into it rather than what the sender wrote.</summary>
+    /// <param name="markup">The representation to read.</param>
+    /// <returns>The characters every inlined reference occupies, counting each occurrence, because each one is in the string.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="markup" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// The counterpart of <see cref="OctetsIn" /> for the bound stated in characters, and it counts occurrences rather
+    /// than pictures: one picture named twice is in the string twice, and what a character bound is about is how long
+    /// the string is. A picture is discounted from that bound because it is already bounded in octets.
+    /// </remarks>
+    public static long CharactersInlinedBy(string markup)
+    {
+        ArgumentNullException.ThrowIfNull(markup);
+
+        return InlinedPictures().Matches(markup).Sum(match => (long)match.Length);
+    }
+
     /// <summary>Matches a <c>data:</c> URI as every position the markup can carry one delimits it.</summary>
     /// <remarks>
     /// An attribute delimits with its own quote, a CSS <c>url()</c> with a parenthesis, and a bare attribute value

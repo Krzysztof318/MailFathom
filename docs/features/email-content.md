@@ -630,13 +630,18 @@ markup performs, which neither the policy nor the serializer can see. A result t
 returned at all, so a defect in the pass above costs a reader this surface rather than costing them the guarantee.
 
 `RetainRemoteImageReferences` widens this representation further than it widens the tree, and deliberately. In the tree
-a picture's source is the only reference there is to widen; here a stylesheet, a background, a candidate source, and a
-web font are all addresses the same fetch would reveal the same thing through, so the consent restores every one of them
-— a layout served without its fonts and its background pictures is exactly the reduction this surface was opened to
-escape. It restores addresses and nothing else: an executable construct stays gone whether or not it was asked for.
+a picture's source is the only reference there is to widen; here a background and a web font are addresses the same
+fetch would reveal the same thing through, so the consent restores both — a layout served without its fonts and its
+background pictures is exactly the reduction this surface was opened to escape. It restores addresses and nothing else:
+an executable construct stays gone whether or not it was asked for.
 
-`@import` is the one address the consent does not restore. What it fetches is a stylesheet, and a stylesheet fetched at
-render time is a document nothing here read, so admitting it would hand the surface CSS that never met an allow-list.
+Two forms of remote address stay refused under consent as well, and for one reason rather than two: the pass that
+decides a URL never sees them. An `@import` and the candidates of a `srcset` are both resolved by the CSS and markup
+parsers without reaching the policy's URL filter, so admitting either would leave an address in the output that nothing
+judged — which would also leave a scripting scheme in it, on the one path where a scheme can arrive without being
+read. The consent widens what the filter decides; it cannot widen what the filter is not asked about. `srcset`, `sizes`,
+and the `source` element are therefore absent from the allow-lists in every read, consented or not, and a `<picture>`
+draws from the `img` it encloses.
 
 ## When the local copy is unusable
 

@@ -115,10 +115,10 @@ public sealed record GetEmailContentRequest
     /// <para>
     /// What it widens differs by representation, because what each one can carry differs. The reduced document has a
     /// picture's source and nothing else, so that is the whole of it there. The self-contained markup carries a
-    /// stylesheet, a background, a web font, and a set of candidate sources besides, and every one of them is an
-    /// address the same fetch would reveal the same thing through — so the consent restores all of them or the surface
-    /// would draw a layout missing exactly the parts it was opened to see. In neither case does it restore anything
-    /// that runs.
+    /// background and a web font besides, and both are addresses the same fetch would reveal the same thing through —
+    /// so the consent restores them or the surface would draw a layout missing exactly the parts it was opened to see.
+    /// It restores nothing that runs in either, and nothing whose address the pass deciding a URL never sees, which is
+    /// what leaves an <c>@import</c> and a <c>srcset</c> refused whether or not it was asked for.
     /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when it is asked for by a request naming other than one email.</exception>
