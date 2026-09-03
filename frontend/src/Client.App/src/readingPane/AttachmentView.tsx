@@ -153,7 +153,8 @@ function Inside({
     // An answer belongs to the read that produced it, and losing the network ends that read: coming back starts
     // another, so the answer from before it would stand on the screen while the new one is still in flight — a surface
     // looking finished during a wait, which is what somebody acts on twice. Dropped during the render that observes
-    // the change rather than in an effect, which is React's own way of letting go of state a prop has outlived.
+    // the change rather than in an effect, which is React's own way of letting go of state a prop has outlived. The
+    // other way a read starts again is somebody pressing to try again, and that one is let go of in the press.
     const [readWithNetwork, setReadWithNetwork] = useState(online);
 
     if (readWithNetwork !== online) {
@@ -216,6 +217,11 @@ function Inside({
                     <SecondaryButton
                         label={translate('connection.retry')}
                         onActivate={() => {
+                            // Let go of the refusal here rather than where the network's own change is answered: this
+                            // one is a person's act, and a value that changes because somebody pressed something
+                            // belongs to the press. Without it the sentence they pressed past would stand over the
+                            // read they started, which is a wait drawn as an answer.
+                            setAnswer(null);
                             setReading({ drawnAs: reading.drawnAs, attempt: reading.attempt + 1 });
                         }}
                     />

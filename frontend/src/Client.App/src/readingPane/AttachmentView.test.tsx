@@ -252,6 +252,19 @@ describe('AttachmentView', () => {
         expect(held.asked.length).toBe(2);
     });
 
+    // The second attempt is a wait like the first one, so what stands on the screen while it runs is the wait rather
+    // than the sentence somebody pressed past.
+    it('says it is reading while the second attempt is in flight rather than keeping the refusal up', async () => {
+        const held = reading({ outcome: 'refused', refusal: 'unavailable' });
+        drawing(photograph, held.exchange);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+
+        expect(screen.getByText('Reading harbour.png…')).toBeDefined();
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(held.asked.length).toBe(2);
+    });
+
     it('offers no second attempt at a refusal that would repeat identically', async () => {
         drawing(photograph, reading({ outcome: 'refused', refusal: 'unauthorized' }).exchange);
 

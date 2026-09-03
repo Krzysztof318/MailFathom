@@ -119,7 +119,19 @@ describe('showingFailureOf', () => {
         expect(showingFailureOf({ outcome: 'refused', refusal: 'unreadable' })).toBe('unreadable');
     });
 
-    it('reports a refusal a download shares by the same reading that download is given', () => {
-        expect(showingFailureOf({ outcome: 'refused', refusal: 'unauthorized' })).toBe('unauthorized');
+    it('reports a read the screen gave up on as an answer the client acted on rather than as a failure', () => {
+        expect(showingFailureOf({ outcome: 'refused', refusal: 'abandoned' })).toBeNull();
+    });
+
+    // Every refusal a download can answer with, by the reading that download is given: this function is the callback
+    // an operator's own dimension is built from, so a value delegated wrongly is a dashboard saying a deployment is
+    // refusing what it delivered — which is why the coverage is exhaustive here as it is above.
+    it.each([
+        ['unauthenticated', 'unauthenticated'],
+        ['unauthorized', 'unauthorized'],
+        ['unavailable', 'unavailable'],
+        ['largerThanDescribed', 'unreadable'],
+    ] as const)('reports a %s refusal as the failure a download reports it as', (refusal, reported) => {
+        expect(showingFailureOf({ outcome: 'refused', refusal })).toBe(reported);
     });
 });
