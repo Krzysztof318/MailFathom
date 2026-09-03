@@ -360,8 +360,6 @@
     --color-warning-text: oklch(0.87 0.1 62);
     --color-warning-soft: oklch(0.315 0.05 50);
     --color-error: oklch(0.66 0.19 25);
-
-    --color-error: oklch(0.66 0.19 25);
     --color-error-text: oklch(0.845 0.105 25);
     --color-error-soft: oklch(0.325 0.078 22);
 

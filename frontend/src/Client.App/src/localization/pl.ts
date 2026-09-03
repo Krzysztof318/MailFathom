@@ -632,6 +632,7 @@ export const pl: Catalogue = {
     'toast.stopOperation': 'Przerwij operację',
     'toast.stopQuestion': 'Przerwać operację?',
     'toast.keepGoing': 'Kontynuuj',
+    'toast.stopIsFinal': 'Przerwania nie da się cofnąć — operację trzeba by uruchomić od nowa.',
     'toast.stopped': 'Anulowano',
     'toast.stoppedNothingWritten': 'Operacja przerwana przed zapisem — nic nie zostało zmienione.',
 };

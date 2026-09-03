@@ -624,6 +624,7 @@ export const en = {
     'toast.stopOperation': 'Stop the operation',
     'toast.stopQuestion': 'Stop the operation?',
     'toast.keepGoing': 'Keep going',
+    'toast.stopIsFinal': 'Stopping is not taken back — the operation would have to be started again.',
     'toast.stopped': 'Stopped',
     'toast.stoppedNothingWritten': 'The operation was stopped before anything was written, so nothing changed.',
 } as const;

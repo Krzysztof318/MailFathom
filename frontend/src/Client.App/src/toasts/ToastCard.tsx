@@ -2,7 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useEffect, useId, useRef, useState, type PointerEvent } from 'react';
+import { useEffect, useRef, useState, type PointerEvent } from 'react';
+import { Confirmation } from '../confirmation/Confirmation';
 import { Icon } from '../controls/Icon';
 import type { IconName } from '../controls/icons';
 import { swipeSoFar } from '../controls/swipeDismissal';
@@ -58,8 +59,6 @@ const toastMarks: Readonly<Record<ToastKind | 'running', ToastMark>> = {
     },
 };
 
-const wordsStop = 'stop';
-
 export function ToastCard({
     toast,
     onDismiss,
@@ -75,16 +74,15 @@ export function ToastCard({
 }) {
     const { translate } = useLocalization();
     const asked = useRef<HTMLDialogElement>(null);
-    const question = useId();
 
     // The gesture in flight: which pointer started it and where it landed. A ref rather than state, because nothing on
     // the screen is drawn from it and a moving finger would otherwise render the card for every pixel of its travel.
     const swiping = useRef<{ pointer: number; from: number; top: number } | null>(null);
 
-    // The sentence the question is asking, held here rather than read from the toast while the dialog is open. The
-    // operation goes on running while somebody decides, so it may settle mid-question and take `stands` with it — and
-    // a dialog whose words came from what has just changed would be unmounted under the reader with focus inside it.
-    const [asking, setAsking] = useState<string | null>(null);
+    // What stopping would leave behind, kept here from the moment the question is asked rather than read off the toast
+    // while it stands: the operation goes on running while somebody decides, so it may settle mid-question and take
+    // `stands` with it, and the question would then be drawn from something that has already changed.
+    const [leavesBehind, setLeavesBehind] = useState('');
 
     // Bound once rather than read inside the handler: the handler runs after this render, and a property read there
     // is no longer the one the markup decided to draw a control for.
@@ -93,17 +91,9 @@ export function ToastCard({
     const mark = running ? toastMarks.running : toastMarks[toast.stands.kind];
     const closing = running ? translate('toast.stopOperation') : translate('toast.close');
 
-    // Two imperative calls on a dialog, which is the whole of what these effects are for. Opening it is `showModal`
-    // rather than an attribute, for the top layer, the inertness, the focus trap, and the backdrop; closing it is the
-    // dialog's own path, which returns focus to whatever opened it. The second is what an operation settling while the
-    // question stands has to go through — the answer is no longer worth anything, and unmounting the element instead
-    // would drop the focus that `showModal` trapped inside it.
-    useEffect(() => {
-        if (asking !== null) {
-            asked.current?.showModal();
-        }
-    }, [asking]);
-
+    // An operation that settles while the question stands closes it through the dialog's own path, which is what puts
+    // focus back on the control that opened it. Taking the element away instead would drop the focus `showModal`
+    // trapped inside it, and the answer is worth nothing by then anyway — there is nothing left to stop.
     useEffect(() => {
         if (!running) {
             asked.current?.close();
@@ -112,7 +102,8 @@ export function ToastCard({
 
     function close(): void {
         if ('operation' in toast.stands) {
-            setAsking(toast.stands.operation.stoppingLeavesBehind);
+            setLeavesBehind(toast.stands.operation.stoppingLeavesBehind);
+            asked.current?.showModal();
         } else {
             onDismiss();
         }
@@ -232,51 +223,21 @@ export function ToastCard({
                 />
             )}
 
-            {asking === null ? null : (
-                <dialog
-                    ref={asked}
-                    aria-labelledby={question}
-                    className="m-auto w-96 max-w-full rounded-3xl border border-line bg-panel p-5 text-text shadow-dialog backdrop:bg-scrim"
-                    onClose={() => {
-                        // Every way out of the dialog arrives here — both controls, the escape key, and the operation
-                        // settling underneath it — and only one of them carries the word that stops anything.
-                        if (asked.current?.returnValue === wordsStop) {
-                            onStop();
-                        }
-
-                        setAsking(null);
-                    }}
-                >
-                    <div className="flex flex-col gap-3.5">
-                        <h2 id={question} className="text-xl font-semibold">
-                            {translate('toast.stopQuestion')}
-                        </h2>
-
-                        <p className="text-base text-muted text-pretty">{asking}</p>
-
-                        <div className="flex flex-wrap justify-end gap-2">
-                            <button
-                                type="button"
-                                className="rounded-lg px-3.75 py-2 text-base text-text-soft transition hover:bg-hover"
-                                onClick={() => {
-                                    asked.current?.close();
-                                }}
-                            >
-                                {translate('toast.keepGoing')}
-                            </button>
-
-                            <button
-                                type="button"
-                                className="rounded-lg bg-error px-4 py-2 text-base font-semibold text-on-accent transition hover:opacity-90"
-                                onClick={() => {
-                                    asked.current?.close(wordsStop);
-                                }}
-                            >
-                                {translate('toast.stopOperation')}
-                            </button>
-                        </div>
-                    </div>
-                </dialog>
+            {!running && leavesBehind === '' ? null : (
+                // The client's one confirmation, asked here as every other act asks it. It stays mounted once it has
+                // been asked, even after the operation settles, because closing it is the dialog's own act and an
+                // element taken away mid-question closes nothing.
+                <Confirmation
+                    asked={asked}
+                    mark="cancel"
+                    question={translate('toast.stopQuestion')}
+                    consequence={<p className="text-base text-muted text-pretty">{leavesBehind}</p>}
+                    reversal={{ kind: 'permanent', said: translate('toast.stopIsFinal') }}
+                    ways={[
+                        { said: translate('toast.keepGoing'), manner: 'back' },
+                        { said: translate('toast.stopOperation'), manner: 'act', run: onStop },
+                    ]}
+                />
             )}
         </div>
     );
