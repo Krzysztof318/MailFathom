@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     readMailBody,
     readMailMessage,
@@ -64,6 +64,9 @@ interface Read {
     readonly attempt: number;
 }
 
+/** The part of a `Read` the head is read under. The sender's pictures are a body ask and are not in it. */
+type HeadRead = Pick<Read, 'storedEmailId' | 'attempt'>;
+
 export function FullHtmlSurface({
     session,
     transport,
@@ -85,9 +88,18 @@ export function FullHtmlSurface({
 }) {
     const { locale, translate } = useLocalization();
     const [read, setRead] = useState<Read>({ storedEmailId, remotePictures: false, attempt: 0 });
-    const [described, setDescribed] = useState<{ read: Read; result: ClientResult<MailMessage> } | null>(null);
+    const [described, setDescribed] = useState<{ read: HeadRead; result: ClientResult<MailMessage> } | null>(null);
     const [answer, setAnswer] = useState<{ read: Read; result: ClientResult<MailBody> } | null>(null);
     const [connected, setConnected] = useState(online);
+
+    // What the head is read under, held as one object so that both the effect below and the answer it keeps are keyed
+    // on the same identity. Asking for the sender's pictures leaves that identity alone, which is what makes the ask a
+    // second read of the body rather than of the whole message — and what stops the subject blanking while an identical
+    // head request repeats.
+    const headRead = useMemo<HeadRead>(
+        () => ({ storedEmailId: read.storedEmailId, attempt: read.attempt }),
+        [read.storedEmailId, read.attempt],
+    );
 
     // Opening the surface is a view change, so focus goes to the start of it rather than staying on the control that
     // was pressed — which the platform has just put focus back on as the confirmation closed, and which is on a screen
@@ -120,9 +132,9 @@ export function FullHtmlSurface({
         }
     }
 
-    // Both reads are keyed on the same `Read`, so one retry re-runs both and neither can be left behind on an older
-    // attempt than the other. Nothing is read without a network, and coming back re-runs them — which is the whole of
-    // the recovery from that direction and what makes the offline sentence's promise a true one.
+    // Both reads carry the same attempt, so one retry re-runs both and neither can be left behind on an older attempt
+    // than the other. Nothing is read without a network, and coming back re-runs them — which is the whole of the
+    // recovery from that direction and what makes the offline sentence's promise a true one.
     useEffect(() => {
         if (!online) {
             return;
@@ -130,16 +142,16 @@ export function FullHtmlSurface({
 
         let listening = true;
 
-        void readMailMessage(session, transport, read.storedEmailId).then((answered) => {
+        void readMailMessage(session, transport, headRead.storedEmailId).then((answered) => {
             if (listening) {
-                setDescribed({ read, result: answered });
+                setDescribed({ read: headRead, result: answered });
             }
         });
 
         return () => {
             listening = false;
         };
-    }, [session, transport, read, online]);
+    }, [session, transport, headRead, online]);
 
     useEffect(() => {
         if (!online) {
@@ -160,7 +172,7 @@ export function FullHtmlSurface({
         };
     }, [session, transport, read, online]);
 
-    const describing = described?.read === read ? described.result : null;
+    const describing = described?.read === headRead ? described.result : null;
     const drawn = answer?.read === read ? answer.result : null;
     const message = describing?.outcome === 'read' ? describing.value : null;
     const author = message?.headers.participants.find((participant) => participant.role === 'From') ?? null;

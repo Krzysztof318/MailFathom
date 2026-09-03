@@ -169,6 +169,21 @@ describe('FullHtmlSurface', () => {
         ]);
     });
 
+    it('leaves the head alone when the pictures are asked for, rather than re-reading and blanking it', async () => {
+        const { transport, asked } = deploymentServing();
+
+        await drawing(transport);
+        await screen.findByTitle("The sender's own markup, drawn in isolation");
+        press('Load pictures from the sender');
+
+        await screen.findByText(/so their servers can tell it was opened/);
+
+        expect(asked.map((request) => request.path).filter((path) => !path.includes('/body'))).toEqual([
+            `${session.baseAddress}/api/client/messages/${messageId}`,
+        ]);
+        expect(screen.getByText('Quarterly invoice')).toBeDefined();
+    });
+
     it('leaves the surface through the control that closes it', async () => {
         const closed = vi.fn();
         const { transport } = deploymentServing();
