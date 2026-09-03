@@ -33,6 +33,12 @@ namespace MailFathom.Host.Api;
 /// surface has to refuse.
 /// </para>
 /// <para>
+/// The name routes, which <see cref="ClientDisplayNameEndpoint" /> describes, stand beside the record rather than
+/// inside it: what this deployment records a person as is the envelope its record hangs on, so a client reading the
+/// record alone would still have nothing to draw the person with. They are written under the record's own grant and
+/// refused for the same person, and the read says which, so a screen is drawn from one answer.
+/// </para>
+/// <para>
 /// The preferences routes, which <see cref="ClientPreferencesEndpoint" /> describes, are the surface's other write and
 /// are deliberately not part of that record. What they hold is how somebody wants to work rather than what this
 /// deployment reads for them, so it is granted, bound, and refused on its own terms — and a person whose mail accounts
@@ -79,6 +85,7 @@ internal static class ClientApiEndpoints
             .RequireNoPermission();
 
         api.MapClientOwnerRecord();
+        api.MapClientDisplayName();
         api.MapClientPreferences();
         api.MapClientMailAccounts();
         api.MapClientMailFolders();
