@@ -7,8 +7,8 @@
 // browser or a WebView refuses needs is written once instead of once per caller, and so the names those values are
 // written under are declared together rather than as strings spread across the screens that read them.
 //
-// What belongs here is what says how much room *this screen* has. What says how somebody wants to work follows them
-// between machines and belongs to the deployment instead, which is a surface of its own.
+// Which of the client's two stores a new setting belongs in is not decided here: `frontend/src/AGENTS.md` § *State*
+// holds the one rule and the two exceptions granted to it, both of which are values above.
 //
 // Reached as `window.localStorage` rather than as the bare global on purpose, and this is where that reason is
 // written down: Node publishes a `localStorage` global of its own, which is unavailable unless the process was started
