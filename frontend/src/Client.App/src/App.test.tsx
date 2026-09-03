@@ -88,10 +88,17 @@ const emptyFolder: Answer = {
     body: JSON.stringify({ emails: [], nextCursor: null, previousCursor: null, pageSize: 100 }),
 };
 
-/** A deployment that accepts any credential and answers the session and the accounts with what a test named. */
+/**
+ * A deployment that accepts any credential and answers the session and the accounts with what a test named.
+ *
+ * The preferences route answers nothing readable unless a test states it, which is what every test that is not about
+ * a preference wants: the client then draws the unset document rather than one this file would have to keep in step
+ * with the deployment's own. A test about a preference states the answer and gets it.
+ */
 function deploymentAnswering(
     accounts: Answer = directory(true, [workAccount]),
     session: Answer = accepted,
+    preferences: Answer | null = null,
 ): DeploymentTransport {
     return () => (request) => {
         asked.push(request);
@@ -100,7 +107,19 @@ function deploymentAnswering(
             return Promise.resolve(complete(emptyFolder));
         }
 
+        if (preferences !== null && request.path.endsWith('/preferences')) {
+            return Promise.resolve(complete(preferences));
+        }
+
         return Promise.resolve(complete(request.path.endsWith('/session') ? session : accounts));
+    };
+}
+
+/** The whole preferences document, because the route answers all of it whether or not anything was ever set. */
+function preferencesAnswering(telemetryEnabled: boolean): Answer {
+    return {
+        status: 200,
+        body: JSON.stringify({ telemetryEnabled, theme: 'system', openMailInTabs: false, markReadOnOpen: true }),
     };
 }
 
@@ -1485,8 +1504,9 @@ describe('App deployment', () => {
     });
 });
 
-// Inside the frame the language is chosen on the settings screen rather than in the menu that leads to it, which is
-// where the design project puts it — so a test about the language opens that screen the way a person does.
+// Inside the frame the language and the telemetry decision are made on the settings screen rather than in the menu
+// that leads to it, which is where the design project puts them — so a test about either opens that screen the way a
+// person does.
 function openSettings(): void {
     fireEvent.click(screen.getByRole('button', { name: 'Settings', hidden: true }));
 }
@@ -1588,9 +1608,9 @@ describe('App telemetry', () => {
         expect(recording.permitted.at(-1)).toBe(false);
     });
 
-    // What a restart owes somebody who turned it off on this machine: the decision is honoured from the first effect,
-    // before the deployment has answered anything, rather than for the second it takes that answer to come back.
-    it('honours a decision this device remembers before the deployment has answered again', async () => {
+    // What a restart owes somebody who turned it off on this machine: the decision is honoured from the first effect
+    // rather than for the second it takes an answer to come back, and it stands for as long as no answer does.
+    it('honours a decision this device remembers while the deployment has answered nothing', async () => {
         window.localStorage.setItem(telemetryKey(heldPerson), 'false');
 
         const recording = telemetryRecording();
@@ -1600,5 +1620,57 @@ describe('App telemetry', () => {
 
         expect(recording.permitted).not.toContain(true);
         expect(recording.events).not.toContain('session_started');
+    });
+
+    // The other half of that: the device's copy is a cache and not a second opinion, so the deployment's own answer
+    // replaces it — which is what makes a decision taken on one machine reach this one.
+    it('lets the deployment replace what this device remembers once it answers', async () => {
+        window.localStorage.setItem(telemetryKey(heldPerson), 'false');
+
+        const recording = telemetryRecording();
+
+        renderApp(
+            servedFrom,
+            heldCredential,
+            deploymentAnswering(undefined, accepted, preferencesAnswering(true)),
+            storeKeeping(),
+            recording.telemetry,
+        );
+        await framed();
+
+        expect(recording.permitted[0]).toBe(false);
+        await waitFor(() => {
+            expect(recording.permitted.at(-1)).toBe(true);
+        });
+    });
+
+    // What began is the session rather than the recording, so moving the switch off and on again reports nothing a
+    // second time. The guard is a ref rather than a derived value because the record is an event and not a state.
+    it('reports a session beginning once across a switch moved twice', async () => {
+        const recording = telemetryRecording();
+
+        renderApp(
+            servedFrom,
+            heldCredential,
+            deploymentAnswering(undefined, accepted, preferencesAnswering(true)),
+            storeKeeping(),
+            recording.telemetry,
+        );
+        await framed();
+        openSettings();
+
+        const withhold = screen.getByRole('switch', { name: /Do not send telemetry/ });
+
+        fireEvent.click(withhold);
+        await waitFor(() => {
+            expect(recording.permitted.at(-1)).toBe(false);
+        });
+
+        fireEvent.click(withhold);
+        await waitFor(() => {
+            expect(recording.permitted.at(-1)).toBe(true);
+        });
+
+        expect(recording.events.filter((event) => event === 'session_started')).toHaveLength(1);
     });
 });
