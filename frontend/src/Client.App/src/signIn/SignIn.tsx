@@ -15,11 +15,12 @@ import {
 } from '@mailfathom/client-backend';
 import { Icon } from '../controls/Icon';
 import { SecondaryButton } from '../controls/SecondaryButton';
+import type { AdoptedDeployment } from '../deployment/adoptedDeployment';
 import type { DeploymentTransport } from '../deployment/sendToDeployment';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
-import { ConnectionDetails } from './ConnectionDetails';
-import { portOf, resolveConnection } from './connection';
+import { AdvancedConnection } from './AdvancedConnection';
+import { defaultPortOf, portForPermission, portOf, resolveConnection, type ResolvedConnection } from './connection';
 import { resolveCredentialEntry, type CredentialEntryRefusal } from './credentialEntry';
 import { CredentialNotices, type CredentialNotice } from './CredentialNotices';
 import type { CredentialLifetime } from './credentialStore';
@@ -28,10 +29,20 @@ import type { CredentialLifetime } from './credentialStore';
 // already said where the deployment is. Those are one form rather than two screens because a person was handed all four
 // values together, and splitting them would make the first half read as configuration.
 //
-// Which of the two shapes is rendered follows from whether an address arrived, not from which head this is — a web
-// bundle is served by its deployment and so arrives with one, and a shell loaded from a scheme of its own does not.
-// What is decided here is only what a person sees; the address rule and the credential's own encoding each belong to
-// the module that owns them.
+// Which shape is rendered follows from where the address came from, not from which head this is. Three answers, and
+// each draws the address differently:
+//
+// - **Nobody has said.** The field is asked for and is editable, and the `Advanced` disclosure beside it holds the
+//   permission an unsecured connection needs and what the entry resolved to.
+// - **A deployment configured it.** The field is drawn and is not editable — somebody has to be able to see what they
+//   are about to send a password over, and a hidden field says less than a locked one. The disclosure is not drawn at
+//   all: every row in it is about an address this person cannot change, and the permission it holds arrived from the
+//   same configuration, so it would offer a decision that has already been taken.
+// - **The origin served the client, or the person named it on an earlier run.** The address is not on this form. A web
+//   bundle is served by its deployment, and a chosen address is stated above this screen beside the way out of it.
+//
+// What is decided here is only what a person sees; the address rule, the precedence between configuration sources, and
+// the credential's own encoding each belong to the module that owns them.
 
 /** Everything this screen can be stopped by, whether it was decided here, by the deployment, or by the wire. */
 type SignInScreenRefusal = DeploymentEntryRefusal | CredentialEntryRefusal | SignInRefusal | ClientFailureReason;
@@ -92,31 +103,54 @@ const lifetimeMessages: Readonly<Record<CredentialLifetime, MessageKey>> = {
 // One shape for every field on this screen, stated once. The focus treatment is the design project's — the line goes
 // to the accent and the tint widens behind it — and it is written with `focus-within` on the box rather than on the
 // input, because the box is what the reveal control and the port hint stand inside.
+//
+// Everything that changes below the compact breakpoint is the same decision made twice: a control a finger has to hit
+// is taller than one a pointer has to hit, and a field a phone keyboard would zoom the page into is one set below the
+// size that browser treats as readable. So the generous size is the base and the compact one is the variant, which is
+// the direction a mobile-first breakpoint reads in.
 const fieldBox =
-    'flex items-center gap-2 rounded-xl border border-line-strong bg-panel px-3 transition focus-within:border-accent focus-within:ring-4 focus-within:ring-accent-soft';
+    'flex items-center gap-2 rounded-xl border border-line-strong bg-panel px-3 transition focus-within:border-accent focus-within:ring-3 focus-within:ring-accent-soft';
 
-const fieldInput = 'min-h-11 min-w-0 flex-1 bg-transparent text-md text-text outline-none';
+const fieldInput =
+    'min-h-13 min-w-0 flex-1 bg-transparent text-xl text-text outline-none compact:min-h-11 compact:text-md';
+
+const fieldLabel = 'text-sm font-medium text-text-soft';
 
 export function SignIn({
-    deployment,
+    adopted,
+    clearTextPermitted: configuredClearText,
     lifetime,
     notices,
     send,
     onSignedIn,
 }: {
-    readonly deployment: DeploymentAddress | null;
+    readonly adopted: AdoptedDeployment | null;
+
+    /** The clear-text permission a deployment configured, or `null` where it configured none. */
+    readonly clearTextPermitted: boolean | null;
+
     readonly lifetime: CredentialLifetime;
     readonly notices: readonly CredentialNotice[];
     readonly send: DeploymentTransport;
     readonly onSignedIn: (deployment: DeploymentAddress, authorization: string) => void;
 }) {
     const { translate } = useLocalization();
+    const deployment = adopted === null ? null : adopted.deployment;
     const [entry, setEntry] = useState('');
-    const [clearTextPermitted, setClearTextPermitted] = useState(false);
+
+    // Seeded from what a deployment configured, and left alone afterwards where it did: nothing this screen holds is
+    // written back to the device store, so removing the setting removes it from the screen on the next start.
+    const [clearTextPermitted, setClearTextPermitted] = useState(configuredClearText ?? false);
     const [userName, setUserName] = useState('');
     const [password, setPassword] = useState('');
     const [revealed, setRevealed] = useState(false);
     const [presenting, setPresenting] = useState(false);
+
+    // The address the attempt in flight was started against, which is the one case on this screen where a value is
+    // held rather than computed: nothing on the form still says it. The fields stay editable while an attempt runs —
+    // deliberately, so a person who sees their mistake can correct it without waiting — and a screen that re-derived
+    // this from the entry would then name the address being typed while the request goes to the one that was.
+    const [reaching, setReaching] = useState<ResolvedConnection | null>(null);
     const [refusal, setRefusal] = useState<SignInScreenRefusal | null>(null);
     const address = useRef<HTMLInputElement>(null);
     const name = useRef<HTMLInputElement>(null);
@@ -203,6 +237,10 @@ export function SignIn({
         );
 
         setRefusal(null);
+
+        // Read back permitting clear text, the way the summary reads a handed address: what is being asked here is
+        // what this attempt's address resolved *to*, and it only became one by having been resolved already.
+        setReaching(resolveConnection(reached.deployment.baseAddress, true));
         setPresenting(true);
 
         // An abandoned attempt has no answer, whatever the wire eventually said: the screen is already back where the
@@ -279,10 +317,19 @@ export function SignIn({
         attempt.current?.abort();
     }
 
-    // What the typed address resolves to, computed during render rather than held beside the entry: it is a pure
-    // function of two values this component already has, and a second piece of state kept in step with them is the
-    // pair that eventually disagrees. It is `null` on this screen wherever no address is being typed at all.
-    const connection = deployment === null ? resolveConnection(entry, clearTextPermitted) : null;
+    // Which of the three address shapes this screen is in, and what the field then holds. A configured address is the
+    // one somebody is shown rather than asked for, so it is read out of what was adopted rather than out of the entry.
+    const configured = adopted?.origin === 'configured';
+    const shownAddress = configured ? deployment?.baseAddress : deployment === null ? entry : undefined;
+
+    // What the address on the screen resolves to, computed during render rather than held beside the entry: it is a
+    // pure function of values this component already has, and a second piece of state kept in step with them is the
+    // pair that eventually disagrees. It is `null` wherever there is no address on this form at all.
+    //
+    // A configured address is read back permitting clear text, for the reason a stored one is: it only became the
+    // address this run uses by being resolved, and what is being asked here is what it resolved *to*.
+    const connection =
+        shownAddress === undefined ? null : resolveConnection(shownAddress, configured || clearTextPermitted);
 
     return (
         <section className="flex flex-col gap-6">
@@ -300,102 +347,64 @@ export function SignIn({
                     void present();
                 }}
             >
-                {deployment === null ? (
-                    <>
-                        <div className="flex flex-col gap-1.5">
-                            <label className="text-sm font-medium text-text-soft" htmlFor="sign-in-address">
-                                {translate('connect.address')}
-                            </label>
-                            <div className={fieldBox}>
-                                <input
-                                    // The refusal joins the hint rather than replacing it, so somebody reading the
-                                    // field hears why it was refused and what it wants, in that order, without moving
-                                    // off it.
-                                    aria-describedby={describedBy('sign-in-address-hint')}
-                                    aria-invalid={marks('address')}
-                                    autoComplete="off"
-                                    className={fieldInput}
-                                    id="sign-in-address"
-                                    inputMode="url"
-                                    ref={address}
-                                    spellCheck={false}
-                                    type="text"
-                                    value={entry}
-                                    onChange={(event) => {
-                                        setEntry(event.target.value);
-                                        setRefusal(null);
-                                    }}
-                                />
+                {shownAddress === undefined ? null : (
+                    <div className="flex flex-col gap-1.5">
+                        <label className={fieldLabel} htmlFor="sign-in-address">
+                            {translate('connect.address')}
+                        </label>
+                        <div className={fieldBox}>
+                            <input
+                                // The refusal joins the hint rather than replacing it, so somebody reading the field
+                                // hears why it was refused and what it wants, in that order, without moving off it.
+                                aria-describedby={describedBy('sign-in-address-hint')}
+                                aria-invalid={marks('address')}
+                                autoComplete="off"
+                                className={fieldInput}
+                                id="sign-in-address"
+                                inputMode="url"
+                                placeholder={configured ? undefined : translate('connect.addressExample')}
+                                readOnly={configured}
+                                ref={address}
+                                spellCheck={false}
+                                type="text"
+                                value={shownAddress}
+                                onChange={(event) => {
+                                    setEntry(event.target.value);
+                                    setRefusal(null);
+                                }}
+                            />
 
-                                {/* The port this will actually reach, said beside the field while it is being typed.
-                                    Out of the accessibility tree because the sentence under the field says the same
-                                    thing in words, and hearing a bare number after every keystroke is noise. */}
-                                {connection === null ? null : (
-                                    <span aria-hidden="true" className="shrink-0 text-xs whitespace-nowrap text-faint">
-                                        {translate('connect.portHint', { port: portOf(connection) })}
-                                    </span>
-                                )}
-                            </div>
-                            <p className="text-xs text-muted" id="sign-in-address-hint">
-                                {translate('connect.addressHint')}{' '}
-                                {connection?.port === null
-                                    ? translate('connect.portDefaultNote', { port: portOf(connection) })
-                                    : null}
-                            </p>
-                        </div>
+                            {/* The lock says the same thing the field's own read-only state already announces, for
+                                somebody reading rather than listening. Decorative for exactly that reason. */}
+                            {configured ? <Icon name="lock" className="size-4 shrink-0 text-faint" /> : null}
 
-                        {/* The one control on this screen that gives something away, drawn as the design project draws
-                            it: a bordered row that turns to the warning weight once it is on, with the sentence about
-                            what it costs revealed underneath rather than standing there permanently. The row is a
-                            `label` around a real checkbox, so it is operable from the keyboard and announced as one. */}
-                        <div className="flex flex-col gap-2">
-                            <label
-                                className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${
-                                    clearTextPermitted
-                                        ? 'border-warning bg-warning-soft'
-                                        : 'border-line bg-panel hover:border-line-strong'
-                                }`}
-                            >
-                                <input
-                                    aria-describedby="sign-in-clear-text-explanation"
-                                    // The name is pinned rather than taken from the label's contents, because the
-                                    // label wraps the whole row — which is what makes the row a target somebody can
-                                    // hit — and the sentence about what this costs would otherwise be read twice: once
-                                    // as the name of the control and again as its description.
-                                    aria-label={translate('connect.clearText')}
-                                    checked={clearTextPermitted}
-                                    className="mt-0.5 size-4 shrink-0 accent-warning"
-                                    type="checkbox"
-                                    onChange={(event) => {
-                                        setClearTextPermitted(event.target.checked);
-                                        setRefusal(null);
-                                    }}
-                                />
-                                <span className="flex flex-col gap-1">
-                                    <span className="text-base font-medium text-text">
-                                        {translate('connect.clearText')}
-                                    </span>
-                                    <span className="text-xs text-muted" id="sign-in-clear-text-explanation">
-                                        {translate('connect.clearTextExplanation')}
-                                    </span>
+                            {/* The port this will actually reach, said beside the field while it is being typed. Out
+                                of the accessibility tree because the sentence under the field says the same thing in
+                                words, and hearing a bare number after every keystroke is noise. */}
+                            {connection === null ? null : (
+                                <span aria-hidden="true" className="shrink-0 text-xs whitespace-nowrap text-faint">
+                                    {translate('connect.portHint', { port: portOf(connection) })}
                                 </span>
-                            </label>
-
-                            {clearTextPermitted ? (
-                                <p className="flex items-start gap-2 rounded-lg border border-warning bg-warning-soft px-3 py-2 text-xs text-warning-text">
-                                    <Icon name="warning" className="mt-px size-4" />
-                                    {translate('connect.clearTextInForce')}
-                                </p>
-                            ) : null}
+                            )}
                         </div>
-                    </>
-                ) : null}
+                        <p className="text-xs text-muted" id="sign-in-address-hint">
+                            {configured
+                                ? translate('connect.addressConfigured')
+                                : translate('connect.addressHint', {
+                                      port:
+                                          connection === null
+                                              ? portForPermission(clearTextPermitted)
+                                              : defaultPortOf(connection),
+                                  })}
+                        </p>
+                    </div>
+                )}
 
                 {/* Neither field carries a `maxLength`, deliberately: it truncates a paste without saying so, and a
                     password silently shortened is refused by the deployment and read back as a wrong password.
                     `resolveCredentialEntry` refuses what is too long by name instead. */}
                 <div className="flex flex-col gap-1.5">
-                    <label className="text-sm font-medium text-text-soft" htmlFor="sign-in-user-name">
+                    <label className={fieldLabel} htmlFor="sign-in-user-name">
                         {translate('signIn.userName')}
                     </label>
                     <div className={fieldBox}>
@@ -405,6 +414,7 @@ export function SignIn({
                             autoComplete="username"
                             className={fieldInput}
                             id="sign-in-user-name"
+                            placeholder={translate('signIn.userNameExample')}
                             ref={name}
                             spellCheck={false}
                             type="text"
@@ -418,7 +428,7 @@ export function SignIn({
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                    <label className="text-sm font-medium text-text-soft" htmlFor="sign-in-password">
+                    <label className={fieldLabel} htmlFor="sign-in-password">
                         {translate('signIn.password')}
                     </label>
                     <div className={fieldBox}>
@@ -443,7 +453,7 @@ export function SignIn({
                             aria-label={translate(
                                 revealed ? 'signIn.hidePasswordControl' : 'signIn.revealPasswordControl',
                             )}
-                            className="-me-2 shrink-0 rounded-lg px-2 py-1 text-sm text-muted transition hover:bg-hover hover:text-text"
+                            className="-me-2 flex min-h-12 shrink-0 items-center rounded-lg px-3 text-md text-muted transition hover:bg-hover hover:text-text compact:min-h-8 compact:px-2 compact:text-sm"
                             type="button"
                             onClick={() => {
                                 setRevealed(!revealed);
@@ -456,46 +466,64 @@ export function SignIn({
                     </div>
                 </div>
 
+                {/* Only where an address is being typed. A client served by its own deployment is not being pointed
+                    anywhere, so there is no connection for a reader to check before handing over a password; and an
+                    address a deployment configured is one every row in here would be about and none of them could
+                    change, permission included. */}
+                {deployment === null ? (
+                    <AdvancedConnection
+                        connection={connection}
+                        clearTextPermitted={clearTextPermitted}
+                        clearTextConfigured={configuredClearText !== null}
+                        onPermitClearText={(permitted) => {
+                            setClearTextPermitted(permitted);
+                            setRefusal(null);
+                        }}
+                    />
+                ) : null}
+
+                {shown === null || presenting ? null : (
+                    <p
+                        className="rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning-text"
+                        id="sign-in-refusal"
+                        role="alert"
+                    >
+                        {translate(shown.message)}
+                    </p>
+                )}
+
                 <div className="flex items-center gap-3">
                     <button
-                        className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-accent px-4 text-md font-semibold text-on-accent transition hover:bg-accent-strong disabled:opacity-70"
+                        className="flex min-h-13 flex-1 items-center justify-center gap-2 rounded-full bg-accent px-4 text-lg font-semibold text-on-accent transition hover:bg-accent-strong disabled:opacity-70 compact:min-h-11.5 compact:text-md"
                         disabled={presenting}
                         ref={submit}
                         type="submit"
                     >
                         {presenting ? <Spinner /> : null}
-                        {translate('signIn.submit')}
+                        {presenting
+                            ? translate('signIn.presenting', { address: reaching?.authority ?? '' })
+                            : translate('signIn.submit')}
                     </button>
 
                     {presenting ? (
                         <SecondaryButton label={translate('signIn.abandon')} shape="form" onActivate={abandon} />
                     ) : null}
                 </div>
-
-                {/* Only where an address is being typed: a client served by its own deployment is not being pointed
-                    anywhere, so there is no connection for a reader to check before handing over a password. */}
-                {deployment === null ? <ConnectionDetails connection={connection} /> : null}
             </form>
 
             <p className="text-xs text-muted" id="sign-in-kept">
                 {translate(lifetimeMessages[lifetime])}
             </p>
 
+            {/* The wait is drawn on the control that started it, which is where somebody looking at the screen reads
+                it. A label changing is not something a screen reader announces, so the same sentence stands here in a
+                live region as well — out of sight rather than out of the accessibility tree, because two copies of it
+                on the screen would say the same thing twice. */}
             {presenting ? (
-                <p className="text-sm text-muted" role="status">
-                    {translate('signIn.presenting')}
+                <p className="sr-only" role="status">
+                    {translate('signIn.presenting', { address: reaching?.authority ?? '' })}
                 </p>
             ) : null}
-
-            {shown === null || presenting ? null : (
-                <p
-                    className="rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning-text"
-                    id="sign-in-refusal"
-                    role="alert"
-                >
-                    {translate(shown.message)}
-                </p>
-            )}
         </section>
     );
 }

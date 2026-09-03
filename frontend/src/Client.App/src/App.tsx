@@ -6,11 +6,18 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { ClientSession, DeploymentAddress, MailFathomTransport } from '@mailfathom/client-backend';
 import { BrandMark } from './controls/BrandMark';
 import { SecondaryButton } from './controls/SecondaryButton';
-import { forgetDeployment, storeDeployment, type AdoptedDeployment } from './deployment/adoptedDeployment';
+import {
+    forgetDeployment,
+    storeDeployment,
+    type AdoptedDeployment,
+    type ClientDeployment,
+    type ConfigurationRefusal,
+} from './deployment/adoptedDeployment';
 import type { PortraitExchange } from './deployment/portraitExchange';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { telemetryForwardedBy } from './deployment/telemetryForwarding';
 import { FolderTree } from './folders/FolderTree';
+import type { MessageKey } from './localization/en';
 import { useLocalization } from './localization/useLocalization';
 import { NothingOpen } from './mailSpace/NothingOpen';
 import { TabStrip } from './mailSpace/TabStrip';
@@ -63,7 +70,7 @@ export function App({
     send,
     portraits,
 }: {
-    readonly deployment: AdoptedDeployment | null;
+    readonly deployment: ClientDeployment;
     readonly signedInWith: string | null;
     readonly credentials: CredentialStore;
     readonly send: DeploymentTransport;
@@ -73,7 +80,7 @@ export function App({
 }) {
     const { workspace, revise } = useWorkspace();
     const telemetry = useTelemetry();
-    const [adopted, setAdopted] = useState(deployment);
+    const [adopted, setAdopted] = useState(deployment.outcome === 'resolved' ? deployment.adopted : null);
     const [authorization, setAuthorization] = useState(signedInWith);
     const [notices, setNotices] = useState<readonly CredentialNotice[]>([]);
     const baseAddress = adopted === null ? null : adopted.deployment.baseAddress;
@@ -223,7 +230,7 @@ export function App({
     function signedIn(reached: DeploymentAddress, presented: string): void {
         if (adopted === null) {
             storeDeployment(reached);
-            setAdopted({ deployment: reached, chosen: true });
+            setAdopted({ deployment: reached, origin: 'chosen' });
         }
 
         setNotices([]);
@@ -299,8 +306,9 @@ export function App({
     if (baseAddress === null || authorization === null) {
         return (
             <SignInScreen
-                deployment={adopted === null ? null : adopted.deployment}
-                chosen={adopted?.chosen === true}
+                adopted={adopted}
+                refusal={deployment.outcome === 'refused' ? deployment.refusal : null}
+                clearTextPermitted={deployment.outcome === 'resolved' ? deployment.clearTextPermitted : null}
                 lifetime={credentials.lifetime}
                 notices={notices}
                 send={send}
@@ -419,7 +427,7 @@ export function App({
                         <AccountMenu
                             accounts={mailAccounts}
                             deploymentVersion={deploymentSession?.version ?? null}
-                            readingFrom={adopted?.chosen === true ? baseAddress : null}
+                            readingFrom={adopted?.origin === 'chosen' ? baseAddress : null}
                             telemetryForwarding={telemetryForwardedBy(deploymentSession, baseAddress)}
                             preferences={preferences}
                             profile={profile}
@@ -489,16 +497,18 @@ function OpenMail({
 // who has not signed in yet exactly as much as to somebody who has, and the frame that usually holds them is not on the
 // screen at this point.
 function SignInScreen({
-    deployment,
-    chosen,
+    adopted,
+    refusal,
+    clearTextPermitted,
     lifetime,
     notices,
     send,
     onSignedIn,
     onPointSomewhereElse,
 }: {
-    readonly deployment: DeploymentAddress | null;
-    readonly chosen: boolean;
+    readonly adopted: AdoptedDeployment | null;
+    readonly refusal: ConfigurationRefusal | null;
+    readonly clearTextPermitted: boolean | null;
     readonly lifetime: CredentialStore['lifetime'];
     readonly notices: readonly CredentialNotice[];
     readonly send: DeploymentTransport;
@@ -512,7 +522,7 @@ function SignInScreen({
             {/* The brand half. Above the split it is a column standing beside the form and carrying the claim; below
                 it the claim goes and what is left is a strip naming the product, because a narrow window's room
                 belongs to the form somebody came here to fill rather than to a sentence about it. */}
-            <aside className="flex shrink-0 items-center gap-3 border-b border-line bg-rail px-4 py-4 split:basis-2/5 split:flex-col split:items-start split:justify-center split:gap-10 split:border-e split:border-b-0 split:px-12">
+            <aside className="flex shrink-0 items-center gap-3 border-b border-line bg-rail px-4 py-4 split:basis-2/5 split:flex-col split:items-start split:justify-start split:gap-10 split:py-12 split:border-e split:border-b-0 split:px-12">
                 {/* The product's name is the screen's heading at every width, rather than the claim beneath it: the
                     claim is the half a narrow window drops, and a heading that disappears with the composition would
                     leave the form's own `h2` as the first heading on the page below the split. What is decided by
@@ -522,7 +532,9 @@ function SignInScreen({
                     <h1 className="text-2xl font-semibold tracking-tight">{translate('shell.title')}</h1>
                 </div>
 
-                <div className="hidden max-w-sm flex-col gap-4 split:flex">
+                {/* Centred in what the brand above it leaves, rather than centred with it: the design stands the
+                    product's name at the top of the column and the claim in the middle of the rest. */}
+                <div className="hidden max-w-sm flex-col gap-4 split:my-auto split:flex">
                     <p className="text-5xl font-semibold tracking-tight text-balance">{translate('signIn.claim')}</p>
                     <p className="text-lg text-muted text-pretty">{translate('signIn.claimExplanation')}</p>
                 </div>
@@ -530,30 +542,84 @@ function SignInScreen({
 
             <main className="flex flex-1 justify-center overflow-y-auto px-4 py-8 split:items-center split:px-12">
                 <div className="flex w-full max-w-sm flex-col gap-6">
-                    <div className="flex items-center justify-end gap-2">
-                        <p className="me-auto font-mono text-2xs text-faint">{__MAILFATHOM_VERSION__}</p>
+                    {/* The client's version is not here: the design draws neither, and the account menu already
+                        reports it beside the deployment's own once there is a session to read it against — which is
+                        where somebody comparing the two would look. Off this row the two pickers fit one line at the
+                        narrowest width, which is the composition the design draws. */}
+                    <div className="flex flex-wrap items-center justify-end gap-3.5">
                         <ThemeChoice />
                         <LanguageChoice />
                     </div>
 
-                    {/* The way out of an address somebody named themselves, offered here rather than only inside the
-                        frame: a deployment that stopped accepting the credential, or one whose password is gone,
-                        leaves a person on this screen with no address field to correct — and a chosen address is read
-                        back out of storage on every later start, so reloading returns to the same one. */}
-                    {chosen && deployment !== null ? (
-                        <ChosenDeployment address={deployment.baseAddress} onChange={onPointSomewhereElse} />
-                    ) : null}
+                    {/* A deployment that configured this client wrongly is said out loud rather than worked around.
+                        Nothing else on this screen is drawn with it: every control under it is about a connection this
+                        run has already been refused, and offering the form would invite a password against an address
+                        the client will not use. */}
+                    {refusal === null ? (
+                        <>
+                            {/* The way out of an address somebody named themselves, offered here rather than only
+                                inside the frame: a deployment that stopped accepting the credential, or one whose
+                                password is gone, leaves a person on this screen with no address field to correct —
+                                and a chosen address is read back out of storage on every later start, so reloading
+                                returns to the same one. */}
+                            {adopted?.origin === 'chosen' ? (
+                                <ChosenDeployment
+                                    address={adopted.deployment.baseAddress}
+                                    onChange={onPointSomewhereElse}
+                                />
+                            ) : null}
 
-                    <SignIn
-                        deployment={deployment}
-                        lifetime={lifetime}
-                        notices={notices}
-                        send={send}
-                        onSignedIn={onSignedIn}
-                    />
+                            <SignIn
+                                adopted={adopted}
+                                clearTextPermitted={clearTextPermitted}
+                                lifetime={lifetime}
+                                notices={notices}
+                                send={send}
+                                onSignedIn={onSignedIn}
+                            />
+                        </>
+                    ) : (
+                        <ConfigurationRefused refusal={refusal} />
+                    )}
                 </div>
             </main>
         </div>
+    );
+}
+
+// What a deployment configured that this client will not connect to, in place of the form. Each of the four is a
+// different mistake with a different repair, so each is a sentence of its own rather than one about configuration
+// being wrong — the person reading it is often not the person who wrote the setting, and what they need is something
+// exact enough to pass on.
+//
+// There is no way out of this screen from inside the client, and that is the state rather than an omission: the
+// setting is on the machine rather than in the application, so what leaves it is an operator editing what they wrote.
+// Saying which three places those are is what the sentence has to do instead of offering a control that would only
+// pretend.
+const configurationRefusals: Readonly<Record<ConfigurationRefusal, MessageKey>> = {
+    addressMalformed: 'configuration.addressMalformed',
+    addressNeedsClearTextPermission: 'configuration.addressNeedsClearTextPermission',
+    clearTextContradictsAddress: 'configuration.clearTextContradictsAddress',
+    permissionNotABoolean: 'configuration.permissionNotABoolean',
+};
+
+function ConfigurationRefused({ refusal }: { readonly refusal: ConfigurationRefusal }) {
+    const { translate } = useLocalization();
+    const refused = useRef<HTMLElement>(null);
+
+    // This is drawn in place of the form somebody was on their way to filling, which is a view change like any other:
+    // a keyboard left on the document would tab into whatever follows and never meet the sentence saying why there is
+    // no form. The alert announces it to a screen reader; this is what puts anybody else at the start of it.
+    useEffect(() => {
+        refused.current?.focus();
+    }, []);
+
+    return (
+        <section className="flex flex-col gap-3" ref={refused} role="alert" tabIndex={-1}>
+            <h2 className="text-4xl font-semibold tracking-tight text-text">{translate('configuration.refused')}</h2>
+            <p className="text-base text-text-soft">{translate(configurationRefusals[refusal])}</p>
+            <p className="text-sm text-muted">{translate('configuration.whereItIsStated')}</p>
+        </section>
     );
 }
 

@@ -1,6 +1,6 @@
 # The desktop client
 
-<!-- describes: .github/workflows/build-desktop-client.yml, frontend/src-tauri/** -->
+<!-- describes: .github/workflows/build-desktop-client.yml, frontend/src-tauri/**, frontend/src/Client.App/src/shellOperations/configuredConnection.ts, frontend/src/Client.App/src/deployment/adoptedDeployment.ts -->
 
 What a release publishes for somebody who wants MailFathom's client as an application on their own machine rather than
 as a page a deployment serves: which platforms, in which formats, what each installer does, and what none of them does.
@@ -72,6 +72,72 @@ Nothing is published for macOS, and neither Android nor iOS is a head this proje
   download from a release page.
 - **It is not signed.** No bundle published here carries an Authenticode signature or a Linux package signature, so
   Windows warns about an unknown publisher and a package manager reports the package as unsigned.
+
+## Pointing the client at a deployment
+
+The web head is served by its deployment and needs to be told nothing. The desktop head is served by nobody, so it asks
+for an address on the sign-in screen — and where somebody hands this application to other people, they can state that
+address once instead, so nobody is asked for it at all. Two settings do that, and both are read at start.
+
+| Setting | What it states |
+|---|---|
+| **The service address** | Where the deployment's [client surface](client-endpoint.md) is: a host, optionally a port, optionally a scheme. Without a scheme it is read as `https`. |
+| **The clear-text permission** | Whether this client may connect over `http`, which sends the password unencrypted. Written `true` or `false`, in any case; nothing else is read as either. |
+
+Each is stated in any of three places. **Later in this list wins**, so a wrapper script may override a machine's
+environment and a packaged shortcut may override both:
+
+1. **A configuration file**, `client.conf` beside the application's own configuration, in the directory this platform
+   gives it:
+
+   | Platform | Path |
+   |---|---|
+   | Linux | `~/.config/io.github.krzysztof318.mailfathom/client.conf` |
+   | Windows | `%APPDATA%\io.github.krzysztof318.mailfathom\client.conf` |
+
+   `key = value` lines, `#` for a comment, and nothing else. A key it does not know is skipped, and a file larger than
+   64 KiB is not read at all.
+
+   ```ini
+   service-address = mail.example.com:8443
+   permit-clear-text = false
+   ```
+
+2. **The environment**, as `MAILFATHOM_SERVICE_ADDRESS` and `MAILFATHOM_PERMIT_CLEAR_TEXT`.
+
+3. **The command line**, as `--service-address=mail.example.com:8443` and `--permit-clear-text=false`.
+   `--permit-clear-text` alone grants the permission. A later argument wins over an earlier one.
+
+Each setting is resolved on its own, so the address may come from a shortcut and the permission from the file. A value
+that is empty or only whitespace states nothing and falls through to the place under it, which is what a templated
+installer emits for a setting nobody set. Whitespace around a value is trimmed.
+
+Beneath all three sit the two things the client resolves without being told: the address somebody typed on this machine
+and chose to keep, and — for the web head — the origin that served the page. Anything configured wins over both, so a
+client that was pointed somewhere by whoever installed it cannot be pointed elsewhere by an earlier run, and removing
+the setting hands the machine back to what it had. **Nothing configured is ever written to the device's own store**; it
+is read at every start and kept nowhere.
+
+**A configured address is not editable and offers no alternative.** The sign-in screen draws it in the field, locked
+and announced as such, and the *Advanced* disclosure — where somebody would otherwise change the address or permit an
+unsecured connection — is not rendered at all. The permission that came with the address still governs what the client
+will connect to; where one was configured, the screen states it rather than offering it.
+
+**Configuration that does not resolve stops the client with the reason on the screen**, rather than being ignored or
+quietly corrected. Four things are refused:
+
+- an address that is not one — a path, a query, or something that is not a host;
+- an `http` address with no permission stated beside it;
+- a permission granted beside an address that names `https`, because one of the two is a mistake and this client cannot
+  know which;
+- a permission written as anything but `true` or `false` — `yes`, `1`, and `on` are refused rather than guessed at.
+
+The last two are refused rather than reconciled for one reason: correcting either would mean this client deciding on
+somebody's behalf whether their password crosses a network in the clear.
+
+None of this reaches the web head, which has no shell to read an argument, an environment, or a file. What that head
+gets instead is the origin it was served from, and — for a development run — the address an orchestration puts in
+`VITE_MAILFATHOM_SERVICE_ADDRESS` at build time, which sits beneath everything above.
 
 ## Verifying a download
 

@@ -5,9 +5,9 @@
 import { StrictMode } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ClientRequest, ClientResponse, ClientSession } from '@mailfathom/client-backend';
+import type { ClientRequest, ClientResponse, ClientSession, DeploymentAddress } from '@mailfathom/client-backend';
 import { App } from './App';
-import type { AdoptedDeployment } from './deployment/adoptedDeployment';
+import type { ClientDeployment } from './deployment/adoptedDeployment';
 import { telemetryKey } from './device/deviceStore';
 import { AttachmentDeliveryContext, type AttachmentDelivery } from './deployment/attachmentDelivery';
 import type { PortraitExchange } from './deployment/portraitExchange';
@@ -416,14 +416,33 @@ function storeRefusingToForget(): RecordingStore {
 
 // What `main.tsx` resolves at the edge and hands down. The origin that served the client is the case a web head is in,
 // and it is the default here because the screens below are about the spaces rather than about where the deployment is.
-const servedFrom: AdoptedDeployment = {
-    deployment: { baseAddress: 'https://mail.example.invalid' },
-    chosen: false,
+const servingAddress: DeploymentAddress = { baseAddress: 'https://mail.example.invalid' };
+
+const servedFrom: ClientDeployment = {
+    outcome: 'resolved',
+    adopted: { deployment: servingAddress, origin: 'serving' },
+    clearTextPermitted: null,
 };
 
-function chose(baseAddress: string): AdoptedDeployment {
-    return { deployment: { baseAddress }, chosen: true };
+function chose(baseAddress: string): ClientDeployment {
+    return {
+        outcome: 'resolved',
+        adopted: { deployment: { baseAddress }, origin: 'chosen' },
+        clearTextPermitted: null,
+    };
 }
+
+/** What a deployment configured, which is the shape a client somebody was handed opens in. */
+function wasConfiguredWith(baseAddress: string, clearTextPermitted: boolean | null = null): ClientDeployment {
+    return {
+        outcome: 'resolved',
+        adopted: { deployment: { baseAddress }, origin: 'configured' },
+        clearTextPermitted,
+    };
+}
+
+/** Nothing at all: no configuration, nothing stored, and nothing that served the client from a deployment. */
+const nothingAdopted: ClientDeployment = { outcome: 'resolved', adopted: null, clearTextPermitted: null };
 
 // The application is mounted the way `main.tsx` mounts it, `StrictMode` and all five providers included. Nothing below
 // the frame may decide the language, the theme, what the person is carrying, or how a followed link leaves the
@@ -439,7 +458,7 @@ const drawsNobody: PortraitExchange = {
 };
 
 function renderApp(
-    deployment: AdoptedDeployment | null = servedFrom,
+    deployment: ClientDeployment = servedFrom,
     signedInWith: string | null = heldCredential,
     send: DeploymentTransport = deploymentAnswering(),
     credentials: CredentialStore = storeKeeping(),
@@ -511,13 +530,13 @@ async function framed(): Promise<void> {
 }
 
 function typeAddress(entry: string): void {
-    fireEvent.change(screen.getByRole('textbox', { name: 'Deployment address' }), { target: { value: entry } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Server' }), { target: { value: entry } });
 }
 
 function signIn(userName = 'owner', password = 'open sesame'): void {
-    fireEvent.change(screen.getByRole('textbox', { name: 'User name' }), { target: { value: userName } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Login' }), { target: { value: userName } });
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: password } });
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
 }
 
 function openingAt(address: string): void {
@@ -1046,10 +1065,10 @@ describe('App session', () => {
 });
 
 describe('App sign-in', () => {
-    it('asks for a user name and a password when nothing has been signed in with', () => {
+    it('asks for a login and a password when nothing has been signed in with', () => {
         renderApp(servedFrom, null);
 
-        expect(screen.getByRole('textbox', { name: 'User name' })).toBeDefined();
+        expect(screen.getByRole('textbox', { name: 'Login' })).toBeDefined();
         expect(screen.getByLabelText('Password')).toBeDefined();
         expect(screen.queryByRole('navigation', { name: 'Spaces' })).toBeNull();
     });
@@ -1057,7 +1076,7 @@ describe('App sign-in', () => {
     it('asks for nothing but the credential where the origin that served the client is the deployment', () => {
         renderApp(servedFrom, null);
 
-        expect(screen.queryByRole('textbox', { name: 'Deployment address' })).toBeNull();
+        expect(screen.queryByRole('textbox', { name: 'Server' })).toBeNull();
     });
 
     it('opens the frame once the credential somebody typed has been accepted', async () => {
@@ -1085,7 +1104,7 @@ describe('App sign-in', () => {
         signIn();
         await framed();
 
-        expect([...credentials.kept]).toEqual([[servedFrom.deployment.baseAddress, typedCredential]]);
+        expect([...credentials.kept]).toEqual([[servingAddress.baseAddress, typedCredential]]);
     });
 
     it('says how long the password will be kept before anybody has typed one', () => {
@@ -1114,9 +1133,7 @@ describe('App sign-in', () => {
         renderApp(servedFrom, null, refusing);
         signIn();
 
-        expect(
-            await screen.findByText('The user name or the password is not accepted by this deployment.'),
-        ).toBeDefined();
+        expect(await screen.findByText('The login or the password is not accepted by this deployment.')).toBeDefined();
     });
 
     it('tells somebody whose deployment offers no passwords that, rather than refusing their credential', async () => {
@@ -1127,7 +1144,7 @@ describe('App sign-in', () => {
 
         expect(
             await screen.findByText(
-                'This deployment does not accept a user name and a password. Whoever runs it has to enable that before you can sign in here.',
+                'This deployment does not accept a login and a password. Whoever runs it has to enable that before you can sign in here.',
             ),
         ).toBeDefined();
     });
@@ -1145,7 +1162,7 @@ describe('App sign-in', () => {
 
     it('puts somebody in front of the sign-in when the deployment stops accepting what was kept', async () => {
         const credentials = storeKeeping();
-        await credentials.keep(servedFrom.deployment, typedCredential);
+        await credentials.keep(servingAddress, typedCredential);
 
         renderApp(servedFrom, typedCredential, deploymentAnswering({ status: 401, body: '' }), credentials);
 
@@ -1210,7 +1227,7 @@ describe('App sign-in', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Sign out', hidden: true }));
 
-        expect(screen.getByRole('textbox', { name: 'User name' })).toBeDefined();
+        expect(screen.getByRole('textbox', { name: 'Login' })).toBeDefined();
         expect(screen.queryByRole('navigation', { name: 'Spaces' })).toBeNull();
         expect([...credentials.kept]).toEqual([]);
     });
@@ -1286,7 +1303,7 @@ describe('App sign-in', () => {
     it('places focus on the credential where the deployment is already known', () => {
         renderApp(servedFrom, null);
 
-        expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'User name' }));
+        expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Login' }));
     });
 
     it('puts focus at the start of the workspace once somebody has signed in, rather than leaving it behind', async () => {
@@ -1314,21 +1331,68 @@ describe('App deployment', () => {
         });
     });
 
-    it('asks for an address when nothing has said where the deployment is', () => {
-        renderApp(null, null);
+    // A deployment that configured this client wrongly is said out loud rather than worked around: every control on
+    // the sign-in screen is about a connection this run has already been refused, so offering the form would invite a
+    // password against an address the client will not use.
+    it('says what a deployment configured wrongly, in place of the form, rather than asking for a password', () => {
+        renderApp({ outcome: 'refused', refusal: 'clearTextContradictsAddress' }, null);
 
-        expect(screen.getByRole('textbox', { name: 'Deployment address' })).toBeDefined();
+        expect(screen.getByRole('heading', { name: 'This client is configured wrongly' })).toBeDefined();
+        expect(
+            screen.getByText(
+                'It was told to permit an unsecured connection and given an https address, which are two different answers to one question. Remove whichever of the two is wrong.',
+            ),
+        ).toBeDefined();
+        expect(screen.queryByRole('textbox', { name: 'Server' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull();
+    });
+
+    // The form somebody was on their way to filling is gone, which is a view change like any other: focus left on the
+    // document would tab past the one sentence saying why there is nothing to fill.
+    it('puts focus at the start of the refusal, rather than leaving it where the form would have been', () => {
+        renderApp({ outcome: 'refused', refusal: 'addressMalformed' }, null);
+
+        expect(document.activeElement).toBe(
+            screen.getByRole('heading', { name: 'This client is configured wrongly' }).parentElement,
+        );
+    });
+
+    it('says where the two settings are read from, there being no way out of that screen from inside the client', () => {
+        renderApp({ outcome: 'refused', refusal: 'addressMalformed' }, null);
+
+        expect(
+            screen.getByText(
+                'Both settings are read from the arguments MailFathom was started with, from its environment, and from client.conf beside its own configuration, in that order.',
+            ),
+        ).toBeDefined();
+    });
+
+    // An address a deployment configured is not one changing an address could move, so the client is not offered as
+    // something to point elsewhere — which is the same reason an origin that served the client is not.
+    it('offers no way out of a configured address, that being nobody on this machine’s to change', () => {
+        renderApp(wasConfiguredWith('https://configured.example.invalid'), null);
+
+        expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Server' }).value).toBe(
+            'https://configured.example.invalid',
+        );
+        expect(screen.queryByRole('button', { name: 'Point somewhere else' })).toBeNull();
+    });
+
+    it('asks for an address when nothing has said where the deployment is', () => {
+        renderApp(nothingAdopted, null);
+
+        expect(screen.getByRole('textbox', { name: 'Server' })).toBeDefined();
         expect(screen.queryByRole('navigation', { name: 'Spaces' })).toBeNull();
     });
 
     it('places focus on the address where that is the first thing it is asking for', () => {
-        renderApp(null, null);
+        renderApp(nothingAdopted, null);
 
-        expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Deployment address' }));
+        expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Server' }));
     });
 
     it('signs in against the address somebody named, in the same act as naming it', async () => {
-        renderApp(null, null);
+        renderApp(nothingAdopted, null);
 
         typeAddress('mail.example.test');
         signIn();
@@ -1358,7 +1422,7 @@ describe('App deployment', () => {
         // without this, somebody whose password no longer works has no way to point the client anywhere else.
         fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else', hidden: true }));
 
-        expect(screen.getByRole('textbox', { name: 'Deployment address' })).toBeDefined();
+        expect(screen.getByRole('textbox', { name: 'Server' })).toBeDefined();
     });
 
     it('offers nothing to change on the sign-in screen the origin that served the client left', () => {
@@ -1380,7 +1444,7 @@ describe('App deployment', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else', hidden: true }));
 
-        expect(screen.getByRole('textbox', { name: 'Deployment address' })).toBeDefined();
+        expect(screen.getByRole('textbox', { name: 'Server' })).toBeDefined();
         expect(screen.queryByRole('navigation', { name: 'Spaces' })).toBeNull();
     });
 
@@ -1419,7 +1483,7 @@ describe('App deployment', () => {
             answer();
         }
 
-        expect(await screen.findByRole('textbox', { name: 'Deployment address' })).toBeDefined();
+        expect(await screen.findByRole('textbox', { name: 'Server' })).toBeDefined();
         await waitFor(() => {
             expect(screen.queryByRole('navigation', { name: 'Spaces' })).toBeNull();
         });
@@ -1429,7 +1493,12 @@ describe('App deployment', () => {
     it('forgets the credential of the deployment it is pointed away from', async () => {
         const credentials = storeKeeping();
         const chosen = chose('https://mail.example.invalid');
-        await credentials.keep(chosen.deployment, heldCredential);
+        const pointedAt = (chosen.outcome === 'resolved' ? chosen.adopted?.deployment : null) ?? servingAddress;
+
+        // Seeded against the address this test itself chose rather than against the serving fixture that happens to
+        // spell the same one: the two are different origins, and a test that passed on the coincidence would stop
+        // proving what its name says the moment either literal moved.
+        await credentials.keep(pointedAt, heldCredential);
 
         renderApp(chosen, heldCredential, deploymentAnswering(), credentials);
         await framed();
@@ -1454,7 +1523,7 @@ describe('App deployment', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else', hidden: true }));
 
-        expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Deployment address' }));
+        expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Server' }));
     });
 
     it('starts an empty workspace when somebody signs in, rather than handing them the last person’s', async () => {
@@ -1551,9 +1620,7 @@ describe('App telemetry', () => {
         renderApp(servedFrom, heldCredential, deploymentAnswering(), storeKeeping(), recording.telemetry);
         await framed();
 
-        expect(recording.exportedFor.map((session) => session?.baseAddress)).toContain(
-            servedFrom.deployment.baseAddress,
-        );
+        expect(recording.exportedFor.map((session) => session?.baseAddress)).toContain(servingAddress.baseAddress);
         expect(recording.events).toContain('session_started');
     });
 
@@ -1575,7 +1642,7 @@ describe('App telemetry', () => {
     it('records a credential the deployment has stopped accepting', async () => {
         const recording = telemetryRecording();
         const credentials = storeKeeping();
-        await credentials.keep(servedFrom.deployment, typedCredential);
+        await credentials.keep(servingAddress, typedCredential);
 
         renderApp(
             servedFrom,

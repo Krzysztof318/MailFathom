@@ -25,7 +25,6 @@ export const pl: Catalogue = {
     'control.notBuiltYet': '{control} — jeszcze niezbudowane',
     'ai.badge': 'AI',
 
-    'theme.system': 'Zgodnie z systemem',
     'theme.automatic': 'Auto',
     'theme.light': 'Jasny',
     'theme.dark': 'Ciemny',
@@ -50,28 +49,28 @@ export const pl: Catalogue = {
 
     'signIn.claim': 'Twoja poczta zostaje na Twoim serwerze.',
     'signIn.claimExplanation':
-        'Podaj adres wdrożenia MailFathom prowadzonego przez Twoją organizację. Indeksowanie i analiza wiadomości dzieją się po jego stronie — nic nie trafia do nikogo innego bez Twojej zgody.',
+        'Podaj adres serwera MailFathom swojej organizacji. Indeksowanie i analiza wiadomości dzieją się po jego stronie — nic nie trafia do chmury bez Twojej zgody.',
     'signIn.revealPassword': 'Pokaż',
     'signIn.hidePassword': 'Ukryj',
     'signIn.revealPasswordControl': 'Pokaż hasło',
     'signIn.hidePasswordControl': 'Ukryj hasło',
 
-    'signIn.title': 'Zaloguj się do swojego MailFathom',
-    'signIn.explanation':
-        'Wszystko, co ten klient odczytuje, i wszystko, co w nim wpiszesz, trafia do wdrożenia przechowującego Twoją pocztę i nigdzie indziej.',
-    'signIn.userName': 'Nazwa użytkownika',
+    'signIn.title': 'Połącz skrzynkę',
+    'signIn.explanation': 'Dane logowania trafiają wyłącznie do wskazanego serwera.',
+    'signIn.userName': 'Login',
+    'signIn.userNameExample': 'k.kowalska@example.com',
     'signIn.password': 'Hasło',
-    'signIn.submit': 'Zaloguj się',
-    'signIn.presenting': 'Logowanie…',
+    'signIn.submit': 'Połącz',
+    'signIn.presenting': 'Łączenie z {address}…',
     'signIn.abandon': 'Przerwij próbę',
-    'signIn.incomplete': 'Wpisz nazwę użytkownika i hasło do swojego wdrożenia.',
+    'signIn.incomplete': 'Wpisz login i hasło do swojego wdrożenia.',
     'signIn.userNameHasColon':
-        'Nazwa użytkownika nie może zawierać dwukropka, ponieważ to on oddziela ją od hasła podczas wysyłania.',
+        'Login nie może zawierać dwukropka, ponieważ to on oddziela go od hasła podczas wysyłania.',
     'signIn.tooLong':
-        'Ta nazwa użytkownika lub to hasło są dłuższe, niż klient jest w stanie przedstawić. Sprawdź, co zostało wklejone.',
-    'signIn.credentialRefused': 'To wdrożenie nie akceptuje tej nazwy użytkownika lub tego hasła.',
+        'Ten login lub to hasło są dłuższe, niż klient jest w stanie przedstawić. Sprawdź, co zostało wklejone.',
+    'signIn.credentialRefused': 'To wdrożenie nie akceptuje tego loginu lub tego hasła.',
     'signIn.basicNotOffered':
-        'To wdrożenie nie przyjmuje nazwy użytkownika i hasła. Osoba, która je prowadzi, musi najpierw włączyć taką możliwość.',
+        'To wdrożenie nie przyjmuje loginu i hasła. Osoba, która je prowadzi, musi najpierw włączyć taką możliwość.',
     'signIn.grantMissing': 'Wdrożenie przyjęło poświadczenie, ale nie zezwala mu na odczyt żadnej poczty.',
     'signIn.deploymentSilent': 'Wdrożenie nie odpowiedziało. Spróbuj ponownie za chwilę.',
     'signIn.noLongerAccepted': 'To wdrożenie przestało akceptować zapamiętane hasło. Zaloguj się ponownie.',
@@ -86,27 +85,30 @@ export const pl: Catalogue = {
     'signIn.keptUntilTheClientCloses':
         'Twoje hasło jest przechowywane do zamknięcia MailFathom i zapytamy o nie ponownie — ten komputer nie udostępnia pęku kluczy, w którym można je bezpiecznie przechować.',
 
-    'connect.address': 'Adres wdrożenia',
-    'connect.addressHint':
-        'Host, na którym wdrożenie odpowiada, oraz port, jeśli go używa — na przykład mailfathom.example.com albo mailfathom.example.com:8443.',
+    'connect.address': 'Serwer',
+    'connect.addressConfigured':
+        'Adres serwera został podany przy instalacji tego klienta, więc nie można go tutaj zmienić.',
+    'connect.addressExample': 'mailfathom.example.com:8443',
+    'connect.addressHint': 'Port opcjonalny — bez niego ten klient łączy się na porcie {port}.',
     'connect.clearText': 'Łącz się z tym wdrożeniem zwykłym protokołem HTTP',
+    'connect.clearTextConfigured':
+        'To ustawienie zostało określone przy instalacji klienta, więc nie zmienisz go tutaj. Decyduje o nim osoba, która go skonfigurowała.',
     'connect.clearTextExplanation':
         'Twoje hasło jest kodowane, a nie szyfrowane, przy każdym żądaniu. Każdy, kto znajduje się między tym klientem a wdrożeniem, może je odczytać. Zostaw tę opcję wyłączoną, chyba że sieć między nimi należy do Ciebie.',
     'connect.clearTextInForce':
-        'TLS jest wyłączony. Nazwa użytkownika, hasło i każda odczytana wiadomość pójdą otwartym tekstem. Używaj tego tylko w sieci, którą kontrolujesz, albo przez VPN.',
+        'TLS jest wyłączony. Login, hasło i każda odczytana wiadomość pójdą otwartym tekstem. Używaj tego tylko w sieci, którą kontrolujesz, albo przez VPN.',
     'connect.portHint': 'port {port}',
-    'connect.portDefaultNote': 'Port jest opcjonalny — bez niego klient łączy się na porcie {port}.',
-    'connect.details': 'Szczegóły połączenia',
-    'connect.hideDetails': 'Ukryj szczegóły połączenia',
+    'connect.advanced': 'Zaawansowane',
+    'connect.withoutTls': 'bez TLS',
     'connect.protocol': 'Protokół',
     'connect.protocolOverTls': 'HTTPS, przez TLS',
     'connect.protocolClearText': 'HTTP, bez szyfrowania',
     'connect.host': 'Adres',
     'connect.port': 'Port',
     'connect.portDefault': '{port} (domyślny)',
-    'connect.encryption': 'Szyfrowanie',
-    'connect.encryptionInForce': 'Włączone',
-    'connect.encryptionNone': 'Brak',
+    'connect.certificate': 'Weryfikacja certyfikatu',
+    'connect.certificateChecked': 'Wymagana',
+    'connect.certificateNone': 'Brak — nic nie jest szyfrowane',
     'connect.nothingNamed': 'Nic jeszcze nie podano',
     'connect.blank': 'Podaj wdrożenie, które przechowuje Twoją pocztę.',
     'connect.malformed': 'To nie jest adres. Podaj host, na którym wdrożenie odpowiada, oraz port, jeśli go używa.',
@@ -114,6 +116,18 @@ export const pl: Catalogue = {
         'Ten adres używa zwykłego protokołu HTTP, a ten klient nie wyśle nim hasła, dopóki na to nie zezwolisz.',
     'connect.unavailable': 'Nic tam nie odpowiedziało. Sprawdź adres oraz to, czy wdrożenie jest uruchomione.',
     'connect.unreadable': 'Coś tam odpowiedziało, ale nie jako MailFathom.',
+
+    'configuration.refused': 'Ten klient jest błędnie skonfigurowany',
+    'configuration.addressMalformed':
+        'Podany adres serwera nie jest adresem. Musi to być host, na którym wdrożenie odpowiada, oraz port, jeśli go używa.',
+    'configuration.addressNeedsClearTextPermission':
+        'Podany adres serwera używa zwykłego protokołu HTTP, a nic nie zezwoliło na niezabezpieczone połączenie. Podaj adres https albo zezwól obok niego na otwarty tekst.',
+    'configuration.clearTextContradictsAddress':
+        'Zezwolono na niezabezpieczone połączenie i jednocześnie podano adres https, co jest dwiema różnymi odpowiedziami na jedno pytanie. Usuń tę z nich, która jest błędna.',
+    'configuration.permissionNotABoolean':
+        'Zezwolenie na niezabezpieczone połączenie musi mieć wartość true albo false, a podana wartość nie jest żadną z nich.',
+    'configuration.whereItIsStated':
+        'Oba ustawienia są odczytywane z argumentów uruchomienia MailFathom, z jego środowiska oraz z pliku client.conf obok jego własnej konfiguracji — w tej kolejności.',
 
     'preferences.notStated':
         'Ta zmiana nie została zapisana na wdrożeniu, więc obowiązuje tylko na tym urządzeniu do czasu, aż kolejna się powiedzie.',

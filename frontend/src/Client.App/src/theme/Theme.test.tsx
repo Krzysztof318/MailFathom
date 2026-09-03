@@ -95,7 +95,7 @@ describe('ThemeProvider', () => {
 
     it('leaves an explicit choice alone when the machine changes under it', () => {
         renderChoice();
-        fireEvent.change(screen.getByRole('combobox', { name: 'Theme' }), { target: { value: 'light' } });
+        fireEvent.click(screen.getByRole('radio', { name: 'Light' }));
 
         machineTurns(true);
 
@@ -116,21 +116,20 @@ describe('useTheme', () => {
 });
 
 describe('ThemeChoice', () => {
-    it('offers following the machine beside each of the two themes', () => {
+    it('offers following the machine beside each of the two themes, as one group of choices', () => {
         renderChoice();
 
-        const choice = screen.getByRole('combobox', { name: 'Theme' });
-        expect([...choice.querySelectorAll('option')].map((option) => option.textContent)).toEqual([
-            'Follow the system',
-            'Light',
-            'Dark',
+        expect(screen.getAllByRole('radio')).toEqual([
+            screen.getByRole('radio', { name: 'Auto' }),
+            screen.getByRole('radio', { name: 'Light' }),
+            screen.getByRole('radio', { name: 'Dark' }),
         ]);
     });
 
     it('repaints the client when another theme is chosen, without anything being restarted', () => {
         renderChoice();
 
-        fireEvent.change(screen.getByRole('combobox', { name: 'Theme' }), { target: { value: 'dark' } });
+        fireEvent.click(screen.getByRole('radio', { name: 'Dark' }));
 
         expect(paintedTheme()).toBe('dark');
     });
@@ -138,7 +137,7 @@ describe('ThemeChoice', () => {
     it('remembers the choice, so a later run of either head opens in it', () => {
         renderChoice();
 
-        fireEvent.change(screen.getByRole('combobox', { name: 'Theme' }), { target: { value: 'dark' } });
+        fireEvent.click(screen.getByRole('radio', { name: 'Dark' }));
 
         expect(readStoredThemeChoice()).toBe('dark');
     });

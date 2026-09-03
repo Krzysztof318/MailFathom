@@ -10,6 +10,7 @@ import { AttachmentDeliveryContext, deliverAttachment } from './deployment/attac
 import { portraitExchange } from './deployment/portraitExchange';
 import { sendToDeployment } from './deployment/sendToDeployment';
 import { LocalizationProvider } from './localization/Localization';
+import { configuredConnection } from './shellOperations/configuredConnection';
 import { LinkOpenerContext, linkOpenerForThisApplication } from './shellOperations/linkOpener';
 import { credentialStore } from './signIn/credentialStore';
 import { clientTelemetryForThisApplication, TelemetryContext } from './telemetry/clientTelemetry';
@@ -40,7 +41,10 @@ void open(container);
  * its deployment or pointed at one, a credential in a keychain or in the tab — out of every screen underneath.
  *
  * The credential store is asked before anything is rendered rather than while it is, because a screen that mounts
- * signed out and then swaps to the workspace is a screen somebody has already started reading.
+ * signed out and then swaps to the workspace is a screen somebody has already started reading. What a deployment
+ * configured is asked first, for the same reason and one more: the address it may carry is what the credential kept on
+ * this machine is filed under, so a client that read the store before it knew where it was pointed would read back the
+ * credential of whichever deployment it was pointed at last.
  *
  * The four things that outlive every screen stand above it: the language it reads in, the theme it is painted in, what
  * the person is carrying between the spaces, and how a link they follow leaves the application. Each is above the frame
@@ -48,9 +52,10 @@ void open(container);
  * somebody who has not signed in yet reads in a language and is painted in a theme exactly as somebody who has.
  */
 async function open(root: HTMLElement): Promise<void> {
-    const deployment = adoptedDeployment();
+    const deployment = adoptedDeployment(await configuredConnection());
+    const adopted = deployment.outcome === 'resolved' ? deployment.adopted : null;
     const credentials = await credentialStore();
-    const signedInWith = deployment === null ? null : await credentials.read(deployment.deployment);
+    const signedInWith = adopted === null ? null : await credentials.read(adopted.deployment);
 
     createRoot(root).render(
         <StrictMode>
