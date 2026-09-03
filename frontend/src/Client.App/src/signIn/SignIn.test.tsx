@@ -590,6 +590,15 @@ describe('SignIn', () => {
         expect(screen.getByText(/The port is optional — without one this client reaches 443\./u)).toBeDefined();
     });
 
+    // The sentence is about the port reached in the absence of the one that is there, so an address naming its own
+    // leaves it unchanged: reading the typed port back would promise that dropping `:8443` reaches 8443.
+    it('keeps naming the scheme’s port in the hint where the address named one of its own', () => {
+        renderScreen(signedIn);
+        typeAddress('mail.example.test:8443');
+
+        expect(screen.getByText(/The port is optional — without one this client reaches 443\./u)).toBeDefined();
+    });
+
     // Before anything is typed there is no resolved connection to read the port off, and the field is exactly where
     // somebody is deciding whether to name one — so the scheme's own port is what the hint states.
     it('names the port the scheme reaches before an address has been typed at all', () => {

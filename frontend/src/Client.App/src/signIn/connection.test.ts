@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import { portForPermission, portOf, resolveConnection } from './connection';
+import { defaultPortOf, portForPermission, portOf, resolveConnection } from './connection';
 
 describe('resolveConnection', () => {
     it('reads a name with no scheme as the encrypted address it resolves to', () => {
@@ -65,6 +65,18 @@ describe('portOf', () => {
     it('answers the scheme own port where the address named none, so the hint says what will be reached', () => {
         expect(portOf({ secure: true, authority: 'mail.example.test', port: null })).toBe('443');
         expect(portOf({ secure: false, authority: 'mail.example.test', port: null })).toBe('80');
+    });
+});
+
+describe('defaultPortOf', () => {
+    it('answers the scheme own port although the address named one of its own', () => {
+        expect(defaultPortOf({ secure: true, authority: 'mail.example.test:8443', port: '8443' })).toBe('443');
+        expect(defaultPortOf({ secure: false, authority: 'mail.example.test:8080', port: '8080' })).toBe('80');
+    });
+
+    it('answers the same port as `portOf` where the address named none, both being the scheme own', () => {
+        expect(defaultPortOf({ secure: true, authority: 'mail.example.test', port: null })).toBe('443');
+        expect(defaultPortOf({ secure: false, authority: 'mail.example.test', port: null })).toBe('80');
     });
 });
 

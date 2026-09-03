@@ -47,7 +47,18 @@ export function resolveConnection(entry: string, clearTextPermitted: boolean): R
 
 /** The port that will be reached, whether the address named it or the scheme supplies it. */
 export function portOf(connection: ResolvedConnection): string {
-    return connection.port ?? schemePorts[connection.secure ? 'https' : 'http'];
+    return connection.port ?? defaultPortOf(connection);
+}
+
+/**
+ * The port this connection's scheme reaches on its own, whatever the address named.
+ *
+ * It is what the hint under the field promises — *without one this client reaches …* — which is a sentence about the
+ * port that would be reached in the absence of the one that is there, so it cannot be answered by `portOf`: reading
+ * that back would tell somebody who typed `:8443` that dropping it reaches `8443`.
+ */
+export function defaultPortOf(connection: ResolvedConnection): string {
+    return schemePorts[connection.secure ? 'https' : 'http'];
 }
 
 /**

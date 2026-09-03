@@ -20,7 +20,7 @@ import type { DeploymentTransport } from '../deployment/sendToDeployment';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { AdvancedConnection } from './AdvancedConnection';
-import { portForPermission, portOf, resolveConnection, type ResolvedConnection } from './connection';
+import { defaultPortOf, portForPermission, portOf, resolveConnection, type ResolvedConnection } from './connection';
 import { resolveCredentialEntry, type CredentialEntryRefusal } from './credentialEntry';
 import { CredentialNotices, type CredentialNotice } from './CredentialNotices';
 import type { CredentialLifetime } from './credentialStore';
@@ -394,7 +394,7 @@ export function SignIn({
                                       port:
                                           connection === null
                                               ? portForPermission(clearTextPermitted)
-                                              : portOf(connection),
+                                              : defaultPortOf(connection),
                                   })}
                         </p>
                     </div>
