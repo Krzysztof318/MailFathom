@@ -219,6 +219,15 @@
     --spacing-mailboxes-folded: 4.8125rem;
     --spacing-drawer: 16.375rem;
 
+    /* The settings surface, in the composition where it is a card rather than the whole screen: the width the design
+       project draws it at, and the height it holds whatever is in it — so its body scrolls inside a card that does not
+       change size as somebody moves between its two tabs, and a tall window does not stretch it past what it needs.
+       Both are the project's, and both are a size the card is given rather than a ceiling it stops at, which is why
+       they sit here beside the rail's widths rather than among the `--container-*` measures a column is read against.
+       Below the workspace breakpoint neither is read, because the surface is the screen. */
+    --spacing-settings: 28.75rem;
+    --spacing-settings-card: min(78vh, 37.5rem);
+
     /* The widest a message's own content is ever drawn, which is a ceiling rather than a width: the reading pane takes
        whatever the three columns leave it, and this is where the words inside it stop taking more. It is the width the
        design draws the pane at, so a window the size the project was drawn against is unchanged by it and a wider one
@@ -235,13 +244,6 @@
        three the design project's. Below the floor the pane itself is the measure, which is what the narrow composition
        is. */
     --container-conversation: clamp(42.5rem, 62vw, 68.75rem);
-
-    /* The settings surface, in the composition where it is a card rather than the whole screen: the width the design
-       project draws it at, and the height it holds whatever is in it — so its body scrolls inside a card that does not
-       change size as somebody moves between its two tabs, and a tall window does not stretch it past what it needs.
-       Both are the project's. Below the workspace breakpoint neither is read, because the surface is the screen. */
-    --container-settings: 28.75rem;
-    --spacing-settings-card: min(78vh, 37.5rem);
 
     /* The widest one tab in the strip above the content pane is drawn, which is a ceiling in the same sense: a tab
        takes the room its title needs and stops here, so a long subject is cut rather than pushing every other tab off

@@ -819,8 +819,13 @@ test('draws the settings surface as a card over the workspace in a wide window',
 
     const panel = await page.getByRole('dialog', { name: 'Settings' }).boundingBox();
 
-    expect(panel?.width).toBeLessThan(wideWindow.width);
-    expect(panel?.height).toBeLessThan(wideWindow.height);
+    // The card's own measurements rather than merely "narrower than the window": a dialog the width utility failed to
+    // reach would still be a few pixels off the viewport's width once a scrollbar is counted, so bounding it below the
+    // window would pass for exactly the regression this test exists to catch. Both numbers are the tokens the design
+    // project's card is drawn at, in pixels at the root size this suite runs under — 28.75rem, and 78% of a 720-pixel
+    // window, which is the lower of that token's two terms here.
+    expect(panel?.width).toBeCloseTo(460, 0);
+    expect(panel?.height).toBeCloseTo(0.78 * wideWindow.height, 0);
 
     // The workspace is still behind it, which is what makes changing one setting something that opens over what
     // somebody was doing rather than a place they navigated to.
