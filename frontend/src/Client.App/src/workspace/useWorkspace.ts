@@ -25,6 +25,16 @@ export interface Workspace {
      */
     readonly collapsed: readonly string[];
 
+    /**
+     * Whether the mailbox column is folded to its icon rail rather than drawn at the width that carries names.
+     *
+     * Beside the rows somebody folded rather than inside the column that draws it, because two things read it: the
+     * composition, which decides how wide the column is, and the tree inside it, which decides whether a row is a name
+     * or a symbol. It is a second axis rather than the same one — folding a mailbox away hides its folders, and folding
+     * the column narrows every row that is still there — which is why neither value is derivable from the other.
+     */
+    readonly mailboxesFolded: boolean;
+
     /** What the person has open, once a space offers something to open. */
     readonly selection: string | null;
 
@@ -78,6 +88,7 @@ export interface WorkspaceRevision {
 export const emptyWorkspace: Workspace = {
     scope: everything,
     collapsed: [],
+    mailboxesFolded: false,
     selection: null,
     conversation: null,
     fragment: null,

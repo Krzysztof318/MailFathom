@@ -87,6 +87,40 @@ function ScopeProbe() {
     return <output>{JSON.stringify(workspace)}</output>;
 }
 
+const foldTheColumn = 'Fold the column, as the composition around the tree would.';
+
+// Stands in for the control the mail space draws over this column: the tree reads the folded state out of the
+// workspace rather than being handed it, so what the test needs is something that writes it there.
+function FoldTheColumn() {
+    const { workspace, revise } = useWorkspace();
+
+    return (
+        <button
+            type="button"
+            onClick={() => {
+                revise({ mailboxesFolded: !workspace.mailboxesFolded });
+            }}
+        >
+            {foldTheColumn}
+        </button>
+    );
+}
+
+function foldTheColumnAway(): void {
+    fireEvent.click(screen.getByRole('button', { name: foldTheColumn }));
+}
+
+/** The part of a row that carries its name, its state, and its count — drawn beside the symbol, or said and not drawn. */
+function saidOn(named: HTMLElement): HTMLElement {
+    const said = named.querySelector<HTMLElement>('span:not([aria-hidden])');
+
+    if (said === null) {
+        throw new Error(`The row "${named.textContent}" says nothing about what it is.`);
+    }
+
+    return said;
+}
+
 // An `output` reports itself as a status region, exactly as the tree's own waiting line does, so the probe is picked
 // out by being the one carrying a workspace rather than a sentence.
 function carried(): Workspace {
@@ -106,6 +140,7 @@ function treeUnder(
                 <ReadMarkingContext value={marking}>
                     <FolderTree session={session} transport={transport} online={online} />
                 </ReadMarkingContext>
+                <FoldTheColumn />
                 <ScopeProbe />
             </WorkspaceProvider>
         </LocalizationProvider>
@@ -429,5 +464,88 @@ describe('FolderTree', () => {
 
         expect(screen.getByText(/This machine is offline\./)).toBeDefined();
         expect(transport).not.toHaveBeenCalled();
+    });
+});
+
+describe('FolderTree, in a folded column', () => {
+    it('draws a folder as its symbol alone, and says the name it no longer draws', async () => {
+        renderTree(answering(JSON.stringify(tree)));
+
+        await drawn();
+        foldTheColumnAway();
+
+        const inbox = row(/^Inbox12 unread/);
+
+        expect(saidOn(inbox).className).toContain('sr-only');
+        expect(inbox.querySelector('svg')).not.toBeNull();
+        expect(inbox.textContent).toContain('12 unread');
+    });
+
+    it('draws a folder symbol larger than the column draws one, a narrower target having to be hit as reliably', async () => {
+        renderTree(answering(JSON.stringify(tree)));
+
+        await drawn();
+
+        expect(
+            row(/^Inbox12 unread/)
+                .querySelector('svg')
+                ?.getAttribute('class'),
+        ).toContain('size-4.5');
+
+        foldTheColumnAway();
+
+        expect(
+            row(/^Inbox12 unread/)
+                .querySelector('svg')
+                ?.getAttribute('class'),
+        ).toContain('size-6');
+    });
+
+    it('marks a mailbox by its colour where the column named it, so the mailboxes stay tellable apart', async () => {
+        renderTree(answering(JSON.stringify(tree)));
+
+        await drawn();
+        foldTheColumnAway();
+
+        const work = row(/^Work/);
+
+        expect(saidOn(work).className).toContain('sr-only');
+        expect(work.querySelector('[aria-hidden="true"].rounded-full')).not.toBeNull();
+        expect(work.textContent).toContain('Work');
+    });
+
+    it('offers no per-row control in the rail, the arrow keys being what folds a row there', async () => {
+        renderTree(answering(JSON.stringify(tree)));
+
+        await drawn();
+
+        const drawnControls = row(/^Work/).querySelectorAll('svg').length;
+
+        foldTheColumnAway();
+
+        expect(row(/^Work/).querySelectorAll('svg').length).toBe(drawnControls - 1);
+    });
+
+    it('leaves what a reader folded away folded, folding the column being the other question', async () => {
+        renderTree(answering(JSON.stringify(tree)));
+
+        await drawn();
+        const work = row(/^Work/);
+
+        work.focus();
+        fireEvent.keyDown(work, { key: 'ArrowLeft' });
+
+        expect(screen.queryByRole('treeitem', { name: /^Archiwum/ })).toBeNull();
+
+        foldTheColumnAway();
+
+        expect(carried().collapsed).toEqual(['account:work']);
+        expect(screen.queryByRole('treeitem', { name: /^Archiwum/ })).toBeNull();
+        expect(row(/^Work/).getAttribute('aria-expanded')).toBe('false');
+
+        foldTheColumnAway();
+
+        expect(carried().collapsed).toEqual(['account:work']);
+        expect(screen.queryByRole('treeitem', { name: /^Archiwum/ })).toBeNull();
     });
 });

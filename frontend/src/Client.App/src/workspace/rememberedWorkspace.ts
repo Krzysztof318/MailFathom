@@ -95,6 +95,7 @@ function workspaceIn(value: unknown): Workspace | null {
     const record = value as Record<string, unknown>;
     const scope = scopeIn(record['scope']);
     const collapsed = collapsedIn(record['collapsed']);
+    const mailboxesFolded = record['mailboxesFolded'] ?? false;
     const selection = record['selection'] ?? null;
     const selected = selectedIn(record['selected']);
     const question = record['question'];
@@ -115,11 +116,25 @@ function workspaceIn(value: unknown): Workspace | null {
         return null;
     }
 
+    if (typeof mailboxesFolded !== 'boolean') {
+        return null;
+    }
+
     if (typeof question !== 'string' || question.length > longestQuestion) {
         return null;
     }
 
-    return { scope, collapsed, selection, conversation, fragment: null, selected, question, recentSearches };
+    return {
+        scope,
+        collapsed,
+        mailboxesFolded,
+        selection,
+        conversation,
+        fragment: null,
+        selected,
+        question,
+        recentSearches,
+    };
 }
 
 // The searches read back, each held to what this surface ranks against at all: text longer than that is not a search

@@ -290,14 +290,17 @@ nothing configured.
 `src/workspace/` is what survives moving between spaces, and it is mounted above the frame for exactly that reason. It
 holds one **scope** — every mailbox at once, one role across all of them, one mailbox, or one folder of one — beside the
 question, the message that is open, the conversation being read in front of it, the messages that have been picked
-out, what was searched for before, and the rows of the folder tree somebody has folded away. It is kept in the store the web head keeps its credential in, so a reload returns to what was on the
+out, what was searched for before, the rows of the folder tree somebody has folded away, and whether the mailbox column
+itself is folded to its rail. It is kept in the store the web head keeps its credential in, so a reload returns to what was on the
 screen; signing in and signing out both empty it, because what somebody was looking at and about to ask is theirs rather
 than the machine's.
 
 `src/folders/` is what writes that scope. It draws the owner's mailboxes and their folders as one tree, read from the
 folders route in a single exchange, with the roles that span every mailbox above them — so asking about every inbox at
 once is one act rather than three. A folder is placed and named by the role the deployment gave it rather than by what
-its server calls it, because a name is whatever a provider chose in whatever language.
+its server calls it, because a name is whatever a provider chose in whatever language. The same tree is what the folded
+column draws: a row keeps its place and its symbol and loses its label, a mailbox is marked by its colour where its name
+stood, and the two folds stay independent — narrowing the column changes nothing about which mailboxes are open in it.
 
 `src/messageList/` is what that scope is drawn as. It reads `/api/client/emails`, which is keyset-paged in both
 directions, and it is where the client's three hardest constraints meet: a mailbox of two hundred and fourteen thousand

@@ -11,6 +11,7 @@ const storageKey = 'mailfathom.workspace';
 const kept: Workspace = {
     scope: { kind: 'folder', accountId: 'work', alias: 'INBOX' },
     collapsed: ['account:personal'],
+    mailboxesFolded: true,
     selection: 'AAMkAD-42',
     conversation: { threadId: '9b2a1c74-4a4e-4c93-9a2e-3f6f0a1b2c3d', openAt: 'AAMkAD-42' },
     fragment: null,
@@ -58,6 +59,23 @@ describe('rememberedWorkspace', () => {
 
         expect(rememberedWorkspace()).toEqual({ ...kept, recentSearches: [] });
         expect(recentSearches).toHaveLength(1);
+    });
+
+    // A workspace kept before the column could be folded is one this client wrote, so it opens on what was kept with
+    // the column at the width every workspace before it was drawn at.
+    it('reads a workspace kept before the column could fold as one drawn at the column width', () => {
+        const { mailboxesFolded, ...before } = kept;
+
+        stored(before);
+
+        expect(rememberedWorkspace()).toEqual({ ...kept, mailboxesFolded: false });
+        expect(mailboxesFolded).toBe(true);
+    });
+
+    it('refuses a folded column that is not one, a store being a place a person can write', () => {
+        stored({ ...emptyWorkspace, mailboxesFolded: 'yes' });
+
+        expect(rememberedWorkspace()).toEqual(emptyWorkspace);
     });
 
     it.each([

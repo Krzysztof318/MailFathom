@@ -208,7 +208,7 @@
        reads them is. */
     --spacing-rail: 6rem;
     --spacing-mailboxes: 13.125rem;
-    --spacing-mailboxes-folded: 3.625rem;
+    --spacing-mailboxes-folded: 4.8125rem;
     --spacing-drawer: 16.375rem;
 
     /* The widest a message's own content is ever drawn, which is a ceiling rather than a width: the reading pane takes
