@@ -143,7 +143,9 @@ export function Composer({
                 return;
             }
 
-            setKnown(answer.value.headers.participants.map((participant) => participant.address));
+            // Once each: somebody who wrote and was copied in is one person to offer, and the completion list is
+            // keyed by the address.
+            setKnown([...new Set(answer.value.headers.participants.map((participant) => participant.address))]);
             setComposition((held) => held ?? answerTo(answer.value, opening.answers));
         });
 
@@ -222,9 +224,10 @@ export function Composer({
         onClosed();
     }
 
-    // Whether a send may start at all, read by the button and by the keyboard shortcut alike: two ways to ask are
-    // one act, and a second press would queue the same message twice — while the first is still in flight, and equally
-    // once it is queued, the message having gone as far as this screen can send it either way.
+    // Whether this message may still be acted on, read by every control that writes to the draft: the send itself,
+    // the shortcut that asks the same question, and saving and attaching. Two presses would queue the same message
+    // twice — while the first is still in flight, and equally once it is queued — and a save or an attach after that
+    // would say what is happening over the queued state and take the way to withdraw off the screen with it.
     const sendable = online && draft.standing.kind !== 'sending' && draft.standing.kind !== 'queued';
 
     const title = translate(titles[opening.kind === 'new' ? 'new' : opening.answers]);
@@ -424,7 +427,8 @@ export function Composer({
 
                         <button
                             type="button"
-                            className="flex items-center gap-1.75 rounded-lg border border-line-strong px-3 py-2 text-sm text-text-soft transition hover:bg-hover"
+                            disabled={!sendable}
+                            className="flex items-center gap-1.75 rounded-lg border border-line-strong px-3 py-2 text-sm text-text-soft transition hover:bg-hover disabled:opacity-60"
                             onClick={() => {
                                 files.current?.click();
                             }}
@@ -452,7 +456,8 @@ export function Composer({
 
                         <button
                             type="button"
-                            className="rounded-lg px-2 py-2 text-sm text-muted transition hover:bg-hover hover:text-text"
+                            disabled={!sendable}
+                            className="rounded-lg px-2 py-2 text-sm text-muted transition hover:bg-hover hover:text-text disabled:opacity-60"
                             onClick={() => {
                                 void draft.save(composition);
                             }}

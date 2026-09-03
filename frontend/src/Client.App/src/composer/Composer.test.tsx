@@ -117,6 +117,14 @@ function answerFor(request: ClientRequest, answers: Answers): { status: number; 
     return answers.save ?? { status: 200, body: draftBody() };
 }
 
+/** One file as the deployment records it, which is both what an upload answers and what a save lists back. */
+const stagedFile = {
+    attachmentId: 'a1',
+    fileName: 'invoice.pdf',
+    mediaType: 'application/pdf',
+    sizeOctets: 2_048,
+};
+
 const uploadsOneFile: AttachmentUpload = () =>
     Promise.resolve({
         status: 200,
@@ -393,6 +401,23 @@ describe('Composer, a message of its own', () => {
         expect(screen.queryByRole('dialog', { name: 'Send this message?' })).toBeNull();
     });
 
+    it('leaves nothing that would write over a queued send and take the way to withdraw with it', async () => {
+        drawComposer();
+
+        address('ada@example.invalid');
+        write('Subject', 'The quarterly figures');
+        write('Message', 'They are attached.');
+        confirmSend();
+
+        expect(await screen.findByText('Queued to go out.')).toBeDefined();
+
+        // Both of these say what is happening the moment they are pressed, so either one would draw over the queued
+        // state and leave the message going out with nothing on the screen able to stop it.
+        expect(screen.getByRole('button', { name: 'Save draft' }).hasAttribute('disabled')).toBe(true);
+        expect(screen.getByRole('button', { name: 'Attach' }).hasAttribute('disabled')).toBe(true);
+        expect(screen.getByRole('button', { name: 'Take it back' })).toBeDefined();
+    });
+
     it('stays open and says so where the deployment would not give the draft up', async () => {
         const { closed } = drawComposer({ kind: 'new' }, { discard: { status: 503, body: '' } });
 
@@ -550,6 +575,79 @@ describe('Composer, a message of its own', () => {
         expect(document.activeElement).toBe(last);
     });
 
+    it('does not put a removed file back when an older save answers after the removal', async () => {
+        // A save answers with the whole list the deployment held when it was asked, so one still in flight while a
+        // file is taken off would otherwise draw that file back onto a message that no longer carries it.
+        let releaseTheSave = (): void => undefined;
+        const stagedAtTheDeployment = JSON.parse(draftBody({ attachments: [stagedFile] })) as unknown;
+
+        const asked: ClientRequest[] = [];
+
+        const transport: MailFathomTransport = (request) => {
+            asked.push(request);
+
+            if (request.method === 'PUT') {
+                return new Promise((answer) => {
+                    releaseTheSave = () => {
+                        answer({ status: 200, body: JSON.stringify(stagedAtTheDeployment), headers: {} });
+                    };
+                });
+            }
+
+            const answer = answerFor(request, {});
+
+            return Promise.resolve({ status: answer.status, body: answer.body, headers: {} });
+        };
+
+        render(
+            <LocalizationProvider>
+                <AttachmentUploadContext value={uploadsOneFile}>
+                    <Composer
+                        session={session}
+                        transport={transport}
+                        accounts={[work]}
+                        opening={{ kind: 'new' }}
+                        online
+                        onClosed={vi.fn()}
+                    />
+                </AttachmentUploadContext>
+            </LocalizationProvider>,
+        );
+
+        const picker = document.querySelector<HTMLInputElement>('input[type=file]');
+
+        if (picker === null) {
+            throw new Error('The composer drew no file picker to attach with.');
+        }
+
+        await act(() => {
+            fireEvent.change(picker, { target: { files: [new File(['0'], 'invoice.pdf')] } });
+
+            return Promise.resolve();
+        });
+
+        const staged = await screen.findByRole('list', { name: 'Attached files' });
+
+        // A save in flight, and the file taken off while it is.
+        fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+
+        await act(() => {
+            fireEvent.click(within(staged).getByRole('button', { name: 'Remove invoice.pdf' }));
+
+            return Promise.resolve();
+        });
+
+        expect(screen.queryByRole('list', { name: 'Attached files' })).toBeNull();
+
+        await act(() => {
+            releaseTheSave();
+
+            return Promise.resolve();
+        });
+
+        expect(screen.queryByRole('list', { name: 'Attached files' })).toBeNull();
+    });
+
     it('takes a staged file off the draft at the deployment as well as off the screen', async () => {
         const { asked } = drawComposer();
 
@@ -663,14 +761,23 @@ describe('Composer, an answer', () => {
         });
     });
 
-    it('offers the people in the conversation to complete an address from', async () => {
-        drawComposer(replying);
+    it('offers the people in the conversation to complete an address from, each of them once', async () => {
+        // The sender copied in as well, which is what puts one address in two headers — and what would otherwise
+        // offer it twice and give the completion list two options under one key.
+        const message = JSON.parse(messageBody()) as {
+            headers: { participants: { role: string; address: string; displayName: string | null }[] };
+        };
+
+        message.headers.participants.push({ role: 'Cc', address: 'billing@example.invalid', displayName: 'Billing' });
+
+        drawComposer(replying, { message: { status: 200, body: JSON.stringify(message) } });
 
         await screen.findByText('Re: Quarterly invoice');
 
         const offered = [...document.querySelectorAll('datalist option')].map((option) => option.getAttribute('value'));
 
         expect(offered).toContain('auditor@example.invalid');
+        expect(offered).toStrictEqual([...new Set(offered)]);
     });
 
     it('closes an answer nobody has written in without asking, since its recipients are not work anybody did', async () => {

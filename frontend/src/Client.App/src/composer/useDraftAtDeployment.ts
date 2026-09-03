@@ -79,6 +79,12 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
     // identifier the first of them wrote, and nothing on the screen is drawn from it.
     const draftId = useRef<string | null>(null);
 
+    // Which change to the staged files is the newest. A save answers with the whole list the deployment holds, so
+    // one that started before a file was taken off would put that file back on the screen when it lands afterwards —
+    // the deployment having discarded it already, and the screen then saying a message carries something it does not.
+    // Every act that changes the list takes a number on the way out and writes only while it is still the newest.
+    const staging = useRef(0);
+
     // The save in flight, if any. `saved` reads `draftId.current` and only writes it back once its own request has
     // answered, so two acts starting inside that window would each write a draft and strand whatever the loser staged
     // against it. A second caller joins the first rather than starting a second write.
@@ -114,6 +120,7 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
     async function write(composition: Composition): Promise<string | null> {
         const held = draftId.current;
         const wire = wireComposition(composition);
+        const at = ++staging.current;
 
         const answer =
             held === null
@@ -127,7 +134,10 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
         }
 
         draftId.current = answer.value.draftId;
-        setStaged(answer.value.attachments);
+
+        if (at === staging.current) {
+            setStaged(answer.value.attachments);
+        }
 
         return answer.value.draftId;
     }
@@ -195,8 +205,12 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
                 return;
             }
 
+            const at = ++staging.current;
+
             settled(await unstageMailDraftAttachment(session, transport, held, attachmentId), () => {
-                setStaged((already) => already.filter((file) => file.attachmentId !== attachmentId));
+                if (at === staging.current) {
+                    setStaged((already) => already.filter((file) => file.attachmentId !== attachmentId));
+                }
 
                 return { kind: 'held' };
             });

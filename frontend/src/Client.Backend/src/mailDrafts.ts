@@ -5,7 +5,7 @@
 import { failed, failureReasonForStatus, read, type ClientResult } from './failure';
 import { asRecord } from './json';
 import { headersFor, routeFor, type ClientSession } from './session';
-import { reported, spanned } from './telemetry';
+import { spanned } from './telemetry';
 import { send, type ClientRequest, type ClientResponse, type MailFathomTransport } from './transport';
 
 // Writing mail, which is the one thing on this surface that reaches somebody else. A draft here is the draft in the
@@ -255,18 +255,15 @@ export function sendMailDraft(
     transport: MailFathomTransport,
     draftId: string,
 ): Promise<ClientResult<MailSendOutcome>> {
-    return reported(
-        'POST /drafts/{draftId}/send',
-        async () =>
-            outcomeOf(
-                await send(transport, {
-                    method: 'POST',
-                    path: routeFor(session, mailDraftSendRoute(draftId)),
-                    headers: headersFor(session),
-                    longestAnswer: longestDraftAnswer,
-                }),
-            ),
-        (result) => (result.outcome === 'failed' ? result.failure.reason : null),
+    return spanned('POST /drafts/{draftId}/send', async () =>
+        outcomeOf(
+            await send(transport, {
+                method: 'POST',
+                path: routeFor(session, mailDraftSendRoute(draftId)),
+                headers: headersFor(session),
+                longestAnswer: longestDraftAnswer,
+            }),
+        ),
     );
 }
 
@@ -394,7 +391,16 @@ function outcomeOf(response: ClientResponse | null): ClientResult<MailSendOutcom
         return failed(failureReasonForStatus(response.status), response.status);
     }
 
-    const code = bodyIn(response)?.['errorCode'];
+    const body = bodyIn(response);
+
+    if (body === null) {
+        // A refusal whose body is not a record is a body this client could not read, exactly as at `200`. Reading it
+        // as a rule of the deployment would put a sentence about the message on the screen for what is a page from
+        // something in the way.
+        return failed('unreadable', response.status);
+    }
+
+    const code = body['errorCode'];
     const refusal = typeof code === 'number' ? refusalsByCode[code] : undefined;
 
     return read({ queued: false, refusal: refusal ?? 'refusedForAnotherReason' });

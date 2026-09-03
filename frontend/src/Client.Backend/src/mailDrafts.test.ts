@@ -397,6 +397,14 @@ describe('sendMailDraft', () => {
         });
     });
 
+    it('refuses a refusal whose body it could not read rather than wording one it never understood', async () => {
+        // An intermediary answering `503` with a page of its own is not this deployment stating a rule about the
+        // message, and reading it as one would put a sentence about what was written on the screen for it.
+        const answer = await sendMailDraft(session, answering({ status: 503, body: '<html>Gateway</html>' }), draftId);
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 503 } });
+    });
+
     it('reads a status that is neither a queueing nor a refusal as a failure of the request', async () => {
         const answer = await sendMailDraft(session, answering({ status: 403, body: '' }), draftId);
 
