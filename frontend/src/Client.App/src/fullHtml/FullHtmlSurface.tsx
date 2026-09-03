@@ -185,6 +185,17 @@ export function FullHtmlSurface({
     const failure =
         describing?.outcome === 'failed' ? describing.failure : drawn?.outcome === 'failed' ? drawn.failure : null;
 
+    // The head names the message once it has been read, says it is reading while it is, and says nothing otherwise. A
+    // head that failed is reported below, with the way out beside it; repeating it here in the present tense would have
+    // the surface saying it is still reading something it has already given up on. With no network nothing is being
+    // read at all, which is the same sentence for the same reason.
+    const naming =
+        message !== null
+            ? (message.headers.subject ?? translate('message.noSubject'))
+            : online && describing === null
+              ? translate('fullHtml.reading')
+              : null;
+
     return (
         <section ref={region} tabIndex={-1} aria-label={translate('fullHtml.surface')} className="flex h-full flex-col">
             <header className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-2.5">
@@ -193,11 +204,7 @@ export function FullHtmlSurface({
                 </span>
 
                 <div className="flex min-w-0 flex-1 basis-48 flex-col">
-                    <span className="truncate text-md font-semibold">
-                        {message === null
-                            ? translate('fullHtml.reading')
-                            : (message.headers.subject ?? translate('message.noSubject'))}
-                    </span>
+                    {naming === null ? null : <span className="truncate text-md font-semibold">{naming}</span>}
 
                     {/* Nothing is claimed about who sent a message that has not been read. A line naming an unknown
                         author beside an unknown time is a sentence about this client's state dressed as a fact about
@@ -261,10 +268,11 @@ function Markup({
 }) {
     const { translate } = useLocalization();
 
-    // Offline is its own sentence rather than a failure worded politely, and it is said in place of everything else:
-    // unlike the reading pane, this surface has nothing already drawn to keep, because a reader reaches it by pressing
-    // a control and there is no earlier answer standing behind that press.
-    if (!online) {
+    // Offline is its own sentence rather than a failure worded politely, and it is said in place of everything else —
+    // except a markup that already arrived. A drawn frame needs no network to go on showing what it shows, and nothing
+    // about it stopped being true when the network went, which is exactly the guard `readingPane/ReadingPane.tsx` puts
+    // on the same prop. What the sentence replaces is a surface with nothing on it yet.
+    if (!online && drawn?.outcome !== 'read') {
         return (
             <p className="px-4 py-3 text-sm text-muted" role="status">
                 {translate('message.offline')}

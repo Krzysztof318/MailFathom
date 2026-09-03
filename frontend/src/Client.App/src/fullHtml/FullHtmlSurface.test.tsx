@@ -73,23 +73,30 @@ function deploymentServing(markup: unknown = asSent): { transport: MailFathomTra
     };
 }
 
+/** Draws the surface, and answers with the way to hand it a network that came or went afterwards. */
 async function drawing(
     transport: MailFathomTransport,
     { onClose = () => undefined, online = true }: { onClose?: () => void; online?: boolean } = {},
-): Promise<void> {
-    render(
+): Promise<(nowOnline: boolean) => void> {
+    const surface = (hasNetwork: boolean) => (
         <LocalizationProvider>
             <FullHtmlSurface
                 session={session}
                 transport={transport}
                 storedEmailId={messageId}
-                online={online}
+                online={hasNetwork}
                 onClose={onClose}
             />
-        </LocalizationProvider>,
+        </LocalizationProvider>
     );
 
+    const view = render(surface(online));
+
     await screen.findByRole('region', { name: "The sender's own version of this message" });
+
+    return (nowOnline) => {
+        view.rerender(surface(nowOnline));
+    };
 }
 
 function press(name: string): void {
@@ -262,6 +269,29 @@ describe('FullHtmlSurface', () => {
 
         expect(await screen.findByTitle("The sender's own markup, drawn in isolation")).toBeDefined();
         expect(screen.getByText('Quarterly invoice')).toBeDefined();
+    });
+
+    it('keeps a markup it has already drawn when the network goes, because nothing about it stopped being true', async () => {
+        const { transport } = deploymentServing();
+
+        const network = await drawing(transport);
+        await screen.findByTitle("The sender's own markup, drawn in isolation");
+        network(false);
+
+        expect(screen.getByTitle("The sender's own markup, drawn in isolation")).toBeDefined();
+        expect(screen.queryByText(/This machine is offline/)).toBeNull();
+    });
+
+    it('stops saying it is reading the message once that read has definitively failed', async () => {
+        const halfServing: MailFathomTransport = (request) =>
+            request.path.includes('/body')
+                ? Promise.resolve({ status: 200, body: body(asSent), headers: {} })
+                : Promise.reject(new Error('the deployment is not there'));
+
+        await drawing(halfServing);
+
+        expect(await screen.findByText(/could not be read: unavailable/)).toBeDefined();
+        expect(screen.queryByText(/Reading the sender/)).toBeNull();
     });
 
     it('says the machine has no network rather than reporting the deployment as unavailable', async () => {
