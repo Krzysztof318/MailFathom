@@ -26,12 +26,16 @@ Two properties hold everywhere and are worth knowing before anything is installe
 
 - **Reading is local.** A read answers from the local copy and never contacts a mail server, so it is fast, works while
   the server is down, and changes nothing remotely. Every result states how fresh the local copy is.
-- **Retrieval is read-only.** Fetching mail never sets the remote `\Seen` flag, so mail MailFathom has copied still
-  shows as unread in your mail client until you read it there. Three things write to your mailbox: a mail rule whose
-  action moves, copies, deletes, or marks a message read, the spam actions that file junk and mark it read, and the
-  `set_mail_flags` tool, beside the three draft tools that put a message into your own Drafts folder. The first two are
-  off until you turn them on; the last two need grants that reading mail does not carry. A fourth path leaves your
-  deployment altogether rather than writing to your mailbox: `send_email`,
+- **Retrieval is read-only.** Fetching mail never sets the remote `\Seen` flag, so a message MailFathom has copied is
+  still unread on your mail server until something says otherwise. Four things write to your mailbox: a mail rule whose
+  action moves, copies, deletes, or marks a message read, the spam actions that file junk and mark it read, the
+  `set_mail_flags` tool, and MailFathom's own client, which marks a message read on your mail server when you open it
+  and read its words — beside the three draft tools that put a message into your own Drafts folder. The first two are
+  off until you turn them on; the tool and the drafts need grants that reading mail does not carry, and so does the
+  client, which marks nothing where its credential was not granted one. What the client does is a preference of yours
+  rather than the deployment's, held with the rest of your client settings and covering every mailbox it reads; it is
+  on unless you turn it off, and the control that turns it off arrives with the client's settings screen. A fifth path
+  leaves your deployment altogether rather than writing to your mailbox: `send_email`,
   `reply_to_email`, `forward_email`, and `send_draft`, behind
   a grant of its own, and they are the acts here nothing can take back.
 

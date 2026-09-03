@@ -9,6 +9,7 @@ import { Organisation } from '../controls/Organisation';
 import { ReceivedAt } from '../controls/ReceivedAt';
 import { SenderAvatar } from '../controls/SenderAvatar';
 import { useLocalization } from '../localization/useLocalization';
+import { drawnUnread, useReadMarking } from '../readMarking/useReadMarking';
 
 // One row of mail, which is its own component for the reason a tree's row is: it is what carries state, a keyboard
 // path, and a test. What it draws is what the page answered with — nothing here reads anything of its own, so a row
@@ -51,6 +52,17 @@ export function MessageRow({
     readonly onElement: (element: HTMLLIElement | null) => void;
 }) {
     const { translate } = useLocalization();
+    const marking = useReadMarking();
+
+    // What the deployment last reported, less what this client has marked read since. The two are not the same for
+    // minutes at a time: marking read is a durable mutation the account's own pass carries to the mail server, and the
+    // stored flag is an observation of what that server was seen to hold — so the row draws from the pending mutation
+    // rather than waiting for the observation to catch up.
+    //
+    // The row stays in the list either way, including a list narrowed to unread mail. A message drawn read is a message
+    // the person is reading; taking its row out from under them the moment the pane rendered it would be the list
+    // disagreeing with the pane about what is open, and the next read of the folder is what removes it.
+    const unread = drawnUnread(marking, email.id, email.unread);
 
     return (
         <li
@@ -79,11 +91,11 @@ export function MessageRow({
             }`}
         >
             <div className="flex items-center gap-2">
-                {email.unread ? (
-                    <span className="size-2 shrink-0 rounded-full bg-accent">
-                        <span className="sr-only">{translate('list.unread')}</span>
-                    </span>
-                ) : null}
+                {/* Unread is drawn as weight and colour, which is how the design project draws it, and said in as many
+                    words for a reader who is not looking at either. Nothing marks the row visually beside that: a dot
+                    ahead of the avatar would inset every unread row a little further than every read one, which is the
+                    one thing a list of rows that have to scan as a column cannot afford. */}
+                {unread ? <span className="sr-only">{translate('list.unread')}</span> : null}
 
                 <SenderAvatar displayName={email.senderDisplayName} address={email.senderAddress} place="row" />
 
@@ -91,7 +103,7 @@ export function MessageRow({
                     is what gives way. Half rather than more because the marks and the time hold their own width: a
                     name allowed past it would push the time out of a row that clips rather than wraps. */}
                 <span
-                    className={`max-w-1/2 shrink-0 truncate text-md font-semibold ${email.unread ? 'text-text' : 'text-text-soft'}`}
+                    className={`max-w-1/2 shrink-0 truncate text-md font-semibold ${unread ? 'text-text' : 'text-text-soft'}`}
                 >
                     {correspondent(email) ?? translate('list.senderUnknown')}
                 </span>
@@ -103,7 +115,7 @@ export function MessageRow({
                 <ReceivedAt at={email.receivedAt} />
             </div>
 
-            <div className={`truncate text-md ${email.unread ? 'text-text' : 'text-text-soft'}`}>
+            <div className={`truncate text-md ${unread ? 'text-text' : 'text-text-soft'}`}>
                 {email.subject ?? translate('list.noSubject')}
             </div>
 

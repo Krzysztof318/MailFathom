@@ -12,6 +12,7 @@ import type {
     MailThreadMessage,
 } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
+import { ReadMarkingContext, nothingMarkedRead, type ReadMarking } from '../readMarking/useReadMarking';
 import { LinkOpenerContext } from '../shellOperations/linkOpener';
 import { ThreadMessage } from './ThreadMessage';
 
@@ -66,22 +67,33 @@ function drawing(
         readonly onOpenOnItsOwn?: () => void;
         readonly onRegion?: (element: HTMLElement | null) => void;
     } = {},
+    marking: ReadMarking = nothingMarkedRead,
 ): void {
     render(
         <LocalizationProvider>
             <LinkOpenerContext value={() => Promise.resolve()}>
-                <ul>
-                    <ThreadMessage
-                        session={session}
-                        transport={answersNothing}
-                        message={held}
-                        onOpenOnItsOwn={handlers.onOpenOnItsOwn ?? (() => undefined)}
-                        onRegion={handlers.onRegion ?? (() => undefined)}
-                    />
-                </ul>
+                <ReadMarkingContext value={marking}>
+                    <ul>
+                        <ThreadMessage
+                            session={session}
+                            transport={answersNothing}
+                            message={held}
+                            onOpenOnItsOwn={handlers.onOpenOnItsOwn ?? (() => undefined)}
+                            onRegion={handlers.onRegion ?? (() => undefined)}
+                        />
+                    </ul>
+                </ReadMarkingContext>
             </LinkOpenerContext>
         </LocalizationProvider>,
     );
+}
+
+/** What a client that has marked exactly this message read carries, which is what the head reads its state through. */
+function marked(storedEmailId: string): ReadMarking {
+    return {
+        marked: new Map([[storedEmailId, { account: 'work', folder: 'Sent' }]]),
+        markRead: () => undefined,
+    };
 }
 
 describe('ThreadMessage', () => {
@@ -137,6 +149,14 @@ describe('ThreadMessage', () => {
         drawing(message({ unread: true }));
 
         expect(screen.getByText('Unread')).toBeDefined();
+    });
+
+    // The list's row and this head are the same message in two places, so a reader who opened it here would otherwise
+    // find it still unread there.
+    it('draws a message this client has marked read as read, though the deployment still reports it unread', () => {
+        drawing(message({ unread: true }), {}, marked('a-message'));
+
+        expect(screen.queryByText('Unread')).toBeNull();
     });
 
     it('recognises a sender by their initials, which is what a conversation of several people is scanned down', () => {

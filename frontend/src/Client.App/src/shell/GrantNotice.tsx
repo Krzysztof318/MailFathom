@@ -17,6 +17,7 @@ import type { ClientCapability } from './capabilities';
 const capabilityNotices: Readonly<Record<ClientCapability, MessageKey>> = {
     readMail: 'grant.readMail',
     askMail: 'grant.askMail',
+    markMailRead: 'grant.markMailRead',
 };
 
 export function GrantNotice({ withheld }: { readonly withheld: readonly ClientCapability[] }) {

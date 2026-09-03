@@ -8,11 +8,18 @@ namespace MailFathom.Application.Preferences;
 /// <param name="TelemetryEnabled">Whether this deployment may be told what the person's client is doing.</param>
 /// <param name="Theme">What the client is painted in once a session exists.</param>
 /// <param name="OpenMailInTabs">Whether opening a message opens a tab rather than replacing what is on the screen.</param>
+/// <param name="MarkReadOnOpen">Whether opening a message in the client marks it read on the owner's own mail server.</param>
 /// <remarks>
 /// <para>
-/// A closed set of three rather than a settings service. Each of them says how somebody wants to work rather than what
+/// A closed set of four rather than a settings service. Each of them says how somebody wants to work rather than what
 /// the screen in front of them is like, which is why they belong to the person and not to the browser profile or the
-/// desktop install they happened to set them in — and why a fourth is added when there is a fourth to add.
+/// desktop install they happened to set them in — and why a fifth is added when there is a fifth to add.
+/// </para>
+/// <para>
+/// Marking read is here rather than on the mail account for the reason
+/// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0026-marking-a-message-read-when-a-person-opens-it-in-the-client.md">ADR 0026</see>
+/// gives: read state is what must not fragment between the machines one person reads on, so it covers every account
+/// that owner reads and is not an operator's key.
 /// </para>
 /// <para>
 /// It is deliberately not part of the owner record. That document is configuration, binds strictly against the rules a
@@ -25,14 +32,19 @@ namespace MailFathom.Application.Preferences;
 /// rather than under one an administrator maintains for them.
 /// </para>
 /// </remarks>
-public sealed record ClientPreferences(bool TelemetryEnabled, ClientThemeChoice Theme, bool OpenMailInTabs)
+public sealed record ClientPreferences(
+    bool TelemetryEnabled,
+    ClientThemeChoice Theme,
+    bool OpenMailInTabs,
+    bool MarkReadOnOpen)
 {
     /// <summary>Gets what a person who has set nothing is answered with.</summary>
     /// <remarks>
     /// Telemetry on, because the switch withdraws a default this deployment already applies rather than granting one,
     /// and a stored answer that has never been written is not a refusal. The theme follows the machine, which is what
     /// the client resolves on the device before there is a session to read this at all. Tabs are off, because a person
-    /// who has not asked for them is reading one message at a time.
+    /// who has not asked for them is reading one message at a time. Marking read is on, because every mail client the
+    /// owner already uses does it and a client that leaves their read state behind is one they keep another beside.
     /// </remarks>
-    public static ClientPreferences Unset { get; } = new(true, ClientThemeChoice.System, false);
+    public static ClientPreferences Unset { get; } = new(true, ClientThemeChoice.System, false, true);
 }

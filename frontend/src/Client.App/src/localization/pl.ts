@@ -282,6 +282,8 @@ export const pl: Catalogue = {
         'To poświadczenie nie może odczytywać poczty w tym wdrożeniu, więc nie pokazujemy żadnej skrzynki ani wiadomości. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
     'grant.askMail':
         'To poświadczenie nie może zadawać pytań Twojej poczcie w tym wdrożeniu, więc nie oferujemy pytania. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
+    'grant.markMailRead':
+        'To poświadczenie nie może zmieniać flag na Twoim serwerze poczty, więc otwarcie wiadomości pozostawia ją tam nieprzeczytaną, a klient pokazuje to, co serwer zgłosił ostatnio. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
 
     'failure.unauthenticated': 'brak uwierzytelnienia',
     'failure.unauthorized': 'brak uprawnień',

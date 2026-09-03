@@ -23,7 +23,7 @@ namespace MailFathom.Host.UnitTests.Api;
 /// </summary>
 public sealed class ClientPreferencesEndpointTests
 {
-    private static readonly ClientPreferences Chosen = new(false, ClientThemeChoice.Dark, true);
+    private static readonly ClientPreferences Chosen = new(false, ClientThemeChoice.Dark, true, false);
 
     [Fact]
     public async Task ReadAsync_APersonWhoHasSetSomething_HandsThemWhatTheySet()
@@ -43,11 +43,12 @@ public sealed class ClientPreferencesEndpointTests
         Assert.False(preferences.TelemetryEnabled);
         Assert.Equal("dark", preferences.Theme);
         Assert.True(preferences.OpenMailInTabs);
+        Assert.False(preferences.MarkReadOnOpen);
     }
 
     /// <summary>A first run is a screen rather than an error, so every preference is answered whether or not it was ever set.</summary>
     [Fact]
-    public async Task ReadAsync_APersonWhoHasSetNothing_AnswersTelemetryOnTheMachinesThemeAndNoTabs()
+    public async Task ReadAsync_APersonWhoHasSetNothing_AnswersTelemetryOnTheMachinesThemeNoTabsAndMarkingRead()
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
@@ -64,6 +65,7 @@ public sealed class ClientPreferencesEndpointTests
         Assert.True(preferences.TelemetryEnabled);
         Assert.Equal("system", preferences.Theme);
         Assert.False(preferences.OpenMailInTabs);
+        Assert.True(preferences.MarkReadOnOpen);
     }
 
     /// <summary>The row is one only this deployment writes, so a reader learns what to do about it and nothing about what it held.</summary>
@@ -98,7 +100,7 @@ public sealed class ClientPreferencesEndpointTests
         // Act
         var result = await ClientPreferencesEndpoint.SaveAsync(
             SignedIn(store),
-            new ClientPreferencesRequest(false, "dark", true),
+            new ClientPreferencesRequest(false, "dark", true, false),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -126,7 +128,7 @@ public sealed class ClientPreferencesEndpointTests
         // Assert
         await store.Received(1).SaveAsync(
             SyntheticMailOwner.Deployment,
-            new ClientPreferences(true, ClientThemeChoice.Light, false),
+            new ClientPreferences(true, ClientThemeChoice.Light, false, true),
             Arg.Any<CancellationToken>());
     }
 
@@ -142,7 +144,7 @@ public sealed class ClientPreferencesEndpointTests
         // Act
         var result = await ClientPreferencesEndpoint.SaveAsync(
             SignedIn(store),
-            new ClientPreferencesRequest(true, "system", false),
+            new ClientPreferencesRequest(true, "system", false, true),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -192,7 +194,7 @@ public sealed class ClientPreferencesEndpointTests
     {
         // Act
         var request = JsonSerializer.Deserialize<ClientPreferencesRequest>(
-            """{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true}""",
+            """{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true,"markReadOnOpen":false}""",
             WebFormat);
 
         // Assert

@@ -99,7 +99,9 @@ per provider here:
   [the folders, and what each service calls them](#the-folders-and-what-each-service-calls-them) what you are naming.
 - **Reading never marks mail read.** MailFathom does not set the remote `\Seen` flag while synchronizing, reconciling,
   fetching content, or answering a tool call — the sessions those run on hold no operation capable of writing a flag.
-  If mail is turning up read at your service, it is another client or a rule at the service, not this one.
+  The flag moves only where somebody asked for it: a rule you wrote, the `set_mail_flags` tool, or your opening a
+  message in MailFathom's own client. If mail is turning up read at your service and none of those was it, it is
+  another client or a rule at the service, not this one.
   [Marking mail read is an act, never a side effect of reading](../features/imap-synchronization.md#marking-mail-read-is-an-act-never-a-side-effect-of-reading)
   states the guarantee and its one deliberate exception.
 - **Whether `"Mode": "Push"` does anything is the server's answer, not a setting.** Push needs the `IDLE` extension, and

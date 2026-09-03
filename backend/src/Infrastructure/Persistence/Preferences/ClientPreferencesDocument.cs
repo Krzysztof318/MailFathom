@@ -12,6 +12,7 @@ namespace MailFathom.Infrastructure.Persistence.Preferences;
 /// <param name="TelemetryEnabled">What they said about telemetry, or nothing where they never said.</param>
 /// <param name="Theme">What they chose the client to be painted in, or nothing where they never chose.</param>
 /// <param name="OpenMailInTabs">What they said about tabs, or nothing where they never said.</param>
+/// <param name="MarkReadOnOpen">What they said about opening a message marking it read, or nothing where they never said.</param>
 /// <remarks>
 /// <para>
 /// Sparse, and every member is therefore optional: a key the document does not carry reads as that preference's own
@@ -33,7 +34,8 @@ namespace MailFathom.Infrastructure.Persistence.Preferences;
 internal sealed record ClientPreferencesDocument(
     bool? TelemetryEnabled,
     ClientThemeChoice? Theme,
-    bool? OpenMailInTabs)
+    bool? OpenMailInTabs,
+    bool? MarkReadOnOpen)
 {
     /// <summary>How the column is written and read, which is fixed here rather than inherited from a host's own options.</summary>
     /// <remarks>
@@ -59,7 +61,8 @@ internal sealed record ClientPreferencesDocument(
         var document = new ClientPreferencesDocument(
             preferences.TelemetryEnabled,
             preferences.Theme,
-            preferences.OpenMailInTabs);
+            preferences.OpenMailInTabs,
+            preferences.MarkReadOnOpen);
 
         return JsonSerializer.Serialize(document, StoredFormat);
     }
@@ -79,6 +82,7 @@ internal sealed record ClientPreferencesDocument(
         return new ClientPreferences(
             document.TelemetryEnabled ?? ClientPreferences.Unset.TelemetryEnabled,
             document.Theme ?? ClientPreferences.Unset.Theme,
-            document.OpenMailInTabs ?? ClientPreferences.Unset.OpenMailInTabs);
+            document.OpenMailInTabs ?? ClientPreferences.Unset.OpenMailInTabs,
+            document.MarkReadOnOpen ?? ClientPreferences.Unset.MarkReadOnOpen);
     }
 }

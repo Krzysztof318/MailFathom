@@ -1036,8 +1036,10 @@ list destructive.
 
 **Nothing on this surface sets `\Seen` implicitly.** Reading a message does not mark it read anywhere — not the message
 route, not the body route, not the attachment route. Marking a message read is a flag change submitted here and nothing
-else; [ADR 0026](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0026-marking-a-message-read-when-a-person-opens-it-in-the-client.md)
-is what decides when the client submits one on a person's behalf.
+else. What MailFathom's own client does with that is
+[ADR 0026](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0026-marking-a-message-read-when-a-person-opens-it-in-the-client.md)'s
+answer rather than this route's: a person opening a message has the client submit one change here, unless they turned
+[`markReadOnOpen`](#the-preferences-routes) off or the credential was never granted `mailfathom.mail.flags.write`.
 
 **A move names the folder by its alias**, exactly as the folders route publishes it, rather than by its place on the
 server: an alias keeps its meaning when the server renames or recreates the folder behind it.
@@ -1235,19 +1237,30 @@ and somebody who set the client up the way they work should not have to set it u
 | `POST /api/client/preferences` | Replaces all of them, as one document |
 
 ```json
-{ "telemetryEnabled": true, "theme": "system", "openMailInTabs": false }
+{ "telemetryEnabled": true, "theme": "system", "openMailInTabs": false, "markReadOnOpen": true }
 ```
 
-**It holds three preferences and nothing else.** Whether this deployment may be told what the person's client is doing;
-what the client is painted in, which is `system`, `light`, or `dark`; and whether opening a message opens a tab rather
-than replacing what is on the screen. Each of them says how somebody wants to work, which is why it belongs to the
+**It holds four preferences and nothing else.** Whether this deployment may be told what the person's client is doing;
+what the client is painted in, which is `system`, `light`, or `dark`; whether opening a message opens a tab rather
+than replacing what is on the screen; and whether opening a message marks it read on the person's own mail server. Each
+of them says how somebody wants to work, which is why it belongs to the
 person. The language does not, and stays on the device: it is resolved for somebody who has not signed in and may never
 get a session. Neither does the width a person drags the message list to, which describes the screen in front of them.
 
-**Unset reads as telemetry on, the theme following the machine, and tabs off.** A person who has set nothing is
+**Unset reads as telemetry on, the theme following the machine, tabs off, and marking read on.** A person who has set
+nothing is
 answered a document rather than a refusal, so a first run draws a screen. The theme is still resolved on the device
 before sign-in — the client cannot wait on the network to paint itself, and there is no session to read this over above
 the sign-in screen — and what this answers replaces that device value once a session exists.
+
+**`markReadOnOpen` covers every account that person reads, and turning it off stores no read state instead.** It is one
+value rather than one per mailbox because read state is what must not differ between the machines somebody reads on, and
+a client whose owner has turned it off shows what their mail server last reported and remembers no reading of its own.
+It governs opening a message and nothing else: marking a message read or unread deliberately, through the flag
+mutations above, is unaffected by it.
+[ADR 0026](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0026-marking-a-message-read-when-a-person-opens-it-in-the-client.md)
+holds the reasoning, including why an operator's lever here is
+[`mailfathom.mail.flags.write`](permissions.md#the-published-set) rather than a key of their own.
 
 **A write states the whole document.** It is a closed set rather than a patch: a key nothing binds is refused rather
 than stored, a theme this deployment does not publish is refused naming the three that are, and a preference the body

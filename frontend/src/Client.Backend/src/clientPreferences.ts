@@ -26,6 +26,9 @@ export interface ClientPreferences {
     readonly telemetryEnabled: boolean;
     readonly theme: ClientThemePreference;
     readonly openMailInTabs: boolean;
+
+    /** Whether opening a message marks it read on the person's own mail server, across every account they read. */
+    readonly markReadOnOpen: boolean;
 }
 
 /**
@@ -38,12 +41,13 @@ export const unsetClientPreferences: ClientPreferences = {
     telemetryEnabled: true,
     theme: 'system',
     openMailInTabs: false,
+    markReadOnOpen: true,
 };
 
 /**
  * The most of one preferences answer this package reads before refusing it.
  *
- * The document is three scalars, so this is far above anything the deployment will legitimately send and far below
+ * The document is four scalars, so this is far above anything the deployment will legitimately send and far below
  * anything worth buffering. It is the same order the write route bounds its request body at, for the same reason:
  * what the bound guards against is an answer that was never a preferences document.
  */
@@ -122,8 +126,13 @@ function parsePreferences(body: string): ClientPreferences | null {
     const telemetryEnabled = record['telemetryEnabled'];
     const theme = record['theme'];
     const openMailInTabs = record['openMailInTabs'];
+    const markReadOnOpen = record['markReadOnOpen'];
 
-    if (typeof telemetryEnabled !== 'boolean' || typeof openMailInTabs !== 'boolean') {
+    if (
+        typeof telemetryEnabled !== 'boolean' ||
+        typeof openMailInTabs !== 'boolean' ||
+        typeof markReadOnOpen !== 'boolean'
+    ) {
         return null;
     }
 
@@ -131,7 +140,7 @@ function parsePreferences(body: string): ClientPreferences | null {
         return null;
     }
 
-    return { telemetryEnabled, theme, openMailInTabs };
+    return { telemetryEnabled, theme, openMailInTabs, markReadOnOpen };
 }
 
 function isThemePreference(value: unknown): value is ClientThemePreference {

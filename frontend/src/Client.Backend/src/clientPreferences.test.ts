@@ -12,7 +12,8 @@ const session: ClientSession = {
     authorization: 'Basic dGVzdA==',
 };
 
-const storedBody = JSON.stringify({ telemetryEnabled: false, theme: 'dark', openMailInTabs: true });
+const stored = { telemetryEnabled: false, theme: 'dark', openMailInTabs: true, markReadOnOpen: false } as const;
+const storedBody = JSON.stringify(stored);
 
 // The transport is the network boundary and the whole of what a test here fakes. Neither route reads a header off an
 // answer, so each helper supplies the empty set.
@@ -47,13 +48,10 @@ describe('readClientPreferences', () => {
         expect(requests[0]?.headers['Authorization']).toBe('Basic dGVzdA==');
     });
 
-    it('reads the three preferences the deployment answered', async () => {
+    it('reads the four preferences the deployment answered', async () => {
         const answer = await readClientPreferences(session, answering({ status: 200, body: storedBody }));
 
-        expect(answer).toStrictEqual({
-            outcome: 'read',
-            value: { telemetryEnabled: false, theme: 'dark', openMailInTabs: true },
-        });
+        expect(answer).toStrictEqual({ outcome: 'read', value: stored });
     });
 
     it('reads a person who has set nothing as the unset answers rather than as an absence', async () => {
@@ -88,6 +86,10 @@ describe('readClientPreferences', () => {
         ['a theme that is not a string', JSON.stringify({ ...unsetClientPreferences, theme: 3 })],
         ['a switch that is not a boolean', JSON.stringify({ ...unsetClientPreferences, openMailInTabs: 'yes' })],
         ['a preference the answer left out', JSON.stringify({ theme: 'dark', openMailInTabs: false })],
+        [
+            'an answer from a deployment older than one of the preferences',
+            JSON.stringify({ telemetryEnabled: true, theme: 'dark', openMailInTabs: false }),
+        ],
     ])('refuses %s as unreadable rather than reading a document with a hole in it', async (_, body) => {
         const answer = await readClientPreferences(session, answering({ status: 200, body }));
 
@@ -99,20 +101,12 @@ describe('writeClientPreferences', () => {
     it('states the whole document as JSON on the preferences route', async () => {
         const { transport, requests } = recording({ status: 200, body: storedBody });
 
-        await writeClientPreferences(session, transport, {
-            telemetryEnabled: false,
-            theme: 'dark',
-            openMailInTabs: true,
-        });
+        await writeClientPreferences(session, transport, stored);
 
         expect(requests[0]?.method).toBe('POST');
         expect(requests[0]?.path).toBe('https://mail.example.invalid/api/client/preferences');
         expect(requests[0]?.headers['Content-Type']).toBe('application/json');
-        expect(JSON.parse(requests[0]?.body ?? '')).toStrictEqual({
-            telemetryEnabled: false,
-            theme: 'dark',
-            openMailInTabs: true,
-        });
+        expect(JSON.parse(requests[0]?.body ?? '')).toStrictEqual(stored);
     });
 
     it('answers with what is now stored', async () => {
@@ -122,10 +116,7 @@ describe('writeClientPreferences', () => {
             unsetClientPreferences,
         );
 
-        expect(answer).toStrictEqual({
-            outcome: 'read',
-            value: { telemetryEnabled: false, theme: 'dark', openMailInTabs: true },
-        });
+        expect(answer).toStrictEqual({ outcome: 'read', value: stored });
     });
 
     it('reports a deployment holding no record for the caller as unavailable', async () => {

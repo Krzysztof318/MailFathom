@@ -17,6 +17,7 @@ import { SecondaryButton } from '../controls/SecondaryButton';
 import { SenderAvatar } from '../controls/SenderAvatar';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { useReadMarking } from '../readMarking/useReadMarking';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { Message } from '../messageBody/Message';
 import { Attachment } from './Attachment';
@@ -33,8 +34,11 @@ import { SenderVerdict } from './SenderVerdict';
 // expensive, so the header block is drawn the moment the first answers and the body says it is still reading underneath
 // it; that is this screen's partial state rather than a gap in it.
 //
-// Nothing here writes to a mailbox. Both reads are `GET`s against the local copy, so opening a message sets no remote
-// flag and tells no mail server that anybody read anything.
+// Neither of those reads writes to a mailbox, and that is the property ADR 0007 bought as a property of the types: both
+// are `GET`s against the local copy, and the route that serves a body holds no write session to reach a mail server
+// with. What does mark the message read is a mutation of its own, authored by the person having opened it and submitted
+// once the body is on the screen — ADR 0026 — so a defect in this pane cannot become a defect that writes to somebody's
+// mailbox.
 
 const failureLabels: Readonly<Record<ClientFailureReason, MessageKey>> = {
     unauthenticated: 'failure.unauthenticated',
@@ -119,6 +123,7 @@ function OpenMessage({
 }) {
     const { locale, translate } = useLocalization();
     const { revise } = useWorkspace();
+    const { markRead } = useReadMarking();
     const [read, setRead] = useState<Read>({ storedEmailId, attempt: 0 });
     const [answer, setAnswer] = useState<Answered | null>(null);
     const [connected, setConnected] = useState(online);
@@ -319,7 +324,22 @@ function OpenMessage({
                         with the pointer settles on the release and one made with the keyboard on the key coming back
                         up, and both of them are events this region already receives. */}
                     <div ref={body} onKeyUp={capture} onMouseUp={capture}>
-                        <Message session={session} transport={transport} storedEmailId={storedEmailId} />
+                        {/* The body being drawn is what opening this message means, so it is what marks it read. The
+                            description above already says which account and folder the message is counted in, which is
+                            what a folder's unread count is corrected by. */}
+                        <Message
+                            session={session}
+                            transport={transport}
+                            storedEmailId={storedEmailId}
+                            onBodyDrawn={() => {
+                                markRead({
+                                    storedEmailId: message.storedEmailId,
+                                    account: message.account,
+                                    folder: message.folder,
+                                    unread: message.unread,
+                                });
+                            }}
+                        />
                     </div>
 
                     {message.attachments.length === 0 ? null : (

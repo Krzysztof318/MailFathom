@@ -263,7 +263,7 @@ async function servedByADeployment(page: Page): Promise<void> {
     // about the two preferences held on the deployment is that a choice made in one session is in force in the next,
     // and a route answering a fixed document would prove the read alone while quietly passing a client that wrote
     // nothing at all.
-    let held = { telemetryEnabled: true, theme: 'system', openMailInTabs: false };
+    let held = { telemetryEnabled: true, theme: 'system', openMailInTabs: false, markReadOnOpen: true };
 
     await page.route('**/api/client/preferences', (route) => {
         if (route.request().method() === 'POST') {

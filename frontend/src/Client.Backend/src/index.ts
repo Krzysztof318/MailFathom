@@ -85,6 +85,13 @@ export {
     type MailSenderVerdict,
 } from './mailMessage';
 export {
+    mailFlagMutationsRoute,
+    markMailRead,
+    mostMessagesPerMutation,
+    type MailMutationOutcome,
+    type MailMutationResult,
+} from './mailMutations';
+export {
     longestSearchPage,
     longestSearchText,
     mailSearchRoute,

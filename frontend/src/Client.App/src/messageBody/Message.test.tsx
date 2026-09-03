@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { StrictMode } from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { ClientResponse, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
@@ -96,6 +96,22 @@ function readingInAConversation() {
                 <Message session={session} transport={transport} storedEmailId="stub-message" quotedHistoryOnRequest />
             </LocalizationProvider>
         </StrictMode>,
+    );
+}
+
+/** The same message, with somebody listening for its words having reached the screen. */
+function readingReported(onBodyDrawn: () => void, storedEmailId = 'stub-message') {
+    return (
+        <StrictMode>
+            <LocalizationProvider>
+                <Message
+                    session={session}
+                    transport={transport}
+                    storedEmailId={storedEmailId}
+                    onBodyDrawn={onBodyDrawn}
+                />
+            </LocalizationProvider>
+        </StrictMode>
     );
 }
 
@@ -272,5 +288,69 @@ describe('Message', () => {
 
         expect(await screen.findByText('The message it answers.')).toBeDefined();
         expect(screen.queryByText('The conversation this message quoted')).toBeNull();
+    });
+
+    // Opening a message is its words having reached the screen, which is what ADR 0026 marks read on. It is said once
+    // however many times the effect runs: `StrictMode` invokes it twice on mount, and saying it twice would be this
+    // client reporting a message opened that nobody opened again.
+    it('says the body was drawn once the message is on the screen, and says it once', async () => {
+        const drawn: number[] = [];
+
+        render(readingReported(() => drawn.push(1)));
+        await screen.findByText('A drawn message.');
+
+        await waitFor(() => {
+            expect(drawn).toHaveLength(1);
+        });
+    });
+
+    it('says nothing for a read the reader moved past before it answered', () => {
+        answer = () => new Promise<Answer>(() => undefined);
+
+        const drawn: number[] = [];
+        const opened = render(readingReported(() => drawn.push(1)));
+
+        opened.unmount();
+
+        expect(drawn).toStrictEqual([]);
+    });
+
+    it('says nothing for a message that could not be read, nothing having been put in front of anybody', async () => {
+        answering({ status: 503, body: '' });
+
+        const drawn: number[] = [];
+
+        render(readingReported(() => drawn.push(1)));
+        await screen.findByText('The message could not be read: unavailable.');
+
+        expect(drawn).toStrictEqual([]);
+    });
+
+    // Asking for the sender's pictures re-reads the same message, and the reader did not open it twice.
+    it('says nothing again when the reader asks for the sender’s pictures', async () => {
+        const drawn: number[] = [];
+
+        render(readingReported(() => drawn.push(1)));
+        await screen.findByText('A drawn message.');
+        answering(bodyAnswering(true));
+        fireEvent.click(screen.getByRole('button', { name: 'Load pictures from the sender' }));
+        await screen.findByText('Pictures are being loaded from the sender for this message.');
+
+        await waitFor(() => {
+            expect(drawn).toHaveLength(1);
+        });
+    });
+
+    it('says it again for the next message the reader opens', async () => {
+        const drawn: number[] = [];
+        const opened = render(readingReported(() => drawn.push(1)));
+
+        await screen.findByText('A drawn message.');
+        opened.rerender(readingReported(() => drawn.push(1), 'another-message'));
+        await screen.findByText('A drawn message.');
+
+        await waitFor(() => {
+            expect(drawn).toHaveLength(2);
+        });
     });
 });

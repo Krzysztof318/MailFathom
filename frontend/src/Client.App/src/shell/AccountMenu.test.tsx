@@ -22,6 +22,7 @@ function mailbox(id: string, displayName: string): MailAccount {
 
 const settings: ClientPreferencesInForce = {
     openMailInTabs: false,
+    markReadOnOpen: true,
     notStated: false,
     chooseTheme: () => undefined,
     chooseTabMode: () => undefined,

@@ -7,6 +7,12 @@ import { describe, expect, it } from 'vitest';
 import type { ClientRequest, ClientResponse, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
 import { AttachmentDeliveryContext, type AttachmentDelivery } from '../deployment/attachmentDelivery';
 import { LocalizationProvider } from '../localization/Localization';
+import {
+    ReadMarkingContext,
+    nothingMarkedRead,
+    type MessageOpened,
+    type ReadMarking,
+} from '../readMarking/useReadMarking';
 import { IntentField } from '../shell/IntentField';
 import { LinkOpenerContext } from '../shellOperations/linkOpener';
 import { WorkspaceProvider } from '../workspace/Workspace';
@@ -82,23 +88,41 @@ function drawing(
     storedEmailId: string | null = messageId,
     online = true,
     deliver: AttachmentDelivery = deliversNothing,
+    marking: ReadMarking = nothingMarkedRead,
 ): void {
     render(
         <LocalizationProvider>
             <WorkspaceProvider>
                 <LinkOpenerContext value={() => Promise.resolve()}>
                     <AttachmentDeliveryContext value={deliver}>
-                        <ReadingPane
-                            session={session}
-                            transport={transport}
-                            storedEmailId={storedEmailId}
-                            online={online}
-                        />
+                        <ReadMarkingContext value={marking}>
+                            <ReadingPane
+                                session={session}
+                                transport={transport}
+                                storedEmailId={storedEmailId}
+                                online={online}
+                            />
+                        </ReadMarkingContext>
                     </AttachmentDeliveryContext>
                 </LinkOpenerContext>
             </WorkspaceProvider>
         </LocalizationProvider>,
     );
+}
+
+/** A client that would mark read, recording what the drawn body said was opened rather than submitting it. */
+function recordingMarkings(): { marking: ReadMarking; opened: MessageOpened[] } {
+    const opened: MessageOpened[] = [];
+
+    return {
+        opened,
+        marking: {
+            marked: new Map(),
+            markRead: (message) => {
+                opened.push(message);
+            },
+        },
+    };
 }
 
 describe('ReadingPane', () => {
@@ -360,6 +384,33 @@ describe('ReadingPane selection', () => {
         await screen.findByRole('heading', { name: 'Quarterly invoice' });
 
         expect(screen.queryByRole('button', { name: 'Show the whole conversation' })).toBeNull();
+    });
+
+    // Opening a message is its words having reached the pane, and where it stands travels with it, because the folder
+    // whose count has to answer for the marking is the folder the deployment counted the message in.
+    it('says which message was opened, and where in the mailbox it stands', async () => {
+        asked.length = 0;
+
+        const { marking, opened } = recordingMarkings();
+
+        drawing(deploymentDescribing(), messageId, true, deliversNothing, marking);
+        await screen.findByText('The invoice is attached.');
+
+        await waitFor(() => {
+            expect(opened).toStrictEqual([
+                { storedEmailId: messageId, account: 'work', folder: 'INBOX', unread: true },
+            ]);
+        });
+    });
+
+    it('says nothing was opened while the message is still being read', () => {
+        asked.length = 0;
+
+        const { marking, opened } = recordingMarkings();
+
+        drawing(answersNothing, messageId, true, deliversNothing, marking);
+
+        expect(opened).toStrictEqual([]);
     });
 });
 
