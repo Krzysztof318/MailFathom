@@ -57,6 +57,33 @@ export {
     type MailAccountDirectory,
     type MailSynchronizationState,
 } from './mailAccounts';
+// `mailDraftAttachmentUploadRequest` is deliberately unpublished, for the reason the download's own request is:
+// composed by a caller it would carry no trace context and leave no record. `stageMailDraftAttachment` is how a file
+// is staged.
+export {
+    discardMailDraft,
+    mailDraftAttachmentRoute,
+    mailDraftAttachmentsRoute,
+    mailDraftRoute,
+    mailDraftSendRoute,
+    mailDraftsRoute,
+    mostAttachmentsInDraft,
+    mostRecipientsInDraft,
+    reviseMailDraft,
+    sendMailDraft,
+    stageMailDraftAttachment,
+    unstageMailDraftAttachment,
+    writeMailDraft,
+    type MailDraft,
+    type MailDraftAnswer,
+    type MailDraftComposition,
+    type MailDraftRecipient,
+    type MailRecipientRole,
+    type MailSendOutcome,
+    type MailSendRefusal,
+    type MailStagedAttachment,
+} from './mailDrafts';
+export { mailOutboxCancellationRoute, withdrawOutgoingMail, type MailSendWithdrawal } from './mailOutbox';
 export {
     mailFoldersRoute,
     readMailFolders,

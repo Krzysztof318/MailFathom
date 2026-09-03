@@ -5,6 +5,7 @@
 import { StrictMode, type ReactNode } from 'react';
 import { render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { ComposingContext } from '../composer/useComposing';
 import { LocalizationProvider } from '../localization/Localization';
 import type { Space as SpaceName } from '../routing/spaces';
 import { WorkspaceProvider } from '../workspace/Workspace';
@@ -21,21 +22,32 @@ const handedTheStatus = 'The connection this space was handed.';
 // Every case here renders under `StrictMode`, which is what `main.tsx` mounts and what makes React invoke an effect
 // twice on the first mount. A focus rule written against "has this effect run before" passes without it and moves
 // focus on landing with it, so the wrapper is the point of the test rather than a detail of the harness.
+// The toolbar and the corner control both ask whether writing a message is offered. Nothing here is about writing one,
+// so nothing offers it and both stand as the planned controls they were.
+const nothingBeingWritten = {
+    offered: false,
+    opening: null,
+    compose: () => undefined,
+    close: () => undefined,
+};
+
 function inStrictMode(space: SpaceName): ReactNode {
     return (
         <StrictMode>
             <LocalizationProvider>
                 <WorkspaceProvider>
-                    <Space
-                        space={space}
-                        intent={<p>{handedTheIntent}</p>}
-                        status={<p>{handedTheStatus}</p>}
-                        folders={<p>{handedTheFolders}</p>}
-                        list={<p>{handedTheList}</p>}
-                        mail={<p>{handedToMail}</p>}
-                        tabs={<p>{handedTheTabs}</p>}
-                        person="reader"
-                    />
+                    <ComposingContext value={nothingBeingWritten}>
+                        <Space
+                            space={space}
+                            intent={<p>{handedTheIntent}</p>}
+                            status={<p>{handedTheStatus}</p>}
+                            folders={<p>{handedTheFolders}</p>}
+                            list={<p>{handedTheList}</p>}
+                            mail={<p>{handedToMail}</p>}
+                            tabs={<p>{handedTheTabs}</p>}
+                            person="reader"
+                        />
+                    </ComposingContext>
                 </WorkspaceProvider>
             </LocalizationProvider>
         </StrictMode>

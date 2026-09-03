@@ -10,6 +10,7 @@ import { App } from './App';
 import type { ClientDeployment } from './deployment/adoptedDeployment';
 import { telemetryKey } from './device/deviceStore';
 import { AttachmentDeliveryContext, type AttachmentDelivery } from './deployment/attachmentDelivery';
+import { AttachmentUploadContext, type AttachmentUpload } from './deployment/attachmentUpload';
 import type { PortraitExchange } from './deployment/portraitExchange';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { LocalizationProvider } from './localization/Localization';
@@ -372,6 +373,7 @@ function deploymentDrawingAConversation(): DeploymentTransport {
 
 /** A delivery nobody in these tests asks for, supplied because a row below the frame reads one from the context. */
 const deliversNothing: AttachmentDelivery = () => Promise.resolve('delivered');
+const uploadsNothing: AttachmentUpload = () => Promise.resolve(null);
 
 /** A deployment answering every route the same way, which is how a refusal to sign anybody in is stated. */
 function deploymentRefusing(answer: Answer): DeploymentTransport {
@@ -478,15 +480,17 @@ function renderApp(
                     <WorkspaceProvider>
                         <LinkOpenerContext value={() => Promise.resolve()}>
                             <AttachmentDeliveryContext value={deliversNothing}>
-                                <TelemetryContext value={telemetry}>
-                                    <App
-                                        credentials={credentials}
-                                        deployment={deployment}
-                                        portraits={drawsNobody}
-                                        send={send}
-                                        signedInWith={signedInWith}
-                                    />
-                                </TelemetryContext>
+                                <AttachmentUploadContext value={uploadsNothing}>
+                                    <TelemetryContext value={telemetry}>
+                                        <App
+                                            credentials={credentials}
+                                            deployment={deployment}
+                                            portraits={drawsNobody}
+                                            send={send}
+                                            signedInWith={signedInWith}
+                                        />
+                                    </TelemetryContext>
+                                </AttachmentUploadContext>
                             </AttachmentDeliveryContext>
                         </LinkOpenerContext>
                     </WorkspaceProvider>
@@ -968,6 +972,28 @@ describe('App session', () => {
             expect(routesAsked()).toEqual(['https://mail.example.invalid/api/client/session']);
         });
         expect(screen.queryByText(/The accounts could not be read/)).toBeNull();
+    });
+
+    it('hands the keyboard back to what asked for a message once the message is closed', async () => {
+        renderApp(
+            servedFrom,
+            heldCredential,
+            granting('mailfathom.mail.read', 'mailfathom.mail.drafts.write', 'mailfathom.mail.send'),
+        );
+        await framed();
+
+        const asks = screen.getByRole('button', { name: 'New message' });
+
+        asks.focus();
+        fireEvent.click(asks);
+
+        await screen.findByLabelText('Message');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Close the message' }));
+
+        await waitFor(() => {
+            expect(document.activeElement).toBe(screen.getByRole('button', { name: 'New message' }));
+        });
     });
 
     it('answers an address naming a space this credential may not open with one it may', async () => {

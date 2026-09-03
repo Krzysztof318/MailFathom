@@ -221,6 +221,85 @@ export const pl: Catalogue = {
     'mail.listWidthHint':
         'Przeciągnij, aby zmienić szerokość listy. Dwuklik lub klawisz Home przywraca szerokość początkową.',
 
+    'compose.titleNew': 'Nowa wiadomość',
+    'compose.titleReply': 'Odpowiedź',
+    'compose.titleReplyAll': 'Odpowiedź do wszystkich',
+    'compose.titleForward': 'Przekazanie dalej',
+    'compose.close': 'Zamknij wiadomość',
+    'compose.reading': 'Odczytujemy wiadomość, na którą odpowiadasz…',
+    'compose.from': 'Od',
+    'compose.to': 'Do',
+    'compose.cc': 'DW',
+    'compose.bcc': 'UDW',
+    'compose.showCopies': 'Dopisz kopię lub ukrytą kopię',
+    'compose.copyHeaders': 'DW · UDW',
+    'compose.addRecipient': 'dodaj odbiorcę…',
+    'compose.removeRecipient': 'Usuń adres {address} z pola {header}',
+    'compose.notAnAddress': 'To jeszcze nie jest adres. Adres wygląda tak: ktos@example.com.',
+    'compose.alreadyAddressed': 'Adres {address} jest tu już wpisany.',
+    'compose.tooManyAddresses': 'Jedno pole przyjmuje najwyżej {count} adresów.',
+    'compose.subject': 'Temat',
+    'compose.subjectPlaceholder': 'Temat wiadomości',
+    'compose.subjectOfAnAnswer': 'Temat odpowiedzi zapisuje Twoje wdrożenie, więc nie edytujemy go tutaj.',
+    'compose.words': 'Treść',
+    'compose.wordsPlaceholder': 'Napisz wiadomość',
+    'compose.attach': 'Załącz',
+    'compose.attachedFiles': 'Załączone pliki',
+    'compose.removeFile': 'Usuń plik {name}',
+    'compose.saveDraft': 'Zapisz szkic',
+    'compose.shortcutSends': 'Ctrl+Enter wysyła',
+    'compose.send': 'Wyślij',
+    'compose.sendAnyway': 'Wyślij mimo to',
+    'compose.backToEditing': 'Wróć do pisania',
+    'compose.confirmQuestion': 'Wysłać tę wiadomość?',
+    'compose.confirmTo': 'Do: {addresses}',
+    'compose.confirmCc': 'Kopia do: {addresses}',
+    'compose.confirmBcc': 'Ukryta kopia do: {addresses}',
+    'compose.confirmNobody': 'Wiadomość nie ma adresata.',
+    'compose.confirmSubject': 'Temat: {subject}',
+    'compose.confirmNoSubject': 'brak',
+    'compose.cautionNoRecipient': 'Nikt nie jest wpisany jako adresat, więc nie ma dokąd jej wysłać.',
+    'compose.cautionNoSubject': 'Wiadomość pójdzie bez tematu.',
+    'compose.cautionNoWords': 'Wiadomość pójdzie bez treści.',
+    'compose.discardQuestion': 'Odrzucić tę wiadomość?',
+    'compose.discardExplanation':
+        'To, co zostało napisane, przepadnie razem ze szkicem, który trzyma dla niej Twoje wdrożenie.',
+    'compose.discard': 'Odrzuć',
+    'compose.saving': 'Zapisujemy szkic…',
+    'compose.saved': 'Szkic zapisany w Twoich szkicach.',
+    'compose.attaching': 'Załączamy plik {name}…',
+    'compose.sending': 'Wysyłamy…',
+    'compose.queued': 'Wiadomość czeka w kolejce do wysłania.',
+    'compose.withdraw': 'Wycofaj',
+    'compose.withdrawn': 'Wycofana, zanim poszła dalej.',
+    'compose.alreadyBeingSent': 'Wysyłka już trwa, więc nie dało się jej wycofać.',
+    'compose.pastRecall': 'Wiadomość została wysłana, więc nie da się jej wycofać.',
+    'compose.noSuchSend': 'Twoje wdrożenie nie prowadzi już tej wysyłki.',
+    'compose.offline':
+        'Ta maszyna jest bez sieci. To, co piszesz, zostaje tutaj, a zapisać lub wysłać można to, gdy sieć wróci.',
+    'compose.refusedSendingNotEnabled':
+        'To wdrożenie nie wysyła poczty. Osoba prowadząca wdrożenie może włączyć wysyłkę.',
+    'compose.refusedRecipient':
+        'Twoje wdrożenie odrzuciło jeden z adresów. Osoba prowadząca wdrożenie decyduje, na jakie adresy może iść poczta.',
+    'compose.refusedCeiling':
+        'Osiągnięto limit wydatków, więc nic nie wychodzi, dopóki okno, w którym jest liczony, się nie przewinie albo osoba prowadząca wdrożenie go nie podniesie.',
+    'compose.refusedContent':
+        'Kontrola treści odrzuciła to, co niesie ta wiadomość. Zmiana treści albo załączników jest tym, co to zmieni.',
+    'compose.refusedNotScanned':
+        'Części tej wiadomości nie dało się sprawdzić, więc nie została wysłana. Usunięcie tego, czego nie dało się odczytać, jest tym, co to zmieni.',
+    'compose.refusedScreeningUnavailable':
+        'Kontrola treści nie odpowiada, więc nic nie wychodzi, dopóki nie odpowie. Wiadomość nadal tu jest.',
+    'compose.refusedForAnotherReason':
+        'Twoje wdrożenie odmówiło wysłania. Osoba prowadząca wdrożenie odczyta powód z jego dziennika.',
+    'compose.failedUnauthenticated':
+        'Ten klient nie jest już zalogowany. Zaloguj się ponownie — to, co zostało napisane, nadal tu jest.',
+    'compose.failedUnauthorized':
+        'To poświadczenie nie może tego zrobić w tym wdrożeniu. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
+    'compose.failedUnavailable':
+        'Twoje wdrożenie nie odpowiedziało. To, co zostało napisane, zostaje tutaj; spróbuj ponownie.',
+    'compose.failedUnreadable':
+        'Twoje wdrożenie odpowiedziało, ale klient nie potrafił nic z tą odpowiedzią zrobić. To usterka warta zgłoszenia.',
+
     'tabs.strip': 'Co jest otwarte',
     'tabs.close': 'Zamknij: {title}',
     'tabs.closeAll': 'Zamknij wszystko, co jest otwarte',
@@ -351,6 +430,10 @@ export const pl: Catalogue = {
     'grant.markMailRead':
         'To poświadczenie nie może zmieniać flag na Twoim serwerze poczty, więc otwarcie wiadomości pozostawia ją tam nieprzeczytaną, a klient pokazuje to, co serwer zgłosił ostatnio. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
 
+    'grant.composeMail':
+        'To poświadczenie nie może zapisywać szkiców w tym wdrożeniu, więc nie oferujemy pisania wiadomości. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
+    'grant.sendMail':
+        'To poświadczenie nie może wysyłać poczty z tego wdrożenia, więc wiadomość można napisać i zapisać jako szkic, ale nie wysłać. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
     'failure.unauthenticated': 'brak uwierzytelnienia',
     'failure.unauthorized': 'brak uprawnień',
     'failure.unavailable': 'usługa niedostępna',

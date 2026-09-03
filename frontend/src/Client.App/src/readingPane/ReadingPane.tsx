@@ -22,7 +22,7 @@ import { useWorkspace } from '../workspace/useWorkspace';
 import { Message } from '../messageBody/Message';
 import { Attachment } from './Attachment';
 import { MessageHeaders } from './MessageHeaders';
-import { sizeOf } from './octets';
+import { sizeOf } from '../localization/octets';
 import { SenderVerdict } from './SenderVerdict';
 
 // Reading one message, which is the act everything else in this client exists to support and where the most is on screen
