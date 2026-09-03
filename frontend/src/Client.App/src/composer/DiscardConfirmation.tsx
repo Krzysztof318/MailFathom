@@ -2,7 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useId, useRef } from 'react';
+import { useRef } from 'react';
+import { Confirmation } from '../confirmation/Confirmation';
 import { Icon } from '../controls/Icon';
 import { useLocalization } from '../localization/useLocalization';
 
@@ -10,9 +11,12 @@ import { useLocalization } from '../localization/useLocalization';
 // wrote is destructive, so the question names what goes and offers the way out of losing it; a message with nothing in
 // it is closed without being asked about, because a confirmation for nothing is what teaches a reader to dismiss them.
 //
+// The question is `confirmation/Confirmation.tsx`, as every act that leaves the deployment is. Three ways out rather
+// than two is what makes this one worth asking at all: the way that gives the words up and the way that keeps them are
+// different acts, and offering only *cancel* and *discard* would put filing the draft behind a control that reads as
+// refusing the question.
+//
 // The control and the question are one component for the reason `SendConfirmation.tsx` gives about the same pairing.
-const wordsGo = 'discard';
-const wordsKept = 'keep';
 
 export function DiscardConfirmation({
     written,
@@ -30,7 +34,6 @@ export function DiscardConfirmation({
 }) {
     const { translate } = useLocalization();
     const asked = useRef<HTMLDialogElement>(null);
-    const question = useId();
 
     return (
         <>
@@ -50,60 +53,20 @@ export function DiscardConfirmation({
                 <Icon name="close" className="size-4.5" />
             </button>
 
-            <dialog
-                ref={asked}
-                aria-labelledby={question}
-                className="m-auto w-96 max-w-full rounded-3xl border border-line bg-panel p-5 text-text shadow-dialog backdrop:bg-scrim"
-                onClose={() => {
-                    if (asked.current?.returnValue === wordsGo) {
-                        onDiscard();
-                    }
-
-                    if (asked.current?.returnValue === wordsKept) {
-                        onKeep();
-                    }
-                }}
-            >
-                <div className="flex flex-col gap-3.5">
-                    <h2 id={question} className="text-xl font-semibold">
-                        {translate('compose.discardQuestion')}
-                    </h2>
-
+            <Confirmation
+                asked={asked}
+                mark="draft"
+                question={translate('compose.discardQuestion')}
+                consequence={
                     <p className="text-base text-muted text-pretty">{translate('compose.discardExplanation')}</p>
-
-                    <div className="flex flex-wrap justify-end gap-2">
-                        <button
-                            type="button"
-                            className="rounded-lg px-3.75 py-2 text-base text-text-soft transition hover:bg-hover"
-                            onClick={() => {
-                                asked.current?.close();
-                            }}
-                        >
-                            {translate('compose.backToEditing')}
-                        </button>
-
-                        <button
-                            type="button"
-                            className="rounded-lg border border-warning px-3.75 py-2 text-base text-warning-text transition hover:bg-warning-soft"
-                            onClick={() => {
-                                asked.current?.close(wordsGo);
-                            }}
-                        >
-                            {translate('compose.discard')}
-                        </button>
-
-                        <button
-                            type="button"
-                            className="rounded-lg bg-accent px-4 py-2 text-base font-semibold text-on-accent transition hover:opacity-90"
-                            onClick={() => {
-                                asked.current?.close(wordsKept);
-                            }}
-                        >
-                            {translate('compose.saveDraft')}
-                        </button>
-                    </div>
-                </div>
-            </dialog>
+                }
+                reversal={{ kind: 'permanent', said: translate('compose.discardIsFinal') }}
+                ways={[
+                    { said: translate('compose.backToEditing'), manner: 'back' },
+                    { said: translate('compose.discard'), manner: 'aside', run: onDiscard },
+                    { said: translate('compose.saveDraft'), manner: 'act', run: onKeep },
+                ]}
+            />
         </>
     );
 }

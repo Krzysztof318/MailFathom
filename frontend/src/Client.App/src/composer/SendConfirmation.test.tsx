@@ -61,6 +61,15 @@ describe('SendConfirmation', () => {
         expect(asked).toContain('Subject: Invoice');
     });
 
+    it('says the send can be taken back until the deployment has handed it on, rather than naming a period', () => {
+        drawConfirmation();
+        ask();
+
+        expect(screen.getByRole('dialog').textContent).toContain(
+            'until your deployment has handed it to the mail server',
+        );
+    });
+
     it('names no header nobody is written in', () => {
         drawConfirmation({ ...addressed, cc: [], bcc: [] });
         ask();

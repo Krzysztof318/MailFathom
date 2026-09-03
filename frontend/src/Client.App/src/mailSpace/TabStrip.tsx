@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { useRef, useState, type KeyboardEvent } from 'react';
+import { Confirmation } from '../confirmation/Confirmation';
 import { Icon } from '../controls/Icon';
 import type { IconName } from '../controls/icons';
 import type { MessageKey } from '../localization/en';
@@ -179,18 +180,16 @@ export function TabStrip({
 
 // Closing everything at once is the one act here that cannot be undone by pressing the thing again, so it is confirmed
 // and the confirmation says what it costs: how many tabs go, and — where one of them is a draft nobody has sent — that
-// the words in it go with them.
+// the words in it go with them. It is asked through `confirmation/Confirmation.tsx`, as every act that costs something
+// is, so what stays here is the count and the draft rather than a dialog of its own.
 //
-// The platform's own dialog, so the page behind it is inert, focus is held inside it, Escape leaves it, and leaving it
-// puts focus back on the control that opened it — four things none of which is written here. The control and the
-// question belong together for that last one: whether the dialog is open is the element's own state rather than a
-// second copy of it in React, so both answers leave through `close()` and the platform restores focus either way.
-// Which answer it was travels the way the platform carries it, in the return value.
+// The control and the question belong together because the dialog is the platform's own: whether it is open is the
+// element's state rather than a second copy of it in React, and leaving it by any route puts focus back on the control
+// that opened it.
 //
 // The design project draws the sentence about a draft unconditionally; it is said here only where a draft is actually
 // open, because a confirmation that names a consequence that will not happen is a confirmation a reader learns to stop
 // reading.
-const everythingCloses = 'close-everything';
 
 // How many tabs go, in the form the count actually takes. It is the first thing this client counts out loud, so the
 // form is selected rather than spelled: Polish needs three for this noun and English hides that it needs two, and a
@@ -232,51 +231,24 @@ function CloseEverything({
                 <Icon name="cancel" className="size-4.5" />
             </button>
 
-            <dialog
-                ref={asked}
-                aria-labelledby="close-every-tab"
-                className="m-auto w-96 max-w-full rounded-3xl border border-line bg-panel p-5 text-text shadow-dialog backdrop:bg-scrim"
-                onClose={() => {
-                    if (asked.current?.returnValue === everythingCloses) {
-                        onConfirm();
-                    }
-                }}
-            >
-                <div className="flex flex-col gap-3.5">
-                    <h2 id="close-every-tab" className="text-xl font-semibold">
-                        {translate('tabs.closeAllQuestion')}
-                    </h2>
-
+            <Confirmation
+                asked={asked}
+                mark="cancel"
+                question={translate('tabs.closeAllQuestion')}
+                consequence={
                     <p className="text-base text-muted">
                         {translate(tabsOpen[new Intl.PluralRules(locale).select(open)], {
                             count: new Intl.NumberFormat(locale).format(open),
                         })}
                         {draft ? ` ${translate('tabs.closeAllDraft')}` : ''}
                     </p>
-
-                    <div className="flex justify-end gap-2">
-                        <button
-                            type="button"
-                            className="rounded-lg border border-line bg-sunken px-3.75 py-2 text-base text-text-soft transition hover:bg-hover"
-                            onClick={() => {
-                                asked.current?.close();
-                            }}
-                        >
-                            {translate('tabs.closeAllCancel')}
-                        </button>
-
-                        <button
-                            type="button"
-                            className="rounded-lg bg-accent px-4 py-2 text-base font-semibold text-on-accent transition hover:opacity-90"
-                            onClick={() => {
-                                asked.current?.close(everythingCloses);
-                            }}
-                        >
-                            {translate('tabs.closeAllConfirm')}
-                        </button>
-                    </div>
-                </div>
-            </dialog>
+                }
+                reversal={{ kind: 'permanent', said: translate('tabs.closeAllIsFinal') }}
+                ways={[
+                    { said: translate('tabs.closeAllCancel'), manner: 'back' },
+                    { said: translate('tabs.closeAllConfirm'), manner: 'act', run: onConfirm },
+                ]}
+            />
         </>
     );
 }

@@ -257,6 +257,14 @@ describe('TabStrip', () => {
         expect(screen.getByText(/An unsent draft will be discarded\./)).toBeDefined();
     });
 
+    it('says what closing everything cannot be taken back to', () => {
+        renderStrip([quarterly, invoice], invoice.key);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Close everything that is open' }));
+
+        expect(screen.getByText(/each one is opened again from the list/)).toBeDefined();
+    });
+
     it('says nothing about a draft where none is open', () => {
         renderStrip([quarterly, invoice], invoice.key);
 

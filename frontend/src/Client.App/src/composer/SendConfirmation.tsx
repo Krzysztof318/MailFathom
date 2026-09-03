@@ -2,7 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useId, type RefObject } from 'react';
+import { type RefObject } from 'react';
+import { Confirmation } from '../confirmation/Confirmation';
 import { Icon } from '../controls/Icon';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
@@ -12,10 +13,12 @@ import { whatWouldBeMissing, type Composition, type SendCaution } from './compos
 // not the words, it is who received them, so the confirmation is where every address is read one last time — the blind
 // copies included, those being the ones a header row never shows back.
 //
-// The control and the question belong in one component for the reason `TabStrip.tsx` gives about the same pairing: the
-// dialog is the platform's own, so whether it is open is the element's state rather than a second copy of it, and
-// leaving it either way puts focus back on the control that opened it without anything here remembering which.
-const messageGoes = 'send';
+// The question itself is `confirmation/Confirmation.tsx`, which every act that leaves the deployment is asked through;
+// what stays here is the send's own half of it — which headers are worth saying, what the message would go out
+// without, and that it can be taken back for as long as the deployment has not handed it on. The control and the
+// question belong in one component for the reason `TabStrip.tsx` gives about the same pairing: the dialog is the
+// platform's own, so whether it is open is the element's state rather than a second copy of it, and leaving it either
+// way puts focus back on the control that opened it without anything here remembering which.
 
 // What a send would go out without, each said as a sentence rather than as a field name. Exhaustive by its own type, so
 // a caution added to the composition fails to compile until it has words.
@@ -47,7 +50,6 @@ export function SendConfirmation({
     readonly onSend: () => void;
 }) {
     const { locale, translate } = useLocalization();
-    const question = useId();
     const missing = whatWouldBeMissing(composition);
     const addresses = new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' });
 
@@ -75,22 +77,22 @@ export function SendConfirmation({
                 {translate('compose.send')}
             </button>
 
-            <dialog
-                ref={asked}
-                aria-labelledby={question}
-                className="m-auto w-100 max-w-full rounded-3xl border border-line bg-panel p-5 text-text shadow-dialog backdrop:bg-scrim"
-                onClose={() => {
-                    if (asked.current?.returnValue === messageGoes) {
-                        onSend();
-                    }
-                }}
-            >
-                <div className="flex flex-col gap-3.5">
-                    <h2 id={question} className="text-xl font-semibold">
-                        {translate('compose.confirmQuestion')}
-                    </h2>
-
-                    <div className="flex flex-col gap-1">
+            <Confirmation
+                asked={asked}
+                mark="send"
+                question={translate('compose.confirmQuestion')}
+                cautions={missing.map((caution) => translate(cautionSaid[caution]))}
+                reversal={{ kind: 'recallable', said: translate('compose.confirmRecallable') }}
+                ways={[
+                    { said: translate('compose.backToEditing'), manner: 'back' },
+                    {
+                        said: translate(missing.length === 0 ? 'compose.send' : 'compose.sendAnyway'),
+                        manner: 'act',
+                        run: onSend,
+                    },
+                ]}
+                consequence={
+                    <>
                         {headers().length === 0 ? (
                             <p className="text-base text-muted">{translate('compose.confirmNobody')}</p>
                         ) : (
@@ -109,42 +111,9 @@ export function SendConfirmation({
                                         : composition.subject,
                             })}
                         </p>
-                    </div>
-
-                    {missing.length === 0 ? null : (
-                        <ul className="flex flex-col gap-1.75 rounded-2xl border border-warning bg-warning-soft px-3.25 py-2.75">
-                            {missing.map((caution) => (
-                                <li key={caution} className="flex items-start gap-2 text-base text-warning-text">
-                                    <Icon name="warning" className="mt-0.5 size-4" />
-                                    {translate(cautionSaid[caution])}
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-
-                    <div className="flex justify-end gap-2">
-                        <button
-                            type="button"
-                            className="rounded-lg border border-line bg-sunken px-3.75 py-2 text-base text-text-soft transition hover:bg-hover"
-                            onClick={() => {
-                                asked.current?.close();
-                            }}
-                        >
-                            {translate('compose.backToEditing')}
-                        </button>
-
-                        <button
-                            type="button"
-                            className="rounded-lg bg-accent px-4 py-2 text-base font-semibold text-on-accent transition hover:opacity-90"
-                            onClick={() => {
-                                asked.current?.close(messageGoes);
-                            }}
-                        >
-                            {translate(missing.length === 0 ? 'compose.send' : 'compose.sendAnyway')}
-                        </button>
-                    </div>
-                </div>
-            </dialog>
+                    </>
+                }
+            />
         </>
     );
 }
