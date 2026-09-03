@@ -7,6 +7,7 @@ import { Icon } from '../controls/Icon';
 import type { IconName } from '../controls/icons';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { mannerDrawn, type Manner } from './wayOutShapes';
 
 // The one question this client puts in front of an act that leaves the deployment, and the vocabulary every screen asks
 // it in. Sending, discarding what somebody wrote, closing everything at once, and — from the stage that performs them —
@@ -52,14 +53,6 @@ export type Reversal =
     /** Not taken back at all, with `said` stating what that costs rather than repeating that it cannot be undone. */
     | { readonly kind: 'permanent'; readonly said: string };
 
-/**
- * How a way out is drawn, which follows what pressing it costs rather than where it sits in the row.
- *
- * `back` leaves the act undone, `act` is the thing being confirmed, and `aside` is a second way out that gives
- * something up without being the act — discarding what was written rather than filing it is the one today.
- */
-export type Manner = 'back' | 'aside' | 'act';
-
 /** One way out of a confirmation: what it is called, how it is drawn, and what pressing it does. */
 export interface WayOut {
     /** Its label, which names what pressing it does — never `OK`, never `Yes`, and never `Confirm`. */
@@ -74,14 +67,6 @@ export interface WayOut {
      */
     readonly run?: () => void;
 }
-
-// How each manner is drawn. Exhaustive by its own type, so a manner added to the union fails to compile until it has
-// been decided what it looks like.
-const mannerDrawn: Readonly<Record<Manner, string>> = {
-    back: 'rounded-lg border border-line bg-sunken px-3.75 py-2 text-base text-text-soft transition hover:bg-hover',
-    aside: 'rounded-lg border border-warning px-3.75 py-2 text-base text-warning-text transition hover:bg-warning-soft',
-    act: 'rounded-lg bg-accent px-4 py-2 text-base font-semibold text-on-accent transition hover:opacity-90',
-};
 
 // How long a reversible act stands, in the form the count actually takes. Selected rather than spelled for the reason
 // `mailSpace/TabStrip.tsx` gives about counting tabs: Polish needs three forms for this noun and English hides that it

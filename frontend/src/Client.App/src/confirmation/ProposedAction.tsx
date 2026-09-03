@@ -2,10 +2,11 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useRef } from 'react';
+import { useId, useRef } from 'react';
 import { Icon } from '../controls/Icon';
 import { useLocalization } from '../localization/useLocalization';
 import { Confirmation, type Reversal } from './Confirmation';
+import { mannerDrawn } from './wayOutShapes';
 
 // Something the model offered to do, drawn so that agreeing is informed. It is the top half of MailFathom's autonomy
 // scale rendered: analysis and a local artifact happen, and everything that leaves the deployment is offered here
@@ -61,51 +62,55 @@ export function ProposedAction({
 }) {
     const { translate } = useLocalization();
     const asked = useRef<HTMLDialogElement>(null);
+    const offers = useId();
 
     return (
-        <section className="flex flex-col gap-2 rounded-2xl border border-accent-line bg-accent-soft px-3.5 py-3">
-            <p className="flex items-center gap-2 text-sm font-semibold text-accent-deep">
-                <Icon name="auto_awesome" className="size-4 shrink-0" />
-                {translate('proposal.offered')}
-            </p>
+        <>
+            {/* Named, and holding only what the card itself draws: the confirmation below repeats the action and the
+                impact, so a region that contained it would answer for copy the card had stopped showing. */}
+            <section
+                aria-labelledby={offers}
+                className="flex flex-col gap-2 rounded-2xl border border-accent-line bg-accent-soft px-3.5 py-3"
+            >
+                <p id={offers} className="flex items-center gap-2 text-sm font-semibold text-accent-deep">
+                    <Icon name="auto_awesome" className="size-4 shrink-0" />
+                    {translate('proposal.offered')}
+                </p>
 
-            <p className="text-base font-semibold text-text text-pretty">{proposal.action}</p>
+                <p className="text-base font-semibold text-text text-pretty">{proposal.action}</p>
 
-            <p className="text-base text-text-soft text-pretty">
-                {translate('proposal.reason', { reason: proposal.reason })}
-            </p>
+                <p className="text-base text-text-soft text-pretty">
+                    {translate('proposal.reason', { reason: proposal.reason })}
+                </p>
 
-            <p className="text-base text-text-soft text-pretty">
-                {translate('proposal.impact', { impact: proposal.impact })}
-            </p>
+                <p className="text-base text-text-soft text-pretty">
+                    {translate('proposal.impact', { impact: proposal.impact })}
+                </p>
 
-            <p className="text-sm text-muted text-pretty">
-                {translate(proposal.confirmationRequired ? 'proposal.confirmed' : 'proposal.unconfirmed')}
-            </p>
+                <p className="text-sm text-muted text-pretty">
+                    {translate(proposal.confirmationRequired ? 'proposal.confirmed' : 'proposal.unconfirmed')}
+                </p>
 
-            <div className="flex flex-wrap justify-end gap-2">
-                <button
-                    type="button"
-                    className="rounded-lg border border-line bg-panel px-3.75 py-2 text-base text-text-soft transition hover:bg-hover"
-                    onClick={onDismissed}
-                >
-                    {translate('proposal.notNow')}
-                </button>
+                <div className="flex flex-wrap justify-end gap-2">
+                    <button type="button" className={mannerDrawn.back} onClick={onDismissed}>
+                        {translate('proposal.notNow')}
+                    </button>
 
-                <button
-                    type="button"
-                    className="rounded-lg bg-accent px-4 py-2 text-base font-semibold text-on-accent transition hover:opacity-90"
-                    onClick={() => {
-                        if (proposal.confirmationRequired) {
-                            asked.current?.showModal();
-                        } else {
-                            onAgreed();
-                        }
-                    }}
-                >
-                    {agreeing}
-                </button>
-            </div>
+                    <button
+                        type="button"
+                        className={mannerDrawn.act}
+                        onClick={() => {
+                            if (proposal.confirmationRequired) {
+                                asked.current?.showModal();
+                            } else {
+                                onAgreed();
+                            }
+                        }}
+                    >
+                        {agreeing}
+                    </button>
+                </div>
+            </section>
 
             <Confirmation
                 asked={asked}
@@ -118,6 +123,6 @@ export function ProposedAction({
                     { said: agreeing, manner: 'act', run: onAgreed },
                 ]}
             />
-        </section>
+        </>
     );
 }

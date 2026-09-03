@@ -31,6 +31,13 @@ function drawProposal(proposal: Proposal = filing): {
     return { agreed, dismissed };
 }
 
+// What the card itself shows, rather than the whole document: the confirmation it holds repeats the action and the
+// impact even while closed — `textContent` reads a `display: none` subtree exactly as it reads any other — so a
+// document-wide assertion would pass for a card that drew neither of them.
+function offered(): HTMLElement {
+    return screen.getByRole('region', { name: 'MailFathom suggests this. Nothing has happened yet.' });
+}
+
 describe('ProposedAction', () => {
     it('performs nothing on being drawn, which is what a suggestion is', () => {
         const { agreed } = drawProposal();
@@ -42,23 +49,23 @@ describe('ProposedAction', () => {
     it('shows what it would do, why it was offered, and what would change', () => {
         drawProposal();
 
-        const offered = document.body.textContent;
+        const shown = offered().textContent;
 
-        expect(offered).toContain('Archive the 12 newsletters from last week');
-        expect(offered).toContain('None of them was opened');
-        expect(offered).toContain('They leave Inbox on the work account');
+        expect(shown).toContain('Archive the 12 newsletters from last week');
+        expect(shown).toContain('None of them was opened');
+        expect(shown).toContain('They leave Inbox on the work account');
     });
 
     it('says that a confirmation stands between agreeing and anything changing', () => {
         drawProposal();
 
-        expect(document.body.textContent).toContain('You are asked to confirm this before anything changes.');
+        expect(offered().textContent).toContain('You are asked to confirm this before anything changes.');
     });
 
     it('says an act that reaches nothing outside the client happens as soon as it is agreed to', () => {
         drawProposal({ ...filing, confirmationRequired: false });
 
-        expect(document.body.textContent).toContain('it happens as soon as you agree');
+        expect(offered().textContent).toContain('it happens as soon as you agree');
     });
 
     it('asks the confirmation rather than acting, where the act needs one', () => {
