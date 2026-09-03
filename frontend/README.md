@@ -427,6 +427,31 @@ client surface has nowhere to put, and offering the field would be offering an e
 plain text for the same kind of reason — what the surface takes is a plain-text draft with an optional HTML
 alternative, and rich authoring is a stage of its own.
 
+## Confirming what leaves the deployment
+
+`src/confirmation/` is the one question the client puts in front of an act somebody cannot simply undo, and every
+screen that asks one asks it there rather than drawing a dialog of its own. Sending, discarding what was written, and
+closing every open tab at once are the three today; flagging, filing, moving, and deleting mail arrive at the same
+component as the stages that perform them land.
+
+**It writes no sentence.** _Are you sure?_ teaches a reader to press yes without reading, so the question, what will
+change, and what every way out is called are the caller's own words, in the terms of the thing being changed — the
+addresses a message is going to, the count and destination of a batch — and the control that performs the act is named
+after the act rather than `OK`. What the component does state is what happens **afterwards**, because that is the half a
+caller forgets and the half that decides how heavy the question should have been: a `Reversal` is a closed union with no
+default, so an act is either taken back within a period the client names, taken back for as long as the deployment
+allows, or not taken back at all with what that costs said in the act's own terms. There is no fourth answer meaning
+nobody thought about it.
+
+The dialog is the platform's `<dialog>` opened modally, which is where the page behind it going inert, focus moving in
+and being held, Escape leaving, and focus returning to the control that opened it all come from — four obligations
+nothing in this tree implements. Whether it is open is therefore the element's own state, which is why a caller hands
+over the reference and draws its own control: the composer's two ways to reach the send question are still one question.
+
+`ProposedAction.tsx` beside it is the other half of MailFathom's autonomy scale, for the stages where the model offers
+to act. It draws what would be done, why it was offered, what would change, and whether a confirmation stands between
+agreeing and it happening — and it performs nothing on being drawn, there being no effect and no timer in it at all.
+
 ## Styling, and the two themes
 
 Tailwind is wired CSS-first through `@tailwindcss/vite`. The palette, the type scale, the radii, the shadow steps, the

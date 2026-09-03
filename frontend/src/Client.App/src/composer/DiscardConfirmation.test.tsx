@@ -50,6 +50,14 @@ describe('DiscardConfirmation', () => {
         expect(asked).toContain('along with the draft your deployment is holding for it');
     });
 
+    it('says that nothing files the words first, so the cost of discarding is read before it is paid', () => {
+        drawConfirmation(true);
+
+        close();
+
+        expect(screen.getByRole('dialog').textContent).toContain('there is no way back to these words');
+    });
+
     it('throws it away once that is confirmed', () => {
         const { discarded, kept } = drawConfirmation(true);
 
