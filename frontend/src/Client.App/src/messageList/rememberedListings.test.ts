@@ -121,6 +121,18 @@ describe('rememberedListing', () => {
             'a span with no start, which every offered one resolves to when it is picked',
             { ...kept, filters: { ...kept.filters, dateRange: 'today' } },
         ],
+        [
+            'a span carrying an end, which the panel draws no field for while the span is lit',
+            {
+                ...kept,
+                filters: {
+                    ...kept.filters,
+                    dateRange: 'today',
+                    receivedFrom: '2026-09-03T00:00',
+                    receivedTo: '2020-01-01T00:00',
+                },
+            },
+        ],
         ['a listing that is not a record', 'the inbox'],
     ])('opens at the leading end for a record carrying %s', (_, written) => {
         stored({ [keyFor(inbox)]: written });

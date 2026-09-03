@@ -206,9 +206,10 @@ function filtersIn(value: unknown): MailListFilters | null {
         return null;
     }
 
-    // A span with no start is a record this client never wrote: every offered span resolves to one the moment it is
-    // picked, and reading it back without one would draw a chip in force over a list nothing narrows.
-    if (dateRange !== null && receivedFrom === null) {
+    // A span resolves to a start and no end the moment it is picked, so a record pairing one with a missing start or
+    // with an end is a record this client never wrote. Both are refused rather than read: the panel draws neither
+    // field while a span is lit, so a bound arriving that way would narrow the folder where nothing shows it.
+    if (dateRange !== null && (receivedFrom === null || receivedTo !== null)) {
         return null;
     }
 
