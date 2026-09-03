@@ -15,6 +15,7 @@ const kept: Workspace = {
     selection: 'AAMkAD-42',
     conversation: { threadId: '9b2a1c74-4a4e-4c93-9a2e-3f6f0a1b2c3d', openAt: 'AAMkAD-42' },
     fullHtml: null,
+    attachment: null,
     fragment: null,
     selected: ['AAMkAD-42', 'AAMkAD-43'],
     question: 'what did Nordwind send',
@@ -58,6 +59,27 @@ describe('rememberWorkspace', () => {
         window.sessionStorage.setItem(storageKey, JSON.stringify({ ...kept, fullHtml: 'AAMkAD-42' }));
 
         expect(rememberedWorkspace().fullHtml).toBeNull();
+    });
+
+    // The file being read is the other part a store never sees: it is a sender's own name for something, and a reload
+    // that reopened it would fetch a file nobody asked for again.
+    it('keeps no name of the file somebody had open', () => {
+        rememberWorkspace({
+            ...kept,
+            attachment: {
+                storedEmailId: 'AAMkAD-42',
+                attachment: {
+                    position: 0,
+                    fileName: 'the-file-somebody-opened.png',
+                    wasFileNameNormalized: false,
+                    mediaType: 'image/png',
+                    sizeOctets: 2_048,
+                },
+            },
+        });
+
+        expect(window.sessionStorage.getItem(storageKey)).not.toContain('the-file-somebody-opened');
+        expect(rememberedWorkspace().attachment).toBeNull();
     });
 });
 

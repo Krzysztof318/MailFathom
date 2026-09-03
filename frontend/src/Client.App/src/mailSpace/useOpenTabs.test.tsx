@@ -4,6 +4,7 @@
 
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
+import type { MailAttachment } from '@mailfathom/client-backend';
 import { WorkspaceProvider } from '../workspace/Workspace';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { useOpenTabs } from './useOpenTabs';
@@ -14,6 +15,8 @@ const openTheQuarterly = 'Open the quarterly figures.';
 const openTheInvoice = 'Open the invoice.';
 const openTheQuarterlyAgain = 'Open the quarterly figures a second time.';
 const readDownTheConversation = 'Read down the conversation, as the pane would.';
+const openTheChart = 'Open the chart the quarterly figures carry.';
+const closeTheChart = 'Close the file being read.';
 const closeEverything = 'Close everything.';
 const reopenTheLastRead = 'Open the last message read.';
 const showTheMarkup = 'Show the quarterly figures as the sender sent it.';
@@ -27,6 +30,7 @@ function Tabs({ inTabs }: { readonly inTabs: boolean }) {
     const reading = `Reading: ${workspace.selection ?? 'nothing'}`;
     const inFrontOfIt = `In front of it: ${workspace.conversation?.threadId ?? 'nothing'}`;
     const markup = `Markup shown for: ${workspace.fullHtml ?? 'nothing'}`;
+    const file = `File: ${workspace.attachment?.attachment.fileName ?? 'nothing'}`;
     const emptied = `Emptied by closing: ${String(tabs.emptiedByClosing)}`;
 
     return (
@@ -35,6 +39,7 @@ function Tabs({ inTabs }: { readonly inTabs: boolean }) {
             <p>{reading}</p>
             <p>{inFrontOfIt}</p>
             <p>{markup}</p>
+            <p>{file}</p>
             <p>{emptied}</p>
 
             <button
@@ -71,6 +76,19 @@ function Tabs({ inTabs }: { readonly inTabs: boolean }) {
                 }}
             >
                 {readDownTheConversation}
+            </button>
+
+            <button
+                type="button"
+                onClick={() => {
+                    tabs.openAttachment({ storedEmailId: 'message-1', attachment: chart });
+                }}
+            >
+                {openTheChart}
+            </button>
+
+            <button type="button" onClick={tabs.closeAttachment}>
+                {closeTheChart}
             </button>
 
             {tabs.tabs.map((tab, at) => {
@@ -131,6 +149,14 @@ function Tabs({ inTabs }: { readonly inTabs: boolean }) {
     );
 }
 
+const chart: MailAttachment = {
+    position: 3,
+    fileName: 'figures.png',
+    wasFileNameNormalized: false,
+    mediaType: 'image/png',
+    sizeOctets: 2_048,
+};
+
 function renderTabs(inTabs: boolean): void {
     render(
         <WorkspaceProvider>
@@ -153,6 +179,10 @@ function reading(): string {
 
 function markupShownFor(): string {
     return screen.getByText(/^Markup shown for: /).textContent;
+}
+
+function fileBeingRead(): string {
+    return screen.getByText(/^File: /).textContent;
 }
 
 describe('useOpenTabs, working in tabs', () => {
@@ -334,5 +364,72 @@ describe('useOpenTabs opening the sender own markup', () => {
 
         expect(reading()).toBe('Reading: message-1');
         expect(markupShownFor()).toBe('Markup shown for: nothing');
+    });
+});
+
+describe('useOpenTabs, opening a file a message carries', () => {
+    it('opens the file in a tab of its own beside the message it was opened from', () => {
+        renderTabs(true);
+
+        press(openTheQuarterly);
+        press(openTheChart);
+
+        expect(open()).toBe('Open: The quarterly figures, figures.png');
+        expect(fileBeingRead()).toBe('File: figures.png');
+    });
+
+    it('leaves the message tab holding the message, so closing the file is a return to it', () => {
+        renderTabs(true);
+
+        press(openTheQuarterly);
+        press(openTheChart);
+        press(closeTheChart);
+
+        expect(open()).toBe('Open: The quarterly figures');
+        expect(reading()).toBe('Reading: message-1');
+        expect(fileBeingRead()).toBe('File: nothing');
+    });
+
+    it('stands the file in front of the message where the person is not working in tabs', () => {
+        renderTabs(false);
+
+        press(openTheQuarterly);
+        press(openTheChart);
+
+        expect(open()).toBe('Open: The quarterly figures');
+        expect(reading()).toBe('Reading: message-1');
+        expect(fileBeingRead()).toBe('File: figures.png');
+    });
+
+    it('takes the file away again where it stood in front of the message rather than as a tab', () => {
+        renderTabs(false);
+
+        press(openTheQuarterly);
+        press(openTheChart);
+        press(closeTheChart);
+
+        expect(open()).toBe('Open: The quarterly figures');
+        expect(reading()).toBe('Reading: message-1');
+        expect(fileBeingRead()).toBe('File: nothing');
+    });
+
+    it('opens the same file once however often it is asked for', () => {
+        renderTabs(true);
+
+        press(openTheQuarterly);
+        press(openTheChart);
+        press(openTheChart);
+
+        expect(open()).toBe('Open: The quarterly figures, figures.png');
+    });
+
+    it('takes the file away when another message is opened, so nothing is read over a message it does not belong to', () => {
+        renderTabs(false);
+
+        press(openTheQuarterly);
+        press(openTheChart);
+        press(openTheInvoice);
+
+        expect(fileBeingRead()).toBe('File: nothing');
     });
 });

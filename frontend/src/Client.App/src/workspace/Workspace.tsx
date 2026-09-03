@@ -15,14 +15,14 @@ import { WorkspaceContext, type Workspace, type WorkspaceRevision } from './useW
 // invokes twice under StrictMode, or make `revise` a new function on every render, which is a read restarted on every
 // render for everything holding it.
 
-// A conversation and the full-HTML surface both stand in front of the message they were opened from, so picking a
-// different message is what closes either. Each is one decision with the selection rather than a value kept in step
-// with it: left free to disagree, one would stay on the screen with nothing reacting to the click behind it, and the
-// way out of it — back to the message — would return to whichever row somebody picked last rather than to the one they
-// opened it from. The surface has a second reason of its own: it draws a stranger's markup for one message, and
-// carrying it onto the next would draw markup nobody asked to be shown.
+// A conversation, the full-HTML surface, and a file each stand in front of the message they were opened from, so
+// picking a different message is what closes any of them. Each is one decision with the selection rather than a value
+// kept in step with it: left free to disagree, one would stay on the screen with nothing reacting to the click behind
+// it, and the way out of it — back to the message — would return to whichever row somebody picked last rather than to
+// the one they opened it from. The surface has a second reason of its own: it draws a stranger's markup for one
+// message, and carrying it onto the next would draw markup nobody asked to be shown.
 //
-// It is decided here rather than wherever a row is clicked because this is where both live: a screen that picks a
+// It is decided here rather than wherever a row is clicked because this is where all three live: a screen that picks a
 // message would otherwise each have to remember to close what it never knew was in front of it, and the one that
 // forgets is the defect.
 function withoutAStaleFront(current: Workspace, change: Partial<Workspace>): Partial<Workspace> {
@@ -34,6 +34,7 @@ function withoutAStaleFront(current: Workspace, change: Partial<Workspace>): Par
         ...change,
         conversation: change.conversation ?? null,
         fullHtml: change.fullHtml ?? null,
+        attachment: change.attachment ?? null,
     };
 }
 

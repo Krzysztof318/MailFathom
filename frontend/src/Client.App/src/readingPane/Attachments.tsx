@@ -3,23 +3,29 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { useEffect, useRef, useState } from 'react';
-import { readMailAttachment, type ClientSession, type MailAttachment } from '@mailfathom/client-backend';
+import type { ClientSession, MailAttachment } from '@mailfathom/client-backend';
 import { Icon } from '../controls/Icon';
 import { useLocalization } from '../localization/useLocalization';
-import { deliveryFailureOf, useAttachmentDelivery } from '../deployment/attachmentDelivery';
-import { Attachment, type Downloading } from './Attachment';
-import { savedAs } from './savedFileName';
+import { useAttachmentExchange } from '../deployment/attachmentExchange';
+import { useOpenAttachment } from '../workspace/openAttachment';
+import { Attachment } from './Attachment';
+import { downloadAttachment, type Download } from './downloadingAttachment';
 
 // The files one message carries, and the downloads of them. Both belong here rather than to a row, because downloading
 // every file is an act on the message: the row that would own its own download cannot be asked to start one by the
 // control beside the list, and a parent reaching into a child to start one is the effect `frontend/src/AGENTS.md`
 // refuses. So the strip owns what each file is doing and the row draws it.
 //
+// Opening a file is the other act it passes down, and it belongs here for the opposite reason: the file the viewer is
+// handed carries the message it came from, which a row is never told and this component already knows.
+//
 // The bulk download drives the same per-file download the chip does, one file after the next, rather than asking the
 // deployment for a bundle: the route serves one part, and what a reader gets is the same files under the same names.
 // Waiting for each before starting the next is what keeps a message carrying twenty files from opening twenty requests
 // and holding twenty answers in memory at once. What that costs is that each file arrives as its own download, which is
 // where this differs from the design project — that draws one archive, which no route serves.
+
+const described: Download = { stage: 'described' };
 
 export function Attachments({
     session,
@@ -31,8 +37,9 @@ export function Attachments({
     readonly attachments: readonly MailAttachment[];
 }) {
     const { translate } = useLocalization();
-    const deliver = useAttachmentDelivery();
-    const [downloading, setDownloading] = useState<ReadonlyMap<number, Downloading>>(new Map());
+    const exchange = useAttachmentExchange();
+    const open = useOpenAttachment();
+    const [downloading, setDownloading] = useState<ReadonlyMap<number, Download>>(new Map());
     const [downloadingAll, setDownloadingAll] = useState(false);
 
     // The one thing a render does not own: a download in flight outlives the render that started it, and the way out of
@@ -59,7 +66,7 @@ export function Attachments({
         };
     }, []);
 
-    function record(position: number, stage: Downloading): void {
+    function record(position: number, stage: Download): void {
         setDownloading((current) => new Map(current).set(position, stage));
     }
 
@@ -74,24 +81,15 @@ export function Attachments({
         running.current.set(attachment.position, abandoning);
         record(attachment.position, { stage: 'arriving', octets: 0 });
 
-        // The request is composed by `Client.Backend` inside the span it opens around the whole download, which is
-        // what puts this wait in the same trace as the deployment's work on it. What this component supplies is the
-        // part that is the screen's: where the file is saved, how much of it has arrived, and the way out.
-        const outcome = await readMailAttachment(
+        const outcome = await downloadAttachment(
             session,
             storedEmailId,
-            attachment.position,
-            attachment.sizeOctets,
-            (request) =>
-                deliver(
-                    request,
-                    savedAs(attachment.fileName, attachment.position),
-                    (octets) => {
-                        record(attachment.position, { stage: 'arriving', octets });
-                    },
-                    abandoning.signal,
-                ),
-            deliveryFailureOf,
+            attachment,
+            exchange,
+            (octets) => {
+                record(attachment.position, { stage: 'arriving', octets });
+            },
+            abandoning.signal,
         );
 
         running.current.delete(attachment.position);
@@ -118,7 +116,10 @@ export function Attachments({
                 <Attachment
                     key={attachment.position}
                     attachment={attachment}
-                    downloading={downloading.get(attachment.position)}
+                    downloading={downloading.get(attachment.position) ?? described}
+                    onOpen={() => {
+                        open({ storedEmailId, attachment });
+                    }}
                     onDownload={() => {
                         void start(attachment);
                     }}

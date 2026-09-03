@@ -9,7 +9,7 @@ import type { ClientRequest, ClientResponse, ClientSession, DeploymentAddress } 
 import { App } from './App';
 import type { ClientDeployment } from './deployment/adoptedDeployment';
 import { telemetryKey } from './device/deviceStore';
-import { AttachmentDeliveryContext, type AttachmentDelivery } from './deployment/attachmentDelivery';
+import { AttachmentExchangeContext, type AttachmentExchange } from './deployment/attachmentExchange';
 import { AttachmentUploadContext, type AttachmentUpload } from './deployment/attachmentUpload';
 import type { PortraitExchange } from './deployment/portraitExchange';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
@@ -371,8 +371,12 @@ function deploymentDrawingAConversation(): DeploymentTransport {
     };
 }
 
-/** A delivery nobody in these tests asks for, supplied because a row below the frame reads one from the context. */
-const deliversNothing: AttachmentDelivery = () => Promise.resolve('delivered');
+/** An exchange nobody in these tests asks for, supplied because a row below the frame reads one from the context. */
+const deliversNothing: AttachmentExchange = {
+    deliver: () => Promise.resolve('delivered'),
+    read: () => Promise.resolve({ outcome: 'shown', content: '' }),
+};
+
 const uploadsNothing: AttachmentUpload = () => Promise.resolve(null);
 
 /** A deployment answering every route the same way, which is how a refusal to sign anybody in is stated. */
@@ -479,7 +483,7 @@ function renderApp(
                 <ThemeProvider>
                     <WorkspaceProvider>
                         <LinkOpenerContext value={() => Promise.resolve()}>
-                            <AttachmentDeliveryContext value={deliversNothing}>
+                            <AttachmentExchangeContext value={deliversNothing}>
                                 <AttachmentUploadContext value={uploadsNothing}>
                                     <TelemetryContext value={telemetry}>
                                         <App
@@ -491,7 +495,7 @@ function renderApp(
                                         />
                                     </TelemetryContext>
                                 </AttachmentUploadContext>
-                            </AttachmentDeliveryContext>
+                            </AttachmentExchangeContext>
                         </LinkOpenerContext>
                     </WorkspaceProvider>
                 </ThemeProvider>

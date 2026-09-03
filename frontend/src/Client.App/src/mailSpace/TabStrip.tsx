@@ -118,7 +118,12 @@ export function TabStrip({
             >
                 {tabs.map((tab) => {
                     const selected = tab.key === active;
-                    const title = tab.title ?? translate('message.noSubject');
+
+                    // What a tab with no name of its own is called, which is what it *is* rather than one word for
+                    // every kind: a message with no subject and a file the sender named nothing are two different
+                    // absences, and calling the second one "no subject" would name a thing files do not have.
+                    const title =
+                        tab.title ?? translate(tab.kind === 'attachment' ? 'attachment.unnamed' : 'message.noSubject');
 
                     return (
                         // Presentational, because what the tab list owns is the tab: the shape a reader sees is one

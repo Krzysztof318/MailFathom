@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { useState } from 'react';
+import { attachmentKey, type OpenedAttachment } from '../workspace/openAttachment';
 import { useWorkspace } from '../workspace/useWorkspace';
 import {
     activated,
@@ -55,6 +56,19 @@ export interface OpenTabsInForce {
     /** Closes that surface, whichever of the two shapes it was drawn in. */
     readonly closeFullHtml: () => void;
 
+    /**
+     * Opens one file a message carries, in the reading column.
+     *
+     * In a tab of its own where the person works in tabs, so the message it was opened from stays open beside it. Where
+     * they do not, it stands in front of that message exactly as a conversation does — which is the one place this
+     * differs from opening a message, and it differs because a file is opened *from* what is on the screen rather than
+     * instead of it: replacing the one tab there is would close the message the reader is going back to.
+     */
+    readonly openAttachment: (opened: OpenedAttachment) => void;
+
+    /** Closes the file being read, leaving the message it was opened from on the screen. */
+    readonly closeAttachment: () => void;
+
     /** Brings a tab forward, returning the reading column to where that tab was left. */
     readonly activate: (key: string) => void;
 
@@ -96,17 +110,21 @@ export function useOpenTabs(inTabs: boolean): OpenTabsInForce {
         selection: workspace.selection,
         conversation: workspace.conversation,
         fullHtml: workspace.fullHtml,
+        attachment: workspace.attachment,
     };
 
     // Opening one thing, whatever kind it is: the tab set gains it, and the reading column goes where that tab was
-    // last left. Written once because the two things a person opens differ in what they hold rather than in what
-    // opening one does, and a second copy of this is how the two would come to disagree about where a tab returns to.
+    // last left. Written once because the things a person opens differ in what they hold rather than in what opening
+    // one does, and a second copy of this is how the two would come to disagree about where a tab returns to.
     function open(tab: OpenTab): void {
         setHeld((current) => opened(current, tab, here, inTabs));
         setEmptiedByClosing(false);
         revise(tabIn(held, tab.key)?.opened ?? tab.opened);
     }
 
+    // Closing one tab, which two of the acts below reach: the close control on the strip, and the way out of a file
+    // that is being read as a tab. Written once because the two are the same act — what a reader is left with, and
+    // what the one way back reopens, cannot be decided twice and stay one answer.
     function closeTab(key: string): void {
         const after = closed(held, key);
         const going = tabIn(held, key);
@@ -134,6 +152,7 @@ export function useOpenTabs(inTabs: boolean): OpenTabsInForce {
                 selection: storedEmailId,
                 conversation: null,
                 fullHtml: null,
+                attachment: null,
             });
 
             // The message already being read is already open, so opening it again is nothing — and doing the work
@@ -161,6 +180,7 @@ export function useOpenTabs(inTabs: boolean): OpenTabsInForce {
                     selection: storedEmailId,
                     conversation: null,
                     fullHtml: storedEmailId,
+                    attachment: null,
                 }),
             );
         },
@@ -175,6 +195,44 @@ export function useOpenTabs(inTabs: boolean): OpenTabsInForce {
             }
 
             revise({ fullHtml: null });
+        },
+
+        openAttachment: (opening) => {
+            if (!inTabs) {
+                revise({ attachment: opening });
+
+                return;
+            }
+
+            const tab = tabFor('attachment', attachmentKey(opening), opening.attachment.fileName, {
+                selection: opening.storedEmailId,
+                conversation: null,
+                fullHtml: null,
+                attachment: opening,
+            });
+
+            // The file already being read is already open, and `open` would put the reading column back where this
+            // tab was left rather than leave it where it is — the same guard `openMail` carries and for the reason
+            // stated there.
+            if (held.active === tab.key) {
+                return;
+            }
+
+            open(tab);
+        },
+
+        closeAttachment: () => {
+            const reading = held.active === null ? null : tabIn(held, held.active);
+
+            // Closing the tab is what closes the file where the file *is* a tab, so the strip and the column stop
+            // together rather than leaving a tab standing over a message. Where it is not — the person is not working
+            // in tabs, or the window narrowed under one that was already open — the file is what stands in front of
+            // the message, and taking it away is the whole of closing it.
+            if (reading?.kind === 'attachment') {
+                closeTab(reading.key);
+            } else {
+                revise({ attachment: null });
+            }
         },
 
         activate: (key) => {

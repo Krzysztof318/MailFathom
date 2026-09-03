@@ -71,16 +71,22 @@ export function rememberedWorkspace(): Workspace {
 /**
  * Keeps what this tab is looking at, so a reload returns to it.
  *
- * Everything but two values, each left out for a reason of its own. The selected fragment is a passage of somebody's
+ * Everything but three values, each left out for a reason of its own. The selected fragment is a passage of somebody's
  * mail rather than a name the service assigned, so keeping it would put mail content in a browser store for nothing —
  * the reading pane drops the fragment as the message it belongs to opens, and a reload is that message opening again.
  * The full-HTML surface is left out because it is a consent rather than a place: it was given for one message after
  * being told what a stranger's markup can carry, and a surface that reopened itself on a reload would be that consent
- * remembered. So a reload returns to the message with the surface closed, and pressing the control asks again.
+ * remembered. So a reload returns to the message with the surface closed, and pressing the control asks again. A file
+ * is left out because it is the sender's own name for something a reader asked to see once, and returning to it would
+ * fetch the file again on a reload nobody meant as a request for it — so a reload returns to the message, which is
+ * where the file was opened from and is one press away.
  */
 export function rememberWorkspace(workspace: Workspace): void {
     try {
-        window.sessionStorage.setItem(storageKey, JSON.stringify({ ...workspace, fragment: null, fullHtml: null }));
+        window.sessionStorage.setItem(
+            storageKey,
+            JSON.stringify({ ...workspace, fragment: null, fullHtml: null, attachment: null }),
+        );
     } catch {
         // A browser refusing storage still runs the client; what a person was looking at then lasts the run rather
         // than outliving it, which is a smaller loss than a client that fails over a preference.
@@ -137,6 +143,7 @@ function workspaceIn(value: unknown): Workspace | null {
         selection,
         conversation,
         fullHtml: null,
+        attachment: null,
         fragment: null,
         selected,
         question,

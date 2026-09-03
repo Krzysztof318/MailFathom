@@ -17,6 +17,7 @@ import {
 } from '@mailfathom/client-backend';
 import { Icon } from '../controls/Icon';
 import { SecondaryButton } from '../controls/SecondaryButton';
+import { SurfaceControl } from '../controls/SurfaceControl';
 import type { MessageKey } from '../localization/en';
 import { wordInstant } from '../localization/instants';
 import { useLocalization } from '../localization/useLocalization';
@@ -219,15 +220,7 @@ export function FullHtmlSurface({
                     )}
                 </div>
 
-                <button
-                    type="button"
-                    aria-label={translate('fullHtml.close')}
-                    title={translate('fullHtml.close')}
-                    className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-hover hover:text-text"
-                    onClick={onClose}
-                >
-                    <Icon name="close" className="size-5" />
-                </button>
+                <SurfaceControl label={translate('fullHtml.close')} icon="close" onActivate={onClose} />
             </header>
 
             <Markup

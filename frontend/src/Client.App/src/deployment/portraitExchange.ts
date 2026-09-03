@@ -14,6 +14,7 @@ import {
     type PortraitImageType,
 } from '@mailfathom/client-backend';
 import { readBoundedContent } from './boundedBody';
+import { asDataUrl } from './dataUrl';
 
 // The third module in this directory that calls `fetch`, and the third for the same reason: `Client.Backend` declares
 // no DOM, so a `Blob`, a `File`, and a `FileReader` can only be named on this side of the boundary. What that package
@@ -22,9 +23,7 @@ import { readBoundedContent } from './boundedBody';
 // the composed request down to the `fetch` here and keeps the record around it.
 //
 // A read answers an address the client may draw rather than the octets themselves, so nothing above holds a picture.
-// That address is a data URL rather than a blob URL deliberately: a blob URL keeps its octets alive until somebody
-// releases it, which would put a lifetime on a value passed through three components, and one portrait bounded at a
-// megabyte costs less held as text than that bookkeeping costs in defects.
+// `dataUrl.ts` beside it composes that address and holds why it is a data URL rather than a blob one.
 
 /** What a read of the portrait answered. */
 export type PortraitRead =
@@ -139,24 +138,4 @@ async function stated(request: ClientRequest, body: Blob | null): Promise<Portra
     return response.status === 204
         ? { outcome: 'stored' }
         : { outcome: 'refused', reason: failureReasonForStatus(response.status) };
-}
-
-/**
- * Turns the octets into an address the client may draw the picture at.
- *
- * `FileReader` rather than encoding by hand, because the platform already does exactly this and a megabyte encoded a
- * character at a time is the loop nobody should write twice.
- */
-function asDataUrl(picture: Blob): Promise<string> {
-    return new Promise((resolve, reject) => {
-        const reading = new FileReader();
-
-        reading.onload = () => {
-            resolve(typeof reading.result === 'string' ? reading.result : '');
-        };
-        reading.onerror = () => {
-            reject(reading.error ?? new Error('The portrait could not be read.'));
-        };
-        reading.readAsDataURL(picture);
-    });
 }

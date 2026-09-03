@@ -573,6 +573,8 @@ export const en = {
     'attachments.list': 'Files this message carries',
     'attachments.downloadAll': 'Download all',
     'attachment.unnamed': 'Unnamed file',
+    'attachment.open': 'Open {name}',
+    'attachment.close': 'Close {name}',
     'attachment.download': 'Download {name}',
     'attachment.nameWasRewritten':
         'The sender wrote a file name this deployment would not use, so what is shown is the name it was given instead.',
@@ -588,6 +590,20 @@ export const en = {
     'attachment.refusedUnavailable': 'The deployment did not answer, so the file was not downloaded. Try again.',
     'attachment.refusedLargerThanDescribed':
         'The deployment sent more than this message said the file holds, so nothing was saved. Report this as a defect.',
+    'attachment.reading': 'Reading {name}…',
+    'attachment.offline':
+        'This machine is offline, so this file cannot be opened. It opens on its own once the network comes back.',
+    'attachment.notShownUnauthenticated':
+        'This deployment no longer accepts the credential, so the file could not be shown. Sign in again.',
+    'attachment.notShownUnauthorized':
+        'This credential may not read mail on this deployment, so the file could not be shown.',
+    'attachment.notShownUnavailable': 'The deployment did not answer, so the file could not be shown. Try again.',
+    'attachment.notShownUnreadable':
+        'What arrived is not what this message said the file holds, so nothing is drawn from it. Download it, and report this as a defect.',
+    'attachment.empty': 'This file holds nothing.',
+    'attachment.notShownKind':
+        'This client does not show files of this kind. Download it to open it in something that does.',
+    'attachment.notShownSize': 'This file is too large to show here. Download it to open it in something that does.',
 
     'carried.total': 'Everything attached comes to {size}.',
     'carried.encrypted': 'This message carries encrypted content somewhere.',

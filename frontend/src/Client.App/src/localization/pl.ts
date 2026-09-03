@@ -581,6 +581,8 @@ export const pl: Catalogue = {
     'attachments.list': 'Pliki dołączone do tej wiadomości',
     'attachments.downloadAll': 'Pobierz wszystkie',
     'attachment.unnamed': 'Plik bez nazwy',
+    'attachment.open': 'Otwórz {name}',
+    'attachment.close': 'Zamknij {name}',
     'attachment.download': 'Pobierz {name}',
     'attachment.nameWasRewritten':
         'Nadawca zapisał nazwę pliku, której to wdrożenie by nie użyło, więc widoczna jest nazwa nadana w jej miejsce.',
@@ -596,6 +598,22 @@ export const pl: Catalogue = {
     'attachment.refusedUnavailable': 'Wdrożenie nie odpowiedziało, więc plik nie został pobrany. Spróbuj ponownie.',
     'attachment.refusedLargerThanDescribed':
         'Wdrożenie przysłało więcej, niż ta wiadomość deklaruje dla tego pliku, więc nic nie zostało zapisane. Zgłoś to jako usterkę.',
+    'attachment.reading': 'Trwa otwieranie pliku {name}…',
+    'attachment.offline':
+        'Ta maszyna jest bez sieci, więc nie można otworzyć tego pliku. Otworzy się sam, gdy sieć wróci.',
+    'attachment.notShownUnauthenticated':
+        'To wdrożenie nie przyjmuje już tych poświadczeń, więc nie udało się pokazać pliku. Zaloguj się ponownie.',
+    'attachment.notShownUnauthorized':
+        'Te poświadczenia nie mogą czytać poczty w tym wdrożeniu, więc nie udało się pokazać pliku.',
+    'attachment.notShownUnavailable':
+        'Wdrożenie nie odpowiedziało, więc nie udało się pokazać pliku. Spróbuj ponownie.',
+    'attachment.notShownUnreadable':
+        'To, co dotarło, nie zgadza się z tym, co ta wiadomość mówi o pliku, więc nic z niego nie rysujemy. Pobierz go i zgłoś to jako usterkę.',
+    'attachment.empty': 'Ten plik nic nie zawiera.',
+    'attachment.notShownKind':
+        'Ten klient nie pokazuje plików tego rodzaju. Pobierz go, aby otworzyć w programie, który to potrafi.',
+    'attachment.notShownSize':
+        'Ten plik jest za duży, aby pokazać go tutaj. Pobierz go, aby otworzyć w programie, który to potrafi.',
 
     'carried.total': 'Wszystkie załączniki razem to {size}.',
     'carried.encrypted': 'Ta wiadomość zawiera gdzieś zaszyfrowaną treść.',

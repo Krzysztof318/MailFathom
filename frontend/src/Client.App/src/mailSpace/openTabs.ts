@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+import type { OpenedAttachment } from '../workspace/openAttachment';
 import type { OpenConversation } from '../workspace/openConversation';
 
 // What the Mail space has open when a person works in tabs, as values rather than as anything on the screen. The strip
@@ -14,22 +15,29 @@ import type { OpenConversation } from '../workspace/openConversation';
 // step: the pane reads the workspace exactly as it did before tabs existed, and every screen that opens or closes a
 // conversation goes on doing it without knowing a tab is holding its place.
 
-/** What the reading column draws: the message open, and whichever surface stands in front of it. */
+/**
+ * What the reading column draws: the message open, and whichever surface stands in front of it.
+ *
+ * All of them are the workspace's own, read from it as a tab loses focus and written back to it as one gains focus, so
+ * this is one shape with the workspace rather than a second copy of what is on the screen.
+ */
 export interface OpenedMail {
     readonly selection: string | null;
     readonly conversation: OpenConversation | null;
 
     /** The message whose own markup is being shown, or `null` where the reduced tree is what is being read. */
     readonly fullHtml: string | null;
+
+    /** The file being read in front of the message, or `null` where the message itself is what is being read. */
+    readonly attachment: OpenedAttachment | null;
 }
 
 /**
  * The four things the design project gives a tab of its own.
  *
- * Two of them have no screen behind them yet — a draft is the composer of #1210, and an attachment opens as a download
- * rather than as a surface — so nothing constructs one today. They are named here rather than added later because the
- * strip is what draws whichever kind a tab has, and a kind it could not draw would be a strip rewritten by each of
- * those changes instead of a tab handed to it.
+ * One of them has no screen behind it yet — a draft is the composer of #1210 — so nothing constructs one today. It is
+ * named here rather than added later because the strip is what draws whichever kind a tab has, and a kind it could not
+ * draw would be a strip rewritten by that change instead of a tab handed to it.
  */
 export type OpenTabKind = 'thread' | 'attachment' | 'fullHtml' | 'draft';
 
@@ -57,7 +65,7 @@ export interface OpenTabs {
 export const nothingOpen: OpenTabs = { tabs: [], active: null };
 
 /** Nothing being read, which is what a tab that is not a message was opened beside. */
-export const nothingOpened: OpenedMail = { selection: null, conversation: null, fullHtml: null };
+export const nothingOpened: OpenedMail = { selection: null, conversation: null, fullHtml: null, attachment: null };
 
 /**
  * One tab, identified by what it holds.
@@ -65,7 +73,7 @@ export const nothingOpened: OpenedMail = { selection: null, conversation: null, 
  * @param kind What sort of thing it is.
  * @param id What the thing is, as the service names it — a message, an attachment, a draft.
  * @param title What the strip calls it, or `null` where it has no name of its own.
- * @param opened What the reading column draws for it, which today only a message has.
+ * @param opened What the reading column draws for it, which today a message and a file it carries have.
  */
 export function tabFor(
     kind: OpenTabKind,

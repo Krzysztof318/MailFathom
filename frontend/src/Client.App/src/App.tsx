@@ -34,6 +34,7 @@ import { forgetListings } from './messageList/rememberedListings';
 import { useClientPreferences } from './preferences/useClientPreferences';
 import { useOwnProfile } from './profile/useOwnProfile';
 import { ReadMarkingProvider } from './readMarking/ReadMarking';
+import { AttachmentView } from './readingPane/AttachmentView';
 import { ReadingPane } from './readingPane/ReadingPane';
 import { useSpace } from './routing/useSpace';
 import { MailSearch } from './search/MailSearch';
@@ -54,6 +55,7 @@ import { SignIn } from './signIn/SignIn';
 import { useTelemetry } from './telemetry/clientTelemetry';
 import { useNavigationTelemetry } from './telemetry/navigationTelemetry';
 import { Thread } from './thread/Thread';
+import { attachmentKey, OpenAttachmentContext, type OpenedAttachment } from './workspace/openAttachment';
 import { conversationKey, type OpenConversation } from './workspace/openConversation';
 import { scopeKey } from './workspace/mailScope';
 import { emptyWorkspace, useWorkspace } from './workspace/useWorkspace';
@@ -346,11 +348,13 @@ export function App({
                 transport={readMail}
                 conversation={workspace.conversation}
                 fullHtml={workspace.fullHtml}
+                attachment={workspace.attachment}
                 storedEmailId={workspace.selection}
                 online={connection.online}
                 expandWholeThread={preferences.expandWholeThread}
                 onShowFullHtml={openTabs.openFullHtml}
                 onCloseFullHtml={openTabs.closeFullHtml}
+                onCloseAttachment={openTabs.closeAttachment}
             />
         );
     }
@@ -394,6 +398,10 @@ export function App({
                 <BlockingContext value={blocking}>
                     <BlockingOverlay operation={blockedOn} />
 
+                    {/* Beside them for the composer's own reason, one component further down: the row that opens a
+                    file a message carries sits three components below the frame that owns what is open, and none of
+                    the three between them has a reason to name a file it never opens. */}
+                    <OpenAttachmentContext value={openTabs.openAttachment}>
                     <div className="flex h-dvh flex-col bg-rail pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left workspace:flex-row">
                         <div
                             ref={workspaceRegion}
@@ -540,6 +548,7 @@ export function App({
                             }
                         />
                     </div>
+                    </OpenAttachmentContext>
                 </BlockingContext>
             </ComposingContext>
         </ReadMarkingProvider>
@@ -551,36 +560,42 @@ function openingKey(opening: ComposerOpening): string {
     return opening.kind === 'new' ? 'new' : `${opening.answers}:${opening.storedEmailId}`;
 }
 
-// What is being read on the right of the mail space: one message, the conversation it belongs to, or the sender's own
-// markup — the last two standing in front of the message rather than instead of it, which is why the message they were
-// opened from is still what this component is holding. Closing either draws it again with nothing having had to
-// remember it.
+// What is being read on the right of the mail space: one message, the conversation it belongs to, the sender's own
+// markup, or one file the message carries — the last three standing in front of the message rather than instead of it,
+// which is why the message they were opened from is still what this component is holding. Closing any of them draws
+// what is behind it again with nothing having had to remember it.
 //
 // The markup surface is in front of the conversation as well as of the message, because it is opened from a message's
-// head and returns to whatever that head was drawn in.
+// head and returns to whatever that head was drawn in. The file is asked about before either, because it was opened
+// from whatever was on the screen: a reader who opened an attachment from a message inside a conversation is looking
+// at the file, and the conversation is what they go back to.
 //
 // Keyed by the conversation together with the message it was opened at, because what a conversation opens with is
 // decided once from what it holds then: opening the same conversation at another message is a screen of its own rather
-// than the same one adjusted.
+// than the same one adjusted. The file is keyed for the same reason and by the same rule.
 function OpenMail({
     session,
     transport,
     conversation,
     fullHtml,
+    attachment,
     storedEmailId,
     online,
     expandWholeThread,
     onShowFullHtml,
     onCloseFullHtml,
+    onCloseAttachment,
 }: {
     readonly session: ClientSession;
     readonly transport: MailFathomTransport;
     readonly conversation: OpenConversation | null;
     readonly fullHtml: string | null;
+    readonly attachment: OpenedAttachment | null;
     readonly storedEmailId: string | null;
     readonly online: boolean;
     readonly onShowFullHtml: (storedEmailId: string, subject: string | null) => void;
     readonly onCloseFullHtml: () => void;
+    readonly onCloseAttachment: () => void;
 
     /** Whether the reader asked for conversations to open with every message drawn, which only the conversation reads. */
     readonly expandWholeThread: boolean;
@@ -592,16 +607,30 @@ function OpenMail({
     // ref written during one: a ref would be written twice under StrictMode and the second pass would report that
     // nothing had been in front.
     //
-    // The question is *whether something was in front* rather than which of the two it was, so the conversation and the
-    // markup surface are one value here. Asking it per surface is how closing the second one would leave focus on a
-    // control that has just been unmounted, while closing the first placed it correctly.
-    const covered = conversation !== null || fullHtml !== null;
+    // The question is *whether something was in front* rather than which of the three it was, so the conversation, the
+    // markup surface, and the file are one value here. Asking it per surface is how closing the second one would leave
+    // focus on a control that has just been unmounted, while closing the first placed it correctly.
+    const covered = conversation !== null || fullHtml !== null || attachment !== null;
     const [wasCovered, setWasCovered] = useState(covered);
     const [arriving, setArriving] = useState(false);
 
     if (wasCovered !== covered) {
         setWasCovered(covered);
         setArriving(!covered);
+    }
+
+    // Keyed by the file, so opening a second one from the same message is a surface of its own rather than the first
+    // one adjusted — which is what keeps a read of one file from drawing into the screen that asked for another.
+    if (attachment !== null) {
+        return (
+            <AttachmentView
+                key={attachmentKey(attachment)}
+                session={session}
+                opened={attachment}
+                online={online}
+                onClose={onCloseAttachment}
+            />
+        );
     }
 
     if (fullHtml !== null) {

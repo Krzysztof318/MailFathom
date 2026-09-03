@@ -6,11 +6,12 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { ClientRequest, ClientSession, MailAttachment } from '@mailfathom/client-backend';
 import {
-    AttachmentDeliveryContext,
-    type AttachmentDelivery,
+    AttachmentExchangeContext,
+    type AttachmentExchange,
     type AttachmentDeliveryOutcome,
-} from '../deployment/attachmentDelivery';
+} from '../deployment/attachmentExchange';
 import { LocalizationProvider } from '../localization/Localization';
+import { OpenAttachmentContext, type OpenedAttachment } from '../workspace/openAttachment';
 import { Attachments } from './Attachments';
 
 const session: ClientSession = {
@@ -44,9 +45,9 @@ interface Asked {
     readonly abandoned: AbortSignal;
 }
 
-/** A delivery that records what it was asked and answers when the test says so, never on its own. */
+/** An exchange whose delivery records what it was asked and answers when the test says so, never on its own. */
 function deliveryHeldOpen(): {
-    deliver: AttachmentDelivery;
+    exchange: AttachmentExchange;
     asked: Asked[];
     answer: (outcome: AttachmentDeliveryOutcome, at?: number) => void;
 } {
@@ -58,22 +59,33 @@ function deliveryHeldOpen(): {
         answer: (outcome, at) => {
             settling[at ?? settling.length - 1]?.(outcome);
         },
-        deliver: (request, fileName, arrived, abandoned) => {
-            asked.push({ request, fileName, arrived, abandoned });
+        exchange: {
+            deliver: (request, fileName, arrived, abandoned) => {
+                asked.push({ request, fileName, arrived, abandoned });
 
-            return new Promise<AttachmentDeliveryOutcome>((resolve) => {
-                settling.push(resolve);
-            });
+                return new Promise<AttachmentDeliveryOutcome>((resolve) => {
+                    settling.push(resolve);
+                });
+            },
+
+            // The strip never shows a file, so a read reaching this is a defect rather than a case to answer.
+            read: () => Promise.reject(new Error('The strip asked to show a file rather than to download one.')),
         },
     };
 }
 
-function drawing(attachments: readonly MailAttachment[], deliver: AttachmentDelivery) {
+function drawing(
+    attachments: readonly MailAttachment[],
+    exchange: AttachmentExchange,
+    open: (opened: OpenedAttachment) => void = () => undefined,
+) {
     return render(
         <LocalizationProvider>
-            <AttachmentDeliveryContext value={deliver}>
-                <Attachments session={session} storedEmailId={messageId} attachments={attachments} />
-            </AttachmentDeliveryContext>
+            <AttachmentExchangeContext value={exchange}>
+                <OpenAttachmentContext value={open}>
+                    <Attachments session={session} storedEmailId={messageId} attachments={attachments} />
+                </OpenAttachmentContext>
+            </AttachmentExchangeContext>
         </LocalizationProvider>,
     );
 }
@@ -81,14 +93,14 @@ function drawing(attachments: readonly MailAttachment[], deliver: AttachmentDeli
 describe('Attachments', () => {
     it('fetches nothing until a download is asked for', () => {
         const held = deliveryHeldOpen();
-        drawing([invoice, photograph], held.deliver);
+        drawing([invoice, photograph], held.exchange);
 
         expect(held.asked).toEqual([]);
     });
 
     it('asks for the file at the position the message described it at, under the size it stated', () => {
         const held = deliveryHeldOpen();
-        drawing([invoice, photograph], held.deliver);
+        drawing([invoice, photograph], held.exchange);
 
         fireEvent.click(screen.getByRole('button', { name: 'Download photo.jpg' }));
 
@@ -102,7 +114,7 @@ describe('Attachments', () => {
 
     it('says how much has arrived while the file is still arriving', async () => {
         const held = deliveryHeldOpen();
-        drawing([invoice], held.deliver);
+        drawing([invoice], held.exchange);
 
         fireEvent.click(screen.getByRole('button', { name: 'Download invoice.pdf' }));
 
@@ -115,7 +127,7 @@ describe('Attachments', () => {
 
     it('starts one download however often the control is pressed while that one is arriving', () => {
         const held = deliveryHeldOpen();
-        drawing([invoice], held.deliver);
+        drawing([invoice], held.exchange);
 
         fireEvent.click(screen.getByRole('button', { name: 'Download invoice.pdf' }));
         fireEvent.click(screen.getByRole('button', { name: 'Download invoice.pdf' }));
@@ -125,7 +137,7 @@ describe('Attachments', () => {
 
     it('abandons a download in flight when the way out of it is taken', () => {
         const held = deliveryHeldOpen();
-        drawing([invoice], held.deliver);
+        drawing([invoice], held.exchange);
 
         fireEvent.click(screen.getByRole('button', { name: 'Download invoice.pdf' }));
         fireEvent.click(screen.getByRole('button', { name: 'Stop downloading' }));
@@ -135,7 +147,7 @@ describe('Attachments', () => {
 
     it('says the file was downloaded once it has been', async () => {
         const held = deliveryHeldOpen();
-        drawing([invoice], held.deliver);
+        drawing([invoice], held.exchange);
 
         fireEvent.click(screen.getByRole('button', { name: 'Download invoice.pdf' }));
         held.answer('delivered');
@@ -143,15 +155,26 @@ describe('Attachments', () => {
         expect(await screen.findByText('invoice.pdf was downloaded.')).toBeDefined();
     });
 
+    // The viewer is handed the message the file came from as well as the file, because a part's position is its only
+    // identity and it means nothing without the message it is a part of.
+    it('hands the viewer the file and the message it came from when a chip is pressed', () => {
+        const opened: OpenedAttachment[] = [];
+        drawing([invoice, photograph], deliveryHeldOpen().exchange, (opening) => opened.push(opening));
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open photo.jpg' }));
+
+        expect(opened).toEqual([{ storedEmailId: messageId, attachment: photograph }]);
+    });
+
     it('offers no way to download everything where the message carries one file', () => {
-        drawing([invoice], () => Promise.resolve('delivered'));
+        drawing([invoice], deliveryHeldOpen().exchange);
 
         expect(screen.queryByRole('button', { name: 'Download all' })).toBeNull();
     });
 
     it('downloads every file the message carries, one after the next', async () => {
         const held = deliveryHeldOpen();
-        drawing([invoice, photograph], held.deliver);
+        drawing([invoice, photograph], held.exchange);
 
         fireEvent.click(screen.getByRole('button', { name: 'Download all' }));
 
@@ -167,7 +190,7 @@ describe('Attachments', () => {
 
     it('asks for no further file once the message it belongs to has been closed', async () => {
         const held = deliveryHeldOpen();
-        const { unmount } = drawing([invoice, photograph], held.deliver);
+        const { unmount } = drawing([invoice, photograph], held.exchange);
 
         fireEvent.click(screen.getByRole('button', { name: 'Download all' }));
         unmount();
@@ -184,7 +207,7 @@ describe('Attachments', () => {
 
     it('reports a refusal against the file it refused and downloads the rest anyway', async () => {
         const held = deliveryHeldOpen();
-        drawing([invoice, photograph], held.deliver);
+        drawing([invoice, photograph], held.exchange);
 
         fireEvent.click(screen.getByRole('button', { name: 'Download all' }));
         held.answer('unavailable');

@@ -5,7 +5,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { ClientRequest, ClientResponse, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
-import { AttachmentDeliveryContext, type AttachmentDelivery } from '../deployment/attachmentDelivery';
+import { AttachmentExchangeContext, type AttachmentExchange } from '../deployment/attachmentExchange';
+import { OpenAttachmentContext } from '../workspace/openAttachment';
 import { LocalizationProvider } from '../localization/Localization';
 import {
     ReadMarkingContext,
@@ -28,7 +29,10 @@ const session: ClientSession = {
 
 const messageId = '00000000-0000-4000-8000-000000000000';
 
-const deliversNothing: AttachmentDelivery = () => Promise.resolve('delivered');
+const deliversNothing: AttachmentExchange = {
+    deliver: () => Promise.resolve('delivered'),
+    read: () => Promise.resolve({ outcome: 'shown', content: '' }),
+};
 
 function description(overrides: Readonly<Record<string, unknown>> = {}): string {
     return JSON.stringify({
@@ -87,24 +91,26 @@ function drawing(
     transport: MailFathomTransport,
     storedEmailId: string | null = messageId,
     online = true,
-    deliver: AttachmentDelivery = deliversNothing,
+    deliver: AttachmentExchange = deliversNothing,
     marking: ReadMarking = nothingMarkedRead,
 ): void {
     render(
         <LocalizationProvider>
             <WorkspaceProvider>
                 <LinkOpenerContext value={() => Promise.resolve()}>
-                    <AttachmentDeliveryContext value={deliver}>
-                        <ReadMarkingContext value={marking}>
-                            <ReadingPane
-                                session={session}
-                                transport={transport}
-                                storedEmailId={storedEmailId}
-                                online={online}
-                                onShowFullHtml={() => undefined}
-                            />
-                        </ReadMarkingContext>
-                    </AttachmentDeliveryContext>
+                    <AttachmentExchangeContext value={deliver}>
+                        <OpenAttachmentContext value={() => undefined}>
+                            <ReadMarkingContext value={marking}>
+                                <ReadingPane
+                                    session={session}
+                                    transport={transport}
+                                    storedEmailId={storedEmailId}
+                                    online={online}
+                                    onShowFullHtml={() => undefined}
+                                />
+                            </ReadMarkingContext>
+                        </OpenAttachmentContext>
+                    </AttachmentExchangeContext>
                 </LinkOpenerContext>
             </WorkspaceProvider>
         </LocalizationProvider>,
@@ -281,15 +287,17 @@ function paneReading(transport: MailFathomTransport, online: boolean) {
         <LocalizationProvider>
             <WorkspaceProvider>
                 <LinkOpenerContext value={() => Promise.resolve()}>
-                    <AttachmentDeliveryContext value={deliversNothing}>
-                        <ReadingPane
-                            session={session}
-                            transport={transport}
-                            storedEmailId={messageId}
-                            online={online}
-                            onShowFullHtml={() => undefined}
-                        />
-                    </AttachmentDeliveryContext>
+                    <AttachmentExchangeContext value={deliversNothing}>
+                        <OpenAttachmentContext value={() => undefined}>
+                            <ReadingPane
+                                session={session}
+                                transport={transport}
+                                storedEmailId={messageId}
+                                online={online}
+                                onShowFullHtml={() => undefined}
+                            />
+                        </OpenAttachmentContext>
+                    </AttachmentExchangeContext>
                 </LinkOpenerContext>
             </WorkspaceProvider>
         </LocalizationProvider>
@@ -302,15 +310,17 @@ function paneFor(storedEmailId: string) {
         <LocalizationProvider>
             <WorkspaceProvider>
                 <LinkOpenerContext value={() => Promise.resolve()}>
-                    <AttachmentDeliveryContext value={deliversNothing}>
-                        <ReadingPane
-                            session={session}
-                            transport={deploymentDescribing()}
-                            storedEmailId={storedEmailId}
-                            online
-                            onShowFullHtml={() => undefined}
-                        />
-                    </AttachmentDeliveryContext>
+                    <AttachmentExchangeContext value={deliversNothing}>
+                        <OpenAttachmentContext value={() => undefined}>
+                            <ReadingPane
+                                session={session}
+                                transport={deploymentDescribing()}
+                                storedEmailId={storedEmailId}
+                                online
+                                onShowFullHtml={() => undefined}
+                            />
+                        </OpenAttachmentContext>
+                    </AttachmentExchangeContext>
                 </LinkOpenerContext>
             </WorkspaceProvider>
         </LocalizationProvider>
@@ -325,16 +335,18 @@ describe('ReadingPane selection', () => {
             <LocalizationProvider>
                 <WorkspaceProvider>
                     <LinkOpenerContext value={() => Promise.resolve()}>
-                        <AttachmentDeliveryContext value={deliversNothing}>
-                            <IntentField accounts={[]} />
-                            <ReadingPane
-                                session={session}
-                                transport={deploymentDescribing()}
-                                storedEmailId={messageId}
-                                online
-                                onShowFullHtml={() => undefined}
-                            />
-                        </AttachmentDeliveryContext>
+                        <AttachmentExchangeContext value={deliversNothing}>
+                            <OpenAttachmentContext value={() => undefined}>
+                                <IntentField accounts={[]} />
+                                <ReadingPane
+                                    session={session}
+                                    transport={deploymentDescribing()}
+                                    storedEmailId={messageId}
+                                    online
+                                    onShowFullHtml={() => undefined}
+                                />
+                            </OpenAttachmentContext>
+                        </AttachmentExchangeContext>
                     </LinkOpenerContext>
                 </WorkspaceProvider>
             </LocalizationProvider>,
