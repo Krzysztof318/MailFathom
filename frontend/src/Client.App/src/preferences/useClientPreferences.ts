@@ -22,8 +22,8 @@ import { useTheme } from '../theme/useTheme';
 // then replaces it once one exists, and that replacement happens once per read rather than on every render — a screen
 // that reconciled the two continuously would fight whichever of them a person changed last.
 //
-// Language is not here. It stays on the device, because what a person reads a client in is a fact about the machine
-// they are at rather than about them.
+// Language is not here. It is chosen above the sign-in screen as well as behind it, and the rule in
+// `frontend/src/AGENTS.md` § *State* is what keeps it where the earlier of those two can reach it.
 
 /** What the client is set to, and how a person changes one of the settings that follow them. */
 export interface ClientPreferencesInForce {
