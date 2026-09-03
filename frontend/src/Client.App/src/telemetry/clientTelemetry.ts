@@ -167,7 +167,14 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
             });
 
             return () => {
-                next((pipeline) => pipeline?.hold());
+                // What this stop does is decided when it runs rather than when it was created, and that is what makes
+                // a refusal taken mid-session safe. React runs a cleanup before the effect body that replaced it, so
+                // somebody moving the switch to off queues this hold first and the discard above second — and holding
+                // flushes on purpose, which would put exactly the records they had just declined onto the wire under
+                // the credential they declined them with, leaving the discard behind it nothing to throw away. Both
+                // steps are queued in one turn, so by the time this one runs the body has already stated the new
+                // answer: reading it here is reading the decision rather than guessing what follows.
+                next((pipeline) => (permitted ? pipeline?.hold() : undefined));
             };
         },
 

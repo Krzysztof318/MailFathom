@@ -305,6 +305,37 @@ describe('useClientPreferences', () => {
         });
     });
 
+    // A write states the whole document, and the account menu offers the theme from the moment it is drawn — so this
+    // is the window between signing in and the read coming back, in which every other value is the route's own unset
+    // answer. Telemetry may not be: the device is holding the answer this person actually gave, and sending the unset
+    // one would turn their refusal into permission on the deployment, in the cache, and on the screen, silently.
+    it('composes a write made before the read returns from what this device remembers', () => {
+        window.localStorage.setItem(telemetryKey(anna), 'false');
+
+        const requests: ClientRequest[] = [];
+        const transport: MailFathomTransport = (request) => {
+            requests.push(request);
+
+            return new Promise(() => undefined);
+        };
+
+        const { result } = reading(transport);
+
+        act(() => {
+            result.current.preferences.chooseTheme('dark');
+        });
+
+        const written = requests.find((asked) => asked.method === 'POST');
+
+        expect(JSON.parse(written?.body ?? '')).toStrictEqual({
+            telemetryEnabled: false,
+            theme: 'dark',
+            openMailInTabs: false,
+            markReadOnOpen: true,
+        });
+        expect(window.localStorage.getItem(telemetryKey(anna))).toBe('false');
+    });
+
     it('lets a choice made while the read is still out stand rather than being read over', async () => {
         const answered: ((answer: { status: number; body: string; headers: Record<string, string> }) => void)[] = [];
         const requests: ClientRequest[] = [];

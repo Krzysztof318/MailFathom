@@ -440,6 +440,23 @@ describe('exportFor', () => {
         });
     });
 
+    // The order React produces when only the permission changed: the previous effect's cleanup, then the next effect's
+    // body. Holding flushes, so a hold that went ahead here would send the batch somebody had just declined — and the
+    // discard behind it would then be throwing away an empty buffer while the records were already on the wire.
+    it('throws away rather than flushing when a session that was permitted is refused', async () => {
+        const telemetry = clientTelemetryForThisApplication();
+
+        const stop = telemetry.exportFor(session, true);
+
+        stop();
+        telemetry.exportFor(session, false);
+
+        await vi.waitFor(() => {
+            expect(pipeline.steps).toEqual(['export Basic c2FtcGxl', 'discard']);
+        });
+        expect(pipeline.steps).not.toContain('hold');
+    });
+
     it('keeps the session that is signed in when one ends and the next begins in the same turn', async () => {
         const telemetry = clientTelemetryForThisApplication();
 

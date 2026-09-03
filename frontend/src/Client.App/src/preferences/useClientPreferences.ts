@@ -175,8 +175,19 @@ export function useClientPreferences(
 
     // What the next write is composed out of: the document last read or last chosen, and the unset one where that
     // belongs to a session this is no longer.
+    //
+    // One value is not taken from the unset document there, and it is the same one the return below derives rather
+    // than holds. A write states the whole document, and the account menu offers the theme and the tab mode from the
+    // moment it is drawn — so somebody who had declined telemetry and changes either of those before the read comes
+    // back would send `telemetryEnabled: true` under their own credential, abandon the read that would have said
+    // otherwise, and have the device's copy rewritten to match. Nobody stated that value; it is the shape of the
+    // route's answer standing in for an answer, and the device is holding the one they actually gave.
     function composedFrom(): ClientPreferences {
-        return latest.current.session === session ? latest.current.preferences : unsetClientPreferences;
+        if (latest.current.session === session) {
+            return latest.current.preferences;
+        }
+
+        return { ...unsetClientPreferences, telemetryEnabled: rememberedTelemetry(person) };
     }
 
     return {
