@@ -45,6 +45,11 @@ namespace MailFathom.Host.Api;
 /// an administrator maintains writes there while writing nothing to the record.
 /// </para>
 /// <para>
+/// The portrait routes, which <see cref="ClientPortraitEndpoint" /> describes, hold the picture a person is drawn by.
+/// They sit beside the preferences rather than in them, because a megabyte of image octets is not a small closed
+/// document and reading a switch should not carry a photograph.
+/// </para>
+/// <para>
 /// The telemetry routes, which <see cref="ClientTelemetryEndpoint" /> describes, are the one family here that is not
 /// about mail: they take the client's own OTLP export and forward it to the collector this deployment already exports
 /// to, because the collector's address and its credential belong to the deployment and a browser bundle holding either
@@ -87,6 +92,7 @@ internal static class ClientApiEndpoints
         api.MapClientOwnerRecord();
         api.MapClientDisplayName();
         api.MapClientPreferences();
+        api.MapClientPortrait();
         api.MapClientMailAccounts();
         api.MapClientMailFolders();
         api.MapClientMailTimeline();

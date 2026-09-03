@@ -60,6 +60,7 @@ using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Observability;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Portraits;
 using MailFathom.Application.Preferences;
 using MailFathom.Application.Resilience;
 using MailFathom.Application.Retrieval;
@@ -112,6 +113,7 @@ using MailFathom.Infrastructure.Persistence.Embeddings;
 using MailFathom.Infrastructure.Persistence.Jobs;
 using MailFathom.Infrastructure.Persistence.Mutations;
 using MailFathom.Infrastructure.Persistence.Owners;
+using MailFathom.Infrastructure.Persistence.Portraits;
 using MailFathom.Infrastructure.Persistence.Preferences;
 using MailFathom.Infrastructure.Persistence.Rules;
 using MailFathom.Infrastructure.Persistence.Secrets;
@@ -511,6 +513,11 @@ public static class ServiceCollectionExtensions
         // The caller-facing use case over it, separate from the store for the reason the contact book's two are: it
         // carries the grant a caller has to hold and the owner the act is resolved for, and the store carries neither.
         services.AddScoped<OwnClientPreferences>();
+        // The picture a person is drawn by, which hangs off the owner row beside that document rather than inside it:
+        // a megabyte of octets is not a small closed document, and a read of a switch should not carry one. Scoped and
+        // registered unconditionally for the same reasons the preferences store is.
+        services.AddScoped<IOwnerPortraitStore, OwnerPortraitStore>();
+        services.AddScoped<OwnPortrait>();
         // Taking an owner off the deployment, with everything it recorded for them. Scoped because the whole walk runs
         // in one of the request's own transactions, and separate from the provisioning above because provisioning runs
         // on every start and is idempotent while this runs when a person asked for it and cannot be undone.
