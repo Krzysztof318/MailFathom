@@ -842,10 +842,12 @@ test('lets a choice outrank the machine preference, and keeps it across a reload
 
     // Found by the one string the client deliberately never translates — a language is named in its own language, so
     // somebody who landed in one they cannot read finds their own — rather than by a label this page is showing in
-    // Polish, which would put a second copy of the catalogue in this file.
-    const language = page.getByRole('combobox').filter({ has: page.getByRole('option', { name: 'Polski' }) });
+    // Polish, which would put a second copy of the catalogue in this file. The choice is a segmented group of radio
+    // buttons whose inputs are hidden from sight rather than from the accessibility tree, so what a person clicks is
+    // the label carrying the name, which is what this clicks too.
+    const language = page.getByRole('group').filter({ has: page.getByRole('radio', { name: 'Polski' }) });
 
-    await language.selectOption('en');
+    await language.getByText('English', { exact: true }).click();
     await page.reload();
 
     // The machine still prefers Polish and the client still opens in English, which is the whole of what "explicit
