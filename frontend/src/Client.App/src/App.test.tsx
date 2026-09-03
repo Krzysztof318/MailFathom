@@ -249,7 +249,12 @@ function deploymentWorkingInTabs(): DeploymentTransport {
         return Promise.resolve(
             complete({
                 status: 200,
-                body: JSON.stringify({ telemetryEnabled: false, theme: 'system', openMailInTabs: true }),
+                body: JSON.stringify({
+                    telemetryEnabled: false,
+                    theme: 'system',
+                    openMailInTabs: true,
+                    markReadOnOpen: true,
+                }),
             }),
         );
     };

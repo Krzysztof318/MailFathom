@@ -5,6 +5,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LocalizationProvider } from '../localization/Localization';
+import { storeLocale } from '../localization/locale';
 import { tabFor, type OpenTab } from './openTabs';
 import { TabStrip } from './TabStrip';
 
@@ -86,6 +87,8 @@ afterEach(() => {
         Object.defineProperty(HTMLDialogElement.prototype, 'close', declaredClose);
     }
 
+    window.localStorage.clear();
+    window.sessionStorage.clear();
     vi.restoreAllMocks();
 });
 
@@ -220,6 +223,30 @@ describe('TabStrip', () => {
 
         expect(acts.closeEverything).toHaveBeenCalledTimes(1);
         expect(screen.queryByRole('heading', { name: 'Close every tab?' })).toBeNull();
+    });
+
+    it('counts one open tab in the form one takes rather than in the plural', () => {
+        renderStrip([quarterly], quarterly.key);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Close everything that is open' }));
+
+        expect(screen.getByText('Open tab: 1.')).toBeDefined();
+    });
+
+    // Polish is where a count actually has to be read: it takes one form at one, a second at two through four, and a
+    // third above that, and a screen that interpolated a number into one sentence would be wrong at two of the three.
+    it.each([
+        [[quarterly], 'Otwarta zakładka: 1.'],
+        [[quarterly, invoice], 'Otwarte zakładki: 2.'],
+        [[quarterly, invoice, rota, draft, tabFor('thread', 'message-5', 'A fifth')], 'Otwartych zakładek: 5.'],
+    ])('counts what is open in the form Polish takes at that number', (open, said) => {
+        storeLocale('pl');
+
+        renderStrip(open, null);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Zamknij wszystko, co jest otwarte' }));
+
+        expect(screen.getByText(new RegExp(said.replaceAll('.', '\\.')))).toBeDefined();
     });
 
     it('says the words in an unsent draft go with it, and says so only where one is open', () => {

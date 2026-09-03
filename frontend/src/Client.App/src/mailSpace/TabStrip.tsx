@@ -5,6 +5,7 @@
 import { useRef, useState, type KeyboardEvent } from 'react';
 import { Icon } from '../controls/Icon';
 import type { IconName } from '../controls/icons';
+import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { closed, type OpenTab, type OpenTabKind } from './openTabs';
 
@@ -191,6 +192,20 @@ export function TabStrip({
 // reading.
 const everythingCloses = 'close-everything';
 
+// How many tabs go, in the form the count actually takes. It is the first thing this client counts out loud, so the
+// form is selected rather than spelled: Polish needs three for this noun and English hides that it needs two, and a
+// single catalogue entry could express neither. Only `one`, `few`, and `many` are ever selected by the two languages
+// the client reads in; the rest fall to the plain plural, which is what a language that asked for a dual would get
+// until somebody writes one.
+const tabsOpen: Readonly<Record<Intl.LDMLPluralRule, MessageKey>> = {
+    zero: 'tabs.closeAllOpen.other',
+    one: 'tabs.closeAllOpen.one',
+    two: 'tabs.closeAllOpen.other',
+    few: 'tabs.closeAllOpen.few',
+    many: 'tabs.closeAllOpen.many',
+    other: 'tabs.closeAllOpen.other',
+};
+
 function CloseEverything({
     open,
     draft,
@@ -233,7 +248,9 @@ function CloseEverything({
                     </h2>
 
                     <p className="text-base text-muted">
-                        {translate('tabs.closeAllOpen', { count: new Intl.NumberFormat(locale).format(open) })}
+                        {translate(tabsOpen[new Intl.PluralRules(locale).select(open)], {
+                            count: new Intl.NumberFormat(locale).format(open),
+                        })}
                         {draft ? ` ${translate('tabs.closeAllDraft')}` : ''}
                     </p>
 
