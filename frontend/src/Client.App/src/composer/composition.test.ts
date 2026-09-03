@@ -54,7 +54,10 @@ describe('answerTo', () => {
 
     it('addresses a reply to the address the author asked to be answered at', () => {
         const composed = answerTo(
-            message('Invoice', [participant('From', 'ada@example.invalid'), participant('ReplyTo', 'desk@example.invalid')]),
+            message('Invoice', [
+                participant('From', 'ada@example.invalid'),
+                participant('ReplyTo', 'desk@example.invalid'),
+            ]),
             'senderOnly',
         );
 
@@ -137,7 +140,9 @@ describe('whatWouldBeMissing', () => {
     });
 
     it('reads whitespace as nothing written', () => {
-        expect(whatWouldBeMissing({ ...nothingWrittenYet('work'), subject: '   ', words: '\n' })).toContain('noSubject');
+        expect(whatWouldBeMissing({ ...nothingWrittenYet('work'), subject: '   ', words: '\n' })).toContain(
+            'noSubject',
+        );
     });
 });
 

@@ -54,12 +54,18 @@ describe('rememberedComposition', () => {
         ['an address that is not text', JSON.stringify({ ...written, to: [7] })],
         ['an empty address', JSON.stringify({ ...written, to: [''] })],
         ['a header that is not a list', JSON.stringify({ ...written, cc: 'bo@example.invalid' })],
-        ['more addresses than one header takes', JSON.stringify({ ...written, to: Array.from({ length: 257 }, () => 'a@b') })],
+        [
+            'more addresses than one header takes',
+            JSON.stringify({ ...written, to: Array.from({ length: 257 }, () => 'a@b') }),
+        ],
         ['a subject past a header line', JSON.stringify({ ...written, subject: 'x'.repeat(999) })],
         ['an address past the longest one', JSON.stringify({ ...written, to: ['x'.repeat(321)] })],
         ['an account past an identifier', JSON.stringify({ ...written, account: 'x'.repeat(257) })],
         ['an answer to nothing named', JSON.stringify({ ...written, answering: { answers: 'everyone' } })],
-        ['an answer of a kind there is none of', JSON.stringify({ ...written, answering: { storedEmailId: 'e1', answers: 'shout' } })],
+        [
+            'an answer of a kind there is none of',
+            JSON.stringify({ ...written, answering: { storedEmailId: 'e1', answers: 'shout' } }),
+        ],
         ['an answer that is a list', JSON.stringify({ ...written, answering: [] })],
     ])('answers nothing for %s, rather than a message with a hole in it', (_, stored) => {
         window.sessionStorage.setItem(storageKey, stored);

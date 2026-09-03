@@ -55,9 +55,7 @@ function recording(response: Answer): { transport: MailFathomTransport; requests
     };
 }
 
-function draftBody(
-    fields: Readonly<Record<string, unknown>> = {},
-): Answer {
+function draftBody(fields: Readonly<Record<string, unknown>> = {}): Answer {
     return {
         status: 200,
         body: JSON.stringify({
@@ -178,27 +176,64 @@ describe('writeMailDraft', () => {
 
     it.each([
         { shape: 'a body that is not JSON', body: 'not json' },
-        { shape: 'a staged file with no size on it', body: JSON.stringify({
-            draftId, account: 'work', subject: '', revision: 1, sizeOctets: 1, recipients: [],
-            attachments: [{ attachmentId, fileName: 'a.pdf', mediaType: 'application/pdf' }],
-        }) },
+        {
+            shape: 'a staged file with no size on it',
+            body: JSON.stringify({
+                draftId,
+                account: 'work',
+                subject: '',
+                revision: 1,
+                sizeOctets: 1,
+                recipients: [],
+                attachments: [{ attachmentId, fileName: 'a.pdf', mediaType: 'application/pdf' }],
+            }),
+        },
         { shape: 'a record with no draft identifier', body: JSON.stringify({ account: 'work' }) },
-        { shape: 'a recipient written in a header this surface does not publish', body: JSON.stringify({
-            draftId, account: 'work', subject: '', revision: 1, sizeOctets: 1, attachments: [],
-            recipients: [{ role: 'Sender', address: 'anna@example.invalid', displayName: null }],
-        }) },
-        { shape: 'more recipients than a draft is read with', body: JSON.stringify({
-            draftId, account: 'work', subject: '', revision: 1, sizeOctets: 1, attachments: [],
-            recipients: Array.from({ length: mostRecipientsInDraft + 1 }, () => ({
-                role: 'To', address: 'anna@example.invalid', displayName: null,
-            })),
-        }) },
-        { shape: 'more staged files than a draft is read with', body: JSON.stringify({
-            draftId, account: 'work', subject: '', revision: 1, sizeOctets: 1, recipients: [],
-            attachments: Array.from({ length: mostAttachmentsInDraft + 1 }, () => ({
-                attachmentId, fileName: 'a.pdf', mediaType: 'application/pdf', sizeOctets: 1,
-            })),
-        }) },
+        {
+            shape: 'a recipient written in a header this surface does not publish',
+            body: JSON.stringify({
+                draftId,
+                account: 'work',
+                subject: '',
+                revision: 1,
+                sizeOctets: 1,
+                attachments: [],
+                recipients: [{ role: 'Sender', address: 'anna@example.invalid', displayName: null }],
+            }),
+        },
+        {
+            shape: 'more recipients than a draft is read with',
+            body: JSON.stringify({
+                draftId,
+                account: 'work',
+                subject: '',
+                revision: 1,
+                sizeOctets: 1,
+                attachments: [],
+                recipients: Array.from({ length: mostRecipientsInDraft + 1 }, () => ({
+                    role: 'To',
+                    address: 'anna@example.invalid',
+                    displayName: null,
+                })),
+            }),
+        },
+        {
+            shape: 'more staged files than a draft is read with',
+            body: JSON.stringify({
+                draftId,
+                account: 'work',
+                subject: '',
+                revision: 1,
+                sizeOctets: 1,
+                recipients: [],
+                attachments: Array.from({ length: mostAttachmentsInDraft + 1 }, () => ({
+                    attachmentId,
+                    fileName: 'a.pdf',
+                    mediaType: 'application/pdf',
+                    sizeOctets: 1,
+                })),
+            }),
+        },
     ])('refuses $shape as unreadable', async ({ body }) => {
         const answer = await writeMailDraft(session, answering({ status: 200, body }), composition);
 
@@ -212,11 +247,7 @@ describe('writeMailDraft', () => {
     });
 
     it('reads a deployment that never answered as one to try again', async () => {
-        const answer = await writeMailDraft(
-            session,
-            () => Promise.reject(new Error('no route to host')),
-            composition,
-        );
+        const answer = await writeMailDraft(session, () => Promise.reject(new Error('no route to host')), composition);
 
         expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unavailable', status: null } });
     });
@@ -236,7 +267,10 @@ describe('reviseMailDraft', () => {
 
 describe('discardMailDraft', () => {
     it('gives the draft up at its own route', async () => {
-        const { transport, requests } = recording({ status: 200, body: JSON.stringify({ draftId, outcome: 'Removed' }) });
+        const { transport, requests } = recording({
+            status: 200,
+            body: JSON.stringify({ draftId, outcome: 'Removed' }),
+        });
 
         const answer = await discardMailDraft(session, transport, draftId);
 
@@ -370,7 +404,11 @@ describe('sendMailDraft', () => {
     });
 
     it('refuses a queueing that named no send as unreadable', async () => {
-        const answer = await sendMailDraft(session, answering({ status: 200, body: JSON.stringify({ draftId }) }), draftId);
+        const answer = await sendMailDraft(
+            session,
+            answering({ status: 200, body: JSON.stringify({ draftId }) }),
+            draftId,
+        );
 
         expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
     });

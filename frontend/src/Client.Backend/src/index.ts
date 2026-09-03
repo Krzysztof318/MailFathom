@@ -83,11 +83,7 @@ export {
     type MailSendRefusal,
     type MailStagedAttachment,
 } from './mailDrafts';
-export {
-    mailOutboxCancellationRoute,
-    withdrawOutgoingMail,
-    type MailSendWithdrawal,
-} from './mailOutbox';
+export { mailOutboxCancellationRoute, withdrawOutgoingMail, type MailSendWithdrawal } from './mailOutbox';
 export {
     mailFoldersRoute,
     readMailFolders,

@@ -318,17 +318,11 @@ export function stageMailDraftAttachment(
     );
 }
 
-function reportedDraft(
-    request: string,
-    ask: () => Promise<ClientResult<MailDraft>>,
-): Promise<ClientResult<MailDraft>> {
+function reportedDraft(request: string, ask: () => Promise<ClientResult<MailDraft>>): Promise<ClientResult<MailDraft>> {
     return reported(request, ask, (result) => (result.outcome === 'failed' ? result.failure.reason : null));
 }
 
-function reportedNothing(
-    request: string,
-    ask: () => Promise<ClientResult<void>>,
-): Promise<ClientResult<void>> {
+function reportedNothing(request: string, ask: () => Promise<ClientResult<void>>): Promise<ClientResult<void>> {
     return reported(request, ask, (result) => (result.outcome === 'failed' ? result.failure.reason : null));
 }
 

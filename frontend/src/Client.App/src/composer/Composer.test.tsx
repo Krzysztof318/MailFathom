@@ -115,7 +115,12 @@ function answerFor(request: ClientRequest, answers: Answers): { status: number; 
 const uploadsOneFile: AttachmentUpload = () =>
     Promise.resolve({
         status: 200,
-        body: JSON.stringify({ attachmentId: 'a1', fileName: 'invoice.pdf', mediaType: 'application/pdf', sizeOctets: 2_048 }),
+        body: JSON.stringify({
+            attachmentId: 'a1',
+            fileName: 'invoice.pdf',
+            mediaType: 'application/pdf',
+            sizeOctets: 2_048,
+        }),
         headers: {},
     });
 
@@ -296,7 +301,10 @@ describe('Composer, a message of its own', () => {
     });
 
     it('says a message already going out could not be taken back', async () => {
-        drawComposer({ kind: 'new' }, { withdrawal: { status: 200, body: JSON.stringify({ outcome: 'StageDoesNotAllowIt' }) } });
+        drawComposer(
+            { kind: 'new' },
+            { withdrawal: { status: 200, body: JSON.stringify({ outcome: 'StageDoesNotAllowIt' }) } },
+        );
 
         address('ada@example.invalid');
         confirmSend();
@@ -396,9 +404,9 @@ describe('Composer, a message of its own', () => {
         });
 
         expect(screen.queryByRole('list', { name: 'Attached files' })).toBeNull();
-        expect(
-            asked.some((request) => request.method === 'DELETE' && request.path.endsWith('/attachments/a1')),
-        ).toBe(true);
+        expect(asked.some((request) => request.method === 'DELETE' && request.path.endsWith('/attachments/a1'))).toBe(
+            true,
+        );
     });
 
     it('closes without asking where nothing has been written', () => {

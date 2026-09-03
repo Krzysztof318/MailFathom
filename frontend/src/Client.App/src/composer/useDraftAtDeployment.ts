@@ -117,7 +117,9 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
     // Every act ends by saying what happened, and a failure says which of the four it was rather than that something
     // went wrong. Stated once here because five acts would otherwise each carry their own copy of the same three lines.
     function settled<TValue>(answer: ClientResult<TValue>, whenRead: (value: TValue) => DraftStanding): void {
-        setStanding(answer.outcome === 'failed' ? { kind: 'failed', reason: answer.failure.reason } : whenRead(answer.value));
+        setStanding(
+            answer.outcome === 'failed' ? { kind: 'failed', reason: answer.failure.reason } : whenRead(answer.value),
+        );
     }
 
     return {

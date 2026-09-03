@@ -37,16 +37,16 @@ function inStrictMode(space: SpaceName): ReactNode {
             <LocalizationProvider>
                 <WorkspaceProvider>
                     <ComposingContext value={nothingBeingWritten}>
-                    <Space
-                        space={space}
-                        intent={<p>{handedTheIntent}</p>}
-                        status={<p>{handedTheStatus}</p>}
-                        folders={<p>{handedTheFolders}</p>}
-                        list={<p>{handedTheList}</p>}
-                        mail={<p>{handedToMail}</p>}
-                        tabs={<p>{handedTheTabs}</p>}
-                        person="reader"
-                    />
+                        <Space
+                            space={space}
+                            intent={<p>{handedTheIntent}</p>}
+                            status={<p>{handedTheStatus}</p>}
+                            folders={<p>{handedTheFolders}</p>}
+                            list={<p>{handedTheList}</p>}
+                            mail={<p>{handedToMail}</p>}
+                            tabs={<p>{handedTheTabs}</p>}
+                            person="reader"
+                        />
                     </ComposingContext>
                 </WorkspaceProvider>
             </LocalizationProvider>

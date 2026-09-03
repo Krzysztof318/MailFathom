@@ -83,7 +83,10 @@ describe('RecipientField', () => {
     });
 
     it('says what one header takes once it is full', () => {
-        const full = Array.from({ length: mostRecipientsInOneHeader }, (_, at) => `reader${String(at)}@example.invalid`);
+        const full = Array.from(
+            { length: mostRecipientsInOneHeader },
+            (_, at) => `reader${String(at)}@example.invalid`,
+        );
         const { changed } = drawField(full);
 
         fireEvent.change(field(), { target: { value: 'ada@example.invalid' } });

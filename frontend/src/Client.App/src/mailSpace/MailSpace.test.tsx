@@ -100,21 +100,21 @@ function renderSpace(wide: boolean, opening: Partial<Workspace> = {}, person: st
         <LocalizationProvider>
             <WorkspaceProvider>
                 <ComposingContext value={nothingBeingWritten}>
-                <Opening change={opening} />
-                <MailSpace
-                    folders={
-                        <>
-                            <p>{handedTheFolders}</p>
-                            <ChooseInbox />
-                        </>
-                    }
-                    list={<p>{handedTheList}</p>}
-                    mail={<p>{handedToMail}</p>}
-                    tabs={<p>{handedTheTabs}</p>}
-                    intent={<p>{handedTheIntent}</p>}
-                    status={<p>{handedTheStatus}</p>}
-                    person={person}
-                />
+                    <Opening change={opening} />
+                    <MailSpace
+                        folders={
+                            <>
+                                <p>{handedTheFolders}</p>
+                                <ChooseInbox />
+                            </>
+                        }
+                        list={<p>{handedTheList}</p>}
+                        mail={<p>{handedToMail}</p>}
+                        tabs={<p>{handedTheTabs}</p>}
+                        intent={<p>{handedTheIntent}</p>}
+                        status={<p>{handedTheStatus}</p>}
+                        person={person}
+                    />
                 </ComposingContext>
             </WorkspaceProvider>
         </LocalizationProvider>,
