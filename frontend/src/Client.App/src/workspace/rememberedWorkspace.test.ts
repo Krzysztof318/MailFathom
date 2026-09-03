@@ -81,6 +81,29 @@ describe('rememberWorkspace', () => {
         expect(window.sessionStorage.getItem(storageKey)).not.toContain('the-file-somebody-opened');
         expect(rememberedWorkspace().attachment).toBeNull();
     });
+
+    // The other half of that, and the half a store cannot be trusted for: what is read back is refused rather than
+    // merely never written, because a store is a place a person can write.
+    it('opens no file for anybody where a store was edited to say one was open', () => {
+        window.sessionStorage.setItem(
+            storageKey,
+            JSON.stringify({
+                ...kept,
+                attachment: {
+                    storedEmailId: 'AAMkAD-42',
+                    attachment: {
+                        position: 0,
+                        fileName: 'the-file-nobody-asked-for.png',
+                        wasFileNameNormalized: false,
+                        mediaType: 'image/png',
+                        sizeOctets: 2_048,
+                    },
+                },
+            }),
+        );
+
+        expect(rememberedWorkspace().attachment).toBeNull();
+    });
 });
 
 describe('rememberedWorkspace', () => {

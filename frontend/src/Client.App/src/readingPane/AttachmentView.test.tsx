@@ -2,11 +2,12 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { ClientRequest, ClientSession, MailAttachment } from '@mailfathom/client-backend';
 import {
     AttachmentExchangeContext,
+    type AttachmentDeliveryOutcome,
     type AttachmentExchange,
     type AttachmentRead,
     type ShownAs,
@@ -67,6 +68,39 @@ function reading(...answers: readonly AttachmentRead[]): { exchange: AttachmentE
 
                 return answer === undefined ? new Promise<AttachmentRead>(() => undefined) : Promise.resolve(answer);
             },
+        },
+    };
+}
+
+/** A delivery the test drives: it reports what it was asked and settles only when the test says so. */
+function delivering(): {
+    exchange: AttachmentExchange;
+    arrived: (octets: number) => void;
+    finish: (outcome: AttachmentDeliveryOutcome) => void;
+} {
+    let reporting: (octets: number) => void = () => undefined;
+    let settling: (outcome: AttachmentDeliveryOutcome) => void = () => undefined;
+
+    return {
+        arrived: (octets) => {
+            act(() => {
+                reporting(octets);
+            });
+        },
+        finish: (outcome) => {
+            act(() => {
+                settling(outcome);
+            });
+        },
+        exchange: {
+            deliver: (_request, _fileName, arrived) => {
+                reporting = arrived;
+
+                return new Promise<AttachmentDeliveryOutcome>((resolve) => {
+                    settling = resolve;
+                });
+            },
+            read: () => new Promise<AttachmentRead>(() => undefined),
         },
     };
 }
@@ -180,6 +214,23 @@ describe('AttachmentView', () => {
         drawing(contract, reading().exchange);
 
         expect(screen.getByRole('button', { name: 'Download contract.pdf' })).toBeDefined();
+    });
+
+    // The download the head offers is the same act the row under a message offers, and it is the one thing on this
+    // surface that keeps state of its own: what is being proven is that pressing it starts that download and that what
+    // becomes of it is said here rather than in the message the file was opened from.
+    it('downloads the file from the control in its head, and says what became of it', async () => {
+        const held = delivering();
+        drawing(photograph, held.exchange);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Download harbour.png' }));
+        held.arrived(1_024);
+
+        expect(screen.getByRole('progressbar', { name: 'How much of the file has arrived' })).toBeDefined();
+
+        held.finish('delivered');
+
+        expect(await screen.findByText('harbour.png was downloaded.')).toBeDefined();
     });
 
     it('says so and reads nothing while the machine has no network', () => {
