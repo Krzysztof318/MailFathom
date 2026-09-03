@@ -10,6 +10,7 @@
     "@mailfathom/client-backend": "workspace:*",
     "@opentelemetry/api": "1.9.1",
     "@opentelemetry/api-logs": "0.222.0",
+    "@opentelemetry/core": "2.11.0",
     "@opentelemetry/exporter-logs-otlp-proto": "0.222.0",
     "@opentelemetry/exporter-metrics-otlp-proto": "0.222.0",
     "@opentelemetry/exporter-trace-otlp-proto": "0.222.0",

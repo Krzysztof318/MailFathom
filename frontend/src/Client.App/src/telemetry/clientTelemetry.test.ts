@@ -18,8 +18,41 @@ import { clientTelemetryForThisApplication, noTelemetry } from './clientTelemetr
 
 // The registries this module publishes to are global, so every one of them is released after each test: a
 // registration that outlived the file would take the next file's records.
+//
+// The pipeline is the one collaborator replaced here, and it is replaced rather than run because composing this
+// telemetry now starts it: the module under test is the queue in front of the three registries, and a real pipeline
+// would take those registries over from the exporters each test reads its records back out of. What that pipeline
+// does with a session is `exporting.test.ts`, and what it holds meanwhile is `holding.test.ts`.
+
+const pipeline = vi.hoisted(() => {
+    const steps: string[] = [];
+
+    return {
+        steps,
+
+        exportTo(session: { readonly authorization: string }) {
+            steps.push(`export ${session.authorization}`);
+
+            return Promise.resolve();
+        },
+
+        hold() {
+            steps.push('hold');
+
+            return Promise.resolve();
+        },
+
+        shutdown: () => Promise.resolve(),
+    };
+});
+
+vi.mock('./exporting', () => ({ startRecording: () => pipeline }));
 
 const session = { baseAddress: 'https://mail.example', authorization: 'Basic c2FtcGxl' };
+
+beforeEach(() => {
+    pipeline.steps.length = 0;
+});
 
 describe('noTelemetry', () => {
     it('records nothing and hands back a teardown that is safe to call', () => {
@@ -241,7 +274,7 @@ describe('clientTelemetryForThisApplication', () => {
             telemetry.exportFor(session)();
 
             await vi.waitFor(() => {
-                expect(isRecording()).toBe(false);
+                expect(pipeline.steps).toContain('hold');
             });
 
             expect(timing).not.toHaveBeenCalled();
@@ -257,8 +290,8 @@ describe('clientTelemetryForThisApplication', () => {
     }
 });
 
-// Outside the block above, because what it is about is the registries being taken over rather than what is written
-// into the ones a test put there — and a provider registered here would be the thing under test's own.
+// Outside the block above, because what it is about is what a session does to the pipeline rather than what is written
+// into the registries a test put there.
 describe('exportFor', () => {
     afterEach(() => {
         trace.disable();
@@ -266,39 +299,51 @@ describe('exportFor', () => {
         logs.disable();
     });
 
-    it('reaches the pipeline for a session that exists, and lets it go when the session ends', async () => {
+    it('names the session as the destination, and takes it away again when the session ends', async () => {
         const telemetry = clientTelemetryForThisApplication();
-
-        expect(isRecording()).toBe(false);
         const stop = telemetry.exportFor(session);
 
-        // The pipeline is fetched rather than bundled, so it arrives a moment after it was asked for. This waits on
-        // the registry answering rather than on a duration, which is what the teardown below does too.
+        // The pipeline is fetched rather than bundled, so it arrives a moment after the client composed it. This waits
+        // on what it was asked to do rather than on a duration.
         await vi.waitFor(() => {
-            expect(isRecording()).toBe(true);
+            expect(pipeline.steps).toEqual(['export Basic c2FtcGxl']);
         });
 
         stop();
 
         await vi.waitFor(() => {
-            expect(isRecording()).toBe(false);
+            expect(pipeline.steps).toEqual(['export Basic c2FtcGxl', 'hold']);
+        });
+    });
+
+    it('asks for no destination at all for a client that has not signed in', async () => {
+        const telemetry = clientTelemetryForThisApplication();
+
+        telemetry.exportFor(null)();
+
+        // Signing in afterwards is what makes the absence provable: the queue is ordered, so a destination or a hold
+        // asked for by the call above would sit in front of this one.
+        telemetry.exportFor(session);
+
+        await vi.waitFor(() => {
+            expect(pipeline.steps).toEqual(['export Basic c2FtcGxl']);
         });
     });
 
     // The sequence `App.tsx` writes, and the one a test against an already-registered provider cannot stand in for:
-    // nothing answers the log registry when `happened` is called, because `exportFor` has only asked for the pipeline.
+    // nothing answers the log registry when `happened` is called, because the pipeline has only just been asked for.
     // A record written where it was asked would reach the no-op logger and be gone — there is no delivery of a record
     // that registry already took. The provider is registered here in the same turn, which is what a pipeline arriving
     // a moment later looks like from the queue's side.
     it('records what happened against the pipeline that arrives, not the registry that answered first', async () => {
         const arriving = new InMemoryLogRecordExporter();
-        const pipeline = new LoggerProvider({ processors: [new SimpleLogRecordProcessor({ exporter: arriving })] });
+        const loggers = new LoggerProvider({ processors: [new SimpleLogRecordProcessor({ exporter: arriving })] });
         const telemetry = clientTelemetryForThisApplication();
 
         const stop = telemetry.exportFor(session);
 
         telemetry.happened('session_started');
-        logs.setGlobalLoggerProvider(pipeline);
+        logs.setGlobalLoggerProvider(loggers);
 
         await vi.waitFor(() => {
             expect(arriving.getFinishedLogRecords()).toHaveLength(1);
@@ -309,7 +354,7 @@ describe('exportFor', () => {
         });
 
         stop();
-        await pipeline.shutdown();
+        await loggers.shutdown();
     });
 
     it('keeps the session that is signed in when one ends and the next begins in the same turn', async () => {
@@ -317,24 +362,14 @@ describe('exportFor', () => {
 
         // What signing out and straight back in looks like from here, and what React does on every mount in strict
         // mode: the teardown and the next start are asked for before the first one has finished arriving. Left to
-        // race, the teardown lands last and takes the registries away from the session that is now signed in.
+        // race, the hold lands last and leaves the session that is now signed in holding for the rest of the run.
         const stop = telemetry.exportFor(session);
 
         stop();
         telemetry.exportFor({ ...session, authorization: 'Basic c29tZWJvZHkgZWxzZQ==' });
 
         await vi.waitFor(() => {
-            expect(isRecording()).toBe(true);
+            expect(pipeline.steps).toEqual(['export Basic c2FtcGxl', 'hold', 'export Basic c29tZWJvZHkgZWxzZQ==']);
         });
     });
 });
-
-/** Whether a span started now would be recorded, which is the whole of what registering the pipeline changes. */
-function isRecording(): boolean {
-    const span = trace.getTracer('MailFathom').startSpan('probe');
-    const recording = span.isRecording();
-
-    span.end();
-
-    return recording;
-}

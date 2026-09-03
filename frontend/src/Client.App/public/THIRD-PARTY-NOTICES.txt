@@ -77,8 +77,8 @@ The OpenTelemetry JavaScript closure, sixteen packages
 https://github.com/open-telemetry/opentelemetry-js
 
 The client's own traces, metrics, and logs, and everything that carries them to the deployment the
-client is signed in to. Fourteen of the sixteen are in a chunk the browser fetches at sign-in rather
-than in the chunk beside this file; the two interface packages, @opentelemetry/api and
+client is signed in to. Fourteen of the sixteen are in a chunk the browser fetches as the client
+starts rather than in the chunk beside this file; the two interface packages, @opentelemetry/api and
 @opentelemetry/api-logs, are in that one. Both chunks are part of the bundle either way.
 
 @opentelemetry/api 1.9.1

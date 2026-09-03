@@ -6,15 +6,19 @@ import { createContext, useContext } from 'react';
 import { metrics, trace } from '@opentelemetry/api';
 import { logs, SeverityNumber } from '@opentelemetry/api-logs';
 import { telemetryName, type ClientSession } from '@mailfathom/client-backend';
+import type { ClientPipeline } from './exporting';
 
 // The client's one telemetry pipeline: the three signals, one resource, and one place any of it is composed. Every
 // screen below receives what it needs as the value this module publishes rather than reaching for a registry of its
 // own, which is what keeps a component from deciding anything about how this client is observed.
 //
-// It begins when somebody has signed in, and that is the shape rather than an omission. The exporter reaches the
-// deployment's own OTLP receiver on the client surface and authenticates there exactly as every read does, so there is
-// no destination to export to and no credential to present until a session exists. What a client records before that
-// is #1230's, and turning any of this off is #1232's.
+// Recording begins where this is composed and exporting begins when somebody signs in, and the gap between the two is
+// the point of it. The exporter reaches the deployment's own OTLP receiver on the client surface and authenticates
+// there exactly as every read does, so there is no destination and no credential to present until a session exists —
+// but starting up, resolving which deployment this client belongs to, and a sign-in that did not succeed are exactly
+// the failures somebody cannot describe, and they are invisible to the deployment because nothing reached it. So
+// `holding.ts` holds them in memory, bounded, until there is a session to attribute them to. Turning any of this off
+// is #1232's.
 //
 // Nothing here records what was on the screen. A space is named, a route template is named, and an occurrence is
 // named; no address, no message, no correspondent, no search text, and no part of a credential reaches a span, a
@@ -33,10 +37,11 @@ export type ClientEvent = 'session_started' | 'credential_no_longer_accepted';
  */
 export interface ClientTelemetry {
     /**
-     * Begins exporting everything this client records for one signed-in session, and answers with what ends it.
+     * Begins exporting everything this client has recorded and records next for one signed-in session, and answers
+     * with what ends it.
      *
      * A session of `null` exports nothing and answers with a teardown that does nothing, which is what a client that
-     * has signed out or has not signed in yet passes.
+     * has signed out or has not signed in yet passes. The pipeline goes on recording either way.
      */
     readonly exportFor: (session: ClientSession | null) => () => void;
 
@@ -69,39 +74,30 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
     // and the next one the one it is.
     let arrivalReported = false;
 
-    // Starting and stopping are put in a queue rather than run where they were asked for, and that is a correctness
-    // rule rather than tidiness. The SDK behind a pipeline is fetched rather than bundled — see `exporting.ts` for
-    // why — so a start does not finish in the turn it was asked in, while signing out and signing in again asks for a
-    // stop and the next start in the same turn. Left to race, the stop would land after the second start and take the
-    // registries away from the session that is now signed in, and the run would export nothing for the rest of its
-    // life. Serialized, each step sees the one before it finished, and only one pipeline is ever registered — which is
-    // the other half of it, since a second registration over a live one is refused rather than replacing it.
-    let queued: Promise<() => void> = Promise.resolve(nothingToStop);
+    // Recording starts here, which is one call into the composition root and before any screen exists. The SDK behind
+    // it is fetched rather than bundled — see `exporting.ts` for why — so the registries answer no one for as long as
+    // that takes, and a run whose network refuses the chunk records nothing rather than failing.
+    let running: Promise<ClientPipeline | null> = import('./exporting')
+        .then(({ startRecording }) => startRecording())
+        .catch(() => null);
 
-    function next(step: (stopRunning: () => void) => Promise<() => void> | (() => void)): void {
-        // Telemetry is never the reason a screen fails, and the chunk this waits on is fetched over a network that can
-        // refuse it. A step that threw therefore leaves the queue with nothing running rather than a rejection nothing
-        // handles, and the client goes on recording into registries that answer no one.
-        queued = queued.then(step).catch(() => nothingToStop);
-    }
-
-    // Everything this client records goes through the same queue, and that is the same correctness rule rather than
-    // symmetry. A registry answers whoever is registered at the instant it is asked, and the record is dropped for
-    // good where that is still the no-op registry — there is no retroactive delivery once the real provider arrives.
-    // A screen reports the moment it has something to report, which for the session beginning is the same turn the
-    // pipeline was asked for, so recording where it was asked would drop exactly the records a sign-in produces.
-    //
-    // Unlike a start, a write knows a pipeline is running, so a write that threw hands the running teardown back
-    // rather than the empty one: a registry refusing one record is not a reason to lose what is exporting.
-    function record(write: () => void): void {
-        queued = queued.then((stopRunning) => {
+    // Everything this module does is put in a queue rather than run where it was asked for, and that is a correctness
+    // rule rather than tidiness. A registry answers whoever is registered at the instant it is asked, and a record
+    // written before the pipeline arrives is dropped for good — there is no retroactive delivery once the real
+    // provider is there. A screen reports the moment it has something to report, which for the session beginning is
+    // the same turn the deployment was resolved in, so writing where it was asked would drop exactly the records a
+    // cold start produces. Serializing also settles signing out and straight back in, which asks for the hold and the
+    // next export in one turn: left to race, the hold would land last and leave the session that is signed in holding.
+    function next(step: (pipeline: ClientPipeline | null) => void | Promise<void>): void {
+        running = running.then(async (pipeline) => {
             try {
-                write();
+                await step(pipeline);
             } catch {
-                // Nothing to do with it. It is a record that was not written, which is what the deployment sees too.
+                // Telemetry is never the reason a screen fails. It is a record that was not written, which is what
+                // the deployment sees too.
             }
 
-            return stopRunning;
+            return pipeline;
         });
     }
 
@@ -111,25 +107,18 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
                 return nothingToStop;
             }
 
-            next(async (stopRunning) => {
-                stopRunning();
-
-                const { startExporting } = await import('./exporting');
-                const stop = startExporting(session);
-
+            next(async (pipeline) => {
+                // Reported before the flush rather than after it, so the export a sign-in produces carries the start
+                // it followed rather than leaving it for whatever goes out a minute later.
                 if (!arrivalReported) {
                     arrivalReported = reportArrival(session);
                 }
 
-                return stop;
+                await pipeline?.exportTo(session);
             });
 
             return () => {
-                next((stopRunning) => {
-                    stopRunning();
-
-                    return nothingToStop;
-                });
+                next((pipeline) => pipeline?.hold());
             };
         },
 
@@ -140,7 +129,7 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
             // reaches a registry and not what the record says.
             const reached = performance.timeOrigin + performance.now();
 
-            record(() => {
+            next(() => {
                 trace
                     .getTracer(telemetryName)
                     .startSpan(`navigate ${space}`, { startTime: askedAt, attributes: at })
@@ -155,8 +144,14 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
         },
 
         happened(event) {
-            record(() => {
+            // Read where it happened rather than where it was written, for the reason a move above is: the queue may
+            // be waiting on an export the deployment is slow to answer, and a record timestamped then would say the
+            // session began at the moment the client next got a word in.
+            const at = performance.timeOrigin + performance.now();
+
+            next(() => {
                 logs.getLogger(telemetryName).emit({
+                    timestamp: at,
                     severityNumber: severities[event],
                     body: bodies[event],
                     attributes: { 'mailfathom.client.event': event },
