@@ -429,10 +429,16 @@ alternative, and rich authoring is a stage of its own.
 
 ## Confirming what leaves the deployment
 
-`src/confirmation/` is the one question the client puts in front of an act somebody cannot simply undo, and every
-screen that asks one asks it there rather than drawing a dialog of its own. Sending, discarding what was written, and
-closing every open tab at once are the three today; flagging, filing, moving, and deleting mail arrive at the same
-component as the stages that perform them land.
+`src/confirmation/` is the one question the client puts in front of an act somebody cannot simply undo. Sending,
+discarding what was written, and closing every open tab at once ask it there today, and flagging, filing, moving, and
+deleting mail arrive at the same component as the stages that perform them land.
+
+One question still draws its own dialog: the stop offered by the blocking overlay, in `src/blocking/`. Two things keep
+it there rather than an oversight. It opens _over_ a dialog already open and relies on the platform stacking the two,
+which is a property of that screen rather than of a question; and stopping an operation is refusing something that has
+not finished, so it states no `Reversal` at all, and the union below has no member for that. Bringing it onto this
+component means answering both — and the destructive fill it paints itself needs a `Manner` of its own, which is what
+the first screen with a delete to confirm will add.
 
 **It writes no sentence.** _Are you sure?_ teaches a reader to press yes without reading, so the question, what will
 change, and what every way out is called are the caller's own words, in the terms of the thing being changed — the

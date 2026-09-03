@@ -61,7 +61,7 @@ describe('SendConfirmation', () => {
         expect(asked).toContain('Subject: Invoice');
     });
 
-    it('says how long the message can be taken back, rather than leaving the question at whether to send', () => {
+    it('says the send can be taken back until the deployment has handed it on, rather than naming a period', () => {
         drawConfirmation();
         ask();
 
