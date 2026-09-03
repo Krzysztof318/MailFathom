@@ -91,9 +91,10 @@ internal static class ClientMailBodyEndpoint
     /// <param name="fullHtml">The query as it arrived, absent where the reader said nothing.</param>
     /// <returns>The request the use case is asked with.</returns>
     /// <remarks>
-    /// Named rather than inlined because what it decides is a privacy boundary: the pane never asks for markup, it
-    /// always asks for the tree, and an absent query means the same as a refusal rather than something to interpret.
-    /// A seam here is what lets that be asserted without standing up the read behind it.
+    /// Named rather than inlined because what it decides is a privacy boundary: the tree is what the pane draws and is
+    /// always asked for, the sender's own markup is asked for only where the reader opened that surface, and an absent
+    /// query of either kind means the same as a refusal rather than something to interpret. A seam here is what lets
+    /// that be asserted without standing up the read behind it.
     /// </remarks>
     internal static GetEmailContentRequest RequestFor(Guid storedEmailId, bool? remoteImages, bool? fullHtml) =>
         GetEmailContentRequest.Create([StoredEmailId.Create(storedEmailId)]) with

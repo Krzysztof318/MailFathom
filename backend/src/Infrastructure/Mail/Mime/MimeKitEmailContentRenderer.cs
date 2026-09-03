@@ -5,6 +5,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using MailFathom.Application.EmailContent.Rendering;
+using MailFathom.Application.EmailContent.Rendering.Document;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Domain.Emails;
@@ -142,6 +143,38 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
 
         var htmlParts = classification.BodyTextParts.Where(part => part.IsHtml).Select(part => part.Text).ToArray();
 
+        var remainingCharacters = bounds.RemainingCharactersForRead
+            - plainTextBody.Text.Length
+            - (sanitizedHtmlBody?.Text.Length ?? 0);
+
+        // The document is a representation of the same body and spends the same budget, so what the two before it
+        // returned is subtracted from what it may reduce. A read naming several emails would otherwise return a
+        // full document for each of them however much of the call's budget was already spent, which would make the
+        // size of the answer the senders' decision rather than the deployment's.
+        var document = bounds.IncludeMailDocument && !bodyIsUnreadable
+            ? await MailBodyProjection.ProduceAsync(
+                message,
+                htmlParts,
+                bounds.RetainRemoteImageReferences,
+                EmailBodyCharacterAllowance.Of(bounds.MaxCharactersPerRepresentation, remainingCharacters).MaxCharacters,
+                bounds.RemainingInlineImageOctetsForRead,
+                cancellationToken)
+            : null;
+
+        // The octets are the same budget the document draws on rather than a second one, so what the document inlined
+        // is taken off before the markup is asked for. One caller asks for both — the client's reading pane requests
+        // the tree it draws and, where the reader opened the full-markup surface, the markup beside it — and handing
+        // each the whole per-document allowance would answer one message with twice the pictures the bound names.
+        var selfContainedHtmlBody = bounds.IncludeSelfContainedHtml && !bodyIsUnreadable
+            ? await SelfContainedHtmlProjection.ProduceAsync(
+                message,
+                htmlParts,
+                bounds.RetainRemoteImageReferences,
+                EmailBodyCharacterAllowance.Of(bounds.MaxCharactersPerRepresentation, remainingCharacters),
+                RemainingImageOctetsAfter(document, bounds.RemainingInlineImageOctetsForRead),
+                cancellationToken)
+            : null;
+
         return new EmailContentRendering(
             MimeMessageHeaderReader.Read(message),
             bodyIsUnreadable ? EmailBodyRepresentation.Empty : plainTextBody,
@@ -151,43 +184,21 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
             classification.Summary,
             classification.Attachments)
         {
-            // The document is a representation of the same body and spends the same budget, so what the two before it
-            // returned is subtracted from what it may reduce. A read naming several emails would otherwise return a
-            // full document for each of them however much of the call's budget was already spent, which would make the
-            // size of the answer the senders' decision rather than the deployment's.
-            Document = bounds.IncludeMailDocument && !bodyIsUnreadable
-                ? await MailBodyProjection.ProduceAsync(
-                    message,
-                    htmlParts,
-                    bounds.RetainRemoteImageReferences,
-                    EmailBodyCharacterAllowance.Of(
-                        bounds.MaxCharactersPerRepresentation,
-                        bounds.RemainingCharactersForRead
-                            - plainTextBody.Text.Length
-                            - (sanitizedHtmlBody?.Text.Length ?? 0)).MaxCharacters,
-                    bounds.RemainingInlineImageOctetsForRead,
-                    cancellationToken)
-                : null,
-
-            // The octets are the same budget the document draws on rather than a second one, and the two representations
-            // are handed the same starting figure rather than one after the other. They are alternative renderings of the
-            // same pictures — a reader sees the tree or the markup, never both at once — so spending the budget twice
-            // would leave whichever was produced second drawing a message the first one had already emptied.
-            SelfContainedHtmlBody = bounds.IncludeSelfContainedHtml && !bodyIsUnreadable
-                ? await SelfContainedHtmlProjection.ProduceAsync(
-                    message,
-                    htmlParts,
-                    bounds.RetainRemoteImageReferences,
-                    EmailBodyCharacterAllowance.Of(
-                        bounds.MaxCharactersPerRepresentation,
-                        bounds.RemainingCharactersForRead
-                            - plainTextBody.Text.Length
-                            - (sanitizedHtmlBody?.Text.Length ?? 0)),
-                    bounds.RemainingInlineImageOctetsForRead,
-                    cancellationToken)
-                : null,
+            Document = document,
+            SelfContainedHtmlBody = selfContainedHtmlBody,
         };
     }
+
+    /// <summary>Reads what is left of the read's picture budget once the document has drawn on it.</summary>
+    /// <remarks>
+    /// Never below zero, because the two bounds this figure is narrowed against are both counts of octets a
+    /// representation may carry: a negative one would read as a budget the arithmetic below it cannot express rather
+    /// than as a budget already spent.
+    /// </remarks>
+    private static int RemainingImageOctetsAfter(MailDocument? document, int remaining) =>
+        document is null
+            ? remaining
+            : (int)Math.Max(remaining - MailDocumentImages.OctetsIn(document), 0);
 
     /// <summary>Names which forms of its own body the message wrote, out of the branch the walk settled on.</summary>
     /// <remarks>

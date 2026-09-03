@@ -604,7 +604,9 @@ assertion behind it general rather than a catalogue somebody has to keep complet
 - **The pictures are present.** A `cid:` part, and a part the message answers under the `Content-Location` it was sent
   with, is inlined as a `data:` URI of the media type it actually is, under the same three octet bounds the document
   tree's inline pictures observe and drawing on the same per-read budget. A picture past a bound is left out and the
-  representation reports `InlineImageOctetLimit` rather than serving a gap in silence.
+  representation reports `InlineImageOctetLimit` rather than serving a gap in silence. A read asking for the document
+  tree as well spends that budget once across the two rather than twice: what the tree inlined is taken off before the
+  markup is produced, and what both carried is taken off before the next email of the call is reached.
 - **Nothing in it runs.** An element outside the allow-list is removed with its content, an attribute outside the
   attribute allow-list is removed, and no URI naming a scripting scheme survives in any position — so `script`,
   `iframe`, `object`, `embed`, `applet`, `form`, `base`, `meta`, `link`, `svg`, and `math` are gone, every event handler
@@ -617,7 +619,9 @@ assertion behind it general rather than a catalogue somebody has to keep complet
 A link's target is the one absolute address that survives, carrying `http`, `https`, `mailto`, or `tel`. A target is a
 navigation the reader performs rather than a resource the document pulls, and it is kept here for the same reason
 `MailDocumentLink` keeps one in the tree: without it this surface would be less useful than the pane it was opened from,
-which is the defect it exists to answer.
+which is the defect it exists to answer. It is decided by that rule before any picture is substituted, so a link
+pointing at the message's own part is dropped rather than answered with the part itself — an anchor is a place to go,
+and a picture's octets are not one.
 
 The result is parsed once more before it is returned, and held against the two allow-lists that produced it. That second
 reading is a check rather than a step — what is returned is the string the single serialization produced, never a

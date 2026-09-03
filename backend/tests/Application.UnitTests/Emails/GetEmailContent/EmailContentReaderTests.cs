@@ -538,6 +538,30 @@ public sealed class EmailContentReaderTests
         Assert.Equal([whole, whole - 300, whole - 600], renderer.ObservedRemainingImageOctets);
     }
 
+    /// <summary>The self-contained markup inlines pictures too, so what it carried is spent out of the same budget the document draws on.</summary>
+    /// <remarks>
+    /// The budget is written for the pictures one call returns rather than for the representation that happens to
+    /// carry them. Charging only the tree would leave a read asking for the markup alone handed the whole allowance
+    /// for every email it names, which is the response size this bound exists to decide.
+    /// </remarks>
+    [Fact]
+    public async Task ReadContentAsync_SelfContainedHtmlInliningPictures_SpendsTheOctetBudgetAcrossTheEmailsOfOneRead()
+    {
+        // Arrange
+        var summaries = SummariesOf(3);
+        var renderer = new BoundedBodyEmailContentRenderer("Body", inlineImageOctets: 300);
+        var reader = ReaderOver(summaries, renderer);
+
+        // Act
+        await reader.ReadContentAsync(
+            RequestFor(IdentitiesOf(summaries)) with { IncludeSelfContainedHtml = true },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var whole = MailDocumentBounds.Default.MaximumInlineImageOctetsPerDocument;
+        Assert.Equal([whole, whole - 300, whole - 600], renderer.ObservedRemainingImageOctets);
+    }
+
     /// <summary>A read that asked for no document spends none of the octet budget, whatever a message carries.</summary>
     [Fact]
     public async Task ReadContentAsync_NoDocumentRequested_LeavesTheOctetBudgetWholeForEveryEmail()

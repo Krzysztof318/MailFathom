@@ -6,6 +6,7 @@ using System.Text;
 using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using MailFathom.Application.EmailContent.Rendering;
+using MailFathom.Application.EmailContent.Rendering.Document;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Infrastructure.Mail.Mime;
@@ -153,6 +154,49 @@ public sealed class SelfContainedHtmlProjectionTests
         // Assert
         Assert.Contains("data:image/png;base64,", html, StringComparison.Ordinal);
         Assert.Empty(RemoteAddresses(html));
+    }
+
+    /// <summary>The two representations that inline a picture share one octet budget, so a read asking for both does not draw it twice.</summary>
+    [Fact]
+    public async Task ProduceAsync_DocumentAskedForBeside_DrawsOnWhatTheDocumentLeftOfTheOctetBudget()
+    {
+        // Arrange
+        var content = MessageCarryingItsOwnPicture("<p>Readable</p><img src=\"cid:logo@example.test\">");
+
+        var wholePicture = await RenderAsync(content, retainRemoteReferences: false, includeMailDocument: true);
+        Assert.NotNull(wholePicture.Document);
+        var pictureOctets = (int)MailDocumentImages.OctetsIn(wholePicture.Document);
+        Assert.NotEqual(0, pictureOctets);
+
+        // Act
+        var rendering = await RenderAsync(
+            content,
+            retainRemoteReferences: false,
+            maximumImageOctets: pictureOctets,
+            includeMailDocument: true);
+
+        // Assert
+        Assert.NotNull(rendering.Document);
+        Assert.Equal(pictureOctets, MailDocumentImages.OctetsIn(rendering.Document));
+
+        var markup = rendering.SelfContainedHtmlBody;
+        Assert.NotNull(markup);
+        Assert.DoesNotContain("data:image/png;base64,", markup.Text, StringComparison.Ordinal);
+        Assert.Equal(EmailBodyTruncation.InlineImageOctetLimit, markup.Truncation);
+    }
+
+    /// <summary>An anchor pointing at the message's own part is decided by the link policy rather than answered with that part's octets.</summary>
+    [Fact]
+    public async Task ProduceAsync_AnchorNamingTheMessagesOwnPicture_IsNotAnsweredWithThePicture()
+    {
+        // Act
+        var html = await HtmlOf(MessageCarryingItsOwnPicture(
+            "<p>Readable</p><a href=\"cid:logo@example.test\">The logo</a>"));
+
+        // Assert
+        Assert.DoesNotContain("href=\"data:", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("cid:", html, StringComparison.Ordinal);
+        Assert.Contains("The logo", html, StringComparison.Ordinal);
     }
 
     /// <summary>A picture the message answers out of its own parts under an absolute address is inlined rather than removed as remote.</summary>
@@ -395,7 +439,8 @@ public sealed class SelfContainedHtmlProjectionTests
         StoredEmailContent content,
         bool retainRemoteReferences,
         int maxBodyCharacters = 100_000,
-        int maximumImageOctets = int.MaxValue)
+        int maximumImageOctets = int.MaxValue,
+        bool includeMailDocument = false)
     {
         var renderer = new MimeKitEmailContentRenderer(new EmailMimeExtractionOptions { MaxPartCount = 1000 });
 
@@ -403,6 +448,7 @@ public sealed class SelfContainedHtmlProjectionTests
             content,
             new EmailContentRenderingBounds(IncludeSanitizedHtml: false, maxBodyCharacters, int.MaxValue)
             {
+                IncludeMailDocument = includeMailDocument,
                 IncludeSelfContainedHtml = true,
                 RetainRemoteImageReferences = retainRemoteReferences,
                 RemainingInlineImageOctetsForRead = maximumImageOctets,

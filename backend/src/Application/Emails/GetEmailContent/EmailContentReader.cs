@@ -626,13 +626,26 @@ public sealed class EmailContentReader
 
     /// <summary>Counts the octets of its own pictures one email inlined, which the call's octet budget is spent in.</summary>
     /// <remarks>
+    /// <para>
     /// Counted apart from the characters because the bound governing it is stated in octets: a <c>data:</c> URI is a
     /// third longer than the picture behind it, and a text budget written for words would have to be read as a size
     /// before it could bound one.
+    /// </para>
+    /// <para>
+    /// Both representations that inline a picture are counted, because both draw on this one budget and one call can
+    /// return both — the client's reading pane asks for the tree it draws and, where the reader opened the full-markup
+    /// surface, the markup beside it. Counting only the tree would leave the next email of the call handed a budget an
+    /// earlier one had already spent.
+    /// </para>
     /// </remarks>
     private static int ImageOctetsReturnedBy(EmailContentReadOutcome outcome) =>
-        outcome.Content?.Body.Document is { } document
-            ? (int)Math.Min(MailDocumentImages.OctetsIn(document), int.MaxValue)
+        outcome.Content is { } content
+            ? (int)Math.Min(
+                (content.Body.Document is { } document ? MailDocumentImages.OctetsIn(document) : 0)
+                    + (content.Body.SelfContainedHtml is { } markup
+                        ? SelfContainedHtmlImages.OctetsIn(markup.Text)
+                        : 0),
+                int.MaxValue)
             : 0;
 
     /// <summary>Counts what one email spent of the call's budget, which is every representation it returned.</summary>

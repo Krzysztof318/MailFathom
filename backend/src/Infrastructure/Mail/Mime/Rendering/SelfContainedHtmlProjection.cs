@@ -301,6 +301,26 @@ internal static partial class SelfContainedHtmlProjection
         var reference = filtering.OriginalUrl.Trim();
         var absolute = Uri.TryCreate(reference, UriKind.Absolute, out var parsed) ? parsed : null;
 
+        // A scheme-relative reference names another host exactly as an absolute one does: whatever renders the markup
+        // supplies the scheme out of its own address, so this is a remote address that merely declines to say which
+        // protocol it wants. It parses as relative, which is what would otherwise carry it past the branch below.
+        if (reference.StartsWith("//", StringComparison.Ordinal))
+        {
+            return retainRemoteReferences ? reference : null;
+        }
+
+        // A link's target is a navigation the reader performs rather than a resource the document pulls, so removing it
+        // would make the surface less useful than the reduced tree beside it without making it safer. It is decided
+        // ahead of the substitutions below rather than after them, because those answer a reference with the picture it
+        // names: an anchor pointing at the message's own logo is a link, and answering it with that logo's octets would
+        // give a reader a target shape this policy never names and nothing here bounds.
+        if (filtering.Tag.LocalName.Equals("a", StringComparison.OrdinalIgnoreCase))
+        {
+            return absolute is null
+                ? filtering.SanitizedUrl
+                : absolute.Scheme is "http" or "https" or "mailto" or "tel" ? reference : null;
+        }
+
         if (reference.StartsWith("cid:", StringComparison.OrdinalIgnoreCase))
         {
             return images.Resolve(reference);
@@ -311,27 +331,12 @@ internal static partial class SelfContainedHtmlProjection
             return MailDataUri.Drawable(reference, MailDocumentBounds.Default.MaximumInlineImageOctets);
         }
 
-        // A scheme-relative reference names another host exactly as an absolute one does: whatever renders the markup
-        // supplies the scheme out of its own address, so this is a remote address that merely declines to say which
-        // protocol it wants. It parses as relative, which is what would otherwise carry it past the branch below.
-        if (reference.StartsWith("//", StringComparison.Ordinal))
-        {
-            return retainRemoteReferences ? reference : null;
-        }
-
         if (absolute is null)
         {
             // A relative reference resolves against a document that has no address, so it reaches nothing. It is left
             // as the sender wrote it rather than removed, because removing it would take a picture's alternative text
             // and a link's shape with it while gaining nothing.
             return filtering.SanitizedUrl;
-        }
-
-        // A link's target is a navigation the reader performs rather than a resource the document pulls, so removing it
-        // would make the surface less useful than the reduced tree beside it without making it safer.
-        if (filtering.Tag.LocalName.Equals("a", StringComparison.OrdinalIgnoreCase))
-        {
-            return absolute.Scheme is "http" or "https" or "mailto" or "tel" ? reference : null;
         }
 
         if (absolute.Scheme != Uri.UriSchemeHttp && absolute.Scheme != Uri.UriSchemeHttps)
