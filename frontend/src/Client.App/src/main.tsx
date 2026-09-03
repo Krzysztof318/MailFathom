@@ -16,6 +16,7 @@ import { LinkOpenerContext, linkOpenerForThisApplication } from './shellOperatio
 import { credentialStore } from './signIn/credentialStore';
 import { clientTelemetryForThisApplication, TelemetryContext } from './telemetry/clientTelemetry';
 import { ThemeProvider } from './theme/Theme';
+import { ToastsProvider } from './toasts/Toasts';
 import { WorkspaceProvider } from './workspace/Workspace';
 import './styles.css';
 
@@ -47,10 +48,11 @@ void open(container);
  * this machine is filed under, so a client that read the store before it knew where it was pointed would read back the
  * credential of whichever deployment it was pointed at last.
  *
- * The four things that outlive every screen stand above it: the language it reads in, the theme it is painted in, what
- * the person is carrying between the spaces, and how a link they follow leaves the application. Each is above the frame
- * because nothing below the frame may be what decides it, and each is above the sign-in screen for the same reason —
- * somebody who has not signed in yet reads in a language and is painted in a theme exactly as somebody who has.
+ * The five things that outlive every screen stand above it: the language it reads in, the theme it is painted in, what
+ * the person is carrying between the spaces, how a link they follow leaves the application, and the surface the client
+ * says back on. Each is above the frame because nothing below the frame may be what decides it, and each is above the
+ * sign-in screen for the same reason — somebody who has not signed in yet reads in a language, is painted in a theme,
+ * and is told what just happened exactly as somebody who has.
  */
 async function open(root: HTMLElement): Promise<void> {
     const deployment = adoptedDeployment(await configuredConnection());
@@ -61,25 +63,27 @@ async function open(root: HTMLElement): Promise<void> {
     createRoot(root).render(
         <StrictMode>
             <LocalizationProvider>
-                <ThemeProvider>
-                    <WorkspaceProvider>
-                        <LinkOpenerContext value={openLink}>
-                            <AttachmentDeliveryContext value={deliverAttachment}>
-                                <AttachmentUploadContext value={uploadAttachment}>
-                                    <TelemetryContext value={telemetry}>
-                                        <App
-                                            credentials={credentials}
-                                            deployment={deployment}
-                                            portraits={portraitExchange}
-                                            send={sendToDeployment}
-                                            signedInWith={signedInWith}
-                                        />
-                                    </TelemetryContext>
-                                </AttachmentUploadContext>
-                            </AttachmentDeliveryContext>
-                        </LinkOpenerContext>
-                    </WorkspaceProvider>
-                </ThemeProvider>
+                <ToastsProvider>
+                    <ThemeProvider>
+                        <WorkspaceProvider>
+                            <LinkOpenerContext value={openLink}>
+                                <AttachmentDeliveryContext value={deliverAttachment}>
+                                    <AttachmentUploadContext value={uploadAttachment}>
+                                        <TelemetryContext value={telemetry}>
+                                            <App
+                                                credentials={credentials}
+                                                deployment={deployment}
+                                                portraits={portraitExchange}
+                                                send={sendToDeployment}
+                                                signedInWith={signedInWith}
+                                            />
+                                        </TelemetryContext>
+                                    </AttachmentUploadContext>
+                                </AttachmentDeliveryContext>
+                            </LinkOpenerContext>
+                        </WorkspaceProvider>
+                    </ThemeProvider>
+                </ToastsProvider>
             </LocalizationProvider>
         </StrictMode>,
     );
