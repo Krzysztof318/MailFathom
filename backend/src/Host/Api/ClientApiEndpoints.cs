@@ -47,8 +47,7 @@ namespace MailFathom.Host.Api;
 /// <para>
 /// The portrait routes, which <see cref="ClientPortraitEndpoint" /> describes, hold the picture a person is drawn by.
 /// They sit beside the preferences rather than in them, because a megabyte of image octets is not a small closed
-/// document and reading a switch should not carry a photograph — and they are the one family here that answers with
-/// something other than JSON.
+/// document and reading a switch should not carry a photograph.
 /// </para>
 /// <para>
 /// The telemetry routes, which <see cref="ClientTelemetryEndpoint" /> describes, are the one family here that is not

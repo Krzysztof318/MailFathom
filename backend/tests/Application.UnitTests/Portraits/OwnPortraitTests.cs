@@ -123,6 +123,24 @@ public sealed class OwnPortraitTests
             .SaveAsync(SyntheticMailOwner.Deployment, portrait, Arg.Any<CancellationToken>());
     }
 
+    /// <summary>The row behind an authenticated caller can be gone, which is an owner erased under a credential that has not yet been withdrawn.</summary>
+    [Fact]
+    public async Task ReplaceAsync_ACallerWhoseRowHasGone_ReportsThatThereWasNobodyToWriteFor()
+    {
+        // Arrange
+        var store = Substitute.For<IOwnerPortraitStore>();
+        store.SaveAsync(Arg.Any<MailOwnerId>(), Arg.Any<OwnerPortrait>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var portraits = ReachedBy(store, MailFathomPermission.MailRead);
+
+        // Act
+        var written = await portraits.ReplaceAsync(OwnerPortrait.Of(Png)!, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.False(written);
+    }
+
     /// <summary>The write is the grant a signed-in person already holds, never the one that decides which mailboxes this deployment connects to.</summary>
     [Fact]
     public async Task ReplaceAsync_ACallerGrantedOnlyTheirMailConfiguration_IsRefused()
