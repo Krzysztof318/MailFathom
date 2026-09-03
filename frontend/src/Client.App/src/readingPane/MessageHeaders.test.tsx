@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MailMessageHeaders } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
 import { MessageHeaders } from './MessageHeaders';
@@ -34,10 +34,10 @@ function disclosure(): HTMLDetailsElement {
     return opened;
 }
 
-function drawing(written: Partial<MailMessageHeaders> = {}): void {
+function drawing(written: Partial<MailMessageHeaders> = {}, onShowFullHtml: () => void = () => undefined): void {
     render(
         <LocalizationProvider>
-            <MessageHeaders headers={{ ...headers, ...written }} />
+            <MessageHeaders headers={{ ...headers, ...written }} onShowFullHtml={onShowFullHtml} />
         </LocalizationProvider>,
     );
 }
@@ -139,5 +139,23 @@ describe('MessageHeaders', () => {
         });
 
         expect(screen.getByText('<script>alert(1)</script> <billing@example.invalid>')).toBeDefined();
+    });
+});
+
+// The one control on this head that does something today, and what it does is ask before anything is shown.
+describe('MessageHeaders and the sender own markup', () => {
+    it('offers the way to the sender own version of this message', () => {
+        drawing();
+
+        expect(screen.getByRole('button', { name: 'Show the full HTML version' })).toBeDefined();
+    });
+
+    it('asks the reader before it opens anything, so pressing it opens nothing on its own', () => {
+        const shown = vi.fn();
+
+        drawing({}, shown);
+        fireEvent.click(screen.getByRole('button', { name: 'Show the full HTML version' }));
+
+        expect(shown).not.toHaveBeenCalled();
     });
 });

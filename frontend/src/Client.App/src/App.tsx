@@ -17,6 +17,7 @@ import type { PortraitExchange } from './deployment/portraitExchange';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { telemetryForwardedBy } from './deployment/telemetryForwarding';
 import { FolderTree } from './folders/FolderTree';
+import { FullHtmlSurface } from './fullHtml/FullHtmlSurface';
 import type { MessageKey } from './localization/en';
 import { useLocalization } from './localization/useLocalization';
 import { NothingOpen } from './mailSpace/NothingOpen';
@@ -291,9 +292,12 @@ export function App({
                 session={session}
                 transport={readMail}
                 conversation={workspace.conversation}
+                fullHtml={workspace.fullHtml}
                 storedEmailId={workspace.selection}
                 online={connection.online}
                 expandWholeThread={preferences.expandWholeThread}
+                onShowFullHtml={openTabs.openFullHtml}
+                onCloseFullHtml={openTabs.closeFullHtml}
             />
         );
     }
@@ -442,9 +446,13 @@ export function App({
     );
 }
 
-// What is being read on the right of the mail space: one message, or the conversation it belongs to standing in front
-// of it. The conversation is in front rather than instead, which is why the message it was opened from is still what
-// this component is holding — closing the conversation draws it again with nothing having had to remember it.
+// What is being read on the right of the mail space: one message, the conversation it belongs to, or the sender's own
+// markup — the last two standing in front of the message rather than instead of it, which is why the message they were
+// opened from is still what this component is holding. Closing either draws it again with nothing having had to
+// remember it.
+//
+// The markup surface is in front of the conversation as well as of the message, because it is opened from a message's
+// head and returns to whatever that head was drawn in.
 //
 // Keyed by the conversation together with the message it was opened at, because what a conversation opens with is
 // decided once from what it holds then: opening the same conversation at another message is a screen of its own rather
@@ -453,30 +461,55 @@ function OpenMail({
     session,
     transport,
     conversation,
+    fullHtml,
     storedEmailId,
     online,
     expandWholeThread,
+    onShowFullHtml,
+    onCloseFullHtml,
 }: {
     readonly session: ClientSession;
     readonly transport: MailFathomTransport;
     readonly conversation: OpenConversation | null;
+    readonly fullHtml: string | null;
     readonly storedEmailId: string | null;
     readonly online: boolean;
+    readonly onShowFullHtml: (storedEmailId: string, subject: string | null) => void;
+    readonly onCloseFullHtml: () => void;
 
     /** Whether the reader asked for conversations to open with every message drawn, which only the conversation reads. */
     readonly expandWholeThread: boolean;
 }) {
-    // Whether the pane below is being arrived at rather than landed on. Closing a conversation swaps this position from
-    // one component to the other, so the pane mounts afresh exactly as it does on a cold start and cannot tell the two
-    // apart from anything it holds itself — this is the only place that saw the conversation go. Adjusted during render,
-    // which is React's answer to state that a changed prop invalidates, rather than read from a ref written during one:
-    // a ref would be written twice under StrictMode and the second pass would report no conversation had been there.
-    const [reading, setReading] = useState(conversation !== null);
+    // Whether the pane below is being arrived at rather than landed on. Closing whatever stood in front of the message
+    // swaps this position from one component to the other, so the pane mounts afresh exactly as it does on a cold start
+    // and cannot tell the two apart from anything it holds itself — this is the only place that saw the surface go.
+    // Adjusted during render, which is React's answer to state that a changed prop invalidates, rather than read from a
+    // ref written during one: a ref would be written twice under StrictMode and the second pass would report that
+    // nothing had been in front.
+    //
+    // The question is *whether something was in front* rather than which of the two it was, so the conversation and the
+    // markup surface are one value here. Asking it per surface is how closing the second one would leave focus on a
+    // control that has just been unmounted, while closing the first placed it correctly.
+    const covered = conversation !== null || fullHtml !== null;
+    const [wasCovered, setWasCovered] = useState(covered);
     const [arriving, setArriving] = useState(false);
 
-    if (reading !== (conversation !== null)) {
-        setReading(conversation !== null);
-        setArriving(conversation === null);
+    if (wasCovered !== covered) {
+        setWasCovered(covered);
+        setArriving(!covered);
+    }
+
+    if (fullHtml !== null) {
+        return (
+            <FullHtmlSurface
+                key={fullHtml}
+                session={session}
+                transport={transport}
+                storedEmailId={fullHtml}
+                online={online}
+                onClose={onCloseFullHtml}
+            />
+        );
     }
 
     return conversation === null ? (
@@ -485,6 +518,7 @@ function OpenMail({
             transport={transport}
             storedEmailId={storedEmailId}
             online={online}
+            onShowFullHtml={onShowFullHtml}
             arriving={arriving}
         />
     ) : (

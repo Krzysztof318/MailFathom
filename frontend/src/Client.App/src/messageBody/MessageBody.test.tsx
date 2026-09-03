@@ -39,6 +39,7 @@ const readable: MailBody = {
     availability: 'Readable',
     plainText: { text: 'A message, as words.', originalCharacterCount: 20, truncation: 'None' },
     document: drawnDocument,
+    selfContainedHtml: null,
     remoteImagesRequested: false,
 };
 

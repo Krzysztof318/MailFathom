@@ -101,6 +101,7 @@ function drawing(
                                 transport={transport}
                                 storedEmailId={storedEmailId}
                                 online={online}
+                                onShowFullHtml={() => undefined}
                             />
                         </ReadMarkingContext>
                     </AttachmentDeliveryContext>
@@ -285,6 +286,7 @@ function paneReading(transport: MailFathomTransport, online: boolean) {
                             transport={transport}
                             storedEmailId={messageId}
                             online={online}
+                            onShowFullHtml={() => undefined}
                         />
                     </AttachmentDeliveryContext>
                 </LinkOpenerContext>
@@ -305,6 +307,7 @@ function paneFor(storedEmailId: string) {
                             transport={deploymentDescribing()}
                             storedEmailId={storedEmailId}
                             online
+                            onShowFullHtml={() => undefined}
                         />
                     </AttachmentDeliveryContext>
                 </LinkOpenerContext>
@@ -328,6 +331,7 @@ describe('ReadingPane selection', () => {
                                 transport={deploymentDescribing()}
                                 storedEmailId={messageId}
                                 online
+                                onShowFullHtml={() => undefined}
                             />
                         </AttachmentDeliveryContext>
                     </LinkOpenerContext>

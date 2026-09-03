@@ -125,6 +125,13 @@
     --color-mailbox-mark: oklch(0.555 0.185 262);
     --color-mailbox-mark-alternate: oklch(0.63 0.08 205);
 
+    /* What a sender's own markup is drawn on, and the one token here that does not follow the theme. A message's HTML
+       was written against a white page — it sets its own foreground colours and expects the rest — so drawing it on a
+       dark surface leaves whatever it left unstated unreadable, which is the whole document for most mail. It is
+       declared here rather than written into the frame so that the exception is stated where every other colour is
+       decided, and so the dark block below can be read as not redefining it on purpose. */
+    --color-sender-markup: oklch(1 0 0);
+
     /* Not surfaces but light: the hairline that lifts a raised surface off the one behind it, what a shadow is cast in
        at two depths, and what the page is dimmed to behind something modal. */
     --color-inset: rgb(255 255 255 / 0.65);

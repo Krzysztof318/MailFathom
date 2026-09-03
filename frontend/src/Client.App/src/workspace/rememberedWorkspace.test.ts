@@ -14,6 +14,7 @@ const kept: Workspace = {
     mailboxesFolded: true,
     selection: 'AAMkAD-42',
     conversation: { threadId: '9b2a1c74-4a4e-4c93-9a2e-3f6f0a1b2c3d', openAt: 'AAMkAD-42' },
+    fullHtml: null,
     fragment: null,
     selected: ['AAMkAD-42', 'AAMkAD-43'],
     question: 'what did Nordwind send',
@@ -42,6 +43,21 @@ describe('rememberWorkspace', () => {
 
         expect(window.sessionStorage.getItem(storageKey)).not.toContain('somebody pointed at');
         expect(rememberedWorkspace().fragment).toBeNull();
+    });
+
+    // A consent given for one message after being told what a stranger's markup can carry, which is why a reload finds
+    // the surface closed and the control asks again rather than reopening it.
+    it('keeps no record of the markup surface having been open', () => {
+        rememberWorkspace({ ...kept, fullHtml: 'AAMkAD-42' });
+
+        expect(window.sessionStorage.getItem(storageKey)).not.toContain('"fullHtml":"AAMkAD-42"');
+        expect(rememberedWorkspace().fullHtml).toBeNull();
+    });
+
+    it('opens the surface for nobody where a store was edited to say it was open', () => {
+        window.sessionStorage.setItem(storageKey, JSON.stringify({ ...kept, fullHtml: 'AAMkAD-42' }));
+
+        expect(rememberedWorkspace().fullHtml).toBeNull();
     });
 });
 

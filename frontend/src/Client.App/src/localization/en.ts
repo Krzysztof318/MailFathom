@@ -390,6 +390,31 @@ export const en = {
     'body.undrawnPicturesCount': 'Pictures too large to draw: {count}',
     'body.quotedHistory': 'The conversation this message quoted',
 
+    'fullHtml.show': 'Show the full HTML version',
+    'fullHtml.question': 'Show the full HTML?',
+    'fullHtml.whatItCanCarry':
+        'The sender wrote this markup themselves. It can carry tracking pixels, a layout imitating a brand you know, and links that go somewhere other than they say.',
+    'fullHtml.whatIsBlocked':
+        'Nothing in it can run, and nothing in it reaches the sender until you ask for their pictures.',
+    'fullHtml.stayReduced': 'Stay with the reduced version',
+    'fullHtml.confirm': 'Show the HTML',
+    'fullHtml.surface': "The sender's own version of this message",
+    'fullHtml.mark': 'HTML',
+    'fullHtml.frame': "The sender's own markup, drawn in isolation",
+    'fullHtml.sentBy': '{author} · {when}',
+    'fullHtml.close': 'Close this view',
+    'fullHtml.reading': "Reading the sender's own version…",
+    'fullHtml.failed': "The sender's own version could not be read: {reason}.",
+    'fullHtml.noMarkup': 'The sender wrote no formatted version of this message, so there is nothing to show here.',
+    'fullHtml.truncated': 'This message is longer than one read returns, so it stops here.',
+    'fullHtml.picturesTruncated':
+        'This message carried more pictures of its own than one view holds, so some of them are missing.',
+    'fullHtml.cannotRun': 'This message cannot run anything: the frame it is drawn in permits no script at all.',
+    'fullHtml.reachesNobody':
+        'It carries no address that would reach the sender — every one of them was removed before this message was sent to the client.',
+    'fullHtml.picturesAsked':
+        'Pictures are being loaded from the sender for this message, so their servers can tell it was opened. Nothing about that is kept: leaving this message and coming back asks again.',
+
     'thread.label': 'Conversation',
     'thread.open': 'Show the whole conversation',
     'thread.close': 'Back to the message',

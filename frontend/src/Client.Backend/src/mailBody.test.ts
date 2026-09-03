@@ -57,6 +57,10 @@ function documentWith(blocks: readonly unknown[], overrides: Readonly<Record<str
 
 type Answer = Omit<ClientResponse, 'headers'>;
 
+// What opening a message asks for: the tree and the words, and neither of the two things a reader has to press a
+// control to be shown.
+const readingTheMessage = { remoteImages: false, fullHtml: false };
+
 function answering(response: Answer): MailFathomTransport {
     return () => Promise.resolve({ ...response, headers: {} });
 }
@@ -78,7 +82,7 @@ async function readingDocument(blocks: readonly unknown[], remoteImages = false)
     const document = documentWith(blocks);
     const body = bodyWith(document, { remoteImagesRequested: remoteImages });
 
-    return readMailBody(session, answering({ status: 200, body }), storedEmailId, remoteImages);
+    return readMailBody(session, answering({ status: 200, body }), storedEmailId, { remoteImages, fullHtml: false });
 }
 
 async function refusing(blocks: readonly unknown[], remoteImages = false) {
@@ -89,15 +93,89 @@ async function refusing(blocks: readonly unknown[], remoteImages = false) {
 
 describe('mailBodyRoute', () => {
     it('asks for the tree alone when the reader has not asked for remote pictures', () => {
-        expect(mailBodyRoute(storedEmailId, false)).toBe(`/messages/${storedEmailId}/body`);
+        expect(mailBodyRoute(storedEmailId, readingTheMessage)).toBe(`/messages/${storedEmailId}/body`);
     });
 
     it('carries the reader ask for remote pictures as the whole of that state', () => {
-        expect(mailBodyRoute(storedEmailId, true)).toBe(`/messages/${storedEmailId}/body?remoteImages=true`);
+        expect(mailBodyRoute(storedEmailId, { remoteImages: true, fullHtml: false })).toBe(
+            `/messages/${storedEmailId}/body?remoteImages=true`,
+        );
     });
 
     it('escapes an identifier rather than writing it into the path as it arrived', () => {
-        expect(mailBodyRoute('../accounts', false)).toBe('/messages/..%2Faccounts/body');
+        expect(mailBodyRoute('../accounts', readingTheMessage)).toBe('/messages/..%2Faccounts/body');
+    });
+
+    it('carries the ask for the sender own markup as a second query of its own', () => {
+        const asked = mailBodyRoute(storedEmailId, { remoteImages: false, fullHtml: true });
+
+        expect(asked).toBe(`/messages/${storedEmailId}/body?fullHtml=true`);
+    });
+
+    it('carries both asks at once, because a reader on the markup surface may ask for its pictures too', () => {
+        const asked = mailBodyRoute(storedEmailId, { remoteImages: true, fullHtml: true });
+
+        expect(asked).toBe(`/messages/${storedEmailId}/body?remoteImages=true&fullHtml=true`);
+    });
+});
+
+describe('readMailBody reading the sender own markup', () => {
+    const showingTheMarkup = { remoteImages: false, fullHtml: true };
+
+    it('reads the markup the deployment served beside the tree it did not replace', async () => {
+        const body = bodyWith(documentWith([]), {
+            selfContainedHtml: { text: '<p>As sent.</p>', originalCharacterCount: 15, truncation: 'None' },
+        });
+
+        const result = await readMailBody(session, answering({ status: 200, body }), storedEmailId, showingTheMarkup);
+
+        expect(result.outcome === 'read' && result.value.selfContainedHtml).toEqual({
+            text: '<p>As sent.</p>',
+            originalCharacterCount: 15,
+            truncation: 'None',
+        });
+    });
+
+    it('reads the bound that left a picture out, which is the one loss the character bounds cannot name', async () => {
+        const body = bodyWith(documentWith([]), {
+            selfContainedHtml: {
+                text: '<p>As sent.</p>',
+                originalCharacterCount: 15,
+                truncation: 'InlineImageOctetLimit',
+            },
+        });
+
+        const result = await readMailBody(session, answering({ status: 200, body }), storedEmailId, showingTheMarkup);
+
+        expect(result.outcome === 'read' && result.value.selfContainedHtml?.truncation).toBe('InlineImageOctetLimit');
+    });
+
+    it('answers a read that opened no surface for it with no markup at all', async () => {
+        const body = bodyWith(documentWith([]));
+
+        const result = await readMailBody(session, answering({ status: 200, body }), storedEmailId, readingTheMessage);
+
+        expect(result.outcome === 'read' && result.value.selfContainedHtml).toBeNull();
+    });
+
+    it('refuses markup that arrived under a read nobody opened a surface for', async () => {
+        const body = bodyWith(documentWith([]), {
+            selfContainedHtml: { text: '<p>As sent.</p>', originalCharacterCount: 15, truncation: 'None' },
+        });
+
+        const result = await readMailBody(session, answering({ status: 200, body }), storedEmailId, readingTheMessage);
+
+        expect(result).toEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
+
+    it('refuses markup whose own account of itself is not one this contract describes', async () => {
+        const body = bodyWith(documentWith([]), {
+            selfContainedHtml: { text: '<p>As sent.</p>', originalCharacterCount: 15, truncation: 'Whatever' },
+        });
+
+        const result = await readMailBody(session, answering({ status: 200, body }), storedEmailId, showingTheMarkup);
+
+        expect(result).toEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
     });
 });
 
@@ -105,7 +183,7 @@ describe('readMailBody', () => {
     it('asks for the body route on the client surface with the session it was given', async () => {
         const { transport, requests } = recording({ status: 200, body: bodyWith(documentWith([])) });
 
-        await readMailBody(session, transport, storedEmailId, false);
+        await readMailBody(session, transport, storedEmailId, readingTheMessage);
 
         expect(requests).toEqual([
             {
@@ -144,6 +222,7 @@ describe('readMailBody', () => {
                     undrawnInlineImageCount: 0,
                     truncated: false,
                 },
+                selfContainedHtml: null,
                 remoteImagesRequested: false,
             },
         });
@@ -153,7 +232,7 @@ describe('readMailBody', () => {
         const document = documentWith([], { refusal: 'NoHtmlPart' });
         const body = bodyWith(document);
 
-        const result = await readMailBody(session, answering({ status: 200, body }), storedEmailId, false);
+        const result = await readMailBody(session, answering({ status: 200, body }), storedEmailId, readingTheMessage);
 
         expect(result.outcome === 'read' && result.value.document?.refusal).toBe('NoHtmlPart');
     });
@@ -164,7 +243,7 @@ describe('readMailBody', () => {
         [404, 'unavailable'],
         [500, 'unavailable'],
     ])('reads status %i as the failure a screen acts on', async (status, reason) => {
-        const result = await readMailBody(session, answering({ status, body: '' }), storedEmailId, false);
+        const result = await readMailBody(session, answering({ status, body: '' }), storedEmailId, readingTheMessage);
 
         expect(result).toEqual({ outcome: 'failed', failure: { reason, status } });
     });
@@ -172,13 +251,18 @@ describe('readMailBody', () => {
     it('reports a deployment nothing answered from as unavailable, rather than throwing at its caller', async () => {
         const refusing: MailFathomTransport = () => Promise.reject(new Error('the deployment is not there'));
 
-        const result = await readMailBody(session, refusing, storedEmailId, false);
+        const result = await readMailBody(session, refusing, storedEmailId, readingTheMessage);
 
         expect(result).toEqual({ outcome: 'failed', failure: { reason: 'unavailable', status: null } });
     });
 
     it('refuses a body that is not JSON rather than reading it as an empty message', async () => {
-        const result = await readMailBody(session, answering({ status: 200, body: 'not json' }), storedEmailId, false);
+        const result = await readMailBody(
+            session,
+            answering({ status: 200, body: 'not json' }),
+            storedEmailId,
+            readingTheMessage,
+        );
 
         expect(result).toEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
     });
@@ -186,7 +270,7 @@ describe('readMailBody', () => {
     it('reads a message the deployment holds nothing readable for as that state', async () => {
         const body = bodyWith(null, { availability: 'EncryptedNotReadableLocally' });
 
-        const result = await readMailBody(session, answering({ status: 200, body }), storedEmailId, false);
+        const result = await readMailBody(session, answering({ status: 200, body }), storedEmailId, readingTheMessage);
 
         expect(result.outcome === 'read' && result.value).toMatchObject({
             availability: 'EncryptedNotReadableLocally',
@@ -199,7 +283,7 @@ describe('readMailBody refusing a document this deployment did not compose', () 
     it('refuses a document written against a schema revision this build does not implement', async () => {
         const body = bodyWith(documentWith([], { schemaVersion: 2 }));
 
-        const result = await readMailBody(session, answering({ status: 200, body }), storedEmailId, false);
+        const result = await readMailBody(session, answering({ status: 200, body }), storedEmailId, readingTheMessage);
 
         expect(result.outcome).toBe('failed');
     });
@@ -296,7 +380,7 @@ describe('readMailBody refusing a document this deployment did not compose', () 
     it('refuses an answer composed for a different request than the one that was made', async () => {
         const body = bodyWith(documentWith([]), { remoteImagesRequested: true });
 
-        const result = await readMailBody(session, answering({ status: 200, body }), storedEmailId, false);
+        const result = await readMailBody(session, answering({ status: 200, body }), storedEmailId, readingTheMessage);
 
         expect(result.outcome).toBe('failed');
     });
@@ -644,7 +728,7 @@ describe('readMailBody refusing a malformed answer', () => {
         ['a truncation flag that is not a flag', bodyWith(documentWith([], { truncated: 'yes' }))],
         ['a refusal outside the set', bodyWith(documentWith([], { refusal: 'Undecided' }))],
     ])('refuses %s', async (_, body) => {
-        const result = await readMailBody(session, answering({ status: 200, body }), storedEmailId, false);
+        const result = await readMailBody(session, answering({ status: 200, body }), storedEmailId, readingTheMessage);
 
         expect(result).toEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
     });

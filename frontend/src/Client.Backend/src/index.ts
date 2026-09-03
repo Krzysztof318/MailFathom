@@ -25,6 +25,7 @@ export {
     readMailBody,
     type MailBlockAlignment,
     type MailBody,
+    type MailBodyAsk,
     type MailBodyAvailability,
     type MailBodyText,
     type MailBodyTruncation,

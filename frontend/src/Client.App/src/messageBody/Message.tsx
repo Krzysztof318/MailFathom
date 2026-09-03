@@ -113,7 +113,9 @@ export function Message({
     useEffect(() => {
         let listening = true;
 
-        void readMailBody(session, transport, read.storedEmailId, read.remotePictures).then((answered) => {
+        const ask = { remoteImages: read.remotePictures, fullHtml: false };
+
+        void readMailBody(session, transport, read.storedEmailId, ask).then((answered) => {
             if (listening) {
                 setAnswer({ read, result: answered });
             }

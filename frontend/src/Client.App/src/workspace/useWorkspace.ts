@@ -47,6 +47,16 @@ export interface Workspace {
     readonly conversation: OpenConversation | null;
 
     /**
+     * The message whose own markup is being shown on the full-HTML surface, or `null` where nobody asked for one.
+     *
+     * Beside the selection for the same reason a conversation is, and never written down anywhere else: the reader's
+     * consent to be shown a stranger's markup is given per message and outlives nothing, so a reload finds it gone and
+     * asks again. `rememberedWorkspace` is where that is enforced rather than here, because that is the only place
+     * this value could otherwise survive one.
+     */
+    readonly fullHtml: string | null;
+
+    /**
      * The part of what is open that a question would be asked about, or `null` where the whole of it is.
      *
      * It is the words a person selected rather than a position in anything, because what the intent field does with it
@@ -91,6 +101,7 @@ export const emptyWorkspace: Workspace = {
     mailboxesFolded: false,
     selection: null,
     conversation: null,
+    fullHtml: null,
     fragment: null,
     selected: [],
     question: '',

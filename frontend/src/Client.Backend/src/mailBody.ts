@@ -13,19 +13,37 @@ import { send, type MailFathomTransport } from './transport';
 // here sanitizes anything: it establishes that what arrived is a document this deployment produced, and refuses the
 // whole of it when it is not. ADR 0024 records why that is the boundary and what each of its parts holds.
 
-/** The route one message's body is served at, relative to the client prefix. */
-export function mailBodyRoute(storedEmailId: string, remoteImages: boolean): string {
-    const asked = remoteImages ? '?remoteImages=true' : '';
+/**
+ * What one read of a body asks for beyond the message itself.
+ *
+ * Two questions rather than two flags on a call: each of them widens what the answer carries, each is the reader's own
+ * act on one message, and neither is remembered by either side. Written as a value so that a call site says which of
+ * the two it is asking, rather than reading as a pair of positional booleans nobody can tell apart.
+ */
+export interface MailBodyAsk {
+    /** Whether the reader asked this message's remote references to be resolved, having been told what that reveals. */
+    readonly remoteImages: boolean;
 
-    return `/messages/${encodeURIComponent(storedEmailId)}/body${asked}`;
+    /** Whether the sender's own markup is wanted beside the reduced tree, which only the surface drawing it asks for. */
+    readonly fullHtml: boolean;
+}
+
+/** The route one message's body is served at, relative to the client prefix. */
+export function mailBodyRoute(storedEmailId: string, ask: MailBodyAsk): string {
+    const asked = [...(ask.remoteImages ? ['remoteImages=true'] : []), ...(ask.fullHtml ? ['fullHtml=true'] : [])];
+
+    const query = asked.length === 0 ? '' : `?${asked.join('&')}`;
+
+    return `/messages/${encodeURIComponent(storedEmailId)}/body${query}`;
 }
 
 /** Whether the body could be read at all, or why the deployment holds nothing to draw. */
 export type MailBodyAvailability =
     'Readable' | 'EncryptedNotReadableLocally' | 'NotStoredExceededSizeLimit' | 'NotStoredAwaitingStorageHeadroom';
 
-/** Which bound cut the plain text short, or that none did. */
-export type MailBodyTruncation = 'None' | 'BodyCharacterLimit' | 'ReadCharacterBudget' | 'SensitiveContentScanCeiling';
+/** Which bound cut a representation short, or that none did. */
+export type MailBodyTruncation =
+    'None' | 'BodyCharacterLimit' | 'ReadCharacterBudget' | 'SensitiveContentScanCeiling' | 'InlineImageOctetLimit';
 
 /** Why the body is read as its plain text rather than as a document, or that it is not. */
 export type MailDocumentRefusal = 'None' | 'NoHtmlPart' | 'ReductionFailed' | 'NothingRenderable';
@@ -185,12 +203,23 @@ export interface MailBodyText {
     readonly truncation: MailBodyTruncation;
 }
 
-/** One message's body, in the two renderings a reading pane draws it from. */
+/** One message's body, in the renderings a read asked the service for. */
 export interface MailBody {
     readonly storedEmailId: string;
     readonly availability: MailBodyAvailability;
     readonly plainText: MailBodyText;
     readonly document: MailDocument | null;
+
+    /**
+     * The sender's own markup, self-contained, or `null` where this read did not ask for it.
+     *
+     * It is markup rather than a tree, which is why nothing draws it in this application's own document: it is the one
+     * value here a screen hands to a frame instead of rendering. What makes that safe is not the frame alone — the
+     * service prepares it with nothing executable in it and, unless the reader asked otherwise, with no address that
+     * resolves against another host. ADR 0024 records which mechanism holds which of those two promises.
+     */
+    readonly selfContainedHtml: MailBodyText | null;
+
     readonly remoteImagesRequested: boolean;
 }
 
@@ -250,6 +279,7 @@ const truncations: readonly MailBodyTruncation[] = [
     'BodyCharacterLimit',
     'ReadCharacterBudget',
     'SensitiveContentScanCeiling',
+    'InlineImageOctetLimit',
 ];
 
 const refusals: readonly MailDocumentRefusal[] = ['None', 'NoHtmlPart', 'ReductionFailed', 'NothingRenderable'];
@@ -289,20 +319,20 @@ const noEmphasis: MailTextEmphasis = {
 /**
  * Reads one message's body, answering an expected failure as a value rather than by throwing.
  *
- * `remoteImages` is the reader's own act on this one message, told to the service as a query and remembered by
- * neither side: opening the message again asks again. It is also what the parser holds a remote picture against, so a
- * document carrying an address nobody asked for is refused rather than drawn.
+ * Both halves of `ask` are the reader's own act on this one message, told to the service as a query and remembered by
+ * neither side: opening the message again asks again. The ask is also what the parser holds the answer against, so a
+ * document carrying an address nobody asked for, or markup nobody opened a surface for, is refused rather than drawn.
  */
 export function readMailBody(
     session: ClientSession,
     transport: MailFathomTransport,
     storedEmailId: string,
-    remoteImages: boolean,
+    ask: MailBodyAsk,
 ): Promise<ClientResult<MailBody>> {
     return spanned('GET /messages/{storedEmailId}/body', async () => {
         const response = await send(transport, {
             method: 'GET',
-            path: routeFor(session, mailBodyRoute(storedEmailId, remoteImages)),
+            path: routeFor(session, mailBodyRoute(storedEmailId, ask)),
             headers: headersFor(session),
             longestAnswer: longestBodyAnswer,
         });
@@ -315,7 +345,7 @@ export function readMailBody(
             return failed(failureReasonForStatus(response.status), response.status);
         }
 
-        const body = parseBody(response.body, remoteImages);
+        const body = parseBody(response.body, ask);
 
         return body === null ? failed('unreadable', response.status) : read(body);
     });
@@ -329,7 +359,7 @@ interface RemainingBudget {
     inlineImageOctets: number;
 }
 
-function parseBody(body: string, remoteImages: boolean): MailBody | null {
+function parseBody(body: string, ask: MailBodyAsk): MailBody | null {
     const record = asRecord(parsed(body));
     if (record === null) {
         return null;
@@ -365,11 +395,24 @@ function parseBody(body: string, remoteImages: boolean): MailBody | null {
     // The query the read was made with and the answer's own account of it have to agree, because everything the parser
     // admits about a remote picture is decided by that one boolean. A disagreement is a document composed for another
     // request, and reading it would be reading a picture reference against a permission nobody granted.
-    if (remoteImagesRequested !== remoteImages) {
+    if (remoteImagesRequested !== ask.remoteImages) {
         return null;
     }
 
-    return { storedEmailId, availability, plainText, document, remoteImagesRequested };
+    // The markup is held to the same rule from the other direction: a read that opened no surface for it is answered
+    // without it, so markup arriving unasked is an answer composed for a different request. Refusing it here is what
+    // keeps the one place a value becomes a document reachable only from the read that asked to draw one.
+    const markup = record['selfContainedHtml'] ?? null;
+    if (!ask.fullHtml && markup !== null) {
+        return null;
+    }
+
+    const selfContainedHtml = markup === null ? null : parseText(markup);
+    if (markup !== null && selfContainedHtml === null) {
+        return null;
+    }
+
+    return { storedEmailId, availability, plainText, document, selfContainedHtml, remoteImagesRequested };
 }
 
 function parseText(value: unknown): MailBodyText | null {

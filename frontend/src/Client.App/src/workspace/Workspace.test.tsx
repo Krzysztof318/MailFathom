@@ -164,6 +164,38 @@ describe('the conversation beside the selection', () => {
     });
 });
 
+// The markup surface stands in front of a message the same way, and closing it on a change of message matters more:
+// what it draws is a stranger's own markup, shown for one message after the reader was asked about that message.
+describe('the markup surface beside the selection', () => {
+    it('closes the surface when a different message is picked, so no message inherits another consent', () => {
+        applying([
+            { selection: 'the-message-it-was-opened-from' },
+            { fullHtml: 'the-message-it-was-opened-from' },
+            { selection: 'another-message' },
+        ]);
+
+        expect(carried().fullHtml).toBeNull();
+        expect(carried().selection).toBe('another-message');
+    });
+
+    it('keeps the surface where the same message is picked again, which changes nothing', () => {
+        applying([
+            { selection: 'the-message-it-was-opened-from' },
+            { fullHtml: 'the-message-it-was-opened-from' },
+            { selection: 'the-message-it-was-opened-from' },
+        ]);
+
+        expect(carried().fullHtml).toBe('the-message-it-was-opened-from');
+    });
+
+    it('leaves a revision naming both alone, because that is the surface being opened on another message', () => {
+        applying([{ selection: 'another-message', fullHtml: 'another-message' }]);
+
+        expect(carried().fullHtml).toBe('another-message');
+        expect(carried().selection).toBe('another-message');
+    });
+});
+
 describe('useWorkspace', () => {
     it('refuses to answer outside the provider rather than inventing a workspace of its own', () => {
         expect(() => {

@@ -68,12 +68,22 @@ export function ReadingPane({
     transport,
     storedEmailId,
     online,
+    onShowFullHtml,
     arriving = false,
 }: {
     readonly session: ClientSession;
     readonly transport: MailFathomTransport;
     readonly storedEmailId: string | null;
     readonly online: boolean;
+
+    /**
+     * Opens the surface drawing the sender's own markup for the message named, which the head's own control asks for.
+     *
+     * Handed in rather than reached for, because where that surface goes is the Mail space's decision — a tab of its
+     * own beside everything else open, or in front of the message where a person does not work in tabs — and a pane
+     * that decided it would be deciding something it cannot see.
+     */
+    readonly onShowFullHtml: (storedEmailId: string, subject: string | null) => void;
 
     /**
      * Whether the reader is arriving at this message rather than landing on it, which decides whether focus is placed.
@@ -98,6 +108,7 @@ export function ReadingPane({
                     transport={transport}
                     storedEmailId={storedEmailId}
                     online={online}
+                    onShowFullHtml={onShowFullHtml}
                     arriving={arriving}
                 />
             )}
@@ -113,12 +124,14 @@ function OpenMessage({
     transport,
     storedEmailId,
     online,
+    onShowFullHtml,
     arriving,
 }: {
     readonly session: ClientSession;
     readonly transport: MailFathomTransport;
     readonly storedEmailId: string;
     readonly online: boolean;
+    readonly onShowFullHtml: (storedEmailId: string, subject: string | null) => void;
     readonly arriving: boolean;
 }) {
     const { locale, translate } = useLocalization();
@@ -274,7 +287,12 @@ function OpenMessage({
             aria-label={message.headers.subject ?? translate('message.noSubject')}
             className="flex flex-col"
         >
-            <MessageHeaders headers={message.headers} />
+            <MessageHeaders
+                headers={message.headers}
+                onShowFullHtml={() => {
+                    onShowFullHtml(storedEmailId, message.headers.subject);
+                }}
+            />
 
             <div className="flex flex-col gap-3 px-5.5 py-4.5">
                 <SenderVerdict verdict={message.sender} />

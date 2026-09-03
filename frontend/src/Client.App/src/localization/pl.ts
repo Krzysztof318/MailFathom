@@ -394,6 +394,31 @@ export const pl: Catalogue = {
     'body.undrawnPicturesCount': 'Obrazów zbyt dużych, by je narysować: {count}',
     'body.quotedHistory': 'Rozmowa cytowana w tej wiadomości',
 
+    'fullHtml.show': 'Pokaż pełną wersję HTML',
+    'fullHtml.question': 'Pokazać pełny HTML?',
+    'fullHtml.whatItCanCarry':
+        'Ten kod napisał sam nadawca. Może zawierać piksele śledzące, układ podszywający się pod znaną markę i odnośniki prowadzące gdzie indziej, niż zapowiadają.',
+    'fullHtml.whatIsBlocked':
+        'Nic w nim nie może się wykonać i nic nie sięga do nadawcy, dopóki nie poprosisz o jego obrazy.',
+    'fullHtml.stayReduced': 'Zostań przy wersji uproszczonej',
+    'fullHtml.confirm': 'Pokaż HTML',
+    'fullHtml.surface': 'Własna wersja tej wiadomości od nadawcy',
+    'fullHtml.mark': 'HTML',
+    'fullHtml.frame': 'Kod napisany przez nadawcę, rysowany w izolacji',
+    'fullHtml.sentBy': '{author} · {when}',
+    'fullHtml.close': 'Zamknij ten widok',
+    'fullHtml.reading': 'Wczytywanie wersji od nadawcy…',
+    'fullHtml.failed': 'Nie udało się odczytać wersji od nadawcy: {reason}.',
+    'fullHtml.noMarkup': 'Nadawca nie napisał sformatowanej wersji tej wiadomości, więc nie ma tu czego pokazać.',
+    'fullHtml.truncated': 'Ta wiadomość jest dłuższa, niż zwraca jeden odczyt, więc urywa się w tym miejscu.',
+    'fullHtml.picturesTruncated':
+        'Ta wiadomość niosła więcej własnych obrazów, niż mieści jeden widok, więc części z nich tu nie ma.',
+    'fullHtml.cannotRun': 'Ta wiadomość nie może niczego wykonać: ramka, w której ją rysujemy, nie dopuszcza skryptów.',
+    'fullHtml.reachesNobody':
+        'Nie niesie żadnego adresu, który sięgałby do nadawcy — wszystkie usunięto, zanim ta wiadomość trafiła do klienta.',
+    'fullHtml.picturesAsked':
+        'Obrazy tej wiadomości są pobierane od nadawcy, więc jego serwery mogą rozpoznać, że ją otwarto. Nic z tego nie jest zapamiętywane: po wyjściu z wiadomości i powrocie pytamy ponownie.',
+
     'thread.label': 'Rozmowa',
     'thread.open': 'Pokaż całą rozmowę',
     'thread.close': 'Wróć do wiadomości',
