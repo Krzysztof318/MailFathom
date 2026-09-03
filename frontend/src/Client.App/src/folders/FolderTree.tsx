@@ -31,6 +31,12 @@ import { unreadAfterMarking } from './unreadAfterMarking';
 //
 // What it does not do is decide anything about the mail itself. Selecting a row writes the scope into the workspace,
 // and the list, the search, and the next question read it from there.
+//
+// Two things fold here and they are different questions. A row folds away what is under it, which is this tree's own
+// and is what `workspace.collapsed` holds. The column folds to a rail, which is the composition's and is what
+// `workspace.mailboxesFolded` holds — read here rather than handed in because the composition that owns it renders
+// this tree as a region it was given rather than as a child it built. Neither touches the other: a rail draws the
+// same rows a column would, each as a symbol.
 
 const failureLabels: Readonly<Record<ClientFailureReason, MessageKey>> = {
     unauthenticated: 'failure.unauthenticated',
@@ -255,6 +261,7 @@ export function FolderTree({
                     expanded={visibleRow.expanded}
                     selected={visibleRow.row.key === inScope}
                     focusable={visibleRow.row.key === carryingFocus?.row.key}
+                    folded={workspace.mailboxesFolded}
                     groupOrdinal={groupOrdinals.get(visibleRow.row.key) ?? null}
                     onSelect={() => {
                         setFocused(visibleRow.row.key);

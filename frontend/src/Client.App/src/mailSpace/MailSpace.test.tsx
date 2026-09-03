@@ -197,17 +197,40 @@ describe('MailSpace, wide', () => {
         );
     });
 
-    it('folds the mailbox column to a strip and opens it again, from a control named for each', () => {
+    it('folds the mailbox column to a rail and opens it again, from a control named for each', () => {
         renderSpace(true);
 
         fireEvent.click(screen.getByRole('button', { name: 'Collapse the mailbox column' }));
 
-        expect(screen.queryByText(handedTheFolders)).toBeNull();
         expect(screen.queryByRole('button', { name: 'Collapse the mailbox column' })).toBeNull();
+        expect(screen.getByRole('complementary').className).toContain('w-mailboxes-folded');
 
         fireEvent.click(screen.getByRole('button', { name: 'Expand the mailbox column' }));
 
+        expect(screen.queryByRole('button', { name: 'Expand the mailbox column' })).toBeNull();
+        expect(screen.getByRole('complementary').className).toContain('w-mailboxes');
+    });
+
+    it('keeps the mailboxes in the folded rail, and drops what a rail has no room to say', () => {
+        renderSpace(true);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Collapse the mailbox column' }));
+
         expect(screen.getByText(handedTheFolders)).toBeDefined();
+        expect(screen.queryByText('Folders')).toBeNull();
+        expect(screen.queryByText(handedTheStatus)).toBeNull();
+    });
+
+    it('draws the AI filters as symbols in the folded rail, where their names would not fit', () => {
+        renderSpace(true);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Collapse the mailbox column' }));
+
+        const filters = screen.getByRole('region', { name: 'AI filters' });
+
+        expect(filters.querySelectorAll('button[aria-disabled="true"]').length).toBe(3);
+        expect(filters.textContent).toBe('');
+        expect(screen.getByRole('button', { name: 'Needs a decision — not built yet' })).toBeDefined();
     });
 
     it('draws every unbuilt action of the toolbar as one that says so in its own name', () => {

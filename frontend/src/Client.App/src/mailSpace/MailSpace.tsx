@@ -83,13 +83,17 @@ export function MailSpace({
     const { translate } = useLocalization();
     const { workspace, revise } = useWorkspace();
     const wide = useWideWorkspace();
-    const [folded, setFolded] = useState(false);
     const [listWidth, setListWidth] = useState(() => readListWidth(person));
     const drawer = useRef<HTMLDialogElement>(null);
     const listColumn = useRef<HTMLElement>(null);
     const readingColumn = useRef<HTMLElement>(null);
 
     const readingInFront = !wide && (workspace.selection !== null || workspace.conversation !== null);
+
+    // Read from the workspace rather than held here, because the column is not the only thing that draws differently
+    // once it is folded: the tree inside it draws a symbol where it drew a name, and the tree is a region handed in
+    // already built rather than a child this component could pass a prop to.
+    const folded = workspace.mailboxesFolded;
 
     // A width chosen on one screen is read back on whatever screen the client opens on next, so the window is measured
     // rather than trusted: what the two columns share is what they measure to, and a stored width the window no longer
@@ -181,7 +185,7 @@ export function MailSpace({
                                     label={translate(folded ? 'mailboxes.unfold' : 'mailboxes.fold')}
                                     icon={folded ? 'chevron_right' : 'chevron_left'}
                                     onActivate={() => {
-                                        setFolded(!folded);
+                                        revise({ mailboxesFolded: !folded });
                                     }}
                                 />
                             }
@@ -309,6 +313,11 @@ export function MailSpace({
 
 // The mailbox column's contents, drawn once for the two places they stand: the column beside the list, and the drawer
 // in front of it. The heading, the tree, the filters MailFathom's own reading will add, and the connection at the foot.
+//
+// Folded, it is the same tree at the rail's width rather than a column emptied of it: the point of folding is to give
+// the width to the list while keeping the mailboxes one click away, and a rail with nothing in it would make the
+// control the only thing left to click. What the rail does drop is the heading, which names a column a reader can see
+// the whole of, and the connection line at the foot, which is a sentence and has nowhere to wrap to.
 function Mailboxes({
     folders,
     status,
@@ -324,7 +333,7 @@ function Mailboxes({
 
     return (
         <>
-            <div className={`flex items-center px-2.25 pt-3 pb-1.5 ${folded ? 'justify-center' : 'justify-between'}`}>
+            <div className={`flex items-center px-2.25 pt-3 pb-1.5 ${folded ? 'justify-end' : 'justify-between'}`}>
                 {folded ? null : (
                     <p className="ps-1.5 text-xs tracking-widest text-muted uppercase">
                         {translate('mailboxes.heading')}
@@ -334,16 +343,12 @@ function Mailboxes({
                 {control}
             </div>
 
-            {folded ? null : (
-                <>
-                    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2.25 py-1">
-                        {folders}
-                        <AiFilters />
-                    </div>
+            <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2.25 py-1">
+                {folders}
+                <AiFilters folded={folded} />
+            </div>
 
-                    <div className="border-t border-line px-3.5 py-2.5">{status}</div>
-                </>
-            )}
+            {folded ? null : <div className="border-t border-line px-3.5 py-2.5">{status}</div>}
         </>
     );
 }

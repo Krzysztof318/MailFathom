@@ -24,6 +24,12 @@ import type { FolderTreeRow } from './folderTreeRows';
 // Two shapes, as the design project draws them. The first level is the groups — the whole workspace and each mailbox —
 // drawn as a small heading with a mark in front of it, and everything under a group is a folder drawn with the symbol
 // of what it is: the role's own where it plays one, and a folder's otherwise.
+//
+// Each of those two is drawn twice again, because the column it stands in folds to a rail. Folded, a group is its mark
+// alone — the colour is what tells one mailbox from the next once the name is gone — and a folder is its symbol alone,
+// drawn larger, because a narrower column still has to be hit reliably. What goes is the drawing rather than the
+// saying: the name, the state, and the count stay in the row for a reader who is not looking at it, which is what
+// keeps a rail of unlabelled symbols something a screen reader can still work through.
 
 // How far in each level under a group sits. Stated as one list rather than as a width worked out from the level,
 // because a computed indentation is a value written outside the token layer however it is arrived at. Anything deeper
@@ -44,6 +50,35 @@ const roleIcons: Readonly<Record<MailFolderRole, IconName>> = {
     Outbox: 'outbox',
 };
 
+// How a row is drawn, which is four cases rather than one expression: a group or a folder, each at the column's width
+// or at the rail's. Named here rather than spelled into the markup, for the reason `frontend/src`'s instructions give
+// about where markup ends — a reader of the element should see what is on the row, not how it is measured.
+function rowShape({
+    group,
+    folded,
+    selected,
+    indent,
+}: {
+    readonly group: boolean;
+    readonly folded: boolean;
+    readonly selected: boolean;
+    readonly indent: string;
+}): string {
+    const across = folded ? 'justify-center' : `gap-2 pe-2 ${indent}`;
+
+    if (group) {
+        const marked = folded ? 'py-2' : 'py-1.25 ps-2.25 text-xs tracking-wide';
+
+        return `${across} mt-3 rounded-sm first:mt-0 ${marked} ${
+            selected ? 'font-semibold text-accent-deep' : 'text-muted hover:text-text'
+        }`;
+    }
+
+    return `${across} rounded-md ${folded ? 'py-1.25' : 'py-1.75 text-md'} ${
+        selected ? 'bg-accent-soft font-semibold text-accent-deep' : 'text-text-soft hover:bg-hover'
+    }`;
+}
+
 export function FolderRow({
     row,
     position,
@@ -51,6 +86,7 @@ export function FolderRow({
     expanded,
     selected,
     focusable,
+    folded,
     groupOrdinal,
     onSelect,
     onToggle,
@@ -63,6 +99,9 @@ export function FolderRow({
     readonly expanded: boolean | null;
     readonly selected: boolean;
     readonly focusable: boolean;
+
+    /** Whether the column this row stands in is folded to its rail, in which case the row is drawn as a symbol alone. */
+    readonly folded: boolean;
 
     /** Which group this row heads, counted from the whole workspace at zero, or `null` for a row under one. */
     readonly groupOrdinal: number | null;
@@ -88,36 +127,35 @@ export function FolderRow({
             tabIndex={focusable ? 0 : -1}
             onClick={onSelect}
             onKeyDown={onKeyDown}
-            className={`flex items-center gap-2 pe-2 transition ${indent} ${row.scope === null ? '' : 'cursor-pointer'} ${
-                group
-                    ? `mt-3 rounded-sm py-1.25 ps-2.25 text-xs tracking-wide first:mt-0 ${
-                          selected ? 'font-semibold text-accent-deep' : 'text-muted hover:text-text'
-                      }`
-                    : `rounded-md py-1.75 text-md ${
-                          selected ? 'bg-accent-soft font-semibold text-accent-deep' : 'text-text-soft hover:bg-hover'
-                      }`
-            }`}
+            className={`flex items-center transition ${row.scope === null ? '' : 'cursor-pointer'} ${rowShape({ group, folded, selected, indent })}`}
         >
             {group ? (
                 <MailboxMark ordinal={groupOrdinal} />
             ) : (
                 <Icon
                     name={row.role === null ? 'folder' : roleIcons[row.role]}
-                    className={`size-4.5 shrink-0 ${selected ? 'text-accent-deep' : 'text-muted'}`}
+                    className={`${folded ? 'size-6' : 'size-4.5'} shrink-0 ${selected ? 'text-accent-deep' : 'text-muted'}`}
                 />
             )}
 
-            <span className="min-w-0 flex-1 truncate">{nameOf(row, translate)}</span>
+            {/* Everything the rail has no room to draw, kept for the reader who hears the row rather than sees it. */}
+            <span className={folded ? 'sr-only' : 'flex min-w-0 flex-1 items-center gap-2'}>
+                <span className="min-w-0 flex-1 truncate">{nameOf(row, translate)}</span>
 
-            <State row={row} />
-            <Unread count={row.unreadEmailCount} />
+                <State row={row} />
+                <Unread count={row.unreadEmailCount} />
+            </span>
 
-            <Twist
-                expanded={expanded}
-                onToggle={() => {
-                    onToggle();
-                }}
-            />
+            {/* A rail has nowhere to put it, and nothing is lost with it: the arrow keys are what fold a row, and the
+                control is hidden from the accessibility tree wherever it is drawn. */}
+            {folded ? null : (
+                <Twist
+                    expanded={expanded}
+                    onToggle={() => {
+                        onToggle();
+                    }}
+                />
+            )}
         </li>
     );
 }

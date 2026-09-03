@@ -17,7 +17,7 @@ const filters: readonly { readonly icon: IconName; readonly label: MessageKey }[
     { icon: 'schedule', label: 'aiFilters.deadlinesThisWeek' },
 ];
 
-export function AiFilters() {
+export function AiFilters({ folded }: { readonly folded: boolean }) {
     const { translate } = useLocalization();
 
     return (
@@ -25,14 +25,19 @@ export function AiFilters() {
             aria-label={translate('aiFilters.heading')}
             className="mt-4 flex flex-col gap-1.5 border-t border-line pt-3.5"
         >
-            <p className="px-2.75 text-xs tracking-widest text-muted uppercase">{translate('aiFilters.heading')}</p>
+            {/* The heading names a group a reader can see the whole of; the rail draws the group as its symbols and the
+                section's own name is what a reader who cannot see them is given instead. */}
+            {folded ? null : (
+                <p className="px-2.75 text-xs tracking-widest text-muted uppercase">{translate('aiFilters.heading')}</p>
+            )}
 
             {filters.map((filter) => (
                 <PlannedControl
                     key={filter.icon}
                     label={translate(filter.label)}
                     icon={filter.icon}
-                    className="justify-start"
+                    shape={folded ? 'symbol' : 'labelled'}
+                    className={folded ? 'self-center' : 'justify-start'}
                 />
             ))}
         </section>
