@@ -26,7 +26,6 @@ export const en = {
     'control.notBuiltYet': '{control} — not built yet',
     'ai.badge': 'AI',
 
-    'theme.system': 'Follow the system',
     'theme.automatic': 'Auto',
     'theme.light': 'Light',
     'theme.dark': 'Dark',
@@ -51,19 +50,19 @@ export const en = {
 
     'signIn.claim': 'Your mail stays on your own server.',
     'signIn.claimExplanation':
-        'Name the MailFathom deployment your organization runs. Indexing and analysis happen on it — nothing reaches anybody else without your say-so.',
+        'Name your organization\u2019s own MailFathom server. Indexing and analysis happen on it — nothing reaches the cloud without your say-so.',
     'signIn.revealPassword': 'Show',
     'signIn.hidePassword': 'Hide',
     'signIn.revealPasswordControl': 'Show the password',
     'signIn.hidePasswordControl': 'Hide the password',
 
-    'signIn.title': 'Sign in to your MailFathom',
-    'signIn.explanation':
-        'Everything this client reads and everything you type into it goes to the deployment that holds your mail, and nowhere else.',
-    'signIn.userName': 'User name',
+    'signIn.title': 'Connect your mailbox',
+    'signIn.explanation': 'What you sign in with goes to the server you name, and nowhere else.',
+    'signIn.userName': 'Login',
+    'signIn.userNameExample': 'k.kowalska@example.com',
     'signIn.password': 'Password',
-    'signIn.submit': 'Sign in',
-    'signIn.presenting': 'Signing in…',
+    'signIn.submit': 'Connect',
+    'signIn.presenting': 'Connecting to {address}…',
     'signIn.abandon': 'Stop trying',
     'signIn.incomplete': 'Type the user name and the password your deployment gave you.',
     'signIn.userNameHasColon':
@@ -86,27 +85,30 @@ export const en = {
     'signIn.keptUntilTheClientCloses':
         'Your password is kept until you close MailFathom, and you will be asked for it again — this machine offers no keychain to keep it in safely.',
 
-    'connect.address': 'Deployment address',
-    'connect.addressHint':
-        'The host it answers on, and a port where it uses one — for example mailfathom.example.com or mailfathom.example.com:8443.',
+    'connect.address': 'Server',
+    'connect.addressConfigured':
+        'The server address was supplied when this client was installed, so it cannot be changed here.',
+    'connect.addressExample': 'mailfathom.example.com:8443',
+    'connect.addressHint': 'The port is optional — without one this client reaches {port}.',
     'connect.clearText': 'Reach this deployment over plain HTTP',
+    'connect.clearTextConfigured':
+        'This was set for you when the client was installed, so it is not yours to change here. Whoever configured it decides it.',
     'connect.clearTextExplanation':
         'Your password is encoded rather than encrypted, on every request. Anybody between this client and the deployment can read it. Leave this off unless the network between them is yours.',
     'connect.clearTextInForce':
         'TLS is off. The user name, the password, and every message read travel in the clear. Use this only inside a network you control or over a VPN.',
     'connect.portHint': 'port {port}',
-    'connect.portDefaultNote': 'The port is optional — without one this client reaches {port}.',
-    'connect.details': 'Connection details',
-    'connect.hideDetails': 'Hide connection details',
+    'connect.advanced': 'Advanced',
+    'connect.withoutTls': 'no TLS',
     'connect.protocol': 'Protocol',
     'connect.protocolOverTls': 'HTTPS, over TLS',
     'connect.protocolClearText': 'HTTP, unencrypted',
     'connect.host': 'Address',
     'connect.port': 'Port',
     'connect.portDefault': '{port} (default)',
-    'connect.encryption': 'Encryption',
-    'connect.encryptionInForce': 'In force',
-    'connect.encryptionNone': 'None',
+    'connect.certificate': 'Certificate check',
+    'connect.certificateChecked': 'Required',
+    'connect.certificateNone': 'None — nothing is encrypted',
     'connect.nothingNamed': 'Nothing named yet',
     'connect.blank': 'Name the deployment that holds your mail.',
     'connect.malformed': 'That is not an address. Name the host it answers on, and a port where it uses one.',
@@ -114,6 +116,18 @@ export const en = {
         'That address is plain HTTP, which this client will not send a password over until you say it may.',
     'connect.unavailable': 'Nothing answered there. Check the address, and check that the deployment is running.',
     'connect.unreadable': 'Something answered there, but not as MailFathom.',
+
+    'configuration.refused': 'This client is configured wrongly',
+    'configuration.addressMalformed':
+        'The server address it was given is not an address. It has to be the host the deployment answers on, and a port where it uses one.',
+    'configuration.addressNeedsClearTextPermission':
+        'The server address it was given is plain HTTP, and nothing permitted an unsecured connection. Either name an https address or permit clear text beside it.',
+    'configuration.clearTextContradictsAddress':
+        'It was told to permit an unsecured connection and given an https address, which are two different answers to one question. Remove whichever of the two is wrong.',
+    'configuration.permissionNotABoolean':
+        'The permission for an unsecured connection has to read true or false, and what it was given reads as neither.',
+    'configuration.whereItIsStated':
+        'Both settings are read from the arguments MailFathom was started with, from its environment, and from client.conf beside its own configuration, in that order.',
 
     'preferences.notStated':
         'That change was not saved to the deployment, so it holds on this machine alone until the next one succeeds.',

@@ -49,3 +49,14 @@ export function resolveConnection(entry: string, clearTextPermitted: boolean): R
 export function portOf(connection: ResolvedConnection): string {
     return connection.port ?? schemePorts[connection.secure ? 'https' : 'http'];
 }
+
+/**
+ * The port the hint names before anything has been typed, which is the scheme's own.
+ *
+ * It reads the permission rather than an address for the reason `portOf` reads a resolved connection: the scheme is
+ * decided by whether clear text was permitted, and a screen that spelled the number itself would be a second copy of
+ * the table above.
+ */
+export function portForPermission(clearTextPermitted: boolean): string {
+    return schemePorts[clearTextPermitted ? 'http' : 'https'];
+}

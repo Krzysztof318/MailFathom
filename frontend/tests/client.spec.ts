@@ -407,9 +407,9 @@ async function readOnward(page: Page, list: Locator): Promise<void> {
 }
 
 async function signIn(page: Page): Promise<void> {
-    await page.getByRole('textbox', { name: 'User name' }).fill(userName);
+    await page.getByRole('textbox', { name: 'Login' }).fill(userName);
     await page.getByLabel('Password', { exact: true }).fill(password);
-    await page.getByRole('button', { name: 'Sign in' }).click();
+    await page.getByRole('button', { name: 'Connect' }).click();
 
     await expect(page.getByRole('navigation', { name: 'Spaces' })).toBeVisible();
 }
@@ -470,8 +470,8 @@ test('asks for a credential before any mail, and opens the frame once one is acc
 
     // The origin serving the bundle is the deployment, so the only thing missing is who is asking — which is why the
     // address is not on this screen and the credential is.
-    await expect(page.getByRole('heading', { name: 'Sign in to your MailFathom' })).toBeVisible();
-    await expect(page.getByRole('textbox', { name: 'Deployment address' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Connect your mailbox' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Server' })).toHaveCount(0);
     await expect(page.getByRole('navigation', { name: 'Spaces' })).toHaveCount(0);
 
     await signIn(page);
@@ -517,7 +517,7 @@ test('stays signed in across a reload, and asks again in a tab that was not sign
 
     // What the web head keeps is kept for the tab and for nothing wider, which is the bound ADR 0023 puts on it. No
     // unit test can make that claim: a second tab is a second document, and jsdom has one.
-    await expect(secondTab.getByRole('textbox', { name: 'User name' })).toBeVisible();
+    await expect(secondTab.getByRole('textbox', { name: 'Login' })).toBeVisible();
     await secondTab.close();
 });
 
@@ -526,11 +526,11 @@ test('asks for the credential again after signing out, including across a reload
 
     await openAccountMenu(page);
     await page.getByRole('button', { name: 'Sign out' }).click();
-    await expect(page.getByRole('textbox', { name: 'User name' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Login' })).toBeVisible();
 
     await page.reload();
 
-    await expect(page.getByRole('textbox', { name: 'User name' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Login' })).toBeVisible();
     await expect(page.getByRole('navigation', { name: 'Spaces' })).toHaveCount(0);
 });
 
@@ -687,9 +687,9 @@ test('signs in at the narrowest width a supported head presents', async ({ page 
 
     // The screen in front of the frame meets the same bar the frame does, and it is the one screen nobody can go
     // around: a form that overflowed at this width would be a client somebody could not sign in to at all.
-    await expect(page.getByRole('textbox', { name: 'User name' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Login' })).toBeVisible();
     await expect(page.getByLabel('Password', { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Connect' })).toBeVisible();
 
     // The heading is asked for here rather than in jsdom because what would take it away is a breakpoint: the brand
     // half drops its claim below the split, and a top-level heading that went with it would leave a screen reader
@@ -820,14 +820,14 @@ test('opens in Polish on a machine that prefers Polish, with nothing configured'
     const page = await openedPreferring(browser, ['pl-PL', 'en-US']);
 
     await expect(page.locator('html')).toHaveAttribute('lang', 'pl');
-    await expect(page.getByRole('button', { name: 'Sign in' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Connect' })).toHaveCount(0);
 });
 
 test('opens in English on a machine preferring a language the client does not carry', async ({ browser }) => {
     const page = await openedPreferring(browser, ['de-DE', 'fr-FR']);
 
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
-    await expect(page.getByRole('button', { name: 'Sign in' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Connect' })).toBeVisible();
 });
 
 test('opens in English on a head that reports no language preference at all', async ({ browser }) => {

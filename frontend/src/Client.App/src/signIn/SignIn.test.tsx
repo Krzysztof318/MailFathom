@@ -5,6 +5,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, DeploymentAddress, MailFathomTransport } from '@mailfathom/client-backend';
+import type { AdoptedDeployment } from '../deployment/adoptedDeployment';
 import { LocalizationProvider } from '../localization/Localization';
 import type { CredentialNotice } from './CredentialNotices';
 import { SignIn } from './SignIn';
@@ -58,6 +59,12 @@ function recording(asked: ClientRequest[], answer: MailFathomTransport): MailFat
 
 const knownDeployment: DeploymentAddress = { baseAddress: 'https://mail.example.invalid' };
 
+/** The deployment the client was served by, which is the shape a web head's sign-in screen is rendered in. */
+const servingDeployment: AdoptedDeployment = { deployment: knownDeployment, origin: 'serving' };
+
+/** The deployment a client somebody was handed was configured with, which is the shape that locks the address field. */
+const configuredDeployment: AdoptedDeployment = { deployment: knownDeployment, origin: 'configured' };
+
 /** What the screen reported and what it started, so a test sees an attempt being called off rather than only ignored. */
 interface Rendered {
     readonly presented: { deployment: DeploymentAddress; authorization: string }[];
@@ -69,9 +76,10 @@ interface Rendered {
 // which is the difference between the screen ignoring an answer and the request being cancelled.
 function renderScreen(
     send: MailFathomTransport,
-    deployment: DeploymentAddress | null = null,
+    adopted: AdoptedDeployment | null = null,
     lifetime: CredentialLifetime = 'untilTheTabCloses',
     notices: readonly CredentialNotice[] = [],
+    clearTextPermitted: boolean | null = null,
 ): Rendered {
     const presented: { deployment: DeploymentAddress; authorization: string }[] = [];
     const attempts: AbortSignal[] = [];
@@ -79,7 +87,8 @@ function renderScreen(
     render(
         <LocalizationProvider>
             <SignIn
-                deployment={deployment}
+                adopted={adopted}
+                clearTextPermitted={clearTextPermitted}
                 lifetime={lifetime}
                 notices={notices}
                 send={(abandoned) => {
@@ -98,16 +107,16 @@ function renderScreen(
 }
 
 function typeAddress(entry: string): void {
-    fireEvent.change(screen.getByRole('textbox', { name: 'Deployment address' }), { target: { value: entry } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Server' }), { target: { value: entry } });
 }
 
 function typeCredential(userName = 'owner', password = 'open sesame'): void {
-    fireEvent.change(screen.getByRole('textbox', { name: 'User name' }), { target: { value: userName } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Login' }), { target: { value: userName } });
     fireEvent.change(screen.getByLabelText('Password'), { target: { value: password } });
 }
 
 function submit(): void {
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
 }
 
 function permitClearText(): void {
@@ -124,24 +133,24 @@ describe('SignIn', () => {
     it('asks for the address and the credential in one place, rather than across two screens', () => {
         renderScreen(signedIn);
 
-        expect(screen.getByRole('textbox', { name: 'Deployment address' })).toBeDefined();
+        expect(screen.getByRole('textbox', { name: 'Server' })).toBeDefined();
         expect(screen.getByRole('checkbox', { name: 'Reach this deployment over plain HTTP' })).toBeDefined();
-        expect(screen.getByRole('textbox', { name: 'User name' })).toBeDefined();
+        expect(screen.getByRole('textbox', { name: 'Login' })).toBeDefined();
         expect(screen.getByLabelText('Password')).toBeDefined();
     });
 
     it('asks for two controls rather than four where the deployment is already known', () => {
-        renderScreen(signedIn, knownDeployment);
+        renderScreen(signedIn, servingDeployment);
 
-        expect(screen.queryByRole('textbox', { name: 'Deployment address' })).toBeNull();
+        expect(screen.queryByRole('textbox', { name: 'Server' })).toBeNull();
         expect(screen.queryByRole('checkbox', { name: 'Reach this deployment over plain HTTP' })).toBeNull();
-        expect(screen.getByRole('textbox', { name: 'User name' })).toBeDefined();
+        expect(screen.getByRole('textbox', { name: 'Login' })).toBeDefined();
     });
 
     it('puts the cursor in the address, because the view changed and focus is placed rather than left behind', () => {
         renderScreen(signedIn);
 
-        expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Deployment address' }));
+        expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Server' }));
     });
 
     it('says what plain HTTP costs beside the control that permits it, rather than after it is chosen', () => {
@@ -198,7 +207,7 @@ describe('SignIn', () => {
     });
 
     it('asks for the half of the credential that is missing, rather than sending the other one', () => {
-        const { presented } = renderScreen(signedIn, knownDeployment);
+        const { presented } = renderScreen(signedIn, servingDeployment);
 
         typeCredential('owner', '');
         submit();
@@ -210,7 +219,7 @@ describe('SignIn', () => {
     });
 
     it('refuses a user name carrying the separator, rather than presenting a credential split in the wrong place', () => {
-        const { presented } = renderScreen(signedIn, knownDeployment);
+        const { presented } = renderScreen(signedIn, servingDeployment);
 
         typeCredential('own:er');
         submit();
@@ -222,7 +231,7 @@ describe('SignIn', () => {
     });
 
     it('refuses a credential longer than it will present, rather than sending a truncated one', () => {
-        const { presented } = renderScreen(signedIn, knownDeployment);
+        const { presented } = renderScreen(signedIn, servingDeployment);
 
         typeCredential('owner', 'p'.repeat(longestCredentialPart + 1));
         submit();
@@ -234,7 +243,7 @@ describe('SignIn', () => {
     });
 
     it('lets a credential exactly as long as the bound through, so the bound is where it says it is', async () => {
-        const { presented } = renderScreen(signedIn, knownDeployment);
+        const { presented } = renderScreen(signedIn, servingDeployment);
 
         typeCredential('owner', 'p'.repeat(longestCredentialPart));
         submit();
@@ -245,29 +254,29 @@ describe('SignIn', () => {
     });
 
     it('leaves the password unmarked for a refusal about the user name alone', () => {
-        renderScreen(signedIn, knownDeployment);
+        renderScreen(signedIn, servingDeployment);
 
         typeCredential('own:er');
         submit();
 
-        expect(screen.getByRole('textbox', { name: 'User name' }).getAttribute('aria-invalid')).toBe('true');
+        expect(screen.getByRole('textbox', { name: 'Login' }).getAttribute('aria-invalid')).toBe('true');
         expect(screen.getByLabelText('Password').getAttribute('aria-invalid')).toBe('false');
     });
 
     it('marks both halves of the credential when the deployment refused the credential itself', async () => {
-        renderScreen(credentialRefused, knownDeployment);
+        renderScreen(credentialRefused, servingDeployment);
 
         typeCredential();
-        await screen.findByRole('button', { name: 'Sign in' });
+        await screen.findByRole('button', { name: 'Connect' });
         submit();
         await screen.findByRole('alert');
 
-        expect(screen.getByRole('textbox', { name: 'User name' }).getAttribute('aria-invalid')).toBe('true');
+        expect(screen.getByRole('textbox', { name: 'Login' }).getAttribute('aria-invalid')).toBe('true');
         expect(screen.getByLabelText('Password').getAttribute('aria-invalid')).toBe('true');
     });
 
     it('says the deployment did not answer, without naming an address nobody typed', async () => {
-        renderScreen(nothingThere, knownDeployment);
+        renderScreen(nothingThere, servingDeployment);
 
         typeCredential();
         submit();
@@ -280,7 +289,7 @@ describe('SignIn', () => {
     });
 
     it('puts focus back on the control that started an attempt when the attempt is refused', async () => {
-        renderScreen(credentialRefused, knownDeployment);
+        renderScreen(credentialRefused, servingDeployment);
 
         typeCredential();
         submit();
@@ -288,17 +297,17 @@ describe('SignIn', () => {
 
         // Starting an attempt disables the submit button, which drops focus to the document — so without placing it
         // the refusal is announced with focus nowhere and a keyboard reader tabs in from the top of the page.
-        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Sign in' }));
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Connect' }));
     });
 
     it('puts focus back on the control that started an attempt when the attempt is given up on', () => {
-        renderScreen(() => new Promise(() => undefined), knownDeployment);
+        renderScreen(() => new Promise(() => undefined), servingDeployment);
 
         typeCredential();
         submit();
         fireEvent.click(screen.getByRole('button', { name: 'Stop trying' }));
 
-        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Sign in' }));
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Connect' }));
     });
 
     it('marks the control a refusal is about, so what has to change is the field that is wrong', () => {
@@ -307,8 +316,8 @@ describe('SignIn', () => {
         typeAddress('my mail server');
         submit();
 
-        expect(screen.getByRole('textbox', { name: 'Deployment address' }).getAttribute('aria-invalid')).toBe('true');
-        expect(screen.getByRole('textbox', { name: 'User name' }).getAttribute('aria-invalid')).toBe('false');
+        expect(screen.getByRole('textbox', { name: 'Server' }).getAttribute('aria-invalid')).toBe('true');
+        expect(screen.getByRole('textbox', { name: 'Login' }).getAttribute('aria-invalid')).toBe('false');
     });
 
     it('sends nothing over plain HTTP until that is declared, and then signs in over it', async () => {
@@ -340,16 +349,16 @@ describe('SignIn', () => {
     });
 
     it('says it is signing in while the answer has not arrived', () => {
-        renderScreen(() => new Promise(() => undefined), knownDeployment);
+        renderScreen(() => new Promise(() => undefined), servingDeployment);
 
         typeCredential();
         submit();
 
-        expect(screen.getByRole('status').textContent).toBe('Signing in…');
+        expect(screen.getByRole('status').textContent).toBe('Connecting to mail.example.invalid…');
     });
 
     it('lets an attempt that never answers be given up on, rather than holding the screen on it', () => {
-        const { attempts } = renderScreen(() => new Promise(() => undefined), knownDeployment);
+        const { attempts } = renderScreen(() => new Promise(() => undefined), servingDeployment);
 
         typeCredential();
         submit();
@@ -359,12 +368,12 @@ describe('SignIn', () => {
         // Back where the person left it: no attempt is reported as running, the credential can be corrected and tried
         // again, and the request the abandoned attempt started was cancelled rather than left on the wire.
         expect(screen.queryByRole('status')).toBeNull();
-        expect(screen.getByRole('button', { name: 'Sign in' }).hasAttribute('disabled')).toBe(false);
+        expect(screen.getByRole('button', { name: 'Connect' }).hasAttribute('disabled')).toBe(false);
         expect(attempts.map((abandoned) => abandoned.aborted)).toEqual([true]);
     });
 
     it('offers nothing to give up on before an attempt has been started', () => {
-        renderScreen(signedIn, knownDeployment);
+        renderScreen(signedIn, servingDeployment);
 
         expect(screen.queryByRole('button', { name: 'Stop trying' })).toBeNull();
     });
@@ -454,7 +463,7 @@ describe('SignIn', () => {
             asked.push(request.path);
 
             return nothingThere(request);
-        }, knownDeployment);
+        }, servingDeployment);
 
         typeCredential();
         submit();
@@ -464,7 +473,7 @@ describe('SignIn', () => {
     });
 
     it('says what answered was not MailFathom rather than signing in against anything that replies', async () => {
-        const { presented } = renderScreen(somethingElse, knownDeployment);
+        const { presented } = renderScreen(somethingElse, servingDeployment);
 
         typeCredential();
         submit();
@@ -474,7 +483,7 @@ describe('SignIn', () => {
     });
 
     it('says why it is asking again when the deployment stopped accepting what was kept', () => {
-        renderScreen(signedIn, knownDeployment, 'untilSignedOut', ['credentialNoLongerAccepted']);
+        renderScreen(signedIn, servingDeployment, 'untilSignedOut', ['credentialNoLongerAccepted']);
 
         expect(screen.getByRole('status').textContent).toBe(
             'This deployment has stopped accepting the password that was kept. Sign in again.',
@@ -482,7 +491,7 @@ describe('SignIn', () => {
     });
 
     it('says the password is still on the machine when signing out could not remove it', () => {
-        renderScreen(signedIn, knownDeployment, 'untilSignedOut', ['passwordNotRemoved']);
+        renderScreen(signedIn, servingDeployment, 'untilSignedOut', ['passwordNotRemoved']);
 
         expect(screen.getByRole('status').textContent).toBe(
             'Signing out did not remove the password from this machine’s credential store, so it is still kept there. Remove it in the store itself, or sign in and out again.',
@@ -490,7 +499,10 @@ describe('SignIn', () => {
     });
 
     it('says both things at once when the credential was refused and the password could not be removed', () => {
-        renderScreen(signedIn, knownDeployment, 'untilSignedOut', ['credentialNoLongerAccepted', 'passwordNotRemoved']);
+        renderScreen(signedIn, servingDeployment, 'untilSignedOut', [
+            'credentialNoLongerAccepted',
+            'passwordNotRemoved',
+        ]);
 
         // Two facts rather than one told twice: a person is signed out for one reason and is still carrying a password
         // for another, and hearing only the first would leave them believing the machine holds nothing.
@@ -501,7 +513,7 @@ describe('SignIn', () => {
     });
 
     it('says the credential was accepted and reads nothing when the deployment holds no grant for it', async () => {
-        renderScreen(grantMissing, knownDeployment);
+        renderScreen(grantMissing, servingDeployment);
         typeCredential('owner', 'open sesame');
         submit();
 
@@ -525,7 +537,7 @@ describe('SignIn', () => {
             vi.spyOn(console, level).mockImplementation((...written: unknown[]) => reported.push(...written));
         }
 
-        renderScreen(transport, knownDeployment);
+        renderScreen(transport, servingDeployment);
         typeCredential('owner', 'open sesame');
         submit();
 
@@ -539,7 +551,7 @@ describe('SignIn', () => {
     });
 
     it('says the password lasts only as long as the tab where nothing may be kept beyond it', () => {
-        renderScreen(signedIn, knownDeployment);
+        renderScreen(signedIn, servingDeployment);
 
         expect(
             screen.getByText(
@@ -565,14 +577,19 @@ describe('SignIn', () => {
         expect(screen.getByText(/The port is optional — without one this client reaches 443\./u)).toBeDefined();
     });
 
-    it('keeps what turning TLS off costs out of the way until it is turned off', () => {
+    // Before anything is typed there is no resolved connection to read the port off, and the field is exactly where
+    // somebody is deciding whether to name one — so the scheme's own port is what the hint states.
+    it('names the port the scheme reaches before an address has been typed at all', () => {
         renderScreen(signedIn);
 
-        expect(screen.queryByText(/^TLS is off\./u)).toBeNull();
+        expect(screen.getByText(/The port is optional — without one this client reaches 443\./u)).toBeDefined();
+    });
 
+    it('names the unsecured port instead once a clear-text connection is what has been permitted', () => {
+        renderScreen(signedIn);
         permitClearText();
 
-        expect(screen.getByText(/^TLS is off\./u)).toBeDefined();
+        expect(screen.getByText(/The port is optional — without one this client reaches 80\./u)).toBeDefined();
     });
 
     it('lets somebody read back the password they typed, and put it away again', () => {
@@ -590,5 +607,43 @@ describe('SignIn', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Hide the password' }));
 
         expect(screen.queryByRole('textbox', { name: 'Password' })).toBeNull();
+    });
+    // Somebody handed a packaged client has to be able to read what their password is about to cross, so the address
+    // is shown rather than hidden — and it is locked rather than absent, because a hidden field says less.
+    it('draws a configured address in a field nobody can edit, rather than dropping the field', () => {
+        renderScreen(signedIn, configuredDeployment);
+
+        const field = screen.getByRole<HTMLInputElement>('textbox', { name: 'Server' });
+
+        expect(field.value).toBe('https://mail.example.invalid');
+        expect(field.readOnly).toBe(true);
+        expect(
+            screen.getByText(
+                'The server address was supplied when this client was installed, so it cannot be changed here.',
+            ),
+        ).toBeDefined();
+    });
+
+    // Every row in it would be about an address this person cannot change, and the permission it holds arrived from
+    // the same configuration — so it would offer a decision that has already been taken.
+    it('draws no advanced disclosure at all where the address arrived from configuration', () => {
+        renderScreen(signedIn, configuredDeployment);
+
+        expect(screen.queryByText('Advanced')).toBeNull();
+        expect(screen.queryByRole('checkbox', { name: 'Reach this deployment over plain HTTP' })).toBeNull();
+    });
+
+    it('signs in over a configured clear-text permission without anybody having to declare it again', async () => {
+        const { presented } = renderScreen(signedIn, null, 'untilTheTabCloses', [], true);
+
+        typeAddress('mail.example.test');
+        typeCredential();
+        submit();
+
+        await vi.waitFor(() => {
+            expect(presented.map((attempt) => attempt.deployment)).toEqual([
+                { baseAddress: 'http://mail.example.test' },
+            ]);
+        });
     });
 });

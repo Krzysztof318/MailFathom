@@ -48,6 +48,8 @@ export const iconNames = [
     'inbox',
     'info',
     'label_important',
+    'language',
+    'lock',
     'logout',
     'mail',
     'mark_email_unread',
