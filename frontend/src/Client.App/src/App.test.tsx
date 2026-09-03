@@ -621,6 +621,14 @@ describe('App', () => {
         await screen.findByText('A drawn message.');
 
         expect(routesAsked().some((path) => path.includes('/mutations/'))).toBe(false);
+
+        // An absence nobody explained is a client that looks broken, which is what the notice strip is for — so the
+        // sentence is asserted on the screen rather than the withholding being asserted on its own.
+        expect(
+            screen.getByText(
+                'This credential may not change a flag on your mail server, so opening a message leaves it unread there and this client shows what the server last reported. Whoever runs the deployment can grant that.',
+            ),
+        ).toBeDefined();
     });
 
     it('draws no message until a row of the list opens one', async () => {

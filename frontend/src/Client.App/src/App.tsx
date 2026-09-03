@@ -137,9 +137,9 @@ export function App({
     const mailAccounts = connection.accounts?.outcome === 'read' ? connection.accounts.value.accounts : [];
     const readsMail = deploymentSession !== null && offers(deploymentSession, 'readMail');
 
-    // The two settings that follow the person rather than this machine. They are read here rather than in the menu that
-    // shows them because the tab mode decides what opening a message does, which is the frame's rather than a menu's —
-    // #1494 is where that half lands, and this is where it will already be.
+    // The settings that follow the person rather than this machine. They are read here rather than in the menu that
+    // shows them because two of them decide what opening a message does, which is the frame's rather than a menu's —
+    // the tab mode, whose other half lands in #1494 and will already be here, and whether opening one marks it read.
     //
     // Asked for on the same three conditions the mail itself is: somebody signed in, a machine with a network, and a
     // credential the deployment lets read. The route is admitted under the grant a reader already holds, so a

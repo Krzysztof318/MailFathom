@@ -722,6 +722,7 @@ test('states the whole preferences document to the deployment when one of them i
         telemetryEnabled: true,
         theme: 'dark',
         openMailInTabs: false,
+        markReadOnOpen: true,
     });
 });
 
