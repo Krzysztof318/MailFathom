@@ -150,6 +150,17 @@ function Inside({
     const [reading, setReading] = useState<Reading>(() => ({ drawnAs: shownAttachment(attachment), attempt: 0 }));
     const [answer, setAnswer] = useState<AttachmentRead | null>(null);
 
+    // An answer belongs to the read that produced it, and losing the network ends that read: coming back starts
+    // another, so the answer from before it would stand on the screen while the new one is still in flight — a surface
+    // looking finished during a wait, which is what somebody acts on twice. Dropped during the render that observes
+    // the change rather than in an effect, which is React's own way of letting go of state a prop has outlived.
+    const [readWithNetwork, setReadWithNetwork] = useState(online);
+
+    if (readWithNetwork !== online) {
+        setReadWithNetwork(online);
+        setAnswer(null);
+    }
+
     // Nothing is read without a network, and coming back re-runs this — which is the whole of the recovery from that
     // direction, and what makes the offline sentence's promise that the file opens on its own a true one. Nothing is
     // read for a file this surface will not draw either, which is what lets that case say so with no octet fetched.
@@ -205,7 +216,6 @@ function Inside({
                     <SecondaryButton
                         label={translate('connection.retry')}
                         onActivate={() => {
-                            setAnswer(null);
                             setReading({ drawnAs: reading.drawnAs, attempt: reading.attempt + 1 });
                         }}
                     />

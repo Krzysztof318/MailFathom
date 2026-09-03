@@ -76,16 +76,24 @@ function drawing(
     exchange: AttachmentExchange,
     online = true,
     onClose: () => void = () => undefined,
-): void {
+): { show: (withNetwork: boolean) => void } {
     const opened: OpenedAttachment = { storedEmailId: messageId, attachment };
 
-    render(
+    const surface = (withNetwork: boolean) => (
         <LocalizationProvider>
             <AttachmentExchangeContext value={exchange}>
-                <AttachmentView session={session} opened={opened} online={online} onClose={onClose} />
+                <AttachmentView session={session} opened={opened} online={withNetwork} onClose={onClose} />
             </AttachmentExchangeContext>
-        </LocalizationProvider>,
+        </LocalizationProvider>
     );
+
+    const { rerender } = render(surface(online));
+
+    return {
+        show: (withNetwork) => {
+            rerender(surface(withNetwork));
+        },
+    };
 }
 
 describe('AttachmentView', () => {
@@ -184,6 +192,21 @@ describe('AttachmentView', () => {
             ),
         ).toBeDefined();
         expect(held.asked).toEqual([]);
+    });
+
+    // The network coming back starts the read again, and what is on the screen while that read is in flight has to be
+    // the wait rather than the answer from before it: a surface that looks finished is one somebody acts on twice.
+    it('says it is reading again when the network comes back rather than drawing the answer from before', async () => {
+        const held = reading({ outcome: 'shown', content: 'data:application/octet-stream;base64,AQID' });
+        const surface = drawing(photograph, held.exchange);
+        await screen.findByRole('img', { name: 'harbour.png' });
+
+        surface.show(false);
+        surface.show(true);
+
+        expect(screen.getByText('Reading harbour.png…')).toBeDefined();
+        expect(screen.queryByRole('img', { name: 'harbour.png' })).toBeNull();
+        expect(held.asked.length).toBe(2);
     });
 
     it('closes on the control that says so, which is the way back to the message it was opened from', () => {

@@ -138,7 +138,7 @@ export function useAttachmentExchange(): AttachmentExchange {
 
 export const attachmentExchange: AttachmentExchange = {
     deliver: async (request, fileName, arrived, abandoned) => {
-        const answer = await octetsOf(request, arrived, abandoned);
+        const answer = await fetchedOctets(request, arrived, abandoned);
 
         if (typeof answer === 'string') {
             return answer;
@@ -150,14 +150,14 @@ export const attachmentExchange: AttachmentExchange = {
     },
 
     read: async (request, shown, abandoned) => {
-        const answer = await octetsOf(request, () => undefined, abandoned);
+        const answer = await fetchedOctets(request, () => undefined, abandoned);
 
         if (typeof answer === 'string') {
             return { outcome: 'refused', refusal: answer };
         }
 
         try {
-            return { outcome: 'shown', content: await drawableFrom(answer, shown) };
+            return { outcome: 'shown', content: await drawnFrom(answer, shown) };
         } catch {
             return { outcome: 'refused', refusal: 'unreadable' };
         }
@@ -165,13 +165,32 @@ export const attachmentExchange: AttachmentExchange = {
 };
 
 /**
- * The octets one file holds, or the refusal that stands in their place.
+ * What one answer to that route amounts to: the octets the file holds, or the refusal that stands in their place.
  *
- * Written once because both operations above ask the same question of the same route and differ only in what they do
- * with the answer: a second copy of the status mapping and the bounded walk is the copy that would come to disagree
+ * It is a function of the answer rather than of the request, which is the split `attachmentUpload.ts` draws for the
+ * same reason — the deciding half is what a suite can put a constructed `Response` to, and the `fetch` around it is
+ * the browser's. Both operations above ask it, because they differ in what they do with the octets rather than in what
+ * an answer means: a second copy of the status mapping and the bounded walk is the copy that would come to disagree
  * about what a `403` means.
+ *
+ * @param response What came back, whose body is walked rather than buffered.
+ * @param longest The most octets this answer may hold, which is the size the message described the part at.
+ * @param arrived How many octets have been read so far, reported as they arrive where a screen says so.
  */
-async function octetsOf(
+export async function attachmentOctetsOf(
+    response: Response,
+    longest: number,
+    arrived: (octets: number) => void = () => undefined,
+): Promise<readonly Uint8Array<ArrayBuffer>[] | Exclude<AttachmentDeliveryOutcome, 'delivered' | 'abandoned'>> {
+    if (response.status !== 200) {
+        return attachmentRefusalForStatus(response.status);
+    }
+
+    return readBoundedContent(response, longest, arrived);
+}
+
+/** The octets one file holds, asked for over the wire, with the way out of the wait named as what ended it. */
+async function fetchedOctets(
     request: ClientRequest,
     arrived: (octets: number) => void,
     abandoned: AbortSignal,
@@ -190,17 +209,19 @@ async function octetsOf(
         return abandoned.aborted ? 'abandoned' : 'unavailable';
     }
 
-    if (response.status !== 200) {
-        return attachmentRefusalForStatus(response.status);
-    }
+    const answer = await attachmentOctetsOf(response, request.longestAnswer ?? longestResponseBody, arrived);
 
-    const octets = await readBoundedContent(response, request.longestAnswer ?? longestResponseBody, arrived);
-
-    return typeof octets === 'string' ? (abandoned.aborted ? 'abandoned' : octets) : octets;
+    // A read that stopped partway is reported as the person's act where it was one: the answer had begun, so what
+    // ended it is asked of the signal rather than of the refusal. A refusal the deployment itself stated keeps its own
+    // name, which is why this reaches only an answer that had already been accepted.
+    return response.status === 200 && typeof answer === 'string' && abandoned.aborted ? 'abandoned' : answer;
 }
 
 /**
  * What a screen draws the octets as.
+ *
+ * Exported beside the deciding half above for the same reason: it is the second half of a read that owes a suite an
+ * assertion, and it takes octets rather than a request so that nothing has to stand in for the wire to make one.
  *
  * A picture becomes an address under the general binary type rather than under what the sender declared the part to be,
  * for the same reason a download is saved under it: an address carries its own origin, and a message whose picture
@@ -210,7 +231,7 @@ async function octetsOf(
  * Text is decoded under the character set the message declared, falling back to UTF-8 where that is a label the
  * platform does not know — which a sender is free to write, this being a header they composed.
  */
-async function drawableFrom(octets: readonly Uint8Array<ArrayBuffer>[], shown: ShownAs): Promise<string> {
+export async function drawnFrom(octets: readonly Uint8Array<ArrayBuffer>[], shown: ShownAs): Promise<string> {
     if (shown.as === 'picture') {
         return asDataUrl(new Blob([...octets], { type: 'application/octet-stream' }));
     }
