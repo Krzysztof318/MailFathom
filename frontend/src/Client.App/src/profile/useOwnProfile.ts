@@ -85,10 +85,11 @@ export function useOwnProfile(
 ): OwnProfileInForce {
     const [held, setHeld] = useState<HeldProfile>(heldForNobody);
 
-    // The reads in flight, so that a screen which has moved on discards their answers. Abandoning travels on a
-    // controller rather than on a flag, for the reason `shell/useConnection.ts` gives: it is asked through a function,
-    // so nothing decides at the first check what can only become true at the second.
-    const reading = useRef<AbortController | null>(null);
+    // The portrait read in flight, so that a screen which has moved on — or a replacement that has just been stored —
+    // discards its answer. Abandoning travels on a controller rather than on a flag, for the reason
+    // `shell/useConnection.ts` gives: it is asked through a function, so nothing decides at the first check what can
+    // only become true at the second. The name read needs no ref beside it, because nothing re-issues one.
+    const readingPicture = useRef<AbortController | null>(null);
 
     // Everything below reads through this rather than out of the state directly, which is what keeps one person's name
     // and picture off the next person's screen without a reset anywhere.
@@ -99,15 +100,18 @@ export function useOwnProfile(
             return;
         }
 
-        const attempted = new AbortController();
-        const abandoned = (): boolean => attempted.signal.aborted;
+        // Two controllers rather than one, because only one of the two reads is ever re-issued: replacing the picture
+        // starts a second portrait read and has to abandon the first, and a single controller would abandon the name
+        // read along with it — discarding an answer the upload had nothing to do with.
+        const naming = new AbortController();
+        const drawing = new AbortController();
 
-        reading.current = attempted;
+        readingPicture.current = drawing;
 
         void (async () => {
             const answer = await readOwnDisplayName(session, transport);
 
-            if (abandoned() || answer.outcome !== 'read') {
+            if (naming.signal.aborted || answer.outcome !== 'read') {
                 return;
             }
 
@@ -119,9 +123,9 @@ export function useOwnProfile(
         })();
 
         void (async () => {
-            const answer = await portraits.read(session, attempted.signal);
+            const answer = await portraits.read(session, drawing.signal);
 
-            if (abandoned() || answer.outcome === 'refused') {
+            if (drawing.signal.aborted || answer.outcome === 'refused') {
                 return;
             }
 
@@ -132,16 +136,30 @@ export function useOwnProfile(
         })();
 
         return () => {
-            attempted.abort();
+            naming.abort();
+
+            // Whichever portrait read is current, which is this effect's own unless a replacement started a fresher
+            // one — that one is what a screen going away has to abandon.
+            readingPicture.current?.abort();
         };
     }, [session, transport, portraits]);
 
     // A picture that has just been replaced is read back rather than drawn from the file that was sent. The deployment
     // is what decides which octets are stored, and a screen showing the file instead would be showing something it
     // hoped had landed — which is the same defect as an optimistic write, worn as an image.
+    //
+    // Whatever read is still in flight is abandoned first, the way `preferences/useClientPreferences.ts` abandons its
+    // own before every write. The read this replaces was started before the picture was: two answers to the same
+    // question have no ordering between them, so an older one landing second would draw the picture the deployment
+    // held before the upload — a defect that arrives looking like the upload having silently failed.
     function drawStoredPicture(asked: ClientSession): void {
-        void portraits.read(asked, reading.current?.signal ?? new AbortController().signal).then((answer) => {
-            if (answer.outcome === 'refused') {
+        readingPicture.current?.abort();
+
+        const attempted = new AbortController();
+        readingPicture.current = attempted;
+
+        void portraits.read(asked, attempted.signal).then((answer) => {
+            if (attempted.signal.aborted || answer.outcome === 'refused') {
                 return;
             }
 

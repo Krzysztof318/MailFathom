@@ -96,11 +96,17 @@ describe('Settings', () => {
         expect(screen.getByText(/keeps your name/u)).toBeDefined();
     });
 
-    it('offers no way to change the picture either, where the name is not the person’s to change', () => {
-        renderSettings({ profile: { ...named, changeable: false, picture: 'data:image/png;base64,AA==' } });
+    it('still offers the picture, which this deployment grants on reading mail rather than on the name', () => {
+        const choosePicture = vi.fn();
+        renderSettings({
+            profile: { ...named, changeable: false, picture: 'data:image/png;base64,AA==', choosePicture },
+        });
 
-        expect(screen.queryByLabelText('Picture')).toBeNull();
-        expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
+        const picture = file('portrait.png', 'image/png', 64);
+        choose(picture);
+
+        expect(choosePicture).toHaveBeenCalledWith(picture, 'image/png');
+        expect(screen.getByRole('button', { name: 'Remove' })).toBeDefined();
     });
 
     it('sends nothing from a read-only field, whatever a person manages to leave in it', () => {

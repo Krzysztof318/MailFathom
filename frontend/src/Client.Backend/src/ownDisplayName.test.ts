@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import { changeOwnDisplayName, readOwnDisplayName } from './ownDisplayName';
+import { changeOwnDisplayName, longestDisplayNameAnswer, readOwnDisplayName } from './ownDisplayName';
 import type { ClientSession } from './session';
 import type { ClientRequest, ClientResponse, MailFathomTransport } from './transport';
 
@@ -45,6 +45,7 @@ describe('readOwnDisplayName', () => {
         expect(requests[0]?.method).toBe('GET');
         expect(requests[0]?.path).toBe('https://mail.example.invalid/api/client/display-name');
         expect(requests[0]?.headers['Authorization']).toBe('Basic dGVzdA==');
+        expect(requests[0]?.longestAnswer).toBe(longestDisplayNameAnswer);
     });
 
     it('reads the name and whether this deployment would take a correction of it', async () => {
@@ -103,6 +104,7 @@ describe('changeOwnDisplayName', () => {
         expect(requests[0]?.path).toBe('https://mail.example.invalid/api/client/display-name');
         expect(requests[0]?.headers['Content-Type']).toBe('application/json');
         expect(requests[0]?.body).toBe(JSON.stringify({ displayName: 'Ada Lovelace' }));
+        expect(requests[0]?.longestAnswer).toBe(longestDisplayNameAnswer);
     });
 
     it('answers the name as it was stored rather than as it was sent', async () => {

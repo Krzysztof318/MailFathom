@@ -76,11 +76,16 @@ export function Settings({
                     {translate('settings.title')}
                 </h2>
 
+                {/* Closed through the element rather than by answering upwards, so that the native `close` event is
+                    the one path out and `onClose` is called once however the screen was left. Calling it here as well
+                    would run it twice — once directly, and once when the effect above closed a dialog still open. */}
                 <button
                     type="button"
                     aria-label={translate('settings.close')}
                     className="ms-auto flex size-6.5 items-center justify-center rounded-md text-muted transition hover:bg-hover hover:text-text"
-                    onClick={onClose}
+                    onClick={() => {
+                        panel.current?.close();
+                    }}
                 >
                     <Icon name="close" className="size-4.25" />
                 </button>
@@ -170,46 +175,49 @@ function Profile({ profile }: { readonly profile: OwnProfileInForce }) {
                         }}
                     />
 
-                    {profile.changeable ? (
-                        <div className="flex flex-wrap items-center gap-1.25">
-                            <label className="flex cursor-pointer items-center gap-1.25 rounded-md border border-line-strong px-2.25 py-1 text-xs text-text-soft transition hover:bg-hover has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent">
-                                <Icon name="add_a_photo" className="size-3.5" />
-                                {translate('settings.choosePicture')}
+                    {/* Drawn whatever the field beside them is doing. `changeable` says whether *the name* would be
+                        taken, which is a grant over somebody's mail configuration; the portrait routes ask only for
+                        the grant to read mail, deliberately and for the reason the endpoint states — what a person is
+                        drawn by is not decided by who maintains their mailboxes. Gating these on it would refuse a
+                        change the deployment would have accepted. */}
+                    <div className="flex flex-wrap items-center gap-1.25">
+                        <label className="flex cursor-pointer items-center gap-1.25 rounded-md border border-line-strong px-2.25 py-1 text-xs text-text-soft transition hover:bg-hover has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent">
+                            <Icon name="add_a_photo" className="size-3.5" />
+                            {translate('settings.choosePicture')}
 
-                                {/* The file input carries the label rather than being clicked by a handler: a hidden
-                                    input a control activates imperatively is one a keyboard reaches only by accident,
-                                    and a label already names it and opens it. */}
-                                <input
-                                    type="file"
-                                    accept="image/jpeg,image/png"
-                                    className="sr-only"
-                                    onChange={(event) => {
-                                        pick(event.target.files?.[0]);
+                            {/* The file input carries the label rather than being clicked by a handler: a hidden input
+                                a control activates imperatively is one a keyboard reaches only by accident, and a
+                                label already names it and opens it. */}
+                            <input
+                                type="file"
+                                accept="image/jpeg,image/png"
+                                className="sr-only"
+                                onChange={(event) => {
+                                    pick(event.target.files?.[0]);
 
-                                        // Cleared so that picking the same file twice is a second choice rather than
-                                        // nothing at all, which is what a person correcting a refusal does.
-                                        event.target.value = '';
-                                    }}
-                                />
-                            </label>
+                                    // Cleared so that picking the same file twice is a second choice rather than
+                                    // nothing at all, which is what a person correcting a refusal does.
+                                    event.target.value = '';
+                                }}
+                            />
+                        </label>
 
-                            {profile.picture === null ? null : (
-                                <button
-                                    type="button"
-                                    className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted transition hover:bg-hover hover:text-text"
-                                    onClick={() => {
-                                        setRefused(null);
-                                        profile.removePicture();
-                                    }}
-                                >
-                                    <Icon name="delete" className="size-3.5" />
-                                    {translate('settings.removePicture')}
-                                </button>
-                            )}
+                        {profile.picture === null ? null : (
+                            <button
+                                type="button"
+                                className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted transition hover:bg-hover hover:text-text"
+                                onClick={() => {
+                                    setRefused(null);
+                                    profile.removePicture();
+                                }}
+                            >
+                                <Icon name="delete" className="size-3.5" />
+                                {translate('settings.removePicture')}
+                            </button>
+                        )}
 
-                            <span className="text-2xs text-faint">{translate('settings.pictureBounds')}</span>
-                        </div>
-                    ) : null}
+                        <span className="text-2xs text-faint">{translate('settings.pictureBounds')}</span>
+                    </div>
 
                     <PictureNotice profile={profile} refused={refused} />
                 </div>

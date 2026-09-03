@@ -242,6 +242,45 @@ describe('useOwnProfile', () => {
         expect(held.latest().picture).toBe(picture);
     });
 
+    it('draws the replacement rather than an older answer that arrives after it', async () => {
+        const replaced = 'data:image/png;base64,AQ==';
+        let answerTheFirstRead = (): void => undefined;
+        const firstRead = new Promise<void>((resolve) => {
+            answerTheFirstRead = () => {
+                resolve();
+            };
+        });
+        let reads = 0;
+
+        // The read started at mount answers last, which is the ordering nothing between two requests guarantees and
+        // the one a screen must not draw: it holds the picture the upload replaced.
+        const held = await renderProfile({
+            read: async () => {
+                reads += 1;
+
+                if (reads > 1) {
+                    return { outcome: 'drawn', picture };
+                }
+
+                await firstRead;
+
+                return { outcome: 'drawn', picture: replaced };
+            },
+            replace: () => Promise.resolve({ outcome: 'stored' }),
+            remove: () => Promise.resolve({ outcome: 'stored' }),
+        });
+
+        act(() => {
+            held.latest().choosePicture(new Blob([new Uint8Array(8)]), 'image/png');
+        });
+        await settled();
+
+        act(answerTheFirstRead);
+        await settled();
+
+        expect(held.latest().picture).toBe(picture);
+    });
+
     it('says a picture that did not reach the deployment did not, and leaves what is drawn alone', async () => {
         const held = await renderProfile(
             drawing({ outcome: 'drawn', picture }, { outcome: 'refused', reason: 'unavailable' }),

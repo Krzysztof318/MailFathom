@@ -13,6 +13,7 @@ import {
     type ClientSession,
     type PortraitImageType,
 } from '@mailfathom/client-backend';
+import { readBoundedContent } from './boundedBody';
 
 // The third module in this directory that calls `fetch`, and the third for the same reason: `Client.Backend` declares
 // no DOM, so a `Blob`, a `File`, and a `FileReader` can only be named on this side of the boundary. What that package
@@ -82,19 +83,23 @@ export const portraitExchange: PortraitExchange = {
             return { outcome: 'refused', reason: failureReasonForStatus(response.status) };
         }
 
-        try {
-            const picture = await response.blob();
+        // An answer larger than a stored portrait could have been is not one this deployment wrote, and the bound is
+        // applied while the octets are read rather than once they are all in memory: what a ceiling at this boundary
+        // is for is that an oversized or endless answer never occupies memory at all, which matters most for an
+        // address a person named and this client has no reason yet to trust.
+        const octets = await readBoundedContent(response, largestPortraitOctets);
 
-            // An answer larger than a stored portrait could have been is not one this deployment wrote, so it is
-            // refused rather than drawn. The bound is applied after the body rather than during it because a portrait
-            // is one small answer: the streaming read in `attachmentDelivery.ts` exists for a file of any size a
-            // sender chose, and this one cannot exceed a megabyte without already being wrong.
-            return picture.size > largestPortraitOctets
-                ? { outcome: 'refused', reason: 'unreadable' }
-                : { outcome: 'drawn', picture: await asDataUrl(picture) };
+        if (typeof octets === 'string') {
+            // An answer over the bound and a connection that stopped partway through both leave the screen with no
+            // picture to draw, which is the one thing it does about either.
+            return { outcome: 'refused', reason: 'unreadable' };
+        }
+
+        try {
+            const kind = response.headers.get('Content-Type') ?? '';
+
+            return { outcome: 'drawn', picture: await asDataUrl(new Blob([...octets], { type: kind })) };
         } catch {
-            // A connection that stopped partway through and octets that could not be read both leave the screen with
-            // no picture to draw, which is the one thing it does about either.
             return { outcome: 'refused', reason: 'unreadable' };
         }
     },

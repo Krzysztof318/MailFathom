@@ -4,6 +4,7 @@
 
 import { createContext, useContext } from 'react';
 import { attachmentRefusalForStatus, longestResponseBody, type ClientRequest } from '@mailfathom/client-backend';
+import { readBoundedContent } from './boundedBody';
 
 // Fetching one file a message carries and handing it to the person, which is one operation rather than two: nothing
 // above this module ever holds the octets, so no screen and no component in the client has a reason to.
@@ -80,61 +81,6 @@ export const deliverAttachment: AttachmentDelivery = async (request, fileName, a
 
     return 'delivered';
 };
-
-/**
- * Reads the octets up to the size the message said the file holds, and stops there.
- *
- * `response.blob()` would buffer whatever arrives before anything got to look at it, which is the wrong order for a
- * download a person is waiting on: they are told a size before they ask, so an answer larger than that is refused
- * rather than written to their machine, and reading in chunks is also what makes the progress they are shown real
- * rather than a guess.
- *
- * The two ways it can end without a file are kept apart rather than collapsed into an absence, because they are two
- * different sentences to a reader: an answer larger than the message described is a defect worth reporting, and a
- * connection that stopped partway through is the ordinary one to try again.
- */
-async function readBoundedContent(
-    response: Response,
-    longest: number,
-    arrived: (octets: number) => void,
-): Promise<readonly Uint8Array<ArrayBuffer>[] | 'largerThanDescribed' | 'unavailable'> {
-    const reading = response.body?.getReader();
-
-    if (reading === undefined) {
-        return 'unavailable';
-    }
-
-    const chunks: Uint8Array<ArrayBuffer>[] = [];
-    let octets = 0;
-
-    for (;;) {
-        let chunk: ReadableStreamReadResult<Uint8Array>;
-
-        try {
-            chunk = await reading.read();
-        } catch {
-            return 'unavailable';
-        }
-
-        if (chunk.done) {
-            return chunks;
-        }
-
-        octets += chunk.value.byteLength;
-
-        if (octets > longest) {
-            await reading.cancel();
-
-            return 'largerThanDescribed';
-        }
-
-        // Copied out of the chunk the stream handed over rather than kept as it stands, because a stream's own buffer
-        // may be a shared one and a `Blob` is composed from unshared memory. The copy replaces the chunk rather than
-        // standing beside it, so what is held at once is the file and one chunk rather than the file twice.
-        chunks.push(chunk.value.slice());
-        arrived(octets);
-    }
-}
 
 /**
  * Hands the octets to the person as a file to keep, and lets go of them.
