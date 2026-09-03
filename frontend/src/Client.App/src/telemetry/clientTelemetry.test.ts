@@ -214,6 +214,24 @@ describe('clientTelemetryForThisApplication', () => {
             });
         });
 
+        it('still reports it for the session it is about, after one it was not', async () => {
+            const telemetry = clientTelemetryForThisApplication();
+
+            // A run pointed somewhere else mid-run: the first session is signed in to a deployment that did not serve
+            // this document, and the second is signed in to the one that did. The document was fetched once, before
+            // either, so the measurement belongs to the second session rather than being spent on the first.
+            //
+            // What is read is the entry being consulted at all, rather than where the value landed: starting a second
+            // pipeline takes the registries this test put there away, so the histogram is no longer this test's to
+            // read by then. Consulting the entry is the whole of what the first session must not have used up.
+            telemetry.exportFor(session);
+            telemetry.exportFor({ ...session, baseAddress: window.location.origin });
+
+            await vi.waitFor(() => {
+                expect(timing).toHaveBeenCalled();
+            });
+        });
+
         it('reports nothing where the client was served by something other than its deployment', async () => {
             const telemetry = clientTelemetryForThisApplication();
 

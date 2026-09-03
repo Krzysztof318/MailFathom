@@ -64,6 +64,9 @@ const nothingToStop = (): void => undefined;
 /** Composes the client's pipeline for the head this bundle is running in, which is the whole of the composition. */
 export function clientTelemetryForThisApplication(): ClientTelemetry {
     // The document arrives once per run, so what it cost is reported once rather than on every session a run holds.
+    // It latches on the measurement having been taken on, never on a session merely having asked: a run can be pointed
+    // at another deployment without reloading, so the session that first asks may be one this measurement is not about
+    // and the next one the one it is.
     let arrivalReported = false;
 
     // Starting and stopping are put in a queue rather than run where they were asked for, and that is a correctness
@@ -115,8 +118,7 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
                 const stop = startExporting(session);
 
                 if (!arrivalReported) {
-                    arrivalReported = true;
-                    reportArrival(session);
+                    arrivalReported = reportArrival(session);
                 }
 
                 return stop;
@@ -188,16 +190,20 @@ const bodies: Readonly<Record<ClientEvent, string>> = {
  * What is asked is therefore whether the document's own origin is the deployment this session is signed in to, which
  * is a comparison of two addresses rather than a question about a head — a shell that serves the bundle over
  * `http://tauri.localhost` answers it exactly as one serving from a scheme of its own does.
+ *
+ * @returns Whether this run's measurement has now been taken on, which a session the measurement is not about never
+ * answers: a client pointed somewhere else mid-run signs into a second deployment without the document being fetched
+ * again, and the one that serves it may be the second.
  */
-function reportArrival(session: ClientSession): void {
+function reportArrival(session: ClientSession): boolean {
     if (window.location.origin !== new URL(session.baseAddress).origin) {
-        return;
+        return false;
     }
 
     if (document.readyState === 'complete') {
         recordArrival();
 
-        return;
+        return true;
     }
 
     // The navigation entry is not finished until the load event has, and a session restored from a stored credential
@@ -205,6 +211,8 @@ function reportArrival(session: ClientSession): void {
     // what makes the measurement one a run either takes or genuinely cannot have, rather than one it happened to ask
     // for too early — a client signed in from storage gets exactly one sign-in, so a second attempt never comes.
     window.addEventListener('load', recordArrival, { once: true });
+
+    return true;
 }
 
 function recordArrival(): void {
