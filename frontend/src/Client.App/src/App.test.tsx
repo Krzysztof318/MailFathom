@@ -1065,7 +1065,7 @@ describe('App session', () => {
 });
 
 describe('App sign-in', () => {
-    it('asks for a user name and a password when nothing has been signed in with', () => {
+    it('asks for a login and a password when nothing has been signed in with', () => {
         renderApp(servedFrom, null);
 
         expect(screen.getByRole('textbox', { name: 'Login' })).toBeDefined();
@@ -1133,9 +1133,7 @@ describe('App sign-in', () => {
         renderApp(servedFrom, null, refusing);
         signIn();
 
-        expect(
-            await screen.findByText('The user name or the password is not accepted by this deployment.'),
-        ).toBeDefined();
+        expect(await screen.findByText('The login or the password is not accepted by this deployment.')).toBeDefined();
     });
 
     it('tells somebody whose deployment offers no passwords that, rather than refusing their credential', async () => {
@@ -1146,7 +1144,7 @@ describe('App sign-in', () => {
 
         expect(
             await screen.findByText(
-                'This deployment does not accept a user name and a password. Whoever runs it has to enable that before you can sign in here.',
+                'This deployment does not accept a login and a password. Whoever runs it has to enable that before you can sign in here.',
             ),
         ).toBeDefined();
     });

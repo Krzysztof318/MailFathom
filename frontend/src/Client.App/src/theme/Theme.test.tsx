@@ -119,10 +119,10 @@ describe('ThemeChoice', () => {
     it('offers following the machine beside each of the two themes, as one group of choices', () => {
         renderChoice();
 
-        expect(screen.getAllByRole('radio').map((offered) => offered.parentElement?.textContent)).toEqual([
-            'Auto',
-            'Light',
-            'Dark',
+        expect(screen.getAllByRole('radio')).toEqual([
+            screen.getByRole('radio', { name: 'Auto' }),
+            screen.getByRole('radio', { name: 'Light' }),
+            screen.getByRole('radio', { name: 'Dark' }),
         ]);
     });
 

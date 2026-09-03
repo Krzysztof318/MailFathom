@@ -212,20 +212,18 @@ describe('SignIn', () => {
         typeCredential('owner', '');
         submit();
 
-        expect(screen.getByRole('alert').textContent).toBe(
-            'Type the user name and the password your deployment gave you.',
-        );
+        expect(screen.getByRole('alert').textContent).toBe('Type the login and the password your deployment gave you.');
         expect(presented).toEqual([]);
     });
 
-    it('refuses a user name carrying the separator, rather than presenting a credential split in the wrong place', () => {
+    it('refuses a login carrying the separator, rather than presenting a credential split in the wrong place', () => {
         const { presented } = renderScreen(signedIn, servingDeployment);
 
         typeCredential('own:er');
         submit();
 
         expect(screen.getByRole('alert').textContent).toBe(
-            'A user name cannot contain a colon, which is what separates it from the password when it is sent.',
+            'A login cannot contain a colon, which is what separates it from the password when it is sent.',
         );
         expect(presented).toEqual([]);
     });
@@ -237,7 +235,7 @@ describe('SignIn', () => {
         submit();
 
         expect(screen.getByRole('alert').textContent).toBe(
-            'That user name or password is longer than this client will present. Check what was pasted in.',
+            'That login or password is longer than this client will present. Check what was pasted in.',
         );
         expect(presented).toEqual([]);
     });
@@ -253,7 +251,7 @@ describe('SignIn', () => {
         });
     });
 
-    it('leaves the password unmarked for a refusal about the user name alone', () => {
+    it('leaves the password unmarked for a refusal about the login alone', () => {
         renderScreen(signedIn, servingDeployment);
 
         typeCredential('own:er');
@@ -451,7 +449,7 @@ describe('SignIn', () => {
         submit();
 
         expect((await screen.findByRole('alert')).textContent).toBe(
-            'This deployment does not accept a user name and a password. Whoever runs it has to enable that before you can sign in here.',
+            'This deployment does not accept a login and a password. Whoever runs it has to enable that before you can sign in here.',
         );
         expect(credentialsSent(asked)).toEqual([undefined]);
         expect(presented).toEqual([]);

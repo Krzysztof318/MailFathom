@@ -64,13 +64,13 @@ export const en = {
     'signIn.submit': 'Connect',
     'signIn.presenting': 'Connecting to {address}…',
     'signIn.abandon': 'Stop trying',
-    'signIn.incomplete': 'Type the user name and the password your deployment gave you.',
+    'signIn.incomplete': 'Type the login and the password your deployment gave you.',
     'signIn.userNameHasColon':
-        'A user name cannot contain a colon, which is what separates it from the password when it is sent.',
-    'signIn.tooLong': 'That user name or password is longer than this client will present. Check what was pasted in.',
-    'signIn.credentialRefused': 'The user name or the password is not accepted by this deployment.',
+        'A login cannot contain a colon, which is what separates it from the password when it is sent.',
+    'signIn.tooLong': 'That login or password is longer than this client will present. Check what was pasted in.',
+    'signIn.credentialRefused': 'The login or the password is not accepted by this deployment.',
     'signIn.basicNotOffered':
-        'This deployment does not accept a user name and a password. Whoever runs it has to enable that before you can sign in here.',
+        'This deployment does not accept a login and a password. Whoever runs it has to enable that before you can sign in here.',
     'signIn.grantMissing': 'This deployment accepted the credential, but it is allowed to read no mail.',
     'signIn.deploymentSilent': 'The deployment did not answer. Try again in a moment.',
     'signIn.noLongerAccepted': 'This deployment has stopped accepting the password that was kept. Sign in again.',
@@ -96,7 +96,7 @@ export const en = {
     'connect.clearTextExplanation':
         'Your password is encoded rather than encrypted, on every request. Anybody between this client and the deployment can read it. Leave this off unless the network between them is yours.',
     'connect.clearTextInForce':
-        'TLS is off. The user name, the password, and every message read travel in the clear. Use this only inside a network you control or over a VPN.',
+        'TLS is off. The login, the password, and every message read travel in the clear. Use this only inside a network you control or over a VPN.',
     'connect.portHint': 'port {port}',
     'connect.advanced': 'Advanced',
     'connect.withoutTls': 'no TLS',

@@ -63,14 +63,14 @@ export const pl: Catalogue = {
     'signIn.submit': 'Połącz',
     'signIn.presenting': 'Łączenie z {address}…',
     'signIn.abandon': 'Przerwij próbę',
-    'signIn.incomplete': 'Wpisz nazwę użytkownika i hasło do swojego wdrożenia.',
+    'signIn.incomplete': 'Wpisz login i hasło do swojego wdrożenia.',
     'signIn.userNameHasColon':
-        'Nazwa użytkownika nie może zawierać dwukropka, ponieważ to on oddziela ją od hasła podczas wysyłania.',
+        'Login nie może zawierać dwukropka, ponieważ to on oddziela go od hasła podczas wysyłania.',
     'signIn.tooLong':
-        'Ta nazwa użytkownika lub to hasło są dłuższe, niż klient jest w stanie przedstawić. Sprawdź, co zostało wklejone.',
-    'signIn.credentialRefused': 'To wdrożenie nie akceptuje tej nazwy użytkownika lub tego hasła.',
+        'Ten login lub to hasło są dłuższe, niż klient jest w stanie przedstawić. Sprawdź, co zostało wklejone.',
+    'signIn.credentialRefused': 'To wdrożenie nie akceptuje tego loginu lub tego hasła.',
     'signIn.basicNotOffered':
-        'To wdrożenie nie przyjmuje nazwy użytkownika i hasła. Osoba, która je prowadzi, musi najpierw włączyć taką możliwość.',
+        'To wdrożenie nie przyjmuje loginu i hasła. Osoba, która je prowadzi, musi najpierw włączyć taką możliwość.',
     'signIn.grantMissing': 'Wdrożenie przyjęło poświadczenie, ale nie zezwala mu na odczyt żadnej poczty.',
     'signIn.deploymentSilent': 'Wdrożenie nie odpowiedziało. Spróbuj ponownie za chwilę.',
     'signIn.noLongerAccepted': 'To wdrożenie przestało akceptować zapamiętane hasło. Zaloguj się ponownie.',
@@ -96,7 +96,7 @@ export const pl: Catalogue = {
     'connect.clearTextExplanation':
         'Twoje hasło jest kodowane, a nie szyfrowane, przy każdym żądaniu. Każdy, kto znajduje się między tym klientem a wdrożeniem, może je odczytać. Zostaw tę opcję wyłączoną, chyba że sieć między nimi należy do Ciebie.',
     'connect.clearTextInForce':
-        'TLS jest wyłączony. Nazwa użytkownika, hasło i każda odczytana wiadomość pójdą otwartym tekstem. Używaj tego tylko w sieci, którą kontrolujesz, albo przez VPN.',
+        'TLS jest wyłączony. Login, hasło i każda odczytana wiadomość pójdą otwartym tekstem. Używaj tego tylko w sieci, którą kontrolujesz, albo przez VPN.',
     'connect.portHint': 'port {port}',
     'connect.advanced': 'Zaawansowane',
     'connect.withoutTls': 'bez TLS',
