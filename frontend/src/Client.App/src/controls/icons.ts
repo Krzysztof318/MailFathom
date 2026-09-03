@@ -21,6 +21,7 @@ export const iconNames = [
     'all_inbox',
     'archive',
     'arrow_back',
+    'arrow_right',
     'attach_file',
     'auto_awesome',
     'calendar_month',

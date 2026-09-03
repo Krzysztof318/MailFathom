@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { MailThreadMessage, MailThreadPage } from '@mailfathom/client-backend';
+import type { OpenConversation } from '../workspace/openConversation';
 
 // Where a conversation puts the reader when it is first drawn. A conversation shows its latest message and hides
 // everything before it behind one control, so the only question left is which message the reader arrived at: the one
@@ -39,4 +40,45 @@ export function arrivesAt(messages: readonly MailThreadMessage[], openAt: string
     }
 
     return messages[messages.length - 1]?.email.id ?? null;
+}
+
+/**
+ * How the message a conversation arrived at is marked out from the ones around it.
+ *
+ * `list` is the durable one: somebody opened this message and the conversation around it is the context, so it keeps
+ * the accent rule and says so in its head for as long as the conversation is open. `result` is the transient one: it
+ * says the client took somebody where they asked to go, and it settles into an ordinary message once it has been seen.
+ */
+export type ArrivalMark = 'list' | 'result';
+
+/**
+ * What marks the message a conversation arrived at, or `null` where nothing does.
+ *
+ * Nothing is marked where the conversation was opened on its own subject, because there is no message somebody was
+ * sent to and a mark saying otherwise would be a sentence that is not true. Nothing is marked either where one message
+ * is all that is drawn: a rule pointing at the only thing on the screen points at nothing, which is why the count is
+ * of what is drawn rather than of what the conversation holds — a conversation with its history folded away draws one
+ * message however many it has read.
+ *
+ * @param conversation The conversation as it was opened.
+ * @param arrival The message it arrived at, or `null` where it has not decided yet.
+ * @param drawn The messages actually on the screen.
+ * @param settled Whether a landing has had its time and become an ordinary message.
+ * @returns What marks the arrival, or `null`.
+ */
+export function arrivalMark(
+    conversation: OpenConversation,
+    arrival: string | null,
+    drawn: readonly MailThreadMessage[],
+    settled: boolean,
+): ArrivalMark | null {
+    if (arrival === null || arrival !== conversation.openAt) {
+        return null;
+    }
+
+    if (conversation.fromResult === true) {
+        return settled ? null : 'result';
+    }
+
+    return drawn.length > 1 ? 'list' : null;
 }

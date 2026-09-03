@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { MailThreadMessage, MailThreadPage } from '@mailfathom/client-backend';
-import { arrivesAt, holdsMessage, messagesOf } from './threadOpening';
+import { arrivalMark, arrivesAt, holdsMessage, messagesOf } from './threadOpening';
 
 function message(id: string, position: number, unread = false): MailThreadMessage {
     return {
@@ -88,5 +88,50 @@ describe('arrivesAt', () => {
 
     it('arrives nowhere in a conversation holding no message anybody may see', () => {
         expect(arrivesAt([], 'two')).toBeNull();
+    });
+});
+
+describe('arrivalMark', () => {
+    const drawn = [message('one', 0), message('two', 1), message('three', 2)];
+
+    it('marks the message somebody opened from the list as the one they opened', () => {
+        expect(arrivalMark({ threadId: 'a-conversation', openAt: 'two' }, 'two', drawn, false)).toBe('list');
+    });
+
+    it('marks nothing in a conversation opened on its own subject, where nobody was sent to a message', () => {
+        expect(arrivalMark({ threadId: 'a-conversation', openAt: null }, 'three', drawn, false)).toBeNull();
+    });
+
+    it('marks nothing while the conversation has not decided where it arrives', () => {
+        expect(arrivalMark({ threadId: 'a-conversation', openAt: 'two' }, null, drawn, false)).toBeNull();
+    });
+
+    it('marks nothing where one message is all that is drawn, a rule there pointing at the only thing there is', () => {
+        expect(
+            arrivalMark({ threadId: 'a-conversation', openAt: 'three' }, 'three', drawn.slice(-1), false),
+        ).toBeNull();
+    });
+
+    it('marks a message landed on from a search result as one somebody was brought to', () => {
+        expect(arrivalMark({ threadId: 'a-conversation', openAt: 'two', fromResult: true }, 'two', drawn, false)).toBe(
+            'result',
+        );
+    });
+
+    it('marks a landing that has settled as nothing at all, which is the ordinary open message', () => {
+        expect(
+            arrivalMark({ threadId: 'a-conversation', openAt: 'two', fromResult: true }, 'two', drawn, true),
+        ).toBeNull();
+    });
+
+    it('marks a landing whatever else is drawn, it saying what the client just did rather than where somebody is', () => {
+        expect(
+            arrivalMark(
+                { threadId: 'a-conversation', openAt: 'three', fromResult: true },
+                'three',
+                drawn.slice(-1),
+                false,
+            ),
+        ).toBe('result');
     });
 });

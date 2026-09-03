@@ -387,6 +387,8 @@ export const pl: Catalogue = {
     'thread.messageBy': 'Wiadomość od: {sender}',
     'thread.showEarlier': 'Pokaż wcześniejsze wiadomości ({count})',
     'thread.hideEarlier': 'Ukryj wcześniejsze wiadomości',
+    'thread.openedFromList': 'Otwarta z listy',
+    'thread.landedFromResult': 'Otwarta z wyniku wyszukiwania',
 
     'message.nothingOpen': 'Otwórz wiadomość, aby ją tutaj przeczytać.',
     'message.reading': 'Trwa otwieranie tej wiadomości…',

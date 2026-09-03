@@ -384,6 +384,8 @@ export const en = {
     'thread.messageBy': 'Message from {sender}',
     'thread.showEarlier': 'Show earlier messages ({count})',
     'thread.hideEarlier': 'Hide earlier messages',
+    'thread.openedFromList': 'Opened from the list',
+    'thread.landedFromResult': 'Brought here from a search result',
 
     'message.nothingOpen': 'Open a message to read it here.',
     'message.reading': 'Reading this message…',

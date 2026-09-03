@@ -15,6 +15,7 @@ import { LocalizationProvider } from '../localization/Localization';
 import { ReadMarkingContext, nothingMarkedRead, type ReadMarking } from '../readMarking/useReadMarking';
 import { LinkOpenerContext } from '../shellOperations/linkOpener';
 import { ThreadMessage } from './ThreadMessage';
+import type { ArrivalMark } from './threadOpening';
 
 const session: ClientSession = {
     baseAddress: 'https://mail.example.invalid',
@@ -68,6 +69,7 @@ function drawing(
         readonly onRegion?: (element: HTMLElement | null) => void;
     } = {},
     marking: ReadMarking = nothingMarkedRead,
+    mark: ArrivalMark | null = null,
 ): void {
     render(
         <LocalizationProvider>
@@ -78,6 +80,7 @@ function drawing(
                             session={session}
                             transport={answersNothing}
                             message={held}
+                            mark={mark}
                             onOpenOnItsOwn={handlers.onOpenOnItsOwn ?? (() => undefined)}
                             onRegion={handlers.onRegion ?? (() => undefined)}
                         />
@@ -196,5 +199,24 @@ describe('ThreadMessage', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Open this message on its own' }));
 
         expect(onOpenOnItsOwn).toHaveBeenCalled();
+    });
+
+    it('says in words that this is the message somebody opened, rather than only drawing a rule beside it', () => {
+        drawing(message(), {}, nothingMarkedRead, 'list');
+
+        expect(screen.getByText('Opened from the list')).toBeDefined();
+    });
+
+    it('says in words that a search result is what brought somebody to this message', () => {
+        drawing(message(), {}, nothingMarkedRead, 'result');
+
+        expect(screen.getByText('Brought here from a search result')).toBeDefined();
+    });
+
+    it('says neither of those about a message the conversation only holds', () => {
+        drawing();
+
+        expect(screen.queryByText('Opened from the list')).toBeNull();
+        expect(screen.queryByText('Brought here from a search result')).toBeNull();
     });
 });

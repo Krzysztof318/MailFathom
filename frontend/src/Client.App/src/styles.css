@@ -219,6 +219,15 @@
        a `--spacing-*` one because what reads it is `max-w-reading`. */
     --container-reading: 56rem;
 
+    /* The measure one message of a conversation is drawn at, which is a different decision from the one above and not
+       a second spelling of it: the reading pane draws one message and ranges its content left against the list it was
+       opened from, while a conversation is a column of messages with nothing beside it, so the column is centred and
+       grows with the window instead of stopping at a fixed width. The floor is where a measure stops being readable at
+       all, the ceiling is where a line stops being comfortable, and between them it is a share of the window — all
+       three the design project's. Below the floor the pane itself is the measure, which is what the narrow composition
+       is. */
+    --container-conversation: clamp(42.5rem, 62vw, 68.75rem);
+
     /* The widest one tab in the strip above the content pane is drawn, which is a ceiling in the same sense: a tab
        takes the room its title needs and stops here, so a long subject is cut rather than pushing every other tab off
        the side. It is the width the design project draws a tab at. */

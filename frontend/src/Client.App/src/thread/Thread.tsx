@@ -17,7 +17,7 @@ import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import type { OpenConversation } from '../workspace/openConversation';
 import { useWorkspace } from '../workspace/useWorkspace';
-import { arrivesAt, holdsMessage, messagesOf } from './threadOpening';
+import { arrivalMark, arrivesAt, holdsMessage, messagesOf } from './threadOpening';
 import { ThreadMessage } from './ThreadMessage';
 
 // A conversation, which is the unit people actually think in and the one mail screen no folder is the scope of: the
@@ -40,6 +40,11 @@ import { ThreadMessage } from './ThreadMessage';
 // asked for — so the document holds a screenful of one-line rows plus whatever they opened, rather than a mailbox. The
 // arithmetic the message list windows with does not transfer either: it is one row height, and an opened message is as
 // tall as what it says. A conversation that ever renders slowly is the argument for reopening this.
+
+// How long a message landed on from a search result stays marked before it settles into an ordinary open message. The
+// design project's own dwell rather than a transition duration, which is why it is a number here and not a token: it is
+// how long something is said for, and the theme decides how movement happens rather than how long a screen speaks.
+const landingHeldFor = 2_200;
 
 const failureLabels: Readonly<Record<ClientFailureReason, MessageKey>> = {
     unauthenticated: 'failure.unauthenticated',
@@ -71,6 +76,10 @@ export function Thread({
     // placed on, and it never moves afterwards.
     const [arrival, setArrival] = useState<string | null>(null);
 
+    // Whether a landing has had its time. It starts unsettled and is never unset, because settling is what a landing
+    // does: nothing in a conversation brings one back, and a conversation reached a second time is a second mount.
+    const [settled, setSettled] = useState(false);
+
     // Whether the messages before the latest are drawn. Decided once by where the reader arrived — a message the
     // history holds cannot be arrived at while the history is hidden — and theirs from then on.
     const [historyShown, setHistoryShown] = useState(false);
@@ -95,6 +104,8 @@ export function Thread({
     }
 
     const held = messagesOf(pages);
+    const drawn = historyShown ? held : held.slice(-1);
+    const mark = arrivalMark(conversation, arrival, drawn, settled);
     const latest = pages.at(-1) ?? null;
 
     // A conversation opened at a message is read forward until that message is in hand, because the route pages from
@@ -183,6 +194,24 @@ export function Thread({
             region.focus();
         }
     }, [arrival]);
+
+    // A landing says the client took somebody where they asked to go, so it is timed from the message being on the
+    // screen rather than from the conversation being opened: a mark that ran out while the conversation was still
+    // being read would have marked nothing anybody saw. A timer is something outside React, which is what an effect is
+    // for, and it goes with the screen it was started for.
+    useEffect(() => {
+        if (arrival === null || conversation.fromResult !== true) {
+            return;
+        }
+
+        const settling = setTimeout(() => {
+            setSettled(true);
+        }, landingHeldFor);
+
+        return () => {
+            clearTimeout(settling);
+        };
+    }, [arrival, conversation.fromResult]);
 
     function close(): void {
         revise({ conversation: null });
@@ -333,12 +362,13 @@ export function Thread({
                     )}
 
                     <ol className="flex flex-col gap-4.5">
-                        {(historyShown ? held : held.slice(-1)).map((message) => (
+                        {drawn.map((message) => (
                             <ThreadMessage
                                 key={message.email.id}
                                 session={session}
                                 transport={transport}
                                 message={message}
+                                mark={message.email.id === arrival ? mark : null}
                                 onOpenOnItsOwn={() => {
                                     openOnItsOwn(message.email.id);
                                 }}
