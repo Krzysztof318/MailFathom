@@ -5,7 +5,7 @@
 import { StrictMode } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ClientRequest, ClientResponse } from '@mailfathom/client-backend';
+import type { ClientRequest, ClientResponse, ClientSession } from '@mailfathom/client-backend';
 import { App } from './App';
 import type { AdoptedDeployment } from './deployment/adoptedDeployment';
 import { AttachmentDeliveryContext, type AttachmentDelivery } from './deployment/attachmentDelivery';
@@ -15,6 +15,7 @@ import { localeNames, locales, readStoredLocale } from './localization/locale';
 import { startingListWidth, storeListWidth } from './mailSpace/listWidth';
 import type { CredentialLifetime, CredentialStore } from './signIn/credentialStore';
 import { mostReconnectionAttempts } from './shell/useConnection';
+import { noTelemetry, TelemetryContext, type ClientEvent, type ClientTelemetry } from './telemetry/clientTelemetry';
 import { ThemeProvider } from './theme/Theme';
 import { LinkOpenerContext } from './shellOperations/linkOpener';
 import { WorkspaceProvider } from './workspace/Workspace';
@@ -375,6 +376,7 @@ function renderApp(
     signedInWith: string | null = heldCredential,
     send: DeploymentTransport = deploymentAnswering(),
     credentials: CredentialStore = storeKeeping(),
+    telemetry: ClientTelemetry = noTelemetry,
 ): void {
     render(
         <StrictMode>
@@ -383,12 +385,14 @@ function renderApp(
                     <WorkspaceProvider>
                         <LinkOpenerContext value={() => Promise.resolve()}>
                             <AttachmentDeliveryContext value={deliversNothing}>
-                                <App
-                                    credentials={credentials}
-                                    deployment={deployment}
-                                    send={send}
-                                    signedInWith={signedInWith}
-                                />
+                                <TelemetryContext value={telemetry}>
+                                    <App
+                                        credentials={credentials}
+                                        deployment={deployment}
+                                        send={send}
+                                        signedInWith={signedInWith}
+                                    />
+                                </TelemetryContext>
                             </AttachmentDeliveryContext>
                         </LinkOpenerContext>
                     </WorkspaceProvider>
@@ -396,6 +400,35 @@ function renderApp(
             </LocalizationProvider>
         </StrictMode>,
     );
+}
+
+/** A telemetry double holding what the frame asked it to record, which is what these tests read back. */
+function telemetryRecording(): {
+    readonly telemetry: ClientTelemetry;
+    readonly exportedFor: (ClientSession | null)[];
+    readonly stopped: number[];
+    readonly events: ClientEvent[];
+} {
+    const exportedFor: (ClientSession | null)[] = [];
+    const stopped: number[] = [];
+    const events: ClientEvent[] = [];
+
+    return {
+        telemetry: {
+            exportFor: (session) => {
+                const started = exportedFor.push(session);
+
+                return () => stopped.push(started);
+            },
+            navigated: () => undefined,
+            happened: (event) => {
+                events.push(event);
+            },
+        },
+        exportedFor,
+        stopped,
+        events,
+    };
 }
 
 // The frame is on the screen once the summary above the space has an answer to state, which is what every test that
@@ -1378,5 +1411,51 @@ describe('App language', () => {
         fireEvent.change(screen.getByRole('combobox', { name: 'Language', hidden: true }), { target: { value: 'pl' } });
 
         expect(readStoredLocale()).toBe('pl');
+    });
+});
+
+describe('App telemetry', () => {
+    it('exports under the session that is signed in, and records that it began', async () => {
+        const recording = telemetryRecording();
+
+        renderApp(servedFrom, heldCredential, deploymentAnswering(), storeKeeping(), recording.telemetry);
+        await framed();
+
+        expect(recording.exportedFor.map((session) => session?.baseAddress)).toContain(
+            servedFrom.deployment.baseAddress,
+        );
+        expect(recording.events).toContain('session_started');
+    });
+
+    it('stops exporting when the person signs out', async () => {
+        const recording = telemetryRecording();
+
+        renderApp(servedFrom, heldCredential, deploymentAnswering(), storeKeeping(), recording.telemetry);
+        await framed();
+        fireEvent.click(screen.getByRole('button', { name: 'Sign out', hidden: true }));
+
+        // Nothing is exported for somebody who is not signed in, so the pipeline the session held is asked to end and
+        // what replaces it is asked to export for nobody.
+        await waitFor(() => {
+            expect(recording.stopped.length).toBeGreaterThan(0);
+        });
+        expect(recording.exportedFor.at(-1)).toBeNull();
+    });
+
+    it('records a credential the deployment has stopped accepting', async () => {
+        const recording = telemetryRecording();
+        const credentials = storeKeeping();
+        await credentials.keep(servedFrom.deployment, typedCredential);
+
+        renderApp(
+            servedFrom,
+            typedCredential,
+            deploymentAnswering({ status: 401, body: '' }),
+            credentials,
+            recording.telemetry,
+        );
+        await screen.findByText('This deployment has stopped accepting the password that was kept. Sign in again.');
+
+        expect(recording.events).toContain('credential_no_longer_accepted');
     });
 });

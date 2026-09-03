@@ -30,6 +30,8 @@ import { userNameIn } from './signIn/credentialEntry';
 import { CredentialNotices, type CredentialNotice } from './signIn/CredentialNotices';
 import type { CredentialStore } from './signIn/credentialStore';
 import { SignIn } from './signIn/SignIn';
+import { useTelemetry } from './telemetry/clientTelemetry';
+import { useNavigationTelemetry } from './telemetry/navigationTelemetry';
 import { Thread } from './thread/Thread';
 import { conversationKey, type OpenConversation } from './workspace/openConversation';
 import { scopeKey } from './workspace/mailScope';
@@ -59,6 +61,7 @@ export function App({
     readonly send: DeploymentTransport;
 }) {
     const { workspace, revise } = useWorkspace();
+    const telemetry = useTelemetry();
     const [adopted, setAdopted] = useState(deployment);
     const [authorization, setAuthorization] = useState(signedInWith);
     const [notices, setNotices] = useState<readonly CredentialNotice[]>([]);
@@ -72,6 +75,19 @@ export function App({
         () => (baseAddress === null || authorization === null ? null : { baseAddress, authorization }),
         [baseAddress, authorization],
     );
+
+    // What this client reports about itself goes out under the session that is signed in, so it starts when one exists
+    // and stops with it. Signing out, or being pointed at another deployment, therefore leaves nothing queued for a
+    // deployment somebody has left — and the session beginning is itself the first thing recorded.
+    useEffect(() => {
+        const stop = telemetry.exportFor(session);
+
+        if (session !== null) {
+            telemetry.happened('session_started');
+        }
+
+        return stop;
+    }, [session, telemetry]);
 
     // The transport those reads are made through, built once for the same reason. It carries a signal nothing ever
     // fires: the tree, the reading pane, and the body renderer each discard the answer to a read they stopped listening
@@ -109,6 +125,7 @@ export function App({
     // It is held steady across renders because the connection below reads again whenever it changes, and a callback
     // rebuilt every render would be a read started every render.
     const credentialRefused = useCallback(() => {
+        telemetry.happened('credential_no_longer_accepted');
         setNotices(['credentialNoLongerAccepted']);
         setAuthorization(null);
         revise(emptyWorkspace);
@@ -123,7 +140,7 @@ export function App({
                 setNotices((shown) => [...shown, 'passwordNotRemoved']);
             }
         });
-    }, [baseAddress, credentials, revise]);
+    }, [baseAddress, credentials, revise, telemetry]);
 
     // What the deployment says is read from the address and the credential rather than held beside them, which is what
     // makes a credential unable to outlive the deployment it was presented to: pointing the client somewhere else, or
@@ -133,6 +150,7 @@ export function App({
     const deploymentSession = connection.session?.outcome === 'read' ? connection.session.value : null;
     const offeredSpaces = deploymentSession === null ? [] : spacesOffered(deploymentSession);
     const space = useSpace(offeredSpaces);
+    useNavigationTelemetry(space);
     const withheld = deploymentSession === null ? [] : withheldFrom(deploymentSession);
     const mailAccounts = connection.accounts?.outcome === 'read' ? connection.accounts.value.accounts : [];
     const readsMail = deploymentSession !== null && offers(deploymentSession, 'readMail');

@@ -5,6 +5,7 @@
 import { deploymentSessionRoute, parseDeploymentSession } from './deploymentSession';
 import { failed, read, type ClientResult } from './failure';
 import { headersFor, routeFor, type ClientSession, type DeploymentAddress } from './session';
+import { spanned } from './telemetry';
 import { send, type MailFathomTransport } from './transport';
 
 // Signing in against a deployment, in two steps and deliberately not one. The route that reports what a caller may do
@@ -50,31 +51,33 @@ export interface DeploymentGreeting {
  * @param transport How the request goes out.
  * @returns What the deployment said about itself, or why there was no answer to read.
  */
-export async function reachDeployment(
+export function reachDeployment(
     deployment: DeploymentAddress,
     transport: MailFathomTransport,
 ): Promise<ClientResult<DeploymentGreeting>> {
-    const response = await send(transport, {
-        method: 'GET',
-        path: routeFor(deployment, deploymentSessionRoute),
-        headers: { Accept: 'application/json' },
+    return spanned(`GET ${deploymentSessionRoute}`, async () => {
+        const response = await send(transport, {
+            method: 'GET',
+            path: routeFor(deployment, deploymentSessionRoute),
+            headers: { Accept: 'application/json' },
+        });
+
+        if (response === null) {
+            return failed('unavailable', null);
+        }
+
+        if (response.status === 200) {
+            return answersAsMailFathom(response.body)
+                ? read({ acceptsPassword: true })
+                : failed('unreadable', response.status);
+        }
+
+        if (response.status === 401 && challengesAsMailFathom(response.headers)) {
+            return read({ acceptsPassword: offersBasic(response.headers) });
+        }
+
+        return failed(response.status >= 500 ? 'unavailable' : 'unreadable', response.status);
     });
-
-    if (response === null) {
-        return failed('unavailable', null);
-    }
-
-    if (response.status === 200) {
-        return answersAsMailFathom(response.body)
-            ? read({ acceptsPassword: true })
-            : failed('unreadable', response.status);
-    }
-
-    if (response.status === 401 && challengesAsMailFathom(response.headers)) {
-        return read({ acceptsPassword: offersBasic(response.headers) });
-    }
-
-    return failed(response.status >= 500 ? 'unavailable' : 'unreadable', response.status);
 }
 
 /**
@@ -96,45 +99,46 @@ export type SignInOutcome = { readonly signedIn: true } | { readonly signedIn: f
  * @param transport How the request goes out.
  * @returns Whether the deployment signed the credential in, or why the answer never arrived.
  */
-export async function signIn(
-    session: ClientSession,
-    transport: MailFathomTransport,
-): Promise<ClientResult<SignInOutcome>> {
-    const response = await send(transport, {
-        method: 'GET',
-        path: routeFor(session, deploymentSessionRoute),
-        headers: headersFor(session),
+export function signIn(session: ClientSession, transport: MailFathomTransport): Promise<ClientResult<SignInOutcome>> {
+    return spanned(`GET ${deploymentSessionRoute}`, async () => {
+        const response = await send(transport, {
+            method: 'GET',
+            path: routeFor(session, deploymentSessionRoute),
+            headers: headersFor(session),
+        });
+
+        if (response === null) {
+            return failed('unavailable', null);
+        }
+
+        if (response.status === 200) {
+            return answersAsMailFathom(response.body)
+                ? read({ signedIn: true })
+                : failed('unreadable', response.status);
+        }
+
+        // A refusal is read only where the challenge proves MailFathom produced it, for the reason the challenge is read at
+        // all: this answer arrives from an address the person typed, and something else refusing a request is a wrong
+        // address rather than a wrong password. Which of the two refusals it is then follows from the schemes offered — a
+        // deployment that has not enabled passwords challenges without naming one, and telling somebody their password was
+        // rejected there would send them to change a password that was never read.
+        if (response.status === 401 && challengesAsMailFathom(response.headers)) {
+            return read(
+                offersBasic(response.headers)
+                    ? { signedIn: false, refusal: 'credentialRefused' }
+                    : { signedIn: false, refusal: 'basicNotOffered' },
+            );
+        }
+
+        // A grant this credential does not hold is the one refusal that is about what an owner may do rather than about who
+        // they are, so it is never a reason to ask for the password again. Nothing else the deployment can answer here says
+        // anything about the credential: a failing deployment is retried, and anything else is not MailFathom answering.
+        if (response.status === 403) {
+            return failed('unauthorized', response.status);
+        }
+
+        return failed(response.status >= 500 ? 'unavailable' : 'unreadable', response.status);
     });
-
-    if (response === null) {
-        return failed('unavailable', null);
-    }
-
-    if (response.status === 200) {
-        return answersAsMailFathom(response.body) ? read({ signedIn: true }) : failed('unreadable', response.status);
-    }
-
-    // A refusal is read only where the challenge proves MailFathom produced it, for the reason the challenge is read at
-    // all: this answer arrives from an address the person typed, and something else refusing a request is a wrong
-    // address rather than a wrong password. Which of the two refusals it is then follows from the schemes offered — a
-    // deployment that has not enabled passwords challenges without naming one, and telling somebody their password was
-    // rejected there would send them to change a password that was never read.
-    if (response.status === 401 && challengesAsMailFathom(response.headers)) {
-        return read(
-            offersBasic(response.headers)
-                ? { signedIn: false, refusal: 'credentialRefused' }
-                : { signedIn: false, refusal: 'basicNotOffered' },
-        );
-    }
-
-    // A grant this credential does not hold is the one refusal that is about what an owner may do rather than about who
-    // they are, so it is never a reason to ask for the password again. Nothing else the deployment can answer here says
-    // anything about the credential: a failing deployment is retried, and anything else is not MailFathom answering.
-    if (response.status === 403) {
-        return failed('unauthorized', response.status);
-    }
-
-    return failed(response.status >= 500 ? 'unavailable' : 'unreadable', response.status);
 }
 
 /**

@@ -5,6 +5,7 @@
 import { failed, failureReasonForStatus, read, type ClientResult } from './failure';
 import { asRecord, isRecord } from './json';
 import { headersFor, routeFor, type ClientSession } from './session';
+import { spanned } from './telemetry';
 import { send, type MailFathomTransport } from './transport';
 
 // The client's trust boundary for a message body, which is a validating parser rather than a filter. What the service
@@ -292,30 +293,32 @@ const noEmphasis: MailTextEmphasis = {
  * neither side: opening the message again asks again. It is also what the parser holds a remote picture against, so a
  * document carrying an address nobody asked for is refused rather than drawn.
  */
-export async function readMailBody(
+export function readMailBody(
     session: ClientSession,
     transport: MailFathomTransport,
     storedEmailId: string,
     remoteImages: boolean,
 ): Promise<ClientResult<MailBody>> {
-    const response = await send(transport, {
-        method: 'GET',
-        path: routeFor(session, mailBodyRoute(storedEmailId, remoteImages)),
-        headers: headersFor(session),
-        longestAnswer: longestBodyAnswer,
+    return spanned('GET /messages/{storedEmailId}/body', async () => {
+        const response = await send(transport, {
+            method: 'GET',
+            path: routeFor(session, mailBodyRoute(storedEmailId, remoteImages)),
+            headers: headersFor(session),
+            longestAnswer: longestBodyAnswer,
+        });
+
+        if (response === null) {
+            return failed('unavailable', null);
+        }
+
+        if (response.status !== 200) {
+            return failed(failureReasonForStatus(response.status), response.status);
+        }
+
+        const body = parseBody(response.body, remoteImages);
+
+        return body === null ? failed('unreadable', response.status) : read(body);
     });
-
-    if (response === null) {
-        return failed('unavailable', null);
-    }
-
-    if (response.status !== 200) {
-        return failed(failureReasonForStatus(response.status), response.status);
-    }
-
-    const body = parseBody(response.body, remoteImages);
-
-    return body === null ? failed('unreadable', response.status) : read(body);
 }
 
 // How much of the document's own budget the walk has left. One object threaded through the walk rather than counters

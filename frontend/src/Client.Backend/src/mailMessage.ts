@@ -4,6 +4,7 @@
 
 import { failed, failureReasonForStatus, read, type ClientResult } from './failure';
 import { headersFor, routeFor, type ClientSession } from './session';
+import { spanned } from './telemetry';
 import { send, type MailFathomTransport } from './transport';
 
 // Everything a reading pane draws around a message, which is the other half of the body route. What the service serves
@@ -135,29 +136,31 @@ const authorAuthentications: readonly MailAuthorAuthentication[] = ['NotEstablis
 const deploymentTrusts: readonly MailDeploymentTrust[] = ['Unknown', 'Trusted'];
 
 /** Reads one message's description, answering an expected failure as a value rather than by throwing. */
-export async function readMailMessage(
+export function readMailMessage(
     session: ClientSession,
     transport: MailFathomTransport,
     storedEmailId: string,
 ): Promise<ClientResult<MailMessage>> {
-    const response = await send(transport, {
-        method: 'GET',
-        path: routeFor(session, mailMessageRoute(storedEmailId)),
-        headers: headersFor(session),
-        longestAnswer: longestMessageAnswer,
+    return spanned('GET /messages/{storedEmailId}', async () => {
+        const response = await send(transport, {
+            method: 'GET',
+            path: routeFor(session, mailMessageRoute(storedEmailId)),
+            headers: headersFor(session),
+            longestAnswer: longestMessageAnswer,
+        });
+
+        if (response === null) {
+            return failed('unavailable', null);
+        }
+
+        if (response.status !== 200) {
+            return failed(failureReasonForStatus(response.status), response.status);
+        }
+
+        const message = parseMessage(response.body);
+
+        return message === null ? failed('unreadable', response.status) : read(message);
     });
-
-    if (response === null) {
-        return failed('unavailable', null);
-    }
-
-    if (response.status !== 200) {
-        return failed(failureReasonForStatus(response.status), response.status);
-    }
-
-    const message = parseMessage(response.body);
-
-    return message === null ? failed('unreadable', response.status) : read(message);
 }
 
 function parseMessage(body: string): MailMessage | null {

@@ -5,6 +5,7 @@
 import { failed, failureReasonForStatus, read, type ClientResult } from './failure';
 import { asRecord } from './json';
 import { headersFor, routeFor, type ClientSession } from './session';
+import { spanned } from './telemetry';
 import { send, type ClientResponse, type MailFathomTransport } from './transport';
 
 /** The route the acting person's own client preferences are read at and written back to, relative to the client prefix. */
@@ -54,18 +55,20 @@ export const unsetClientPreferences: ClientPreferences = {
 export const longestPreferencesAnswer = 4_096;
 
 /** Reads what the signed-in person set about their own client, answering an expected failure as a value. */
-export async function readClientPreferences(
+export function readClientPreferences(
     session: ClientSession,
     transport: MailFathomTransport,
 ): Promise<ClientResult<ClientPreferences>> {
-    return answerOf(
-        await send(transport, {
-            method: 'GET',
-            path: routeFor(session, clientPreferencesRoute),
-            headers: headersFor(session),
-            longestAnswer: longestPreferencesAnswer,
-        }),
-    );
+    return spanned(`GET ${clientPreferencesRoute}`, async () => {
+        return answerOf(
+            await send(transport, {
+                method: 'GET',
+                path: routeFor(session, clientPreferencesRoute),
+                headers: headersFor(session),
+                longestAnswer: longestPreferencesAnswer,
+            }),
+        );
+    });
 }
 
 /**
@@ -75,20 +78,22 @@ export async function readClientPreferences(
  * omits is committed as its own unset answer rather than left at whatever the row held. A caller therefore sends back
  * what it last read with one value replaced, which is also why nothing here merges anything.
  */
-export async function writeClientPreferences(
+export function writeClientPreferences(
     session: ClientSession,
     transport: MailFathomTransport,
     stated: ClientPreferences,
 ): Promise<ClientResult<ClientPreferences>> {
-    return answerOf(
-        await send(transport, {
-            method: 'POST',
-            path: routeFor(session, clientPreferencesRoute),
-            headers: { ...headersFor(session), 'Content-Type': 'application/json' },
-            body: JSON.stringify(stated),
-            longestAnswer: longestPreferencesAnswer,
-        }),
-    );
+    return spanned(`POST ${clientPreferencesRoute}`, async () => {
+        return answerOf(
+            await send(transport, {
+                method: 'POST',
+                path: routeFor(session, clientPreferencesRoute),
+                headers: { ...headersFor(session), 'Content-Type': 'application/json' },
+                body: JSON.stringify(stated),
+                longestAnswer: longestPreferencesAnswer,
+            }),
+        );
+    });
 }
 
 // Both routes answer the stored document, so both are read the same way. A deployment that holds no record for the

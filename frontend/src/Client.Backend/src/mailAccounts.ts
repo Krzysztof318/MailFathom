@@ -5,6 +5,7 @@
 import { failed, failureReasonForStatus, read, type ClientResult } from './failure';
 import { asRecord } from './json';
 import { headersFor, routeFor, type ClientSession } from './session';
+import { spanned } from './telemetry';
 import { send, type MailFathomTransport } from './transport';
 
 /** The route the owner's accounts are served at, relative to the client prefix. */
@@ -44,27 +45,29 @@ const synchronizationStates: readonly MailSynchronizationState[] = [
 ];
 
 /** Reads the signed-in owner's accounts, answering an expected failure as a value rather than by throwing. */
-export async function readMailAccounts(
+export function readMailAccounts(
     session: ClientSession,
     transport: MailFathomTransport,
 ): Promise<ClientResult<MailAccountDirectory>> {
-    const response = await send(transport, {
-        method: 'GET',
-        path: routeFor(session, mailAccountsRoute),
-        headers: headersFor(session),
+    return spanned(`GET ${mailAccountsRoute}`, async () => {
+        const response = await send(transport, {
+            method: 'GET',
+            path: routeFor(session, mailAccountsRoute),
+            headers: headersFor(session),
+        });
+
+        if (response === null) {
+            return failed('unavailable', null);
+        }
+
+        if (response.status !== 200) {
+            return failed(failureReasonForStatus(response.status), response.status);
+        }
+
+        const directory = parseDirectory(response.body);
+
+        return directory === null ? failed('unreadable', response.status) : read(directory);
     });
-
-    if (response === null) {
-        return failed('unavailable', null);
-    }
-
-    if (response.status !== 200) {
-        return failed(failureReasonForStatus(response.status), response.status);
-    }
-
-    const directory = parseDirectory(response.body);
-
-    return directory === null ? failed('unreadable', response.status) : read(directory);
 }
 
 function parseDirectory(body: string): MailAccountDirectory | null {

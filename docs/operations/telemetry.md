@@ -1,6 +1,6 @@
 # Telemetry and the Aspire dashboard
 
-<!-- describes: backend/src/Application/Observability/**, backend/src/Common/Observability/**, backend/src/Host/Observability/**, backend/src/Host/ServiceDefaultsExtensions.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Hosting/Workers/**, backend/src/Infrastructure/Observability/**, backend/src/Infrastructure/Mail/MailServerConnectionBudget.cs, backend/src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, backend/src/Infrastructure/HostApplicationBuilderExtensions.cs, backend/src/Mcp/Observability/**, backend/src/Cli/Diagnostics/**, backend/src/AppHost/**, backend/src/AI/ProviderAdapters/OpenAiCompatibleClientFactory.cs -->
+<!-- describes: backend/src/Application/Observability/**, backend/src/Common/Observability/**, backend/src/Host/Observability/**, backend/src/Host/ServiceDefaultsExtensions.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Hosting/Workers/**, backend/src/Infrastructure/Observability/**, backend/src/Infrastructure/Mail/MailServerConnectionBudget.cs, backend/src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, backend/src/Infrastructure/HostApplicationBuilderExtensions.cs, backend/src/Mcp/Observability/**, backend/src/Cli/Diagnostics/**, backend/src/AppHost/**, backend/src/AI/ProviderAdapters/OpenAiCompatibleClientFactory.cs, frontend/src/Client.App/src/telemetry/**, frontend/src/Client.Backend/src/telemetry.ts -->
 
 The host instruments itself with OpenTelemetry throughout — logs, metrics, and traces — and exports none of it unless
 the environment names a destination. Today exactly one environment does that out of the box: a local run under the
@@ -1172,6 +1172,75 @@ because the clients hold what they could not export and nothing is queued here.
 The one thing that does write a line is a forwarding condition that holds: one record per condition, repeated at most
 every five minutes, naming the condition and how many batches it has cost since it was last reported. That is a count a
 rate cannot give an operator reading the log after the fact, and it carries no part of a payload.
+
+### What the client publishes about itself
+
+Everything above is the deployment's own reading of the relay. What travels through it is the client's, and it arrives
+at the collector under the same name every other section here publishes under — **`MailFathom`**, as both a tracer and
+a meter, for the reason [that section](#what-mailfathom-publishes-under-its-own-name) gives about one name: a second
+registration would be one more thing to subscribe to, and being on the second stack is not a reason to take one.
+
+**The resource identifies a client and never a person.** Three attributes are the client's own, and the receiver writes
+the owner attributes itself, from the credential the export presented, replacing whatever a page put in their place.
+
+| Attribute | What it says |
+| --- | --- |
+| `service.name` | `mailfathom-client`, which is what separates the client's records from the deployment's own in one collector |
+| `service.version` | The same `<VersionPrefix>` the deployment reports, substituted into the bundle at build time |
+| `mailfathom.client.head` | `web` or `desktop` — which head produced the record, not which operating system it ran on |
+
+**The client exports nothing until somebody has signed in.** The exporter reaches
+[the telemetry routes](client-endpoint.md#the-telemetry-routes) on the deployment the client is pointed at and
+authenticates there with the session's own credential, so there is no destination and nothing to present before that.
+Signing out shuts the pipeline down and flushes what it held. A deployment that named no collector answers those routes
+`404`, which is what a client sending to a deployment that exports nothing meets.
+
+**One span and two measurements per request**, opened where the client asks and closed where it decides what the answer
+was — which is later than the response, because a body the client refused as unreadable is a failure a screen acts on
+and the status alone does not say so.
+
+| Instrument | Unit | What it reports |
+| --- | --- | --- |
+| `mailfathom.client.requests` | `{request}` | Requests the client made to the client surface |
+| `mailfathom.client.request.duration` | `s` | How long each of them took, answer read and all |
+
+Both carry `mailfathom.client.request`, which is the method and the **route template** the client asked for —
+`GET /folders`, `GET /messages/{storedEmailId}/body` — never a composed path, so a message identifier is not a
+dimension value. The span takes the same string as its name. Beside it sits `mailfathom.client.outcome`, whose values
+are the client's own contract rather than words invented here — `read` and `failed` — and, on a failure,
+`mailfathom.client.failure`, carrying which of `unauthenticated`, `unauthorized`, `unavailable`, or `unreadable` the
+client mapped the answer to. A failed request's span status is an error carrying no message: what failed is already the
+dimension beside it.
+
+**Moving between screens is the client's alone to report.** Every screen after the first is rendered rather than
+fetched, so the wait a person actually has is invisible from the deployment.
+
+| Instrument | Unit | What it reports |
+| --- | --- | --- |
+| `mailfathom.client.navigations` | `{navigation}` | Moves to another space |
+| `mailfathom.client.navigation.duration` | `s` | How long each move took, from the address changing to the space being on the screen |
+| `mailfathom.client.arrival.duration` | `s` | How long the document itself took to arrive |
+
+The first two carry `mailfathom.client.space`, whose values are the client's own space names, and each move opens a
+span named `navigate <space>`. The space a run opens on is not a move and is reported by none of them.
+
+**`mailfathom.client.arrival.duration` is reported by the web head and by no other**, and that is the one place the two
+heads differ in what they can say. A document served over HTTP arrived from the deployment, and the browser's own
+navigation timing measures exactly that. The desktop shell loads the same document from a scheme of its own with no
+server behind it, so the same measurement would be timing a disk and would put two unrelated quantities on one
+histogram. It is therefore absent on that head rather than reported as a zero — which is why a panel reading it is
+read against `mailfathom.client.head` rather than against the client population as a whole. Nothing in the client
+branches on the head to decide this: what is asked is how the document was served.
+
+**Two log records, and no others.** `session_started` at `INFO` when a signed-in session begins, and
+`credential_no_longer_accepted` at `WARN` when the deployment stops taking the credential a session held. Each carries
+`mailfathom.client.event` naming which it is. There is no record per request and none per screen: a client open on
+somebody's desk would make a deployment's log unreadable within a day, which is the same reasoning the relay above
+applies to itself.
+
+**Nothing the client sends carries what was on the screen.** No address, no subject, no correspondent, no search text,
+no message identifier, and no part of the credential reaches a span name, an attribute, a measurement, or a log record.
+The route templates and the space names above are the whole of the vocabulary, and both are closed sets.
 
 ## What the administration command emits
 

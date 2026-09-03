@@ -4,6 +4,7 @@
 
 import { failed, failureReasonForStatus, read, type ClientResult } from './failure';
 import { headersFor, routeFor, type ClientSession } from './session';
+import { spanned } from './telemetry';
 import { send, type MailFathomTransport } from './transport';
 
 /** The route a deployment reports itself and the caller's grant at, relative to the client prefix. */
@@ -72,27 +73,29 @@ const longestSessionBody = 4096;
  * @param transport How the request goes out.
  * @returns The deployment's version and this caller's grant, or why the answer never arrived.
  */
-export async function readDeploymentSession(
+export function readDeploymentSession(
     session: ClientSession,
     transport: MailFathomTransport,
 ): Promise<ClientResult<DeploymentSession>> {
-    const response = await send(transport, {
-        method: 'GET',
-        path: routeFor(session, deploymentSessionRoute),
-        headers: headersFor(session),
+    return spanned(`GET ${deploymentSessionRoute}`, async () => {
+        const response = await send(transport, {
+            method: 'GET',
+            path: routeFor(session, deploymentSessionRoute),
+            headers: headersFor(session),
+        });
+
+        if (response === null) {
+            return failed('unavailable', null);
+        }
+
+        if (response.status !== 200) {
+            return failed(failureReasonForStatus(response.status), response.status);
+        }
+
+        const answered = parseDeploymentSession(response.body);
+
+        return answered === null ? failed('unreadable', response.status) : read(answered);
     });
-
-    if (response === null) {
-        return failed('unavailable', null);
-    }
-
-    if (response.status !== 200) {
-        return failed(failureReasonForStatus(response.status), response.status);
-    }
-
-    const answered = parseDeploymentSession(response.body);
-
-    return answered === null ? failed('unreadable', response.status) : read(answered);
 }
 
 /**

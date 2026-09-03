@@ -186,6 +186,27 @@ not inherit each other's split, and the key it is written under folds the name t
 What says how somebody wants to work — rather than how much room this screen has — follows them between machines and is
 the deployment's to hold instead.
 
+## What the client records about itself
+
+The client carries one OpenTelemetry pipeline for all three signals, composed once in `src/Client.App/src/main.tsx`
+beside the deployment and the credential, and handed down as a value: `src/Client.App/src/telemetry/clientTelemetry.ts`
+publishes it, and a screen that reports something takes it out of context rather than registering anything of its own.
+`src/Client.Backend/src/telemetry.ts` is the other half — every request that package makes goes through it, so one span
+and two measurements per request happen in one place whatever the operation did with the answer. That package pins
+`@opentelemetry/api` and nothing else, which names no browser API and so crosses none of the boundary above.
+
+It exports to [the deployment's own OTLP receiver](../docs/operations/client-endpoint.md#the-telemetry-routes) on the
+client surface, over HTTP with protobuf, presenting the session's credential exactly as every read does — so nothing is
+exported until somebody has signed in, and signing out shuts the pipeline down and flushes what it held.
+[What it publishes](../docs/operations/telemetry.md#what-the-client-publishes-about-itself) is the operator's page,
+including the one measurement only the web head can make and why the desktop head reports nothing in its place rather
+than a zero.
+
+**The SDK behind the exporter is fetched rather than bundled.** `telemetry/exporting.ts` is reached through a dynamic
+import, so the chunk carrying the three providers and the three exporters — 125 kB, 35 kB compressed — is downloaded at
+the moment somebody signs in and never by somebody who does not. What the pipeline costs the document a person waits
+for is the API in front of it: 15 kB, 5 kB compressed.
+
 ## The two suites
 
 `pnpm test` is the unit suite, and `vitest.config.ts` declares one Vitest project per package because the two are tested

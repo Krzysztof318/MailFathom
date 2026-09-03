@@ -5,6 +5,7 @@
 import { failed, failureReasonForStatus, read, type ClientResult } from './failure';
 import { asRecord } from './json';
 import { headersFor, routeFor, type ClientSession } from './session';
+import { spanned } from './telemetry';
 import { send, type MailFathomTransport } from './transport';
 
 // One page of the owner's mail, keyset-paged in both directions. The route is the one a mail screen spends its time
@@ -132,29 +133,31 @@ const mostRecipients = 256;
  * @param query Which list is being read, and where in it.
  * @returns The page, or why it never arrived.
  */
-export async function readMailTimeline(
+export function readMailTimeline(
     session: ClientSession,
     transport: MailFathomTransport,
     query: MailTimelineQuery,
 ): Promise<ClientResult<MailTimelinePage>> {
-    const response = await send(transport, {
-        method: 'GET',
-        path: routeFor(session, mailTimelineRoute) + timelineQueryString(query),
-        headers: headersFor(session),
-        longestAnswer: longestTimelineAnswer,
+    return spanned(`GET ${mailTimelineRoute}`, async () => {
+        const response = await send(transport, {
+            method: 'GET',
+            path: routeFor(session, mailTimelineRoute) + timelineQueryString(query),
+            headers: headersFor(session),
+            longestAnswer: longestTimelineAnswer,
+        });
+
+        if (response === null) {
+            return failed('unavailable', null);
+        }
+
+        if (response.status !== 200) {
+            return failed(failureReasonForStatus(response.status), response.status);
+        }
+
+        const page = parsePage(response.body, query.pageSize);
+
+        return page === null ? failed('unreadable', response.status) : read(page);
     });
-
-    if (response === null) {
-        return failed('unavailable', null);
-    }
-
-    if (response.status !== 200) {
-        return failed(failureReasonForStatus(response.status), response.status);
-    }
-
-    const page = parsePage(response.body, query.pageSize);
-
-    return page === null ? failed('unreadable', response.status) : read(page);
 }
 
 /**

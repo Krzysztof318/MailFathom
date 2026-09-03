@@ -11,6 +11,7 @@ import { sendToDeployment } from './deployment/sendToDeployment';
 import { LocalizationProvider } from './localization/Localization';
 import { LinkOpenerContext, linkOpenerForThisApplication } from './shellOperations/linkOpener';
 import { credentialStore } from './signIn/credentialStore';
+import { clientTelemetryForThisApplication, TelemetryContext } from './telemetry/clientTelemetry';
 import { ThemeProvider } from './theme/Theme';
 import { WorkspaceProvider } from './workspace/Workspace';
 import './styles.css';
@@ -18,6 +19,11 @@ import './styles.css';
 // The one place a head is asked about. Everything below receives the operation rather than the answer to that
 // question, which is what keeps one client one client across both heads.
 const openLink = linkOpenerForThisApplication();
+
+// The one place the client's traces, metrics, and logs are composed. It is here rather than beside a screen for the
+// reason the link opener is: what this client reports about itself is the application's decision and not one screen's,
+// and everything below receives it as a value rather than registering anything of its own.
+const telemetry = clientTelemetryForThisApplication();
 
 const container = document.getElementById('root');
 
@@ -52,12 +58,14 @@ async function open(root: HTMLElement): Promise<void> {
                     <WorkspaceProvider>
                         <LinkOpenerContext value={openLink}>
                             <AttachmentDeliveryContext value={deliverAttachment}>
-                                <App
-                                    credentials={credentials}
-                                    deployment={deployment}
-                                    send={sendToDeployment}
-                                    signedInWith={signedInWith}
-                                />
+                                <TelemetryContext value={telemetry}>
+                                    <App
+                                        credentials={credentials}
+                                        deployment={deployment}
+                                        send={sendToDeployment}
+                                        signedInWith={signedInWith}
+                                    />
+                                </TelemetryContext>
                             </AttachmentDeliveryContext>
                         </LinkOpenerContext>
                     </WorkspaceProvider>

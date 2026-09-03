@@ -12,6 +12,7 @@ import {
     type MailSynchronizationState,
 } from './mailAccounts';
 import { headersFor, routeFor, type ClientSession } from './session';
+import { spanned } from './telemetry';
 import { send, type MailFathomTransport } from './transport';
 
 // The owner's mailboxes and the folders in them, which the service answers in one exchange because they are one tree
@@ -88,27 +89,29 @@ const roles: readonly MailFolderRole[] = [
 ];
 
 /** Reads the signed-in owner's mailboxes and folders, answering an expected failure as a value rather than by throwing. */
-export async function readMailFolders(
+export function readMailFolders(
     session: ClientSession,
     transport: MailFathomTransport,
 ): Promise<ClientResult<MailFolderDirectory>> {
-    const response = await send(transport, {
-        method: 'GET',
-        path: routeFor(session, mailFoldersRoute),
-        headers: headersFor(session),
+    return spanned(`GET ${mailFoldersRoute}`, async () => {
+        const response = await send(transport, {
+            method: 'GET',
+            path: routeFor(session, mailFoldersRoute),
+            headers: headersFor(session),
+        });
+
+        if (response === null) {
+            return failed('unavailable', null);
+        }
+
+        if (response.status !== 200) {
+            return failed(failureReasonForStatus(response.status), response.status);
+        }
+
+        const directory = parseDirectory(response.body);
+
+        return directory === null ? failed('unreadable', response.status) : read(directory);
     });
-
-    if (response === null) {
-        return failed('unavailable', null);
-    }
-
-    if (response.status !== 200) {
-        return failed(failureReasonForStatus(response.status), response.status);
-    }
-
-    const directory = parseDirectory(response.body);
-
-    return directory === null ? failed('unreadable', response.status) : read(directory);
 }
 
 function parseDirectory(body: string): MailFolderDirectory | null {
