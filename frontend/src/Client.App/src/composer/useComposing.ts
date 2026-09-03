@@ -29,7 +29,7 @@ export interface Composing {
     /** Opens the composer on a message of its own or on an answer to one. */
     readonly compose: (opening: ComposerOpening) => void;
 
-    /** Closes it, which the composer itself does once there is nothing left to lose. */
+    /** Closes it and hands the keyboard back to whatever asked for it, which is what the composer closes through. */
     readonly close: () => void;
 }
 

@@ -71,7 +71,9 @@ export const uploadAttachment: AttachmentUpload = async (request, file, abandone
 // this client is already signed in to and has already read mail from, so the bound is a ceiling on a known answer
 // rather than a defence against an unknown one.
 async function readBoundedAnswer(response: Response, longest: number): Promise<string> {
-    const body = await response.text();
+    // Measured in bytes, because that is what the bound counts: a decoded string's length is UTF-16 code units, so
+    // reading it that way would let an answer past the ceiling through whenever it carried multi-byte characters.
+    const octets = await response.arrayBuffer();
 
-    return body.length > longest ? '' : body;
+    return octets.byteLength > longest ? '' : new TextDecoder().decode(octets);
 }

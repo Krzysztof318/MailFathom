@@ -129,13 +129,14 @@ function drawComposer(
     answers: Answers = {},
     accounts: readonly MailAccount[] = [work],
     online = true,
+    upload: AttachmentUpload = uploadsOneFile,
 ): { closed: ReturnType<typeof vi.fn>; asked: ClientRequest[]; upload: AttachmentUpload } {
     const closed = vi.fn();
     const { transport, asked } = deployment(answers);
 
     render(
         <LocalizationProvider>
-            <AttachmentUploadContext value={uploadsOneFile}>
+            <AttachmentUploadContext value={upload}>
                 <Composer
                     session={session}
                     transport={transport}
@@ -148,7 +149,18 @@ function drawComposer(
         </LocalizationProvider>,
     );
 
-    return { closed, asked, upload: uploadsOneFile };
+    return { closed, asked, upload };
+}
+
+// The composer itself. Under jsdom the window reads narrow, where the composer stands over the whole screen and is
+// therefore a dialog rather than a region — so this names it by the label it carries in either shape.
+function composerFrame(): HTMLElement {
+    return screen.getByRole('dialog', { name: /^(New message|Reply|Reply to everyone|Forward)$/u });
+}
+
+/** The send confirmation, named rather than taken by role alone: the composer around it is a dialog too. */
+function sendQuestion(): HTMLElement {
+    return screen.getByRole('dialog', { name: 'Send this message?' });
 }
 
 function write(label: string, text: string): void {
@@ -165,7 +177,7 @@ function address(text: string): void {
 function confirmSend(): void {
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
-    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^Send( anyway)?$/u }));
+    fireEvent.click(within(sendQuestion()).getByRole('button', { name: /^Send( anyway)?$/u }));
 }
 
 afterEach(() => {
@@ -176,7 +188,7 @@ describe('Composer, a message of its own', () => {
     it('opens empty, named for what is being written', () => {
         drawComposer();
 
-        expect(screen.getByRole('region', { name: 'New message' })).toBeDefined();
+        expect(composerFrame()).toBeDefined();
         expect(screen.getByLabelText('Message')).toHaveProperty('value', '');
     });
 
@@ -236,7 +248,7 @@ describe('Composer, a message of its own', () => {
         address('ada@example.invalid');
         fireEvent.keyDown(screen.getByLabelText('Message'), { key: 'Enter', ctrlKey: true });
 
-        expect(screen.getByRole('dialog').textContent).toContain('Send this message?');
+        expect(sendQuestion().textContent).toContain('Send this message?');
         expect(asked).toHaveLength(0);
     });
 
@@ -358,6 +370,14 @@ describe('Composer, a message of its own', () => {
         expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(true);
     });
 
+    it('refuses the shortcut wherever it refuses the control, so neither asks what the other would not', () => {
+        drawComposer({ kind: 'new' }, {}, [work], false);
+
+        fireEvent.keyDown(screen.getByLabelText('Message'), { key: 'Enter', ctrlKey: true });
+
+        expect(screen.queryByRole('dialog', { name: 'Send this message?' })).toBeNull();
+    });
+
     it('stages a file against the draft and draws what it is called and how large', async () => {
         drawComposer();
 
@@ -378,6 +398,97 @@ describe('Composer, a message of its own', () => {
 
         expect(staged.textContent).toContain('invoice.pdf');
         expect(within(staged).getByRole('button', { name: 'Remove invoice.pdf' })).toBeDefined();
+    });
+
+    it('stages several chosen files against one draft rather than filing a draft for each', async () => {
+        // Where the octets went, which is the whole question: the draft one file is staged against is written by
+        // whichever save answers first, so uploads started together would each carry a draft of their own and every
+        // file but the last would hang off one nothing ever sends.
+        const stagedAgainst: string[] = [];
+
+        const uploadsEachFile: AttachmentUpload = (request) => {
+            stagedAgainst.push(request.path);
+
+            return Promise.resolve({
+                status: 200,
+                body: JSON.stringify({
+                    attachmentId: `a${String(stagedAgainst.length)}`,
+                    fileName: `file-${String(stagedAgainst.length)}.pdf`,
+                    mediaType: 'application/pdf',
+                    sizeOctets: 2_048,
+                }),
+                headers: {},
+            });
+        };
+
+        const { asked } = drawComposer({ kind: 'new' }, {}, [work], true, uploadsEachFile);
+
+        const picker = document.querySelector<HTMLInputElement>('input[type=file]');
+
+        if (picker === null) {
+            throw new Error('The composer drew no file picker to attach with.');
+        }
+
+        await act(() => {
+            fireEvent.change(picker, {
+                target: { files: [new File(['0'], 'one.pdf'), new File(['1'], 'two.pdf')] },
+            });
+
+            return Promise.resolve();
+        });
+
+        await waitFor(() => {
+            expect(stagedAgainst).toHaveLength(2);
+        });
+
+        expect(asked.filter((request) => request.method === 'POST' && request.path.endsWith('/drafts'))).toHaveLength(
+            1,
+        );
+        expect(new Set(stagedAgainst.map((path) => path.split('/attachments')[0])).size).toBe(1);
+    });
+
+    it('asks before giving up a message whose only work so far is an attached file', async () => {
+        drawComposer();
+
+        const picker = document.querySelector<HTMLInputElement>('input[type=file]');
+
+        if (picker === null) {
+            throw new Error('The composer drew no file picker to attach with.');
+        }
+
+        await act(() => {
+            fireEvent.change(picker, { target: { files: [new File(['0'], 'invoice.pdf')] } });
+
+            return Promise.resolve();
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Close the message' }));
+
+        expect(screen.getByRole('dialog', { name: 'Discard this message?' })).toBeDefined();
+    });
+
+    it('holds the keyboard inside itself while it stands over the whole screen', () => {
+        drawComposer();
+
+        const reachable = [...composerFrame().querySelectorAll<HTMLElement>('button, input, textarea, select')].filter(
+            (control) => control.tabIndex !== -1 && control.closest('dialog:not([open])') === null,
+        );
+
+        const first = reachable[0];
+        const last = reachable[reachable.length - 1];
+
+        if (first === undefined || last === undefined) {
+            throw new Error('The composer drew nothing a keyboard can reach.');
+        }
+
+        last.focus();
+        fireEvent.keyDown(last, { key: 'Tab' });
+
+        expect(document.activeElement).toBe(first);
+
+        fireEvent.keyDown(first, { key: 'Tab', shiftKey: true });
+
+        expect(document.activeElement).toBe(last);
     });
 
     it('takes a staged file off the draft at the deployment as well as off the screen', async () => {
@@ -440,7 +551,11 @@ describe('Composer, a message of its own', () => {
 
         write('Message', 'Keep this.');
         fireEvent.click(screen.getByRole('button', { name: 'Close the message' }));
-        fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Save draft' }));
+        fireEvent.click(
+            within(screen.getByRole('dialog', { name: 'Discard this message?' })).getByRole('button', {
+                name: 'Save draft',
+            }),
+        );
 
         expect(await screen.findByText(/did not answer/u)).toBeDefined();
         expect(closed).not.toHaveBeenCalled();

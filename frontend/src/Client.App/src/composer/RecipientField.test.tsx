@@ -45,6 +45,15 @@ describe('RecipientField', () => {
         expect(changed).toHaveBeenCalledWith(['ada@example.invalid']);
     });
 
+    it('empties the field for a comma with nothing before it, as it does for an address', () => {
+        const { changed } = drawField();
+
+        fireEvent.change(field(), { target: { value: ',' } });
+
+        expect((field() as HTMLInputElement).value).toBe('');
+        expect(changed).not.toHaveBeenCalled();
+    });
+
     it('writes in what was left in the field when the field is left', () => {
         const { changed } = drawField(['bo@example.invalid']);
 

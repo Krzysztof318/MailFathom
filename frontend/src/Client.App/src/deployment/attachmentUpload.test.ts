@@ -48,4 +48,15 @@ describe('uploadAttachment', () => {
 
         expect(await uploadAttachment(staging, file, new AbortController().signal)).toMatchObject({ body: '' });
     });
+
+    it('counts the answer in the octets the bound is stated in rather than in the characters they decode to', async () => {
+        // Thirty-three characters, two octets each: under the bound read as a string and over it read as what the
+        // bound actually counts.
+        const past = 'ą'.repeat(33);
+
+        vi.stubGlobal('fetch', () => Promise.resolve(new Response(past, { status: 200 })));
+
+        expect(past.length).toBeLessThan(staging.longestAnswer ?? 0);
+        expect(await uploadAttachment(staging, file, new AbortController().signal)).toMatchObject({ body: '' });
+    });
 });

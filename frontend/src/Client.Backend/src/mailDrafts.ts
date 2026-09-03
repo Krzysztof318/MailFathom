@@ -186,7 +186,7 @@ export function reviseMailDraft(
     composition: MailDraftComposition,
 ): Promise<ClientResult<MailDraft>> {
     // A template rather than the composed route: an identifier in a span name is one name per draft.
-    return reportedDraft('PUT /drafts/{draftId}', async () =>
+    return spanned('PUT /drafts/{draftId}', async () =>
         draftIn(
             await send(transport, {
                 method: 'PUT',
@@ -210,7 +210,7 @@ export function discardMailDraft(
     transport: MailFathomTransport,
     draftId: string,
 ): Promise<ClientResult<void>> {
-    return reportedNothing('DELETE /drafts/{draftId}', async () =>
+    return spanned('DELETE /drafts/{draftId}', async () =>
         acknowledged(
             await send(transport, {
                 method: 'DELETE',
@@ -229,7 +229,7 @@ export function unstageMailDraftAttachment(
     draftId: string,
     attachmentId: string,
 ): Promise<ClientResult<void>> {
-    return reportedNothing('DELETE /drafts/{draftId}/attachments/{attachmentId}', async () =>
+    return spanned('DELETE /drafts/{draftId}/attachments/{attachmentId}', async () =>
         acknowledged(
             await send(transport, {
                 method: 'DELETE',
@@ -316,14 +316,6 @@ export function stageMailDraftAttachment(
     return spanned('POST /drafts/{draftId}/attachments', async () =>
         stagedIn(await deliver(mailDraftAttachmentUploadRequest(session, draftId, fileName, mediaType))),
     );
-}
-
-function reportedDraft(request: string, ask: () => Promise<ClientResult<MailDraft>>): Promise<ClientResult<MailDraft>> {
-    return reported(request, ask, (result) => (result.outcome === 'failed' ? result.failure.reason : null));
-}
-
-function reportedNothing(request: string, ask: () => Promise<ClientResult<void>>): Promise<ClientResult<void>> {
-    return reported(request, ask, (result) => (result.outcome === 'failed' ? result.failure.reason : null));
 }
 
 // What a save states on the wire. The composition already carries whichever of the two shapes it is, so this only
@@ -417,8 +409,9 @@ function bodyIn(response: ClientResponse): Readonly<Record<string, unknown>> | n
 }
 
 function parseDraft(body: Readonly<Record<string, unknown>> | null): MailDraft | null {
-    // A save answers with the record alone and a send answers with the record nested under `draft`, so the record is
-    // taken from wherever this answer put it rather than from two parsers that would disagree about one shape.
+    // A save answers with the record itself, and the surface is documented as free to wrap it under `draft`, so the
+    // record is taken from wherever this answer put it rather than from two parsers that would disagree about one
+    // shape.
     const record = body === null ? null : (asRecord(body['draft']) ?? body);
 
     if (record === null) {

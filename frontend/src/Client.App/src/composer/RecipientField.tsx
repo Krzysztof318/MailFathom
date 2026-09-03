@@ -49,6 +49,7 @@ export function RecipientField({
 
         if (address === '') {
             setRefused(null);
+            setWritten('');
 
             return;
         }

@@ -5,7 +5,7 @@
 import { useEffect } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ComposingContext } from '../composer/useComposing';
+import { ComposingContext, type Composing } from '../composer/useComposing';
 import { LocalizationProvider } from '../localization/Localization';
 import { WorkspaceProvider } from '../workspace/Workspace';
 import { useWorkspace, type Workspace } from '../workspace/useWorkspace';
@@ -92,14 +92,19 @@ const nothingBeingWritten = {
     close: () => undefined,
 };
 
-function renderSpace(wide: boolean, opening: Partial<Workspace> = {}, person: string | null = 'reader'): void {
+function renderSpace(
+    wide: boolean,
+    opening: Partial<Workspace> = {},
+    person: string | null = 'reader',
+    composing: Composing = nothingBeingWritten,
+): void {
     atWidth(wide);
     withModalDialogs();
 
     render(
         <LocalizationProvider>
             <WorkspaceProvider>
-                <ComposingContext value={nothingBeingWritten}>
+                <ComposingContext value={composing}>
                     <Opening change={opening} />
                     <MailSpace
                         folders={
@@ -120,6 +125,11 @@ function renderSpace(wide: boolean, opening: Partial<Workspace> = {}, person: st
         </LocalizationProvider>,
     );
 }
+
+// The two things the space does differently once writing a message is on offer: the corner control becomes one that
+// works, and the reading column comes forward for what is being written exactly as it does for what is being read.
+const writingIsOffered = { ...nothingBeingWritten, offered: true };
+const somethingBeingWritten = { ...writingIsOffered, opening: { kind: 'new' } as const };
 
 afterEach(() => {
     if (declaredMatchMedia === undefined) {
@@ -309,6 +319,23 @@ describe('MailSpace, narrow', () => {
         expect(screen.queryByRole('toolbar')).toBeNull();
         expect(screen.getByRole('button', { name: 'Folders and filters' })).toBeDefined();
         expect(screen.getByRole('button', { name: 'New message — not built yet' })).toBeDefined();
+    });
+
+    it('draws a corner control that works where writing a message is on offer', () => {
+        renderSpace(false, {}, 'reader', writingIsOffered);
+
+        expect(screen.getByRole('button', { name: 'New message' })).toBeDefined();
+        expect(screen.queryByRole('button', { name: 'New message — not built yet' })).toBeNull();
+    });
+
+    it('brings the reading column in front of the list for a message being written, as it does for one being read', () => {
+        renderSpace(false, {}, 'reader', somethingBeingWritten);
+
+        expect(screen.getByText(handedToMail)).toBeDefined();
+        expect(screen.queryByText(handedTheList)).toBeNull();
+
+        // The corner control belongs to the list, so it goes with it rather than standing over what is being written.
+        expect(screen.queryByRole('button', { name: 'New message' })).toBeNull();
     });
 
     it('opens the mailboxes in a drawer that closes from its own control', () => {

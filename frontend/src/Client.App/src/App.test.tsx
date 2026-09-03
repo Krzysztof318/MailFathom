@@ -974,6 +974,26 @@ describe('App session', () => {
         expect(screen.queryByText(/The accounts could not be read/)).toBeNull();
     });
 
+    it('hands the keyboard back to what asked for a message once the message is closed', async () => {
+        renderApp(
+            servedFrom,
+            heldCredential,
+            granting('mailfathom.mail.read', 'mailfathom.mail.drafts.write', 'mailfathom.mail.send'),
+        );
+        await framed();
+
+        const asks = screen.getByRole('button', { name: 'New message' });
+
+        asks.focus();
+        fireEvent.click(asks);
+
+        await screen.findByLabelText('Message');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Close the message' }));
+
+        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'New message' }));
+    });
+
     it('answers an address naming a space this credential may not open with one it may', async () => {
         openingAt('#/discover');
 

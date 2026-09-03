@@ -57,9 +57,6 @@ export interface DraftAtDeployment {
     /** Stages one file against the draft, saving it first where nothing has been saved yet. */
     readonly attach: (composition: Composition, file: File) => Promise<void>;
 
-    /** Abandons an upload in flight, which leaves nothing staged. */
-    readonly stopAttaching: () => void;
-
     /** Takes one staged file back off. */
     readonly unstage: (attachmentId: string) => Promise<void>;
 
@@ -168,11 +165,6 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
 
                 return { kind: 'held' };
             });
-        },
-
-        stopAttaching: () => {
-            uploading.current?.abort();
-            uploading.current = null;
         },
 
         unstage: async (attachmentId) => {

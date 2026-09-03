@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import {
     readMailMessage,
     type ClientFailureReason,
@@ -72,6 +72,11 @@ const withdrawalSaid = {
     pastRecall: 'compose.pastRecall',
     noSuchSend: 'compose.noSuchSend',
 } as const satisfies Readonly<Record<string, MessageKey>>;
+
+// Everything a keyboard may land on, as the platform decides it rather than as a list of the composer's own
+// controls: a control added later is caught by this without anybody remembering to name it here.
+const reachableControls =
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]';
 
 const titles: Readonly<Record<'new' | MailDraftAnswer, MessageKey>> = {
     new: 'compose.titleNew',
@@ -164,10 +169,55 @@ export function Composer({
         setComposition((held) => (held === null ? null : { ...held, ...change }));
     }
 
+    // Tab kept inside the composer while it stands over the whole screen. The two confirmations are `<dialog>`
+    // elements and hold the keyboard themselves once open, so what is inside a closed one is skipped rather than
+    // counted — a closed dialog draws nothing and is not somewhere a keyboard may land.
+    function holdTheKeyboard(event: KeyboardEvent<HTMLElement>): void {
+        if (wide || event.key !== 'Tab' || frame.current === null) {
+            return;
+        }
+
+        const reachable = [...frame.current.querySelectorAll<HTMLElement>(reachableControls)].filter(
+            (control) => control.tabIndex !== -1 && control.closest('dialog:not([open])') === null,
+        );
+
+        const first = reachable.at(0);
+        const last = reachable.at(-1);
+
+        if (first === undefined || last === undefined) {
+            return;
+        }
+
+        if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    }
+
+    // One file at a time. The draft this stages against is written by whichever save answers first, so two uploads
+    // started together would each file a draft of their own and every file but the last would be staged against one
+    // nothing sends.
+    async function attachInTurn(chosen: readonly File[]): Promise<void> {
+        if (composition === null) {
+            return;
+        }
+
+        for (const file of chosen) {
+            await draft.attach(composition, file);
+        }
+    }
+
     function close(): void {
         forgetComposition();
         onClosed();
     }
+
+    // Whether a send may start at all, read by the button and by the keyboard shortcut alike: two ways to ask are
+    // one act, and a second press while the first is in flight would queue the same message twice.
+    const sendable = online && draft.standing.kind !== 'sending';
 
     const title = translate(titles[opening.kind === 'new' ? 'new' : opening.answers]);
 
@@ -175,6 +225,12 @@ export function Composer({
         <section
             ref={frame}
             aria-label={title}
+            // Narrow, this covers the whole viewport, which makes it a dialog whatever it is composed out of: the
+            // spaces beside it stay mounted underneath, so without this a keyboard would tab straight off the screen
+            // into controls nobody can see. Wide it is a column beside the others and neither is true.
+            role={wide ? undefined : 'dialog'}
+            aria-modal={wide ? undefined : true}
+            onKeyDown={holdTheKeyboard}
             className={`flex flex-col bg-panel text-text ${
                 wide ? 'h-full min-h-0' : 'fixed inset-0 z-50 pt-safe-top pb-safe-bottom'
             }`}
@@ -184,7 +240,7 @@ export function Composer({
 
                 <div className="ms-auto flex items-center">
                     <DiscardConfirmation
-                        written={composition !== null && anythingWritten(composition)}
+                        written={composition !== null && (anythingWritten(composition) || draft.staged.length > 0)}
                         onDiscard={() => {
                             void draft.discard();
                             close();
@@ -314,7 +370,7 @@ export function Composer({
                         onKeyDown={(event) => {
                             // The design's own shortcut, and it opens the confirmation rather than sending: what a
                             // keyboard saves is reaching for the control, never the reading of who the message is for.
-                            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && sendable) {
                                 event.preventDefault();
                                 asked.current?.showModal();
                             }
@@ -335,7 +391,7 @@ export function Composer({
                         <SendConfirmation
                             asked={asked}
                             composition={composition}
-                            disabled={!online || draft.standing.kind === 'sending'}
+                            disabled={!sendable}
                             onSend={() => {
                                 void draft.send(composition);
                             }}
@@ -362,11 +418,10 @@ export function Composer({
                             aria-hidden="true"
                             className="hidden"
                             onChange={(event) => {
-                                for (const file of event.target.files ?? []) {
-                                    void draft.attach(composition, file);
-                                }
+                                const chosen = [...(event.target.files ?? [])];
 
                                 event.target.value = '';
+                                void attachInTurn(chosen);
                             }}
                         />
 

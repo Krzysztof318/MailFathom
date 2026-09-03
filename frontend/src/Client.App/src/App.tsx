@@ -91,6 +91,7 @@ export function App({
     const baseAddress = adopted === null ? null : adopted.deployment.baseAddress;
     const workspaceRegion = useRef<HTMLDivElement>(null);
     const [written, setWritten] = useState<ComposerOpening | null>(null);
+    const askedFrom = useRef<HTMLElement | null>(null);
     const focusedFor = useRef(authorization);
 
     // Built once per address and credential rather than per render, because it is what the message read below depends
@@ -176,10 +177,17 @@ export function App({
             offered: writesMail,
             opening: written,
             compose: (asked: ComposerOpening) => {
+                // What asked for it, so that closing hands the keyboard back to it. The three controls that ask are in
+                // three different components, and remembering the one that had focus is one place rather than a ref
+                // threaded through each of them.
+                askedFrom.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
                 setWritten(writesMail ? asked : null);
             },
             close: () => {
                 setWritten(null);
+                askedFrom.current?.focus();
+                askedFrom.current = null;
             },
         }),
         [writesMail, written],
@@ -466,9 +474,7 @@ export function App({
                                             accounts={mailAccounts}
                                             opening={written}
                                             online={connection.online}
-                                            onClosed={() => {
-                                                setWritten(null);
-                                            }}
+                                            onClosed={composing.close}
                                         />
                                     )
                                 }
