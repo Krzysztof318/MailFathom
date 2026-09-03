@@ -50,12 +50,14 @@ export interface Operation {
     readonly body?: string;
 
     /**
-     * What stopping this operation would cost, in the words the person gets before they answer.
+     * What stopping this operation would leave behind, in the words the person gets before they answer.
      *
      * Required rather than defaulted: what is lost by stopping halfway is the operation's own to say, and a generic
-     * sentence in its place is the confirmation that teaches somebody to click through the next one.
+     * sentence in its place is the confirmation that teaches somebody to click through the next one. It carries the
+     * name `blocking/useBlocking.ts` gives the same sentence, because an operation that blocks the client and one
+     * that reports from the corner are two surfaces for one act rather than two ideas.
      */
-    readonly stopExplanation: string;
+    readonly stoppingLeavesBehind: string;
 
     /** Stops the operation. Called once, and only after somebody confirmed they meant to. */
     readonly stop: () => void;

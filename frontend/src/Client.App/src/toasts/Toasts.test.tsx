@@ -106,7 +106,7 @@ function swipe(swiped: HTMLElement, across: number, down: number, pointerType = 
 const packing: Operation = {
     title: 'Packing attachments',
     body: '14 files',
-    stopExplanation: 'The archive is half written, and stopping now throws it away.',
+    stoppingLeavesBehind: 'The archive is half written, and stopping now throws it away.',
     stop: () => undefined,
 };
 
@@ -329,6 +329,26 @@ describe('ToastsProvider', () => {
         pass(toastLeaving);
 
         expect(stopped).toHaveBeenCalledTimes(1);
+    });
+
+    it('closes the question itself where the operation settles while it stands', () => {
+        drawSurface();
+
+        const stopped = vi.fn();
+
+        const settle = raiseOperation({ ...packing, stop: stopped });
+
+        fireEvent.click(closeControl('Stop the operation'));
+
+        expect(screen.queryByRole('dialog')).not.toBeNull();
+
+        // Finishing is not an answer to the question, and the question is no longer worth answering — so it goes
+        // through the dialog's own close rather than being taken off the screen with focus inside it.
+        settle({ kind: 'success', title: 'Archive ready' });
+
+        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(stopped).not.toHaveBeenCalled();
+        expect(standing()[0]).toContain('Success Archive ready');
     });
 
     it('becomes the outcome in place, and behaves like any other toast from there', () => {

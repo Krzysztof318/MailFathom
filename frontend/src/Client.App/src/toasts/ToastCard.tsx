@@ -2,13 +2,13 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useId, useRef, type PointerEvent } from 'react';
+import { useEffect, useId, useRef, useState, type PointerEvent } from 'react';
 import { Icon } from '../controls/Icon';
 import type { IconName } from '../controls/icons';
 import { swipeSoFar } from '../controls/swipeDismissal';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
-import { toastLifetime, type StandingToast, type ToastAction, type ToastKind } from './useToasts';
+import { toastLeaving, toastLifetime, type StandingToast, type ToastAction, type ToastKind } from './useToasts';
 
 // One toast as it stands on the screen: what happened, what it was about, at most one thing to do about it, and the
 // close control that is on every card in every composition. The bar along the bottom edge is the lifetime running out,
@@ -81,6 +81,11 @@ export function ToastCard({
     // the screen is drawn from it and a moving finger would otherwise render the card for every pixel of its travel.
     const swiping = useRef<{ pointer: number; from: number; top: number } | null>(null);
 
+    // The sentence the question is asking, held here rather than read from the toast while the dialog is open. The
+    // operation goes on running while somebody decides, so it may settle mid-question and take `stands` with it — and
+    // a dialog whose words came from what has just changed would be unmounted under the reader with focus inside it.
+    const [asking, setAsking] = useState<string | null>(null);
+
     // Bound once rather than read inside the handler: the handler runs after this render, and a property read there
     // is no longer the one the markup decided to draw a control for.
     const action = toast.action;
@@ -88,9 +93,26 @@ export function ToastCard({
     const mark = running ? toastMarks.running : toastMarks[toast.stands.kind];
     const closing = running ? translate('toast.stopOperation') : translate('toast.close');
 
-    function close(): void {
-        if (running) {
+    // Two imperative calls on a dialog, which is the whole of what these effects are for. Opening it is `showModal`
+    // rather than an attribute, for the top layer, the inertness, the focus trap, and the backdrop; closing it is the
+    // dialog's own path, which returns focus to whatever opened it. The second is what an operation settling while the
+    // question stands has to go through — the answer is no longer worth anything, and unmounting the element instead
+    // would drop the focus that `showModal` trapped inside it.
+    useEffect(() => {
+        if (asking !== null) {
             asked.current?.showModal();
+        }
+    }, [asking]);
+
+    useEffect(() => {
+        if (!running) {
+            asked.current?.close();
+        }
+    }, [running]);
+
+    function close(): void {
+        if ('operation' in toast.stands) {
+            setAsking(toast.stands.operation.stoppingLeavesBehind);
         } else {
             onDismiss();
         }
@@ -153,13 +175,16 @@ export function ToastCard({
             className={`pointer-events-auto relative flex touch-none items-start gap-3 overflow-hidden rounded-3xl border border-line bg-panel ps-3.25 pe-3 pt-3.25 pb-3.75 opacity-80 shadow-overlay transition hover:opacity-100 ${
                 toast.leaving ? 'animate-toast-leaving' : 'animate-toast-arriving'
             }`}
+            // How long leaving takes is how long the surface waits before the card is gone, which is one number in
+            // `useToasts.ts` and is handed to the animation here rather than written into the stylesheet a second time.
+            style={toast.leaving ? { animationDuration: `${String(toastLeaving)}ms` } : undefined}
             onPointerDown={beginSwipe}
             onPointerMove={followSwipe}
             onPointerUp={endSwipe}
             onPointerCancel={endSwipe}
         >
             <span className={`flex size-8.5 shrink-0 items-center justify-center rounded-xl ${mark.tint}`}>
-                <Icon name={mark.icon} className={`size-5.25 ${running ? 'animate-toast-running' : ''}`} />
+                <Icon name={mark.icon} className={`size-5.25 ${running ? 'animate-spin' : ''}`} />
             </span>
 
             <div className="flex min-w-0 flex-1 flex-col gap-1 pt-0.5">
@@ -207,15 +232,19 @@ export function ToastCard({
                 />
             )}
 
-            {!running ? null : (
+            {asking === null ? null : (
                 <dialog
                     ref={asked}
                     aria-labelledby={question}
                     className="m-auto w-96 max-w-full rounded-3xl border border-line bg-panel p-5 text-text shadow-dialog backdrop:bg-scrim"
                     onClose={() => {
+                        // Every way out of the dialog arrives here — both controls, the escape key, and the operation
+                        // settling underneath it — and only one of them carries the word that stops anything.
                         if (asked.current?.returnValue === wordsStop) {
                             onStop();
                         }
+
+                        setAsking(null);
                     }}
                 >
                     <div className="flex flex-col gap-3.5">
@@ -223,7 +252,7 @@ export function ToastCard({
                             {translate('toast.stopQuestion')}
                         </h2>
 
-                        <p className="text-base text-muted text-pretty">{toast.stands.operation.stopExplanation}</p>
+                        <p className="text-base text-muted text-pretty">{asking}</p>
 
                         <div className="flex flex-wrap justify-end gap-2">
                             <button
