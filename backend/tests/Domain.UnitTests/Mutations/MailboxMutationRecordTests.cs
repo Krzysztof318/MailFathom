@@ -825,6 +825,90 @@ public sealed class MailboxMutationRecordTests
         Assert.False(accountsForKeywords);
     }
 
+    /// <summary>Only a record nothing has been asked of a server for is one a person may still change their mind about.</summary>
+    [Theory]
+    [InlineData(MailboxMutationStage.Recorded, true)]
+    [InlineData(MailboxMutationStage.PlacementIssued, false)]
+    [InlineData(MailboxMutationStage.PlacementConfirmed, false)]
+    [InlineData(MailboxMutationStage.SourceFlaggedDeleted, false)]
+    [InlineData(MailboxMutationStage.Completed, false)]
+    [InlineData(MailboxMutationStage.Abandoned, false)]
+    [InlineData(MailboxMutationStage.Cancelled, false)]
+    public void IsWithdrawable_AStage_AnswersWhetherNothingHasGoneOutYet(MailboxMutationStage stage, bool expected)
+    {
+        // Arrange
+        var record = CompletedRelocation() with { Stage = stage };
+
+        // Assert
+        Assert.Equal(expected, record.IsWithdrawable);
+    }
+
+    /// <summary>
+    /// A withdrawn record is the second stage nothing was ever issued for, which is what every provenance question
+    /// rests on: a record that stopped before a command went out explains no flag, no keyword, and no disappearance.
+    /// </summary>
+    [Theory]
+    [InlineData(MailboxMutationStage.Recorded, false)]
+    [InlineData(MailboxMutationStage.Cancelled, false)]
+    [InlineData(MailboxMutationStage.PlacementIssued, true)]
+    [InlineData(MailboxMutationStage.PlacementConfirmed, true)]
+    [InlineData(MailboxMutationStage.SourceFlaggedDeleted, true)]
+    [InlineData(MailboxMutationStage.Completed, true)]
+    [InlineData(MailboxMutationStage.Abandoned, true)]
+    public void MayHaveReachedTheServer_AStage_AnswersWhetherACommandCouldHaveGoneOut(
+        MailboxMutationStage stage,
+        bool expected)
+    {
+        // Arrange
+        var record = CompletedRelocation() with { Stage = stage };
+
+        // Assert
+        Assert.Equal(expected, record.MayHaveReachedTheServer);
+    }
+
+    /// <summary>A withdrawn record carries no work, so a pass that treated it as outstanding would be carrying a change nobody wants.</summary>
+    [Fact]
+    public void IsTerminal_AWithdrawnRecord_IsFinished()
+    {
+        // Arrange
+        var record = CompletedRelocation() with { Stage = MailboxMutationStage.Cancelled };
+
+        // Assert
+        Assert.True(record.IsTerminal);
+        Assert.Equal(MailboxMutationLifecycle.Cancelled, record.Lifecycle);
+    }
+
+    /// <summary>A message that disappeared while a withdrawn move sat unissued disappeared for some other reason.</summary>
+    [Fact]
+    public void AccountsForRemovalOf_AWithdrawnRelocation_MatchesNothing()
+    {
+        // Arrange
+        var record = CompletedRelocation() with { Stage = MailboxMutationStage.Cancelled };
+
+        // Act
+        var accountsForRemoval = record.AccountsForRemovalOf(SourceOccurrence());
+
+        // Assert
+        Assert.False(accountsForRemoval);
+    }
+
+    /// <summary>A flag standing where a withdrawn store never went out was put there by somebody else.</summary>
+    [Fact]
+    public void AccountsForSeenStateOf_AWithdrawnStore_MatchesNothing()
+    {
+        // Arrange
+        var record = CompletedSeenStateChange(isSeen: true) with { Stage = MailboxMutationStage.Cancelled };
+
+        // Act
+        var accountsForSeenState = record.AccountsForSeenStateOf(
+            SourceOccurrence(),
+            observedSeenState: true,
+            ObservedBeforeTheStore);
+
+        // Assert
+        Assert.False(accountsForSeenState);
+    }
+
     private static MailboxMutationRecord CompletedSeenStateChange(bool isSeen) => CompletedRelocation() with
     {
         Request = MailboxMutationRequest.SetSeen(LocalEmail, SyntheticMailOwner.Deployment, SourceOccurrence(), Requester, isSeen),

@@ -118,10 +118,11 @@ internal sealed partial class MailboxMutationReconciliationStore(
         var probed = perValue + 1;
 
         // Reached through the prefix of the identity index — folder, UIDVALIDITY, UID — which is why this question needs
-        // no index of its own, exactly as reading a disappearance back does not. The stage is excluded here rather than
-        // left to the caller because a record written down and not yet issued explains no reading, and it carries the
-        // newest stage change in the table: against an occurrence a caller has just triaged, those rows would otherwise
-        // fill the budget and drop the completed record that does explain what the server reported.
+        // no index of its own, exactly as reading a disappearance back does not. The two stages no command went out
+        // under are excluded here rather than left to the caller because neither explains a reading, and both carry the
+        // newest stage change in the table: against an occurrence a caller has just triaged or just withdrawn a change
+        // on, those rows would otherwise fill the budget and drop the completed record that does explain what the
+        // server reported.
         var storedValues = await readContext.MailboxMutations
             .AsNoTracking()
             .Where(mutation => mutation.OwnerId == ownerValue
@@ -132,6 +133,7 @@ internal sealed partial class MailboxMutationReconciliationStore(
                 && changedUids.Contains(mutation.Uid)
                 && FlagWritingMutationNames.Contains(mutation.Mutation)
                 && mutation.Stage != MailboxMutationStage.Recorded
+                && mutation.Stage != MailboxMutationStage.Cancelled
                 && mutation.StageChangedAt > issuedAfter)
             .GroupBy(mutation => new { mutation.Uid, mutation.Mutation })
             .Select(storedValue => new

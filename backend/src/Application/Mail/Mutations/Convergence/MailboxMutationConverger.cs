@@ -266,9 +266,12 @@ public sealed class MailboxMutationConverger
                     this.DeadLetteredCount++;
                     break;
 
-                // A record that reached the performer at an unacknowledged placement was read before this pass settled
-                // it, which a concurrent writer can produce. It is left exactly where the performer left it.
+                // Both are records a concurrent writer moved after this pass read them, and both are left exactly where
+                // the performer left them. A withdrawn one is counted here rather than given a total of its own because
+                // the counts say what this pass did, and what it did with it was nothing; the outstanding figures
+                // beside them are read afresh and never count a withdrawn record at all.
                 case MailboxMutationStatus.OutcomeUnknown:
+                case MailboxMutationStatus.Withdrawn:
                 default:
                     this.DeferredCount++;
                     break;

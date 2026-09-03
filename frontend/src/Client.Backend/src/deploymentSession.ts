@@ -17,13 +17,14 @@ const productName = 'MailFathom';
  *
  * It is the mail half of the published set and the whole of it, because that is the half this surface draws on: an
  * administrative name is refused on this endpoint rather than reported as a grant nobody could use. The client acts on
- * two of them today and names all eight anyway — this is the contract the deployment publishes rather than a list of
+ * two of them today and names all nine anyway — this is the contract the deployment publishes rather than a list of
  * what one screen happens to read, so a screen arriving later finds the name already here.
  */
 export const mailPermissions = [
     'mailfathom.mail.read',
     'mailfathom.mail.ask',
     'mailfathom.mail.flags.write',
+    'mailfathom.mail.move',
     'mailfathom.mail.drafts.write',
     'mailfathom.mail.send',
     'mailfathom.mail.accounts.write',

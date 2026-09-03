@@ -94,6 +94,25 @@ public readonly record struct MailFathomPermission
     /// </remarks>
     public static MailFathomPermission MailFlagsWrite { get; } = new("mailfathom.mail.flags.write", ProtectedSurface.Mail);
 
+    /// <summary>Gets the permission covering moving mail this deployment holds from one of its folders into another.</summary>
+    /// <remarks>
+    /// <para>
+    /// It is apart from <see cref="MailFlagsWrite" /> because the two risk different things. A flag is one bit of a
+    /// message that stays where it was, and the worst a wrong one does is misdescribe mail the owner can still find;
+    /// a move displaces the message, and on a server without <c>MOVE</c> the sequence is a copy and a delete, so a
+    /// failure between them is the one mailbox change that can lose mail rather than misstate it. A deployment that
+    /// lets a caller mark and label mail has not thereby let it file that mail somewhere the owner does not look.
+    /// </para>
+    /// <para>
+    /// It is not a grant over folders. Creating, renaming, and deleting a folder are refused outright by
+    /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md">ADR 0007</see>,
+    /// so what this name reaches is one message changing folders and nothing about the shape of the mailbox. The
+    /// destination is one the caller may already read, which is why it widens nothing: a folder withheld from the
+    /// caller is no more a destination than it is a source.
+    /// </para>
+    /// </remarks>
+    public static MailFathomPermission MailMove { get; } = new("mailfathom.mail.move", ProtectedSurface.Mail);
+
     /// <summary>Gets the permission covering writing, editing, and giving up a draft this deployment holds.</summary>
     /// <remarks>
     /// <para>
@@ -206,6 +225,7 @@ public readonly record struct MailFathomPermission
         MailContactsRead,
         MailContactsWrite,
         MailFlagsWrite,
+        MailMove,
         MailDraftsWrite,
         MailSend,
         MailAccountsWrite,

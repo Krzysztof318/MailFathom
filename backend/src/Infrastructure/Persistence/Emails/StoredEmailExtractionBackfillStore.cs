@@ -363,7 +363,8 @@ internal sealed class StoredEmailExtractionBackfillStore(
                     && !candidate.Mutations.Any(mutation =>
                         mutation.Mutation == MailAwaitingRelocation.RelocateMutationName
                         && mutation.Stage != MailboxMutationStage.Completed
-                        && mutation.Stage != MailboxMutationStage.Abandoned)));
+                        && mutation.Stage != MailboxMutationStage.Abandoned
+                        && mutation.Stage != MailboxMutationStage.Cancelled)));
 
         return await (terms.IsApplied ? DerivedWorkAdmittedEmails.Admitting(email, terms) : email)
             .AnyAsync(cancellationToken);

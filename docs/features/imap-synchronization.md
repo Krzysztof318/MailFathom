@@ -646,8 +646,9 @@ recorded while the server was unreachable, and a command whose acknowledgement w
 durable record in a non-final state, and the first run after the interruption reads it and carries it the rest of the
 way. The mailbox ends in the state that was asked for however the process behaved in between.
 
-A change has exactly two acceptable endings, and *pending forever* is deliberately not one of them, because that is the
-one state that looks like success from every screen an operator reads.
+A change has exactly three acceptable endings — it completes, it is given up on, or the person who asked for it takes it
+back — and *pending forever* is deliberately not one of them, because that is the one state that looks like success from
+every screen an operator reads.
 
 | Where a change is left | What the next run does |
 | --- | --- |
@@ -656,6 +657,13 @@ one state that looks like success from every screen an operator reads.
 | A delete whose `\Deleted` flag landed | Reissues the expunge alone |
 | A placement whose answer never arrived | Never reissues it — see below |
 | Given up on | Nothing; it stays counted and readable |
+| Withdrawn | Nothing; a run never sees it again |
+
+A withdrawal is the third ending, and it is the person who asked for the change taking it back rather than anything
+here deciding: a record still at *recorded* is moved to *cancelled*, and no run ever reads it. It is reachable from that
+one stage alone, so nothing withdraws a command already issued. [The client
+endpoint](../operations/client-endpoint.md#the-mutation-routes) is where a person does it, which is what makes a change
+against an unreachable account something they can change their mind about rather than something they wait out.
 
 An unacknowledged placement is the one case that cannot simply be resumed, and how it ends depends on which sequence
 issued it. A relocation the server carried with `MOVE` removes the source as part of the same command, so once

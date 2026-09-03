@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientOwnerRecordEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Observability/ClientTelemetry/** -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientOwnerRecordEndpoint.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Observability/ClientTelemetry/** -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -68,6 +68,11 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `GET /api/client/messages/{storedEmailId}` | `mailfathom.mail.read` |
 | `GET /api/client/messages/{storedEmailId}/body` | `mailfathom.mail.read` |
 | `GET /api/client/messages/{storedEmailId}/attachments/{position}` | `mailfathom.mail.read` |
+| `GET /api/client/mutations` | `mailfathom.mail.read` |
+| `POST /api/client/mutations/flags` | `mailfathom.mail.flags.write` |
+| `POST /api/client/mutations/flags/withdrawals` | `mailfathom.mail.flags.write` |
+| `POST /api/client/mutations/moves` | `mailfathom.mail.move` |
+| `POST /api/client/mutations/moves/withdrawals` | `mailfathom.mail.move` |
 | `GET /api/client/record` | `mailfathom.mail.read` |
 | `POST /api/client/record` | `mailfathom.mail.accounts.write` |
 | `POST /api/client/record/mail-accounts` | `mailfathom.mail.accounts.write` |
@@ -951,6 +956,149 @@ is answered `403`, as everywhere else on this surface.
 
 **It is served from the local copy.** Nothing here contacts a mail server, so downloading a file cannot fetch a message
 and cannot set the remote `\Seen` flag.
+
+### The mutation routes
+
+These five are how a person changes the mailbox itself: marking mail read or unread, starring it, relabelling it, and
+filing it into another folder — and asking where each of those changes has got to, or taking one back.
+
+| Route | What it does |
+| --- | --- |
+| `POST /api/client/mutations/flags` | Writes down one batch of flag and tag changes, one result per message |
+| `POST /api/client/mutations/moves` | Writes down one batch of folder moves, one result per message |
+| `GET /api/client/mutations?record=…&record=…` | Reports where each of the caller's own changes stands |
+| `POST /api/client/mutations/flags/withdrawals` | Takes back flag and tag changes nothing has been asked of a server for |
+| `POST /api/client/mutations/moves/withdrawals` | Takes back moves nothing has been asked of a server for |
+
+**Nothing here reaches a mail server, and that is the design rather than a limitation.** A submission writes a durable
+record and answers; the account's own reconciliation pass is what issues the IMAP command, which is
+[ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)'s
+write session and the same path a rule, a spam verdict, and an MCP tool go down. So a screen never waits on somebody
+else's mail server to redraw, a change asked for while the account is unreachable is kept rather than lost, and a
+process that dies between a copy and a delete leaves a record saying what was half done.
+
+**A submission is a batch, and the answer is per message.** At most 200 messages per request — and at most 100 records
+per read, because a read names them in the request line. The route enforces that hundred itself, answering a longer one
+with an ordinary `400`; it is set well under the request line Kestrel will actually accept, so a longer path or a proxy
+that rewrites the prefix never turns a documented read into a raw `414` nobody can act on. A refusal about one of the messages is that message's own result rather than the request's — so a batch composed from a list that has moved on since
+the screen drew it reports exactly which entries did not apply and writes the rest down. `requestId` is the caller's own
+identity for the request: repeating a request under the same one is the same request and produces the same records
+rather than a second set, and omitting it has one generated, which makes every submission distinct.
+
+```http
+POST /api/client/mutations/flags
+Content-Type: application/json
+
+{
+  "requestId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90",
+  "changes": [
+    {
+      "storedEmailId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90",
+      "flags": { "seen": true, "flagged": null },
+      "tags": { "change": "add", "keywords": ["$Todo"] }
+    }
+  ]
+}
+```
+
+```json
+{
+  "results": [
+    {
+      "storedEmailId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90",
+      "outcome": "recorded",
+      "detail": null,
+      "changes": [
+        { "mutation": "set-seen", "recordId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a91", "state": "pending" },
+        { "mutation": "add-keywords", "recordId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a92", "state": "pending" }
+      ]
+    }
+  ]
+}
+```
+
+**A record per value rather than per message**, because a record is the unit convergence resumes, abandons, and
+attributes an observation back to. A message whose `\Seen` change completes while its keywords are still converging
+reports exactly that.
+
+**`flags` and `tags` are two different things and the response keeps them apart.** `flags` are the IMAP system flags
+`\Seen` and `\Flagged`; `tags` are IMAP keywords, which is what a mail server calls a label. Both reach the mailbox —
+MailFathom holds no tag of its own, so there is no local label that could leak to a server by being confused with a
+keyword, and equally none to keep private. A tag change names both halves together, `change` being one of `add`,
+`remove`, or `replace` and `keywords` the list it applies to: a list without a direction and a direction without a list
+are each half a change, and guessing which was meant would make clearing every tag unreachable and an accidental empty
+list destructive.
+
+**Nothing on this surface sets `\Seen` implicitly.** Reading a message does not mark it read anywhere — not the message
+route, not the body route, not the attachment route. Marking a message read is a flag change submitted here and nothing
+else; [ADR 0026](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0026-marking-a-message-read-when-a-person-opens-it-in-the-client.md)
+is what decides when the client submits one on a person's behalf.
+
+**A move names the folder by its alias**, exactly as the folders route publishes it, rather than by its place on the
+server: an alias keeps its meaning when the server renames or recreates the folder behind it.
+
+```http
+POST /api/client/mutations/moves
+Content-Type: application/json
+
+{ "moves": [{ "storedEmailId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90", "destinationFolder": "ARCHIVE" }] }
+```
+
+Each result carries one of `recorded`, `message-not-found`, `destination-not-found`, `already-in-destination`, or
+`account-no-longer-configured`, and a flag change may also answer `change-not-usable` when the values asked for are not
+values one request can name. A folder withheld from this caller is reported as a destination that is not there, on the
+same rule that makes mail in a withheld folder a message that is not there: filing mail into a folder the caller cannot
+read would move it out of sight rather than be a capability of its own.
+
+**Moving mail is its own grant.** `mailfathom.mail.flags.write` does not reach it and `mailfathom.mail.move` does. A
+flag misdescribes mail the owner can still find; a move puts the mail somewhere else, and on a server without `MOVE` it
+is a copy followed by a delete — which is why the two are granted separately and why the record exists at all.
+
+**A move either completes or leaves the message where it was, and a half-finished one is reported rather than
+guessed at.** The read route's `outcomeUnknown` is that report: a placement command went out and its answer never came
+back, so the message may be in the destination, in the source, or in both, and MailFathom will not decide which. The
+account's next pass re-establishes it; until then the field is the one thing on this response a person acts on rather
+than waits through.
+
+```http
+GET /api/client/mutations?record=0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a91
+```
+
+```json
+{
+  "changes": [
+    {
+      "recordId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a91",
+      "storedEmailId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90",
+      "mutation": "relocate",
+      "state": "converging",
+      "outcomeUnknown": false,
+      "attemptCount": 2,
+      "lastFailure": 22001,
+      "recordedAt": "2026-08-12T09:00:00+00:00",
+      "stateChangedAt": "2026-08-12T09:04:00+00:00"
+    }
+  ]
+}
+```
+
+**`state` is `pending`, `converging`, `completed`, `dead-lettered`, or `cancelled`**, and `attemptCount` with
+`lastFailure` are what say a change against an unreachable account is being retried rather than forgotten. The retries
+are bounded and backed off by the account's own pass; a change that exhausts them is `dead-lettered`, which is a person's
+to look at rather than something the deployment keeps trying forever.
+
+**A change that has not reached the server is withdrawable, and one that has is not.** A withdrawal moves a record to
+`cancelled`, and the account's pass never sees it. A record past the point a command went out is reported where it
+stands instead of being refused, which is also what makes the call safe to repeat: a `STORE` already issued cannot be
+recalled, and a placement whose answer never came back has to be re-established rather than declared void. The grant
+that authored a change is the grant that withdraws it, which is why there are two withdrawal routes rather than one.
+
+**A record belonging to somebody else is absent from every answer here rather than refused**, and so is one recorded in
+a folder this caller may no longer read — the same answer a read of that folder's mail gives. Nothing on this surface
+says whether an identity somebody else holds exists.
+
+**No mutation record carries mail content.** A record names the message, the change, the folder, and where it stands; no
+subject, no correspondent, no body, and no keyword reaches a log line or a telemetry dimension from it.
 
 ### The record routes
 

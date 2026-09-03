@@ -1001,6 +1001,15 @@ public static class ServiceCollectionExtensions
         // so a protocol request resolves nothing over the network before it has been decided whether it may write.
         services.AddScoped<IAuthoredMailboxTargetReader, AuthoredMailboxTargetReader>();
         services.AddScoped<MailFlagChangeRecorder>();
+
+        // The relocation half of what a caller may author, beside the flag half and registered the same way: it writes
+        // a record and holds nothing that could reach a mail server, so the account's own pass carries the move.
+        services.AddScoped<MailRelocationRecorder>();
+
+        // What a caller does with a record after it has one — read where it got to, and withdraw it while nothing has
+        // been asked of the server. Both are about records already opened, which is why neither depends on an author.
+        services.AddScoped<MailboxChangeProgressReader>();
+        services.AddScoped<MailboxChangeWithdrawer>();
     }
 
     /// <summary>Registers the outbox, the drafts beside it, the bounds a send is judged against, and every use case that authors one.</summary>

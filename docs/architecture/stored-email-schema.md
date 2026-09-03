@@ -513,6 +513,14 @@ from:
 | `SourceFlaggedDeleted` | The source carries `\Deleted` and only the expunge remains | relocate over the fallback, delete |
 | `Completed` | The change is made, and asking again performs nothing | every mutation |
 | `Abandoned` | Nothing will attempt it again, and `LastFailureCode` says what ended it | every mutation |
+| `Cancelled` | The person who asked for it took it back before anything reached the server | every mutation |
+
+`Cancelled` is reachable from `Recorded` and from nowhere else, which is what makes it a withdrawal rather than an
+abandonment: a `STORE` already issued cannot be recalled, and a placement whose answer never came back has to be
+re-established rather than declared void, so a record past `Recorded` is reported where it stands instead of being
+withdrawn. It is terminal like `Completed` and `Abandoned`, and unlike `Abandoned` it says nothing failed — which is why
+it is a stage of its own rather than a reuse of the one that means *stuck, and a person should look*. The stage is
+stored by name, so it needed no migration.
 
 `PlacementIssued` is the one stage a retry may not act on. A `COPY` issued twice is a second message rather than a
 repeat of the first, so a mutation found there is reported as an unknown outcome, has
@@ -541,10 +549,12 @@ retried, and it would be worth nothing if it also stopped the change being seen.
 without spending the bound: a refusal the server has already given once and will give again, and an unacknowledged
 placement that outlasts `MailSynchronization:UnknownMutationOutcomeGrace` without the mailbox settling it.
 
-Every row that is not `Completed` is read once per account run, oldest first and bounded by
+Every row that is neither `Completed` nor `Cancelled` is read once per account run, oldest first and bounded by
 `MailSynchronization:MaxMutationsPerConvergencePass`, and each is carried further or given up on. The same rows are
 counted by stage in one grouped query per run, which is what the outstanding-mutation gauges report; the partial index
 below is what makes both cheap, because it holds what is outstanding rather than the mailbox's whole mutation history.
+A withdrawn row is still in that index — the index filter names `Completed` alone, so admitting `Cancelled` to it would
+be a migration for rows nothing waits on — and every query over it excludes the stage instead.
 
 `PlacementObservedAt` and `SourceRemovalObservedAt` are what synchronization has since seen come back, and they are
 separate facts from `Stage` because they answer a different question and are written by a different run. The stage says

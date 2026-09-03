@@ -123,7 +123,31 @@ public sealed record MailboxMutationRecord
     public required DateTimeOffset? SourceRemovalObservedAt { get; init; }
 
     /// <summary>Gets whether the record has reached a stage nothing moves it out of.</summary>
-    public bool IsTerminal => this.Stage is MailboxMutationStage.Completed or MailboxMutationStage.Abandoned;
+    public bool IsTerminal => this.Stage
+        is MailboxMutationStage.Completed
+        or MailboxMutationStage.Abandoned
+        or MailboxMutationStage.Cancelled;
+
+    /// <summary>Gets whether the change is still one a person may withdraw.</summary>
+    /// <remarks>
+    /// Withdrawal is offered for exactly as long as nothing has been asked of the mail server, because after that a
+    /// record is a statement about a mailbox somebody else now holds: an issued <c>STORE</c> cannot be recalled, and a
+    /// placement whose answer never came back is the one outcome that must be re-established rather than declared void.
+    /// Undoing a change that already reached the server is asking for the opposite change, which is an ordinary
+    /// mutation of its own.
+    /// </remarks>
+    public bool IsWithdrawable => this.Stage is MailboxMutationStage.Recorded;
+
+    /// <summary>Gets whether a command for this mutation may have reached the mail server.</summary>
+    /// <remarks>
+    /// It is what every provenance question rests on, because a mailbox standing as this record asked is MailFathom's
+    /// own doing only where MailFathom asked for it. The two stages it excludes are the two where nothing was ever
+    /// issued — a change written down and not yet attempted, and one withdrawn before it was — and a mailbox that
+    /// matches either is a mailbox somebody else changed.
+    /// </remarks>
+    public bool MayHaveReachedTheServer => this.Stage
+        is not MailboxMutationStage.Recorded
+        and not MailboxMutationStage.Cancelled;
 
     /// <summary>Gets where in its lifecycle the mutation stands, in the reading somebody watching a deployment asks for.</summary>
     public MailboxMutationLifecycle Lifecycle => MailboxMutationLifecycle.Of(this.Stage);
@@ -220,8 +244,8 @@ public sealed record MailboxMutationRecord
     /// by its own store, while the owner clearing that flag afterwards reaches evaluation as the change it is.
     /// </para>
     /// <para>
-    /// A record still at <see cref="MailboxMutationStage.Recorded" /> matches nothing, because no <c>STORE</c> has
-    /// reached the server for it and the flag standing where it would have put it is somebody else's doing.
+    /// A record no <c>STORE</c> has gone out for matches nothing, whether it is waiting to be attempted or was
+    /// withdrawn before it was, because the flag standing where it would have put it is somebody else's doing.
     /// </para>
     /// <para>
     /// <paramref name="previouslyObservedAt" /> is what scopes the answer to the one change this record describes, and
@@ -238,7 +262,7 @@ public sealed record MailboxMutationRecord
         bool observedSeenState,
         DateTimeOffset previouslyObservedAt) =>
         this.Request.Mutation == MailboxMutation.SetSeen
-        && this.Stage != MailboxMutationStage.Recorded
+        && this.MayHaveReachedTheServer
         && previouslyObservedAt < this.StageChangedAt
         && this.Request.Occurrence == occurrence
         && this.Request.DesiredSeenState == observedSeenState;
@@ -254,7 +278,7 @@ public sealed record MailboxMutationRecord
         bool observedFlaggedState,
         DateTimeOffset previouslyObservedAt) =>
         this.Request.Mutation == MailboxMutation.SetFlagged
-        && this.Stage != MailboxMutationStage.Recorded
+        && this.MayHaveReachedTheServer
         && previouslyObservedAt < this.StageChangedAt
         && this.Request.Occurrence == occurrence
         && this.Request.DesiredFlaggedState == observedFlaggedState;
@@ -290,7 +314,7 @@ public sealed record MailboxMutationRecord
         ArgumentNullException.ThrowIfNull(previouslyObservedKeywords);
         ArgumentNullException.ThrowIfNull(observedKeywords);
 
-        if (this.Stage == MailboxMutationStage.Recorded
+        if (!this.MayHaveReachedTheServer
             || previouslyObservedAt >= this.StageChangedAt
             || this.Request.Occurrence != occurrence
             || this.Request.Keywords is not { } authored)
@@ -351,9 +375,9 @@ public sealed record MailboxMutationRecord
     /// a folder renumbered under a new UIDVALIDITY matches nothing.
     /// </para>
     /// <para>
-    /// A record still at <see cref="MailboxMutationStage.Recorded" /> matches nothing, because nothing has reached the
-    /// server for it and a disappearance is therefore somebody else's act. Every later stage matches, including
-    /// <see cref="MailboxMutationStage.Abandoned" />, and that direction is deliberate: an abandoned relocation may
+    /// A record no command has gone out for matches nothing — one waiting to be attempted and one withdrawn before it
+    /// was — because a disappearance is then somebody else's act. Every stage a command was issued under matches,
+    /// including <see cref="MailboxMutationStage.Abandoned" />, and that direction is deliberate: an abandoned relocation may
     /// have placed the email in the destination folder before it ran out of attempts, and treating the vanished source
     /// as a remote deletion would erase the local copy of mail that still exists. Attributing one manual deletion to
     /// MailFathom keeps mail nobody asked to keep; the other way round loses mail.
@@ -365,7 +389,7 @@ public sealed record MailboxMutationRecord
     /// </remarks>
     public bool AccountsForRemovalOf(EmailOccurrenceId sourceOccurrence) =>
         this.ExpectsSourceRemovalObservation
-        && this.Stage != MailboxMutationStage.Recorded
+        && this.MayHaveReachedTheServer
         && this.Request.Occurrence == sourceOccurrence;
 
     /// <summary>Builds the keyword set one mutation would have left on a message that carried the earlier one.</summary>

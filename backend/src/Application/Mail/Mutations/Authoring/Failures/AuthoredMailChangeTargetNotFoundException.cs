@@ -6,7 +6,7 @@ using MailFathom.Domain.Failures;
 
 namespace MailFathom.Application.Mail.Mutations.Authoring.Failures;
 
-/// <summary>The failure raised when a change names an email this deployment holds no readable row for.</summary>
+/// <summary>The failure raised when an authored change names an email this deployment holds no readable row for.</summary>
 /// <remarks>
 /// <para>
 /// It answers four cases with one sentence: no row carries that identity, the row belongs to an account this
@@ -26,10 +26,10 @@ namespace MailFathom.Application.Mail.Mutations.Authoring.Failures;
 /// on its way back into a client-readable result and a log line beside it, and the answer does not depend on it.
 /// </para>
 /// </remarks>
-public sealed class MailFlagChangeTargetNotFoundException : MailFathomException
+public sealed class AuthoredMailChangeTargetNotFoundException : MailFathomException
 {
     /// <summary>Refuses a change against an email this deployment does not serve to tools.</summary>
-    public MailFlagChangeTargetNotFoundException()
+    public AuthoredMailChangeTargetNotFoundException()
         : base("The named email is not one this deployment serves, so no change can be written down against it.")
     {
     }

@@ -1070,7 +1070,7 @@ touch only what they name.
 | `recordedChanges[]` | One entry per value asked for, in the order `seen`, `flagged`, keywords |
 | `recordedChanges[].change` | `set-seen`, `set-flagged`, `add-keywords`, `remove-keywords`, or `set-keywords` |
 | `recordedChanges[].changeRecordId` | The durable record's identifier, which is the name a log line and an audit entry give the same change |
-| `recordedChanges[].state` | `pending`, `converging`, `completed`, or `dead-lettered` |
+| `recordedChanges[].state` | `pending`, `converging`, `completed`, `dead-lettered`, or `cancelled` |
 
 The change and the state are published under the names MailFathom's own log lines and counters use, so a caller quoting
 one to an operator is quoting the word they will find. Nothing derived from the message appears, and the keywords the

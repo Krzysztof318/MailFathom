@@ -59,4 +59,14 @@ public enum MailboxMutationStage
     /// <summary>The mutation will not be attempted again, and the failure that ended it is on the record.</summary>
     /// <remarks>A refused mutation and one that spent its bounded attempts both end here, which is what keeps a failing change visible instead of pending forever.</remarks>
     Abandoned = 5,
+
+    /// <summary>The change was withdrawn before any command went out, and nothing will attempt it.</summary>
+    /// <remarks>
+    /// Only a record at <see cref="Recorded" /> reaches here, which is what makes withdrawal a statement about the
+    /// mailbox rather than about the record alone: nothing had been asked of the server, so nothing has to be undone.
+    /// It is a stage of its own rather than <see cref="Abandoned" /> because the two say opposite things to whoever is
+    /// watching — an abandoned change is stuck and waiting for a person, and a withdrawn one is finished and wanted by
+    /// nobody.
+    /// </remarks>
+    Cancelled = 6,
 }

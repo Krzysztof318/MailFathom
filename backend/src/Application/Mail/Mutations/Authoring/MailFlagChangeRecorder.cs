@@ -82,7 +82,7 @@ public sealed class MailFlagChangeRecorder
     /// <returns>The record opened for each value, in the order the change states them.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="change" /> or <paramref name="requester" /> is <see langword="null" />.</exception>
     /// <exception cref="PrincipalNotAuthorizedException">Thrown when the caller does not hold the writing grant.</exception>
-    /// <exception cref="MailFlagChangeTargetNotFoundException">Thrown when this deployment serves no readable email under that identity, or when the email it serves names a remote occurrence the mail server no longer holds.</exception>
+    /// <exception cref="AuthoredMailChangeTargetNotFoundException">Thrown when this deployment serves no readable email under that identity, or when the email it serves names a remote occurrence the mail server no longer holds.</exception>
     /// <exception cref="MailFlagChangeInvalidException">Thrown when the requester identity already names one of these mutations on this occurrence with a different value.</exception>
     /// <remarks>
     /// A change asked for twice under one requester identity is one change: the record store admits one record per
@@ -107,7 +107,7 @@ public sealed class MailFlagChangeRecorder
         if (target is null
             || !this.scopeResolver.IsReadableByTools(target.Occurrence.AccountId, target.Folder.Alias))
         {
-            throw new MailFlagChangeTargetNotFoundException();
+            throw new AuthoredMailChangeTargetNotFoundException();
         }
 
         var requests = change.Mutations()

@@ -113,7 +113,7 @@ public sealed class MailFlagChangeRecorderTests
         var change = AuthoredMailFlagChange.Create(LocalEmail, seen: true, null, null, null);
 
         // Act
-        var refusal = await Assert.ThrowsAsync<MailFlagChangeTargetNotFoundException>(() =>
+        var refusal = await Assert.ThrowsAsync<AuthoredMailChangeTargetNotFoundException>(() =>
             recorder.RecordAsync(change, Requester, TestContext.Current.CancellationToken));
 
         // Assert
@@ -131,7 +131,7 @@ public sealed class MailFlagChangeRecorderTests
         var change = AuthoredMailFlagChange.Create(LocalEmail, seen: true, null, null, null);
 
         // Act
-        var refusal = await Assert.ThrowsAsync<MailFlagChangeTargetNotFoundException>(() =>
+        var refusal = await Assert.ThrowsAsync<AuthoredMailChangeTargetNotFoundException>(() =>
             recorder.RecordAsync(change, Requester, TestContext.Current.CancellationToken));
 
         // Assert
@@ -155,7 +155,7 @@ public sealed class MailFlagChangeRecorderTests
         var change = AuthoredMailFlagChange.Create(LocalEmail, seen: true, null, null, null);
 
         // Act
-        var refusal = await Assert.ThrowsAsync<MailFlagChangeTargetNotFoundException>(() =>
+        var refusal = await Assert.ThrowsAsync<AuthoredMailChangeTargetNotFoundException>(() =>
             recorder.RecordAsync(change, Requester, TestContext.Current.CancellationToken));
 
         // Assert

@@ -551,6 +551,213 @@
         ],
         "type": "object"
       },
+      "ClientMailChangeStateResponse": {
+        "properties": {
+          "attemptCount": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "lastFailure": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "mutation": {
+            "type": "string"
+          },
+          "outcomeUnknown": {
+            "type": "boolean"
+          },
+          "recordId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "recordedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "stateChangedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "storedEmailId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "recordId",
+          "storedEmailId",
+          "mutation",
+          "state",
+          "outcomeUnknown",
+          "attemptCount",
+          "lastFailure",
+          "recordedAt",
+          "stateChangedAt"
+        ],
+        "type": "object"
+      },
+      "ClientMailChangeWithdrawalRequest": {
+        "properties": {
+          "recordIds": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "recordIds"
+        ],
+        "type": "object"
+      },
+      "ClientMailChangesResponse": {
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/ClientMailChangeStateResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "changes"
+        ],
+        "type": "object"
+      },
+      "ClientMailFlagChangeRequest": {
+        "properties": {
+          "flags": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ClientMailFlagStateRequest"
+              }
+            ]
+          },
+          "storedEmailId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "tags": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ClientMailTagChangeRequest"
+              }
+            ]
+          }
+        },
+        "required": [
+          "storedEmailId",
+          "flags",
+          "tags"
+        ],
+        "type": "object"
+      },
+      "ClientMailFlagChangeResultResponse": {
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/ClientMailRecordedChangeResponse"
+            },
+            "type": "array"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "storedEmailId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "storedEmailId",
+          "outcome",
+          "detail",
+          "changes"
+        ],
+        "type": "object"
+      },
+      "ClientMailFlagChangesRequest": {
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/ClientMailFlagChangeRequest"
+            },
+            "type": "array"
+          },
+          "requestId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "requestId",
+          "changes"
+        ],
+        "type": "object"
+      },
+      "ClientMailFlagChangesResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ClientMailFlagChangeResultResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "type": "object"
+      },
+      "ClientMailFlagStateRequest": {
+        "properties": {
+          "flagged": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "seen": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          }
+        },
+        "required": [
+          "seen",
+          "flagged"
+        ],
+        "type": "object"
+      },
       "ClientMailFolderAccountResponse": {
         "properties": {
           "account": {
@@ -802,6 +1009,91 @@
         ],
         "type": "object"
       },
+      "ClientMailMoveRequest": {
+        "properties": {
+          "destinationFolder": {
+            "type": "string"
+          },
+          "storedEmailId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "storedEmailId",
+          "destinationFolder"
+        ],
+        "type": "object"
+      },
+      "ClientMailMoveResultResponse": {
+        "properties": {
+          "change": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ClientMailRecordedChangeResponse"
+              }
+            ]
+          },
+          "destinationFolder": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "storedEmailId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "storedEmailId",
+          "outcome",
+          "destinationFolder",
+          "change"
+        ],
+        "type": "object"
+      },
+      "ClientMailMovesRequest": {
+        "properties": {
+          "moves": {
+            "items": {
+              "$ref": "#/components/schemas/ClientMailMoveRequest"
+            },
+            "type": "array"
+          },
+          "requestId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "requestId",
+          "moves"
+        ],
+        "type": "object"
+      },
+      "ClientMailMovesResponse": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ClientMailMoveResultResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "type": "object"
+      },
       "ClientMailParticipantResponse": {
         "properties": {
           "address": {
@@ -821,6 +1113,26 @@
           "role",
           "address",
           "displayName"
+        ],
+        "type": "object"
+      },
+      "ClientMailRecordedChangeResponse": {
+        "properties": {
+          "mutation": {
+            "type": "string"
+          },
+          "recordId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "mutation",
+          "recordId",
+          "state"
         ],
         "type": "object"
       },
@@ -1009,6 +1321,30 @@
           "authorAuthentication",
           "deploymentTrust",
           "authenticatedDomain"
+        ],
+        "type": "object"
+      },
+      "ClientMailTagChangeRequest": {
+        "properties": {
+          "change": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "null",
+              "array"
+            ]
+          }
+        },
+        "required": [
+          "change",
+          "keywords"
         ],
         "type": "object"
       },
@@ -8625,6 +8961,204 @@
           },
           "404": {
             "description": "Not Found"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/mutations": {
+      "get": {
+        "parameters": [
+          {
+            "in": "query",
+            "name": "record",
+            "required": true,
+            "schema": {
+              "items": {
+                "format": "uuid",
+                "type": "string"
+              },
+              "type": "array"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientMailChangesResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/mutations/flags": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ClientMailFlagChangesRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientMailFlagChangesResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/mutations/flags/withdrawals": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ClientMailChangeWithdrawalRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientMailChangesResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/mutations/moves": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ClientMailMovesRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientMailMovesResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/mutations/moves/withdrawals": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ClientMailChangeWithdrawalRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientMailChangesResponse"
+                }
+              }
+            },
+            "description": "OK"
           }
         },
         "security": [
