@@ -170,6 +170,21 @@ export const en = {
     'mail.listWidthHint':
         'Drag to change the list width. Double-click, or press Home, to return it to where it started.',
 
+    'tabs.strip': 'Open tabs',
+    'tabs.close': 'Close {title}',
+    'tabs.closeAll': 'Close everything that is open',
+    'tabs.closeAllQuestion': 'Close every tab?',
+    'tabs.closeAllOpen.one': 'Open tab: {count}.',
+    'tabs.closeAllOpen.few': 'Open tabs: {count}.',
+    'tabs.closeAllOpen.many': 'Open tabs: {count}.',
+    'tabs.closeAllOpen.other': 'Open tabs: {count}.',
+    'tabs.closeAllDraft': 'An unsent draft will be discarded.',
+    'tabs.closeAllConfirm': 'Close them all',
+    'tabs.closeAllCancel': 'Cancel',
+    'tabs.nothingOpen': 'Nothing is open',
+    'tabs.nothingOpenExplanation': 'Pick a message from the list and it opens as a tab of its own.',
+    'tabs.reopenLastRead': 'Open the last message read',
+
     'folder.inbox': 'Inbox',
     'folder.drafts': 'Drafts',
     'folder.sent': 'Sent',

@@ -69,6 +69,7 @@ export function SearchResults({
     online,
     narrowed,
     onWiden,
+    onOpen,
 }: {
     readonly session: ClientSession;
     readonly transport: MailFathomTransport;
@@ -82,9 +83,12 @@ export function SearchResults({
     readonly narrowed: boolean;
 
     readonly onWiden: () => void;
+
+    /** Opens a result, which the list asks for rather than performs — the reason `MessageList` gives. */
+    readonly onOpen: (storedEmailId: string, subject: string | null) => void;
 }) {
     const { translate } = useLocalization();
-    const { workspace, revise } = useWorkspace();
+    const { workspace } = useWorkspace();
 
     const [found, setFound] = useState<FoundMail | null>(null);
     const [failure, setFailure] = useState<ClientFailure | null>(null);
@@ -226,7 +230,7 @@ export function SearchResults({
 
         if (result !== undefined) {
             setFocusedRow(row);
-            revise({ selection: result.id });
+            onOpen(result.id, result.subject);
         }
     }
 

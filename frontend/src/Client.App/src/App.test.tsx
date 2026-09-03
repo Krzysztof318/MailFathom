@@ -229,6 +229,37 @@ function flagsRecorded(stated: string): Answer {
     };
 }
 
+/**
+ * The same deployment, answering for somebody whose preferences say they open mail in tabs.
+ *
+ * It is the deployment's answer rather than a value handed to the frame because that is where the preference lives:
+ * the strip is on the screen when this person's own record says so and the window is wide enough for it, and both
+ * halves of that are what these tests are about.
+ */
+function deploymentWorkingInTabs(): DeploymentTransport {
+    const otherwise = deploymentDrawingAMessage();
+
+    return (signal) => (request) => {
+        if (!request.path.endsWith('/preferences')) {
+            return otherwise(signal)(request);
+        }
+
+        asked.push(request);
+
+        return Promise.resolve(
+            complete({
+                status: 200,
+                body: JSON.stringify({
+                    telemetryEnabled: false,
+                    theme: 'system',
+                    openMailInTabs: true,
+                    markReadOnOpen: true,
+                }),
+            }),
+        );
+    };
+}
+
 // The same message, threaded, beside the conversation it belongs to. It is a second double rather than an option on the
 // first because what it proves is the frame wiring three screens together: a row opens a message, the message opens its
 // conversation, and closing the conversation returns to the message the workspace still holds.
@@ -524,6 +555,42 @@ describe('App', () => {
         fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
 
         expect(await screen.findByText('A drawn message.')).toBeDefined();
+    });
+
+    it('names what a person working in tabs has opened, in a strip above the mail', async () => {
+        renderApp(servedFrom, heldCredential, deploymentWorkingInTabs());
+        await framed();
+
+        await goTo('Mail');
+
+        const list = await screen.findByRole('listbox', { name: 'Messages' });
+        fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
+
+        expect(await screen.findByRole('tab', { name: 'Quarterly invoice' })).toBeDefined();
+        expect(await screen.findByText('A drawn message.')).toBeDefined();
+    });
+
+    it('says nothing is open to a person working in tabs who has opened none', async () => {
+        renderApp(servedFrom, heldCredential, deploymentWorkingInTabs());
+        await framed();
+
+        await goTo('Mail');
+
+        expect(await screen.findByText('Nothing is open')).toBeDefined();
+        expect(screen.queryByRole('tablist')).toBeNull();
+    });
+
+    it('opens mail in the reading column, and draws no strip, for somebody who has not asked for tabs', async () => {
+        renderApp(servedFrom, heldCredential, deploymentDrawingAMessage());
+        await framed();
+
+        await goTo('Mail');
+
+        const list = await screen.findByRole('listbox', { name: 'Messages' });
+        fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
+
+        expect(await screen.findByText('A drawn message.')).toBeDefined();
+        expect(screen.queryByRole('tablist')).toBeNull();
     });
 
     it('divides the mail space where the person now signed in last left it, rather than where anybody did', async () => {

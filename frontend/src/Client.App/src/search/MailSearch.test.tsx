@@ -74,7 +74,14 @@ function searchUnder(transport: MailFathomTransport, scope: MailScope = everythi
     return (
         <LocalizationProvider>
             <WorkspaceProvider>
-                <MailSearch session={session} transport={transport} scope={scope} accounts={[work]} online={true}>
+                <MailSearch
+                    session={session}
+                    transport={transport}
+                    scope={scope}
+                    accounts={[work]}
+                    online={true}
+                    onOpen={() => undefined}
+                >
                     <p>{mailInScope}</p>
                 </MailSearch>
             </WorkspaceProvider>

@@ -90,6 +90,27 @@ function carried(): Workspace {
     return JSON.parse(probe?.textContent ?? '') as Workspace;
 }
 
+// Opening is the frame's decision rather than the list's, so the list asks and this stands in for what the frame does
+// with the ask: it writes the workspace, which is the pane composition and what every assertion below reads back.
+function ListOpeningIntoTheWorkspace(drawn: {
+    readonly session: ClientSession;
+    readonly transport: MailFathomTransport;
+    readonly scope: MailScope;
+    readonly accounts: readonly MailAccount[];
+    readonly online: boolean;
+}) {
+    const { revise } = useWorkspace();
+
+    return (
+        <MessageList
+            {...drawn}
+            onOpen={(storedEmailId) => {
+                revise({ selection: storedEmailId });
+            }}
+        />
+    );
+}
+
 function listUnder(
     transport: MailFathomTransport,
     { scope = everything, accounts = [work], online = true }: Partial<Drawn> = {},
@@ -97,7 +118,7 @@ function listUnder(
     return (
         <LocalizationProvider>
             <WorkspaceProvider>
-                <MessageList
+                <ListOpeningIntoTheWorkspace
                     session={session}
                     transport={transport}
                     scope={scope}

@@ -13,6 +13,7 @@ import { Space } from './Space';
 // Not catalogue entries: each stands for whatever the frame composes for Mail, which is the point of the three props.
 const handedToMail = 'The mail this space was handed.';
 const handedTheFolders = 'The folder tree this space was handed.';
+const handedTheTabs = 'The tab strip this space was handed.';
 const handedTheList = 'The message list this space was handed.';
 const handedTheIntent = 'The question this space was handed.';
 const handedTheStatus = 'The connection this space was handed.';
@@ -32,6 +33,7 @@ function inStrictMode(space: SpaceName): ReactNode {
                         folders={<p>{handedTheFolders}</p>}
                         list={<p>{handedTheList}</p>}
                         mail={<p>{handedToMail}</p>}
+                        tabs={<p>{handedTheTabs}</p>}
                         person="reader"
                     />
                 </WorkspaceProvider>

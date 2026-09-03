@@ -32,11 +32,16 @@ import { MailToolbar } from './MailToolbar';
 // How the wide shape divides its width between the list and the pane is the reader's, and this is where that lives: it
 // is the composition's own number rather than either column's, and only the shape that draws both columns has a
 // boundary to move.
+//
+// A person working in tabs gets one more row above all of it, and it is handed in already built for the reason every
+// region is: what is open is the frame's rather than this composition's, and what this owns is that the strip stands
+// over the whole space rather than over one column of it — and that the narrow shape draws none of it.
 
 export function MailSpace({
     folders,
     list,
     mail,
+    tabs,
     intent,
     status,
     person,
@@ -49,6 +54,14 @@ export function MailSpace({
 
     /** What is open, which is the reading column. */
     readonly mail: ReactNode;
+
+    /**
+     * The strip naming everything open, which stands across the top of the space above the toolbar.
+     *
+     * `null` where a person is not working in tabs, or has nothing open — which is every narrow window, since a row of
+     * tabs above a mailbox column and a list needs room the composition does not have there.
+     */
+    readonly tabs: ReactNode;
 
     /**
      * The question the reader is composing, which stands at the foot of the reading column — and, in the narrow shape,
@@ -150,6 +163,7 @@ export function MailSpace({
 
     return (
         <div className="flex min-h-0 flex-1 flex-col">
+            {wide ? tabs : null}
             {wide ? <MailToolbar /> : null}
 
             <div className="flex min-h-0 flex-1">

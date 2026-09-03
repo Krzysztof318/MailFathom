@@ -43,6 +43,7 @@ export function MailSearch({
     accounts,
     online,
     children,
+    onOpen,
 }: {
     readonly session: ClientSession;
     readonly transport: MailFathomTransport;
@@ -55,6 +56,9 @@ export function MailSearch({
 
     /** What stands in this column while no search is in force, which is the mail in scope. */
     readonly children: ReactNode;
+
+    /** Opens a result, handed straight to the results below — the reason `MessageList` gives. */
+    readonly onOpen: (storedEmailId: string, subject: string | null) => void;
 }) {
     const { translate } = useLocalization();
     const { workspace, revise } = useWorkspace();
@@ -163,6 +167,7 @@ export function MailSearch({
                         onWiden={() => {
                             setAsk(widened(ask));
                         }}
+                        onOpen={onOpen}
                     />
                 </>
             )}
