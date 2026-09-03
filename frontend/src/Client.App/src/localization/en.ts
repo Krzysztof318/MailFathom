@@ -170,7 +170,7 @@ export const en = {
     'mail.listWidthHint':
         'Drag to change the list width. Double-click, or press Home, to return it to where it started.',
 
-    'tabs.strip': 'What is open',
+    'tabs.strip': 'Open tabs',
     'tabs.close': 'Close {title}',
     'tabs.closeAll': 'Close everything that is open',
     'tabs.closeAllQuestion': 'Close every tab?',

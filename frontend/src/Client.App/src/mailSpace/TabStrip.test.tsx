@@ -16,8 +16,12 @@ const draft = tabFor('draft', 'draft-1', 'A message being written');
 const declaredShowModal = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'showModal');
 const declaredClose = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'close');
 
-// The confirmation is the platform's own modal dialog, which jsdom implements none of: opening it is recorded as the
-// `open` attribute the platform would set, which is what the assertions below read.
+// The confirmation is the platform's own modal dialog, which jsdom implements none of. What is stood in for here is
+// only what the assertions below read, and all of it is what the platform's own close algorithm does: the `open`
+// attribute it sets and clears, the return value an answer leaves behind, and the `close` event that carries the
+// answer back to the page. Focus restoration is the one part not modelled, because jsdom has no top layer to restore
+// from — what a test can hold is that both answers leave through `close()`, which is what the platform's own
+// restoration hangs off.
 function withModalDialogs(): void {
     Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
         configurable: true,
@@ -27,8 +31,14 @@ function withModalDialogs(): void {
     });
     Object.defineProperty(HTMLDialogElement.prototype, 'close', {
         configurable: true,
-        value(this: HTMLDialogElement) {
+        value(this: HTMLDialogElement, returnValue?: string) {
             this.removeAttribute('open');
+
+            if (returnValue !== undefined) {
+                this.returnValue = returnValue;
+            }
+
+            this.dispatchEvent(new Event('close'));
         },
     });
 }
@@ -83,7 +93,7 @@ describe('TabStrip', () => {
     it('names every open tab and reports the one being read as the selected one', () => {
         renderStrip([quarterly, invoice], invoice.key);
 
-        expect(screen.getByRole('tablist', { name: 'What is open' })).toBeDefined();
+        expect(screen.getByRole('tablist', { name: 'Open tabs' })).toBeDefined();
         expect(tab('The quarterly figures').getAttribute('aria-selected')).toBe('false');
         expect(tab('The invoice').getAttribute('aria-selected')).toBe('true');
     });

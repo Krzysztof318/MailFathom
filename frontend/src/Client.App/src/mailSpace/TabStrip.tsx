@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useRef, useState, type KeyboardEvent } from 'react';
 import { Icon } from '../controls/Icon';
 import type { IconName } from '../controls/icons';
 import { useLocalization } from '../localization/useLocalization';
@@ -44,7 +44,6 @@ export function TabStrip({
     readonly onCloseEverything: () => void;
 }) {
     const { translate } = useLocalization();
-    const [asking, setAsking] = useState(false);
     const [reached, setReached] = useState<string | null>(null);
     const [followed, setFollowed] = useState(active);
     const buttons = useRef(new Map<string, HTMLButtonElement>());
@@ -168,31 +167,11 @@ export function TabStrip({
                 })}
             </div>
 
-            <button
-                type="button"
-                aria-label={translate('tabs.closeAll')}
-                title={translate('tabs.closeAll')}
-                className="mx-1.5 my-auto flex size-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-hover hover:text-text"
-                onClick={() => {
-                    setAsking(true);
-                }}
-            >
-                <Icon name="cancel" className="size-4.5" />
-            </button>
-
-            {asking ? (
-                <CloseEverything
-                    open={tabs.length}
-                    draft={tabs.some((tab) => tab.kind === 'draft')}
-                    onCancel={() => {
-                        setAsking(false);
-                    }}
-                    onConfirm={() => {
-                        setAsking(false);
-                        onCloseEverything();
-                    }}
-                />
-            ) : null}
+            <CloseEverything
+                open={tabs.length}
+                draft={tabs.some((tab) => tab.kind === 'draft')}
+                onConfirm={onCloseEverything}
+            />
         </div>
     );
 }
@@ -201,63 +180,86 @@ export function TabStrip({
 // and the confirmation says what it costs: how many tabs go, and — where one of them is a draft nobody has sent — that
 // the words in it go with them.
 //
-// The platform's own dialog, so the page behind it is inert, focus is held inside it, and Escape leaves it, with none
-// of the three written here. The design project draws this sentence unconditionally; it is said here only where a
-// draft is actually open, because a confirmation that names a consequence that will not happen is a confirmation a
-// reader learns to stop reading.
+// The platform's own dialog, so the page behind it is inert, focus is held inside it, Escape leaves it, and leaving it
+// puts focus back on the control that opened it — four things none of which is written here. The control and the
+// question belong together for that last one: whether the dialog is open is the element's own state rather than a
+// second copy of it in React, so both answers leave through `close()` and the platform restores focus either way.
+// Which answer it was travels the way the platform carries it, in the return value.
+//
+// The design project draws the sentence about a draft unconditionally; it is said here only where a draft is actually
+// open, because a confirmation that names a consequence that will not happen is a confirmation a reader learns to stop
+// reading.
+const everythingCloses = 'close-everything';
+
 function CloseEverything({
     open,
     draft,
-    onCancel,
     onConfirm,
 }: {
     readonly open: number;
     readonly draft: boolean;
-    readonly onCancel: () => void;
     readonly onConfirm: () => void;
 }) {
     const { locale, translate } = useLocalization();
     const asked = useRef<HTMLDialogElement>(null);
 
-    useEffect(() => {
-        asked.current?.showModal();
-    }, []);
-
     return (
-        <dialog
-            ref={asked}
-            aria-labelledby="close-every-tab"
-            className="m-auto w-96 max-w-full rounded-3xl border border-line bg-panel p-5 text-text shadow-dialog backdrop:bg-scrim"
-            onClose={onCancel}
-        >
-            <div className="flex flex-col gap-3.5">
-                <h2 id="close-every-tab" className="text-xl font-semibold">
-                    {translate('tabs.closeAllQuestion')}
-                </h2>
+        <>
+            <button
+                type="button"
+                aria-label={translate('tabs.closeAll')}
+                title={translate('tabs.closeAll')}
+                className="mx-1.5 my-auto flex size-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-hover hover:text-text"
+                onClick={() => {
+                    asked.current?.showModal();
+                }}
+            >
+                <Icon name="cancel" className="size-4.5" />
+            </button>
 
-                <p className="text-base text-muted">
-                    {translate('tabs.closeAllOpen', { count: new Intl.NumberFormat(locale).format(open) })}
-                    {draft ? ` ${translate('tabs.closeAllDraft')}` : ''}
-                </p>
+            <dialog
+                ref={asked}
+                aria-labelledby="close-every-tab"
+                className="m-auto w-96 max-w-full rounded-3xl border border-line bg-panel p-5 text-text shadow-dialog backdrop:bg-scrim"
+                onClose={() => {
+                    if (asked.current?.returnValue === everythingCloses) {
+                        onConfirm();
+                    }
+                }}
+            >
+                <div className="flex flex-col gap-3.5">
+                    <h2 id="close-every-tab" className="text-xl font-semibold">
+                        {translate('tabs.closeAllQuestion')}
+                    </h2>
 
-                <div className="flex justify-end gap-2">
-                    <button
-                        type="button"
-                        className="rounded-lg border border-line bg-sunken px-3.75 py-2 text-base text-text-soft transition hover:bg-hover"
-                        onClick={onCancel}
-                    >
-                        {translate('tabs.closeAllCancel')}
-                    </button>
+                    <p className="text-base text-muted">
+                        {translate('tabs.closeAllOpen', { count: new Intl.NumberFormat(locale).format(open) })}
+                        {draft ? ` ${translate('tabs.closeAllDraft')}` : ''}
+                    </p>
 
-                    <button
-                        type="button"
-                        className="rounded-lg bg-accent px-4 py-2 text-base font-semibold text-on-accent transition hover:opacity-90"
-                        onClick={onConfirm}
-                    >
-                        {translate('tabs.closeAllConfirm')}
-                    </button>
+                    <div className="flex justify-end gap-2">
+                        <button
+                            type="button"
+                            className="rounded-lg border border-line bg-sunken px-3.75 py-2 text-base text-text-soft transition hover:bg-hover"
+                            onClick={() => {
+                                asked.current?.close();
+                            }}
+                        >
+                            {translate('tabs.closeAllCancel')}
+                        </button>
+
+                        <button
+                            type="button"
+                            className="rounded-lg bg-accent px-4 py-2 text-base font-semibold text-on-accent transition hover:opacity-90"
+                            onClick={() => {
+                                asked.current?.close(everythingCloses);
+                            }}
+                        >
+                            {translate('tabs.closeAllConfirm')}
+                        </button>
+                    </div>
                 </div>
-            </div>
-        </dialog>
+            </dialog>
+        </>
     );
 }
