@@ -7,6 +7,12 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { ClientRequest, ClientResponse, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
+import {
+    ReadMarkingContext,
+    nothingMarkedRead,
+    type MessageOpened,
+    type ReadMarking,
+} from '../readMarking/useReadMarking';
 import { LinkOpenerContext } from '../shellOperations/linkOpener';
 import { WorkspaceProvider } from '../workspace/Workspace';
 import type { OpenConversation } from '../workspace/openConversation';
@@ -72,6 +78,9 @@ function pageOf(
     });
 }
 
+/** What the deployment says about a message nobody has read yet. */
+const unread = { unread: true };
+
 /** One message's whole text, named after the message so a test can tell which of them was read. */
 function bodyAsWords(path: string): string {
     const storedEmailId = path.split('/messages/')[1]?.split('/')[0] ?? '';
@@ -118,12 +127,19 @@ function deploymentRefusing(status: number): MailFathomTransport {
 /** A deployment that has taken the request and not answered it, which is what a surface that waits is proven against. */
 const answersNothing: MailFathomTransport = () => new Promise<ClientResponse>(() => undefined);
 
-function inTheFrame(transport: MailFathomTransport, conversation: OpenConversation, online: boolean): ReactElement {
+function inTheFrame(
+    transport: MailFathomTransport,
+    conversation: OpenConversation,
+    online: boolean,
+    marking: ReadMarking = nothingMarkedRead,
+): ReactElement {
     return (
         <LocalizationProvider>
             <WorkspaceProvider>
                 <LinkOpenerContext value={() => Promise.resolve()}>
-                    <Thread session={session} transport={transport} conversation={conversation} online={online} />
+                    <ReadMarkingContext value={marking}>
+                        <Thread session={session} transport={transport} conversation={conversation} online={online} />
+                    </ReadMarkingContext>
                 </LinkOpenerContext>
             </WorkspaceProvider>
         </LocalizationProvider>
@@ -134,8 +150,24 @@ function drawing(
     transport: MailFathomTransport,
     conversation: OpenConversation = { threadId, openAt: null },
     online = true,
+    marking: ReadMarking = nothingMarkedRead,
 ) {
-    return render(inTheFrame(transport, conversation, online));
+    return render(inTheFrame(transport, conversation, online, marking));
+}
+
+/** A client that would mark read, recording what each drawn body said was opened rather than submitting it. */
+function recordingMarkings(): { marking: ReadMarking; opened: MessageOpened[] } {
+    const opened: MessageOpened[] = [];
+
+    return {
+        opened,
+        marking: {
+            marked: new Map(),
+            markRead: (message) => {
+                opened.push(message);
+            },
+        },
+    };
 }
 
 function bodiesAsked(): string[] {
@@ -210,6 +242,55 @@ describe('Thread', () => {
             expect(bodiesAsked()).toHaveLength(1);
         });
         expect(bodiesAsked()[0]).toContain('/messages/three/body');
+    });
+
+    // ADR 0026 marks read every body the conversation drew, which is one rule rather than two — and the conversation
+    // draws one until the reader asks for the history, so a conversation of three opens one message rather than three.
+    it('marks read the one message it drew, and none the history hides', async () => {
+        const { marking, opened } = recordingMarkings();
+
+        drawing(
+            deploymentAnswering(pageOf(['one', 'two', 'three'], {}, { one: unread, two: unread, three: unread })),
+            { threadId, openAt: null },
+            true,
+            marking,
+        );
+
+        await screen.findByText('The whole of what three says.');
+
+        await waitFor(() => {
+            expect(opened.map((message) => message.storedEmailId)).toStrictEqual(['three']);
+        });
+    });
+
+    it('marks read each message the reader shows the history for', async () => {
+        const { marking, opened } = recordingMarkings();
+
+        drawing(
+            deploymentAnswering(pageOf(['one', 'two'], {}, { one: unread, two: unread })),
+            { threadId, openAt: null },
+            true,
+            marking,
+        );
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Show earlier messages (1)' }));
+        await screen.findByText('The whole of what one says.');
+
+        await waitFor(() => {
+            expect(opened.map((message) => message.storedEmailId).toSorted()).toStrictEqual(['one', 'two']);
+        });
+    });
+
+    it('says where each message it marked read stands, which is what a folder’s count answers for', async () => {
+        const { marking, opened } = recordingMarkings();
+
+        drawing(deploymentAnswering(pageOf(['one'], {}, { one: unread })), { threadId, openAt: null }, true, marking);
+
+        await screen.findByText('The whole of what one says.');
+
+        await waitFor(() => {
+            expect(opened).toStrictEqual([{ storedEmailId: 'one', account: 'work', folder: 'INBOX', unread: true }]);
+        });
     });
 
     it('reads a message the reader shows the history for, and not before', async () => {

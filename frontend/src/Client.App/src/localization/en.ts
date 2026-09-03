@@ -283,6 +283,8 @@ export const en = {
         'This credential may not read mail on this deployment, so no mailbox and no message is shown. Whoever runs the deployment can grant that.',
     'grant.askMail':
         'This credential may not ask questions of your mail on this deployment, so asking is not offered. Whoever runs the deployment can grant that.',
+    'grant.markMailRead':
+        'This credential may not change a flag on your mail server, so opening a message leaves it unread there and this client shows what the server last reported. Whoever runs the deployment can grant that.',
 
     'failure.unauthenticated': 'unauthenticated',
     'failure.unauthorized': 'unauthorized',

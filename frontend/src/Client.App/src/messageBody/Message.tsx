@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
     readMailBody,
     type ClientFailureReason,
@@ -66,6 +66,20 @@ interface MessageToDraw {
 
     /** Whether the conversation this message quoted is folded away until a reader asks for it, which a thread does. */
     readonly quotedHistoryOnRequest?: boolean;
+
+    /**
+     * Said once, when this message's words are on the screen, which is what opening a message means.
+     *
+     * The body having been drawn rather than a selection having moved, because a reading pane that follows the list
+     * would otherwise report fifty messages opened for one press-and-hold of the arrow key: a read the reader scrolled
+     * past is discarded rather than drawn, and a message whose body was never drawn was never opened. The round trip is
+     * what a mail client with a preview pane otherwise needs a dwell timer for, and unlike a threshold it is not a
+     * number anybody has to defend.
+     *
+     * Asking for the sender's pictures re-reads the same message and says nothing again, because the reader did not
+     * open it twice.
+     */
+    readonly onBodyDrawn?: () => void;
 }
 
 // The ceiling every message's own content is read under, stated here rather than where a message is laid out, so that
@@ -83,7 +97,13 @@ export function Message(message: MessageToDraw) {
     );
 }
 
-function MessageRead({ session, transport, storedEmailId, quotedHistoryOnRequest = false }: MessageToDraw) {
+function MessageRead({
+    session,
+    transport,
+    storedEmailId,
+    quotedHistoryOnRequest = false,
+    onBodyDrawn,
+}: MessageToDraw) {
     const { translate } = useLocalization();
     const [read, setRead] = useState<Read>({ storedEmailId, remotePictures: false, attempt: 0 });
 
@@ -116,6 +136,22 @@ function MessageRead({ session, transport, storedEmailId, quotedHistoryOnRequest
 
     const held = drawableUnder(answer, read);
     const reading = held?.read !== read;
+
+    // Which message's words are actually on the screen, which is the whole of what opening one means here — `null`
+    // while a read is in flight and for a read that failed, because neither put anything in front of anybody.
+    const drawn = held?.result.outcome === 'read' ? held.read.storedEmailId : null;
+
+    // The message this component has already reported as drawn. A ref rather than a flag in state because it has to
+    // survive `StrictMode` invoking the effect below twice on mount, for the reason the reading pane's own focus guard
+    // is one — and because saying it twice would be this client reporting a message opened that nobody opened again.
+    const reported = useRef<string | null>(null);
+
+    useEffect(() => {
+        if (drawn !== null && reported.current !== drawn) {
+            reported.current = drawn;
+            onBodyDrawn?.();
+        }
+    }, [drawn, onBodyDrawn]);
 
     // A message already drawn stays on the screen while a re-read runs, because replacing it with one line drops the
     // focus of whoever clicked and moves everything below their cursor on an interaction that changes no words. A

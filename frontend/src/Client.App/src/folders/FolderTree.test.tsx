@@ -7,6 +7,7 @@ import { fireEvent, render, screen, type RenderResult } from '@testing-library/r
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
+import { ReadMarkingContext, nothingMarkedRead, type MarkedIn, type ReadMarking } from '../readMarking/useReadMarking';
 import { WorkspaceProvider } from '../workspace/Workspace';
 import { useWorkspace, type Workspace } from '../workspace/useWorkspace';
 import { FolderTree } from './FolderTree';
@@ -94,19 +95,33 @@ function carried(): Workspace {
     return JSON.parse(probe?.textContent ?? '') as Workspace;
 }
 
-function treeUnder(transport: MailFathomTransport, online: boolean): ReactElement {
+function treeUnder(
+    transport: MailFathomTransport,
+    online: boolean,
+    marking: ReadMarking = nothingMarkedRead,
+): ReactElement {
     return (
         <LocalizationProvider>
             <WorkspaceProvider>
-                <FolderTree session={session} transport={transport} online={online} />
+                <ReadMarkingContext value={marking}>
+                    <FolderTree session={session} transport={transport} online={online} />
+                </ReadMarkingContext>
                 <ScopeProbe />
             </WorkspaceProvider>
         </LocalizationProvider>
     );
 }
 
-function renderTree(transport: MailFathomTransport, online = true): RenderResult {
-    return render(treeUnder(transport, online));
+function renderTree(transport: MailFathomTransport, online = true, marking?: ReadMarking): RenderResult {
+    return render(treeUnder(transport, online, marking));
+}
+
+/** A client that has marked the named messages read, each in the folder the list counted it in. */
+function marked(...places: readonly MarkedIn[]): ReadMarking {
+    return {
+        marked: new Map(places.map((place, at) => [`message-${String(at)}`, place])),
+        markRead: () => undefined,
+    };
 }
 
 function row(name: RegExp): HTMLElement {
@@ -179,6 +194,32 @@ describe('FolderTree', () => {
 
         expect(row(/^Inbox12 unread/).textContent).toContain('12 unread');
         expect(row(/^Inbox12 unread/).textContent).not.toContain('4,213');
+    });
+
+    // A count that still named a message the reader has just opened would disagree with the row drawing that message
+    // read, which is the one thing about an unread count somebody notices. Every level of the tree is a sum over the
+    // same folders, so the correction is applied once to the folders and each of them answers for it.
+    it('takes what this client has marked read off the folder, its mailbox, and the role across mailboxes', async () => {
+        renderTree(
+            answering(JSON.stringify(tree)),
+            true,
+            marked({ account: 'work', folder: 'INBOX' }, { account: 'work', folder: 'INBOX' }),
+        );
+
+        await drawn();
+
+        expect(row(/^Inbox10 unread/).textContent).toContain('10 unread');
+        expect(row(/^Work10 unread/).textContent).toContain('10 unread');
+        expect(row(/^Inbox13 unread/).textContent).toContain('13 unread');
+        expect(row(/^All mailboxes13 unread/).textContent).toContain('13 unread');
+    });
+
+    it('leaves a mailbox this client has marked nothing in exactly as the deployment counted it', async () => {
+        renderTree(answering(JSON.stringify(tree)), true, marked({ account: 'work', folder: 'INBOX' }));
+
+        await drawn();
+
+        expect(row(/^Personal/).textContent).toContain('3 unread');
     });
 
     it('offers every mailbox at once as the scope everything else is read under', async () => {

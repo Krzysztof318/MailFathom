@@ -21,10 +21,10 @@ public sealed class ClientPreferencesDocumentTests
     public void Render_APersonsPreferences_WritesEveryOneOfThemUnderItsOwnKey()
     {
         // Act
-        var document = ClientPreferencesDocument.Render(new ClientPreferences(false, ClientThemeChoice.Dark, true));
+        var document = ClientPreferencesDocument.Render(new ClientPreferences(false, ClientThemeChoice.Dark, true, false));
 
         // Assert
-        Assert.Equal("""{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true}""", document);
+        Assert.Equal("""{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true,"markReadOnOpen":false}""", document);
     }
 
     /// <summary>Written whole rather than as a difference from the defaults, so a stored row states what its writer meant however the defaults later move.</summary>
@@ -35,14 +35,14 @@ public sealed class ClientPreferencesDocumentTests
         var document = ClientPreferencesDocument.Render(ClientPreferences.Unset);
 
         // Assert
-        Assert.Equal("""{"telemetryEnabled":true,"theme":"system","openMailInTabs":false}""", document);
+        Assert.Equal("""{"telemetryEnabled":true,"theme":"system","openMailInTabs":false,"markReadOnOpen":true}""", document);
     }
 
     [Fact]
     public void Parse_ADocumentThisBuildWrote_ReadsBackWhatWasWritten()
     {
         // Arrange
-        var chosen = new ClientPreferences(false, ClientThemeChoice.Light, true);
+        var chosen = new ClientPreferences(false, ClientThemeChoice.Light, true, false);
 
         // Act
         var read = ClientPreferencesDocument.Parse(ClientPreferencesDocument.Render(chosen));
@@ -69,7 +69,18 @@ public sealed class ClientPreferencesDocumentTests
         var read = ClientPreferencesDocument.Parse("""{"theme":"dark"}""");
 
         // Assert
-        Assert.Equal(new ClientPreferences(true, ClientThemeChoice.Dark, false), read);
+        Assert.Equal(new ClientPreferences(true, ClientThemeChoice.Dark, false, true), read);
+    }
+
+    /// <summary>ADR 0026 defaults marking read to on, so a row written before the preference existed reads as marking rather than as declining it.</summary>
+    [Fact]
+    public void Parse_ARowWrittenBeforeMarkingReadWasAPreference_AnswersItAsOn()
+    {
+        // Act
+        var read = ClientPreferencesDocument.Parse("""{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true}""");
+
+        // Assert
+        Assert.True(read.MarkReadOnOpen);
     }
 
     /// <summary>A key this build does not know is one a later build wrote, and the strict binding that refuses one belongs at the boundary a person writes through.</summary>

@@ -482,8 +482,9 @@ guarantee that synchronization and content retrieval never mark mail read is a p
 [ADR 0007](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0007-remote-mailbox-mutation-boundary-and-write-session.md)
 records in full — and the push session is never taken out of `IDLE` to carry a change.
 
-A rule's action, a spam verdict's action, and the `set_mail_flags` MCP tool are what ask for a change today, so an
-account whose rules write nothing, whose spam actions are off, and whose mail no caller has changed holds no such
+A rule's action, a spam verdict's action, the `set_mail_flags` MCP tool, and somebody opening a message in MailFathom's
+own client with `markReadOnOpen` on are what ask for a change today, so an account whose rules write nothing, whose spam
+actions are off, whose mail no caller has changed, and whose reader has not opened a message here holds no such
 connection and this setting costs nothing.
 
 ### Every change is written down before it is issued
@@ -598,6 +599,15 @@ session type: it writes the same durable record a rule's action writes and retur
 opens the write session and issues the command. So the flag still moves because somebody asked for it in as many words,
 never because something read the message — and the type separation stays a property of the code rather than a rule
 somebody has to remember.
+
+**MailFathom's own client authors one too, when somebody opens a message and its words reach the screen.** That is the
+one place a person's act and a read of the local copy coincide, and it is still an authored change rather than a side
+effect of the read: the client submits it to the same route `set_mail_flags` writes through, so it holds neither session
+type either, and the account's own run is what tells the mail server. What decides whether it happens is the reader's
+own setting, on unless they turn it off, and the grant their credential signed in under — a client whose credential may
+not write a flag says so and marks nothing.
+[ADR 0026](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0026-marking-a-message-read-when-a-person-opens-it-in-the-client.md)
+is the decision, including why it is the body having been drawn rather than the selection having moved.
 
 Both directions are one mutation and one authored act, because both are the same statement about the same flag. Setting
 it is what stops mail MailFathom has already handled from sitting unread in the client the owner actually opens;

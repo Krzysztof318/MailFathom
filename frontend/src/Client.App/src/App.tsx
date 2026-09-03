@@ -13,6 +13,7 @@ import { useLocalization } from './localization/useLocalization';
 import { MessageList } from './messageList/MessageList';
 import { forgetListings } from './messageList/rememberedListings';
 import { useClientPreferences } from './preferences/useClientPreferences';
+import { ReadMarkingProvider } from './readMarking/ReadMarking';
 import { ReadingPane } from './readingPane/ReadingPane';
 import { useSpace } from './routing/useSpace';
 import { MailSearch } from './search/MailSearch';
@@ -136,15 +137,22 @@ export function App({
     const mailAccounts = connection.accounts?.outcome === 'read' ? connection.accounts.value.accounts : [];
     const readsMail = deploymentSession !== null && offers(deploymentSession, 'readMail');
 
-    // The two settings that follow the person rather than this machine. They are read here rather than in the menu that
-    // shows them because the tab mode decides what opening a message does, which is the frame's rather than a menu's —
-    // #1494 is where that half lands, and this is where it will already be.
+    // The settings that follow the person rather than this machine. They are read here rather than in the menu that
+    // shows them because two of them decide what opening a message does, which is the frame's rather than a menu's —
+    // the tab mode, whose other half lands in #1494 and will already be here, and whether opening one marks it read.
     //
     // Asked for on the same three conditions the mail itself is: somebody signed in, a machine with a network, and a
     // credential the deployment lets read. The route is admitted under the grant a reader already holds, so a
     // credential without it would meet a refusal the screen has nothing to do about, and a machine with no network
     // would meet nothing at all.
     const preferences = useClientPreferences(readsMail && connection.online ? session : null, readMail);
+
+    // Whether opening a message marks it read on the person's own mail server, which is the frame's answer rather than
+    // a screen's for the reason ADR 0026 gives about the two halves of it: the reader's own setting says what they want
+    // of every account they read, and the grant says whether this credential may write a flag at all. Either missing is
+    // the same client — one that draws what the mail server last reported and marks nothing.
+    const markingRead =
+        preferences.markReadOnOpen && deploymentSession !== null && offers(deploymentSession, 'markMailRead');
 
     function signedIn(reached: DeploymentAddress, presented: string): void {
         if (adopted === null) {
@@ -214,113 +222,118 @@ export function App({
     }
 
     return (
-        <div className="flex h-dvh flex-col bg-rail pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left workspace:flex-row">
-            <div ref={workspaceRegion} tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col bg-page">
-                {/* Inside the frame as well as on the sign-in screen, because a credential that could not be kept is
+        // Above the frame rather than inside a space, because three unrelated places below read what has been marked:
+        // the row that draws a message, the folder tree that counts unread mail, and the body that marks one on being
+        // drawn. What it holds goes with the credential, exactly as the workspace does.
+        <ReadMarkingProvider session={session} transport={readMail} marking={markingRead}>
+            <div className="flex h-dvh flex-col bg-rail pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left workspace:flex-row">
+                <div ref={workspaceRegion} tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col bg-page">
+                    {/* Inside the frame as well as on the sign-in screen, because a credential that could not be kept is
                     learned about at the moment somebody successfully signed in — which is the one of these sentences
                     whose reader is already past that screen. Beside it, and in the same strip, is what this credential
                     may not do: both are statements about the credential rather than about anything it read. */}
-                {notices.length === 0 && withheld.length === 0 ? null : (
-                    <div className="flex flex-col gap-2 border-b border-line-soft bg-panel px-4 py-2 workspace:px-8">
-                        <CredentialNotices notices={notices} />
-                        <GrantNotice withheld={withheld} />
-                    </div>
-                )}
+                    {notices.length === 0 && withheld.length === 0 ? null : (
+                        <div className="flex flex-col gap-2 border-b border-line-soft bg-panel px-4 py-2 workspace:px-8">
+                            <CredentialNotices notices={notices} />
+                            <GrantNotice withheld={withheld} />
+                        </div>
+                    )}
 
-                {/* The region the space is drawn in is there before the deployment says which space that is, so
+                    {/* The region the space is drawn in is there before the deployment says which space that is, so
                     nothing on the screen moves under a reader when the answer arrives. Until it does, what stands in
                     the region is what the connection says — reaching, retrying, offline, or refused — because that is
                     the only thing on the screen there is to read, and the way out of a deployment that never answers
                     has to be somewhere. */}
-                {space === null ? (
-                    <main className="flex-1 px-4 py-6 workspace:px-8">
-                        <ConnectionSummary connection={connection} />
-                    </main>
-                ) : (
-                    <Space
-                        space={space}
-                        // Who is signed in, taken apart in the one module that composes a credential and never here.
-                        // A screen never sees the credential; what it is handed is the name the deployment knows the
-                        // person by, which is what a preference kept per person on this machine is written under.
-                        person={userNameIn(authorization)}
-                        // Asking is what the field is for, so a credential that may not ask is not shown one. It is
-                        // absent rather than disabled: a control nobody can use says less about why than the sentence
-                        // above does. Where it stands is the space's decision, which is why it is handed in rather
-                        // than drawn here.
-                        intent={
-                            deploymentSession !== null && offers(deploymentSession, 'askMail') ? (
-                                <IntentField accounts={mailAccounts} />
-                            ) : null
-                        }
-                        status={<ConnectionSummary connection={connection} />}
-                        folders={
-                            session === null || !readsMail ? null : (
-                                <FolderTree session={session} transport={readMail} online={connection.online} />
-                            )
-                        }
-                        list={
-                            session === null || !readsMail ? null : (
-                                // Both keyed by the scope, so pointing at another mailbox starts a list and a search
-                                // rather than resetting either: every value below belongs to one mailbox read one way,
-                                // and a search carries the mailbox it was made in as a filter it would go on showing.
-                                // Searching stands above the list rather than beside it because it is where somebody
-                                // reaches for it — looking at a folder, with the message not in front of them — and
-                                // what it finds is drawn in the same column with the same row.
-                                <MailSearch
-                                    key={scopeKey(workspace.scope)}
-                                    session={session}
-                                    transport={readMail}
-                                    scope={workspace.scope}
-                                    accounts={mailAccounts}
-                                    online={connection.online}
-                                >
-                                    <MessageList
+                    {space === null ? (
+                        <main className="flex-1 px-4 py-6 workspace:px-8">
+                            <ConnectionSummary connection={connection} />
+                        </main>
+                    ) : (
+                        <Space
+                            space={space}
+                            // Who is signed in, taken apart in the one module that composes a credential and never here.
+                            // A screen never sees the credential; what it is handed is the name the deployment knows the
+                            // person by, which is what a preference kept per person on this machine is written under.
+                            person={userNameIn(authorization)}
+                            // Asking is what the field is for, so a credential that may not ask is not shown one. It is
+                            // absent rather than disabled: a control nobody can use says less about why than the sentence
+                            // above does. Where it stands is the space's decision, which is why it is handed in rather
+                            // than drawn here.
+                            intent={
+                                deploymentSession !== null && offers(deploymentSession, 'askMail') ? (
+                                    <IntentField accounts={mailAccounts} />
+                                ) : null
+                            }
+                            status={<ConnectionSummary connection={connection} />}
+                            folders={
+                                session === null || !readsMail ? null : (
+                                    <FolderTree session={session} transport={readMail} online={connection.online} />
+                                )
+                            }
+                            list={
+                                session === null || !readsMail ? null : (
+                                    // Both keyed by the scope, so pointing at another mailbox starts a list and a search
+                                    // rather than resetting either: every value below belongs to one mailbox read one way,
+                                    // and a search carries the mailbox it was made in as a filter it would go on showing.
+                                    // Searching stands above the list rather than beside it because it is where somebody
+                                    // reaches for it — looking at a folder, with the message not in front of them — and
+                                    // what it finds is drawn in the same column with the same row.
+                                    <MailSearch
                                         key={scopeKey(workspace.scope)}
                                         session={session}
                                         transport={readMail}
                                         scope={workspace.scope}
                                         accounts={mailAccounts}
                                         online={connection.online}
+                                    >
+                                        <MessageList
+                                            key={scopeKey(workspace.scope)}
+                                            session={session}
+                                            transport={readMail}
+                                            scope={workspace.scope}
+                                            accounts={mailAccounts}
+                                            online={connection.online}
+                                        />
+                                    </MailSearch>
+                                )
+                            }
+                            mail={
+                                session === null ? null : (
+                                    <OpenMail
+                                        session={session}
+                                        transport={readMail}
+                                        conversation={workspace.conversation}
+                                        storedEmailId={workspace.selection}
+                                        online={connection.online}
                                     />
-                                </MailSearch>
-                            )
-                        }
-                        mail={
-                            session === null ? null : (
-                                <OpenMail
-                                    session={session}
-                                    transport={readMail}
-                                    conversation={workspace.conversation}
-                                    storedEmailId={workspace.selection}
-                                    online={connection.online}
-                                />
-                            )
-                        }
-                    />
-                )}
-            </div>
+                                )
+                            }
+                        />
+                    )}
+                </div>
 
-            {/* Navigation is last in the document because the keyboard follows the document rather than the layout,
+                {/* Navigation is last in the document because the keyboard follows the document rather than the layout,
                 and the narrow composition puts it at the bottom of the screen: written the other way round, a reader
                 tabbing into a narrow window would reach the bottom bar before the header above it. The wide
                 composition then carries the one mismatch CSS cannot remove — a rail drawn on the left out of a node
                 that comes last — because no single document order matches both shapes, and content before navigation
                 is the direction a skip link exists to manufacture rather than the one it works around. */}
-            <SpaceNavigation
-                offered={offeredSpaces}
-                current={space}
-                account={
-                    <AccountMenu
-                        accounts={mailAccounts}
-                        deploymentVersion={deploymentSession?.version ?? null}
-                        readingFrom={adopted?.chosen === true ? baseAddress : null}
-                        preferences={preferences}
-                        onPointSomewhereElse={pointSomewhereElse}
-                        onSignOut={signOut}
-                    />
-                }
-            />
-        </div>
+                <SpaceNavigation
+                    offered={offeredSpaces}
+                    current={space}
+                    account={
+                        <AccountMenu
+                            accounts={mailAccounts}
+                            deploymentVersion={deploymentSession?.version ?? null}
+                            readingFrom={adopted?.chosen === true ? baseAddress : null}
+                            preferences={preferences}
+                            onPointSomewhereElse={pointSomewhereElse}
+                            onSignOut={signOut}
+                        />
+                    }
+                />
+            </div>
+        </ReadMarkingProvider>
     );
 }
 

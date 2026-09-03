@@ -14,8 +14,15 @@ const session: ClientSession = {
     authorization: 'Basic dGVzdA==',
 };
 
-function stored(preferences: { telemetryEnabled: boolean; theme: string; openMailInTabs: boolean }): string {
-    return JSON.stringify(preferences);
+// The whole document, because the route answers with nothing less and the package refuses an answer missing a field.
+// Marking read is defaulted rather than named at each call, since only the tests below that are about it say anything.
+function stored(preferences: {
+    telemetryEnabled: boolean;
+    theme: string;
+    openMailInTabs: boolean;
+    markReadOnOpen?: boolean;
+}): string {
+    return JSON.stringify({ markReadOnOpen: true, ...preferences });
 }
 
 // The transport is the network boundary and the whole of what these tests fake, exactly as in the package that reads
@@ -62,6 +69,24 @@ describe('useClientPreferences', () => {
 
         expect(requests[0]?.method).toBe('GET');
         expect(requests[0]?.path).toBe('https://mail.example.invalid/api/client/preferences');
+    });
+
+    it('answers marking read as on before anything has been read, which is what ADR 0026 defaults it to', () => {
+        const { transport } = recording(stored({ telemetryEnabled: true, theme: 'dark', openMailInTabs: true }));
+        const { result } = reading(transport);
+
+        expect(result.current.preferences.markReadOnOpen).toBe(true);
+    });
+
+    it('answers marking read as off once the person has turned it off', async () => {
+        const { transport } = recording(
+            stored({ telemetryEnabled: true, theme: 'system', openMailInTabs: false, markReadOnOpen: false }),
+        );
+        const { result } = reading(transport);
+
+        await waitFor(() => {
+            expect(result.current.preferences.markReadOnOpen).toBe(false);
+        });
     });
 
     it('lets the deployment’s theme replace what the device opened in', async () => {
@@ -126,6 +151,7 @@ describe('useClientPreferences', () => {
             telemetryEnabled: false,
             theme: 'light',
             openMailInTabs: true,
+            markReadOnOpen: true,
         });
     });
 
@@ -151,6 +177,7 @@ describe('useClientPreferences', () => {
                 telemetryEnabled: true,
                 theme: 'light',
                 openMailInTabs: false,
+                markReadOnOpen: true,
             });
         });
     });
@@ -229,6 +256,7 @@ describe('useClientPreferences', () => {
             telemetryEnabled: true,
             theme: 'system',
             openMailInTabs: true,
+            markReadOnOpen: true,
         });
     });
 

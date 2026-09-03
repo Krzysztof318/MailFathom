@@ -14,10 +14,12 @@ import {
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { useReadMarking } from '../readMarking/useReadMarking';
 import { scopeKey } from '../workspace/mailScope';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { FolderRow } from './FolderRow';
 import { folderTreeOf, visibleRows, type VisibleRow } from './folderTreeRows';
+import { unreadAfterMarking } from './unreadAfterMarking';
 
 // The client's scope selector: which mailbox and which folder everything else is about. It is a tree because the
 // mailboxes are a tree, and it is one tree rather than one per account because several mailboxes are one workspace —
@@ -54,6 +56,7 @@ export function FolderTree({
 }) {
     const { translate } = useLocalization();
     const { workspace, revise } = useWorkspace();
+    const { marked } = useReadMarking();
     const [attempt, setAttempt] = useState(0);
     const [answered, setAnswered] = useState<Answered | null>(null);
     const [focused, setFocused] = useState<string | null>(null);
@@ -128,7 +131,10 @@ export function FolderTree({
         );
     }
 
-    const directory = answered.result.value;
+    // What the deployment answered, less the mail this client has marked read since it answered. A count that still
+    // named a message the reader has just opened would disagree with the row drawing that message read, which is the
+    // one thing about an unread count somebody notices.
+    const directory = unreadAfterMarking(answered.result.value, marked);
 
     // An owner holding no account is told so and told what would fill it, rather than being handed an empty tree.
     if (directory.accounts.length === 0) {

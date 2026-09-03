@@ -1642,6 +1642,12 @@
       "ClientPreferencesRequest": {
         "additionalProperties": false,
         "properties": {
+          "markReadOnOpen": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
           "openMailInTabs": {
             "type": [
               "null",
@@ -1665,6 +1671,9 @@
       },
       "ClientPreferencesResponse": {
         "properties": {
+          "markReadOnOpen": {
+            "type": "boolean"
+          },
           "openMailInTabs": {
             "type": "boolean"
           },
@@ -1678,7 +1687,8 @@
         "required": [
           "telemetryEnabled",
           "theme",
-          "openMailInTabs"
+          "openMailInTabs",
+          "markReadOnOpen"
         ],
         "type": "object"
       },

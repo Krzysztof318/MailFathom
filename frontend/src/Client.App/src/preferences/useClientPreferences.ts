@@ -14,7 +14,7 @@ import {
 import type { ThemeChoice } from '../theme/themeChoice';
 import { useTheme } from '../theme/useTheme';
 
-// The two settings that follow the person rather than the machine, read from the deployment once there is a session to
+// The settings that follow the person rather than the machine, read from the deployment once there is a session to
 // read it with and written back whole whenever one of them changes.
 //
 // The theme is the half that exists on both sides, and the order between them is deliberate. The device answers first,
@@ -25,10 +25,20 @@ import { useTheme } from '../theme/useTheme';
 // Language is not here. It stays on the device, because what a person reads a client in is a fact about the machine
 // they are at rather than about them.
 
-/** What the client is set to, and how a person changes one of the two settings that follow them. */
+/** What the client is set to, and how a person changes one of the settings that follow them. */
 export interface ClientPreferencesInForce {
     /** Whether opening a message opens a tab rather than replacing what is on the screen. */
     readonly openMailInTabs: boolean;
+
+    /**
+     * Whether opening a message marks it read on the person's own mail server, which ADR 0026 defaults to on.
+     *
+     * Read here rather than chosen here: the control that moves it belongs to the settings screen, and what the frame
+     * needs is the value in force. Somebody with nothing read yet gets the unset answer, which is the same one the
+     * deployment will confirm — so a message opened in the first moments of a session marks read rather than waiting
+     * for a preference nobody has changed.
+     */
+    readonly markReadOnOpen: boolean;
 
     /** Whether the deployment refused the last change, which is the one thing about this a screen has to say out loud. */
     readonly notStated: boolean;
@@ -152,6 +162,7 @@ export function useClientPreferences(
 
     return {
         openMailInTabs: inForce.preferences.openMailInTabs,
+        markReadOnOpen: inForce.preferences.markReadOnOpen,
         notStated: inForce.notStated,
         chooseTheme: (choice) => {
             setThemeChoice(choice);

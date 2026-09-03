@@ -10,6 +10,7 @@ import { SecondaryButton } from '../controls/SecondaryButton';
 import { SenderAvatar } from '../controls/SenderAvatar';
 import { useLocalization } from '../localization/useLocalization';
 import { Message } from '../messageBody/Message';
+import { drawnUnread, useReadMarking } from '../readMarking/useReadMarking';
 
 // One message of a conversation, as a head and what it says. It is its own component for the reason a list row is: it
 // is what carries the read and the way out to the message on its own.
@@ -38,8 +39,14 @@ export function ThreadMessage({
     readonly onRegion: (element: HTMLElement | null) => void;
 }) {
     const { translate } = useLocalization();
+    const marking = useReadMarking();
     const email = message.email;
     const sender = email.senderDisplayName ?? email.senderAddress ?? translate('list.senderUnknown');
+
+    // What the deployment last reported, less what this client has marked read since — the same reading the list's own
+    // row draws from, because the two are the same message in two places and a reader who opened it here would
+    // otherwise find it still unread there.
+    const unread = drawnUnread(marking, email.id, email.unread);
 
     return (
         <li>
@@ -52,15 +59,11 @@ export function ThreadMessage({
                 <div className="flex items-center gap-2.75">
                     <SenderAvatar displayName={email.senderDisplayName} address={email.senderAddress} place="card" />
 
-                    {email.unread ? (
-                        <span className="size-2 shrink-0 rounded-full bg-accent">
-                            <span className="sr-only">{translate('list.unread')}</span>
-                        </span>
-                    ) : null}
+                    {unread ? <span className="sr-only">{translate('list.unread')}</span> : null}
 
                     {/* Who wrote is what a conversation is scanned by, so it keeps its width and everything beside it
                         is what gives way. */}
-                    <span className={`shrink-0 text-md font-semibold ${email.unread ? 'text-text' : 'text-text-soft'}`}>
+                    <span className={`shrink-0 text-md font-semibold ${unread ? 'text-text' : 'text-text-soft'}`}>
                         {sender}
                     </span>
 
@@ -75,7 +78,25 @@ export function ThreadMessage({
                     {translate('thread.storedIn', { account: email.account, folder: email.folder })}
                 </p>
 
-                <Message session={session} transport={transport} storedEmailId={email.id} quotedHistoryOnRequest />
+                {/* Every body the conversation drew is marked read, which is one rule rather than two: the reading
+                    pane and a message here put the same words in front of the same person, and what marks a message
+                    read is that its body was drawn wherever it was drawn. Nothing the screen decides for itself draws
+                    more than the latest message — the rest are behind *show earlier messages*, which is a gesture the
+                    reader makes knowing the count it names. */}
+                <Message
+                    session={session}
+                    transport={transport}
+                    storedEmailId={email.id}
+                    quotedHistoryOnRequest
+                    onBodyDrawn={() => {
+                        marking.markRead({
+                            storedEmailId: email.id,
+                            account: email.account,
+                            folder: email.folder,
+                            unread: email.unread,
+                        });
+                    }}
+                />
 
                 <div>
                     <SecondaryButton label={translate('thread.openOnItsOwn')} onActivate={onOpenOnItsOwn} />

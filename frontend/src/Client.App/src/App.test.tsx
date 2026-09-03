@@ -188,14 +188,23 @@ const folderWithOneMessage: Answer = {
  * The two are separate routes because they are separately expensive, so the double answers them separately as well —
  * a description that also served a body would prove the pane against an exchange the service does not have.
  */
-function deploymentDrawingAMessage(): DeploymentTransport {
-    const otherwise = deploymentAnswering();
+function deploymentDrawingAMessage(session: Answer = accepted): DeploymentTransport {
+    const otherwise = deploymentAnswering(directory(true, [workAccount]), session);
 
     return (signal) => (request) => {
         if (request.path.includes('/emails')) {
             asked.push(request);
 
             return Promise.resolve(complete(folderWithOneMessage));
+        }
+
+        // The one route here that changes a mailbox. It is answered rather than left to fall through, because a
+        // submission the deployment did not write down is one the frame stops claiming — which would make an assertion
+        // about the row pass for a client that never marked anything.
+        if (request.path.endsWith('/mutations/flags')) {
+            asked.push(request);
+
+            return Promise.resolve(complete(flagsRecorded(request.body ?? '{}')));
         }
 
         if (!request.path.includes('/messages/')) {
@@ -205,6 +214,18 @@ function deploymentDrawingAMessage(): DeploymentTransport {
         asked.push(request);
 
         return Promise.resolve(complete(request.path.includes('/body') ? drawnMessage : describedMessage));
+    };
+}
+
+/** Every change a batch named, written down, which is what a deployment holding the grant answers with. */
+function flagsRecorded(stated: string): Answer {
+    const changes = (JSON.parse(stated) as { changes: readonly { storedEmailId: string }[] }).changes;
+
+    return {
+        status: 200,
+        body: JSON.stringify({
+            results: changes.map(({ storedEmailId }) => ({ storedEmailId, outcome: 'recorded' })),
+        }),
     };
 }
 
@@ -411,6 +432,10 @@ async function goTo(space: string): Promise<void> {
 const declaredMatchMedia = Object.getOwnPropertyDescriptor(window, 'matchMedia');
 
 beforeEach(() => {
+    // Cleared here as well as after each test, because a read the previous test started can answer while its tree is
+    // still being torn down and start one more — which lands in this record after the teardown emptied it, and reads
+    // as this test having asked for a route it never reached.
+    asked.length = 0;
     openingAt('/');
     Object.defineProperty(window, 'matchMedia', {
         configurable: true,
@@ -553,6 +578,57 @@ describe('App', () => {
         await waitFor(() => {
             expect(document.activeElement).toBe(screen.getByRole('article', { name: /Quarterly invoice/ }));
         });
+    });
+
+    // Three things decide whether opening a message marks it read, and all three are the frame's: the reader's own
+    // setting, the grant the credential signed in under, and there being a session to submit over. Nothing below the
+    // frame asks the question, so this is where each of them is proven.
+    it('marks read a message a row opened, where the credential may write a flag', async () => {
+        renderApp(
+            servedFrom,
+            heldCredential,
+            deploymentDrawingAMessage(
+                sessionAnswering(['mailfathom.mail.read', 'mailfathom.mail.ask', 'mailfathom.mail.flags.write']),
+            ),
+        );
+        await framed();
+
+        await goTo('Mail');
+
+        const list = await screen.findByRole('listbox', { name: 'Messages' });
+        fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
+        await screen.findByText('A drawn message.');
+
+        await waitFor(() => {
+            expect(
+                asked.some(
+                    (request) =>
+                        request.path === 'https://mail.example.invalid/api/client/mutations/flags' &&
+                        request.method === 'POST',
+                ),
+            ).toBe(true);
+        });
+    });
+
+    it('marks nothing where the credential was never granted a flag write, and says so rather than failing', async () => {
+        renderApp(servedFrom, heldCredential, deploymentDrawingAMessage());
+        await framed();
+
+        await goTo('Mail');
+
+        const list = await screen.findByRole('listbox', { name: 'Messages' });
+        fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
+        await screen.findByText('A drawn message.');
+
+        expect(routesAsked().some((path) => path.includes('/mutations/'))).toBe(false);
+
+        // An absence nobody explained is a client that looks broken, which is what the notice strip is for — so the
+        // sentence is asserted on the screen rather than the withholding being asserted on its own.
+        expect(
+            screen.getByText(
+                'This credential may not change a flag on your mail server, so opening a message leaves it unread there and this client shows what the server last reported. Whoever runs the deployment can grant that.',
+            ),
+        ).toBeDefined();
     });
 
     it('draws no message until a row of the list opens one', async () => {

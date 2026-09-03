@@ -44,7 +44,7 @@ internal static class ClientPreferencesEndpoint
 
     /// <summary>The greatest request body the write route reads before refusing it.</summary>
     /// <remarks>
-    /// Far above three scalars and their JSON escaping, and far below anything worth an allocation. The document is
+    /// Far above four scalars and their JSON escaping, and far below anything worth an allocation. The document is
     /// closed, so what the bound guards against is not a large record but a body that was never a preferences document
     /// at all; it is answered <c>413</c> before the handler is reached, as every other write on this surface is.
     /// </remarks>
@@ -127,11 +127,12 @@ internal static class ClientPreferencesEndpoint
 /// <param name="TelemetryEnabled">Whether this deployment may be told what their client is doing, or nothing to say what an unset switch says.</param>
 /// <param name="Theme">The name of what the client is painted in, or nothing to follow the machine.</param>
 /// <param name="OpenMailInTabs">Whether opening a message opens a tab, or nothing for the unset answer.</param>
+/// <param name="MarkReadOnOpen">Whether opening a message marks it read on their mail server, or nothing for the unset answer.</param>
 /// <remarks>
 /// <para>
 /// Bound strictly: a key nothing here binds fails the bind rather than being stored, which is what keeps the document
-/// closed — it holds three preferences because three is what a client can state, not because a writer happened to send
-/// three. Every one of them is optional, and an omitted one is committed as its unset answer rather than left at
+/// closed — it holds four preferences because four is what a client can state, not because a writer happened to send
+/// four. Every one of them is optional, and an omitted one is committed as its unset answer rather than left at
 /// whatever the row held.
 /// </para>
 /// <para>
@@ -145,7 +146,8 @@ internal static class ClientPreferencesEndpoint
 internal sealed record ClientPreferencesRequest(
     bool? TelemetryEnabled = null,
     string? Theme = null,
-    bool? OpenMailInTabs = null)
+    bool? OpenMailInTabs = null,
+    bool? MarkReadOnOpen = null)
 {
     /// <summary>Reads the request as the whole set the write commits.</summary>
     /// <returns>The preferences, with every one the body omitted answered as unset, or <see langword="null" /> when the body names a theme this build does not publish.</returns>
@@ -161,7 +163,8 @@ internal sealed record ClientPreferencesRequest(
         return new ClientPreferences(
             this.TelemetryEnabled ?? ClientPreferences.Unset.TelemetryEnabled,
             theme,
-            this.OpenMailInTabs ?? ClientPreferences.Unset.OpenMailInTabs);
+            this.OpenMailInTabs ?? ClientPreferences.Unset.OpenMailInTabs,
+            this.MarkReadOnOpen ?? ClientPreferences.Unset.MarkReadOnOpen);
     }
 }
 
@@ -169,13 +172,18 @@ internal sealed record ClientPreferencesRequest(
 /// <param name="TelemetryEnabled">Whether this deployment may be told what their client is doing.</param>
 /// <param name="Theme">What the client is painted in once a session exists.</param>
 /// <param name="OpenMailInTabs">Whether opening a message opens a tab rather than replacing what is on the screen.</param>
+/// <param name="MarkReadOnOpen">Whether opening a message marks it read on the owner's own mail server.</param>
 /// <remarks>
 /// Every preference is answered, whether or not the person ever set it, so a client renders one screen rather than one
 /// per combination of what happens to be stored. What it does not report is when anything was set or from where: this
 /// deployment keeps no record of the machines somebody signed in from, and a response saying when a switch last moved
 /// would be the beginning of one.
 /// </remarks>
-internal sealed record ClientPreferencesResponse(bool TelemetryEnabled, string Theme, bool OpenMailInTabs)
+internal sealed record ClientPreferencesResponse(
+    bool TelemetryEnabled,
+    string Theme,
+    bool OpenMailInTabs,
+    bool MarkReadOnOpen)
 {
     /// <summary>Describes one person's preferences on the wire.</summary>
     /// <param name="preferences">What they set.</param>
@@ -188,6 +196,7 @@ internal sealed record ClientPreferencesResponse(bool TelemetryEnabled, string T
         return new ClientPreferencesResponse(
             preferences.TelemetryEnabled,
             preferences.Theme.Name,
-            preferences.OpenMailInTabs);
+            preferences.OpenMailInTabs,
+            preferences.MarkReadOnOpen);
     }
 }
