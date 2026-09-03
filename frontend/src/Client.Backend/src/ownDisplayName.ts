@@ -5,6 +5,7 @@
 import { failed, failureReasonForStatus, read, type ClientFailure, type ClientResult } from './failure';
 import { asRecord } from './json';
 import { headersFor, routeFor, type ClientSession } from './session';
+import { spanned } from './telemetry';
 import { send, type ClientResponse, type MailFathomTransport } from './transport';
 
 // What the signed-in person is called, which is the one thing a client drawing them cannot compose from the credential
@@ -38,28 +39,30 @@ export interface OwnDisplayName {
 export const longestDisplayNameAnswer = 1_024;
 
 /** Reads the name this deployment records the signed-in person under, answering an expected failure as a value. */
-export async function readOwnDisplayName(
+export function readOwnDisplayName(
     session: ClientSession,
     transport: MailFathomTransport,
 ): Promise<ClientResult<OwnDisplayName>> {
-    const response = await send(transport, {
-        method: 'GET',
-        path: routeFor(session, ownDisplayNameRoute),
-        headers: headersFor(session),
-        longestAnswer: longestDisplayNameAnswer,
+    return spanned(`GET ${ownDisplayNameRoute}`, async () => {
+        const response = await send(transport, {
+            method: 'GET',
+            path: routeFor(session, ownDisplayNameRoute),
+            headers: headersFor(session),
+            longestAnswer: longestDisplayNameAnswer,
+        });
+
+        if (response === null) {
+            return failed('unavailable', null);
+        }
+
+        if (response.status !== 200) {
+            return failed(failureReasonForStatus(response.status), response.status);
+        }
+
+        const name = parseDisplayName(response.body);
+
+        return name === null ? failed('unreadable', response.status) : read(name);
     });
-
-    if (response === null) {
-        return failed('unavailable', null);
-    }
-
-    if (response.status !== 200) {
-        return failed(failureReasonForStatus(response.status), response.status);
-    }
-
-    const name = parseDisplayName(response.body);
-
-    return name === null ? failed('unreadable', response.status) : read(name);
 }
 
 /**

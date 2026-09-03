@@ -1581,8 +1581,12 @@ you know what that is. The empty list is the third posture rather than an oversi
 browser, which is what a deployment whose client is a desktop or mobile head wants, since neither is subject to CORS at
 all.
 
-The policy allows `GET`, the `Authorization`, `Content-Type`, and `Accept` request headers, and exposes
-`WWW-Authenticate` so a page can read the challenge that tells it where to authorize. **Credentials are never allowed
+The policy allows `GET` and `POST`, the `Authorization`, `Content-Type`, `Accept`, and `traceparent` request headers,
+and exposes `WWW-Authenticate` so a page can read the challenge that tells it where to authorize and `Retry-After` so a
+client told to hold can read for how long. `traceparent` is the W3C trace context the client sends on every request, and
+it is the only propagation header this surface admits — [what a client-originated trace
+contains](telemetry.md#what-a-client-originated-trace-contains) is what it carries and why nothing else is allowed
+beside it. **Credentials are never allowed
 under any of the postures above**: a browser that could attach an ambient cookie would let a page act as whoever is
 signed in somewhere else, and this surface's credential is a bearer token the client sets deliberately.
 

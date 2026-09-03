@@ -103,12 +103,38 @@ public sealed class ServiceDefaultsTelemetryRedactionTests
         Assert.False(traced);
     }
 
+    /// <summary>An export is never traced, because a span about exporting is one more thing to export.</summary>
+    /// <remarks>
+    /// All three OTLP routes are driven rather than one, because the specification fixes three paths beneath the
+    /// prefix and a filter written for the one a regression happened to name would leave the other two feeding the
+    /// trace store on every batch a signed-in client sends.
+    /// </remarks>
+    [Theory]
+    [InlineData("/api/client/telemetry/v1/traces")]
+    [InlineData("/api/client/telemetry/v1/metrics")]
+    [InlineData("/api/client/telemetry/v1/logs")]
+    [InlineData("/API/CLIENT/TELEMETRY/v1/traces")]
+    public void IsWorthTracing_AClientTelemetryExport_KeepsTheExportPathFromFeedingItself(string path)
+    {
+        // Arrange
+        var context = new DefaultHttpContext();
+        context.Request.Path = path;
+
+        // Act
+        var traced = ServiceDefaultsExtensions.IsWorthTracing(context);
+
+        // Assert
+        Assert.False(traced);
+    }
+
     /// <summary>Everything a client actually calls is still traced, which is what makes the absence above readable.</summary>
     [Theory]
     [InlineData("/mcp")]
     [InlineData("/api/admin/embeddings/profiles")]
     [InlineData("/health/details")]
     [InlineData("/aliveness")]
+    [InlineData("/api/client/folders")]
+    [InlineData("/api/client/telemetry-preferences")]
     public void IsWorthTracing_AnyOtherPath_IsTraced(string path)
     {
         // Arrange

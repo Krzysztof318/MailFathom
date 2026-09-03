@@ -196,6 +196,13 @@ publishes it, and a screen that reports something takes it out of context rather
 and two measurements per request happen in one place whatever the operation did with the answer. That package pins
 `@opentelemetry/api` and nothing else, which names no browser API and so crosses none of the boundary above.
 
+**That span is also what the request travels under.** It is the active context while the operation composes its
+request, so `headersFor` writes the W3C trace context into the headers and the span the deployment opens is this one's
+child — one trace over the screen, the request, the use case, and the query beneath it.
+[What a client-originated trace contains](../docs/operations/telemetry.md#what-a-client-originated-trace-contains) is
+the operator's page. What it asks of an operation here is that it compose its request before it awaits anything: the
+context manager the SDK registers holds the active context across a synchronous run rather than across a suspension.
+
 It exports to [the deployment's own OTLP receiver](../docs/operations/client-endpoint.md#the-telemetry-routes) on the
 client surface, over HTTP with protobuf, presenting the session's credential exactly as every read does — so nothing is
 exported until somebody has signed in.

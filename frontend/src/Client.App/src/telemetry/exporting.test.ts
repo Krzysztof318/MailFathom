@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { logs } from '@opentelemetry/api-logs';
 import { metrics, trace } from '@opentelemetry/api';
 import { ExportResultCode } from '@opentelemetry/core';
+import { signIn, type ClientRequest, type ClientResponse } from '@mailfathom/client-backend';
 import { startRecording, type ClientPipeline } from './exporting';
 
 // What this module does is register the three providers for the whole of a run and decide, from whether a session
@@ -72,6 +73,37 @@ afterEach(async () => {
     vi.restoreAllMocks();
 });
 
+/**
+ * The request one ordinary operation put on the wire, which is where the trace context is read back from.
+ *
+ * Signing in is used because it is the shortest request on this surface and reaches the same `spanned` wrapper and the
+ * same header composition every other one does. What the deployment answered is beside the point here, so it answers
+ * the smallest body the operation accepts.
+ */
+async function requestSentBySigningIn(): Promise<ClientRequest> {
+    const sent: ClientRequest[] = [];
+
+    const answer: ClientResponse = {
+        status: 200,
+        body: JSON.stringify({ service: 'MailFathom', version: '0.0.0', permissions: [] }),
+        headers: {},
+    };
+
+    await signIn(session, (request) => {
+        sent.push(request);
+
+        return Promise.resolve(answer);
+    });
+
+    const [asked] = sent;
+
+    if (asked === undefined) {
+        throw new Error('Signing in put no request on the wire.');
+    }
+
+    return asked;
+}
+
 /** Whether a span started now would be recorded, which is the whole of what registering the pipeline changes. */
 function recording(): boolean {
     const span = trace.getTracer('MailFathom').startSpan('probe');
@@ -91,6 +123,23 @@ describe('startRecording', () => {
         running = startRecording();
 
         expect(recording()).toBe(true);
+    });
+
+    it('names no trace before it is composed, because there is no span to name one from', async () => {
+        const asked = await requestSentBySigningIn();
+
+        expect(asked.headers).not.toHaveProperty('traceparent');
+    });
+
+    it('joins a request to the span the client opened around it, so one trace covers both stacks', async () => {
+        running = startRecording();
+
+        const asked = await requestSentBySigningIn();
+
+        // The whole W3C form is asserted rather than the header merely being present: the version, a trace identifier,
+        // the span identifier the deployment parents its own span on, and the sampled flag — which is what tells the
+        // deployment this trace is being recorded and is the half a caller can turn off.
+        expect(asked.headers['traceparent']).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/);
     });
 
     it('reports under the client rather than under the deployment it is signed in to', () => {

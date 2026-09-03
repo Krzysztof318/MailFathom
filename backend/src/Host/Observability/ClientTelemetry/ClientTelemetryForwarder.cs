@@ -6,6 +6,7 @@ using System.Buffers.Binary;
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
+using OpenTelemetry;
 using OpenTelemetry.Exporter;
 
 namespace MailFathom.Host.Observability.ClientTelemetry;
@@ -101,6 +102,12 @@ internal sealed class ClientTelemetryForwarder
 
         try
         {
+            // The forward is not traced, which is the other half of keeping the export path from feeding itself: the
+            // request carrying the batch is already refused by ServiceDefaultsExtensions.IsWorthTracing, and this is
+            // the outbound leg of the same hop. A span for it would be a record about exporting, sent to the very
+            // collector this call is delivering to. Suppression is what the SDK's own exporters use for exactly this,
+            // and it covers the whole send rather than one instrumentation.
+            using var untraced = SuppressInstrumentationScope.Begin();
             using var client = this.clients.CreateClient(HttpClientName);
             using var request = this.Compose(signal, batch);
             using var response = await client.SendAsync(request, forwarding.Token);

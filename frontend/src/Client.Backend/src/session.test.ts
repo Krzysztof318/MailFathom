@@ -29,4 +29,12 @@ describe('headersFor', () => {
             Authorization: 'Basic dGVzdA==',
         });
     });
+
+    // The assertion above is the whole of it while no pipeline is registered, which is what a run that has not signed
+    // in looks like: there is no span to name, so the propagator writes no trace context and the request begins a
+    // trace at the deployment. `exporting.test.ts` in `Client.App` is where the composed client's own span is shown
+    // reaching the header, because registering the propagator and the context manager is that package's act.
+    it('names no trace this client did not open', () => {
+        expect(headersFor(session)).not.toHaveProperty('traceparent');
+    });
 });
