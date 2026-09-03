@@ -19,7 +19,7 @@ const inbox: MailScope = { kind: 'folder', accountId: 'work', alias: 'INBOX' };
 
 const kept: RememberedListing = {
     order: 'oldestFirst',
-    filters: { unread: true, flagged: null, hasAttachments: null, includeJunk: false },
+    filters: { ...openingListing.filters, unread: true },
     cursor: 'the-cursor-that-page-was-read-with',
     readAs: 'backward',
     rowInPage: 17,
@@ -112,11 +112,31 @@ describe('rememberedListing', () => {
         ['a filter that is neither answer nor both', { ...kept, filters: { ...kept.filters, unread: 'yes' } }],
         ['no junk answer at all', { ...kept, filters: { unread: null, flagged: null, hasAttachments: null } }],
         ['filters that are not a record', { ...kept, filters: [] }],
+        ['a span this client never offered', { ...kept, filters: { ...kept.filters, dateRange: 'lastDecade' } }],
+        [
+            'a bound the date control never wrote',
+            { ...kept, filters: { ...kept.filters, receivedFrom: 'the first of August' } },
+        ],
+        [
+            'a span with no start, which every offered one resolves to when it is picked',
+            { ...kept, filters: { ...kept.filters, dateRange: 'today' } },
+        ],
         ['a listing that is not a record', 'the inbox'],
     ])('opens at the leading end for a record carrying %s', (_, written) => {
         stored({ [keyFor(inbox)]: written });
 
         expect(rememberedListing(deployment, inbox)).toStrictEqual(neverOpenedListing);
+    });
+
+    it('reads back the span and the pair the folder was narrowed by, so returning to it finds them', () => {
+        const narrowed = {
+            ...kept,
+            filters: { ...kept.filters, dateRange: 'thisYear' as const, receivedFrom: '2026-01-01T00:00' },
+        };
+
+        rememberListing(deployment, inbox, narrowed);
+
+        expect(rememberedListing(deployment, inbox)).toStrictEqual(narrowed);
     });
 
     it('refuses a store holding more folders than it keeps rather than reading part of it', () => {

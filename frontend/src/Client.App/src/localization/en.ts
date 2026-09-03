@@ -334,6 +334,20 @@ export const en = {
     'list.emptyWhileFailing':
         'This mailbox stopped synchronizing, so what is here may be less than the mail server holds.',
 
+    'list.filters': 'Filters',
+    'list.filtersInForce': 'Active filters: {count}',
+    'list.noFiltersInForce': 'No active filters',
+    'list.clearFilters': 'Clear filters',
+    'list.dateRange': 'Date range',
+    'list.rangeToday': 'Today',
+    'list.rangeLastSevenDays': 'Last 7 days',
+    'list.rangeLastThirtyDays': 'Last 30 days',
+    'list.rangeThisYear': 'This year',
+    'list.receivedFromField': 'from',
+    'list.receivedToField': 'to',
+    'list.rangeSelectsNothing':
+        'The end of the range falls before its start, so nothing could have arrived between them.',
+
     'list.order': 'Order',
     'list.newestFirst': 'Newest first',
     'list.oldestFirst': 'Oldest first',

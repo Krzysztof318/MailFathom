@@ -40,6 +40,7 @@ export const iconNames = [
     'edit_square',
     'expand_more',
     'explore',
+    'filter_alt',
     'flag',
     'folder',
     'forward',
@@ -66,6 +67,7 @@ export const iconNames = [
     'tab',
     'task_alt',
     'topic',
+    'tune',
     'warning',
 ] as const;
 

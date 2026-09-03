@@ -51,6 +51,12 @@ export interface MailTimelineQuery {
     /** Keep only mail with attachments, only mail without, or `null` for both. */
     readonly hasAttachments: boolean | null;
 
+    /** The inclusive start of the received range as an instant, or `null` for no start. */
+    readonly receivedOnOrAfter: string | null;
+
+    /** The exclusive end of the received range as an instant, or `null` for no end. */
+    readonly receivedBefore: string | null;
+
     readonly order: MailTimelineOrder;
     readonly direction: MailTimelinePageDirection;
 
@@ -175,12 +181,15 @@ export function timelineQueryString(query: MailTimelineQuery): string {
         `pageSize=${String(query.pageSize)}`,
     ];
 
-    if (query.account !== null) {
-        asked.push(`account=${encodeURIComponent(query.account)}`);
-    }
-
-    if (query.folder !== null) {
-        asked.push(`folder=${encodeURIComponent(query.folder)}`);
+    for (const [name, named] of [
+        ['account', query.account],
+        ['folder', query.folder],
+        ['receivedOnOrAfter', query.receivedOnOrAfter],
+        ['receivedBefore', query.receivedBefore],
+    ] as const) {
+        if (named !== null) {
+            asked.push(`${name}=${encodeURIComponent(named)}`);
+        }
     }
 
     if (query.includeJunk) {
