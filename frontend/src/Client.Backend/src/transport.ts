@@ -4,7 +4,7 @@
 
 /** One request this package asks its caller to put on the wire. */
 export interface ClientRequest {
-    readonly method: 'GET' | 'POST';
+    readonly method: 'GET' | 'POST' | 'DELETE';
     readonly path: string;
     readonly headers: Readonly<Record<string, string>>;
 

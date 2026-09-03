@@ -40,11 +40,15 @@ export interface ClientPreferencesInForce {
      */
     readonly markReadOnOpen: boolean;
 
+    /** Whether this deployment may be told what the person's client is doing. */
+    readonly telemetryEnabled: boolean;
+
     /** Whether the deployment refused the last change, which is the one thing about this a screen has to say out loud. */
     readonly notStated: boolean;
 
     readonly chooseTheme: (choice: ThemeChoice) => void;
     readonly chooseTabMode: (openMailInTabs: boolean) => void;
+    readonly chooseTelemetry: (telemetryEnabled: boolean) => void;
 }
 
 // What is held, and whose it is. The session is carried beside the document rather than trusted to have stayed the
@@ -163,6 +167,7 @@ export function useClientPreferences(
     return {
         openMailInTabs: inForce.preferences.openMailInTabs,
         markReadOnOpen: inForce.preferences.markReadOnOpen,
+        telemetryEnabled: inForce.preferences.telemetryEnabled,
         notStated: inForce.notStated,
         chooseTheme: (choice) => {
             setThemeChoice(choice);
@@ -170,6 +175,9 @@ export function useClientPreferences(
         },
         chooseTabMode: (openMailInTabs) => {
             state({ ...composedFrom(), openMailInTabs });
+        },
+        chooseTelemetry: (telemetryEnabled) => {
+            state({ ...composedFrom(), telemetryEnabled });
         },
     };
 }

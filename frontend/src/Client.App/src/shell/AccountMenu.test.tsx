@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MailAccount } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
 import type { ClientPreferencesInForce } from '../preferences/useClientPreferences';
+import type { OwnProfileInForce } from '../profile/useOwnProfile';
 import { ThemeProvider } from '../theme/Theme';
 import { AccountMenu } from './AccountMenu';
 
@@ -23,9 +24,23 @@ function mailbox(id: string, displayName: string): MailAccount {
 const settings: ClientPreferencesInForce = {
     openMailInTabs: false,
     markReadOnOpen: true,
+    telemetryEnabled: true,
     notStated: false,
     chooseTheme: () => undefined,
     chooseTabMode: () => undefined,
+    chooseTelemetry: () => undefined,
+};
+
+const nobody: OwnProfileInForce = {
+    displayName: null,
+    changeable: false,
+    picture: null,
+    nameNotAcceptable: false,
+    nameNotStated: false,
+    pictureNotStated: false,
+    correctName: () => undefined,
+    choosePicture: () => undefined,
+    removePicture: () => undefined,
 };
 
 // The width the tab mode needs is the one thing on this menu jsdom answers for, and it answers `false` to every query
@@ -47,6 +62,7 @@ function renderMenu({
     deploymentVersion = '0.9.0',
     readingFrom = null,
     preferences = settings,
+    profile = nobody,
     onPointSomewhereElse = () => undefined,
     onSignOut = () => undefined,
 }: {
@@ -54,6 +70,7 @@ function renderMenu({
     readonly deploymentVersion?: string | null;
     readonly readingFrom?: string | null;
     readonly preferences?: ClientPreferencesInForce;
+    readonly profile?: OwnProfileInForce;
     readonly onPointSomewhereElse?: () => void;
     readonly onSignOut?: () => void;
 } = {}): void {
@@ -65,6 +82,7 @@ function renderMenu({
                     deploymentVersion={deploymentVersion}
                     readingFrom={readingFrom}
                     preferences={preferences}
+                    profile={profile}
                     onPointSomewhereElse={onPointSomewhereElse}
                     onSignOut={onSignOut}
                 />
@@ -91,13 +109,58 @@ describe('AccountMenu', () => {
         expect(document.getElementById('account-menu')?.getAttribute('popover')).toBe('auto');
     });
 
-    it('holds the three settings and the way out', () => {
+    it('holds the two settings a person reaches between messages, the way into the rest, and the way out', () => {
         renderMenu();
 
         expect(screen.getByRole('switch', { name: /Tab mode/u, hidden: true })).toBeDefined();
         expect(screen.getByRole('group', { name: 'Theme', hidden: true })).toBeDefined();
-        expect(screen.getByRole('combobox', { name: 'Language', hidden: true })).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Settings', hidden: true })).toBeDefined();
         expect(screen.getByRole('button', { name: 'Sign out', hidden: true })).toBeDefined();
+    });
+
+    it('does not choose a language here, that being what the settings screen behind its own row is for', () => {
+        renderMenu();
+
+        expect(screen.queryByRole('combobox', { name: 'Language', hidden: true })).toBeNull();
+    });
+
+    it('names the person once the deployment has said what they are called', () => {
+        renderMenu({ profile: { ...nobody, displayName: 'Ada Lovelace' } });
+
+        expect(screen.getByText('Ada Lovelace')).toBeDefined();
+    });
+
+    it('names nobody while nothing has answered, rather than a placeholder somebody would read as a name', () => {
+        renderMenu({ profile: nobody });
+
+        expect(screen.getByRole('button', { name: 'Account and preferences' }).textContent).toBe('');
+    });
+
+    it('draws the person by their own picture once they have one', () => {
+        renderMenu({ profile: { ...nobody, displayName: 'Ada Lovelace', picture: 'data:image/png;base64,AA==' } });
+
+        const drawn = screen.getByRole('button', { name: 'Account and preferences' }).querySelector('img');
+
+        expect(drawn?.getAttribute('src')).toBe('data:image/png;base64,AA==');
+    });
+
+    it('opens the settings screen from its own row', () => {
+        renderMenu({ profile: { ...nobody, displayName: 'Ada Lovelace' } });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Settings', hidden: true }));
+
+        expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
+    });
+
+    it('hands focus back to the row that opened the screen once it closes', () => {
+        renderMenu({ profile: { ...nobody, displayName: 'Ada Lovelace' } });
+
+        const row = screen.getByRole('button', { name: 'Settings', hidden: true });
+        fireEvent.click(row);
+        fireEvent.click(screen.getByRole('button', { name: 'Close settings' }));
+
+        expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
+        expect(document.activeElement).toBe(row);
     });
 
     it('lists the mailboxes this deployment reads for the person', () => {
@@ -126,7 +189,7 @@ describe('AccountMenu', () => {
     it('says what the client alone is running while the deployment has not answered', () => {
         renderMenu({ deploymentVersion: null });
 
-        expect(screen.queryByText(/deployment/u)).toBeNull();
+        expect(screen.queryByText(/, deployment /u)).toBeNull();
         expect(screen.getByText(/^Client /u)).toBeDefined();
     });
 

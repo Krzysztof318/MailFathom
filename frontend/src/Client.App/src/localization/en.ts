@@ -118,6 +118,27 @@ export const en = {
     'preferences.notStated':
         'That change was not saved to the deployment, so it holds on this machine alone until the next one succeeds.',
 
+    'settings.title': 'Settings',
+    'settings.close': 'Close settings',
+    'settings.profile': 'Profile',
+    'settings.name': 'Full name',
+    'settings.nameNotYours':
+        'Whoever runs this deployment keeps your name, so it is shown here rather than offered for you to change.',
+    'settings.nameNotAcceptable':
+        'That name was not accepted. It cannot be blank or longer than 128 characters, and it cannot be one somebody else on this deployment already goes by.',
+    'settings.nameNotStored': 'That name was not saved to the deployment, so it still holds you under the old one.',
+    'settings.choosePicture': 'Picture',
+    'settings.removePicture': 'Remove',
+    'settings.pictureBounds': 'JPG/PNG, up to 1 MB',
+    'settings.pictureNotAnImageKind': 'That file is neither a JPEG nor a PNG, so it was not sent.',
+    'settings.pictureTooLarge': 'That picture is larger than 1 MB, so it was not sent.',
+    'settings.pictureNotStored': 'That picture was not saved to the deployment, so you are still drawn as you were.',
+    'settings.privacy': 'Privacy',
+    'settings.telemetryWithheld': 'Do not send telemetry',
+    'settings.telemetryExplanation': 'Error diagnostics and usage statistics stay on this device.',
+    'settings.telemetryWithheldWarning':
+        'Without telemetry, support is harder — problems have to be described by hand, and some failures cannot be reproduced by whoever is helping you.',
+
     'deployment.reachedAt': 'Reading from {address}',
     'deployment.change': 'Point somewhere else',
 

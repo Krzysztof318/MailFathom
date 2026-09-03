@@ -125,6 +125,24 @@ export {
     type MailTimelinePageDirection,
     type MailTimelineQuery,
 } from './mailTimeline';
+export {
+    changeOwnDisplayName,
+    longestDisplayNameAnswer,
+    ownDisplayNameRoute,
+    readOwnDisplayName,
+    type OwnDisplayName,
+    type OwnDisplayNameChange,
+} from './ownDisplayName';
+export {
+    isPortraitImageType,
+    largestPortraitOctets,
+    ownPortraitRoute,
+    portraitImageTypes,
+    readOwnPortraitRequest,
+    removeOwnPortraitRequest,
+    replaceOwnPortraitRequest,
+    type PortraitImageType,
+} from './ownPortrait';
 export { clientRoutePrefix, headersFor, routeFor, type ClientSession, type DeploymentAddress } from './session';
 export { telemetryEndpoints, telemetryName } from './telemetry';
 export { reachDeployment, signIn, type DeploymentGreeting, type SignInOutcome, type SignInRefusal } from './signIn';

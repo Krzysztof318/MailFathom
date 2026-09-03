@@ -273,6 +273,19 @@ async function servedByADeployment(page: Page): Promise<void> {
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(held) });
     });
 
+    // Who the signed-in person is, which the frame reads for the account menu and the settings screen. The portrait is
+    // answered as none: what a stored one costs this suite is a second binary fixture, and every assertion below is
+    // about the name and the screen around it rather than about the octets.
+    await page.route('**/api/client/display-name', (route) =>
+        route.fulfill({
+            status: 200,
+            contentType: 'application/json',
+            body: JSON.stringify({ displayName: 'Ada Lovelace', changeable: true }),
+        }),
+    );
+
+    await page.route('**/api/client/portrait', (route) => route.fulfill({ status: 204 }));
+
     await page.route('**/api/client/session', (route) =>
         route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(sessionAnswer) }),
     );
@@ -404,6 +417,13 @@ async function signIn(page: Page): Promise<void> {
 async function openAccountMenu(page: Page): Promise<void> {
     await page.getByRole('button', { name: 'Account and preferences' }).click();
     await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
+}
+
+/** The settings screen opened from the row the account menu carries, which is the only way in. */
+async function openSettings(page: Page): Promise<void> {
+    await openAccountMenu(page);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible();
 }
 
 /**
@@ -733,8 +753,8 @@ test('opens again in the language that was chosen, after the page is loaded afre
     await expect(discover).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 
-    await openAccountMenu(page);
-    await page.getByRole('combobox', { name: 'Language' }).selectOption('pl');
+    await openSettings(page);
+    await page.getByRole('group', { name: 'Language' }).getByText('Polski', { exact: true }).click();
     await page.reload();
 
     // The assertion is the English heading being gone and the document declaring the other language, rather than the
@@ -743,6 +763,36 @@ test('opens again in the language that was chosen, after the page is loaded afre
     // object to.
     await expect(discover).toHaveCount(0);
     await expect(page.locator('html')).toHaveAttribute('lang', 'pl');
+});
+
+// The two things a modal screen owes a keyboard, and the two only a browser can answer: `dialog.showModal` is what
+// puts the page behind it out of reach and closes it on Escape, and jsdom implements neither the top layer nor the
+// key. What a unit test can prove about this screen is what the component does — it is proven there — and what is
+// left is that the platform does the rest, which is asked here rather than reimplemented anywhere.
+test('keeps the keyboard inside the settings screen while it is open', async ({ page }) => {
+    await openSignedIn(page);
+    await openSettings(page);
+
+    const panel = page.getByRole('dialog', { name: 'Settings' });
+
+    await expect(panel.locator(':focus')).toHaveCount(1);
+
+    // Far enough round to have left a screen that merely looked modal: the panel carries fewer controls than this.
+    for (let step = 0; step < 12; step += 1) {
+        await page.keyboard.press('Tab');
+    }
+
+    await expect(panel.locator(':focus')).toHaveCount(1);
+});
+
+test('closes the settings screen on Escape, handing focus back to the row that opened it', async ({ page }) => {
+    await openSignedIn(page);
+    await openSettings(page);
+
+    await page.keyboard.press('Escape');
+
+    await expect(page.getByRole('dialog', { name: 'Settings' })).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeFocused();
 });
 
 // What language the client opens in when nobody has chosen one. Only a browser can answer it: `navigator.languages` is
