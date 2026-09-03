@@ -77,12 +77,22 @@ export function MessageList({
     scope,
     accounts,
     online,
+    onOpen,
 }: {
     readonly session: ClientSession;
     readonly transport: MailFathomTransport;
     readonly scope: MailScope;
     readonly accounts: readonly MailAccount[];
     readonly online: boolean;
+
+    /**
+     * Opens a message, which the list asks for rather than performs.
+     *
+     * A row knows which message and what it is called; what opening one *does* — replace the pane, or take a tab of
+     * its own beside what is already open — belongs to the frame, and a list that decided it would be the second
+     * implementation of a decision the frame already holds.
+     */
+    readonly onOpen: (storedEmailId: string, subject: string | null) => void;
 }) {
     const { translate } = useLocalization();
     const { workspace, revise } = useWorkspace();
@@ -347,7 +357,7 @@ export function MessageList({
         const email = rowAt(held, row);
 
         if (email !== null) {
-            revise({ selection: email.id });
+            onOpen(email.id, email.subject);
         }
     }
 
@@ -379,7 +389,7 @@ export function MessageList({
         dragging.current = true;
         setAnchor(email.id);
         select(onlySelected(email.id));
-        revise({ selection: email.id });
+        onOpen(email.id, email.subject);
     }
 
     function dragOver(row: number): void {

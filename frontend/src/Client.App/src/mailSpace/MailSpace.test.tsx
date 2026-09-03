@@ -13,6 +13,7 @@ import { MailSpace } from './MailSpace';
 
 // Not catalogue entries: each stands for whatever the frame composes for the region, which is the point of the props.
 const handedTheFolders = 'The folder tree this space was handed.';
+const handedTheTabs = 'The tab strip this space was handed.';
 const handedTheList = 'The message list this space was handed.';
 const handedToMail = 'The mail this space was handed.';
 const handedTheIntent = 'The question this space was handed.';
@@ -98,6 +99,7 @@ function renderSpace(wide: boolean, opening: Partial<Workspace> = {}, person: st
                     }
                     list={<p>{handedTheList}</p>}
                     mail={<p>{handedToMail}</p>}
+                    tabs={<p>{handedTheTabs}</p>}
                     intent={<p>{handedTheIntent}</p>}
                     status={<p>{handedTheStatus}</p>}
                     person={person}
@@ -232,6 +234,16 @@ describe('MailSpace, wide', () => {
         }
     });
 
+    it('puts the strip of what is open above the toolbar, over the whole width', () => {
+        renderSpace(true);
+
+        const strip = screen.getByText(handedTheTabs);
+
+        expect(strip.compareDocumentPosition(screen.getByRole('toolbar', { name: 'Mail actions' }))).toBe(
+            Node.DOCUMENT_POSITION_FOLLOWING,
+        );
+    });
+
     it('offers the three AI filters as what the product will have rather than as working controls', () => {
         renderSpace(true);
 
@@ -246,6 +258,12 @@ describe('MailSpace, narrow', () => {
         renderSpace(false);
 
         expect(screen.queryByRole('separator', { name: 'Message list width' })).toBeNull();
+    });
+
+    it('draws no strip of what is open, there being no room above one column for a row of tabs', () => {
+        renderSpace(false);
+
+        expect(screen.queryByText(handedTheTabs)).toBeNull();
     });
 
     it('draws the list alone while nothing is open, with the mailboxes behind a control and no toolbar', () => {

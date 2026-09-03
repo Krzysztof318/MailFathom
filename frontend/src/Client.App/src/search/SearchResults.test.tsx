@@ -93,6 +93,28 @@ interface Drawn {
     readonly onWiden: () => void;
 }
 
+// Opening is the frame's, exactly as it is for the message list, so this stands in for what the frame does with the
+// ask: it writes the workspace, which is what the probe below reads back.
+function ResultsOpeningIntoTheWorkspace(drawn: {
+    readonly session: ClientSession;
+    readonly transport: MailFathomTransport;
+    readonly ask: MailSearchAsk;
+    readonly online: boolean;
+    readonly narrowed: boolean;
+    readonly onWiden: () => void;
+}) {
+    const { revise } = useWorkspace();
+
+    return (
+        <SearchResults
+            {...drawn}
+            onOpen={(storedEmailId) => {
+                revise({ selection: storedEmailId });
+            }}
+        />
+    );
+}
+
 function resultsUnder(
     transport: MailFathomTransport,
     { ask = anywhere, online = true, narrowed = false, onWiden = () => undefined }: Partial<Drawn> = {},
@@ -100,7 +122,7 @@ function resultsUnder(
     return (
         <LocalizationProvider>
             <WorkspaceProvider>
-                <SearchResults
+                <ResultsOpeningIntoTheWorkspace
                     session={session}
                     transport={transport}
                     ask={ask}

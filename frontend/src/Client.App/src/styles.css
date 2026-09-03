@@ -219,6 +219,11 @@
        a `--spacing-*` one because what reads it is `max-w-reading`. */
     --container-reading: 56rem;
 
+    /* The widest one tab in the strip above the content pane is drawn, which is a ceiling in the same sense: a tab
+       takes the room its title needs and stops here, so a long subject is cut rather than pushing every other tab off
+       the side. It is the width the design project draws a tab at. */
+    --container-tab: 14.375rem;
+
     /* What a notch, a rounded corner, or a system bar takes out of the viewport. Zero everywhere a window has none,
        which is every head this repository builds today; declaring it as a token is what keeps a screen from reaching
        for a fixed padding the day one of them has one. */

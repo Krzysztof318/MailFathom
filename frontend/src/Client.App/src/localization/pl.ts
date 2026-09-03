@@ -170,6 +170,18 @@ export const pl: Catalogue = {
     'mail.listWidthHint':
         'Przeciągnij, aby zmienić szerokość listy. Dwuklik lub klawisz Home przywraca szerokość początkową.',
 
+    'tabs.strip': 'Co jest otwarte',
+    'tabs.close': 'Zamknij: {title}',
+    'tabs.closeAll': 'Zamknij wszystko, co jest otwarte',
+    'tabs.closeAllQuestion': 'Zamknąć wszystkie zakładki?',
+    'tabs.closeAllOpen': 'Otwarte zakładki: {count}.',
+    'tabs.closeAllDraft': 'Niewysłany szkic zostanie odrzucony.',
+    'tabs.closeAllConfirm': 'Zamknij wszystkie',
+    'tabs.closeAllCancel': 'Anuluj',
+    'tabs.nothingOpen': 'Nic nie jest otwarte',
+    'tabs.nothingOpenExplanation': 'Wybierz wiadomość z listy — otworzy się jako własna zakładka.',
+    'tabs.reopenLastRead': 'Otwórz ostatnio czytaną wiadomość',
+
     'folder.inbox': 'Odebrane',
     'folder.drafts': 'Kopie robocze',
     'folder.sent': 'Wysłane',

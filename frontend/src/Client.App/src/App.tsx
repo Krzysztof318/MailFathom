@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { ClientSession, DeploymentAddress, MailFathomTransport } from '@mailfathom/client-backend';
 import { BrandMark } from './controls/BrandMark';
 import { SecondaryButton } from './controls/SecondaryButton';
@@ -10,6 +10,9 @@ import { forgetDeployment, storeDeployment, type AdoptedDeployment } from './dep
 import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { FolderTree } from './folders/FolderTree';
 import { useLocalization } from './localization/useLocalization';
+import { NothingOpen } from './mailSpace/NothingOpen';
+import { TabStrip } from './mailSpace/TabStrip';
+import { useOpenTabs } from './mailSpace/useOpenTabs';
 import { MessageList } from './messageList/MessageList';
 import { forgetListings } from './messageList/rememberedListings';
 import { useClientPreferences } from './preferences/useClientPreferences';
@@ -26,6 +29,7 @@ import { LanguageChoice, ThemeChoice } from './shell/Preferences';
 import { Space } from './shell/Space';
 import { SpaceNavigation } from './shell/SpaceNavigation';
 import { useConnection } from './shell/useConnection';
+import { useWideEnoughForTabs } from './shell/useWideWorkspace';
 import { userNameIn } from './signIn/credentialEntry';
 import { CredentialNotices, type CredentialNotice } from './signIn/CredentialNotices';
 import type { CredentialStore } from './signIn/credentialStore';
@@ -154,6 +158,13 @@ export function App({
     const markingRead =
         preferences.markReadOnOpen && deploymentSession !== null && offers(deploymentSession, 'markMailRead');
 
+    // Whether the person is working in tabs, which is the two halves of that question and nothing else: what they set,
+    // and a window with room for a row of tabs above the columns. Below that width the mode is inert rather than off —
+    // the switch stays in the menu and says so — so narrowing returns the pane layout and widening returns the strip.
+    const wideEnoughForTabs = useWideEnoughForTabs();
+    const inTabs = preferences.openMailInTabs && wideEnoughForTabs;
+    const openTabs = useOpenTabs(inTabs);
+
     function signedIn(reached: DeploymentAddress, presented: string): void {
         if (adopted === null) {
             storeDeployment(reached);
@@ -199,6 +210,29 @@ export function App({
                 }
             });
         }
+    }
+
+    // What the reading column holds: the empty state where somebody working in tabs has closed all of them, and what
+    // they have open otherwise. A function rather than a chain inside the markup, for the reason `frontend/src`'s
+    // instructions give about where markup ends.
+    function whatIsOpen(): ReactNode {
+        if (inTabs && openTabs.tabs.length === 0) {
+            return <NothingOpen arriving={openTabs.emptiedByClosing} onReopenLastRead={openTabs.reopenLastRead} />;
+        }
+
+        if (session === null) {
+            return null;
+        }
+
+        return (
+            <OpenMail
+                session={session}
+                transport={readMail}
+                conversation={workspace.conversation}
+                storedEmailId={workspace.selection}
+                online={connection.online}
+            />
+        );
     }
 
     function pointSomewhereElse(): void {
@@ -285,6 +319,7 @@ export function App({
                                         scope={workspace.scope}
                                         accounts={mailAccounts}
                                         online={connection.online}
+                                        onOpen={openTabs.openMail}
                                     >
                                         <MessageList
                                             key={scopeKey(workspace.scope)}
@@ -293,21 +328,25 @@ export function App({
                                             scope={workspace.scope}
                                             accounts={mailAccounts}
                                             online={connection.online}
+                                            onOpen={openTabs.openMail}
                                         />
                                     </MailSearch>
                                 )
                             }
-                            mail={
-                                session === null ? null : (
-                                    <OpenMail
-                                        session={session}
-                                        transport={readMail}
-                                        conversation={workspace.conversation}
-                                        storedEmailId={workspace.selection}
-                                        online={connection.online}
+                            tabs={
+                                /* A map of what is open, so it is drawn only where there is something to map: an empty
+                                   strip over an empty pane would say the same thing twice. */
+                                inTabs && openTabs.tabs.length > 0 ? (
+                                    <TabStrip
+                                        tabs={openTabs.tabs}
+                                        active={openTabs.active}
+                                        onActivate={openTabs.activate}
+                                        onClose={openTabs.close}
+                                        onCloseEverything={openTabs.closeEverything}
                                     />
-                                )
+                                ) : null
                             }
+                            mail={whatIsOpen()}
                         />
                     )}
                 </div>
