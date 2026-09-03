@@ -1224,13 +1224,15 @@ fetched, so the wait a person actually has is invisible from the deployment.
 The first two carry `mailfathom.client.space`, whose values are the client's own space names, and each move opens a
 span named `navigate <space>`. The space a run opens on is not a move and is reported by none of them.
 
-**`mailfathom.client.arrival.duration` is reported by the web head and by no other**, and that is the one place the two
-heads differ in what they can say. A document served over HTTP arrived from the deployment, and the browser's own
-navigation timing measures exactly that. The desktop shell loads the same document from a scheme of its own with no
-server behind it, so the same measurement would be timing a disk and would put two unrelated quantities on one
-histogram. It is therefore absent on that head rather than reported as a zero — which is why a panel reading it is
-read against `mailfathom.client.head` rather than against the client population as a whole. Nothing in the client
-branches on the head to decide this: what is asked is how the document was served.
+**`mailfathom.client.arrival.duration` is reported only by a client the deployment itself served**, and that is the
+one place the two heads differ in what they can say. The browser times every document it loads, and that number means
+a deployment answering only where the deployment is what answered: a desktop shell serves the same document out of the
+bundle it packages, and a development server serves it beside a deployment it merely points at, so in both the same
+measurement would be timing a disk and would put two unrelated quantities on one histogram. It is therefore absent
+there rather than reported as a zero — which is why a panel reading it is read against `mailfathom.client.head` rather
+than against the client population as a whole. Nothing in the client branches on the head to decide this: what is
+asked is whether the document's own origin is the deployment the session is signed in to, which a shell serving the
+bundle over `http://tauri.localhost` answers exactly as one serving from a scheme of its own does.
 
 **Two log records, and no others.** `session_started` at `INFO` when a signed-in session begins, and
 `credential_no_longer_accepted` at `WARN` when the deployment stops taking the credential a session held. Each carries

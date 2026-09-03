@@ -159,4 +159,22 @@ describe('spanned', () => {
         expect(timed?.descriptor.unit).toBe('s');
         expect(timed?.dataPoints).toHaveLength(1);
     });
+
+    it('counts a read and times it too, under an outcome carrying no failure', async () => {
+        await spanned('GET /folders', () => Promise.resolve(read(1)));
+
+        const recorded = await recordedMeasurements();
+        const counted = recorded.find((metric) => metric.descriptor.name === 'mailfathom.client.requests');
+        const timed = recorded.find((metric) => metric.descriptor.name === 'mailfathom.client.request.duration');
+
+        expect(counted?.dataPoints[0]?.value).toBe(1);
+        expect(counted?.dataPoints[0]?.attributes).toEqual({
+            'mailfathom.client.request': 'GET /folders',
+            'mailfathom.client.outcome': 'read',
+        });
+        expect(timed?.dataPoints[0]?.attributes).toEqual({
+            'mailfathom.client.request': 'GET /folders',
+            'mailfathom.client.outcome': 'read',
+        });
+    });
 });

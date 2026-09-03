@@ -96,7 +96,7 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
 
                 if (!arrivalReported) {
                     arrivalReported = true;
-                    reportArrival();
+                    reportArrival(session);
                 }
 
                 return stop;
@@ -152,15 +152,18 @@ const bodies: Readonly<Record<ClientEvent, string>> = {
 /**
  * Reports how long this client took to arrive, where that is a question about the deployment rather than about a disk.
  *
- * This is the one measurement the two heads do not both have, and it is absent on one rather than reported as a zero
- * or as something else: a document served over HTTP arrived from the deployment, and the navigation entry measures
- * exactly that. The desktop shell loads the same document from a scheme of its own with no server behind it, so the
- * same entry would time reading files off a disk and would put two unrelated quantities on one histogram — which is
- * worse than a histogram that head does not contribute to. What is asked is therefore how the document was served
- * rather than which head is running, so a development server and a deployment both answer the same way.
+ * The browser times every document it loads, so what decides whether that number means anything is where the document
+ * came from: the entry measures a deployment answering only when the deployment is what served it. A desktop shell
+ * serves the same document out of the bundle it packages, and a development server serves it beside a deployment it
+ * merely points at — both would put a disk read on a histogram of network arrivals, which is worse than a histogram
+ * they do not contribute to. So the measurement is absent there rather than reported as a zero.
+ *
+ * What is asked is therefore whether the document's own origin is the deployment this session is signed in to, which
+ * is a comparison of two addresses rather than a question about a head — a shell that serves the bundle over
+ * `http://tauri.localhost` answers it exactly as one serving from a scheme of its own does.
  */
-function reportArrival(): void {
-    if (window.location.protocol !== 'http:' && window.location.protocol !== 'https:') {
+function reportArrival(session: ClientSession): void {
+    if (window.location.origin !== new URL(session.baseAddress).origin) {
         return;
     }
 

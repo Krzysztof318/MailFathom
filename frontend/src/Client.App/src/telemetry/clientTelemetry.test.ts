@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { metrics, trace } from '@opentelemetry/api';
 import { logs, SeverityNumber } from '@opentelemetry/api-logs';
 import { InMemoryLogRecordExporter, LoggerProvider, SimpleLogRecordProcessor } from '@opentelemetry/sdk-logs';
@@ -146,6 +146,58 @@ describe('clientTelemetryForThisApplication', () => {
         // The span still reaches the exporter this test registered, which is what says nothing replaced it.
         expect(spans.getFinishedSpans()).toHaveLength(1);
     });
+
+    // How long the document took to arrive is a measurement about a deployment answering, so it is reported only where
+    // the deployment is what served the document. A desktop shell serving the same bundle over `http://tauri.localhost`
+    // and a development server pointed at a deployment elsewhere both fail that, and both would otherwise put a disk
+    // read on a histogram of network arrivals. The browser is stubbed because jsdom navigates to nothing and so times
+    // nothing, which would let either assertion below pass for the wrong reason.
+    describe('the arrival of the document', () => {
+        let timing: MockInstance<typeof performance.getEntriesByType>;
+
+        beforeEach(() => {
+            timing = vi
+                .spyOn(performance, 'getEntriesByType')
+                .mockReturnValue([{ duration: 1_500 } as PerformanceEntry]);
+        });
+
+        afterEach(() => {
+            vi.restoreAllMocks();
+        });
+
+        it('reports it where the deployment is what served this client', async () => {
+            const telemetry = clientTelemetryForThisApplication();
+
+            telemetry.exportFor({ ...session, baseAddress: window.location.origin });
+
+            await vi.waitFor(async () => {
+                expect(await arrivalDuration()).toBe(1.5);
+            });
+        });
+
+        it('reports nothing where the client was served by something other than its deployment', async () => {
+            const telemetry = clientTelemetryForThisApplication();
+
+            // Signed in to a deployment elsewhere, which is every desktop shell and every development server. The
+            // teardown is queued behind the start, so waiting for it is how this knows the start finished rather than
+            // that it has not begun.
+            telemetry.exportFor(session)();
+
+            await vi.waitFor(() => {
+                expect(isRecording()).toBe(false);
+            });
+
+            expect(timing).not.toHaveBeenCalled();
+        });
+    });
+
+    async function arrivalDuration(): Promise<number | undefined> {
+        const recorded = await recordedMeasurements();
+        const arrival = recorded.find((metric) => metric.descriptor.name === 'mailfathom.client.arrival.duration');
+        const [point] = arrival?.dataPoints ?? [];
+
+        return typeof point?.value === 'object' && 'sum' in point.value ? point.value.sum : undefined;
+    }
 });
 
 // Outside the block above, because what it is about is the registries being taken over rather than what is written
