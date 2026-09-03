@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { Icon } from '../controls/Icon';
+import { Switch } from '../controls/Switch';
 import type { MessageKey } from '../localization/en';
 import { isOfferedLocale, localeNames, locales } from '../localization/locale';
 import { useLocalization } from '../localization/useLocalization';
@@ -102,23 +103,7 @@ export function TabModeSwitch({ on, onChange }: { readonly on: boolean; readonly
                 {wideEnough ? null : <span className="text-xs text-faint">{translate('shell.tabModeTooNarrow')}</span>}
             </span>
 
-            {/* The platform has no switch element, so a checkbox carries the role: `switch` is what says this is on or
-                off rather than ticked, and everything a checkbox already gives — the keyboard, the label, the
-                disabled state — is kept. The track and the knob are drawn from the checked state of the input beside
-                them rather than from a second copy of it held in React. */}
-            <input
-                type="checkbox"
-                role="switch"
-                checked={on}
-                disabled={!wideEnough}
-                className="peer sr-only"
-                onChange={(event) => {
-                    onChange(event.target.checked);
-                }}
-            />
-            <span className="flex w-7.5 shrink-0 items-center rounded-full bg-line-strong p-0.5 transition peer-checked:justify-end peer-checked:bg-accent peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent">
-                <span className="size-3.25 rounded-full bg-panel" />
-            </span>
+            <Switch on={on} disabled={!wideEnough} onChange={onChange} />
         </label>
     );
 }
@@ -145,6 +130,51 @@ export function ThemeChoice() {
                 </option>
             ))}
         </select>
+    );
+}
+
+/**
+ * The language as one chip per offering, which is the form the settings screen carries it in.
+ *
+ * The second shape of this control rather than a second control, exactly as the theme has two: a strip above a sign-in
+ * form has room for a dropdown and a settings section has room for the choices themselves. Radio buttons for the
+ * reason the theme segments are — the platform announces them as one group, moves between them with the arrow keys,
+ * and leaves one tab stop.
+ *
+ * The languages are never translated. Somebody who has landed in one they cannot read finds their own by its own name.
+ */
+export function LanguageSegments() {
+    const { locale, setLocale, translate } = useLocalization();
+
+    return (
+        <fieldset className="flex flex-wrap gap-1.25">
+            <legend className="sr-only">{translate('shell.language')}</legend>
+
+            {locales.map((offered) => (
+                <label
+                    key={offered}
+                    className={`cursor-pointer rounded-lg px-3.25 py-1.5 text-sm transition has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent ${
+                        locale === offered
+                            ? 'bg-accent font-semibold text-on-accent'
+                            : 'border border-line bg-sunken text-text-soft hover:bg-hover'
+                    }`}
+                >
+                    <input
+                        type="radio"
+                        name="language"
+                        value={offered}
+                        checked={locale === offered}
+                        className="sr-only"
+                        onChange={(event) => {
+                            if (isOfferedLocale(event.target.value)) {
+                                setLocale(event.target.value);
+                            }
+                        }}
+                    />
+                    {localeNames[offered]}
+                </label>
+            ))}
+        </fieldset>
     );
 }
 

@@ -7,6 +7,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { adoptedDeployment } from './deployment/adoptedDeployment';
 import { AttachmentDeliveryContext, deliverAttachment } from './deployment/attachmentDelivery';
+import { portraitExchange } from './deployment/portraitExchange';
 import { sendToDeployment } from './deployment/sendToDeployment';
 import { LocalizationProvider } from './localization/Localization';
 import { LinkOpenerContext, linkOpenerForThisApplication } from './shellOperations/linkOpener';
@@ -62,6 +63,7 @@ async function open(root: HTMLElement): Promise<void> {
                                     <App
                                         credentials={credentials}
                                         deployment={deployment}
+                                        portraits={portraitExchange}
                                         send={sendToDeployment}
                                         signedInWith={signedInWith}
                                     />

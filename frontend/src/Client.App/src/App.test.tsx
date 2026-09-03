@@ -9,6 +9,7 @@ import type { ClientRequest, ClientResponse, ClientSession } from '@mailfathom/c
 import { App } from './App';
 import type { AdoptedDeployment } from './deployment/adoptedDeployment';
 import { AttachmentDeliveryContext, type AttachmentDelivery } from './deployment/attachmentDelivery';
+import type { PortraitExchange } from './deployment/portraitExchange';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { LocalizationProvider } from './localization/Localization';
 import { localeNames, locales, readStoredLocale } from './localization/locale';
@@ -402,6 +403,14 @@ function chose(baseAddress: string): AdoptedDeployment {
 // application, so a test that supplied fewer would be proving a second arrangement — and the mode is half of that
 // arrangement rather than a detail of it: it invokes every effect twice on mount, which is the difference between a
 // screen that behaves and one that behaves the first time.
+// The portrait is the one read this frame makes that does not go through a transport, octets not being text. Nothing
+// here is about a picture, so the exchange answers that there is none and refuses both writes as unreachable.
+const drawsNobody: PortraitExchange = {
+    read: () => Promise.resolve({ outcome: 'none' }),
+    replace: () => Promise.resolve({ outcome: 'refused', reason: 'unavailable' }),
+    remove: () => Promise.resolve({ outcome: 'refused', reason: 'unavailable' }),
+};
+
 function renderApp(
     deployment: AdoptedDeployment | null = servedFrom,
     signedInWith: string | null = heldCredential,
@@ -420,6 +429,7 @@ function renderApp(
                                     <App
                                         credentials={credentials}
                                         deployment={deployment}
+                                        portraits={drawsNobody}
                                         send={send}
                                         signedInWith={signedInWith}
                                     />
@@ -1262,11 +1272,14 @@ describe('App deployment', () => {
         renderApp(chose('https://elsewhere.example.invalid'));
         await framed();
 
-        expect(routesAsked()).toEqual([
-            'https://elsewhere.example.invalid/api/client/session',
-            'https://elsewhere.example.invalid/api/client/accounts',
-            'https://elsewhere.example.invalid/api/client/preferences',
-        ]);
+        await waitFor(() => {
+            expect(routesAsked()).toEqual([
+                'https://elsewhere.example.invalid/api/client/session',
+                'https://elsewhere.example.invalid/api/client/accounts',
+                'https://elsewhere.example.invalid/api/client/preferences',
+                'https://elsewhere.example.invalid/api/client/display-name',
+            ]);
+        });
     });
 
     it('asks for an address when nothing has said where the deployment is', () => {
@@ -1289,11 +1302,14 @@ describe('App deployment', () => {
         signIn();
         await framed();
 
-        expect(routesAsked()).toEqual([
-            'https://mail.example.test/api/client/session',
-            'https://mail.example.test/api/client/accounts',
-            'https://mail.example.test/api/client/preferences',
-        ]);
+        await waitFor(() => {
+            expect(routesAsked()).toEqual([
+                'https://mail.example.test/api/client/session',
+                'https://mail.example.test/api/client/accounts',
+                'https://mail.example.test/api/client/preferences',
+                'https://mail.example.test/api/client/display-name',
+            ]);
+        });
     });
 
     it('offers to be pointed elsewhere once somebody named the deployment themselves', async () => {
@@ -1441,23 +1457,35 @@ describe('App deployment', () => {
         signIn();
         await framed();
 
-        expect(routesAsked()).toEqual([
-            'https://first.example.invalid/api/client/session',
-            'https://first.example.invalid/api/client/accounts',
-            'https://first.example.invalid/api/client/preferences',
-            'https://second.example.invalid/api/client/session',
-            'https://second.example.invalid/api/client/accounts',
-            'https://second.example.invalid/api/client/preferences',
-        ]);
+        await waitFor(() => {
+            expect(routesAsked()).toEqual([
+                'https://first.example.invalid/api/client/session',
+                'https://first.example.invalid/api/client/accounts',
+                'https://first.example.invalid/api/client/preferences',
+                'https://first.example.invalid/api/client/display-name',
+                'https://second.example.invalid/api/client/session',
+                'https://second.example.invalid/api/client/accounts',
+                'https://second.example.invalid/api/client/preferences',
+                'https://second.example.invalid/api/client/display-name',
+            ]);
+        });
     });
 });
+
+// Inside the frame the language is chosen on the settings screen rather than in the menu that leads to it, which is
+// where the design project puts it — so a test about the language opens that screen the way a person does.
+function openSettings(): void {
+    fireEvent.click(screen.getByRole('button', { name: 'Settings', hidden: true }));
+}
 
 describe('App language', () => {
     it('offers each language under its own name, and no other', () => {
         renderApp();
+        openSettings();
 
-        const choice = screen.getByRole('combobox', { name: 'Language', hidden: true });
-        expect([...choice.querySelectorAll('option')].map((option) => option.textContent)).toEqual(
+        const offered = within(screen.getByRole('group', { name: 'Language' })).getAllByRole('radio');
+
+        expect(offered.map((choice) => choice.closest('label')?.textContent)).toEqual(
             locales.map((locale) => localeNames[locale]),
         );
     });
@@ -1465,8 +1493,9 @@ describe('App language', () => {
     it('rewrites the screen when another language is chosen, without anything being restarted', async () => {
         renderApp();
         await screen.findByRole('heading', { name: 'Discover', level: 1 });
+        openSettings();
 
-        fireEvent.change(screen.getByRole('combobox', { name: 'Language', hidden: true }), { target: { value: 'pl' } });
+        fireEvent.click(screen.getByRole('radio', { name: localeNames.pl }));
 
         expect(screen.getByRole('heading', { name: 'Odkrywaj', level: 1 })).toBeDefined();
         expect(document.documentElement.lang).toBe('pl');
@@ -1474,8 +1503,9 @@ describe('App language', () => {
 
     it('remembers the choice, so a later run of either head opens in it', () => {
         renderApp();
+        openSettings();
 
-        fireEvent.change(screen.getByRole('combobox', { name: 'Language', hidden: true }), { target: { value: 'pl' } });
+        fireEvent.click(screen.getByRole('radio', { name: localeNames.pl }));
 
         expect(readStoredLocale()).toBe('pl');
     });

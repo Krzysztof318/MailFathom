@@ -2,30 +2,33 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useId } from 'react';
+import { useId, useRef, useState } from 'react';
 import type { MailAccount } from '@mailfathom/client-backend';
 import { Icon } from '../controls/Icon';
 import { MailboxMark } from '../controls/MailboxMark';
+import { PersonAvatar } from '../controls/PersonAvatar';
 import { useLocalization } from '../localization/useLocalization';
 import type { ClientPreferencesInForce } from '../preferences/useClientPreferences';
-import { LanguageChoice, TabModeSwitch, ThemeSegments } from './Preferences';
+import type { OwnProfileInForce } from '../profile/useOwnProfile';
+import { Settings } from '../settings/Settings';
+import { TabModeSwitch, ThemeSegments } from './Preferences';
 
 // The menu at the foot of the rail, which is where the design project puts everything that is about the person rather
-// than about the mail: which mailboxes this deployment reads for them, the two settings that follow them between
-// machines, the one that stays on the machine, what the client and the deployment are running, where the client is
-// reading from, and the way out. It is the platform's own popover rather than a menu built out of state — it opens
-// and closes from the control that names it, closes on Escape and on a press outside it, and hands focus back to that
-// control, none of which this file has to write.
+// than about the mail: who they are, which mailboxes this deployment reads for them, the two settings that follow them
+// between machines, what the client and the deployment are running, where the client is reading from, the way into
+// everything else about them, and the way out. It is the platform's own popover rather than a menu built out of state —
+// it opens and closes from the control that names it, closes on Escape and on a press outside it, and hands focus back
+// to that control, none of which this file has to write.
 //
-// The person is not named here, and neither is the way into Settings. The client holds a finished credential and never
-// the user name it was composed from, so the control is drawn as a person rather than as initials the client would have
-// had to invent; both arrive with the profile routes and the Settings screen.
+// The language is not here and is on the settings screen, which is where the design project draws it: the menu holds
+// what somebody reaches for between messages, and what language the client reads in is set once.
 
 export function AccountMenu({
     accounts,
     deploymentVersion,
     readingFrom,
     preferences,
+    profile,
     onPointSomewhereElse,
     onSignOut,
 }: {
@@ -38,13 +41,34 @@ export function AccountMenu({
     /** The address somebody named for the deployment, or `null` where the origin that served the client is it. */
     readonly readingFrom: string | null;
 
-    /** The settings that follow the person, and the two ways of changing one. */
+    /** The settings that follow the person, and the three ways of changing one. */
     readonly preferences: ClientPreferencesInForce;
+
+    /** Who the client is drawing, which this menu shows and the screen behind its own row edits. */
+    readonly profile: OwnProfileInForce;
 
     readonly onPointSomewhereElse: () => void;
     readonly onSignOut: () => void;
 }) {
     const { translate } = useLocalization();
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    const menu = useRef<HTMLDivElement>(null);
+    const settingsRow = useRef<HTMLButtonElement>(null);
+
+    // The menu is folded away while the screen behind it is open, which is what the design project draws, and put back
+    // when it closes so that focus returns to the row it was opened from rather than to the rail. The platform's own
+    // two methods rather than a state of ours: the popover is the platform's, and a second opinion about whether it is
+    // open is the pair that comes to disagree.
+    function openSettings(): void {
+        menu.current?.hidePopover();
+        setSettingsOpen(true);
+    }
+
+    function closeSettings(): void {
+        setSettingsOpen(false);
+        menu.current?.showPopover();
+        settingsRow.current?.focus();
+    }
 
     return (
         <>
@@ -52,20 +76,25 @@ export function AccountMenu({
                 type="button"
                 popoverTarget="account-menu"
                 aria-label={translate('shell.account')}
-                className="flex size-8.5 shrink-0 items-center justify-center rounded-full bg-line-strong text-text-soft shadow-raised transition hover:-translate-y-px hover:shadow-overlay"
+                className="flex size-8.5 shrink-0 items-center justify-center rounded-full text-text-soft shadow-raised transition hover:-translate-y-px hover:shadow-overlay"
             >
-                <Icon name="person" className="size-5" />
+                <PersonAvatar displayName={profile.displayName} picture={profile.picture} place="menu" />
             </button>
 
             {/* No display utility on the popover itself: the platform hides a closed popover with `display: none` from
                 its own stylesheet, and a utility on the element would outrank that and draw the menu open forever. */}
             <div
+                ref={menu}
                 id="account-menu"
                 popover="auto"
                 aria-label={translate('shell.accountMenu')}
                 className="inset-x-4 top-auto bottom-22 m-0 overflow-hidden rounded-2xl border border-line bg-panel p-0 text-base text-text shadow-overlay workspace:inset-x-auto workspace:bottom-4.5 workspace:left-26.5 workspace:w-54"
             >
                 <div className="flex flex-col gap-0.5 border-b border-line-soft px-3.25 py-2.75">
+                    {profile.displayName === null ? null : (
+                        <p className="truncate font-semibold">{profile.displayName}</p>
+                    )}
+
                     <p className="font-mono text-xs text-muted">
                         {deploymentVersion === null
                             ? translate('shell.clientVersion', { client: __MAILFATHOM_VERSION__ })
@@ -101,10 +130,15 @@ export function AccountMenu({
                     <ThemeSegments onChoose={preferences.chooseTheme} />
                 </div>
 
-                <div className="flex items-center justify-between gap-2 px-3.25 py-2.5">
-                    <span className="text-base">{translate('shell.language')}</span>
-                    <LanguageChoice />
-                </div>
+                <button
+                    ref={settingsRow}
+                    type="button"
+                    className="flex w-full items-center gap-2.5 px-3.25 py-2.5 text-start transition hover:bg-hover"
+                    onClick={openSettings}
+                >
+                    <Icon name="settings" className="size-4.75" />
+                    {translate('settings.title')}
+                </button>
 
                 {preferences.notStated ? (
                     <p className="border-t border-line-soft px-3.25 py-2 text-xs text-warning-text">
@@ -121,6 +155,10 @@ export function AccountMenu({
                     {translate('shell.signOut')}
                 </button>
             </div>
+
+            {/* Outside the popover rather than inside it, because the menu is folded away while this is open and a
+                dialog inside something the platform sets `display: none` on is a dialog nobody can see. */}
+            <Settings open={settingsOpen} profile={profile} preferences={preferences} onClose={closeSettings} />
         </>
     );
 }

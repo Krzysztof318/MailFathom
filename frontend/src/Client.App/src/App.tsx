@@ -7,6 +7,7 @@ import type { ClientSession, DeploymentAddress, MailFathomTransport } from '@mai
 import { BrandMark } from './controls/BrandMark';
 import { SecondaryButton } from './controls/SecondaryButton';
 import { forgetDeployment, storeDeployment, type AdoptedDeployment } from './deployment/adoptedDeployment';
+import type { PortraitExchange } from './deployment/portraitExchange';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { FolderTree } from './folders/FolderTree';
 import { useLocalization } from './localization/useLocalization';
@@ -16,6 +17,7 @@ import { useOpenTabs } from './mailSpace/useOpenTabs';
 import { MessageList } from './messageList/MessageList';
 import { forgetListings } from './messageList/rememberedListings';
 import { useClientPreferences } from './preferences/useClientPreferences';
+import { useOwnProfile } from './profile/useOwnProfile';
 import { ReadMarkingProvider } from './readMarking/ReadMarking';
 import { ReadingPane } from './readingPane/ReadingPane';
 import { useSpace } from './routing/useSpace';
@@ -58,11 +60,15 @@ export function App({
     signedInWith,
     credentials,
     send,
+    portraits,
 }: {
     readonly deployment: AdoptedDeployment | null;
     readonly signedInWith: string | null;
     readonly credentials: CredentialStore;
     readonly send: DeploymentTransport;
+
+    /** How the picture the signed-in person is drawn by is read and written, octets not being what a transport speaks. */
+    readonly portraits: PortraitExchange;
 }) {
     const { workspace, revise } = useWorkspace();
     const telemetry = useTelemetry();
@@ -182,6 +188,11 @@ export function App({
     const wideEnoughForTabs = useWideEnoughForTabs();
     const inTabs = preferences.openMailInTabs && wideEnoughForTabs;
     const openTabs = useOpenTabs(inTabs);
+
+    // Who the person is, asked on the same three conditions and for the same reasons. It is read here rather than in
+    // the menu that shows it because the settings screen behind that menu writes it, and two reads made separately
+    // would disagree the moment one of them did.
+    const profile = useOwnProfile(readsMail && connection.online ? session : null, readMail, portraits);
 
     function signedIn(reached: DeploymentAddress, presented: string): void {
         if (adopted === null) {
@@ -384,6 +395,7 @@ export function App({
                             deploymentVersion={deploymentSession?.version ?? null}
                             readingFrom={adopted?.chosen === true ? baseAddress : null}
                             preferences={preferences}
+                            profile={profile}
                             onPointSomewhereElse={pointSomewhereElse}
                             onSignOut={signOut}
                         />

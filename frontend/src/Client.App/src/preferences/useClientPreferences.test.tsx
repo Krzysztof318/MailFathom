@@ -195,6 +195,45 @@ describe('useClientPreferences', () => {
         });
     });
 
+    it('reads whether this deployment may be told what the client is doing', async () => {
+        const { transport } = recording(stored({ telemetryEnabled: false, theme: 'system', openMailInTabs: false }));
+        const { result } = reading(transport);
+
+        await waitFor(() => {
+            expect(result.current.preferences.telemetryEnabled).toBe(false);
+        });
+    });
+
+    it('states the whole document when the telemetry decision is the one that changed', async () => {
+        const { transport, requests } = recording(
+            stored({ telemetryEnabled: true, theme: 'dark', openMailInTabs: true }),
+        );
+        const { result } = reading(transport);
+
+        await waitFor(() => {
+            expect(result.current.preferences.telemetryEnabled).toBe(true);
+        });
+
+        act(() => {
+            result.current.preferences.chooseTelemetry(false);
+        });
+
+        await waitFor(() => {
+            expect(result.current.preferences.telemetryEnabled).toBe(false);
+        });
+
+        // The write is the whole document rather than the field that moved, so a deployment reading it back finds the
+        // theme and the tab mode as they were rather than as an empty record over somebody's answers.
+        const stating = requests.find((request) => request.method === 'POST');
+
+        expect(JSON.parse(stating?.body ?? '')).toStrictEqual({
+            telemetryEnabled: false,
+            theme: 'dark',
+            openMailInTabs: true,
+            markReadOnOpen: true,
+        });
+    });
+
     it('reads again as somebody else once the credential changes', async () => {
         const { transport, requests } = recording(
             stored({ telemetryEnabled: true, theme: 'system', openMailInTabs: false }),

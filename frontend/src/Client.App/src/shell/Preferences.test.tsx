@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LocalizationProvider } from '../localization/Localization';
 import { ThemeProvider } from '../theme/Theme';
-import { TabModeSwitch, ThemeSegments } from './Preferences';
+import { LanguageSegments, TabModeSwitch, ThemeSegments } from './Preferences';
 
 // The width the tab mode needs is the one thing here jsdom answers for, and the suite's own setup answers `false` to
 // every query — so a test about the wide case states the width it is about rather than inheriting one.
@@ -129,5 +129,39 @@ describe('ThemeSegments', () => {
         fireEvent.click(screen.getByRole('radio', { name: 'Dark' }));
 
         expect(onChoose).toHaveBeenCalledWith('dark');
+    });
+});
+
+describe('LanguageSegments', () => {
+    afterEach(() => {
+        window.localStorage.clear();
+    });
+
+    it('offers each language as one named group, each named in its own language', () => {
+        renderControl(<LanguageSegments />);
+
+        expect(screen.getByRole('group', { name: 'Language' })).toBeDefined();
+        expect(screen.getAllByRole('radio').map((segment) => segment.getAttribute('value'))).toStrictEqual([
+            'en',
+            'pl',
+        ]);
+        expect(screen.getByRole('radio', { name: 'Polski' })).toBeDefined();
+    });
+
+    it('marks the language the client is reading in', () => {
+        renderControl(<LanguageSegments />);
+
+        expect(screen.getByRole('radio', { name: 'English' })).toHaveProperty('checked', true);
+    });
+
+    // Unlike the theme, which is answered by the deployment and reported upwards, the language is the device's own —
+    // so what this control does about a choice is make it rather than state it.
+    it('changes what the client reads in, and keeps it on the device', () => {
+        renderControl(<LanguageSegments />);
+
+        fireEvent.click(screen.getByRole('radio', { name: 'Polski' }));
+
+        expect(screen.getByRole('radio', { name: 'Polski' })).toHaveProperty('checked', true);
+        expect(window.localStorage.getItem('mailfathom.locale')).toBe('pl');
     });
 });

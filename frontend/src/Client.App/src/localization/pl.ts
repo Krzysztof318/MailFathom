@@ -118,6 +118,29 @@ export const pl: Catalogue = {
     'preferences.notStated':
         'Ta zmiana nie została zapisana na wdrożeniu, więc obowiązuje tylko na tym urządzeniu do czasu, aż kolejna się powiedzie.',
 
+    'settings.title': 'Ustawienia',
+    'settings.close': 'Zamknij ustawienia',
+    'settings.profile': 'Profil',
+    'settings.name': 'Imię i nazwisko',
+    'settings.nameNotYours':
+        'Twoje imię i nazwisko prowadzi ten, kto zarządza tym wdrożeniem, więc jest tu pokazane, a nie oddane do zmiany.',
+    'settings.nameNotAcceptable':
+        'To imię i nazwisko nie zostało przyjęte. Nie może być puste ani dłuższe niż 128 znaków i nie może być takie, jakim posługuje się już ktoś inny na tym wdrożeniu.',
+    'settings.nameNotStored':
+        'To imię i nazwisko nie zostało zapisane na wdrożeniu, więc nadal prowadzi Cię pod poprzednim.',
+    'settings.choosePicture': 'Zdjęcie',
+    'settings.removePicture': 'Usuń',
+    'settings.pictureBounds': 'JPG/PNG, maks. 1 MB',
+    'settings.pictureNotAnImageKind': 'Ten plik nie jest ani plikiem JPEG, ani PNG, więc nie został wysłany.',
+    'settings.pictureTooLarge': 'To zdjęcie jest większe niż 1 MB, więc nie zostało wysłane.',
+    'settings.pictureNotStored':
+        'To zdjęcie nie zostało zapisane na wdrożeniu, więc nadal jesteś rysowany tak jak wcześniej.',
+    'settings.privacy': 'Prywatność',
+    'settings.telemetryWithheld': 'Nie wysyłaj danych telemetrycznych',
+    'settings.telemetryExplanation': 'Diagnostyka błędów i statystyki użycia zostają na tym urządzeniu.',
+    'settings.telemetryWithheldWarning':
+        'Bez telemetrii pomoc techniczna będzie utrudniona — zgłoszenia trzeba będzie opisywać ręcznie, a części błędów nie da się odtworzyć po stronie wsparcia.',
+
     'deployment.reachedAt': 'Odczyt z {address}',
     'deployment.change': 'Wskaż inne wdrożenie',
 
