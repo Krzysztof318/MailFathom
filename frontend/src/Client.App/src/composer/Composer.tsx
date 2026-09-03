@@ -107,6 +107,12 @@ export function Composer({
     const wide = useWideWorkspace();
     const draft = useDraftAtDeployment(session, transport);
     const [composition, setComposition] = useState(() => opened(opening, accounts));
+
+    // Whether anybody has written in this message, which is not the same question as whether it has anything in it:
+    // an answer opens addressed to the conversation it answers, and asking to confirm giving up a message nobody has
+    // touched is the confirmation that teaches a reader to dismiss them. A message this tab was already writing is
+    // authored by definition — somebody wrote it, in this tab, before the reload.
+    const [authored, setAuthored] = useState(() => composition !== null && anythingWritten(composition));
     const [reading, setReading] = useState<Reading>({ kind: 'reading' });
     const [known, setKnown] = useState<readonly string[]>([]);
     const [copiesShown, setCopiesShown] = useState(false);
@@ -166,6 +172,7 @@ export function Composer({
     }, [written, opening.kind]);
 
     function revise(change: Partial<Composition>): void {
+        setAuthored(true);
         setComposition((held) => (held === null ? null : { ...held, ...change }));
     }
 
@@ -216,8 +223,9 @@ export function Composer({
     }
 
     // Whether a send may start at all, read by the button and by the keyboard shortcut alike: two ways to ask are
-    // one act, and a second press while the first is in flight would queue the same message twice.
-    const sendable = online && draft.standing.kind !== 'sending';
+    // one act, and a second press would queue the same message twice — while the first is still in flight, and equally
+    // once it is queued, the message having gone as far as this screen can send it either way.
+    const sendable = online && draft.standing.kind !== 'sending' && draft.standing.kind !== 'queued';
 
     const title = translate(titles[opening.kind === 'new' ? 'new' : opening.answers]);
 
@@ -240,10 +248,15 @@ export function Composer({
 
                 <div className="ms-auto flex items-center">
                     <DiscardConfirmation
-                        written={composition !== null && (anythingWritten(composition) || draft.staged.length > 0)}
+                        written={authored || draft.staged.length > 0}
                         onDiscard={() => {
-                            void draft.discard();
-                            close();
+                            // The same rule the keep path holds to: a deployment that refused is one the composer
+                            // stays open on, because closing on it is how what somebody wrote is lost quietly.
+                            void draft.discard().then((given) => {
+                                if (given) {
+                                    close();
+                                }
+                            });
                         }}
                         onKeep={() => {
                             if (composition !== null) {
@@ -333,25 +346,37 @@ export function Composer({
                     ) : null}
 
                     <div className="flex items-center gap-2.5 border-b border-line px-4.25 py-2.75">
-                        <label htmlFor={subjectId} className="w-11 shrink-0 text-sm text-muted">
-                            {translate('compose.subject')}
-                        </label>
-
+                        {/* Two elements rather than one, because only one of the two things the row holds is labelable:
+                            an answer's subject is text the deployment writes, and `for` on a paragraph names nothing a
+                            screen reader would follow. So the field takes a label and the paragraph is named by the
+                            word beside it. */}
                         {composition.answering === null ? (
-                            <input
-                                id={subjectId}
-                                value={composition.subject}
-                                placeholder={translate('compose.subjectPlaceholder')}
-                                className="min-w-0 flex-1 border-none bg-transparent text-md text-text outline-none placeholder:text-faint"
-                                onChange={(event) => {
-                                    revise({ subject: event.target.value });
-                                }}
-                            />
+                            <>
+                                <label htmlFor={subjectId} className="w-11 shrink-0 text-sm text-muted">
+                                    {translate('compose.subject')}
+                                </label>
+
+                                <input
+                                    id={subjectId}
+                                    value={composition.subject}
+                                    placeholder={translate('compose.subjectPlaceholder')}
+                                    className="min-w-0 flex-1 border-none bg-transparent text-md text-text outline-none placeholder:text-faint"
+                                    onChange={(event) => {
+                                        revise({ subject: event.target.value });
+                                    }}
+                                />
+                            </>
                         ) : (
-                            <p id={subjectId} className="min-w-0 flex-1 truncate text-md">
-                                {composition.subject}
-                                <span className="sr-only"> {translate('compose.subjectOfAnAnswer')}</span>
-                            </p>
+                            <>
+                                <span id={subjectId} className="w-11 shrink-0 text-sm text-muted">
+                                    {translate('compose.subject')}
+                                </span>
+
+                                <p aria-labelledby={subjectId} className="min-w-0 flex-1 truncate text-md">
+                                    {composition.subject}
+                                    <span className="sr-only"> {translate('compose.subjectOfAnAnswer')}</span>
+                                </p>
+                            </>
                         )}
                     </div>
 

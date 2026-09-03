@@ -4,6 +4,7 @@
 
 import { createContext, useContext } from 'react';
 import { longestResponseBody, type ClientRequest, type ClientResponse } from '@mailfathom/client-backend';
+import { readBoundedContent } from './boundedBody';
 
 // Putting one file the author is attaching on the wire. It is the third module in this directory that calls `fetch`
 // and the second that carries octets: `Client.Backend` declares no DOM, so a `File`, a `Blob`, and an `AbortSignal`
@@ -49,11 +50,7 @@ export const uploadAttachment: AttachmentUpload = async (request, file, abandone
             signal: abandoned,
         });
 
-        return {
-            status: response.status,
-            body: await readBoundedAnswer(response, request.longestAnswer ?? longestResponseBody),
-            headers: Object.fromEntries(response.headers),
-        };
+        return await answerOf(response, request.longestAnswer ?? longestResponseBody);
     } catch {
         // A connection refused, a name that does not resolve, and the author taking the file back off all arrive here
         // as one rejected promise. Which of them it was is the composer's to know — it is what holds the signal — and
@@ -62,18 +59,34 @@ export const uploadAttachment: AttachmentUpload = async (request, file, abandone
     }
 };
 
-// The answer to an upload is one staged-file record, so the bound the request states is what it is read under. An
-// answer past it comes back empty, which the parser already refuses as unreadable.
-//
-// Read whole rather than streamed against the bound, which is the one thing this does differently from
-// `sendToDeployment.ts`: that transport also answers the address a client is asking whether MailFathom is even at, so
-// it must not buffer a stranger's answer before anything looks at it. This request is only ever made to a deployment
-// this client is already signed in to and has already read mail from, so the bound is a ceiling on a known answer
-// rather than a defence against an unknown one.
-async function readBoundedAnswer(response: Response, longest: number): Promise<string> {
-    // Measured in bytes, because that is what the bound counts: a decoded string's length is UTF-16 code units, so
-    // reading it that way would let an answer past the ceiling through whenever it carried multi-byte characters.
-    const octets = await response.arrayBuffer();
+/**
+ * What one answer to an upload amounts to, read under the size it is allowed to hold.
+ *
+ * Separate from the request above because that one calls `fetch` and this one is everything the client decides about
+ * what came back — which is what a test reaches, on a `Response` it constructed rather than on a patched global.
+ *
+ * The answer is one staged-file record, so an answer past the bound comes back with nothing in it, which the parser
+ * already refuses as unreadable. It is walked rather than buffered, for the reason `boundedBody.ts` states: a ceiling
+ * an answer is measured against after it is all in memory is a ceiling that was never applied.
+ */
+export async function answerOf(response: Response, longest: number): Promise<ClientResponse> {
+    const octets = await readBoundedContent(response, longest);
 
-    return octets.byteLength > longest ? '' : new TextDecoder().decode(octets);
+    return {
+        status: response.status,
+        body: typeof octets === 'string' ? '' : new TextDecoder().decode(joined(octets)),
+        headers: Object.fromEntries(response.headers),
+    };
+}
+
+function joined(chunks: readonly Uint8Array<ArrayBuffer>[]): Uint8Array<ArrayBuffer> {
+    const whole = new Uint8Array(chunks.reduce((octets, chunk) => octets + chunk.byteLength, 0));
+    let written = 0;
+
+    for (const chunk of chunks) {
+        whole.set(chunk, written);
+        written += chunk.byteLength;
+    }
+
+    return whole;
 }

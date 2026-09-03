@@ -991,7 +991,9 @@ describe('App session', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Close the message' }));
 
-        expect(document.activeElement).toBe(screen.getByRole('button', { name: 'New message' }));
+        await waitFor(() => {
+            expect(document.activeElement).toBe(screen.getByRole('button', { name: 'New message' }));
+        });
     });
 
     it('answers an address naming a space this credential may not open with one it may', async () => {

@@ -79,6 +79,7 @@ interface Answers {
     readonly save?: { readonly status: number; readonly body: string };
     readonly send?: { readonly status: number; readonly body: string };
     readonly withdrawal?: { readonly status: number; readonly body: string };
+    readonly discard?: { readonly status: number; readonly body: string };
 }
 
 function deployment(answers: Answers = {}): { transport: MailFathomTransport; asked: ClientRequest[] } {
@@ -107,6 +108,10 @@ function answerFor(request: ClientRequest, answers: Answers): { status: number; 
 
     if (request.path.endsWith('/outbox/cancellation')) {
         return answers.withdrawal ?? { status: 200, body: JSON.stringify({ outcome: 'Accepted' }) };
+    }
+
+    if (request.method === 'DELETE' && answers.discard !== undefined) {
+        return answers.discard;
     }
 
     return answers.save ?? { status: 200, body: draftBody() };
@@ -370,6 +375,60 @@ describe('Composer, a message of its own', () => {
         expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(true);
     });
 
+    it('offers no second send once one is queued, from the control or from the shortcut', async () => {
+        drawComposer();
+
+        address('ada@example.invalid');
+        write('Subject', 'The quarterly figures');
+        write('Message', 'They are attached.');
+        confirmSend();
+
+        expect(await screen.findByText('Queued to go out.')).toBeDefined();
+
+        // The message has gone as far as this screen can send it, so neither way of asking may start a second one.
+        expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(true);
+
+        fireEvent.keyDown(screen.getByLabelText('Message'), { key: 'Enter', ctrlKey: true });
+
+        expect(screen.queryByRole('dialog', { name: 'Send this message?' })).toBeNull();
+    });
+
+    it('stays open and says so where the deployment would not give the draft up', async () => {
+        const { closed } = drawComposer({ kind: 'new' }, { discard: { status: 503, body: '' } });
+
+        write('Message', 'Something worth keeping.');
+        fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+
+        expect(await screen.findByText('Draft filed in your own drafts.')).toBeDefined();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Close the message' }));
+        fireEvent.click(
+            within(screen.getByRole('dialog', { name: 'Discard this message?' })).getByRole('button', {
+                name: 'Discard',
+            }),
+        );
+
+        expect(await screen.findByText(/did not answer/u)).toBeDefined();
+        expect(closed).not.toHaveBeenCalled();
+    });
+
+    it('files one draft for two saves asked for before the first has answered', async () => {
+        const { asked } = drawComposer();
+
+        write('Message', 'Something worth keeping.');
+
+        await act(() => {
+            fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Save draft' }));
+
+            return Promise.resolve();
+        });
+
+        expect(asked.filter((request) => request.method === 'POST' && request.path.endsWith('/drafts'))).toHaveLength(
+            1,
+        );
+    });
+
     it('refuses the shortcut wherever it refuses the control, so neither asks what the other would not', () => {
         drawComposer({ kind: 'new' }, {}, [work], false);
 
@@ -520,12 +579,14 @@ describe('Composer, a message of its own', () => {
         );
     });
 
-    it('closes without asking where nothing has been written', () => {
+    it('closes without asking where nothing has been written', async () => {
         const { closed } = drawComposer();
 
         fireEvent.click(screen.getByRole('button', { name: 'Close the message' }));
 
-        expect(closed).toHaveBeenCalledTimes(1);
+        await waitFor(() => {
+            expect(closed).toHaveBeenCalledTimes(1);
+        });
         expect(rememberedComposition()).toBeNull();
     });
 
@@ -612,6 +673,28 @@ describe('Composer, an answer', () => {
         expect(offered).toContain('auditor@example.invalid');
     });
 
+    it('closes an answer nobody has written in without asking, since its recipients are not work anybody did', async () => {
+        const { closed } = drawComposer(replying);
+
+        await screen.findByText('Re: Quarterly invoice');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Close the message' }));
+
+        await waitFor(() => {
+            expect(closed).toHaveBeenCalledTimes(1);
+        });
+        expect(screen.queryByRole('dialog', { name: 'Discard this message?' })).toBeNull();
+    });
+
+    it('names the subject it will not let anybody edit, there being no field for a label to point at', async () => {
+        drawComposer(replying);
+
+        const subject = await screen.findByText('Re: Quarterly invoice');
+
+        expect(subject.getAttribute('aria-labelledby')).not.toBeNull();
+        expect(document.getElementById(subject.getAttribute('aria-labelledby') ?? '')?.textContent).toBe('Subject');
+    });
+
     it('says the message could not be read, and offers the way out, rather than an empty composer', async () => {
         const { closed } = drawComposer(replying, { message: { status: 503, body: '' } });
 
@@ -619,7 +702,9 @@ describe('Composer, an answer', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Close the message' }));
 
-        expect(closed).toHaveBeenCalledTimes(1);
+        await waitFor(() => {
+            expect(closed).toHaveBeenCalledTimes(1);
+        });
     });
 
     it('reads nothing where this tab was already writing that answer', () => {

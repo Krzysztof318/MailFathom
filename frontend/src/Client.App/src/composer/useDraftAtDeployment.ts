@@ -67,7 +67,7 @@ export interface DraftAtDeployment {
     readonly withdraw: () => Promise<void>;
 
     /** Gives the draft up, taking its copies back out of the owner's drafts folder. */
-    readonly discard: () => Promise<void>;
+    readonly discard: () => Promise<boolean>;
 }
 
 export function useDraftAtDeployment(session: ClientSession, transport: MailFathomTransport): DraftAtDeployment {
@@ -78,6 +78,11 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
     // The draft the deployment holds, as a ref rather than as state: two acts in the same turn have to see the
     // identifier the first of them wrote, and nothing on the screen is drawn from it.
     const draftId = useRef<string | null>(null);
+
+    // The save in flight, if any. `saved` reads `draftId.current` and only writes it back once its own request has
+    // answered, so two acts starting inside that window would each write a draft and strand whatever the loser staged
+    // against it. A second caller joins the first rather than starting a second write.
+    const saving = useRef<Promise<string | null> | null>(null);
     const queued = useRef<string | null>(null);
     const uploading = useRef<AbortController | null>(null);
 
@@ -90,7 +95,23 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
         [],
     );
 
-    async function saved(composition: Composition): Promise<string | null> {
+    function saved(composition: Composition): Promise<string | null> {
+        const already = saving.current;
+
+        if (already !== null) {
+            return already;
+        }
+
+        const writing = write(composition);
+
+        saving.current = writing;
+
+        return writing.finally(() => {
+            saving.current = null;
+        });
+    }
+
+    async function write(composition: Composition): Promise<string | null> {
         const held = draftId.current;
         const wire = wireComposition(composition);
 
@@ -215,14 +236,29 @@ export function useDraftAtDeployment(session: ClientSession, transport: MailFath
         },
 
         discard: async () => {
+            // Whatever save is in flight first, so a draft written a moment ago is one this knows about rather than
+            // one it leaves behind because the identifier had not landed yet.
+            await saving.current;
+
             const held = draftId.current;
 
             if (held === null) {
-                return;
+                return true;
+            }
+
+            const answer = await discardMailDraft(session, transport, held);
+
+            if (answer.outcome === 'failed') {
+                // Said rather than swallowed: closing on a refused delete would tell somebody their words are gone
+                // while the deployment is still holding them, with nothing on this screen to go back to.
+                setStanding({ kind: 'failed', reason: answer.failure.reason });
+
+                return false;
             }
 
             draftId.current = null;
-            await discardMailDraft(session, transport, held);
+
+            return true;
         },
     };
 }
