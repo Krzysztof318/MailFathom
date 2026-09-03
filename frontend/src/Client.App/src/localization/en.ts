@@ -138,6 +138,10 @@ export const en = {
     'settings.telemetryExplanation': 'Error diagnostics and usage statistics stay on this device.',
     'settings.telemetryWithheldWarning':
         'Without telemetry, support is harder — problems have to be described by hand, and some failures cannot be reproduced by whoever is helping you.',
+    'settings.telemetryDestination':
+        'Sent to {address}, which forwards it to whichever collector it is configured with. It carries which screens you opened and how long they took, never your mail, your addresses, your folders, or your password.',
+    'settings.telemetryNotForwarded':
+        'This deployment forwards no telemetry, so this client sends none and there is nothing to turn off.',
 
     'deployment.reachedAt': 'Reading from {address}',
     'deployment.change': 'Point somewhere else',

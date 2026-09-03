@@ -108,13 +108,21 @@ specification, so a client points its exporter at the prefix above them and appe
 
 ### The session route
 
-It answers with three fields: `service`, which is always `MailFathom`; `version`, the running release; and
-`permissions`, the published names the credential just presented carries, in the order this project publishes them.
+It answers with four fields: `service`, which is always `MailFathom`; `version`, the running release; `permissions`, the
+published names the credential just presented carries, in the order this project publishes them; and `telemetry`,
+whether this deployment forwards a client's own telemetry.
 
 That is what a client needs before it has drawn a single message: that this is MailFathom rather than something else
 answering the port, which contract it speaks, and what the rest of the surface will serve it. It is also what lets
 sign-in be built and proven end to end before a screen exists — a client that reached here with a token it had just been
 issued knows the token works.
+
+**`telemetry` is not part of the grant and never varies by credential.** What decides it is whether the deployment named
+a collector, which is the same condition that decides whether
+[the telemetry routes](#the-telemetry-routes) are served at all — so the two cannot disagree. A client reads it to
+decide whether to record anything and whether its own switch is worth offering; the only other way to find out is to
+export a batch and read the `404`, which is finding out by doing the thing. A client older than this field, or one
+reading an answer that omits it, treats it as `false` and sends nothing.
 
 It has a second reader, holding nothing at all. A person naming their deployment in the client types a host, and the
 client asks here before it sends anything to that address, so a mistyped one is reported as an address that answers as
@@ -1306,8 +1314,10 @@ to [the published permission set](permissions.md).
 signed in from, and a response saying when a switch last moved would be the beginning of one. Erasing an owner erases
 their preferences with everything else derived from them.
 
-**A deployment that proxies no telemetry still serves these routes** and stores the switch unchanged. What a client
-draws when there is nothing behind the switch is the client's own question.
+**A deployment that proxies no telemetry still serves these routes** and stores the switch unchanged, so a person's
+answer survives a deployment that starts forwarding later. What such a deployment tells a client is
+[`"telemetry": false` on the session route](#the-session-route), and what MailFathom's own client draws for that is
+a sentence saying so in place of the switch — a control over a client that is already sending nothing decides nothing.
 
 ### The portrait routes
 

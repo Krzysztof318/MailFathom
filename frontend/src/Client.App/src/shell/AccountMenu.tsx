@@ -27,6 +27,7 @@ export function AccountMenu({
     accounts,
     deploymentVersion,
     readingFrom,
+    telemetryDestination,
     preferences,
     profile,
     onPointSomewhereElse,
@@ -40,6 +41,13 @@ export function AccountMenu({
 
     /** The address somebody named for the deployment, or `null` where the origin that served the client is it. */
     readonly readingFrom: string | null;
+
+    /**
+     * Where this client's own telemetry is sent, or `null` where this deployment forwards none and there is therefore
+     * nothing behind the switch. It is the deployment's address whether or not somebody typed it, because what the
+     * settings screen has to name is where the records actually go rather than how the client came to be pointed there.
+     */
+    readonly telemetryDestination: string | null;
 
     /** The settings that follow the person, and the three ways of changing one. */
     readonly preferences: ClientPreferencesInForce;
@@ -158,7 +166,13 @@ export function AccountMenu({
 
             {/* Outside the popover rather than inside it, because the menu is folded away while this is open and a
                 dialog inside something the platform sets `display: none` on is a dialog nobody can see. */}
-            <Settings open={settingsOpen} profile={profile} preferences={preferences} onClose={closeSettings} />
+            <Settings
+                open={settingsOpen}
+                profile={profile}
+                preferences={preferences}
+                telemetryDestination={telemetryDestination}
+                onClose={closeSettings}
+            />
         </>
     );
 }

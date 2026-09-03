@@ -1714,6 +1714,9 @@
           "service": {
             "type": "string"
           },
+          "telemetry": {
+            "type": "boolean"
+          },
           "version": {
             "type": "string"
           }
@@ -1721,7 +1724,8 @@
         "required": [
           "service",
           "version",
-          "permissions"
+          "permissions",
+          "telemetry"
         ],
         "type": "object"
       },

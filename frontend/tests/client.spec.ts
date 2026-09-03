@@ -30,6 +30,7 @@ const sessionAnswer = {
     service: 'MailFathom',
     version: declaredVersion,
     permissions: ['mailfathom.mail.read', 'mailfathom.mail.ask'],
+    telemetry: true,
 };
 
 const mailAccounts = {

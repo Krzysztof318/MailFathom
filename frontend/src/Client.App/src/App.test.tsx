@@ -30,11 +30,15 @@ type Answer = Omit<ClientResponse, 'headers'> & { readonly headers?: Readonly<Re
 /** What a deployment answers a caller it accepts, which is what proves the address is MailFathom and the password works. */
 const accepted = sessionAnswering(['mailfathom.mail.read', 'mailfathom.mail.ask']);
 
-/** A deployment reporting itself and what it grants the credential that just reached it. */
-function sessionAnswering(permissions: readonly string[]): Answer {
+/**
+ * A deployment reporting itself, what it grants the credential that just reached it, and whether it forwards the
+ * client's own telemetry. The last of those is what decides whether the client records anything at all, so a test
+ * about telemetry states it and every other test takes a deployment that forwards it.
+ */
+function sessionAnswering(permissions: readonly string[], telemetry = true): Answer {
     return {
         status: 200,
-        body: JSON.stringify({ service: 'MailFathom', version: '0.8.7', permissions }),
+        body: JSON.stringify({ service: 'MailFathom', version: '0.8.7', permissions, telemetry }),
     };
 }
 
@@ -447,16 +451,20 @@ function renderApp(
 function telemetryRecording(): {
     readonly telemetry: ClientTelemetry;
     readonly exportedFor: (ClientSession | null)[];
+    readonly permitted: boolean[];
     readonly stopped: number[];
     readonly events: ClientEvent[];
 } {
     const exportedFor: (ClientSession | null)[] = [];
+    const permitted: boolean[] = [];
     const stopped: number[] = [];
     const events: ClientEvent[] = [];
 
     return {
         telemetry: {
-            exportFor: (session) => {
+            exportFor: (session, allowed) => {
+                permitted.push(allowed);
+
                 const started = exportedFor.push(session);
 
                 return () => stopped.push(started);
@@ -467,6 +475,7 @@ function telemetryRecording(): {
             },
         },
         exportedFor,
+        permitted,
         stopped,
         events,
     };
@@ -1554,5 +1563,38 @@ describe('App telemetry', () => {
         await screen.findByText('This deployment has stopped accepting the password that was kept. Sign in again.');
 
         expect(recording.events).toContain('credential_no_longer_accepted');
+    });
+
+    // A deployment that forwards nothing is not known to forward nothing until it says so, and until then the client
+    // records into the buffer #1230 holds — which is why what is asserted is where this ends rather than that it never
+    // permitted anything. The pipeline throws away what it held when that answer arrives, which `exporting.test.ts`
+    // and `holding.test.ts` are what prove.
+    it('stops recording against a deployment that says it forwards no telemetry', async () => {
+        const recording = telemetryRecording();
+
+        renderApp(
+            servedFrom,
+            heldCredential,
+            deploymentAnswering(undefined, sessionAnswering(['mailfathom.mail.read', 'mailfathom.mail.ask'], false)),
+            storeKeeping(),
+            recording.telemetry,
+        );
+        await framed();
+
+        expect(recording.permitted.at(-1)).toBe(false);
+    });
+
+    // What a restart owes somebody who turned it off on this machine: the decision is honoured from the first effect,
+    // before the deployment has answered anything, rather than for the second it takes that answer to come back.
+    it('honours a decision this device remembers before the deployment has answered again', async () => {
+        window.localStorage.setItem('mailfathom.telemetry', 'false');
+
+        const recording = telemetryRecording();
+
+        renderApp(servedFrom, heldCredential, deploymentAnswering(), storeKeeping(), recording.telemetry);
+        await framed();
+
+        expect(recording.permitted).not.toContain(true);
+        expect(recording.events).not.toContain('session_started');
     });
 });

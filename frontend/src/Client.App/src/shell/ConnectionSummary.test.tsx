@@ -40,7 +40,7 @@ const unreachableAccount: MailAccount = { ...failingAccount, synchronizationStat
 
 const reading: ClientResult<DeploymentSession> = {
     outcome: 'read',
-    value: { version: '0.8.7', permissions: ['mailfathom.mail.read'] },
+    value: { version: '0.8.7', permissions: ['mailfathom.mail.read'], telemetryForwarded: true },
 };
 
 function directory(
@@ -141,7 +141,9 @@ describe('ConnectionSummary', () => {
     });
 
     it('says nothing about freshness where the credential may not read mail, that being said elsewhere', () => {
-        renderSummary({ session: { outcome: 'read', value: { version: '0.8.7', permissions: [] } } });
+        renderSummary({
+            session: { outcome: 'read', value: { version: '0.8.7', permissions: [], telemetryForwarded: true } },
+        });
 
         expect(screen.queryByText(/account/i)).toBeNull();
     });

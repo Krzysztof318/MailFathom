@@ -21,6 +21,17 @@
 export const deviceKeys = {
     themeChoice: 'mailfathom.theme',
     locale: 'mailfathom.locale',
+
+    /**
+     * The last telemetry answer the deployment gave this person, kept so a restart honours it before the deployment
+     * answers again.
+     *
+     * It is the one value here that is not the device's own decision, and it is deliberately not a second opinion: the
+     * deployment holds the answer and this is a cache of it, read only until the first read comes back and written by
+     * nothing but that read and the switch itself. What it buys is the seconds between a client opening and the
+     * deployment answering, in which a client that had been told no would otherwise record and export again.
+     */
+    telemetry: 'mailfathom.telemetry',
 } as const;
 
 /** Reading a value the device holds, writing one, and removing one. */

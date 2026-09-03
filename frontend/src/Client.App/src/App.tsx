@@ -86,19 +86,6 @@ export function App({
         [baseAddress, authorization],
     );
 
-    // What this client reports about itself goes out under the session that is signed in, so it starts when one exists
-    // and stops with it. Signing out, or being pointed at another deployment, therefore leaves nothing queued for a
-    // deployment somebody has left — and the session beginning is itself the first thing recorded.
-    useEffect(() => {
-        const stop = telemetry.exportFor(session);
-
-        if (session !== null) {
-            telemetry.happened('session_started');
-        }
-
-        return stop;
-    }, [session, telemetry]);
-
     // The transport those reads are made through, built once for the same reason. It carries a signal nothing ever
     // fires: the tree, the reading pane, and the body renderer each discard the answer to a read they stopped listening
     // for rather than cancelling it, which is what a screen that may be looking at another message by then actually
@@ -174,6 +161,40 @@ export function App({
     // credential without it would meet a refusal the screen has nothing to do about, and a machine with no network
     // would meet nothing at all.
     const preferences = useClientPreferences(readsMail && connection.online ? session : null, readMail);
+
+    // What this client reports about itself goes out under the session that is signed in, so it starts when one exists
+    // and stops with it. Signing out, or being pointed at another deployment, therefore leaves nothing queued for a
+    // deployment somebody has left — and the session beginning is itself the first thing recorded.
+    //
+    // Both halves of the permission have to hold: somebody has to have agreed to be reported on, and the deployment
+    // has to forward telemetry at all. They travel with the session rather than through a call of their own, so a
+    // change to any of the three restarts one effect — the pipeline that was running is torn down before the next is
+    // asked for, which is the ordering a separate stop and start racing each other would not have.
+    //
+    // The two halves are unanswered differently on purpose. What the person agreed to is answered from this device
+    // until the deployment answers, so a client that had been turned off records nothing in the seconds a read takes.
+    // What the deployment forwards is unknown rather than refused until it says — a deployment nobody has reached yet
+    // is every cold start and every failed sign-in, which is exactly what the pipeline holds records for, so refusing
+    // there would throw away the failures somebody cannot otherwise describe. Only `false`, which is a deployment
+    // stating that it forwards nothing, stops it; and stopping it discards what was held rather than sending it.
+    const telemetryPermitted = preferences.telemetryEnabled && deploymentSession?.telemetryForwarded !== false;
+
+    // Which session has already been reported as having begun, so that it is reported once however many times this
+    // effect runs. It runs again whenever the permission changes, and the permission is false until the deployment has
+    // answered what it forwards — so without this, an ordinary sign-in would record nothing and moving the switch
+    // twice would record a session beginning twice.
+    const sessionReported = useRef<ClientSession | null>(null);
+
+    useEffect(() => {
+        const stop = telemetry.exportFor(session, telemetryPermitted);
+
+        if (session !== null && telemetryPermitted && sessionReported.current !== session) {
+            sessionReported.current = session;
+            telemetry.happened('session_started');
+        }
+
+        return stop;
+    }, [session, telemetry, telemetryPermitted]);
 
     // Whether opening a message marks it read on the person's own mail server, which is the frame's answer rather than
     // a screen's for the reason ADR 0026 gives about the two halves of it: the reader's own setting says what they want
@@ -394,6 +415,7 @@ export function App({
                             accounts={mailAccounts}
                             deploymentVersion={deploymentSession?.version ?? null}
                             readingFrom={adopted?.chosen === true ? baseAddress : null}
+                            telemetryDestination={deploymentSession?.telemetryForwarded === true ? baseAddress : null}
                             preferences={preferences}
                             profile={profile}
                             onPointSomewhereElse={pointSomewhereElse}

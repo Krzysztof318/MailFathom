@@ -179,6 +179,19 @@ describe('the buffers a client holds before it signs in', () => {
             expect(destination.exported).toHaveLength(0);
         });
 
+        it('throws away what it held rather than exporting it, once somebody refuses to be reported on', async () => {
+            const destination = fakeDestination<ReadableSpan>();
+
+            await record('navigate mail');
+            held.discard();
+
+            // Named afterwards rather than before, because what is being proved is that the records are gone rather
+            // than that this destination did not get them: a buffer that merely held them would empty into this one.
+            await held.exportTo(destination);
+
+            expect(destination.exported.flat()).toHaveLength(0);
+        });
+
         it('drops the oldest records once it is holding more than it may, and counts them', async () => {
             const destination = fakeDestination<ReadableSpan>();
 
@@ -270,6 +283,22 @@ describe('the buffers a client holds before it signs in', () => {
 
             await loggers.shutdown();
         });
+
+        it('throws away what it held rather than exporting it, once somebody refuses to be reported on', async () => {
+            const destination = fakeDestination<ReadableLogRecord>();
+            const held = heldLogRecordExporter();
+            const loggers = new LoggerProvider({ processors: [new SimpleLogRecordProcessor({ exporter: held })] });
+
+            loggers.getLogger('MailFathom').emit({ body: 'A client session began.' });
+            await loggers.forceFlush();
+
+            held.discard();
+            await held.exportTo(destination);
+
+            expect(destination.exported.flat()).toHaveLength(0);
+
+            await loggers.shutdown();
+        });
     });
 
     describe('heldMetricExporter', () => {
@@ -315,6 +344,18 @@ describe('the buffers a client holds before it signs in', () => {
             await recorded.forceFlush();
 
             expect(await dropsCounted()).toEqual([]);
+        });
+
+        it('addresses nothing once somebody refuses to be reported on, having nothing to throw away', async () => {
+            const destination = fakeMeasurementDestination();
+
+            await held.exportTo(destination);
+            held.discard();
+
+            recorded.getMeter('MailFathom').createCounter('mailfathom.client.navigations').add(1);
+            await recorded.forceFlush();
+
+            expect(destination.exported).toEqual([]);
         });
     });
 });

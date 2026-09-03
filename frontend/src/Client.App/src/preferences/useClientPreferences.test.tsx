@@ -352,4 +352,58 @@ describe('useClientPreferences', () => {
         // a second run would already have pushed a second request rather than being about to.
         expect(requests).toHaveLength(1);
     });
+
+    // The telemetry answer is the one setting a client has to honour before it has been read, because the seconds
+    // between opening and the first answer are seconds a client that had been turned off would otherwise record in.
+    describe('the telemetry answer this device remembers', () => {
+        it('keeps what the deployment answered, so the next start honours it before it answers again', async () => {
+            const { transport } = recording(
+                stored({ telemetryEnabled: false, theme: 'system', openMailInTabs: false }),
+            );
+            const { result } = reading(transport);
+
+            await waitFor(() => {
+                expect(result.current.preferences.telemetryEnabled).toBe(false);
+            });
+
+            expect(window.localStorage.getItem('mailfathom.telemetry')).toBe('false');
+        });
+
+        it('keeps what somebody chose here, without waiting for the deployment to confirm it', async () => {
+            const { transport } = recording(stored({ telemetryEnabled: true, theme: 'system', openMailInTabs: false }));
+            const { result } = reading(transport);
+
+            await waitFor(() => {
+                expect(result.current.preferences.telemetryEnabled).toBe(true);
+            });
+
+            act(() => {
+                result.current.preferences.chooseTelemetry(false);
+            });
+
+            expect(window.localStorage.getItem('mailfathom.telemetry')).toBe('false');
+        });
+
+        it('answers it while there is no session to read one with, rather than the unset answer', () => {
+            window.localStorage.setItem('mailfathom.telemetry', 'false');
+
+            const { transport } = recording(stored({ telemetryEnabled: true, theme: 'system', openMailInTabs: false }));
+            const { result } = reading(transport, null);
+
+            expect(result.current.preferences.telemetryEnabled).toBe(false);
+        });
+
+        it('is replaced by what the deployment answers, holding no second opinion beyond that', async () => {
+            window.localStorage.setItem('mailfathom.telemetry', 'false');
+
+            const { transport } = recording(stored({ telemetryEnabled: true, theme: 'system', openMailInTabs: false }));
+            const { result } = reading(transport);
+
+            await waitFor(() => {
+                expect(result.current.preferences.telemetryEnabled).toBe(true);
+            });
+
+            expect(window.localStorage.getItem('mailfathom.telemetry')).toBe('true');
+        });
+    });
 });

@@ -61,6 +61,7 @@ function renderMenu({
     accounts = [],
     deploymentVersion = '0.9.0',
     readingFrom = null,
+    telemetryDestination = 'https://mail.example',
     preferences = settings,
     profile = nobody,
     onPointSomewhereElse = () => undefined,
@@ -69,6 +70,7 @@ function renderMenu({
     readonly accounts?: readonly MailAccount[];
     readonly deploymentVersion?: string | null;
     readonly readingFrom?: string | null;
+    readonly telemetryDestination?: string | null;
     readonly preferences?: ClientPreferencesInForce;
     readonly profile?: OwnProfileInForce;
     readonly onPointSomewhereElse?: () => void;
@@ -81,6 +83,7 @@ function renderMenu({
                     accounts={accounts}
                     deploymentVersion={deploymentVersion}
                     readingFrom={readingFrom}
+                    telemetryDestination={telemetryDestination}
                     preferences={preferences}
                     profile={profile}
                     onPointSomewhereElse={onPointSomewhereElse}

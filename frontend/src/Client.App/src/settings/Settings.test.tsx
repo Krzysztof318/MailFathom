@@ -35,15 +35,23 @@ const named: OwnProfileInForce = {
 function renderSettings({
     profile = named,
     preferences = settings,
+    telemetryDestination = 'https://mail.example',
     onClose = () => undefined,
 }: {
     readonly profile?: OwnProfileInForce;
     readonly preferences?: ClientPreferencesInForce;
+    readonly telemetryDestination?: string | null;
     readonly onClose?: () => void;
 } = {}): void {
     render(
         <LocalizationProvider>
-            <Settings open profile={profile} preferences={preferences} onClose={onClose} />
+            <Settings
+                open
+                profile={profile}
+                preferences={preferences}
+                telemetryDestination={telemetryDestination}
+                onClose={onClose}
+            />
         </LocalizationProvider>,
     );
 }
@@ -224,6 +232,27 @@ describe('Settings', () => {
         renderSettings({ preferences: { ...settings, telemetryEnabled: false } });
 
         expect(screen.getByText(/support is harder/u)).toBeDefined();
+    });
+
+    it('names where the records go, so the decision is about something rather than about a word', () => {
+        renderSettings({ telemetryDestination: 'https://mail.example' });
+
+        expect(screen.getByText(/Sent to https:\/\/mail\.example/u)).toBeDefined();
+    });
+
+    it('says what a record carries and what it never carries', () => {
+        renderSettings();
+
+        expect(screen.getByText(/never your mail, your addresses, your folders, or your password/u)).toBeDefined();
+    });
+
+    // A deployment that forwards nothing has nothing behind the switch, so it says so rather than offering a control
+    // that decides nothing about a client that is already sending nothing.
+    it('offers no switch where the deployment forwards no telemetry, and says why', () => {
+        renderSettings({ telemetryDestination: null });
+
+        expect(screen.getByText(/forwards no telemetry/u)).toBeDefined();
+        expect(screen.queryByRole('switch', { name: /Do not send telemetry/u })).toBeNull();
     });
 
     it('offers the language here rather than in the menu that leads here', () => {

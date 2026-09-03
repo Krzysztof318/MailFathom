@@ -6,6 +6,7 @@ import { createContext, useContext } from 'react';
 import { metrics, trace } from '@opentelemetry/api';
 import { logs, SeverityNumber } from '@opentelemetry/api-logs';
 import { telemetryName, type ClientSession } from '@mailfathom/client-backend';
+import { isSpace } from '../routing/spaces';
 import type { ClientPipeline } from './exporting';
 
 // The client's one telemetry pipeline: the three signals, one resource, and one place any of it is composed. Every
@@ -17,8 +18,12 @@ import type { ClientPipeline } from './exporting';
 // there exactly as every read does, so there is no destination and no credential to present until a session exists —
 // but starting up, resolving which deployment this client belongs to, and a sign-in that did not succeed are exactly
 // the failures somebody cannot describe, and they are invisible to the deployment because nothing reached it. So
-// `holding.ts` holds them in memory, bounded, until there is a session to attribute them to. Turning any of this off
-// is #1232's.
+// `holding.ts` holds them in memory, bounded, until there is a session to attribute them to.
+//
+// Whether any of it happens at all is the person's, and it arrives here beside the session through `exportFor`. Off
+// stops the recording rather than filtering the export, and what was held from before that answer arrived is discarded
+// rather than flushed: a client that has never been told stands on the deployment's unset answer and records into that
+// buffer, so the first thing somebody who wants none of this says has to reach the buffer as well as the wire.
 //
 // Nothing here records what was on the screen. A space is named, a route template is named, and an occurrence is
 // named; no address, no message, no correspondent, no search text, and no part of a credential reaches a span, a
@@ -26,6 +31,9 @@ import type { ClientPipeline } from './exporting';
 
 /** Something that happened to this client's session, which is an occurrence rather than a quantity to measure. */
 export type ClientEvent = 'session_started' | 'credential_no_longer_accepted';
+
+/** What a move is reported as where the address named something this client does not publish as a space. */
+export const unnamedSpace = 'other';
 
 /**
  * What the application may report about itself.
@@ -42,10 +50,24 @@ export interface ClientTelemetry {
      *
      * A session of `null` exports nothing and answers with a teardown that does nothing, which is what a client that
      * has signed out or has not signed in yet passes. The pipeline goes on recording either way.
+     *
+     * @param session Who is signed in and where their telemetry goes, or `null` where nobody is.
+     * @param permitted Whether this person has agreed to be reported on at all. It is stated here rather than through
+     * a setter of its own because it answers the same question as which session is exporting — one caller states both
+     * from one effect, and two ways of saying "stop" would be two orderings to reason about. `false` records nothing
+     * from the moment it is stated and discards what was held before it, which is the difference between a switch and
+     * a filter on the way out.
      */
-    readonly exportFor: (session: ClientSession | null) => () => void;
+    readonly exportFor: (session: ClientSession | null, permitted: boolean) => () => void;
 
-    /** A person reached a space, having asked for it at `askedAt` — an epoch instant in milliseconds. */
+    /**
+     * A person reached a space, having asked for it at `askedAt` — an epoch instant in milliseconds.
+     *
+     * The space is redacted to {@link unnamedSpace} unless it is one the client publishes, so an address naming
+     * something else — a message, a folder, anything a later route could carry — cannot become a span name or a
+     * dimension value. The argument is a string rather than the space type deliberately: a compiler refusal would hold
+     * only for what is written today, and what this has to survive is a caller reached from an address.
+     */
     readonly navigated: (space: string, askedAt: number) => void;
 
     /** Records that something happened to the session, with no measurement attached to it. */
@@ -81,6 +103,11 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
         .then(({ startRecording }) => startRecording())
         .catch(() => null);
 
+    // Whether anything may be recorded at all. It begins permitted because that is the deployment's own unset answer,
+    // and the frame states the remembered one on its first effect — before any request has come back, which is what
+    // makes a restart honour a decision rather than record until it is confirmed.
+    let permitted = true;
+
     // Everything this module does is put in a queue rather than run where it was asked for, and that is a correctness
     // rule rather than tidiness. A registry answers whoever is registered at the instant it is asked, and a record
     // written before the pipeline arrives is dropped for good — there is no retroactive delivery once the real
@@ -101,8 +128,30 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
         });
     }
 
+    // A record goes through the same queue and is refused before it joins it, which is what makes the switch a switch:
+    // nothing is written into a provider, so there is nothing for a later export to carry and nothing in the buffer
+    // for a person to have to trust an exporter about.
+    function record(write: () => void): void {
+        if (!permitted) {
+            return;
+        }
+
+        next(write);
+    }
+
     return {
-        exportFor(session) {
+        exportFor(session, allowed) {
+            permitted = allowed;
+
+            if (!allowed) {
+                // Read rather than exported, and read before anything else this queue holds: what was recorded while
+                // the deployment had said nothing is exactly what a person turning this off has not agreed to, so it
+                // leaves the buffer without ever having been addressed.
+                next((pipeline) => pipeline?.discard());
+
+                return nothingToStop;
+            }
+
             if (session === null) {
                 return nothingToStop;
             }
@@ -123,16 +172,17 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
         },
 
         navigated(space, askedAt) {
-            const at = { 'mailfathom.client.space': space };
+            const named = isSpace(space) ? space : unnamedSpace;
+            const at = { 'mailfathom.client.space': named };
 
             // Read where the move ended rather than where it was written, so queueing the write moves when the record
             // reaches a registry and not what the record says.
             const reached = performance.timeOrigin + performance.now();
 
-            next(() => {
+            record(() => {
                 trace
                     .getTracer(telemetryName)
-                    .startSpan(`navigate ${space}`, { startTime: askedAt, attributes: at })
+                    .startSpan(`navigate ${named}`, { startTime: askedAt, attributes: at })
                     .end(reached);
 
                 const meter = metrics.getMeter(telemetryName);
@@ -149,7 +199,7 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
             // session began at the moment the client next got a word in.
             const at = performance.timeOrigin + performance.now();
 
-            next(() => {
+            record(() => {
                 logs.getLogger(telemetryName).emit({
                     timestamp: at,
                     severityNumber: severities[event],

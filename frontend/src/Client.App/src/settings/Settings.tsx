@@ -29,6 +29,7 @@ export function Settings({
     open,
     profile,
     preferences,
+    telemetryDestination,
     onClose,
 }: {
     readonly open: boolean;
@@ -38,6 +39,9 @@ export function Settings({
 
     /** The settings that follow the person, of which this screen edits one. */
     readonly preferences: ClientPreferencesInForce;
+
+    /** Where this client's telemetry is sent, or `null` where this deployment forwards none. */
+    readonly telemetryDestination: string | null;
 
     readonly onClose: () => void;
 }) {
@@ -102,7 +106,7 @@ export function Settings({
                 <Divider />
 
                 <SectionName>{translate('settings.privacy')}</SectionName>
-                <Telemetry preferences={preferences} />
+                <Telemetry preferences={preferences} destination={telemetryDestination} />
             </div>
         </dialog>
     );
@@ -266,9 +270,29 @@ function PictureNotice({
 
 // Whether this deployment may be told what the client is doing, drawn the way the design project states it: as the
 // decision to withhold rather than the decision to permit, so that the switch being on is the private answer.
-function Telemetry({ preferences }: { readonly preferences: ClientPreferencesInForce }) {
+//
+// Two things stand beside the switch that the design project does not draw, both of them the acceptance of #1232 and
+// both about the same thing — that a decision is only a decision if what is being decided is stated. Where the records
+// go is named, because "telemetry" says nothing about who ends up holding it, and this client sends to the deployment
+// somebody signed in to rather than anywhere else. And a deployment that forwards none is said out loud instead of
+// being drawn as a switch: there is nothing behind it there, so moving it would decide nothing.
+function Telemetry({
+    preferences,
+    destination,
+}: {
+    readonly preferences: ClientPreferencesInForce;
+    readonly destination: string | null;
+}) {
     const { translate } = useLocalization();
     const withheld = !preferences.telemetryEnabled;
+
+    if (destination === null) {
+        return (
+            <p className="rounded-xl border border-line bg-sunken px-2.5 py-2.25 text-xs text-muted">
+                {translate('settings.telemetryNotForwarded')}
+            </p>
+        );
+    }
 
     return (
         <>
@@ -285,6 +309,10 @@ function Telemetry({ preferences }: { readonly preferences: ClientPreferencesInF
                     }}
                 />
             </label>
+
+            <p className="text-2xs text-faint">
+                {translate('settings.telemetryDestination', { address: destination })}
+            </p>
 
             {withheld ? (
                 <p className="flex items-start gap-2 rounded-xl border border-warning bg-warning-soft px-2.5 py-2.25 text-xs text-warning-text">

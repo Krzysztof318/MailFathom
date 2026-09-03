@@ -1195,6 +1195,26 @@ the owner attributes itself, from the credential the export presented, replacing
 | `service.version` | The same `<VersionPrefix>` the deployment reports, substituted into the bundle at build time |
 | `mailfathom.client.head` | `web` or `desktop` — which head produced the record, not which operating system it ran on |
 
+**Whoever is reading decides whether any of it is recorded, and the switch is on the client's settings screen.** It is
+held by the deployment rather than by the browser profile or the desktop install it was moved in — it is
+[one of the four client preferences](client-endpoint.md#the-preferences-routes), so declining once holds on every
+machine that person signs in from — and the client keeps the last answer it was given on the device as well, so a
+restart honours a decision before the first read comes back rather than recording for the second it takes. That cache
+is not a second opinion: nothing writes it but the deployment's answer and the switch itself, and a client that has
+been answered never reads it again for the rest of the run.
+
+**Off means nothing is recorded, not that records are dropped on the way out.** The switch stops the writing, so a
+person who declined pays nothing to run the client instead of paying for everything but the upload. What was recorded
+before the answer arrived is thrown away rather than flushed: a client that has never been told stands on the unset
+answer and records into the buffer described below, so an answer of off empties that buffer without ever addressing
+it. Turning it back on begins at that moment and reaches back over nothing.
+
+**A deployment that forwards no telemetry offers no switch.** It answers
+[`"telemetry": false` on the session route](client-endpoint.md#the-session-route); the client stops recording the moment
+it reads that and throws away what it had held, and the settings screen says so in place of a control that would decide
+nothing. Until a deployment has said either way the client records, because a deployment nobody has reached yet is
+every cold start and every failed sign-in — which is what the buffer below exists to keep.
+
 **The client exports nothing until somebody has signed in, and records from the moment it opens.** The exporter reaches
 [the telemetry routes](client-endpoint.md#the-telemetry-routes) on the deployment the client is pointed at and
 authenticates there with the session's own credential, so there is no destination and nothing to present before that.
@@ -1267,7 +1287,9 @@ fetched, so the wait a person actually has is invisible from the deployment.
 | `mailfathom.client.arrival.duration` | `s` | How long the document itself took to arrive |
 
 The first two carry `mailfathom.client.space`, whose values are the client's own space names, and each move opens a
-span named `navigate <space>`. The space a run opens on is not a move and is reported by none of them.
+span named `navigate <space>`. The space a run opens on is not a move and is reported by none of them. An address
+naming anything else is reported as `other` rather than as itself, which is what keeps a route carrying a message
+identifier out of a span name and out of a dimension however the client's addresses grow.
 
 **`mailfathom.client.arrival.duration` is reported only by a client the deployment itself served**, and that is the
 one place the two heads differ in what they can say. The browser times every document it loads, and that number means
@@ -1286,8 +1308,12 @@ somebody's desk would make a deployment's log unreadable within a day, which is 
 applies to itself.
 
 **Nothing the client sends carries what was on the screen.** No address, no subject, no correspondent, no search text,
-no message identifier, and no part of the credential reaches a span name, an attribute, a measurement, or a log record.
-The route templates and the space names above are the whole of the vocabulary, and both are closed sets.
+no message identifier, no folder name, and no part of the credential reaches a span name, an attribute, a measurement,
+or a log record. The route templates and the space names above are the whole of the vocabulary, and both are closed
+sets. That is a test rather than a claim: the client's unit suite drives every operation the wire package can make with
+mail in each argument that takes one, asserts that none of those values reaches a record, and asserts the stronger form
+beside it — that every request the client names itself is a method and a route template whose segments are literals or
+`{placeholder}` holes, which is what holds for a value nobody thought to forbid.
 
 ### What a client-originated trace contains
 

@@ -13,6 +13,7 @@ import {
 } from '@mailfathom/client-backend';
 import type { ThemeChoice } from '../theme/themeChoice';
 import { useTheme } from '../theme/useTheme';
+import { rememberedTelemetry, rememberTelemetry } from './rememberedTelemetry';
 
 // The settings that follow the person rather than the machine, read from the deployment once there is a session to
 // read it with and written back whole whenever one of them changes.
@@ -40,7 +41,13 @@ export interface ClientPreferencesInForce {
      */
     readonly markReadOnOpen: boolean;
 
-    /** Whether this deployment may be told what the person's client is doing. */
+    /**
+     * Whether this deployment may be told what the person's client is doing.
+     *
+     * Answered before the deployment has said anything, from what this device was last told, so that a client which
+     * had been turned off does not record and export for the second the first read takes. Everything else here is the
+     * deployment's answer alone.
+     */
     readonly telemetryEnabled: boolean;
 
     /** Whether the deployment refused the last change, which is the one thing about this a screen has to say out loud. */
@@ -93,6 +100,13 @@ export function useClientPreferences(
     // back and then have to be undone by a second write nobody asked for.
     const reading = useRef<AbortController | null>(null);
 
+    // What this device was last told about telemetry, which stands in for the deployment's answer until one arrives and
+    // is replaced by every answer and every choice afterwards. It is state rather than a value read here, because the
+    // store is the device's rather than React's and reading it per render would be a storage read per render for a
+    // value that moves twice in a session. It is not a second copy of what the deployment holds: the two are different
+    // facts, and this one is only ever rendered while there is no answer for this session at all.
+    const [remembered, setRemembered] = useState(rememberedTelemetry);
+
     // Everything below reads through this rather than out of the state directly, which is what keeps one person's
     // answers off the next person's screen without a reset anywhere. Signing out and back in on one tab keeps this
     // hook mounted, so what was read for the credential before is still in state when the new one arrives — and it
@@ -123,6 +137,8 @@ export function useClientPreferences(
             const read = { session, preferences: answer.value, notStated: false };
 
             latest.current = read;
+            setRemembered(answer.value.telemetryEnabled);
+            rememberTelemetry(answer.value.telemetryEnabled);
             setHeld(read);
 
             // The deployment's answer replaces the device's, which is the whole of why these two settings are held
@@ -145,6 +161,8 @@ export function useClientPreferences(
         const chosen = { session, preferences, notStated: false };
 
         latest.current = chosen;
+        setRemembered(preferences.telemetryEnabled);
+        rememberTelemetry(preferences.telemetryEnabled);
         setHeld(chosen);
 
         if (session === null) {
@@ -167,7 +185,9 @@ export function useClientPreferences(
     return {
         openMailInTabs: inForce.preferences.openMailInTabs,
         markReadOnOpen: inForce.preferences.markReadOnOpen,
-        telemetryEnabled: inForce.preferences.telemetryEnabled,
+        // The one setting answered from the device while the deployment has said nothing for this session, for the
+        // reason `rememberedTelemetry.ts` gives. Every other one takes its unset answer, which a screen can draw.
+        telemetryEnabled: inForce.session === null ? remembered : inForce.preferences.telemetryEnabled,
         notStated: inForce.notStated,
         chooseTheme: (choice) => {
             setThemeChoice(choice);

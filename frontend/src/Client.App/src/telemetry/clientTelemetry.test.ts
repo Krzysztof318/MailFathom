@@ -42,6 +42,12 @@ const pipeline = vi.hoisted(() => {
             return Promise.resolve();
         },
 
+        discard() {
+            steps.push('discard');
+
+            return Promise.resolve();
+        },
+
         shutdown: () => Promise.resolve(),
     };
 });
@@ -56,7 +62,7 @@ beforeEach(() => {
 
 describe('noTelemetry', () => {
     it('records nothing and hands back a teardown that is safe to call', () => {
-        const stop = noTelemetry.exportFor(session);
+        const stop = noTelemetry.exportFor(session, true);
 
         expect(() => {
             noTelemetry.navigated('mail', performance.timeOrigin);
@@ -129,6 +135,24 @@ describe('clientTelemetryForThisApplication', () => {
         expect(span?.attributes).toEqual({ 'mailfathom.client.space': 'mail' });
     });
 
+    // An address is what a person put in the fragment, so what reaches this is whatever survived reading it rather
+    // than a value the compiler chose. Each of these is something a later route could legitimately carry, and none of
+    // them may become a span name or a dimension value.
+    it.each([
+        ['a message identifier', 'mail/018f2c31-2f2c-7c1e-9f0e-3a1b6f9c0d21'],
+        ['a folder somebody named', 'mail/INBOX/Clients/Acme'],
+        ['what somebody searched for', 'search?q=salary%20review'],
+    ])('reports a move to %s as an unnamed space', async (_, address) => {
+        const telemetry = clientTelemetryForThisApplication();
+
+        telemetry.navigated(address, performance.timeOrigin + performance.now());
+
+        const [span] = await written(() => spans.getFinishedSpans());
+
+        expect(span?.name).toBe('navigate other');
+        expect(span?.attributes).toEqual({ 'mailfathom.client.space': 'other' });
+    });
+
     it('counts a move and times it, under the space it reached', async () => {
         const telemetry = clientTelemetryForThisApplication();
 
@@ -184,10 +208,44 @@ describe('clientTelemetryForThisApplication', () => {
         expect(recorded).not.toContain('mail.example');
     });
 
+    describe('somebody who has not agreed to be reported on', () => {
+        it('has nothing written about them, whether or not there is a session to export it', async () => {
+            const telemetry = clientTelemetryForThisApplication();
+
+            telemetry.exportFor(session, false);
+            telemetry.navigated('mail', performance.timeOrigin + performance.now());
+            telemetry.happened('session_started');
+
+            // Nothing arrives to wait for, so what is waited on is the pipeline having been asked to throw away what
+            // it held — everything above was queued before that and would be in front of it had it been recorded.
+            await vi.waitFor(() => {
+                expect(pipeline.steps).toContain('discard');
+            });
+
+            expect(spans.getFinishedSpans()).toHaveLength(0);
+            expect(records.getFinishedLogRecords()).toHaveLength(0);
+        });
+
+        it('is recorded again from the moment they say so', async () => {
+            const telemetry = clientTelemetryForThisApplication();
+
+            telemetry.exportFor(session, false);
+            telemetry.navigated('mail', performance.timeOrigin + performance.now());
+            telemetry.exportFor(session, true);
+            telemetry.navigated('discover', performance.timeOrigin + performance.now());
+
+            const [span] = await written(() => spans.getFinishedSpans());
+
+            // One span rather than two: the move made while they had said no is not recovered by them saying yes.
+            expect(spans.getFinishedSpans()).toHaveLength(1);
+            expect(span?.name).toBe('navigate discover');
+        });
+    });
+
     it('leaves the registries alone for a client that has not signed in', async () => {
         const telemetry = clientTelemetryForThisApplication();
 
-        telemetry.exportFor(null)();
+        telemetry.exportFor(null, true)();
         telemetry.navigated('mail', performance.timeOrigin + performance.now());
 
         // The span still reaches the exporter this test registered, which is what says nothing replaced it.
@@ -215,7 +273,7 @@ describe('clientTelemetryForThisApplication', () => {
         it('reports it where the deployment is what served this client', async () => {
             const telemetry = clientTelemetryForThisApplication();
 
-            telemetry.exportFor({ ...session, baseAddress: window.location.origin });
+            telemetry.exportFor({ ...session, baseAddress: window.location.origin }, true);
 
             await vi.waitFor(async () => {
                 expect(await arrivalDuration()).toBe(1.5);
@@ -230,7 +288,7 @@ describe('clientTelemetryForThisApplication', () => {
             // What a session restored from a stored credential looks like: it is signed in before the load event, and
             // the entry then describes a document still arriving. This run gets one sign-in and no second attempt, so
             // reading it here is losing the measurement rather than deferring it.
-            telemetry.exportFor({ ...session, baseAddress: window.location.origin });
+            telemetry.exportFor({ ...session, baseAddress: window.location.origin }, true);
 
             // Queued behind the start, so its record appearing is how this knows the start finished — reading the
             // histogram before that would find it empty whether the measurement was deferred or merely late.
@@ -257,8 +315,8 @@ describe('clientTelemetryForThisApplication', () => {
             // What is read is the entry being consulted at all, rather than where the value landed: starting a second
             // pipeline takes the registries this test put there away, so the histogram is no longer this test's to
             // read by then. Consulting the entry is the whole of what the first session must not have used up.
-            telemetry.exportFor(session);
-            telemetry.exportFor({ ...session, baseAddress: window.location.origin });
+            telemetry.exportFor(session, true);
+            telemetry.exportFor({ ...session, baseAddress: window.location.origin }, true);
 
             await vi.waitFor(() => {
                 expect(timing).toHaveBeenCalled();
@@ -271,7 +329,7 @@ describe('clientTelemetryForThisApplication', () => {
             // Signed in to a deployment elsewhere, which is every desktop shell and every development server. The
             // teardown is queued behind the start, so waiting for it is how this knows the start finished rather than
             // that it has not begun.
-            telemetry.exportFor(session)();
+            telemetry.exportFor(session, true)();
 
             await vi.waitFor(() => {
                 expect(pipeline.steps).toContain('hold');
@@ -301,7 +359,7 @@ describe('exportFor', () => {
 
     it('names the session as the destination, and takes it away again when the session ends', async () => {
         const telemetry = clientTelemetryForThisApplication();
-        const stop = telemetry.exportFor(session);
+        const stop = telemetry.exportFor(session, true);
 
         // The pipeline is fetched rather than bundled, so it arrives a moment after the client composed it. This waits
         // on what it was asked to do rather than on a duration.
@@ -319,11 +377,11 @@ describe('exportFor', () => {
     it('asks for no destination at all for a client that has not signed in', async () => {
         const telemetry = clientTelemetryForThisApplication();
 
-        telemetry.exportFor(null)();
+        telemetry.exportFor(null, true)();
 
         // Signing in afterwards is what makes the absence provable: the queue is ordered, so a destination or a hold
         // asked for by the call above would sit in front of this one.
-        telemetry.exportFor(session);
+        telemetry.exportFor(session, true);
 
         await vi.waitFor(() => {
             expect(pipeline.steps).toEqual(['export Basic c2FtcGxl']);
@@ -340,7 +398,7 @@ describe('exportFor', () => {
         const loggers = new LoggerProvider({ processors: [new SimpleLogRecordProcessor({ exporter: arriving })] });
         const telemetry = clientTelemetryForThisApplication();
 
-        const stop = telemetry.exportFor(session);
+        const stop = telemetry.exportFor(session, true);
 
         telemetry.happened('session_started');
         logs.setGlobalLoggerProvider(loggers);
@@ -357,16 +415,41 @@ describe('exportFor', () => {
         await loggers.shutdown();
     });
 
+    it('throws away what was held rather than exporting it, when the answer arrives as off', async () => {
+        const telemetry = clientTelemetryForThisApplication();
+
+        // What a fresh client does: it records against the deployment's unset answer while the preference is being
+        // read, and the answer comes back off. Nothing may be addressed, so the discard stands alone in the queue —
+        // an export before it would be the one batch the person had asked never to be sent.
+        telemetry.navigated('mail', performance.timeOrigin + performance.now());
+        telemetry.exportFor(session, false);
+
+        await vi.waitFor(() => {
+            expect(pipeline.steps).toEqual(['discard']);
+        });
+    });
+
+    it('exports for a session again once the answer comes back the other way', async () => {
+        const telemetry = clientTelemetryForThisApplication();
+
+        telemetry.exportFor(session, false);
+        telemetry.exportFor(session, true);
+
+        await vi.waitFor(() => {
+            expect(pipeline.steps).toEqual(['discard', 'export Basic c2FtcGxl']);
+        });
+    });
+
     it('keeps the session that is signed in when one ends and the next begins in the same turn', async () => {
         const telemetry = clientTelemetryForThisApplication();
 
         // What signing out and straight back in looks like from here, and what React does on every mount in strict
         // mode: the teardown and the next start are asked for before the first one has finished arriving. Left to
         // race, the hold lands last and leaves the session that is now signed in holding for the rest of the run.
-        const stop = telemetry.exportFor(session);
+        const stop = telemetry.exportFor(session, true);
 
         stop();
-        telemetry.exportFor({ ...session, authorization: 'Basic c29tZWJvZHkgZWxzZQ==' });
+        telemetry.exportFor({ ...session, authorization: 'Basic c29tZWJvZHkgZWxzZQ==' }, true);
 
         await vi.waitFor(() => {
             expect(pipeline.steps).toEqual(['export Basic c2FtcGxl', 'hold', 'export Basic c29tZWJvZHkgZWxzZQ==']);
