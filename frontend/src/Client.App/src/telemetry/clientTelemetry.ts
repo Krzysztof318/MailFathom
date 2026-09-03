@@ -82,6 +82,26 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
         queued = queued.then(step).catch(() => nothingToStop);
     }
 
+    // Everything this client records goes through the same queue, and that is the same correctness rule rather than
+    // symmetry. A registry answers whoever is registered at the instant it is asked, and the record is dropped for
+    // good where that is still the no-op registry — there is no retroactive delivery once the real provider arrives.
+    // A screen reports the moment it has something to report, which for the session beginning is the same turn the
+    // pipeline was asked for, so recording where it was asked would drop exactly the records a sign-in produces.
+    //
+    // Unlike a start, a write knows a pipeline is running, so a write that threw hands the running teardown back
+    // rather than the empty one: a registry refusing one record is not a reason to lose what is exporting.
+    function record(write: () => void): void {
+        queued = queued.then((stopRunning) => {
+            try {
+                write();
+            } catch {
+                // Nothing to do with it. It is a record that was not written, which is what the deployment sees too.
+            }
+
+            return stopRunning;
+        });
+    }
+
     return {
         exportFor(session) {
             if (session === null) {
@@ -113,25 +133,32 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
 
         navigated(space, askedAt) {
             const at = { 'mailfathom.client.space': space };
+
+            // Read where the move ended rather than where it was written, so queueing the write moves when the record
+            // reaches a registry and not what the record says.
             const reached = performance.timeOrigin + performance.now();
 
-            trace
-                .getTracer(telemetryName)
-                .startSpan(`navigate ${space}`, { startTime: askedAt, attributes: at })
-                .end(reached);
+            record(() => {
+                trace
+                    .getTracer(telemetryName)
+                    .startSpan(`navigate ${space}`, { startTime: askedAt, attributes: at })
+                    .end(reached);
 
-            const meter = metrics.getMeter(telemetryName);
-            meter.createCounter('mailfathom.client.navigations').add(1, at);
-            meter
-                .createHistogram('mailfathom.client.navigation.duration', { unit: 's' })
-                .record((reached - askedAt) / 1_000, at);
+                const meter = metrics.getMeter(telemetryName);
+                meter.createCounter('mailfathom.client.navigations').add(1, at);
+                meter
+                    .createHistogram('mailfathom.client.navigation.duration', { unit: 's' })
+                    .record((reached - askedAt) / 1_000, at);
+            });
         },
 
         happened(event) {
-            logs.getLogger(telemetryName).emit({
-                severityNumber: severities[event],
-                body: bodies[event],
-                attributes: { 'mailfathom.client.event': event },
+            record(() => {
+                logs.getLogger(telemetryName).emit({
+                    severityNumber: severities[event],
+                    body: bodies[event],
+                    attributes: { 'mailfathom.client.event': event },
+                });
             });
         },
     };
@@ -167,6 +194,20 @@ function reportArrival(session: ClientSession): void {
         return;
     }
 
+    if (document.readyState === 'complete') {
+        recordArrival();
+
+        return;
+    }
+
+    // The navigation entry is not finished until the load event has, and a session restored from a stored credential
+    // reaches this before that: read then, the entry describes a document still arriving and answers zero. Waiting is
+    // what makes the measurement one a run either takes or genuinely cannot have, rather than one it happened to ask
+    // for too early — a client signed in from storage gets exactly one sign-in, so a second attempt never comes.
+    window.addEventListener('load', recordArrival, { once: true });
+}
+
+function recordArrival(): void {
     const [arrival] = performance.getEntriesByType('navigation');
 
     if (arrival === undefined || arrival.duration <= 0) {

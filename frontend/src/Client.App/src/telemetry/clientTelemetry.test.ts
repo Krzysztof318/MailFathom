@@ -68,19 +68,29 @@ describe('clientTelemetryForThisApplication', () => {
         await loggers.shutdown();
     });
 
+    // Everything this module records is queued behind whatever the pipeline is doing, so a test reads what was written
+    // rather than what had been written by the time the call returned.
+    async function written<TRecord>(reading: () => readonly TRecord[]): Promise<readonly TRecord[]> {
+        await vi.waitFor(() => {
+            expect(reading().length).toBeGreaterThan(0);
+        });
+
+        return reading();
+    }
+
     async function recordedMeasurements(): Promise<readonly MetricData[]> {
         await meters.forceFlush();
 
         return measurements.getMetrics().flatMap((exported) => exported.scopeMetrics.flatMap((scope) => scope.metrics));
     }
 
-    it('spans a move to a space from the moment it was asked for', () => {
+    it('spans a move to a space from the moment it was asked for', async () => {
         const telemetry = clientTelemetryForThisApplication();
         const askedAt = performance.timeOrigin + performance.now();
 
         telemetry.navigated('mail', askedAt);
 
-        const [span] = spans.getFinishedSpans();
+        const [span] = await written(() => spans.getFinishedSpans());
 
         expect(span?.name).toBe('navigate mail');
         expect(span?.attributes).toEqual({ 'mailfathom.client.space': 'mail' });
@@ -91,6 +101,8 @@ describe('clientTelemetryForThisApplication', () => {
 
         telemetry.navigated('discover', performance.timeOrigin + performance.now());
 
+        await written(() => spans.getFinishedSpans());
+
         const recorded = await recordedMeasurements();
         const counted = recorded.find((metric) => metric.descriptor.name === 'mailfathom.client.navigations');
         const timed = recorded.find((metric) => metric.descriptor.name === 'mailfathom.client.navigation.duration');
@@ -100,51 +112,53 @@ describe('clientTelemetryForThisApplication', () => {
         expect(timed?.descriptor.unit).toBe('s');
     });
 
-    it('records a session beginning as an informational occurrence', () => {
+    it('records a session beginning as an informational occurrence', async () => {
         const telemetry = clientTelemetryForThisApplication();
 
         telemetry.happened('session_started');
 
-        const [record] = records.getFinishedLogRecords();
+        const [record] = await written(() => records.getFinishedLogRecords());
 
         expect(record?.severityNumber).toBe(SeverityNumber.INFO);
         expect(record?.attributes).toEqual({ 'mailfathom.client.event': 'session_started' });
     });
 
-    it('records a credential the deployment stopped accepting as a warning', () => {
+    it('records a credential the deployment stopped accepting as a warning', async () => {
         const telemetry = clientTelemetryForThisApplication();
 
         telemetry.happened('credential_no_longer_accepted');
 
-        const [record] = records.getFinishedLogRecords();
+        const [record] = await written(() => records.getFinishedLogRecords());
 
         expect(record?.severityNumber).toBe(SeverityNumber.WARN);
         expect(record?.attributes).toEqual({ 'mailfathom.client.event': 'credential_no_longer_accepted' });
     });
 
-    it('carries no part of the credential or the address into anything it records', () => {
+    it('carries no part of the credential or the address into anything it records', async () => {
         const telemetry = clientTelemetryForThisApplication();
 
         telemetry.navigated('mail', performance.timeOrigin + performance.now());
         telemetry.happened('session_started');
 
-        const written = JSON.stringify([
+        await written(() => records.getFinishedLogRecords());
+
+        const recorded = JSON.stringify([
             spans.getFinishedSpans().map((span) => [span.name, span.attributes]),
             records.getFinishedLogRecords().map((record) => [record.body, record.attributes]),
         ]);
 
-        expect(written).not.toContain('c2FtcGxl');
-        expect(written).not.toContain('mail.example');
+        expect(recorded).not.toContain('c2FtcGxl');
+        expect(recorded).not.toContain('mail.example');
     });
 
-    it('leaves the registries alone for a client that has not signed in', () => {
+    it('leaves the registries alone for a client that has not signed in', async () => {
         const telemetry = clientTelemetryForThisApplication();
 
         telemetry.exportFor(null)();
         telemetry.navigated('mail', performance.timeOrigin + performance.now());
 
         // The span still reaches the exporter this test registered, which is what says nothing replaced it.
-        expect(spans.getFinishedSpans()).toHaveLength(1);
+        expect(await written(() => spans.getFinishedSpans())).toHaveLength(1);
     });
 
     // How long the document took to arrive is a measurement about a deployment answering, so it is reported only where
@@ -169,6 +183,31 @@ describe('clientTelemetryForThisApplication', () => {
             const telemetry = clientTelemetryForThisApplication();
 
             telemetry.exportFor({ ...session, baseAddress: window.location.origin });
+
+            await vi.waitFor(async () => {
+                expect(await arrivalDuration()).toBe(1.5);
+            });
+        });
+
+        it('waits for the document to finish loading before reading what it cost', async () => {
+            vi.spyOn(document, 'readyState', 'get').mockReturnValue('interactive');
+
+            const telemetry = clientTelemetryForThisApplication();
+
+            // What a session restored from a stored credential looks like: it is signed in before the load event, and
+            // the entry then describes a document still arriving. This run gets one sign-in and no second attempt, so
+            // reading it here is losing the measurement rather than deferring it.
+            telemetry.exportFor({ ...session, baseAddress: window.location.origin });
+
+            // Queued behind the start, so its record appearing is how this knows the start finished — reading the
+            // histogram before that would find it empty whether the measurement was deferred or merely late.
+            telemetry.happened('session_started');
+
+            await written(() => records.getFinishedLogRecords());
+
+            expect(await arrivalDuration()).toBeUndefined();
+
+            window.dispatchEvent(new Event('load'));
 
             await vi.waitFor(async () => {
                 expect(await arrivalDuration()).toBe(1.5);
@@ -226,6 +265,33 @@ describe('exportFor', () => {
         await vi.waitFor(() => {
             expect(isRecording()).toBe(false);
         });
+    });
+
+    // The sequence `App.tsx` writes, and the one a test against an already-registered provider cannot stand in for:
+    // nothing answers the log registry when `happened` is called, because `exportFor` has only asked for the pipeline.
+    // A record written where it was asked would reach the no-op logger and be gone — there is no delivery of a record
+    // that registry already took. The provider is registered here in the same turn, which is what a pipeline arriving
+    // a moment later looks like from the queue's side.
+    it('records what happened against the pipeline that arrives, not the registry that answered first', async () => {
+        const arriving = new InMemoryLogRecordExporter();
+        const pipeline = new LoggerProvider({ processors: [new SimpleLogRecordProcessor({ exporter: arriving })] });
+        const telemetry = clientTelemetryForThisApplication();
+
+        const stop = telemetry.exportFor(session);
+
+        telemetry.happened('session_started');
+        logs.setGlobalLoggerProvider(pipeline);
+
+        await vi.waitFor(() => {
+            expect(arriving.getFinishedLogRecords()).toHaveLength(1);
+        });
+
+        expect(arriving.getFinishedLogRecords()[0]?.attributes).toEqual({
+            'mailfathom.client.event': 'session_started',
+        });
+
+        stop();
+        await pipeline.shutdown();
     });
 
     it('keeps the session that is signed in when one ends and the next begins in the same turn', async () => {
