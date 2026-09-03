@@ -57,4 +57,13 @@ public sealed record EmailContentRendering(
     /// </para>
     /// </remarks>
     public MailDocument? Document { get; init; }
+
+    /// <summary>Gets the message's own markup with everything that runs or reports removed, or <see langword="null" /> when none was asked for.</summary>
+    /// <remarks>
+    /// A fourth representation of the same body, cut from the same parse of the same source prefix as the other three.
+    /// It is not a reading of <see cref="SanitizedHtmlBody" />: that one admits no URI scheme at all and keeps no
+    /// style, so a surface built on its output would draw a message with no pictures and no layout, and building this
+    /// one out of it would make one pass's output another pass's input for no gain.
+    /// </remarks>
+    public EmailBodyRepresentation? SelfContainedHtmlBody { get; init; }
 }

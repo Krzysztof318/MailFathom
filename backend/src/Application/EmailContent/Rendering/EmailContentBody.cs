@@ -50,12 +50,14 @@ public sealed record EmailContentBody
         EmailBodyRepresentation plainText,
         EmailBodyRepresentation? sanitizedHtml,
         MailDocument? document,
+        EmailBodyRepresentation? selfContainedHtml,
         EmailBodyForms forms)
     {
         this.Availability = availability;
         this.PlainText = plainText;
         this.SanitizedHtml = sanitizedHtml;
         this.Document = document;
+        this.SelfContainedHtml = selfContainedHtml;
         this.Forms = forms;
     }
 
@@ -85,12 +87,21 @@ public sealed record EmailContentBody
     /// </remarks>
     public MailDocument? Document { get; }
 
+    /// <summary>Gets the message's own markup with everything that runs or reports removed, or <see langword="null" /> when none was produced.</summary>
+    /// <remarks>
+    /// The representation the surface that opens the sender's own layout reads, and the only one of the four that
+    /// carries both markup and pictures. It is absent unless a caller asked for it, so the two representations a model
+    /// reads and the tree a pane draws are unchanged by its existence.
+    /// </remarks>
+    public EmailBodyRepresentation? SelfContainedHtml { get; }
+
     /// <summary>Gets the body of a message whose own body arrived encrypted.</summary>
     public static EmailContentBody EncryptedNotReadableLocally { get; } = new(
         EmailBodyAvailability.EncryptedNotReadableLocally,
         EmailBodyRepresentation.Empty,
         sanitizedHtml: null,
         document: null,
+        selfContainedHtml: null,
         EmailBodyForms.None);
 
     /// <summary>Gets the body of a message whose raw MIME exceeded the size limit and was never stored.</summary>
@@ -99,6 +110,7 @@ public sealed record EmailContentBody
         EmailBodyRepresentation.Empty,
         sanitizedHtml: null,
         document: null,
+        selfContainedHtml: null,
         EmailBodyForms.None);
 
     /// <summary>Gets the body of a message whose content storage had no room for it yet.</summary>
@@ -107,12 +119,14 @@ public sealed record EmailContentBody
         EmailBodyRepresentation.Empty,
         sanitizedHtml: null,
         document: null,
+        selfContainedHtml: null,
         EmailBodyForms.None);
 
     /// <summary>Reports a body that was read from the stored message.</summary>
     /// <param name="plainText">The plain-text representation, bounded and carrying its truncation metadata.</param>
     /// <param name="sanitizedHtml">The sanitized HTML representation, or <see langword="null" /> when none was produced.</param>
     /// <param name="document">The reduced document tree, or <see langword="null" /> when none was produced.</param>
+    /// <param name="selfContainedHtml">The self-contained markup, or <see langword="null" /> when none was produced.</param>
     /// <param name="forms">Which forms of its own body the message carried.</param>
     /// <returns>The readable body.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="plainText" /> or <paramref name="forms" /> is <see langword="null" />.</exception>
@@ -125,11 +139,18 @@ public sealed record EmailContentBody
         EmailBodyRepresentation plainText,
         EmailBodyRepresentation? sanitizedHtml,
         MailDocument? document,
+        EmailBodyRepresentation? selfContainedHtml,
         EmailBodyForms forms)
     {
         ArgumentNullException.ThrowIfNull(plainText);
         ArgumentNullException.ThrowIfNull(forms);
 
-        return new EmailContentBody(EmailBodyAvailability.Readable, plainText, sanitizedHtml, document, forms);
+        return new EmailContentBody(
+            EmailBodyAvailability.Readable,
+            plainText,
+            sanitizedHtml,
+            document,
+            selfContainedHtml,
+            forms);
     }
 }

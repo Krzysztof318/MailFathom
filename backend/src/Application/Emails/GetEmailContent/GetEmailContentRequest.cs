@@ -95,12 +95,31 @@ public sealed record GetEmailContentRequest
     /// </remarks>
     public bool IncludeMailDocument { get; init; }
 
+    /// <summary>Gets whether to also produce the message's own markup with everything that runs or reports removed.</summary>
+    /// <remarks>
+    /// An init property for the same reason the document is: one caller asks for it — the surface that opens the
+    /// sender's own layout in a frame beside the reading pane — and it is the most expensive representation a read can
+    /// produce, since it inlines the message's own pictures as well as carrying its markup. A model reading mail wants
+    /// neither, so the tool surface leaves it alone and pays for neither the parse nor the decode.
+    /// </remarks>
+    public bool IncludeSelfContainedHtml { get; init; }
+
     /// <summary>Gets whether the reduced document may carry this message's remote picture references.</summary>
     /// <remarks>
-    /// It is a per-message act by the reader: asking for it loads the sender's pictures, which tells whoever wrote the
-    /// message that it was opened and from where. Nothing remembers the answer, so it is asked again the next time the
-    /// message is opened — and the request refuses to carry the consent across a list, because one reader deciding
-    /// about one message is exactly what it means and a read naming ten would apply it to nine they never saw.
+    /// <para>
+    /// It is a per-message act by the reader: asking for it loads what the sender's message reaches for, which tells
+    /// whoever wrote it that it was opened and from where. Nothing remembers the answer, so it is asked again the next
+    /// time the message is opened — and the request refuses to carry the consent across a list, because one reader
+    /// deciding about one message is exactly what it means and a read naming ten would apply it to nine they never saw.
+    /// </para>
+    /// <para>
+    /// What it widens differs by representation, because what each one can carry differs. The reduced document has a
+    /// picture's source and nothing else, so that is the whole of it there. The self-contained markup carries a
+    /// stylesheet, a background, a web font, and a set of candidate sources besides, and every one of them is an
+    /// address the same fetch would reveal the same thing through — so the consent restores all of them or the surface
+    /// would draw a layout missing exactly the parts it was opened to see. In neither case does it restore anything
+    /// that runs.
+    /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown when it is asked for by a request naming other than one email.</exception>
     public bool RetainRemoteImageReferences

@@ -1139,6 +1139,63 @@ public sealed class EmailContentReaderTests
         Assert.Equal("<p>the key is [redacted:CloudKey]</p>", content.Body.SanitizedHtml?.Text);
     }
 
+    /// <summary>The ask reaches the adapter and what it produced reaches the caller, which is the whole of the seam.</summary>
+    [Fact]
+    public async Task ReadContentAsync_SelfContainedHtmlRequested_AsksTheRendererForItAndReturnsIt()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create();
+        var renderer = RendererReturning(RenderingOf() with
+        {
+            SelfContainedHtmlBody = new EmailBodyRepresentation("<p>Body</p>", 11, EmailBodyTruncation.None),
+        });
+
+        var reader = ReaderOver(summary, renderer);
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId]) with { IncludeSelfContainedHtml = true },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.Equal("<p>Body</p>", ContentOf(Assert.Single(result.Emails)).Body.SelfContainedHtml?.Text);
+        await renderer.Received(1).RenderAsync(
+            Arg.Any<StoredEmailContent>(),
+            Arg.Is<EmailContentRenderingBounds>(bounds => bounds != null && bounds.IncludeSelfContainedHtml),
+            Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// The self-contained markup is a fourth rendering of the same body and passes the same guard, because a credential
+    /// published through the one representation nobody scanned is published exactly as far as through any other.
+    /// </summary>
+    [Fact]
+    public async Task ReadContentAsync_SelfContainedHtmlCarryingADetectedValue_PublishesItRedacted()
+    {
+        // Arrange
+        using var egress = ScanningSensitiveContentEgress.Finding(Marker, TimeProvider.System);
+        var summary = SyntheticEmailSummaries.Create();
+        var reader = ReaderOver(
+            summary,
+            RendererReturning(RenderingOf() with
+            {
+                SelfContainedHtmlBody = new EmailBodyRepresentation(
+                    $"<p>the key is {Marker}</p>",
+                    26,
+                    EmailBodyTruncation.None),
+            }),
+            egressGuard: egress.Guard);
+
+        // Act
+        var result = await reader.ReadContentAsync(
+            RequestFor([summary.StoredEmailId]) with { IncludeSelfContainedHtml = true },
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var content = ContentOf(Assert.Single(result.Emails));
+        Assert.Equal("<p>the key is [redacted:CloudKey]</p>", content.Body.SelfContainedHtml?.Text);
+    }
+
     /// <summary>
     /// The document is a third rendering of the same body, so it passes the same guard: a credential the markup carried
     /// would otherwise reach a reading pane by the one representation nobody had put under a scanner.

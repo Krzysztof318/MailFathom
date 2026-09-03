@@ -37,7 +37,7 @@ public sealed class ClientMailBodyEndpointTests
     public void RequestFor_AnyRead_AsksForTheTreeAndForNeitherMarkupNorAttachmentLinks()
     {
         // Act
-        var request = ClientMailBodyEndpoint.RequestFor(Message, remoteImages: null);
+        var request = ClientMailBodyEndpoint.RequestFor(Message, remoteImages: null, fullHtml: null);
 
         // Assert
         Assert.True(request.IncludeMailDocument);
@@ -54,10 +54,53 @@ public sealed class ClientMailBodyEndpointTests
     public void RequestFor_TheRemoteImagesQuery_IsTheWholeOfWhatRetainsThem(bool? remoteImages, bool expected)
     {
         // Act
-        var request = ClientMailBodyEndpoint.RequestFor(Message, remoteImages);
+        var request = ClientMailBodyEndpoint.RequestFor(Message, remoteImages, fullHtml: null);
 
         // Assert
         Assert.Equal(expected, request.RetainRemoteImageReferences);
+    }
+
+    /// <summary>The default read is unchanged, so the pane pays for neither the parse nor the pictures the second surface inlines.</summary>
+    [Theory]
+    [InlineData(null, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public void RequestFor_TheFullHtmlQuery_IsTheWholeOfWhatProducesTheSelfContainedMarkup(bool? fullHtml, bool expected)
+    {
+        // Act
+        var request = ClientMailBodyEndpoint.RequestFor(Message, remoteImages: null, fullHtml);
+
+        // Assert
+        Assert.Equal(expected, request.IncludeSelfContainedHtml);
+    }
+
+    /// <summary>A read that produced the markup publishes it beside the tree rather than in place of it.</summary>
+    [Fact]
+    public void For_AMessageCarryingTheSelfContainedMarkup_PublishesItBesideTheTree()
+    {
+        // Arrange
+        var message = MessageWith(
+            document: null,
+            selfContainedHtml: new EmailBodyRepresentation("<p>Hello</p>", 12, EmailBodyTruncation.None));
+
+        // Act
+        var response = ClientMailBodyResponse.For(message, remoteImagesRequested: false);
+
+        // Assert
+        Assert.NotNull(response.SelfContainedHtml);
+        Assert.Equal("<p>Hello</p>", response.SelfContainedHtml.Text);
+        Assert.Equal(nameof(EmailBodyTruncation.None), response.SelfContainedHtml.Truncation);
+    }
+
+    /// <summary>A read that produced none says so by absence, which is what a client reads as nothing to open.</summary>
+    [Fact]
+    public void For_AMessageWithoutTheSelfContainedMarkup_PublishesNone()
+    {
+        // Act
+        var response = ClientMailBodyResponse.For(MessageWith(document: null), remoteImagesRequested: false);
+
+        // Assert
+        Assert.Null(response.SelfContainedHtml);
     }
 
     /// <summary>Both renderings travel together, because a pane needs the words whether or not it draws the tree.</summary>
@@ -160,21 +203,27 @@ public sealed class ClientMailBodyEndpointTests
         Assert.Equal("BodyCharacterLimit", response.Truncation);
     }
 
-    private static ReadEmailContent MessageWith(MailDocument? document) => new()
+    private static ReadEmailContent MessageWith(
+        MailDocument? document,
+        EmailBodyRepresentation? selfContainedHtml = null)
     {
-        StoredEmailId = StoredEmailId.Create(Message),
-        AccountId = MailAccountId.Create("primary"),
-        FolderAlias = MailFolderAlias.Create("INBOX"),
-        Headers = new EmailContentHeaders(null, null, null, [], EmailThreadReferences.None),
-        Body = EmailContentBody.Readable(
-            new EmailBodyRepresentation("Just words.", 11, EmailBodyTruncation.None),
-            sanitizedHtml: null,
-            document,
-            new EmailBodyForms(PlainText: true, Html: document is not null)),
-        Attachments = [],
-        RemoteFlags = RemoteEmailFlagSnapshot.NeverObserved,
-        SenderVerification = SenderVerification.NotEstablished,
-        SenderAuthenticationEvidence = SenderAuthenticationEvidence.None,
-        MachineAuthorship = MachineAuthorshipAssessment.NotAssessed,
-    };
+        return new ReadEmailContent
+        {
+            StoredEmailId = StoredEmailId.Create(Message),
+            AccountId = MailAccountId.Create("primary"),
+            FolderAlias = MailFolderAlias.Create("INBOX"),
+            Headers = new EmailContentHeaders(null, null, null, [], EmailThreadReferences.None),
+            Body = EmailContentBody.Readable(
+                new EmailBodyRepresentation("Just words.", 11, EmailBodyTruncation.None),
+                sanitizedHtml: null,
+                document,
+                selfContainedHtml,
+                new EmailBodyForms(PlainText: true, Html: document is not null)),
+            Attachments = [],
+            RemoteFlags = RemoteEmailFlagSnapshot.NeverObserved,
+            SenderVerification = SenderVerification.NotEstablished,
+            SenderAuthenticationEvidence = SenderAuthenticationEvidence.None,
+            MachineAuthorship = MachineAuthorshipAssessment.NotAssessed,
+        };
+    }
 }

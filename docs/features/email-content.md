@@ -18,7 +18,7 @@ tool that maps onto it is documented in [MCP tools](mcp-tools.md#get_email_conte
 
 ## The request contract
 
-`GetEmailContentRequest` carries six values and is built through `Create`, `CreateForThread`, or `CreateForSelection`,
+`GetEmailContentRequest` carries seven values and is built through `Create`, `CreateForThread`, or `CreateForSelection`,
 which enforce the refusals below.
 
 | Field | Meaning | Absent means |
@@ -28,6 +28,7 @@ which enforce the refusals below.
 | `IncludeSanitizedHtml` | Whether to also produce the sanitized HTML representation of each body | plain text only |
 | `IncludeAttachmentDownloadLinks` | Whether to mint a link for fetching each attachment, rather than only describe it | descriptions only |
 | `IncludeMailDocument` | Whether to also reduce each body to [the document tree a reading pane draws](#the-document-a-reading-pane-draws) | no document |
+| `IncludeSelfContainedHtml` | Whether to also produce [the message's own markup with everything that runs or reports removed](#the-markup-a-full-html-surface-reads) | no such markup |
 | `RetainRemoteImageReferences` | Whether that document may carry this message's remote picture references | every remote reference removed |
 
 The first two are alternatives and exactly one of them is given. `CreateForSelection` is what a boundary offering both
@@ -47,7 +48,7 @@ that is a reader's act rather than a caller's preference, so a request carrying 
 refused otherwise — [Nothing in a body reaches another server unless the reader asked](#nothing-in-a-body-reaches-another-server-unless-the-reader-asked)
 holds why.
 
-The last two are init properties rather than factory arguments, because one caller asks for them — the client
+The last three are init properties rather than factory arguments, because one caller asks for them — the client
 endpoint a person's reading pane reads — and every other entrypoint would have to name them only to decline them.
 
 The HTML representation is opt-in because it costs a sanitization pass over untrusted markup and because plain text is
@@ -367,6 +368,7 @@ different actions.
 | `BodyCharacterLimit` | The per-representation bound cut it | Nothing; this message is longer than any single call returns |
 | `ReadCharacterBudget` | The call's total budget cut it, because the emails named before it had already spent it | Name this email in a call of its own, or fewer emails at once |
 | `SensitiveContentScanCeiling` | A switched-on scanner analyzed as much of the body as it may, and the rest is withheld rather than served unscanned | Nothing a call can do; only raising `SensitiveContent:MaximumAnalyzedCharacters` returns more |
+| `InlineImageOctetLimit` | The message carried more of its own pictures than one representation inlines, so the ones past the bound were left out | Nothing a call can do; the words are whole and the pictures are what is missing |
 
 `EmailContent:MaxBodyCharacters` sets the per-representation bound, defaults to 100,000, and is validated at startup
 within 1,000–1,000,000. `EmailContent:MaxCharactersPerRead` sets the whole call's budget, defaults to 200,000, and is
@@ -585,6 +587,53 @@ with a reason it can show rather than to an empty frame. `Truncated` says a boun
 of the body, the way `EmailBodyTruncation` says the same about a representation, and it says the same about a scan that
 withheld what it could not reach — every way a document is cut short reads as one flag.
 
+## The markup a full-HTML surface reads
+
+The two representations above answer two questions and leave a third unanswered. The sanitized markup is what a model
+should be handed and admits no URI scheme at all, so it draws a message with every picture missing and every link inert
+— thinner than the tree beside it. The tree is what a reading pane draws and carries no markup by construction. Neither
+is what a person wants when the reduction lost something and they ask to see the message as it was sent.
+
+`IncludeSelfContainedHtml` produces the third: **the sender's own markup, with the sender's own pictures in it, and with
+nothing in it that runs or that reaches another host.** It is cut from the message's own parse rather than from the
+sanitized representation's output, so no pass's serialization is another pass's input, and it is serialized once.
+
+Three properties define it, and each is an allow-list rather than a list of things removed — which is what makes the
+assertion behind it general rather than a catalogue somebody has to keep complete.
+
+- **The pictures are present.** A `cid:` part, and a part the message answers under the `Content-Location` it was sent
+  with, is inlined as a `data:` URI of the media type it actually is, under the same three octet bounds the document
+  tree's inline pictures observe and drawing on the same per-read budget. A picture past a bound is left out and the
+  representation reports `InlineImageOctetLimit` rather than serving a gap in silence.
+- **Nothing in it runs.** An element outside the allow-list is removed with its content, an attribute outside the
+  attribute allow-list is removed, and no URI naming a scripting scheme survives in any position — so `script`,
+  `iframe`, `object`, `embed`, `applet`, `form`, `base`, `meta`, `link`, `svg`, and `math` are gone, every event handler
+  is gone, and so is a construct nobody anticipated, because nothing admitted it. Style and layout do survive, which is
+  what the surface exists for.
+- **Nothing in it reaches another host.** Every remote address is removed while the representation is prepared, in every
+  form markup can carry one — an attribute, a CSS `url()`, an `@import`, a `srcset`, a `<picture>` source, a font face,
+  and a scheme-relative reference that names a host without naming a protocol.
+
+A link's target is the one absolute address that survives, carrying `http`, `https`, `mailto`, or `tel`. A target is a
+navigation the reader performs rather than a resource the document pulls, and it is kept here for the same reason
+`MailDocumentLink` keeps one in the tree: without it this surface would be less useful than the pane it was opened from,
+which is the defect it exists to answer.
+
+The result is parsed once more before it is returned, and held against the two allow-lists that produced it. That second
+reading is a check rather than a step — what is returned is the string the single serialization produced, never a
+re-serialization of the check's own parse — and it exists because the parse that matters is the one whatever renders the
+markup performs, which neither the policy nor the serializer can see. A result that fails it is not repaired and not
+returned at all, so a defect in the pass above costs a reader this surface rather than costing them the guarantee.
+
+`RetainRemoteImageReferences` widens this representation further than it widens the tree, and deliberately. In the tree
+a picture's source is the only reference there is to widen; here a stylesheet, a background, a candidate source, and a
+web font are all addresses the same fetch would reveal the same thing through, so the consent restores every one of them
+— a layout served without its fonts and its background pictures is exactly the reduction this surface was opened to
+escape. It restores addresses and nothing else: an executable construct stays gone whether or not it was asked for.
+
+`@import` is the one address the consent does not restore. What it fetches is a stylesheet, and a stylesheet fetched at
+render time is a document nothing here read, so admitting it would hand the surface CSS that never met an allow-list.
+
 ## When the local copy is unusable
 
 Missing or damaged content is an expected outcome, not a crash. The read verifies what is stored against the length and
@@ -798,8 +847,10 @@ configured bucket whether it answers, and the check that asks the stored content
   and the HTML sanitizer respectively. Neither type escapes that namespace.
 - `MailFathom.Infrastructure.Mail.Mime.Rendering` — the reduction from one parsed document to the closed tree:
   `MailBodyProjection` over `MailBodyReducer` and `MailTableReducer`, the style and link readers that decide what a
-  node contributes, and `MailInlineImages`, which resolves a `cid:` part into a bounded `data:` URI. The HTML parser
-  stays behind this namespace exactly as the MIME parser stays behind the one above.
+  node contributes, and `MailInlineImages`, which resolves a `cid:` part into a bounded `data:` URI. It also holds
+  `SelfContainedHtmlProjection`, which produces [the markup a full-HTML surface reads](#the-markup-a-full-html-surface-reads)
+  and shares that picture resolution with the reduction beside it. The HTML parser stays behind this namespace exactly
+  as the MIME parser stays behind the one above.
 - `MailFathom.Infrastructure.ObjectStorage` — `S3EmailContentObjectStore` and the two mechanisms that take a payload
   back out of it: `ReleasedContentObjectEraser`, which the persistence session calls once its transaction has
   committed, and `ObjectStorageContentReclamation`, which sweeps a listing.

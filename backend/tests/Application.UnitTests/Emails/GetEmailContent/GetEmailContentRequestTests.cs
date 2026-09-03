@@ -45,7 +45,19 @@ public sealed class GetEmailContentRequestTests
 
         // Assert
         Assert.False(request.IncludeMailDocument);
+        Assert.False(request.IncludeSelfContainedHtml);
         Assert.False(request.RetainRemoteImageReferences);
+    }
+
+    /// <summary>The most expensive representation is asked for by name, which is what leaves every other caller paying nothing for it.</summary>
+    [Fact]
+    public void IncludeSelfContainedHtml_ARequestAskingForIt_CarriesTheAsk()
+    {
+        // Act
+        var request = GetEmailContentRequest.Create(IdentitiesOf(1)) with { IncludeSelfContainedHtml = true };
+
+        // Assert
+        Assert.True(request.IncludeSelfContainedHtml);
     }
 
     /// <summary>The consent is about one message, so the one request that may carry it names one message.</summary>

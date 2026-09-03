@@ -164,6 +164,7 @@ public sealed class ClientMailMessageEndpointTests
                 new EmailBodyRepresentation("Just words.", 11, EmailBodyTruncation.None),
                 sanitizedHtml: null,
                 document: null,
+                selfContainedHtml: null,
                 new EmailBodyForms(plainText, html)),
         };
 
@@ -257,6 +258,7 @@ public sealed class ClientMailMessageEndpointTests
             new EmailBodyRepresentation("Just words.", 11, EmailBodyTruncation.None),
             sanitizedHtml: null,
             document: null,
+            selfContainedHtml: null,
             new EmailBodyForms(PlainText: true, Html: true)),
         AttachmentSummary = new StoredEmailAttachmentSummary(
             AttachmentCount: 2,

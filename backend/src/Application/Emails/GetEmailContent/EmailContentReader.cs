@@ -301,6 +301,7 @@ public sealed class EmailContentReader
                 remainingCharacters)
             {
                 IncludeMailDocument = request.IncludeMailDocument,
+                IncludeSelfContainedHtml = request.IncludeSelfContainedHtml,
                 RetainRemoteImageReferences = request.RetainRemoteImageReferences,
                 RemainingInlineImageOctetsForRead = Math.Max(remainingImageOctets, 0),
             },
@@ -479,6 +480,9 @@ public sealed class EmailContentReader
             body.Document is { } document
                 ? await this.GuardedAsync(document, cancellationToken)
                 : null,
+            body.SelfContainedHtml is { } selfContainedHtml
+                ? await this.GuardedAsync(selfContainedHtml, cancellationToken)
+                : null,
             body.Forms);
     }
 
@@ -633,10 +637,19 @@ public sealed class EmailContentReader
 
     /// <summary>Counts what one email spent of the call's budget, which is every representation it returned.</summary>
     /// <remarks>
+    /// <para>
     /// The document is counted as the words it holds rather than as the JSON it serializes to. What the budget governs
     /// is how much mail one call draws out of a mailbox, and a picture the message carried is bounded by
     /// <see cref="MailDocumentBounds" /> in octets rather than in characters, so counting its encoding here would
     /// spend a text budget on something no text bound was written for.
+    /// </para>
+    /// <para>
+    /// The self-contained markup is counted whole, pictures included, which is the opposite treatment and the right one:
+    /// it is one string rather than a tree with octets hanging off it, and counting only its words would leave a read
+    /// naming ten emails composing ten messages' worth of inlined pictures against a budget none of them touched. What
+    /// it costs instead is that a call asking for this representation is answered for fewer emails, which is what asking
+    /// for the most expensive representation there is should cost.
+    /// </para>
     /// </remarks>
     private static int CharactersReturnedBy(EmailContentReadOutcome outcome) =>
         outcome.Content is { } content
@@ -645,6 +658,7 @@ public sealed class EmailContentReader
                 + (content.Body.Document is { } document
                     ? MailDocumentTexts.Collect(document).Sum(text => text.Length)
                     : 0)
+                + (content.Body.SelfContainedHtml?.Text.Length ?? 0)
             : 0;
 
     /// <summary>Records the defect durably and produces the outcome to report for it.</summary>
@@ -694,6 +708,7 @@ public sealed class EmailContentReader
                     rendering.PlainTextBody,
                     rendering.SanitizedHtmlBody,
                     rendering.Document,
+                    rendering.SelfContainedHtmlBody,
                     rendering.BodyForms),
             AttachmentSummary = SummaryOf(rendering.AttachmentSummary),
             Attachments = attachments,

@@ -140,6 +140,8 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
                     bounds.RemainingCharactersForRead - plainTextBody.Text.Length))
             : null;
 
+        var htmlParts = classification.BodyTextParts.Where(part => part.IsHtml).Select(part => part.Text).ToArray();
+
         return new EmailContentRendering(
             MimeMessageHeaderReader.Read(message),
             bodyIsUnreadable ? EmailBodyRepresentation.Empty : plainTextBody,
@@ -156,13 +158,31 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
             Document = bounds.IncludeMailDocument && !bodyIsUnreadable
                 ? await MailBodyProjection.ProduceAsync(
                     message,
-                    [.. classification.BodyTextParts.Where(part => part.IsHtml).Select(part => part.Text)],
+                    htmlParts,
                     bounds.RetainRemoteImageReferences,
                     EmailBodyCharacterAllowance.Of(
                         bounds.MaxCharactersPerRepresentation,
                         bounds.RemainingCharactersForRead
                             - plainTextBody.Text.Length
                             - (sanitizedHtmlBody?.Text.Length ?? 0)).MaxCharacters,
+                    bounds.RemainingInlineImageOctetsForRead,
+                    cancellationToken)
+                : null,
+
+            // The octets are the same budget the document draws on rather than a second one, and the two representations
+            // are handed the same starting figure rather than one after the other. They are alternative renderings of the
+            // same pictures — a reader sees the tree or the markup, never both at once — so spending the budget twice
+            // would leave whichever was produced second drawing a message the first one had already emptied.
+            SelfContainedHtmlBody = bounds.IncludeSelfContainedHtml && !bodyIsUnreadable
+                ? await SelfContainedHtmlProjection.ProduceAsync(
+                    message,
+                    htmlParts,
+                    bounds.RetainRemoteImageReferences,
+                    EmailBodyCharacterAllowance.Of(
+                        bounds.MaxCharactersPerRepresentation,
+                        bounds.RemainingCharactersForRead
+                            - plainTextBody.Text.Length
+                            - (sanitizedHtmlBody?.Text.Length ?? 0)),
                     bounds.RemainingInlineImageOctetsForRead,
                     cancellationToken)
                 : null,
