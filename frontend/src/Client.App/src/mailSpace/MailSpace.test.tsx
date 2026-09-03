@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LocalizationProvider } from '../localization/Localization';
 import { WorkspaceProvider } from '../workspace/Workspace';
 import { useWorkspace, type Workspace } from '../workspace/useWorkspace';
+import { listWidthStep, readListWidth, startingListWidth, storeListWidth } from './listWidth';
 import { MailSpace } from './MailSpace';
 
 // Not catalogue entries: each stands for whatever the frame composes for the region, which is the point of the props.
@@ -80,7 +81,7 @@ function Opening({ change }: { readonly change: Partial<Workspace> }) {
     return null;
 }
 
-function renderSpace(wide: boolean, opening: Partial<Workspace> = {}): void {
+function renderSpace(wide: boolean, opening: Partial<Workspace> = {}, person: string | null = 'reader'): void {
     atWidth(wide);
     withModalDialogs();
 
@@ -99,6 +100,7 @@ function renderSpace(wide: boolean, opening: Partial<Workspace> = {}): void {
                     mail={<p>{handedToMail}</p>}
                     intent={<p>{handedTheIntent}</p>}
                     status={<p>{handedTheStatus}</p>}
+                    person={person}
                 />
             </WorkspaceProvider>
         </LocalizationProvider>,
@@ -125,10 +127,53 @@ afterEach(() => {
     }
 
     window.sessionStorage.clear();
+    window.localStorage.clear();
     vi.restoreAllMocks();
 });
 
 describe('MailSpace, wide', () => {
+    it('puts a grip on the boundary, at the width this person last settled on', () => {
+        storeListWidth('karolina', 420);
+
+        renderSpace(true, {}, 'karolina');
+
+        expect(screen.getByRole('separator', { name: 'Message list width' }).getAttribute('aria-valuenow')).toBe('420');
+    });
+
+    it('opens at the starting width for somebody who has settled on none', () => {
+        renderSpace(true, {}, 'marta');
+
+        expect(screen.getByRole('separator', { name: 'Message list width' }).getAttribute('aria-valuenow')).toBe(
+            String(startingListWidth),
+        );
+    });
+
+    it('keeps the width a reader moves the grip to, and offers it back on the next start', () => {
+        renderSpace(true, {}, 'karolina');
+
+        fireEvent.keyDown(screen.getByRole('separator', { name: 'Message list width' }), { key: 'ArrowRight' });
+
+        expect(screen.getByRole('separator', { name: 'Message list width' }).getAttribute('aria-valuenow')).toBe(
+            String(startingListWidth + listWidthStep),
+        );
+        expect(readListWidth('karolina')).toBe(startingListWidth + listWidthStep);
+    });
+
+    it('moves the boundary while the grip is being dragged, and settles where it was let go', () => {
+        renderSpace(true, {}, 'karolina');
+
+        const grip = screen.getByRole('separator', { name: 'Message list width' });
+        fireEvent.pointerDown(grip, { pointerId: 1, clientX: 600 });
+        fireEvent.pointerMove(grip, { pointerId: 1, clientX: 664 });
+
+        // Read while the pointer is still down: the boundary follows the drag rather than jumping to where it ended.
+        expect(grip.getAttribute('aria-valuenow')).toBe(String(startingListWidth + 64));
+
+        fireEvent.pointerUp(grip, { pointerId: 1, clientX: 664 });
+
+        expect(readListWidth('karolina')).toBe(startingListWidth + 64);
+    });
+
     it('draws the three columns side by side, with the toolbar over them', () => {
         renderSpace(true);
 
@@ -197,6 +242,12 @@ describe('MailSpace, wide', () => {
 });
 
 describe('MailSpace, narrow', () => {
+    it('draws no grip, because one column at a time has no boundary to move', () => {
+        renderSpace(false);
+
+        expect(screen.queryByRole('separator', { name: 'Message list width' })).toBeNull();
+    });
+
     it('draws the list alone while nothing is open, with the mailboxes behind a control and no toolbar', () => {
         renderSpace(false);
 

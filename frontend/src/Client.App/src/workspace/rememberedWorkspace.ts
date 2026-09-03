@@ -16,7 +16,7 @@ import { emptyWorkspace, type Workspace } from './useWorkspace';
 // store that dies with the tab is what makes that true of a tab somebody closed without signing out. It is the same
 // bound the web head keeps its credential under, for the same reason.
 //
-// Reached as `window.sessionStorage` rather than as the bare global for the reason `localization/locale.ts` gives:
+// Reached as `window.sessionStorage` rather than as the bare global for the reason `device/deviceStore.ts` gives:
 // Node publishes stores of its own that win over the document's under the test runner.
 const storageKey = 'mailfathom.workspace';
 

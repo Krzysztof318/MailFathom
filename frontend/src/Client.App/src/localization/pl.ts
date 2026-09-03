@@ -166,6 +166,9 @@ export const pl: Catalogue = {
     'mail.backToList': 'Wróć do listy',
     'mail.listColumn': 'Lista wiadomości',
     'mail.readingColumn': 'To, co otwarte',
+    'mail.listWidth': 'Szerokość listy wiadomości',
+    'mail.listWidthHint':
+        'Przeciągnij, aby zmienić szerokość listy. Dwuklik lub klawisz Home przywraca szerokość początkową.',
 
     'folder.inbox': 'Odebrane',
     'folder.drafts': 'Kopie robocze',

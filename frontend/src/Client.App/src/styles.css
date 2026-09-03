@@ -201,13 +201,14 @@
     --spacing-message-row: 4.75rem;
 
     /* How wide the rail is, how wide the column beside it that holds the mailbox tree is when it is open and when it
-       is folded to a strip, how wide the message list beside that is, and how wide the drawer the narrow shape holds
-       the mailboxes in is. All five are the project's, and they are here rather than on the components because the
-       first four have to add up to a composition. */
+       is folded to a strip, and how wide the drawer the narrow shape holds the mailboxes in is. All four are the
+       project's, and they are here rather than on the components because the first three have to add up to a
+       composition. The message list's width is not among them: it is the one width a person sets rather than the
+       design, so it is drawn from a value and its bounds live in `mailSpace/listWidth.ts`, where the arithmetic that
+       reads them is. */
     --spacing-rail: 6rem;
     --spacing-mailboxes: 13.125rem;
     --spacing-mailboxes-folded: 3.625rem;
-    --spacing-message-list: 21.25rem;
     --spacing-drawer: 16.375rem;
 
     /* The widest a message's own content is ever drawn, which is a ceiling rather than a width: the reading pane takes

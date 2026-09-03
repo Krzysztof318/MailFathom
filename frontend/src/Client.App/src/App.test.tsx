@@ -12,6 +12,7 @@ import { AttachmentDeliveryContext, type AttachmentDelivery } from './deployment
 import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { LocalizationProvider } from './localization/Localization';
 import { localeNames, locales, readStoredLocale } from './localization/locale';
+import { startingListWidth, storeListWidth } from './mailSpace/listWidth';
 import type { CredentialLifetime, CredentialStore } from './signIn/credentialStore';
 import { mostReconnectionAttempts } from './shell/useConnection';
 import { ThemeProvider } from './theme/Theme';
@@ -498,6 +499,35 @@ describe('App', () => {
         fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
 
         expect(await screen.findByText('A drawn message.')).toBeDefined();
+    });
+
+    it('divides the mail space where the person now signed in last left it, rather than where anybody did', async () => {
+        // The width is stored against the person the held credential names, so this is the one assertion that the name
+        // the frame takes the credential apart for is the name the store was written under. Everything below the frame
+        // is handed that name and could not tell a wrong one from a right one.
+        storeListWidth('test', 468);
+
+        renderApp();
+        await framed();
+
+        await goTo('Mail');
+
+        expect(
+            (await screen.findByRole('separator', { name: 'Message list width' })).getAttribute('aria-valuenow'),
+        ).toBe('468');
+    });
+
+    it('divides it where it starts for somebody else signing in on the same machine', async () => {
+        storeListWidth('test', 468);
+
+        renderApp(servedFrom, 'Basic YW5vdGhlcjpzZWNyZXQ=');
+        await framed();
+
+        await goTo('Mail');
+
+        expect(
+            (await screen.findByRole('separator', { name: 'Message list width' })).getAttribute('aria-valuenow'),
+        ).toBe(String(startingListWidth));
     });
 
     it('opens the conversation a message belongs to, and returns to that message when it is closed', async () => {

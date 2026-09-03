@@ -2,6 +2,13 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+import { deviceKeys, deviceStore } from '../device/deviceStore';
+
+// Which theme was chosen is one of the things the device holds rather than the deployment, so it is read and written
+// through `device/deviceStore.ts` — including the handling a browser or a WebView refusing storage needs, which is
+// that module's rather than this one's. The choice survives a restart of either head because both store it in the same
+// place: the web bundle in the browser's origin storage, the desktop shell in its WebView's.
+
 /** What a person may choose: one of the two themes, or whatever the machine is set to. */
 export const themeChoices = ['system', 'light', 'dark'] as const;
 
@@ -13,12 +20,6 @@ export type Theme = 'light' | 'dark';
 /** What a first run resolves to when nothing it reads names a choice: the machine's own. */
 export const defaultThemeChoice: ThemeChoice = 'system';
 
-// What the explicit choice is written under, beside the language. It survives a restart of either head because both
-// store it in the same place: the web bundle in the browser's origin storage, the desktop shell in its WebView's.
-//
-// Reached as `window.localStorage` rather than as the bare global, for the reason `localization/locale.ts` gives.
-const storageKey = 'mailfathom.theme';
-
 const darkQuery = '(prefers-color-scheme: dark)';
 
 export function isThemeChoice(value: unknown): value is ThemeChoice {
@@ -27,21 +28,13 @@ export function isThemeChoice(value: unknown): value is ThemeChoice {
 
 /** The theme explicitly chosen on this machine, or `null` where none was chosen or what was stored is not offered. */
 export function readStoredThemeChoice(): ThemeChoice | null {
-    try {
-        const stored = window.localStorage.getItem(storageKey);
-        return isThemeChoice(stored) ? stored : null;
-    } catch {
-        return null;
-    }
+    const stored = deviceStore().read(deviceKeys.themeChoice);
+
+    return isThemeChoice(stored) ? stored : null;
 }
 
 export function storeThemeChoice(choice: ThemeChoice): void {
-    try {
-        window.localStorage.setItem(storageKey, choice);
-    } catch {
-        // A browser configured to refuse storage still runs the client; the choice then lasts the session rather than
-        // outliving it, which is a smaller loss than a screen that fails to mount over a preference.
-    }
+    deviceStore().write(deviceKeys.themeChoice, choice);
 }
 
 /** What the client opens in: the explicit choice, else following the machine. */

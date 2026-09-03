@@ -166,6 +166,9 @@ export const en = {
     'mail.backToList': 'Back to the list',
     'mail.listColumn': 'Message list',
     'mail.readingColumn': 'What is open',
+    'mail.listWidth': 'Message list width',
+    'mail.listWidthHint':
+        'Drag to change the list width. Double-click, or press Home, to return it to where it started.',
 
     'folder.inbox': 'Inbox',
     'folder.drafts': 'Drafts',

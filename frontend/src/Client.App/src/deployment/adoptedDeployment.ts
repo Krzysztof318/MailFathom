@@ -29,7 +29,7 @@ export interface AdoptedDeployment {
 // Where the chosen address is written. An address is not a credential and is stored as what it is; what the desktop
 // head does with anything secret is its own question.
 //
-// Reached as `window.localStorage` rather than as the bare global for the reason `localization/locale.ts` gives: Node
+// Reached as `window.localStorage` rather than as the bare global for the reason `device/deviceStore.ts` gives: Node
 // publishes a `localStorage` global of its own that wins over the document's under the test runner, so the bare name
 // is two different objects behind one identifier.
 const storageKey = 'mailfathom.deployment';
