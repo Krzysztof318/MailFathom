@@ -230,6 +230,7 @@ describe('useClientPreferences', () => {
             telemetryEnabled: false,
             theme: 'dark',
             openMailInTabs: true,
+            markReadOnOpen: true,
         });
     });
 

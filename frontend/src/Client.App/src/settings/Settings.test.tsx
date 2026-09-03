@@ -12,6 +12,7 @@ import { Settings } from './Settings';
 
 const settings: ClientPreferencesInForce = {
     openMailInTabs: false,
+    markReadOnOpen: true,
     telemetryEnabled: true,
     notStated: false,
     chooseTheme: () => undefined,

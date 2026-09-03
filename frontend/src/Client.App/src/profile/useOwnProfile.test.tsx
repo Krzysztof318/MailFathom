@@ -239,7 +239,11 @@ describe('useOwnProfile', () => {
         // answer names the name the person has since changed away from.
         const transport: MailFathomTransport = async (request) => {
             if (request.method !== 'POST') {
-                return { status: 200, body: JSON.stringify({ displayName: 'Ada Lovelace', changeable: true }), headers: {} };
+                return {
+                    status: 200,
+                    body: JSON.stringify({ displayName: 'Ada Lovelace', changeable: true }),
+                    headers: {},
+                };
             }
 
             corrections += 1;
@@ -254,7 +258,11 @@ describe('useOwnProfile', () => {
 
             await firstCorrection;
 
-            return { status: 200, body: JSON.stringify({ displayName: 'Grace Hopper', changeable: true }), headers: {} };
+            return {
+                status: 200,
+                body: JSON.stringify({ displayName: 'Grace Hopper', changeable: true }),
+                headers: {},
+            };
         };
 
         const held = await renderProfile(drawing({ outcome: 'none' }), transport);
