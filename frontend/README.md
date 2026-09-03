@@ -466,8 +466,10 @@ breakpoints the composition changes at, the safe-area insets, and the motion def
 
 Every value there is the design project's rather than this repository's, declared in OKLCH under two themes. What a
 screen composes against is never a hue but a **semantic** name — a page, a panel, a rail, a sunken region, three line
-weights, four text weights, an accent, a healthy state, a warning. Both themes declare the same names, which is what
-lets the light and the dark client be one set of utilities rather than a `dark:` variant on every one of them.
+weights, four text weights, an accent, a healthy state, a warning. A name means the same thing under both themes, which
+is what lets the light and the dark client be one set of utilities rather than a `dark:` variant on every one of them —
+the dark block redeclares the names whose value differs and leaves alone the two the design draws as one colour on both
+of its artboards, the surface a sender's markup is drawn on and the mailbox-mark ramp past its first hue.
 
 The typeface and the symbols are in the bundle for the same reason the credential never leaves it: **no screen reaches
 an external origin.** Instrument Sans is committed under `src/Client.App/src/assets/fonts/` and declared by
