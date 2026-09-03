@@ -134,7 +134,9 @@ export const pl: Catalogue = {
 
     'settings.title': 'Ustawienia',
     'settings.close': 'Zamknij ustawienia',
+    'settings.sections': 'Sekcje ustawień',
     'settings.profile': 'Profil',
+    'settings.application': 'Aplikacja',
     'settings.name': 'Imię i nazwisko',
     'settings.nameNotYours':
         'Twoje imię i nazwisko prowadzi ten, kto zarządza tym wdrożeniem, więc jest tu pokazane, a nie oddane do zmiany.',
@@ -149,6 +151,12 @@ export const pl: Catalogue = {
     'settings.pictureTooLarge': 'To zdjęcie jest większe niż 1 MB, więc nie zostało wysłane.',
     'settings.pictureNotStored':
         'To zdjęcie nie zostało zapisane na wdrożeniu, więc nadal jesteś rysowany tak jak wcześniej.',
+    'settings.profileHeld':
+        'Imię, nazwisko i zdjęcie przechowuje wdrożenie, na które się logujesz, więc idą za Tobą między maszynami. Żadne z nich nie trafia na Twój serwer poczty.',
+    'settings.messageView': 'Widok wiadomości',
+    'settings.expandWholeThread': 'Rozwijaj cały wątek automatycznie',
+    'settings.expandWholeThreadExplanation':
+        'Bez tego wątek otwiera się na wybranej wiadomości, a pozostałe są pod przyciskiem.',
     'settings.privacy': 'Prywatność',
     'settings.telemetryWithheld': 'Nie wysyłaj danych telemetrycznych',
     'settings.telemetryExplanation': 'Diagnostyka błędów i statystyki użycia zostają na tym urządzeniu.',

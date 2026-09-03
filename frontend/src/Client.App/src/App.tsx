@@ -293,6 +293,7 @@ export function App({
                 conversation={workspace.conversation}
                 storedEmailId={workspace.selection}
                 online={connection.online}
+                expandWholeThread={preferences.expandWholeThread}
             />
         );
     }
@@ -454,12 +455,16 @@ function OpenMail({
     conversation,
     storedEmailId,
     online,
+    expandWholeThread,
 }: {
     readonly session: ClientSession;
     readonly transport: MailFathomTransport;
     readonly conversation: OpenConversation | null;
     readonly storedEmailId: string | null;
     readonly online: boolean;
+
+    /** Whether the reader asked for conversations to open with every message drawn, which only the conversation reads. */
+    readonly expandWholeThread: boolean;
 }) {
     // Whether the pane below is being arrived at rather than landed on. Closing a conversation swaps this position from
     // one component to the other, so the pane mounts afresh exactly as it does on a cold start and cannot tell the two
@@ -489,6 +494,7 @@ function OpenMail({
             transport={transport}
             conversation={conversation}
             online={online}
+            expandWholeThread={expandWholeThread}
         />
     );
 }

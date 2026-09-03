@@ -119,7 +119,13 @@ function deploymentAnswering(
 function preferencesAnswering(telemetryEnabled: boolean): Answer {
     return {
         status: 200,
-        body: JSON.stringify({ telemetryEnabled, theme: 'system', openMailInTabs: false, markReadOnOpen: true }),
+        body: JSON.stringify({
+            telemetryEnabled,
+            theme: 'system',
+            openMailInTabs: false,
+            markReadOnOpen: true,
+            expandWholeThread: false,
+        }),
     };
 }
 
@@ -283,6 +289,7 @@ function deploymentWorkingInTabs(): DeploymentTransport {
                     theme: 'system',
                     openMailInTabs: true,
                     markReadOnOpen: true,
+                    expandWholeThread: false,
                 }),
             }),
         );
@@ -1575,9 +1582,10 @@ describe('App deployment', () => {
 
 // Inside the frame the language and the telemetry decision are made on the settings screen rather than in the menu
 // that leads to it, which is where the design project puts them — so a test about either opens that screen the way a
-// person does.
+// person does, on the tab that holds both, which is the second of its two.
 function openSettings(): void {
     fireEvent.click(screen.getByRole('button', { name: 'Settings', hidden: true }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Application', hidden: true }));
 }
 
 describe('App language', () => {

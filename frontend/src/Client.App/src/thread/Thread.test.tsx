@@ -138,13 +138,20 @@ function inTheFrame(
     conversation: OpenConversation,
     online: boolean,
     marking: ReadMarking = nothingMarkedRead,
+    expandWholeThread = false,
 ): ReactElement {
     return (
         <LocalizationProvider>
             <WorkspaceProvider>
                 <LinkOpenerContext value={() => Promise.resolve()}>
                     <ReadMarkingContext value={marking}>
-                        <Thread session={session} transport={transport} conversation={conversation} online={online} />
+                        <Thread
+                            session={session}
+                            transport={transport}
+                            conversation={conversation}
+                            online={online}
+                            expandWholeThread={expandWholeThread}
+                        />
                     </ReadMarkingContext>
                 </LinkOpenerContext>
             </WorkspaceProvider>
@@ -157,8 +164,9 @@ function drawing(
     conversation: OpenConversation = { threadId, openAt: null },
     online = true,
     marking: ReadMarking = nothingMarkedRead,
+    expandWholeThread = false,
 ) {
-    return render(inTheFrame(transport, conversation, online, marking));
+    return render(inTheFrame(transport, conversation, online, marking, expandWholeThread));
 }
 
 /** A client that would mark read, recording what each drawn body said was opened rather than submitting it. */
@@ -198,6 +206,35 @@ describe('Thread', () => {
         expect(await screen.findByText('The whole of what one says.')).toBeDefined();
 
         fireEvent.click(screen.getByRole('button', { name: 'Hide earlier messages' }));
+
+        expect(screen.getAllByRole('listitem')).toHaveLength(1);
+        expect(screen.queryByText('The whole of what one says.')).toBeNull();
+    });
+
+    it('opens with every message drawn where the reader asked conversations to open expanded', async () => {
+        drawing(
+            deploymentAnswering(pageOf(['one', 'two', 'three'])),
+            { threadId, openAt: null },
+            true,
+            nothingMarkedRead,
+            true,
+        );
+
+        expect(await screen.findByText('The whole of what one says.')).toBeDefined();
+        expect(screen.getAllByRole('listitem')).toHaveLength(3);
+        expect(screen.getByRole('button', { name: 'Hide earlier messages' })).toBeDefined();
+    });
+
+    it('still hides the history from a reader who asked for it expanded and then pressed the control', async () => {
+        drawing(
+            deploymentAnswering(pageOf(['one', 'two', 'three'])),
+            { threadId, openAt: null },
+            true,
+            nothingMarkedRead,
+            true,
+        );
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Hide earlier messages' }));
 
         expect(screen.getAllByRole('listitem')).toHaveLength(1);
         expect(screen.queryByText('The whole of what one says.')).toBeNull();

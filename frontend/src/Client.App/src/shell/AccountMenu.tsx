@@ -51,7 +51,7 @@ export function AccountMenu({
      */
     readonly telemetryForwarding: TelemetryForwarding;
 
-    /** The settings that follow the person, and the three ways of changing one. */
+    /** The settings that follow the person, and the four ways of changing one. */
     readonly preferences: ClientPreferencesInForce;
 
     /** Who the client is drawing, which this menu shows and the screen behind its own row edits. */
@@ -167,14 +167,16 @@ export function AccountMenu({
             </div>
 
             {/* Outside the popover rather than inside it, because the menu is folded away while this is open and a
-                dialog inside something the platform sets `display: none` on is a dialog nobody can see. */}
-            <Settings
-                open={settingsOpen}
-                profile={profile}
-                preferences={preferences}
-                telemetryForwarding={telemetryForwarding}
-                onClose={closeSettings}
-            />
+                dialog inside something the platform sets `display: none` on is a dialog nobody can see. Rendered only
+                while it is open, which is what keeps the tab it was last left on out of anything that outlives it. */}
+            {settingsOpen ? (
+                <Settings
+                    profile={profile}
+                    preferences={preferences}
+                    telemetryForwarding={telemetryForwarding}
+                    onClose={closeSettings}
+                />
+            ) : null}
         </>
     );
 }

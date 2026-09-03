@@ -23,7 +23,7 @@ namespace MailFathom.Host.UnitTests.Api;
 /// </summary>
 public sealed class ClientPreferencesEndpointTests
 {
-    private static readonly ClientPreferences Chosen = new(false, ClientThemeChoice.Dark, true, false);
+    private static readonly ClientPreferences Chosen = new(false, ClientThemeChoice.Dark, true, false, true);
 
     [Fact]
     public async Task ReadAsync_APersonWhoHasSetSomething_HandsThemWhatTheySet()
@@ -44,11 +44,12 @@ public sealed class ClientPreferencesEndpointTests
         Assert.Equal("dark", preferences.Theme);
         Assert.True(preferences.OpenMailInTabs);
         Assert.False(preferences.MarkReadOnOpen);
+        Assert.True(preferences.ExpandWholeThread);
     }
 
     /// <summary>A first run is a screen rather than an error, so every preference is answered whether or not it was ever set.</summary>
     [Fact]
-    public async Task ReadAsync_APersonWhoHasSetNothing_AnswersTelemetryOnTheMachinesThemeNoTabsAndMarkingRead()
+    public async Task ReadAsync_APersonWhoHasSetNothing_AnswersTelemetryOnTheMachinesThemeNoTabsMarkingReadAndNoExpansion()
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
@@ -66,6 +67,7 @@ public sealed class ClientPreferencesEndpointTests
         Assert.Equal("system", preferences.Theme);
         Assert.False(preferences.OpenMailInTabs);
         Assert.True(preferences.MarkReadOnOpen);
+        Assert.False(preferences.ExpandWholeThread);
     }
 
     /// <summary>The row is one only this deployment writes, so a reader learns what to do about it and nothing about what it held.</summary>
@@ -100,7 +102,7 @@ public sealed class ClientPreferencesEndpointTests
         // Act
         var result = await ClientPreferencesEndpoint.SaveAsync(
             SignedIn(store),
-            new ClientPreferencesRequest(false, "dark", true, false),
+            new ClientPreferencesRequest(false, "dark", true, false, true),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -128,7 +130,7 @@ public sealed class ClientPreferencesEndpointTests
         // Assert
         await store.Received(1).SaveAsync(
             SyntheticMailOwner.Deployment,
-            new ClientPreferences(true, ClientThemeChoice.Light, false, true),
+            new ClientPreferences(true, ClientThemeChoice.Light, false, true, false),
             Arg.Any<CancellationToken>());
     }
 
@@ -144,7 +146,7 @@ public sealed class ClientPreferencesEndpointTests
         // Act
         var result = await ClientPreferencesEndpoint.SaveAsync(
             SignedIn(store),
-            new ClientPreferencesRequest(true, "system", false, true),
+            new ClientPreferencesRequest(true, "system", false, true, false),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -194,11 +196,24 @@ public sealed class ClientPreferencesEndpointTests
     {
         // Act
         var request = JsonSerializer.Deserialize<ClientPreferencesRequest>(
-            """{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true,"markReadOnOpen":false}""",
+            """{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true,"markReadOnOpen":false,"expandWholeThread":true}""",
             WebFormat);
 
         // Assert
         Assert.Equal(Chosen, request!.Stated());
+    }
+
+    /// <summary>The fifth preference binds like the four beside it, and a body written before it existed still states the rest.</summary>
+    [Fact]
+    public void Deserialize_ABodyOmittingThreadExpansion_StatesItAsTheUnsetAnswer()
+    {
+        // Act
+        var request = JsonSerializer.Deserialize<ClientPreferencesRequest>(
+            """{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true,"markReadOnOpen":false}""",
+            WebFormat);
+
+        // Assert
+        Assert.False(request!.Stated()!.ExpandWholeThread);
     }
 
     /// <summary>How the transport reads a body, so the binding these assert is the one a request actually meets.</summary>

@@ -9,11 +9,12 @@ namespace MailFathom.Application.Preferences;
 /// <param name="Theme">What the client is painted in once a session exists.</param>
 /// <param name="OpenMailInTabs">Whether opening a message opens a tab rather than replacing what is on the screen.</param>
 /// <param name="MarkReadOnOpen">Whether opening a message in the client marks it read on the owner's own mail server.</param>
+/// <param name="ExpandWholeThread">Whether opening a conversation draws every message in it rather than the one it was opened at.</param>
 /// <remarks>
 /// <para>
-/// A closed set of four rather than a settings service. Each of them says how somebody wants to work rather than what
+/// A closed set of five rather than a settings service. Each of them says how somebody wants to work rather than what
 /// the screen in front of them is like, which is why they belong to the person and not to the browser profile or the
-/// desktop install they happened to set them in — and why a fifth is added when there is a fifth to add.
+/// desktop install they happened to set them in — and why a sixth is added when there is a sixth to add.
 /// </para>
 /// <para>
 /// Marking read is here rather than on the mail account for the reason
@@ -36,7 +37,8 @@ public sealed record ClientPreferences(
     bool TelemetryEnabled,
     ClientThemeChoice Theme,
     bool OpenMailInTabs,
-    bool MarkReadOnOpen)
+    bool MarkReadOnOpen,
+    bool ExpandWholeThread)
 {
     /// <summary>Gets what a person who has set nothing is answered with.</summary>
     /// <remarks>
@@ -45,6 +47,8 @@ public sealed record ClientPreferences(
     /// the client resolves on the device before there is a session to read this at all. Tabs are off, because a person
     /// who has not asked for them is reading one message at a time. Marking read is on, because every mail client the
     /// owner already uses does it and a client that leaves their read state behind is one they keep another beside.
+    /// A conversation opens at the message it was opened at, because that is the message somebody came for and the
+    /// history behind it is one control away.
     /// </remarks>
-    public static ClientPreferences Unset { get; } = new(true, ClientThemeChoice.System, false, true);
+    public static ClientPreferences Unset { get; } = new(true, ClientThemeChoice.System, false, true, false);
 }

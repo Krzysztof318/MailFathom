@@ -1653,6 +1653,12 @@
       "ClientPreferencesRequest": {
         "additionalProperties": false,
         "properties": {
+          "expandWholeThread": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
           "markReadOnOpen": {
             "type": [
               "null",
@@ -1682,6 +1688,9 @@
       },
       "ClientPreferencesResponse": {
         "properties": {
+          "expandWholeThread": {
+            "type": "boolean"
+          },
           "markReadOnOpen": {
             "type": "boolean"
           },
@@ -1699,7 +1708,8 @@
           "telemetryEnabled",
           "theme",
           "openMailInTabs",
-          "markReadOnOpen"
+          "markReadOnOpen",
+          "expandWholeThread"
         ],
         "type": "object"
       },

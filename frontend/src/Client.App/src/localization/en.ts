@@ -134,7 +134,9 @@ export const en = {
 
     'settings.title': 'Settings',
     'settings.close': 'Close settings',
+    'settings.sections': 'Settings sections',
     'settings.profile': 'Profile',
+    'settings.application': 'Application',
     'settings.name': 'Full name',
     'settings.nameNotYours':
         'Whoever runs this deployment keeps your name, so it is shown here rather than offered for you to change.',
@@ -147,6 +149,12 @@ export const en = {
     'settings.pictureNotAnImageKind': 'That file is neither a JPEG nor a PNG, so it was not sent.',
     'settings.pictureTooLarge': 'That picture is larger than 1 MB, so it was not sent.',
     'settings.pictureNotStored': 'That picture was not saved to the deployment, so you are still drawn as you were.',
+    'settings.profileHeld':
+        'Your name and picture are held by the deployment you signed in to, so they follow you between machines. Neither is sent to your mail server.',
+    'settings.messageView': 'Message view',
+    'settings.expandWholeThread': 'Expand the whole thread automatically',
+    'settings.expandWholeThreadExplanation':
+        'Without it, a conversation opens at the message you chose and the rest sit behind a control.',
     'settings.privacy': 'Privacy',
     'settings.telemetryWithheld': 'Do not send telemetry',
     'settings.telemetryExplanation': 'Error diagnostics and usage statistics stay on this device.',

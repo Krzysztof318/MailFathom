@@ -50,12 +50,21 @@ export interface ClientPreferencesInForce {
      */
     readonly telemetryEnabled: boolean;
 
+    /**
+     * Whether opening a conversation draws every message in it rather than the one it was opened at.
+     *
+     * Unset reads as off, which is the conversation the client has always drawn: the message somebody came for, with
+     * the history behind it one control away.
+     */
+    readonly expandWholeThread: boolean;
+
     /** Whether the deployment refused the last change, which is the one thing about this a screen has to say out loud. */
     readonly notStated: boolean;
 
     readonly chooseTheme: (choice: ThemeChoice) => void;
     readonly chooseTabMode: (openMailInTabs: boolean) => void;
     readonly chooseTelemetry: (telemetryEnabled: boolean) => void;
+    readonly chooseThreadExpansion: (expandWholeThread: boolean) => void;
 }
 
 // What is held, and whose it is. The session is carried beside the document rather than trusted to have stayed the
@@ -84,7 +93,7 @@ const heldForNobody: HeldPreferences = {
  * offline or the grant does not let it read, and somebody is still signed in through all of that. It decides one thing
  * only — whose remembered telemetry answer the device is asked for — and getting it wrong is what would hand the next
  * person the last person's answer.
- * @returns The settings in force, and the two ways of changing one.
+ * @returns The settings in force, and the four ways of changing one.
  */
 export function useClientPreferences(
     session: ClientSession | null,
@@ -203,6 +212,7 @@ export function useClientPreferences(
         // It costs a storage read on the renders before an answer has arrived and none afterwards, the branch not
         // being taken once there is one.
         telemetryEnabled: inForce.session === null ? rememberedTelemetry(person) : inForce.preferences.telemetryEnabled,
+        expandWholeThread: inForce.preferences.expandWholeThread,
         notStated: inForce.notStated,
         chooseTheme: (choice) => {
             setThemeChoice(choice);
@@ -213,6 +223,9 @@ export function useClientPreferences(
         },
         chooseTelemetry: (telemetryEnabled) => {
             state({ ...composedFrom(), telemetryEnabled });
+        },
+        chooseThreadExpansion: (expandWholeThread) => {
+            state({ ...composedFrom(), expandWholeThread });
         },
     };
 }

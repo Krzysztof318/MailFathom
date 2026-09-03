@@ -236,6 +236,13 @@
        is. */
     --container-conversation: clamp(42.5rem, 62vw, 68.75rem);
 
+    /* The settings surface, in the composition where it is a card rather than the whole screen: the width the design
+       project draws it at, and the height it holds whatever is in it — so its body scrolls inside a card that does not
+       change size as somebody moves between its two tabs, and a tall window does not stretch it past what it needs.
+       Both are the project's. Below the workspace breakpoint neither is read, because the surface is the screen. */
+    --container-settings: 28.75rem;
+    --spacing-settings-card: min(78vh, 37.5rem);
+
     /* The widest one tab in the strip above the content pane is drawn, which is a ceiling in the same sense: a tab
        takes the room its title needs and stops here, so a long subject is cut rather than pushing every other tab off
        the side. It is the width the design project draws a tab at. */
