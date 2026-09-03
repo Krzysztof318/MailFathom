@@ -17,7 +17,7 @@ import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import type { OpenConversation } from '../workspace/openConversation';
 import { useWorkspace } from '../workspace/useWorkspace';
-import { arrivalMark, arrivesAt, holdsMessage, messagesOf } from './threadOpening';
+import { arrivalMark, arrivesAt, holdsMessage, messagesOf, type Arrival } from './threadOpening';
 import { ThreadMessage } from './ThreadMessage';
 
 // A conversation, which is the unit people actually think in and the one mail screen no folder is the scope of: the
@@ -73,8 +73,8 @@ export function Thread({
     const [connected, setConnected] = useState(online);
 
     // Where the reader arrived, once the conversation has decided it, and `null` until then. It is what focus is
-    // placed on, and it never moves afterwards.
-    const [arrival, setArrival] = useState<string | null>(null);
+    // placed on and what the mark is decided from, and it never moves afterwards.
+    const [arrival, setArrival] = useState<Arrival | null>(null);
 
     // Whether a landing has had its time. It starts unsettled and is never unset, because settling is what a landing
     // does: nothing in a conversation brings one back, and a conversation reached a second time is a second mount.
@@ -105,7 +105,7 @@ export function Thread({
 
     const held = messagesOf(pages);
     const drawn = historyShown ? held : held.slice(-1);
-    const mark = arrivalMark(conversation, arrival, drawn, settled);
+    const mark = arrivalMark(conversation, arrival, settled);
     const latest = pages.at(-1) ?? null;
 
     // A conversation opened at a message is read forward until that message is in hand, because the route pages from
@@ -118,8 +118,6 @@ export function Thread({
     const wanted = pageWanted(latest, online && failure === null, asked || searching);
     const wantedCursor = wanted?.cursor ?? null;
     const reading = wanted !== null;
-
-    const latestMessage = held.at(-1);
 
     // Where the conversation puts the reader is decided the moment it has stopped reading, from what is held then, and
     // never again: a page arriving later would otherwise move them off the message they came for. React's answer to a
@@ -138,7 +136,7 @@ export function Thread({
         if (arriveAt !== null) {
             setArrival(arriveAt);
 
-            if (arriveAt !== latestMessage?.email.id) {
+            if (arriveAt.amongOthers) {
                 setHistoryShown(true);
             }
         }
@@ -187,10 +185,10 @@ export function Thread({
             return;
         }
 
-        const region = regions.current.get(arrival);
+        const region = regions.current.get(arrival.storedEmailId);
 
         if (region !== undefined) {
-            arrivedAt.current = arrival;
+            arrivedAt.current = arrival.storedEmailId;
             region.focus();
         }
     }, [arrival]);
@@ -368,7 +366,7 @@ export function Thread({
                                 session={session}
                                 transport={transport}
                                 message={message}
-                                mark={message.email.id === arrival ? mark : null}
+                                mark={message.email.id === arrival?.storedEmailId ? mark : null}
                                 onOpenOnItsOwn={() => {
                                     openOnItsOwn(message.email.id);
                                 }}

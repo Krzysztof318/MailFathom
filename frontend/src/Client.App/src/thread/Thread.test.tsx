@@ -374,6 +374,18 @@ describe('Thread', () => {
         expect(screen.queryByText('Opened from the list')).toBeNull();
     });
 
+    it('marks nothing on a message it stood the reader in front of alone, however much history they then show', async () => {
+        drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])), { threadId, openAt: 'three' });
+
+        expect(await screen.findByText('The whole of what three says.')).toBeDefined();
+        expect(screen.queryByText('Opened from the list')).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Show earlier messages (2)' }));
+
+        expect(await screen.findByText('The whole of what one says.')).toBeDefined();
+        expect(screen.queryByText('Opened from the list')).toBeNull();
+    });
+
     it('marks a message a search result brought somebody to only until it has been seen', async () => {
         vi.useFakeTimers({ shouldAdvanceTime: true });
 

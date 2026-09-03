@@ -24,22 +24,38 @@ export function holdsMessage(messages: readonly MailThreadMessage[], storedEmail
     return messages.some((message) => message.email.id === storedEmailId);
 }
 
+/** Where a conversation put the reader, and what was true of that place when it did. */
+export interface Arrival {
+    /** The message arrived at, by the identity it is reached by. */
+    readonly storedEmailId: string;
+
+    /**
+     * Whether the conversation stood the reader in front of messages other than the one they arrived at.
+     *
+     * True exactly where the arrival is not the conversation's latest, which is the one case the pane opens with its
+     * history shown. It decides that, and it decides whether the arrival is marked out from what surrounds it — both
+     * being questions about where the reader landed rather than about what they have done since, which is why the
+     * answer is taken here and never recomputed. A mark derived from what is drawn would appear on a message already
+     * on the screen the moment somebody showed the history, moving its words sideways under them.
+     */
+    readonly amongOthers: boolean;
+}
+
 /**
- * The message a conversation arrives at.
+ * Where a conversation arrives.
  *
  * The message somebody was sent to, where they were sent to one the conversation holds, because that is the context
  * they came for. The latest of it otherwise, which is what a conversation opened on its own subject shows.
  *
  * @param messages The conversation as read so far, in its own order.
  * @param openAt The message the conversation was opened at, or `null` where it was opened at none.
- * @returns The message to arrive at, by the identity it is reached by, or `null` where there is no message to arrive at.
+ * @returns Where to arrive, or `null` where there is no message to arrive at.
  */
-export function arrivesAt(messages: readonly MailThreadMessage[], openAt: string | null): string | null {
-    if (openAt !== null && holdsMessage(messages, openAt)) {
-        return openAt;
-    }
+export function arrivesAt(messages: readonly MailThreadMessage[], openAt: string | null): Arrival | null {
+    const latest = messages[messages.length - 1]?.email.id ?? null;
+    const storedEmailId = openAt !== null && holdsMessage(messages, openAt) ? openAt : latest;
 
-    return messages[messages.length - 1]?.email.id ?? null;
+    return storedEmailId === null ? null : { storedEmailId, amongOthers: storedEmailId !== latest };
 }
 
 /**
@@ -55,24 +71,25 @@ export type ArrivalMark = 'list' | 'result';
  * What marks the message a conversation arrived at, or `null` where nothing does.
  *
  * Nothing is marked where the conversation was opened on its own subject, because there is no message somebody was
- * sent to and a mark saying otherwise would be a sentence that is not true. Nothing is marked either where one message
- * is all that is drawn: a rule pointing at the only thing on the screen points at nothing, which is why the count is
- * of what is drawn rather than of what the conversation holds — a conversation with its history folded away draws one
- * message however many it has read.
+ * sent to and a mark saying otherwise would be a sentence that is not true. Nothing is marked either where the
+ * conversation stood the reader in front of that message alone: a rule pointing at the only thing on the screen points
+ * at nothing.
+ *
+ * Every answer here is a function of the arrival, which is decided once, so a mark neither appears nor disappears
+ * while somebody reads. Showing the history is the gesture that would otherwise do it, and a message already on the
+ * screen gaining a rule and an indent is words moving sideways under a reader.
  *
  * @param conversation The conversation as it was opened.
- * @param arrival The message it arrived at, or `null` where it has not decided yet.
- * @param drawn The messages actually on the screen.
+ * @param arrival Where it arrived, or `null` where it has not decided yet.
  * @param settled Whether a landing has had its time and become an ordinary message.
  * @returns What marks the arrival, or `null`.
  */
 export function arrivalMark(
     conversation: OpenConversation,
-    arrival: string | null,
-    drawn: readonly MailThreadMessage[],
+    arrival: Arrival | null,
     settled: boolean,
 ): ArrivalMark | null {
-    if (arrival === null || arrival !== conversation.openAt) {
+    if (arrival?.storedEmailId !== conversation.openAt) {
         return null;
     }
 
@@ -80,5 +97,5 @@ export function arrivalMark(
         return settled ? null : 'result';
     }
 
-    return drawn.length > 1 ? 'list' : null;
+    return arrival.amongOthers ? 'list' : null;
 }
