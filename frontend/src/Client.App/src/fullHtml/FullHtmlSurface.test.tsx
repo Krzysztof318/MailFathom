@@ -146,6 +146,28 @@ describe('FullHtmlSurface', () => {
         expect(screen.queryByTitle("The sender's own markup, drawn in isolation")).toBeNull();
     });
 
+    it('says so in words where the markup arrived empty, rather than drawing a frame with nothing in it', async () => {
+        const { transport } = deploymentServing({ text: '', originalCharacterCount: 0, truncation: 'None' });
+
+        await drawing(transport);
+
+        expect(await screen.findByText(/no formatted version of this message/)).toBeDefined();
+        expect(screen.queryByTitle("The sender's own markup, drawn in isolation")).toBeNull();
+    });
+
+    it('names the bound that cut the markup to nothing, rather than reporting it as never written', async () => {
+        const { transport } = deploymentServing({
+            text: '',
+            originalCharacterCount: 90_000,
+            truncation: 'ReadCharacterBudget',
+        });
+
+        await drawing(transport);
+
+        expect(await screen.findByText(/longer than one read returns/)).toBeDefined();
+        expect(screen.queryByText(/no formatted version of this message/)).toBeNull();
+    });
+
     it('reports the picture bound as its own loss, which the character bounds cannot name', async () => {
         const { transport } = deploymentServing({ ...asSent, truncation: 'InlineImageOctetLimit' });
 

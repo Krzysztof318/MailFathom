@@ -309,6 +309,18 @@ function Markup({
 
     const cut = truncationNotes[markup.truncation];
 
+    // A representation that reduced to nothing is said in words, which is the obligation `MessageMarkupFrame` leaves to
+    // this surface: it draws no frame for an empty document, because only the surface knows why the markup is absent.
+    // A bound that cut it to nothing is what a reader is told where one did, and that the sender wrote none where none
+    // did — an empty frame would be a white rectangle claiming neither.
+    if (markup.text === '') {
+        return (
+            <p className="px-4 py-3 text-sm text-muted" role="status">
+                {translate(cut ?? 'fullHtml.noMarkup')}
+            </p>
+        );
+    }
+
     return (
         <>
             <MessageMarkupFrame markup={markup.text} />
