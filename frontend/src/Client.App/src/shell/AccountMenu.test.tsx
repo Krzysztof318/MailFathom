@@ -5,6 +5,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MailAccount } from '@mailfathom/client-backend';
+import type { TelemetryForwarding } from '../deployment/telemetryForwarding';
 import { LocalizationProvider } from '../localization/Localization';
 import type { ClientPreferencesInForce } from '../preferences/useClientPreferences';
 import type { OwnProfileInForce } from '../profile/useOwnProfile';
@@ -57,11 +58,14 @@ function atTabWidth(wideEnough: boolean): void {
     });
 }
 
+/** What the deployment answered about forwarding, which this menu only passes to the screen behind its own row. */
+const forwardedTo: TelemetryForwarding = { answered: true, destination: 'https://mail.example' };
+
 function renderMenu({
     accounts = [],
     deploymentVersion = '0.9.0',
     readingFrom = null,
-    telemetryDestination = 'https://mail.example',
+    telemetryForwarding = forwardedTo,
     preferences = settings,
     profile = nobody,
     onPointSomewhereElse = () => undefined,
@@ -70,7 +74,7 @@ function renderMenu({
     readonly accounts?: readonly MailAccount[];
     readonly deploymentVersion?: string | null;
     readonly readingFrom?: string | null;
-    readonly telemetryDestination?: string | null;
+    readonly telemetryForwarding?: TelemetryForwarding;
     readonly preferences?: ClientPreferencesInForce;
     readonly profile?: OwnProfileInForce;
     readonly onPointSomewhereElse?: () => void;
@@ -83,7 +87,7 @@ function renderMenu({
                     accounts={accounts}
                     deploymentVersion={deploymentVersion}
                     readingFrom={readingFrom}
-                    telemetryDestination={telemetryDestination}
+                    telemetryForwarding={telemetryForwarding}
                     preferences={preferences}
                     profile={profile}
                     onPointSomewhereElse={onPointSomewhereElse}

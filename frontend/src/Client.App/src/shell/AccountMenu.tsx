@@ -7,6 +7,7 @@ import type { MailAccount } from '@mailfathom/client-backend';
 import { Icon } from '../controls/Icon';
 import { MailboxMark } from '../controls/MailboxMark';
 import { PersonAvatar } from '../controls/PersonAvatar';
+import type { TelemetryForwarding } from '../deployment/telemetryForwarding';
 import { useLocalization } from '../localization/useLocalization';
 import type { ClientPreferencesInForce } from '../preferences/useClientPreferences';
 import type { OwnProfileInForce } from '../profile/useOwnProfile';
@@ -27,7 +28,7 @@ export function AccountMenu({
     accounts,
     deploymentVersion,
     readingFrom,
-    telemetryDestination,
+    telemetryForwarding,
     preferences,
     profile,
     onPointSomewhereElse,
@@ -43,11 +44,12 @@ export function AccountMenu({
     readonly readingFrom: string | null;
 
     /**
-     * Where this client's own telemetry is sent, or `null` where this deployment forwards none and there is therefore
-     * nothing behind the switch. It is the deployment's address whether or not somebody typed it, because what the
-     * settings screen has to name is where the records actually go rather than how the client came to be pointed there.
+     * What this deployment has said about forwarding this client's own records, which the settings screen behind this
+     * menu's own row words. A forwarded one carries the deployment's address whether or not somebody typed it, because
+     * what that screen has to name is where the records actually go rather than how the client came to be pointed
+     * there.
      */
-    readonly telemetryDestination: string | null;
+    readonly telemetryForwarding: TelemetryForwarding;
 
     /** The settings that follow the person, and the three ways of changing one. */
     readonly preferences: ClientPreferencesInForce;
@@ -170,7 +172,7 @@ export function AccountMenu({
                 open={settingsOpen}
                 profile={profile}
                 preferences={preferences}
-                telemetryDestination={telemetryDestination}
+                telemetryForwarding={telemetryForwarding}
                 onClose={closeSettings}
             />
         </>

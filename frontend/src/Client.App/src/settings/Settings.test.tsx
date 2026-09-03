@@ -5,6 +5,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { largestPortraitOctets } from '@mailfathom/client-backend';
+import type { TelemetryForwarding } from '../deployment/telemetryForwarding';
 import { LocalizationProvider } from '../localization/Localization';
 import type { ClientPreferencesInForce } from '../preferences/useClientPreferences';
 import type { OwnProfileInForce } from '../profile/useOwnProfile';
@@ -32,15 +33,18 @@ const named: OwnProfileInForce = {
     removePicture: () => undefined,
 };
 
+/** The ordinary case: a deployment that answered, and forwards what this client records to itself. */
+const forwardedTo: TelemetryForwarding = { answered: true, destination: 'https://mail.example' };
+
 function renderSettings({
     profile = named,
     preferences = settings,
-    telemetryDestination = 'https://mail.example',
+    telemetryForwarding = forwardedTo,
     onClose = () => undefined,
 }: {
     readonly profile?: OwnProfileInForce;
     readonly preferences?: ClientPreferencesInForce;
-    readonly telemetryDestination?: string | null;
+    readonly telemetryForwarding?: TelemetryForwarding;
     readonly onClose?: () => void;
 } = {}): void {
     render(
@@ -49,7 +53,7 @@ function renderSettings({
                 open
                 profile={profile}
                 preferences={preferences}
-                telemetryDestination={telemetryDestination}
+                telemetryForwarding={telemetryForwarding}
                 onClose={onClose}
             />
         </LocalizationProvider>,
@@ -235,7 +239,7 @@ describe('Settings', () => {
     });
 
     it('names where the records go, so the decision is about something rather than about a word', () => {
-        renderSettings({ telemetryDestination: 'https://mail.example' });
+        renderSettings({ telemetryForwarding: forwardedTo });
 
         expect(screen.getByText(/Sent to https:\/\/mail\.example/u)).toBeDefined();
     });
@@ -249,9 +253,19 @@ describe('Settings', () => {
     // A deployment that forwards nothing has nothing behind the switch, so it says so rather than offering a control
     // that decides nothing about a client that is already sending nothing.
     it('offers no switch where the deployment forwards no telemetry, and says why', () => {
-        renderSettings({ telemetryDestination: null });
+        renderSettings({ telemetryForwarding: { answered: true, destination: null } });
 
         expect(screen.getByText(/forwards no telemetry/u)).toBeDefined();
+        expect(screen.queryByRole('switch', { name: /Do not send telemetry/u })).toBeNull();
+    });
+
+    // A deployment that has said nothing has not said no, and the frame records under the person's own answer while
+    // it waits — so drawing the confirmed sentence here would say nothing is being sent while something is.
+    it('says it is waiting rather than that there is nothing to turn off, before the deployment answers', () => {
+        renderSettings({ telemetryForwarding: { answered: false } });
+
+        expect(screen.getByText(/Waiting for this deployment to say whether it forwards telemetry/u)).toBeDefined();
+        expect(screen.queryByText(/forwards no telemetry/u)).toBeNull();
         expect(screen.queryByRole('switch', { name: /Do not send telemetry/u })).toBeNull();
     });
 

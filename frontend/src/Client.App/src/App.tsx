@@ -9,6 +9,7 @@ import { SecondaryButton } from './controls/SecondaryButton';
 import { forgetDeployment, storeDeployment, type AdoptedDeployment } from './deployment/adoptedDeployment';
 import type { PortraitExchange } from './deployment/portraitExchange';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
+import { telemetryForwardedBy } from './deployment/telemetryForwarding';
 import { FolderTree } from './folders/FolderTree';
 import { useLocalization } from './localization/useLocalization';
 import { NothingOpen } from './mailSpace/NothingOpen';
@@ -419,7 +420,7 @@ export function App({
                             accounts={mailAccounts}
                             deploymentVersion={deploymentSession?.version ?? null}
                             readingFrom={adopted?.chosen === true ? baseAddress : null}
-                            telemetryDestination={deploymentSession?.telemetryForwarded === true ? baseAddress : null}
+                            telemetryForwarding={telemetryForwardedBy(deploymentSession, baseAddress)}
                             preferences={preferences}
                             profile={profile}
                             onPointSomewhereElse={pointSomewhereElse}

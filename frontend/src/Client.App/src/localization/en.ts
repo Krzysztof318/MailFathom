@@ -142,6 +142,8 @@ export const en = {
         'Sent to {address}, which forwards it to whichever collector it is configured with. It carries which screens you opened and how long they took, never your mail, your addresses, your folders, or your password.',
     'settings.telemetryNotForwarded':
         'This deployment forwards no telemetry, so this client sends none and there is nothing to turn off.',
+    'settings.telemetryUnanswered':
+        'Waiting for this deployment to say whether it forwards telemetry. Until it answers, your own decision is what holds.',
 
     'deployment.reachedAt': 'Reading from {address}',
     'deployment.change': 'Point somewhere else',

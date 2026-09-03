@@ -6,6 +6,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Icon } from '../controls/Icon';
 import { PersonAvatar } from '../controls/PersonAvatar';
 import { Switch } from '../controls/Switch';
+import type { TelemetryForwarding } from '../deployment/telemetryForwarding';
 import { useLocalization } from '../localization/useLocalization';
 import type { ClientPreferencesInForce } from '../preferences/useClientPreferences';
 import type { OwnProfileInForce } from '../profile/useOwnProfile';
@@ -29,7 +30,7 @@ export function Settings({
     open,
     profile,
     preferences,
-    telemetryDestination,
+    telemetryForwarding,
     onClose,
 }: {
     readonly open: boolean;
@@ -40,8 +41,8 @@ export function Settings({
     /** The settings that follow the person, of which this screen edits one. */
     readonly preferences: ClientPreferencesInForce;
 
-    /** Where this client's telemetry is sent, or `null` where this deployment forwards none. */
-    readonly telemetryDestination: string | null;
+    /** What this deployment has said about forwarding this client's telemetry, including that it has said nothing. */
+    readonly telemetryForwarding: TelemetryForwarding;
 
     readonly onClose: () => void;
 }) {
@@ -106,7 +107,7 @@ export function Settings({
                 <Divider />
 
                 <SectionName>{translate('settings.privacy')}</SectionName>
-                <Telemetry preferences={preferences} destination={telemetryDestination} />
+                <Telemetry preferences={preferences} forwarding={telemetryForwarding} />
             </div>
         </dialog>
     );
@@ -271,20 +272,33 @@ function PictureNotice({
 // Whether this deployment may be told what the client is doing, drawn the way the design project states it: as the
 // decision to withhold rather than the decision to permit, so that the switch being on is the private answer.
 //
-// Two things stand beside the switch that the design project does not draw, both of them the acceptance of #1232 and
-// both about the same thing — that a decision is only a decision if what is being decided is stated. Where the records
+// Three things stand beside the switch that the design project does not draw, all of them the acceptance of #1232 and
+// all about the same thing — that a decision is only a decision if what is being decided is stated. Where the records
 // go is named, because "telemetry" says nothing about who ends up holding it, and this client sends to the deployment
-// somebody signed in to rather than anywhere else. And a deployment that forwards none is said out loud instead of
-// being drawn as a switch: there is nothing behind it there, so moving it would decide nothing.
+// somebody signed in to rather than anywhere else. A deployment that forwards none is said out loud instead of being
+// drawn as a switch: there is nothing behind it there, so moving it would decide nothing. And a deployment that has
+// not answered yet says that instead of either, because the frame records under the person's own answer while it
+// waits — so drawing "nothing to turn off" over that state would be telling somebody nothing is being sent at exactly
+// the moment something is.
 function Telemetry({
     preferences,
-    destination,
+    forwarding,
 }: {
     readonly preferences: ClientPreferencesInForce;
-    readonly destination: string | null;
+    readonly forwarding: TelemetryForwarding;
 }) {
     const { translate } = useLocalization();
     const withheld = !preferences.telemetryEnabled;
+
+    if (!forwarding.answered) {
+        return (
+            <p className="rounded-xl border border-line bg-sunken px-2.5 py-2.25 text-xs text-muted">
+                {translate('settings.telemetryUnanswered')}
+            </p>
+        );
+    }
+
+    const { destination } = forwarding;
 
     if (destination === null) {
         return (

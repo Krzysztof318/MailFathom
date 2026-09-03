@@ -1216,7 +1216,9 @@ it. Turning it back on begins at that moment and reaches back over nothing.
 [`"telemetry": false` on the session route](client-endpoint.md#the-session-route); the client stops recording the moment
 it reads that and throws away what it had held, and the settings screen says so in place of a control that would decide
 nothing. Until a deployment has said either way the client records, because a deployment nobody has reached yet is
-every cold start and every failed sign-in — which is what the buffer below exists to keep.
+every cold start and every failed sign-in — which is what the buffer below exists to keep. The screen says that too,
+in place of either of the other two: a deployment that has not answered has not refused, so drawing the sentence above
+over that state would tell somebody nothing is being sent at the one moment something is.
 
 **The client exports nothing until somebody has signed in, and records from the moment it opens.** The exporter reaches
 [the telemetry routes](client-endpoint.md#the-telemetry-routes) on the deployment the client is pointed at and
