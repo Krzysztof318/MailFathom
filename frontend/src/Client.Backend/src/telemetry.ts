@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { metrics, SpanStatusCode, trace } from '@opentelemetry/api';
+import { context, metrics, SpanStatusCode, trace } from '@opentelemetry/api';
 import type { ClientResult } from './failure';
 import { routeFor, type DeploymentAddress } from './session';
 
@@ -51,6 +51,10 @@ const requestDuration = 'mailfathom.client.request.duration';
  * decided rather than where the response arrived, because the failure a screen acts on — a body this package refused
  * as unreadable among them — is not known until then.
  *
+ * The span is also the active context the operation runs under, which is what carries it onto the wire: `headersFor`
+ * writes the W3C trace context of whatever is active into the request's headers, so the deployment's span for that
+ * request is this span's child and one trace covers the screen, the request, the use case, and the query beneath it.
+ *
  * @param request The route template this asks for, method first, which is the dimension every record here is grouped
  * by. It is a template rather than the composed path: a message identifier in a span name is one name per message.
  * @param ask The operation, which answers a value rather than throwing for anything it expected.
@@ -67,7 +71,10 @@ export async function spanned<TValue>(
     const startedAt = Date.now();
 
     try {
-        const result = await ask();
+        // The operation runs with this span as the active context, which is what `headersFor` reads the trace context
+        // out of and therefore what joins this span to the one the deployment opens for the request. Without it the
+        // span would still be recorded and exported, and would sit beside the service's work rather than above it.
+        const result = await context.with(trace.setSpan(context.active(), span), ask);
         const outcome =
             result.outcome === 'read'
                 ? { 'mailfathom.client.request': request, 'mailfathom.client.outcome': 'read' }

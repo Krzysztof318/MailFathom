@@ -8,6 +8,7 @@ using MailFathom.Host.Observability.ClientTelemetry;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
 using NSubstitute;
+using OpenTelemetry;
 using OpenTelemetry.Exporter;
 using Xunit;
 
@@ -288,6 +289,33 @@ public sealed class ClientTelemetryForwarderTests
 
         // Assert
         Assert.Equal(ClientTelemetryFailure.Cancelled, (await forwarding).Failure);
+    }
+
+    /// <summary>The forward carries no instrumentation of its own, so exporting cannot become something to export.</summary>
+    /// <remarks>
+    /// Read at the moment the request reaches the collector rather than around the call, because that is where an
+    /// outbound span would be started: suppression that had already been released by then would leave the deployment
+    /// recording one span per forwarded batch, sent to the collector that batch was going to.
+    /// </remarks>
+    [Fact]
+    public async Task ForwardAsync_SendingToTheCollector_IsNotItselfInstrumented()
+    {
+        // Arrange
+        var suppressedWhileSending = false;
+        using var collector = FakeHttpMessageHandler.AlwaysResponding(() =>
+        {
+            suppressedWhileSending = Sdk.SuppressInstrumentation;
+
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent([]) };
+        });
+        var forwarder = ForwarderOver(collector, OtlpExportProtocol.HttpProtobuf);
+
+        // Act
+        await forwarder.ForwardAsync(ClientTelemetrySignal.Traces, Batch, TestContext.Current.CancellationToken);
+
+        // Assert
+        Assert.True(suppressedWhileSending);
+        Assert.False(Sdk.SuppressInstrumentation);
     }
 
     /// <summary>Composes one gRPC answer: the status in the trailers, and the message inside its frame.</summary>

@@ -2,6 +2,8 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+import { context, propagation } from '@opentelemetry/api';
+
 /** The route prefix the client surface is served beneath, which is the deployment's to host and not the client's to choose. */
 export const clientRoutePrefix = '/api/client';
 
@@ -36,7 +38,27 @@ export function routeFor(deployment: DeploymentAddress, route: string): string {
     return `${deployment.baseAddress}${clientRoutePrefix}${route}`;
 }
 
-/** The headers every request on this surface carries. */
+/**
+ * The headers every request on this surface carries.
+ *
+ * Beside the two it composes, it carries the W3C trace context of whatever span is open around the call, which is what
+ * makes the span the deployment opens for this request a child of the client's rather than the root of a trace that
+ * says nothing about who asked. `spanned` is what opens that span and what makes it the active context; where nothing
+ * did, the registered propagator writes no header and the request begins a trace at the deployment as before.
+ *
+ * The context is read here rather than at each call site because this is the one place a request on this surface
+ * composes its headers. What that requires of a call site is that it compose the request before it awaits anything:
+ * the client registers a stack-based context manager, which holds the active context across the synchronous run of an
+ * operation and not across a suspension, so an operation that awaited first would carry no context rather than the
+ * wrong one. Every operation in this package composes its request first.
+ *
+ * Only the trace identifier travels. Nothing here sets baggage, so the propagator writes none — and the client surface
+ * admits `traceparent` alone, so a value rather than an identifier would arrive as a refused preflight.
+ */
 export function headersFor(session: ClientSession): Readonly<Record<string, string>> {
-    return { Accept: 'application/json', Authorization: session.authorization };
+    const headers: Record<string, string> = { Accept: 'application/json', Authorization: session.authorization };
+
+    propagation.inject(context.active(), headers);
+
+    return headers;
 }

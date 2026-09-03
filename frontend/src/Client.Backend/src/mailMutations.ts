@@ -5,6 +5,7 @@
 import { failed, failureReasonForStatus, read, type ClientResult } from './failure';
 import { asRecord } from './json';
 import { headersFor, routeFor, type ClientSession } from './session';
+import { spanned } from './telemetry';
 import { send, type ClientResponse, type MailFathomTransport } from './transport';
 
 // The one route in this package that changes a mailbox rather than reading one. Nothing here reaches a mail server: a
@@ -69,7 +70,7 @@ export interface MailMutationResult {
  * @param storedEmailIds The messages to mark read, at most {@link mostMessagesPerMutation} of them.
  * @returns One result per message the deployment answered for, or an expected failure as a value.
  */
-export async function markMailRead(
+export function markMailRead(
     session: ClientSession,
     transport: MailFathomTransport,
     storedEmailIds: readonly string[],
@@ -78,14 +79,16 @@ export async function markMailRead(
         .slice(0, mostMessagesPerMutation)
         .map((storedEmailId) => ({ storedEmailId, flags: { seen: true } }));
 
-    return answerOf(
-        await send(transport, {
-            method: 'POST',
-            path: routeFor(session, mailFlagMutationsRoute),
-            headers: { ...headersFor(session), 'Content-Type': 'application/json' },
-            body: JSON.stringify({ changes }),
-            longestAnswer: longestMutationAnswer,
-        }),
+    return spanned(`POST ${mailFlagMutationsRoute}`, async () =>
+        answerOf(
+            await send(transport, {
+                method: 'POST',
+                path: routeFor(session, mailFlagMutationsRoute),
+                headers: { ...headersFor(session), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ changes }),
+                longestAnswer: longestMutationAnswer,
+            }),
+        ),
     );
 }
 

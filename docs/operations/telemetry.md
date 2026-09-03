@@ -48,9 +48,15 @@ instrumented. Database commands are spanned by the `Npgsql` source rather than b
 sit MailFathom's own spans, which say which use case ran; [what a request-path trace contains](#what-a-request-path-trace-contains)
 is where they are named.
 
-One filter is deliberate: requests to the health-probe paths are not traced at all, because a probe arrives every few
+Two filters are deliberate. Requests to the health-probe paths are not traced at all, because a probe arrives every few
 seconds for the life of the process and says the same thing every time — tracing it would fill a trace store with
-polling instead of work.
+polling instead of work. Neither are the client's OTLP routes, because
+[exporting must not feed itself](#exporting-is-never-itself-exported).
+
+A trace that began in the client covers both stacks. The client sends W3C trace context on every request it makes, so
+the server span above is that client span's child; [which surfaces continue an incoming
+trace](#which-surfaces-continue-an-incoming-trace) is the decision, per surface, and [what a client-originated trace
+contains](#what-a-client-originated-trace-contains) is what one holds.
 
 One attribute is deliberately rewritten. An [attachment download](mcp-endpoint.md#the-one-route-on-this-surface-that-admits-no-credential)
 carries a signed capability in its path, and whoever holds it can fetch that file until it expires, so the span records
@@ -1270,6 +1276,29 @@ applies to itself.
 no message identifier, and no part of the credential reaches a span name, an attribute, a measurement, or a log record.
 The route templates and the space names above are the whole of the vocabulary, and both are closed sets.
 
+### What a client-originated trace contains
+
+**A trace starts in the client, at the moment a screen asks for something.** The span the request wrapper above opens is
+its root, and the deployment's own work hangs beneath it — which is what lets an operator read a screen that took four
+seconds and see which of the four parts it was:
+
+| Span | Where it comes from |
+| --- | --- |
+| `GET /messages/{storedEmailId}/body` | The client, opened where a screen asked and closed where it decided what the answer was |
+| The server span for that request | The deployment's request pipeline, as the client span's child |
+| `read_email_content` and its siblings | The use case the endpoint ran, named in [what a request-path trace contains](#what-a-request-path-trace-contains) |
+| The database commands and content-store reads | Beneath the use case, as they are on every other surface |
+
+The join is one request header. The client sends `traceparent` — the W3C trace context of the span it opened, and
+nothing else: no `tracestate`, since nothing in the client writes a vendor entry, and no `baggage`, for the reason
+[above](#which-surfaces-continue-an-incoming-trace). The client endpoint's CORS policy names that one header, so a
+cross-origin page's preflight admits it and admits nothing beside it.
+
+**A client that is not exporting sends no trace context**, because there is no span to name: the pipeline begins when
+somebody signs in and ends when they sign out, and a request made outside it starts an ordinary root trace at the
+deployment exactly as an MCP caller sending nothing does. **An export sends none either**, which is what keeps the
+export path from feeding itself.
+
 ## What the administration command emits
 
 Nothing. `mfctl` runs on the operator's own machine and holds no exporter, no collector address, and no telemetry
@@ -1361,9 +1390,56 @@ this host would have set anyway, so a misspelling reads as the variable having b
 And both have to be **environment variables**, not configuration keys, for the reason the exporter switch below gives —
 a start that writes any `OTEL_*` name into a file or an argument fails naming it.
 
-Health and liveness probes are excluded from tracing before any sampler sees them. A probe arrives every few seconds
-for the life of the process and says the same thing every time, so on a deployment exporting to a collector it pays for,
-the polling would otherwise be most of the bill.
+Two sets of paths are excluded from tracing before any sampler sees them, and neither is a sampling decision. Health and
+liveness probes are the first: a probe arrives every few seconds for the life of the process and says the same thing
+every time, so on a deployment exporting to a collector it pays for, the polling would otherwise be most of the bill.
+The client's OTLP routes beneath `/api/client/telemetry` are the second, and they are excluded because
+[exporting must not feed itself](#exporting-is-never-itself-exported).
+
+## Which surfaces continue an incoming trace
+
+Every traced surface continues one. A request arriving with W3C trace context is served under a span that is the
+caller's child, so a caller that already had a trace sees this deployment's work inside it rather than beside it, and
+that is what makes one trace cover a screen, its request, the use case behind it, and the database command. The two
+untraced sets above never ask the question at all.
+
+It is written down per surface rather than left as the framework's default, because what continuing buys is not the
+same on each of them.
+
+| Surface | An incoming trace context | Why |
+| --- | --- | --- |
+| Client endpoint | Continued | The caller is the signed-in client, and joining the two halves is the whole point: a screen that took four seconds and a query that took thirty milliseconds say nothing apart |
+| MCP endpoint | Continued | An assistant's own trace reaches a tool call, which is what makes a slow answer attributable past this process's boundary |
+| Administrative endpoint | Continued | `mfctl` holds no exporter and never sends one, so this is what the framework does rather than a capability anyone uses; a proxy or a scripted caller that does send one is treated like any other |
+| Health probes | Never read | Untraced entirely, so there is no span to parent |
+| The client's OTLP routes | Never read | Untraced entirely, for the reason [below](#exporting-is-never-itself-exported) |
+
+**What a caller can therefore do is name a trace identifier, and nothing else.** It reads no trace, reaches no other
+caller's spans, and changes nothing about what is recorded except the one thing the parent-based sampler already grants
+it: a caller arriving with the sampled flag clear is not asking this process for a fragment of a trace it dropped, so
+its own requests go unrecorded. On a surface that requires a credential — which is every posture the client endpoint
+has, and the shipped default of the other two — that caller is authenticated, and a signed-in person choosing not to
+have their own requests traced is the same choice as not sending the header at all. On an MCP surface an operator
+deliberately opened without one, it is worth knowing that an anonymous caller can keep its own traffic out of the trace
+store; the trace store is not where that deployment's access record lives, and the counters and log records the surface
+publishes are unaffected.
+
+Baggage is not propagated in either direction. It carries values rather than identifiers, and a value crossing a trust
+boundary is a different decision from an identifier joining two spans.
+
+### Exporting is never itself exported
+
+A client that traced its own telemetry export would record the export, export that record, and have one more record to
+export on the next batch — and the request carrying each batch would be spanned at the deployment on the way in. Three
+things cut that, one per leg:
+
+- The client's exporters do not go through the wrapper every request on the client surface goes through, so an export
+  opens no span and takes no measurement.
+- The deployment does not trace a request to `/api/client/telemetry`. The proxy is read by
+  [its own five counters](#what-the-client-telemetry-proxy-emits) instead, which are aggregates rather than one record
+  per batch and so cannot grow with what they measure.
+- The proxy's forward to the collector runs with instrumentation suppressed, which is the outbound half of the same
+  hop and the mechanism the OpenTelemetry SDK's own exporters use for exactly this.
 
 ## The one switch: `OTEL_EXPORTER_OTLP_ENDPOINT`
 

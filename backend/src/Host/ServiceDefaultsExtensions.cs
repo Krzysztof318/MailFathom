@@ -4,6 +4,7 @@
 
 using System.Diagnostics;
 using MailFathom.Host.Api;
+using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Hosting;
 using MailFathom.Host.Observability;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -22,6 +23,10 @@ internal static class ServiceDefaultsExtensions
 {
     /// <summary>The standard variable naming the collector every signal is exported to.</summary>
     internal const string ExporterEndpointVariableName = "OTEL_EXPORTER_OTLP_ENDPOINT";
+
+    /// <summary>Where the client surface receives a client's own OTLP batches, which is the one path never traced.</summary>
+    private static readonly PathString ClientTelemetryExportPrefix =
+        new(ClientEndpointOptions.RoutePrefix + ClientTelemetryEndpoint.TelemetryRoutePrefix);
 
     /// <summary>
     /// Adds observability, service discovery, HTTP resilience, and health-check defaults.
@@ -151,20 +156,34 @@ internal static class ServiceDefaultsExtensions
 
     /// <summary>Reports whether a request is one the trace store is worth filling with.</summary>
     /// <param name="context">The request the instrumentation is about to span.</param>
-    /// <returns><see langword="false" /> for a health or liveness probe, and <see langword="true" /> for anything else.</returns>
+    /// <returns><see langword="false" /> for a health or liveness probe and for a client's telemetry export, and <see langword="true" /> for anything else.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="context" /> is <see langword="null" />.</exception>
     /// <remarks>
+    /// <para>
     /// A probe arrives every few seconds for the lifetime of the process and says the same thing every time, so tracing
     /// it would fill a trace store with the polling rather than with the work — and on a deployment exporting to a
     /// collector it pays for, the polling would be most of the bill. This is a named method rather than a lambda
     /// because it is a decision an operator relies on, and a decision nothing can assert is one a later change removes
     /// without anything saying so.
+    /// </para>
+    /// <para>
+    /// The client's OTLP routes are refused for a different reason: they carry the export itself, and an export that is
+    /// traced feeds itself. A span for one of those requests is a record about exporting, which the deployment then
+    /// exports to the same collector the batch was going to — and the client, seeing its own exports spanned, would
+    /// have one more thing to export on the next batch. The path is the one that carries telemetry rather than asks
+    /// for mail, so it is measured by the five counters the proxy publishes for itself and by nothing else.
+    /// </para>
     /// </remarks>
     internal static bool IsWorthTracing(HttpContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        return !HealthProbe.IsProbePath(context.Request.Path);
+        // Matched by segment rather than by prefix string, exactly as the surfaces themselves are matched, so a path
+        // such as /api/client/telemetry-settings is not mistaken for an export.
+        return !HealthProbe.IsProbePath(context.Request.Path)
+            && !context.Request.Path.StartsWithSegments(
+                ClientTelemetryExportPrefix,
+                StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Replaces the recorded path of an attachment download with its route template.</summary>

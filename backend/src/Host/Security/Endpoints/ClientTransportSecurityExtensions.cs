@@ -37,6 +37,19 @@ internal static class ClientTransportSecurityExtensions
     /// <remarks>Named separately from the MCP endpoint's, because an endpoint resolves exactly one policy and two surfaces sharing one would let either deployment's origins decide what the other answers.</remarks>
     internal const string CorsPolicyName = "MailFathomClientEndpoint";
 
+    /// <summary>The W3C trace context header a client sends so the span this surface opens is a child of the client's.</summary>
+    /// <remarks>
+    /// Written out because no <see cref="HeaderNames" /> entry names it: the header belongs to the W3C trace context
+    /// recommendation rather than to HTTP, and the OpenTelemetry SDK publishes no constant for it either.
+    /// <para>
+    /// It is the one propagation header this surface admits. <c>tracestate</c> is absent because nothing in the client
+    /// writes a vendor entry, and <c>baggage</c> is absent because baggage carries values rather than identifiers and
+    /// this surface has no business receiving one from a page. Both would arrive as a refused preflight rather than as
+    /// a value quietly accepted, which is the direction that fails visibly.
+    /// </para>
+    /// </remarks>
+    internal const string TraceContextHeaderName = "traceparent";
+
     /// <summary>Adds the CORS policy, the authentication schemes, and the authorization requirement the client endpoint runs under.</summary>
     /// <param name="services">The container to add to.</param>
     /// <param name="endpointSettings">The endpoint settings composition read.</param>
@@ -128,9 +141,9 @@ internal static class ClientTransportSecurityExtensions
     /// </para>
     /// <para>
     /// The methods and headers are what this surface serves rather than what an HTTP API might: the two verbs its
-    /// routes are mapped under, one <c>Authorization</c> header, and a declared content type. A route added later adds
-    /// its method here, which is the direction that fails visibly — a policy written wide in advance is a policy nobody
-    /// narrows afterwards.
+    /// routes are mapped under, one <c>Authorization</c> header, a declared content type, and the one trace context
+    /// header <see cref="TraceContextHeaderName" /> names. A route added later adds its method here, which is the
+    /// direction that fails visibly — a policy written wide in advance is a policy nobody narrows afterwards.
     /// </para>
     /// <para>
     /// Two response headers are exposed rather than one. A browser cannot read a header the policy does not name, so
@@ -152,7 +165,11 @@ internal static class ClientTransportSecurityExtensions
 
         policy
             .WithMethods(HttpMethods.Get, HttpMethods.Post)
-            .WithHeaders(HeaderNames.Authorization, HeaderNames.ContentType, HeaderNames.Accept)
+            .WithHeaders(
+                HeaderNames.Authorization,
+                HeaderNames.ContentType,
+                HeaderNames.Accept,
+                TraceContextHeaderName)
             .WithExposedHeaders(HeaderNames.WWWAuthenticate, HeaderNames.RetryAfter);
     }
 }

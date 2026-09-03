@@ -96,9 +96,33 @@ public sealed class ClientTransportSecurityExtensionsTests
         // Assert
         Assert.Equal([HttpMethods.Get, HttpMethods.Post], policy.Methods);
         Assert.Equal(
-            [HeaderNames.Authorization, HeaderNames.ContentType, HeaderNames.Accept],
+            [
+                HeaderNames.Authorization,
+                HeaderNames.ContentType,
+                HeaderNames.Accept,
+                ClientTransportSecurityExtensions.TraceContextHeaderName,
+            ],
             policy.Headers);
     }
+
+    /// <summary>A preflight that refused the trace context header would leave every cross-origin client's span an orphan.</summary>
+    /// <remarks>
+    /// The client sends <c>traceparent</c> on every request it makes, so a browser whose preflight was not told the
+    /// header is allowed refuses the request itself rather than dropping the header — which is the whole surface
+    /// failing rather than one trace being unjoined.
+    /// </remarks>
+    [Fact]
+    public void AddClientTransportSecurity_ThePolicy_LetsAPageJoinItsSpanToTheDeploymentsOwn() =>
+        Assert.Contains(
+            ClientTransportSecurityExtensions.TraceContextHeaderName,
+            ClientCorsPolicyOf(EnabledEndpoint()).Headers);
+
+    /// <summary>Baggage carries values rather than identifiers, and this surface has no business taking one from a page.</summary>
+    [Theory]
+    [InlineData("baggage")]
+    [InlineData("tracestate")]
+    public void AddClientTransportSecurity_ThePolicy_AdmitsNoPropagationHeaderBeyondTheTraceIdentifier(string header) =>
+        Assert.DoesNotContain(header, ClientCorsPolicyOf(EnabledEndpoint()).Headers);
 
     /// <summary>A refusal says where to authorize, and a browser cannot read a response header the policy does not name.</summary>
     [Fact]
