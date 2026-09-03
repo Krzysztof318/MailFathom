@@ -143,6 +143,13 @@ internal static class PersistenceConcurrencyConflicts
     /// identifier, and joins it — so two halves of one conversation reach one thread rather than the second run
     /// failing on a violation it could not have avoided.
     /// </para>
+    /// <para>
+    /// The last is one condition already standing unread in a person's notification centre. Two accounts' runs, or one
+    /// account's run and a retry of it, both read that nothing has been said about the condition and both raise it; the
+    /// loser violates the partial index. The retry is the whole deduplication rule rather than a repair — it re-reads,
+    /// finds the winner's unread row, and raises nothing — and leaving it unrecognized would report a run as having
+    /// failed while the person has already been told exactly once.
+    /// </para>
     /// </remarks>
     internal static bool IsConcurrencyConflict(DbUpdateException exception) =>
         exception.InnerException is PostgresException
@@ -169,6 +176,7 @@ internal static class PersistenceConcurrencyConflicts
                 or PersistenceConstraintNames.MailDraftCopyPrimaryKeyConstraintName
                 or PersistenceConstraintNames.ContentMoveRunPrimaryKeyConstraintName
                 or PersistenceConstraintNames.StoredSecretOwnerNameUniqueIndexName
-                or PersistenceConstraintNames.EmailThreadIdentifierPrimaryKeyConstraintName,
+                or PersistenceConstraintNames.EmailThreadIdentifierPrimaryKeyConstraintName
+                or PersistenceConstraintNames.NotificationUnreadConditionUniqueIndexName,
         };
 }

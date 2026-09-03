@@ -8,6 +8,7 @@ using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Convergence;
+using MailFathom.Application.Notifications;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.Rules.Evaluation;
@@ -208,6 +209,8 @@ internal sealed partial class AccountSynchronizationSupervisor
             .ToArray();
         var resolvedFolders = new ConcurrentBag<MailFolderResolution>();
         var failedFolderCount = 0;
+        var arrivedEmailCount = 0;
+        var credentialRefused = false;
         var convergenceFailed = false;
 
         // The wait for a slot is counted and the run itself is spanned, which is the split that keeps a cycle's
@@ -259,6 +262,18 @@ internal sealed partial class AccountSynchronizationSupervisor
                         resolvedFolders.Add(resolvedFolder);
                     }
 
+                    if (folderRun.StoredEmailCount > 0)
+                    {
+                        Interlocked.Add(ref arrivedEmailCount, folderRun.StoredEmailCount);
+                    }
+
+                    // A plain write rather than an interlocked one: every writer writes the same value, and awaiting
+                    // the whole loop is what publishes it to the read below.
+                    if (folderRun.CredentialRefused)
+                    {
+                        credentialRefused = true;
+                    }
+
                     if (!folderRun.Succeeded)
                     {
                         Interlocked.Increment(ref failedFolderCount);
@@ -268,10 +283,17 @@ internal sealed partial class AccountSynchronizationSupervisor
             if (!schedulingToken.IsCancellationRequested)
             {
                 await this.DeliverOutstandingMailAsync(workUnitToken);
-                await this.EraseExpiredAuditEntriesAsync(runSettings, workUnitToken);
+                await this.EraseExpiredDerivedRecordsAsync(runSettings, workUnitToken);
                 await this.ClassifyRequestedMailAsync(runSettings, workUnitToken);
                 await this.EvaluateMailRulesAsync(runSettings, workUnitToken);
                 await this.CutPassagesOfEvaluatedMailAsync(runSettings, workUnitToken);
+                await this.ReportRunToItsOwnerAsync(
+                    runSettings,
+                    scheduledFolders.Length,
+                    failedFolderCount,
+                    arrivedEmailCount,
+                    credentialRefused,
+                    workUnitToken);
             }
         }
         finally
@@ -440,13 +462,19 @@ internal sealed partial class AccountSynchronizationSupervisor
         }
     }
 
-    /// <summary>Erases whatever in this account's three records has outlived the window it was configured for.</summary>
+    /// <summary>Erases whatever in this account's four derived records has outlived the window it is held to.</summary>
     /// <remarks>
     /// <para>
-    /// All three age out here — the trail of the changes MailFathom made to the mailbox, the record of the questions
-    /// answered from it, and the history of what the rules concluded about its mail. They are separate operator
-    /// decisions with separate windows, and one pass because the pass is what the account's own loop already provides: a
-    /// second schedule would be another thing to configure and watch for work that is three bounded deletes.
+    /// All four age out here — the trail of the changes MailFathom made to the mailbox, the record of the questions
+    /// answered from it, the history of what the rules concluded about its mail, and what its owner has been told
+    /// about any of it. The first three are separate operator decisions with separate windows and the last is the
+    /// record's own bound, and they are one pass because the pass is what the account's own loop already provides: a
+    /// second schedule would be another thing to configure and watch for work that is four bounded deletes.
+    /// </para>
+    /// <para>
+    /// The notifications are the owner's rather than the account's, so an owner holding several accounts is swept once
+    /// per account. That costs a query that erases nothing rather than a mechanism of its own, which is the cheaper of
+    /// the two.
     /// </para>
     /// <para>
     /// It rides the account's own run for the reason convergence does, and runs after the folders rather than before
@@ -461,7 +489,7 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// </para>
     /// </remarks>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Retention is not a mail operation; an erasure that failed is logged and repeated by the next run rather than putting the account into backoff.")]
-    private async Task EraseExpiredAuditEntriesAsync(
+    private async Task EraseExpiredDerivedRecordsAsync(
         MailSynchronizationOptions runSettings,
         CancellationToken cancellationToken)
     {
@@ -497,6 +525,15 @@ internal sealed partial class AccountSynchronizationSupervisor
             {
                 this.LogRuleExecutionsErased(this.account.Id.Value, erasedExecutionCount);
             }
+
+            var erasedNotificationCount = await scope.ServiceProvider
+                .GetRequiredService<NotificationRetention>()
+                .EraseExpiredAsync(this.account.Owner, cancellationToken);
+
+            if (erasedNotificationCount > 0)
+            {
+                this.LogNotificationsErased(this.account.Id.Value, erasedNotificationCount);
+            }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -504,7 +541,65 @@ internal sealed partial class AccountSynchronizationSupervisor
         }
         catch (Exception exception)
         {
-            this.LogAuditRetentionFailed(exception, this.account.Id.Value);
+            this.LogDerivedRecordRetentionFailed(exception, this.account.Id.Value);
+        }
+    }
+
+    /// <summary>Tells this account's owner what the run observed that they were not at the screen for.</summary>
+    /// <remarks>
+    /// <para>
+    /// Last, and after every pass that can still commit mail, so the count reported is the run's whole arrival rather
+    /// than whatever had landed when the report was composed. It is one notification for the run and never one per
+    /// message, which is the record's own rule rather than this worker's choice: a run that commits forty messages is
+    /// one arrival to somebody who was away.
+    /// </para>
+    /// <para>
+    /// A failure never fails the run. A notification is a report about work that is already committed, so backing the
+    /// account off — which is to say fetching its mail less often — because a report could not be written would answer
+    /// the wrong problem with the wrong remedy. What the next run says is what that run observed; nothing here is
+    /// replayed, because a stale count is worse than a missing one.
+    /// </para>
+    /// </remarks>
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Reporting a run to its owner is not a mail operation; a report that failed is logged rather than putting the account into backoff.")]
+    private async Task ReportRunToItsOwnerAsync(
+        MailSynchronizationOptions runSettings,
+        int scheduledFolderCount,
+        int failedFolderCount,
+        int arrivedEmailCount,
+        bool credentialRefused,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var scope = this.scopeFactory.CreateScope();
+
+            scope.ServiceProvider.GetRequiredService<ScopedMailSynchronizationSettings>().UseRunSnapshot(runSettings);
+
+            var notifications = scope.ServiceProvider.GetRequiredService<SynchronizationNotifications>();
+
+            await notifications.ReportArrivedMailAsync(this.account, arrivedEmailCount, cancellationToken);
+
+            // The two system conditions are reported separately rather than as one worst outcome, because they ask the
+            // person for different things: a refused credential is theirs to repair, and an incomplete run is theirs
+            // to know about while MailFathom keeps trying.
+            if (credentialRefused)
+            {
+                await notifications.ReportRefusedCredentialAsync(this.account, cancellationToken);
+            }
+
+            await notifications.ReportIncompleteRunAsync(
+                this.account,
+                failedFolderCount,
+                scheduledFolderCount,
+                cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            this.LogOwnerNotificationFailed(exception, this.account.Id.Value);
         }
     }
 
@@ -848,7 +943,7 @@ internal sealed partial class AccountSynchronizationSupervisor
 
             this.RecordFolderRun(folder, result);
 
-            return new FolderRunOutcome(Succeeded: true, result.Folder);
+            return new FolderRunOutcome(Succeeded: true, result.Folder, result.StoredEmailCount);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -874,6 +969,17 @@ internal sealed partial class AccountSynchronizationSupervisor
             this.RecordFolderRun(folder, MailFolderRunOutcome.DeferredAfterMailServerUnavailable);
 
             return FolderRunOutcome.Failed;
+        }
+        catch (MailboxCredentialRefusedException exception)
+        {
+            // Separated from the unexpected failure below because the two ask for opposite things. Every other failure
+            // here is waited out by the account's own backoff; a refused credential is refused identically on every
+            // run until a person replaces it, so what the run owes is to say so rather than to keep trying quietly.
+            this.LogFolderSynchronizationStoppedByRefusedCredential(exception, this.account.Id.Value, folderAlias);
+            folderRun.CredentialRefused(folderAlias);
+            this.RecordFolderRun(folder, MailFolderRunOutcome.CredentialRefused);
+
+            return FolderRunOutcome.CredentialWasRefused;
         }
         catch (Exception exception)
         {
@@ -1285,8 +1391,8 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// <summary>Separates a retention pass that did not run from the ordinary case of it having nothing to erase.</summary>
     [LoggerMessage(
         Level = LogLevel.Warning,
-        Message = "Erasing the expired audit entries of account {AccountId} ended unexpectedly; the account is not backed off for it and its next run erases what this one did not.")]
-    private partial void LogAuditRetentionFailed(Exception exception, string accountId);
+        Message = "Erasing the expired derived records of account {AccountId} ended unexpectedly; the account is not backed off for it and its next run erases what this one did not.")]
+    private partial void LogDerivedRecordRetentionFailed(Exception exception, string accountId);
 
     /// <summary>States what the rules did to mail that has just arrived, naming the revision so an edit is visible in the record.</summary>
     [LoggerMessage(
@@ -1431,6 +1537,25 @@ internal sealed partial class AccountSynchronizationSupervisor
         string accountId,
         string folderAlias);
 
+    /// <summary>Reports at error level the one folder failure no later run clears on its own.</summary>
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "The mail server refused the credential held for {AccountId} while synchronizing {FolderAlias}; the account is not fetched until the credential is replaced.")]
+    private partial void LogFolderSynchronizationStoppedByRefusedCredential(
+        Exception exception,
+        string accountId,
+        string folderAlias);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Reporting the run of account {AccountId} to its owner ended unexpectedly; the account is not backed off for it and its next run reports what this one observed.")]
+    private partial void LogOwnerNotificationFailed(Exception exception, string accountId);
+
+    [LoggerMessage(
+        Level = LogLevel.Information,
+        Message = "Erased {ErasedCount} expired notifications of the owner of account {AccountId}.")]
+    private partial void LogNotificationsErased(string accountId, int erasedCount);
+
     /// <summary>States what one account run produced for the two decisions that follow it.</summary>
     /// <param name="Failed">Whether at least one folder failed, which is what puts the account into backoff.</param>
     /// <param name="ResolvedFolders">
@@ -1442,9 +1567,22 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// <summary>States what one folder's turn through a run produced.</summary>
     /// <param name="Succeeded">Whether the folder completed, which excludes a deferral and an unexpected failure alike.</param>
     /// <param name="ResolvedFolder">The binding the folder ran under, or <see langword="null" /> when the alias resolved to none.</param>
-    private readonly record struct FolderRunOutcome(bool Succeeded, MailFolderResolution? ResolvedFolder)
+    /// <param name="StoredEmailCount">How many occurrences the folder committed with their content, which is what the run reports as arrived mail.</param>
+    /// <param name="CredentialRefused">
+    /// Whether the mail server refused the account's credential, which is the one failure here that a later run cannot
+    /// clear on its own and is therefore reported to the person rather than only waited out.
+    /// </param>
+    private readonly record struct FolderRunOutcome(
+        bool Succeeded,
+        MailFolderResolution? ResolvedFolder,
+        int StoredEmailCount = 0,
+        bool CredentialRefused = false)
     {
         /// <summary>Gets the outcome of a folder that neither completed nor left a binding worth watching.</summary>
         internal static FolderRunOutcome Failed => new(Succeeded: false, ResolvedFolder: null);
+
+        /// <summary>Gets the outcome of a folder the mail server would not let this account reach at all.</summary>
+        internal static FolderRunOutcome CredentialWasRefused =>
+            new(Succeeded: false, ResolvedFolder: null, StoredEmailCount: 0, CredentialRefused: true);
     }
 }

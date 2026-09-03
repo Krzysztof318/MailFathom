@@ -8,6 +8,7 @@ using System.Net.Sockets;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Resilience;
+using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.MailKit.Delivery;
 using MailFathom.Infrastructure.Mail.OAuth;
@@ -65,6 +66,11 @@ internal sealed class TransientFailureClassifier : ITransientFailureClassifier
     private static bool IsTransientMailboxFailure(Exception failure) => failure switch
     {
         MailKit.Security.AuthenticationException => false,
+
+        // The adapter's own translation of the line above, which reaches this classifier whenever a refusal is caught
+        // above a pipeline rather than inside one. The two have to answer alike, or a refused credential would be
+        // retried for as long as the budget allows purely because it had already been named.
+        MailboxCredentialRefusedException => false,
         MailKit.Security.SslHandshakeException => false,
         System.Security.Authentication.AuthenticationException => false,
         ServiceNotAuthenticatedException => false,

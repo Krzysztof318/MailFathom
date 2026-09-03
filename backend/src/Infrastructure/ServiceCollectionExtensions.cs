@@ -58,6 +58,7 @@ using MailFathom.Application.Mail.Mutations.Audit;
 using MailFathom.Application.Mail.Mutations.Authoring;
 using MailFathom.Application.Mail.Mutations.Convergence;
 using MailFathom.Application.Mail.Mutations.Destinations;
+using MailFathom.Application.Notifications;
 using MailFathom.Application.Observability;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Portraits;
@@ -112,6 +113,7 @@ using MailFathom.Infrastructure.Persistence.Emails.Threads;
 using MailFathom.Infrastructure.Persistence.Embeddings;
 using MailFathom.Infrastructure.Persistence.Jobs;
 using MailFathom.Infrastructure.Persistence.Mutations;
+using MailFathom.Infrastructure.Persistence.Notifications;
 using MailFathom.Infrastructure.Persistence.Owners;
 using MailFathom.Infrastructure.Persistence.Portraits;
 using MailFathom.Infrastructure.Persistence.Preferences;
@@ -1143,6 +1145,11 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<MailboxMutationAuditTelemetry>();
         services.AddScoped<IMailboxMutationAuditTrail, MailboxMutationAuditTrail>();
         services.AddScoped<MailboxMutationAuditTrailRetention>();
+        // What a person is told about while nobody is looking at the screen, and the pass that ages it out. Scoped
+        // like every other store, because the raise opens a session on the scope's own context.
+        services.AddScoped<INotificationStore, PersistedNotificationStore>();
+        services.AddScoped<SynchronizationNotifications>();
+        services.AddScoped<NotificationRetention>();
         services.AddScoped<IMailboxMutationPerformer, MailboxMutationPerformer>();
         // A singleton, because the gauges it publishes are the process's and the account snapshots behind them outlive
         // any one run; the pass that fills them is scoped like everything else that reaches a mail server.

@@ -4,7 +4,6 @@
 
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Infrastructure.UnitTests.TestDoubles;
-using MailKit.Security;
 using NSubstitute;
 using Xunit;
 
@@ -58,6 +57,10 @@ public sealed class MailKitImapTokenAuthenticationTests
         Assert.Equal(["access-token-1"], tokenSource.RejectedTokens);
     }
 
+    /// <summary>
+    /// The refusal leaves the adapter as MailFathom's own failure, so a worker can tell a credential that needs a
+    /// person from a server that was briefly unavailable without reading a mail-library type.
+    /// </summary>
     [Fact]
     public async Task OpenReadOnlyAsync_ServerRejectsTheRenewedTokenToo_FailsAfterExactlyOneRenewal()
     {
@@ -68,7 +71,8 @@ public sealed class MailKitImapTokenAuthenticationTests
         var tokenSource = new RecordingMailAccessTokenSource(TokenExpiry);
 
         // Act
-        await Assert.ThrowsAsync<AuthenticationException>(() => OpenAsync(resilience, client, tokenSource));
+        await Assert.ThrowsAsync<MailboxCredentialRefusedException>(
+            () => OpenAsync(resilience, client, tokenSource));
 
         // Assert: two authentications and one renewal, so a permanently refused token cannot loop.
         Assert.Equal(2, client.PresentedAccessTokens.Count);

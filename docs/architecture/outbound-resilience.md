@@ -102,7 +102,10 @@ without depending on Polly. `Infrastructure` implements it per protocol family:
 
 - **Mailbox** — a rejected credential, an unusable TLS handshake, an unavailable authentication mechanism, and a
   refused IMAP command are terminal. A dropped connection and a desynchronized protocol stream are transient, because
-  a repeated read changes nothing on the server.
+  a repeated read changes nothing on the server. The rejected credential is named twice, as the mail library's own
+  refusal and as the `MailboxCredentialRefusedException` the IMAP adapter translates it into, because a refusal caught
+  above a pipeline rather than inside one would otherwise arrive here under a type nothing had classified — and be
+  retried for as long as the budget allows purely for having been given a name.
 - **Delivery** — only an explicit 4yz reply is repeated, which is the server stating it did not take the message. A
   connection lost between the message data and the final reply is reported as an ordinary protocol, socket, or I/O
   failure, indistinguishable from one that happened before submission, so repeating it risks a second copy in the

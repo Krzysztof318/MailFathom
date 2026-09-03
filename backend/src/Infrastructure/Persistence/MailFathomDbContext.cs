@@ -14,6 +14,7 @@ using MailFathom.Infrastructure.Persistence.Embeddings.Configurations;
 using MailFathom.Infrastructure.Persistence.Entities;
 using MailFathom.Infrastructure.Persistence.Jobs.Configurations;
 using MailFathom.Infrastructure.Persistence.Mutations.Configurations;
+using MailFathom.Infrastructure.Persistence.Notifications.Configurations;
 using MailFathom.Infrastructure.Persistence.Owners.Configurations;
 using MailFathom.Infrastructure.Persistence.Portraits.Configurations;
 using MailFathom.Infrastructure.Persistence.Preferences.Configurations;
@@ -167,6 +168,8 @@ internal sealed class MailFathomDbContext : DbContext
 
     internal DbSet<JobScheduleEntity> JobSchedules => this.Set<JobScheduleEntity>();
 
+    internal DbSet<NotificationEntity> Notifications => this.Set<NotificationEntity>();
+
     /// <inheritdoc />
     /// <remarks>
     /// The order below is the order the configurations are applied in, and it is not alphabetical: a configuration that
@@ -234,5 +237,6 @@ internal sealed class MailFathomDbContext : DbContext
         modelBuilder.ApplyConfiguration(new ContactAddressConfiguration());
         modelBuilder.ApplyConfiguration(new JobConfiguration());
         modelBuilder.ApplyConfiguration(new JobScheduleConfiguration());
+        modelBuilder.ApplyConfiguration(new NotificationConfiguration());
     }
 }

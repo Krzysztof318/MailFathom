@@ -131,6 +131,15 @@ is down must not back an account's reading off, and a send that failed already c
 record. [Mail delivery](../features/mail-delivery.md#how-a-written-down-send-reaches-a-server) is where that half is
 described; nothing else on this page concerns it.
 
+The last step of that sequence belongs to no arrival either, and is drawn nowhere above for the same reason: once the
+passes have finished, the run tells the account's owner what happened to it — mail arrived, a credential was refused,
+some folders did not finish. It is stated per run rather than per message, which is why it cannot sit on this page's
+graph: what it reports is the run's own outcome, and the count it carries is how many messages the passes above stored
+rather than anything derived from one of them. It is the weakest link in the sequence exactly as the drain is, and for
+a stronger reason — a run whose whole point was to fetch mail must not be failed by the record saying it did.
+[What a run tells the person whose mailbox it is](../features/imap-synchronization.md#what-a-run-tells-the-person-whose-mailbox-it-is)
+describes it; nothing else on this page concerns it either.
+
 Nothing else about the pipeline crosses a process boundary while a transaction is open. The two sidecar calls happen
 outside the commit that follows them, and the embedding provider is reached only by the worker, which consumes committed
 state.

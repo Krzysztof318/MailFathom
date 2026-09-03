@@ -314,6 +314,50 @@ signature the format opens with, before the row existed.
 reasons: last write wins, an owner this deployment no longer holds affects no row, and two devices arriving at once
 cannot both read nothing and then collide on the key. Erasing an owner takes the picture with the cascade.
 
+## What happened while nobody was looking
+
+`notifications` holds what a person is told about — a synchronization run that committed new mail, and the system
+conditions that run distinguishes. It belongs to the deployment rather than to a device, because the read state has to
+be the same in both heads and on a second machine, and because most of what produces a row is visible only to the
+service.
+
+| Column of `notifications` | What it records |
+|---|---|
+| `Id` | What addresses the notification, a UUIDv7 minted from the instant it describes |
+| `OwnerId` | The owner it happened to. It is the foreign key onto `settings_accounts` with `ON DELETE CASCADE`, for the reason `client_preferences` keys the same way |
+| `Kind` | Which part of MailFathom it is about — `Mail`, `Calendar`, `Case`, `Task`, or `System` — stored as text |
+| `Title`, `Body` | The two lines a row is drawn with, derived when the notification was produced rather than by re-reading mail when it is displayed |
+| `Source` | What the source line names beyond the kind, which is an account identifier today, and absent where the kind is the whole of it |
+| `TargetKind` | Which of the three shapes opening it leads to — `Nothing`, `Message`, or `Screen` — stored as text |
+| `TargetStoredEmailId` | The message a `Message` target names, and the foreign key onto `stored_emails` with `ON DELETE CASCADE`. Absent for every other shape |
+| `TargetScreen` | The screen a `Screen` target names — `Mail` or `Settings` — stored as text. Absent for every other shape |
+| `DeduplicationKey` | MailFathom's own name for the condition the notification was raised for |
+| `OccurredAt` | When the thing it describes happened |
+| `IsRead` | Whether the person has read it, which is also what frees the condition to be said again |
+
+**A row carries no mail.** The title and the body are MailFathom's own sentences about a count or a condition, the
+source is an account identifier, and the key is a condition's name — so no subject, address, body fragment, filename,
+or credential material reaches the table. What still makes it derived personal data is that it says something reached
+this person's mailbox and when, which is what the two cascades and the retention bound answer for.
+
+**Two cascades reach it, and they answer different obligations.** The owner's row takes their notifications with them,
+so an erasure request never has to name this table — which matters here because the table records no mail account and
+the [erasure walk](#privacy-classification) enumerates the tables that do. And a stored message takes the notifications
+that lead to it, so nothing can leave a row pointing at mail that is gone. That second cascade is why the message is an
+association here where `mailbox_mutation_audit_entries` deliberately keeps its own as a plain value: a trail records an
+act and has to outlive what it acted on, while a notification only offers to open something.
+
+**Saying one condition twice is refused by the schema rather than checked for before the insert.**
+`ix_notifications_owner_unread_condition` is unique over `(OwnerId, DeduplicationKey)` and filtered to `NOT "IsRead"`,
+so a condition already standing unread cannot be raised again and one the person has read is free to be said again when
+it recurs. Being partial is also what makes it the index an unread count is answered from, since that count is one
+owner's rows in it. `ix_notifications_owner_occurred` covers `(OwnerId, OccurredAt, Id)`, which is the centre's own page
+order and the order the retention sweep erases in.
+
+**A notification is kept for ninety days after the thing it describes happened.** The bound is the record's own rather
+than an operator's setting, because a notification is the client's working state rather than a history a deployment
+undertakes to hold, and the sweep rides each account's own synchronization run beside the audit-trail retention passes.
+
 ## What an owner signs in with
 
 `owner_credentials` holds every credential an owner authenticates to
@@ -1317,6 +1361,9 @@ account reach these four tables through the same cascade every other table is re
 | `ix_jobs_owner_account` | `(OwnerId, MailboxAccountId, EnqueuedAt)` | An account's queued work, which is what erasure and any per-account bound reach a job by |
 | `ix_jobs_owner_turn` | `(OwnerId, TurnAt)` where the state is `Pending` or `Claimed` | How far one owner's waiting work has reached, which is what every enqueue asks before it stamps a turn. It carries no account column at all: the owner is on the row now, so the latest turn is one descending step into this index rather than a maximum over the accounts that owner holds joined together. Beside `ix_jobs_owner_account` rather than folded into it because the two are proportional to different things: that one spans everything the queue has ever done, and this one only what is still claimable, which is what keeps the read a backward walk of a few index entries on a queue holding a backlog of any size |
 | `ix_jobs_dead_lettered` | `(StateChangedAt, Id)` where the state is `DeadLettered` | The operator's reading of what has stopped, newest first, keyed on the pair it pages by. The filter keeps the index the size of what is waiting for a person rather than of the table, and a row leaves it the moment the decision about it is taken |
+| `ix_notifications_owner_unread_condition` | `(OwnerId, DeduplicationKey)`, unique, where `NOT "IsRead"` | The deduplication rule itself: one unread statement per condition, and no bound at all on conditions the person has already read. Being partial is also what makes it the index an unread count is answered from, since that count is one owner's rows in it — and what keeps a repeated raise a lost race a retry resolves rather than a check the application could win between the read and the write |
+| `ix_notifications_owner_occurred` | `(OwnerId, OccurredAt, Id)` | The two ways the notification centre is worked: a page of one person's notifications newest first, and the retention sweep that erases the same person's oldest. The identifier is in the key because two notifications raised in one instant need a total order for a keyset page to continue from |
+| `IX_notifications_TargetStoredEmailId` | `(TargetStoredEmailId)` | The foreign key back to the message a notification leads to, which is what erasing that message reaches its notifications by rather than scanning |
 
 The recipient, keyword, and search-vector indexes are GIN rather than B-tree because all of them serve containment tests. A B-tree over an array column serves only equality against a whole array, and over a `tsvector` it serves nothing search asks for; a GIN index is what turns either into an index scan.
 
@@ -1415,6 +1462,15 @@ any of the six reaches a log, a metric, a trace, or an exception message: a fail
 and the folder alias, never a subject, an address, a file name, or a line of what was written.
 
 `settings_accounts` is personal data of a kind nothing else on this page holds: it is the record of a person rather than of their mail, and its document is what they configured MailFathom to do on their behalf. It is therefore the row a data-subject erasure is aimed at, and the cascade beneath it is what discharges the rest — which is also why the tables that record a mail account without keying onto one are taken by the same operation rather than left for somebody to remember. The contact book is reached by the cascade rather than by that derived list: `contacts` and `contact_addresses` record no mail account, but `contacts` keys onto the owner directly and `contact_addresses` keys onto `contacts` through `(ContactId, OwnerId)`, so erasing the owner takes the whole book with them in two hops — which is what an erasure request owes about an assembled record of third parties this owner wrote down. `stored_secrets` keys onto the owner directly as well, so the sealed material behind every reference in their document leaves through that cascade. The refresh token of an account that was authorized but never synchronized is reached by the explicit owner predicate over `mailbox_refresh_tokens`; it no longer survives for lack of a `mailbox_accounts` row. Nothing in the owner row reaches a log, a metric, a trace, or an exception message: a failure names the owner's identifier, which is a value MailFathom generated, and never the document beside it.
+
+`notifications` is derived personal data by the same reading as a chunk or a classification, and by a weaker one than a
+mutation history: a row says that something reached this person's mailbox and when, without saying what. It therefore
+inherits the source message's obligations wherever it names one, and the cascade from `stored_emails` is what makes that
+structural — a notification offering to open a message that has been erased is exactly the row that must not survive.
+What the rows naming no message carry instead is a bound of the record's own: ninety days from the instant described,
+swept on each account's own run. Nothing in the table reaches a log, a metric, a trace, or an exception message; the
+owner's generated identifier and the account alias are what a failure names, and they are the two values that are not
+personal data.
 
 `embedding_profiles` is the exception on this page: it holds no personal data at all. It describes a model, and the credential that reaches that model is configuration rather than a column here, so nothing in this table is a secret or is derived from anybody's mail.
 
