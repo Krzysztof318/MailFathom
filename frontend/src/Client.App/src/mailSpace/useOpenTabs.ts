@@ -184,6 +184,16 @@ export function useOpenTabs(inTabs: boolean): OpenTabsInForce {
                 return;
             }
 
+            // Bringing forward the tab already in front is nothing, and doing the work anyway is destructive: a tab's
+            // `opened` is where it was *left*, written as it stops being active, so an active tab's copy is stale by
+            // design for exactly as long as somebody is using it. Re-activating it would revise the workspace back to
+            // that stale place — closing the conversation or the markup surface the reader has in front of the message,
+            // which is a thing they never asked for and cannot undo. `openMail` above guards the same way for the same
+            // reason; the strip calls this on every press rather than only on a press that changes something.
+            if (held.active === key) {
+                return;
+            }
+
             setHeld((current) => activated(current, key, here));
             revise(tab.opened);
         },

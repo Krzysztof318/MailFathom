@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
     readMailBody,
     readMailMessage,
+    type ClientFailure,
     type ClientFailureReason,
     type ClientResult,
     type ClientSession,
@@ -67,6 +68,7 @@ export function FullHtmlSurface({
     session,
     transport,
     storedEmailId,
+    online,
     onClose,
 }: {
     readonly session: ClientSession;
@@ -75,43 +77,75 @@ export function FullHtmlSurface({
     /** The message whose own markup is being shown, which the reader confirmed one press ago. */
     readonly storedEmailId: string;
 
+    /** Whether this machine has a network, which is a different thing from the deployment refusing to answer. */
+    readonly online: boolean;
+
     /** Leaves the surface, which returns to whatever the reading column was drawing before it. */
     readonly onClose: () => void;
 }) {
     const { locale, translate } = useLocalization();
     const [read, setRead] = useState<Read>({ storedEmailId, remotePictures: false, attempt: 0 });
-    const [described, setDescribed] = useState<ClientResult<MailMessage> | null>(null);
+    const [described, setDescribed] = useState<{ read: Read; result: ClientResult<MailMessage> } | null>(null);
     const [answer, setAnswer] = useState<{ read: Read; result: ClientResult<MailBody> } | null>(null);
+    const [connected, setConnected] = useState(online);
 
     // Opening the surface is a view change, so focus goes to the start of it rather than staying on the control that
     // was pressed — which the platform has just put focus back on as the confirmation closed, and which is on a screen
     // the reader has now left. A ref rather than a flag, for the reason the reading pane's own guard is one: it has to
     // survive StrictMode invoking the effect twice.
-    const head = useRef<HTMLElement>(null);
+    const region = useRef<HTMLElement>(null);
     const focusedOn = useRef<string | null>(null);
 
     useEffect(() => {
         if (focusedOn.current !== storedEmailId) {
             focusedOn.current = storedEmailId;
-            head.current?.focus();
+            region.current?.focus();
         }
     }, [storedEmailId]);
 
+    // A failure the network gap itself caused goes with the gap, so what stands while there is no network is the
+    // offline sentence rather than a refusal a reader would have to press through. Adjusted during render, which is
+    // where React answers a changed prop, exactly as `readingPane/ReadingPane.tsx` answers the same prop.
+    if (connected !== online) {
+        setConnected(online);
+
+        if (!online) {
+            if (described?.result.outcome === 'failed') {
+                setDescribed(null);
+            }
+
+            if (answer?.result.outcome === 'failed') {
+                setAnswer(null);
+            }
+        }
+    }
+
+    // Both reads are keyed on the same `Read`, so one retry re-runs both and neither can be left behind on an older
+    // attempt than the other. Nothing is read without a network, and coming back re-runs them — which is the whole of
+    // the recovery from that direction and what makes the offline sentence's promise a true one.
     useEffect(() => {
+        if (!online) {
+            return;
+        }
+
         let listening = true;
 
-        void readMailMessage(session, transport, storedEmailId).then((answered) => {
+        void readMailMessage(session, transport, read.storedEmailId).then((answered) => {
             if (listening) {
-                setDescribed(answered);
+                setDescribed({ read, result: answered });
             }
         });
 
         return () => {
             listening = false;
         };
-    }, [session, transport, storedEmailId]);
+    }, [session, transport, read, online]);
 
     useEffect(() => {
+        if (!online) {
+            return;
+        }
+
         let listening = true;
         const ask = { remoteImages: read.remotePictures, fullHtml: true };
 
@@ -124,14 +158,23 @@ export function FullHtmlSurface({
         return () => {
             listening = false;
         };
-    }, [session, transport, read]);
+    }, [session, transport, read, online]);
 
-    const message = described?.outcome === 'read' ? described.value : null;
+    const describing = described?.read === read ? described.result : null;
+    const drawn = answer?.read === read ? answer.result : null;
+    const message = describing?.outcome === 'read' ? describing.value : null;
     const author = message?.headers.participants.find((participant) => participant.role === 'From') ?? null;
     const sentAt = message === null ? null : wordInstant(message.headers.sentAt, locale, 'full');
 
+    // **One failure state for two reads.** Either read failing leaves this surface unable to be what it is — the head
+    // names the message and the body is the message — so a reader is told once, with one way out, rather than being
+    // shown a frame under a header that never stops saying it is reading. The head's failure is reported first because
+    // it is the one that would otherwise be silent: a frame drawn below it looks like a surface that worked.
+    const failure =
+        describing?.outcome === 'failed' ? describing.failure : drawn?.outcome === 'failed' ? drawn.failure : null;
+
     return (
-        <section ref={head} tabIndex={-1} aria-label={translate('fullHtml.surface')} className="flex h-full flex-col">
+        <section ref={region} tabIndex={-1} aria-label={translate('fullHtml.surface')} className="flex h-full flex-col">
             <header className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-2.5">
                 <span className="rounded-xs bg-accent px-1.75 py-0.75 text-xs tracking-widest text-on-accent">
                     {translate('fullHtml.mark')}
@@ -144,12 +187,17 @@ export function FullHtmlSurface({
                             : (message.headers.subject ?? translate('message.noSubject'))}
                     </span>
 
-                    <span className="truncate text-sm text-muted">
-                        {translate('fullHtml.sentBy', {
-                            author: author?.displayName ?? author?.address ?? translate('message.noAuthor'),
-                            when: sentAt ?? translate('message.sentAtUnknown'),
-                        })}
-                    </span>
+                    {/* Nothing is claimed about who sent a message that has not been read. A line naming an unknown
+                        author beside an unknown time is a sentence about this client's state dressed as a fact about
+                        the message, on the surface a reader opened because they were checking. */}
+                    {message === null ? null : (
+                        <span className="truncate text-sm text-muted">
+                            {translate('fullHtml.sentBy', {
+                                author: author?.displayName ?? author?.address ?? translate('message.noAuthor'),
+                                when: sentAt ?? translate('message.sentAtUnknown'),
+                            })}
+                        </span>
+                    )}
                 </div>
 
                 <button
@@ -164,7 +212,9 @@ export function FullHtmlSurface({
             </header>
 
             <Markup
-                answered={answer?.read === read ? answer.result : null}
+                online={online}
+                failure={failure}
+                drawn={drawn}
                 onRetry={() => {
                     setRead({ ...read, attempt: read.attempt + 1 });
                 }}
@@ -180,19 +230,54 @@ export function FullHtmlSurface({
     );
 }
 
-// The markup itself, in the five states a surface that waits owes somebody. A body that answered without the
-// representation is the one state a frame cannot express, so it is said in words: the deployment sent no markup for
-// this message, which is what a message with no formatted part looks like from here.
+// The markup itself, in the five states a surface that waits owes somebody. Two of them are said in words because no
+// frame can express either: a body that answered without the representation, which is what a message with no formatted
+// part looks like from here, and a machine with no network, which is a different thing from a deployment refusing.
+//
+// The failure it draws is either read's, resolved by the surface above rather than read off the body alone — a header
+// stuck on *reading* above a frame that worked is the shape this exists to refuse.
 function Markup({
-    answered,
+    online,
+    failure,
+    drawn,
     onRetry,
 }: {
-    readonly answered: ClientResult<MailBody> | null;
+    readonly online: boolean;
+    readonly failure: ClientFailure | null;
+    readonly drawn: ClientResult<MailBody> | null;
     readonly onRetry: () => void;
 }) {
     const { translate } = useLocalization();
 
-    if (answered === null) {
+    // Offline is its own sentence rather than a failure worded politely, and it is said in place of everything else:
+    // unlike the reading pane, this surface has nothing already drawn to keep, because a reader reaches it by pressing
+    // a control and there is no earlier answer standing behind that press.
+    if (!online) {
+        return (
+            <p className="px-4 py-3 text-sm text-muted" role="status">
+                {translate('message.offline')}
+            </p>
+        );
+    }
+
+    if (failure !== null) {
+        return (
+            <div className="flex flex-col items-start gap-2 px-4 py-3">
+                <p className="text-sm text-warning" role="alert">
+                    {translate('fullHtml.failed', { reason: translate(failureLabels[failure.reason]) })}
+                </p>
+
+                {/* Reading again is the way out of exactly one of the four failures, for the reason
+                    `shell/ConnectionSummary.tsx` gives: the other three repeat identically on a second attempt. It
+                    re-runs both reads, because both are keyed on the one attempt. */}
+                {failure.reason === 'unavailable' ? (
+                    <SecondaryButton label={translate('connection.retry')} onActivate={onRetry} />
+                ) : null}
+            </div>
+        );
+    }
+
+    if (drawn?.outcome !== 'read') {
         return (
             <p className="px-4 py-3 text-sm text-muted" role="status">
                 {translate('fullHtml.reading')}
@@ -200,23 +285,7 @@ function Markup({
         );
     }
 
-    if (answered.outcome === 'failed') {
-        return (
-            <div className="flex flex-col items-start gap-2 px-4 py-3">
-                <p className="text-sm text-warning" role="alert">
-                    {translate('fullHtml.failed', { reason: translate(failureLabels[answered.failure.reason]) })}
-                </p>
-
-                {/* Reading again is the way out of exactly one of the four failures, for the reason
-                    `shell/ConnectionSummary.tsx` gives: the other three repeat identically on a second attempt. */}
-                {answered.failure.reason === 'unavailable' ? (
-                    <SecondaryButton label={translate('connection.retry')} onActivate={onRetry} />
-                ) : null}
-            </div>
-        );
-    }
-
-    const markup = answered.value.selfContainedHtml;
+    const markup = drawn.value.selfContainedHtml;
 
     if (markup === null) {
         return (

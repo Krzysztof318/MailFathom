@@ -3,57 +3,18 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { LocalizationProvider } from '../localization/Localization';
 import { ShowFullHtml } from './ShowFullHtml';
 
-const declaredShowModal = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'showModal');
-const declaredClose = Object.getOwnPropertyDescriptor(HTMLDialogElement.prototype, 'close');
-
-// The confirmation is the platform's own modal dialog, which jsdom implements none of. What is stood in for here is
-// only what the assertions below read, and all of it is what the platform's own close algorithm does: the `open`
-// attribute it sets and clears, the return value an answer leaves behind, and the `close` event that carries the
-// answer back to the page. The focus trap and the restoration afterwards are the two parts not modelled, because
-// jsdom has no top layer to hold or restore focus from — what a test here can hold is that both answers leave through
-// `close()`, which is what the platform's own restoration hangs off, and the browser suite is what has a browser.
-function withModalDialogs(): void {
-    Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
-        configurable: true,
-        value(this: HTMLDialogElement) {
-            this.setAttribute('open', '');
-        },
-    });
-    Object.defineProperty(HTMLDialogElement.prototype, 'close', {
-        configurable: true,
-        value(this: HTMLDialogElement, returnValue?: string) {
-            this.removeAttribute('open');
-
-            if (returnValue !== undefined) {
-                this.returnValue = returnValue;
-            }
-
-            this.dispatchEvent(new Event('close'));
-        },
-    });
-}
-
-afterEach(() => {
-    if (declaredShowModal === undefined) {
-        Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal');
-    } else {
-        Object.defineProperty(HTMLDialogElement.prototype, 'showModal', declaredShowModal);
-    }
-
-    if (declaredClose === undefined) {
-        Reflect.deleteProperty(HTMLDialogElement.prototype, 'close');
-    } else {
-        Object.defineProperty(HTMLDialogElement.prototype, 'close', declaredClose);
-    }
-});
+// The confirmation is the platform's own modal dialog, and `vitest.setup.ts` stands in for the two methods jsdom does
+// not implement: the `open` state, the answer `close()` records, and the event that carries it back to the page — which
+// is the whole of what the assertions below read. The focus trap and the restoration afterwards are the two parts
+// nothing here models, because jsdom has no top layer to hold or restore focus from. What a test here can hold is that
+// both answers leave through `close()`, which is what the platform's own restoration hangs off; the browser suite is
+// what has a browser.
 
 function drawing(onShow: () => void): void {
-    withModalDialogs();
-
     render(
         <LocalizationProvider>
             <ShowFullHtml onShow={onShow} />

@@ -748,6 +748,32 @@ describe('App', () => {
         });
     });
 
+    it('returns to the message from the sender own markup, and places the reader in it', async () => {
+        renderApp(servedFrom, heldCredential, deploymentDrawingAConversation());
+        await framed();
+
+        await goTo('Mail');
+
+        const list = await screen.findByRole('listbox', { name: 'Messages' });
+        fireEvent.pointerDown(within(list).getByRole('option', { name: /Quarterly invoice/ }));
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Show the full HTML version' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Show the HTML' }));
+
+        const surface = await screen.findByRole('region', { name: "The sender's own version of this message" });
+
+        fireEvent.click(within(surface).getByRole('button', { name: 'Close this view' }));
+
+        expect(await screen.findByText('A drawn message.')).toBeDefined();
+
+        // The same rule the conversation above is held to, and the one the two surfaces would otherwise disagree on:
+        // what decides it is that *something* was in front of the message rather than which of the two it was, so a
+        // reader leaving this one is placed exactly as a reader leaving that one is.
+        await waitFor(() => {
+            expect(document.activeElement).toBe(screen.getByRole('article', { name: /Quarterly invoice/ }));
+        });
+    });
+
     // Three things decide whether opening a message marks it read, and all three are the frame's: the reader's own
     // setting, the grant the credential signed in under, and there being a session to submit over. Nothing below the
     // frame asks the question, so this is where each of them is proven.

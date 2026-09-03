@@ -73,10 +73,19 @@ function deploymentServing(markup: unknown = asSent): { transport: MailFathomTra
     };
 }
 
-async function drawing(transport: MailFathomTransport, onClose: () => void = () => undefined): Promise<void> {
+async function drawing(
+    transport: MailFathomTransport,
+    { onClose = () => undefined, online = true }: { onClose?: () => void; online?: boolean } = {},
+): Promise<void> {
     render(
         <LocalizationProvider>
-            <FullHtmlSurface session={session} transport={transport} storedEmailId={messageId} onClose={onClose} />
+            <FullHtmlSurface
+                session={session}
+                transport={transport}
+                storedEmailId={messageId}
+                online={online}
+                onClose={onClose}
+            />
         </LocalizationProvider>,
     );
 
@@ -164,7 +173,7 @@ describe('FullHtmlSurface', () => {
         const closed = vi.fn();
         const { transport } = deploymentServing();
 
-        await drawing(transport, closed);
+        await drawing(transport, { onClose: closed });
         press('Close this view');
 
         expect(closed).toHaveBeenCalledOnce();
@@ -176,5 +185,55 @@ describe('FullHtmlSurface', () => {
         await drawing(refusing);
 
         expect(await screen.findByText(/could not be read: unavailable/)).toBeDefined();
+    });
+
+    it('says the message itself could not be read rather than drawing a frame under a head that never arrives', async () => {
+        // Only the read behind the head refuses. Without one failure state for the two reads this is the quiet case:
+        // the frame draws the markup and the head goes on saying it is reading, so the surface looks like it worked.
+        const halfServing: MailFathomTransport = (request) =>
+            request.path.includes('/body')
+                ? Promise.resolve({ status: 200, body: body(asSent), headers: {} })
+                : Promise.reject(new Error('the deployment is not there'));
+
+        await drawing(halfServing);
+
+        expect(await screen.findByText(/could not be read: unavailable/)).toBeDefined();
+        expect(screen.queryByTitle("The sender's own markup, drawn in isolation")).toBeNull();
+        expect(screen.getByRole('button', { name: 'Try again' })).toBeDefined();
+    });
+
+    it('reads both the head and the markup again when the reader tries again', async () => {
+        let refusals = 2;
+
+        const recovering: MailFathomTransport = (request) => {
+            if (refusals > 0) {
+                refusals -= 1;
+
+                return Promise.reject(new Error('the deployment is not there'));
+            }
+
+            const answer: ClientResponse = request.path.includes('/body')
+                ? { status: 200, body: body(asSent), headers: {} }
+                : { status: 200, body: description, headers: {} };
+
+            return Promise.resolve(answer);
+        };
+
+        await drawing(recovering);
+        await screen.findByText(/could not be read: unavailable/);
+        press('Try again');
+
+        expect(await screen.findByTitle("The sender's own markup, drawn in isolation")).toBeDefined();
+        expect(screen.getByText('Quarterly invoice')).toBeDefined();
+    });
+
+    it('says the machine has no network rather than reporting the deployment as unavailable', async () => {
+        const { transport, asked } = deploymentServing();
+
+        await drawing(transport, { online: false });
+
+        expect(await screen.findByText(/This machine is offline/)).toBeDefined();
+        expect(screen.queryByText(/could not be read/)).toBeNull();
+        expect(asked).toEqual([]);
     });
 });

@@ -49,10 +49,13 @@ for (const method of ['showPopover', 'hidePopover'] as const) {
 
 // jsdom implements the `dialog` element but neither of the two methods a modal one is driven by. What is put back is
 // the part of them a document can have: opening marks the element open, so it is exposed as a dialog and what is
-// inside it is readable, and closing unmarks it and fires the `close` event a component listens for. What is
-// deliberately *not* here is everything a modal actually is — the top layer, the backdrop, the focus trap, and Escape —
-// because none of that is this application's code, and a suite that reimplemented it would be asserting the
-// reimplementation. Those belong to the browser suite, which has a browser.
+// inside it is readable, and closing unmarks it, records the answer it was closed with, and fires the `close` event a
+// component listens for. The answer is part of it rather than an extra — the platform's close algorithm sets
+// `returnValue` from the argument, and a component that reads which button was pressed reads it there, so a stand-in
+// that dropped it would report every answer as the same one. What is deliberately *not* here is everything a modal
+// actually is — the top layer, the backdrop, the focus trap, and Escape — because none of that is this application's
+// code, and a suite that reimplemented it would be asserting the reimplementation. Those belong to the browser suite,
+// which has a browser.
 if (typeof HTMLDialogElement.prototype.showModal !== 'function') {
     Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
         configurable: true,
@@ -67,8 +70,13 @@ if (typeof HTMLDialogElement.prototype.close !== 'function') {
     Object.defineProperty(HTMLDialogElement.prototype, 'close', {
         configurable: true,
         writable: true,
-        value(this: HTMLDialogElement) {
+        value(this: HTMLDialogElement, returnValue?: string) {
             this.open = false;
+
+            if (returnValue !== undefined) {
+                this.returnValue = returnValue;
+            }
+
             this.dispatchEvent(new Event('close'));
         },
     });

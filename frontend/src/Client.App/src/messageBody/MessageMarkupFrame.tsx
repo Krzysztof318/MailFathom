@@ -23,6 +23,9 @@ import { useLocalization } from '../localization/useLocalization';
 // for both rather than one per surface. It takes no such parameter today: nothing draws that surface yet, and a value
 // nobody passes is a widening of the one thing on this screen that must not widen by accident.
 //
+// What it is drawn on is `--color-sender-markup`, which is the one token in this client that stays the same in both
+// themes, and `styles.css` carries the reason beside the declaration rather than here.
+//
 // It draws nothing where there is no markup to draw. A frame with an empty document is a white rectangle that says
 // nothing, and what a reader is owed instead is a sentence — which is the surface's to say, because only the surface
 // knows why the markup is absent.
@@ -39,7 +42,7 @@ export function MessageMarkupFrame({ markup }: { readonly markup: string }) {
             title={translate('fullHtml.frame')}
             sandbox=""
             srcDoc={markup}
-            className="min-h-0 w-full flex-1 border-0 bg-white"
+            className="min-h-0 w-full flex-1 border-0 bg-sender-markup"
         />
     );
 }

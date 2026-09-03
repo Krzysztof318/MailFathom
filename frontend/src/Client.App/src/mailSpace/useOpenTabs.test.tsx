@@ -192,6 +192,22 @@ describe('useOpenTabs, working in tabs', () => {
         expect(screen.getByText('In front of it: thread-9')).toBeDefined();
     });
 
+    it('leaves what is in front of a message alone when its own tab is pressed again', () => {
+        renderTabs(true);
+
+        press(openTheQuarterly);
+        press(readDownTheConversation);
+
+        // A tab's `opened` is where it was *left*, written as it stops being active, so the tab in front holds a copy
+        // that is stale for exactly as long as somebody is using it. Bringing it forward again would revise the
+        // workspace back to that copy — closing the conversation the reader is reading, which they never asked for and
+        // cannot undo.
+        press('Bring forward The quarterly figures');
+
+        expect(reading()).toBe('Reading: message-1');
+        expect(screen.getByText('In front of it: thread-9')).toBeDefined();
+    });
+
     it('reads the last remaining tab when the one being read is closed', () => {
         renderTabs(true);
 
