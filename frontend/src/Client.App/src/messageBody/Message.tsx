@@ -82,22 +82,12 @@ interface MessageToDraw {
     readonly onBodyDrawn?: () => void;
 }
 
-// The ceiling every message's own content is read under, stated here rather than where a message is laid out, so that
-// it holds wherever one is drawn and for whatever the content later becomes: the reading pane draws one message and a
-// conversation draws several, and neither has to know the width. It binds the content alone — the head above it, the
-// verdict about who sent it, the files it carries, the actions, and the field the reader asks in have no measure to
-// keep and take the pane's own width — and what it binds is ranged left, so a window wider than the content's ceiling
-// leaves its margin on the empty side of the pane rather than pushing the words away from the list they were opened
-// from.
-export function Message(message: MessageToDraw) {
-    return (
-        <div className="max-w-reading">
-            <MessageRead {...message} />
-        </div>
-    );
-}
-
-function MessageRead({
+// The measure a message is read at is the surface's rather than this component's, which is why nothing here writes
+// one. The two surfaces answer it differently and both answers are the design project's: the reading pane binds one
+// message's content and ranges it left against the list it was opened from, and a conversation binds a whole message —
+// head and words together — and centres the column in the pane. A ceiling stated here would have made the second of
+// those unreachable, since a ceiling inside a narrower one is the narrower one.
+export function Message({
     session,
     transport,
     storedEmailId,

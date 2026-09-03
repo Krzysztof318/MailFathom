@@ -3,8 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { ReactElement } from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientResponse, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
 import {
@@ -32,6 +32,12 @@ const asked: ClientRequest[] = [];
 
 beforeEach(() => {
     asked.length = 0;
+});
+
+// A fake clock left installed changes the next file this worker runs, so it is released here rather than at the end of
+// the one test that installs it.
+afterEach(() => {
+    vi.useRealTimers();
 });
 
 function row(id: string, overrides: Readonly<Record<string, unknown>> = {}): Readonly<Record<string, unknown>> {
@@ -345,6 +351,54 @@ describe('Thread', () => {
         await waitFor(() => {
             expect(document.activeElement?.textContent).toContain('The whole of what three says.');
         });
+    });
+
+    it('marks the message it was opened at, and marks no other one on the screen', async () => {
+        drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])), { threadId, openAt: 'two' });
+
+        expect(await screen.findByText('The whole of what two says.')).toBeDefined();
+
+        const marked = screen.getByText('Opened from the list').closest('li');
+
+        expect(screen.getAllByText('Opened from the list')).toHaveLength(1);
+        expect(marked?.textContent).toContain('The whole of what two says.');
+    });
+
+    it('marks nothing in a conversation opened on its own subject, nobody having been sent to a message', async () => {
+        drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])));
+
+        expect(await screen.findByText('The whole of what three says.')).toBeDefined();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Show earlier messages (2)' }));
+
+        expect(screen.queryByText('Opened from the list')).toBeNull();
+    });
+
+    it('marks nothing on a message it stood the reader in front of alone, however much history they then show', async () => {
+        drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])), { threadId, openAt: 'three' });
+
+        expect(await screen.findByText('The whole of what three says.')).toBeDefined();
+        expect(screen.queryByText('Opened from the list')).toBeNull();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Show earlier messages (2)' }));
+
+        expect(await screen.findByText('The whole of what one says.')).toBeDefined();
+        expect(screen.queryByText('Opened from the list')).toBeNull();
+    });
+
+    it('marks a message a search result brought somebody to only until it has been seen', async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+
+        drawing(deploymentAnswering(pageOf(['one', 'two', 'three'])), { threadId, openAt: 'two', fromResult: true });
+
+        expect(await screen.findByText('Brought here from a search result')).toBeDefined();
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(2_200);
+        });
+
+        expect(screen.queryByText('Brought here from a search result')).toBeNull();
+        expect(screen.queryByText('Opened from the list')).toBeNull();
     });
 
     it('leaves focus where the reader put it when they show the history, which is not a view change', async () => {

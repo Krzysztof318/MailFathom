@@ -323,7 +323,13 @@ function OpenMessage({
                     {/* The gestures a selection ends on rather than a document-wide subscription: a selection made
                         with the pointer settles on the release and one made with the keyboard on the key coming back
                         up, and both of them are events this region already receives. */}
-                    <div ref={body} onKeyUp={capture} onMouseUp={capture}>
+                    {/* The ceiling this pane reads a message's words under, which binds the content alone: the head
+                        above it, the verdict about who sent it, the files it carries, and the actions have no measure
+                        to keep and take the pane's own width. It is ranged left, so a window wider than the ceiling
+                        leaves its margin on the empty side of the pane rather than pushing the words away from the
+                        list they were opened from. A conversation answers the same question differently, which is why
+                        the measure is stated by each surface rather than inside the message. */}
+                    <div ref={body} onKeyUp={capture} onMouseUp={capture} className="max-w-reading">
                         {/* The body being drawn is what opening this message means, so it is what marks it read. The
                             description above already says which account and folder the message is counted in, which is
                             what a folder's unread count is corrected by. */}

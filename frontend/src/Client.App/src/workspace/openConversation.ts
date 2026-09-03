@@ -17,6 +17,17 @@ export interface OpenConversation {
 
     /** The message to open at, expanded and given focus, or `null` to open at what the conversation itself decides. */
     readonly openAt: string | null;
+
+    /**
+     * Whether that message was landed on from a search result rather than opened from the list, which the conversation
+     * marks as it arrives and then forgets.
+     *
+     * Absent everywhere the list opened the conversation, which is every path today. It is deliberately not part of
+     * `conversationKey`: the same message reached twice is the same screen, and it is deliberately not read back out of
+     * the store either — `rememberedWorkspace` rebuilds a conversation from the two fields above, so a reload returns
+     * to the message and not to the landing.
+     */
+    readonly fromResult?: boolean;
 }
 
 /**
