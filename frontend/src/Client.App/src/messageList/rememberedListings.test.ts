@@ -122,6 +122,17 @@ describe('rememberedListing', () => {
             { ...kept, filters: { ...kept.filters, dateRange: 'today' } },
         ],
         [
+            'a typed pair whose end precedes its start, which the date control refuses before writing',
+            {
+                ...kept,
+                filters: {
+                    ...kept.filters,
+                    receivedFrom: '2026-06-01T09:00',
+                    receivedTo: '2026-05-01T09:00',
+                },
+            },
+        ],
+        [
             'a span carrying an end, which the panel draws no field for while the span is lit',
             {
                 ...kept,

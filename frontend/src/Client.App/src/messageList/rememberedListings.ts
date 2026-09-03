@@ -8,6 +8,7 @@ import {
     dateRanges,
     openingListing,
     rowsPerPage,
+    selectableRange,
     type MailListDateRange,
     type MailListFilters,
     type MailListing,
@@ -210,6 +211,13 @@ function filtersIn(value: unknown): MailListFilters | null {
     // with an end is a record this client never wrote. Both are refused rather than read: the panel draws neither
     // field while a span is lit, so a bound arriving that way would narrow the folder where nothing shows it.
     if (dateRange !== null && (receivedFrom === null || receivedTo !== null)) {
+        return null;
+    }
+
+    // A pair the date control refused is one this client never wrote either, and reading it back would put the folder
+    // on a bound the deployment answers with a refusal — which the screen offers to retry, sending the same pair
+    // again. Held to the same test the control is held to rather than to a second spelling of it.
+    if (!selectableRange(receivedFrom, receivedTo)) {
         return null;
     }
 
