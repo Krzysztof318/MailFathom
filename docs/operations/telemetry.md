@@ -1189,11 +1189,37 @@ the owner attributes itself, from the credential the export presented, replacing
 | `service.version` | The same `<VersionPrefix>` the deployment reports, substituted into the bundle at build time |
 | `mailfathom.client.head` | `web` or `desktop` — which head produced the record, not which operating system it ran on |
 
-**The client exports nothing until somebody has signed in.** The exporter reaches
+**The client exports nothing until somebody has signed in, and records from the moment it opens.** The exporter reaches
 [the telemetry routes](client-endpoint.md#the-telemetry-routes) on the deployment the client is pointed at and
 authenticates there with the session's own credential, so there is no destination and nothing to present before that.
-Signing out shuts the pipeline down and flushes what it held. A deployment that named no collector answers those routes
-`404`, which is what a client sending to a deployment that exports nothing meets.
+What the client records meanwhile is held rather than dropped, because starting up, resolving which deployment the
+client belongs to, and a sign-in that did not succeed are the failures a person cannot describe and the deployment
+never saw. A deployment that named no collector answers those routes `404`, which is what a client sending to a
+deployment that exports nothing meets.
+
+**What is held is bounded, in memory, and never written to the device.** A buffer holds at most 512 records or 128 kB
+of them per signal, whichever it reaches first, and a full one drops the oldest — bounded on size rather than on
+elapsed time, so a sign-in screen left open for an afternoon keeps the newest records instead of throwing everything
+away. Measurements are held by their own instruments rather than in a buffer, the temporality being cumulative, so the
+first export after a sign-in carries every total recorded since the client opened. A client closed without ever signing
+in keeps none of it: nothing reaches storage, and a restart begins empty.
+
+**Signing in flushes the whole of it in one export, attributed to that session.** Signing out, and being pointed at
+another deployment, each flush what the session recorded under that session's own credential and return the client to
+holding — so a client that signs in again exports whatever accumulated meanwhile, and nothing is ever left queued for a
+deployment somebody has left.
+
+| Instrument | Unit | What it reports |
+| --- | --- | --- |
+| `mailfathom.client.telemetry.dropped` | `{record}` | Records the client recorded and could not deliver |
+
+It carries `mailfathom.client.signal`, whose values here are `traces` and `logs`, and
+`mailfathom.client.telemetry.condition`, which is `overflowed` where a full buffer dropped the oldest and
+`export_failed` where an export did not arrive past the exporter's own retry bounds. Neither condition is written as a
+log record: both describe a burst by definition, so a line per dropped record would be the loudest thing in a
+deployment's log at the moment the client is least able to send anything. There is no `metrics` value on either — a
+refused metric export loses nothing, the next one carrying the same cumulative totals again. The counter is itself a
+measurement, so it reaches a deployment on the first export after a sign-in like everything else.
 
 **One span and two measurements per request**, opened where the client asks and closed where it decides what the answer
 was — which is later than the response, because a body the client refused as unreadable is a failure a screen acts on

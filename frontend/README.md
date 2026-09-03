@@ -198,16 +198,25 @@ and two measurements per request happen in one place whatever the operation did 
 
 It exports to [the deployment's own OTLP receiver](../docs/operations/client-endpoint.md#the-telemetry-routes) on the
 client surface, over HTTP with protobuf, presenting the session's credential exactly as every read does — so nothing is
-exported until somebody has signed in, and signing out shuts the pipeline down and flushes what it held.
+exported until somebody has signed in.
 [What it publishes](../docs/operations/telemetry.md#what-the-client-publishes-about-itself) is the operator's page,
 including the one measurement only a client the deployment itself served can make, and why anything else reports
 nothing in its place rather than a zero.
 
+**Recording begins before exporting can, and `telemetry/holding.ts` is the gap between them.** The three providers are
+registered where the client is composed, against exporters that hold rather than send, so starting up, resolving which
+deployment this client belongs to, and a sign-in that did not succeed are recorded — which is exactly what nobody can
+describe afterwards and what the deployment never saw. Signing in names the three OTLP destinations and empties what
+was held into one export attributed to that session; signing out flushes what the session recorded and returns to
+holding. What is held is bounded on records and on bytes, the oldest going first and the loss reported as a counter,
+and it lives in memory alone: a client closed without a session keeps nothing, and a restart begins empty.
+
 **The SDK behind the exporter is fetched rather than bundled.** `telemetry/exporting.ts` is reached through a dynamic
-import, so the chunk carrying the three providers and the three exporters — 125 kB, 35 kB compressed — is downloaded at
-the moment somebody signs in and never by somebody who does not. What the pipeline costs the document a person waits
-for is the two interface packages in front of it — `@opentelemetry/api` and `@opentelemetry/api-logs`, the registries
-every recording call reaches whether or not a pipeline was registered behind them: 15 kB, 5 kB compressed.
+import, so the chunk carrying the three providers and the three exporters — 127 kB, 35 kB compressed — is downloaded
+beside the first screen rather than inside it, and the document is on screen without waiting for any of it. What the
+pipeline costs that document is the two interface packages in front of it — `@opentelemetry/api` and
+`@opentelemetry/api-logs`, the registries every recording call reaches whether or not a pipeline was registered behind
+them: 15 kB, 5 kB compressed.
 
 ## The two suites
 
