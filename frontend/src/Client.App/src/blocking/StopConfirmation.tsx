@@ -41,7 +41,13 @@ export function StopConfirmation({
                 type="button"
                 className="mt-1.25 flex h-9.5 items-center justify-center rounded-xl border border-line-strong px-5 text-base font-semibold text-text-soft transition hover:bg-hover hover:text-text"
                 onClick={() => {
-                    asked.current?.showModal();
+                    if (asked.current !== null) {
+                        // A `close()` given no answer leaves the previous one in place, and the close Escape performs
+                        // is one of those — so the answer is cleared where the question is asked rather than at each
+                        // way out of it, and only an explicit press on the stopping control can ever read as one.
+                        asked.current.returnValue = '';
+                        asked.current.showModal();
+                    }
                 }}
             >
                 {translate('blocking.cancel')}

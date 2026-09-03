@@ -112,6 +112,17 @@ describe('BlockingOverlay', () => {
         expect(stopped).not.toHaveBeenCalled();
     });
 
+    it('advances in place while the same operation keeps moving, rather than drawing itself a second time', () => {
+        const { rerender } = drawing(migrating({ progress: 0.2 }));
+
+        expect(screen.getByText('20% — do not close this window')).toBeDefined();
+
+        rerender(migrating({ progress: 0.5 }));
+
+        expect(screen.getByText('50% — do not close this window')).toBeDefined();
+        expect(screen.getByRole('dialog', { name: 'Moving this mailbox' })).toBeDefined();
+    });
+
     it('leaves the screen once the operation stops saying it is running', () => {
         const { rerender } = drawing(migrating());
 

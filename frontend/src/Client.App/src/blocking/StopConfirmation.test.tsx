@@ -61,6 +61,18 @@ describe('StopConfirmation', () => {
         expect(stopped).toHaveBeenCalledOnce();
     });
 
+    it('carries no earlier answer into a later question, so continuing after a stop stops nothing again', () => {
+        const stopped = vi.fn();
+
+        drawing(stopped);
+        press('Cancel');
+        press('Yes, stop');
+        press('Cancel');
+        press('Continue the operation');
+
+        expect(stopped).toHaveBeenCalledOnce();
+    });
+
     it('asks again the next time, because neither answer is remembered', () => {
         drawing(vi.fn());
         press('Cancel');
