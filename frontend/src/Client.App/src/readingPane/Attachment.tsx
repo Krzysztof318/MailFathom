@@ -11,7 +11,7 @@ import {
     useAttachmentDelivery,
     type AttachmentDeliveryOutcome,
 } from '../deployment/attachmentDelivery';
-import { sizeOf } from './octets';
+import { sizeOf } from '../localization/octets';
 import { savedAs } from './savedFileName';
 
 // One file a message carries. It is described before anything is fetched — what it is called, what it declares itself to

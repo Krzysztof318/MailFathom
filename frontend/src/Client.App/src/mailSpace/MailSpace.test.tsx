@@ -5,6 +5,7 @@
 import { useEffect } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ComposingContext } from '../composer/useComposing';
 import { LocalizationProvider } from '../localization/Localization';
 import { WorkspaceProvider } from '../workspace/Workspace';
 import { useWorkspace, type Workspace } from '../workspace/useWorkspace';
@@ -82,6 +83,15 @@ function Opening({ change }: { readonly change: Partial<Workspace> }) {
     return null;
 }
 
+// The toolbar and the corner control both ask whether writing a message is offered. Nothing here is about writing one,
+// so nothing offers it and both stand as the planned controls they were.
+const nothingBeingWritten = {
+    offered: false,
+    opening: null,
+    compose: () => undefined,
+    close: () => undefined,
+};
+
 function renderSpace(wide: boolean, opening: Partial<Workspace> = {}, person: string | null = 'reader'): void {
     atWidth(wide);
     withModalDialogs();
@@ -89,6 +99,7 @@ function renderSpace(wide: boolean, opening: Partial<Workspace> = {}, person: st
     render(
         <LocalizationProvider>
             <WorkspaceProvider>
+                <ComposingContext value={nothingBeingWritten}>
                 <Opening change={opening} />
                 <MailSpace
                     folders={
@@ -104,6 +115,7 @@ function renderSpace(wide: boolean, opening: Partial<Workspace> = {}, person: st
                     status={<p>{handedTheStatus}</p>}
                     person={person}
                 />
+                </ComposingContext>
             </WorkspaceProvider>
         </LocalizationProvider>,
     );

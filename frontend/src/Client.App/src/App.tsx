@@ -4,6 +4,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { ClientSession, DeploymentAddress, MailFathomTransport } from '@mailfathom/client-backend';
+import { Composer } from './composer/Composer';
+import type { ComposerOpening } from './composer/composition';
+import { forgetComposition } from './composer/keptComposition';
+import { ComposingContext } from './composer/useComposing';
 import { BrandMark } from './controls/BrandMark';
 import { SecondaryButton } from './controls/SecondaryButton';
 import {
@@ -86,6 +90,7 @@ export function App({
     const [notices, setNotices] = useState<readonly CredentialNotice[]>([]);
     const baseAddress = adopted === null ? null : adopted.deployment.baseAddress;
     const workspaceRegion = useRef<HTMLDivElement>(null);
+    const [written, setWritten] = useState<ComposerOpening | null>(null);
     const focusedFor = useRef(authorization);
 
     // Built once per address and credential rather than per render, because it is what the message read below depends
@@ -136,6 +141,7 @@ export function App({
         setAuthorization(null);
         revise(emptyWorkspace);
         forgetListings();
+        forgetComposition();
 
         if (baseAddress === null) {
             return;
@@ -160,6 +166,24 @@ export function App({
     const withheld = deploymentSession === null ? [] : withheldFrom(deploymentSession);
     const mailAccounts = connection.accounts?.outcome === 'read' ? connection.accounts.value.accounts : [];
     const readsMail = deploymentSession !== null && offers(deploymentSession, 'readMail');
+    const writesMail = deploymentSession !== null && offers(deploymentSession, 'composeMail');
+
+    // What is being written, held here for the reason the workspace is: the three controls that ask for it are each
+    // several components below this, and what it replaces is a region this frame composes. It is the opening alone —
+    // the message itself is the composer's, so nothing here can read half a message off the frame.
+    const composing = useMemo(
+        () => ({
+            offered: writesMail,
+            opening: written,
+            compose: (asked: ComposerOpening) => {
+                setWritten(writesMail ? asked : null);
+            },
+            close: () => {
+                setWritten(null);
+            },
+        }),
+        [writesMail, written],
+    );
 
     // The settings that follow the person rather than this machine. They are read here rather than in the menu that
     // shows them because two of them decide what opening a message does, which is the frame's rather than a menu's —
@@ -241,6 +265,7 @@ export function App({
         // A reload of a signed-in client does not pass through here, so what survives a reload still survives one.
         revise(emptyWorkspace);
         forgetListings();
+        forgetComposition();
 
         // The screen has already said how long the password will be kept, so a store that refused the write says so
         // rather than leaving somebody to discover it by being asked for the password again at the next start. This
@@ -265,6 +290,7 @@ export function App({
         setAuthorization(null);
         revise(emptyWorkspace);
         forgetListings();
+        forgetComposition();
 
         if (adopted !== null) {
             void credentials.forget(adopted.deployment).then((removed) => {
@@ -328,6 +354,11 @@ export function App({
         // the row that draws a message, the folder tree that counts unread mail, and the body that marks one on being
         // drawn. What it holds goes with the credential, exactly as the workspace does.
         <ReadMarkingProvider session={session} transport={readMail} marking={markingRead}>
+            {/* Above the frame rather than inside the mail space, because what is being written outlives moving
+            between the spaces, and because the three controls that ask for it are each several components below here.
+            Writing is offered where the credential may file a draft; one that may not is told so by the strip above
+            rather than by a screen that refuses every act. */}
+            <ComposingContext value={composing}>
             <div className="flex h-dvh flex-col bg-rail pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left workspace:flex-row">
                 <div ref={workspaceRegion} tabIndex={-1} className="flex min-h-0 min-w-0 flex-1 flex-col bg-page">
                     {/* Inside the frame as well as on the sign-in screen, because a credential that could not be kept is
@@ -362,7 +393,12 @@ export function App({
                             // above does. Where it stands is the space's decision, which is why it is handed in rather
                             // than drawn here.
                             intent={
-                                deploymentSession !== null && offers(deploymentSession, 'askMail') ? (
+                                // Not while a message is being written: what stands at the foot of that column then is
+                                // the composer's own footer, and two rows of controls under one column is two answers
+                                // to what the primary act is.
+                                written === null &&
+                                deploymentSession !== null &&
+                                offers(deploymentSession, 'askMail') ? (
                                     <IntentField accounts={mailAccounts} />
                                 ) : null
                             }
@@ -414,7 +450,28 @@ export function App({
                                     />
                                 ) : null
                             }
-                            mail={whatIsOpen()}
+                            mail={
+                                // A message being written stands where one being read stands, which is the design
+                                // project's composition rather than a window over it — and what is open is still open
+                                // underneath, so closing the composer is a return rather than a second thing to find.
+                                // Keyed by what is being written, so asking for an answer while a message of its own is
+                                // open starts that answer rather than pouring it into the fields already on the screen.
+                                written === null || session === null ? (
+                                    whatIsOpen()
+                                ) : (
+                                    <Composer
+                                        key={openingKey(written)}
+                                        session={session}
+                                        transport={readMail}
+                                        accounts={mailAccounts}
+                                        opening={written}
+                                        online={connection.online}
+                                        onClosed={() => {
+                                            setWritten(null);
+                                        }}
+                                    />
+                                )
+                            }
                         />
                     )}
                 </div>
@@ -442,8 +499,14 @@ export function App({
                     }
                 />
             </div>
+            </ComposingContext>
         </ReadMarkingProvider>
     );
+}
+
+// What a composer is mounted under, so that asking for a second message replaces the first rather than editing it.
+function openingKey(opening: ComposerOpening): string {
+    return opening.kind === 'new' ? 'new' : `${opening.answers}:${opening.storedEmailId}`;
 }
 
 // What is being read on the right of the mail space: one message, the conversation it belongs to, or the sender's own

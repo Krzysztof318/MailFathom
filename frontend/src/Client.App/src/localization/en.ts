@@ -219,6 +219,82 @@ export const en = {
     'mail.listWidthHint':
         'Drag to change the list width. Double-click, or press Home, to return it to where it started.',
 
+    'compose.titleNew': 'New message',
+    'compose.titleReply': 'Reply',
+    'compose.titleReplyAll': 'Reply to everyone',
+    'compose.titleForward': 'Forward',
+    'compose.close': 'Close the message',
+    'compose.reading': 'Reading the message you are answering…',
+    'compose.from': 'From',
+    'compose.to': 'To',
+    'compose.cc': 'Cc',
+    'compose.bcc': 'Bcc',
+    'compose.showCopies': 'Write a copy or a blind copy as well',
+    'compose.copyHeaders': 'Cc · Bcc',
+    'compose.addRecipient': 'Add a recipient…',
+    'compose.removeRecipient': 'Remove {address} from {header}',
+    'compose.notAnAddress': 'That is not an address yet. An address looks like somebody@example.com.',
+    'compose.alreadyAddressed': '{address} is written here already.',
+    'compose.tooManyAddresses': 'One header takes at most {count} addresses.',
+    'compose.subject': 'Subject',
+    'compose.subjectPlaceholder': 'Message subject',
+    'compose.subjectOfAnAnswer': 'Your deployment writes the subject of an answer, so it is not edited here.',
+    'compose.words': 'Message',
+    'compose.wordsPlaceholder': 'Write your message',
+    'compose.attach': 'Attach',
+    'compose.attachedFiles': 'Attached files',
+    'compose.removeFile': 'Remove {name}',
+    'compose.saveDraft': 'Save draft',
+    'compose.shortcutSends': 'Ctrl+Enter sends',
+    'compose.send': 'Send',
+    'compose.sendAnyway': 'Send anyway',
+    'compose.backToEditing': 'Back to writing',
+    'compose.confirmQuestion': 'Send this message?',
+    'compose.confirmTo': 'To {addresses}',
+    'compose.confirmCc': 'Copy to {addresses}',
+    'compose.confirmBcc': 'Blind copy to {addresses}',
+    'compose.confirmNobody': 'It is addressed to nobody.',
+    'compose.confirmSubject': 'Subject: {subject}',
+    'compose.confirmNoSubject': 'none',
+    'compose.cautionNoRecipient': 'Nobody is addressed, so there is nowhere for it to go.',
+    'compose.cautionNoSubject': 'It goes out without a subject.',
+    'compose.cautionNoWords': 'It goes out with nothing written in it.',
+    'compose.discardQuestion': 'Discard this message?',
+    'compose.discardExplanation':
+        'What you have written goes, along with the draft your deployment is holding for it.',
+    'compose.discard': 'Discard',
+    'compose.saving': 'Filing the draft…',
+    'compose.saved': 'Draft filed in your own drafts.',
+    'compose.attaching': 'Attaching {name}…',
+    'compose.sending': 'Sending…',
+    'compose.queued': 'Queued to go out.',
+    'compose.withdraw': 'Take it back',
+    'compose.withdrawn': 'Taken back before it went out.',
+    'compose.alreadyBeingSent': 'It is already being sent, so it could not be taken back.',
+    'compose.pastRecall': 'It has gone out, so it cannot be taken back.',
+    'compose.noSuchSend': 'Your deployment no longer holds that send.',
+    'compose.offline':
+        'This machine is offline. What you write is kept here, and it can be filed or sent once the network is back.',
+    'compose.refusedSendingNotEnabled': 'This deployment does not send mail. Whoever runs it can turn sending on.',
+    'compose.refusedRecipient':
+        'Your deployment refused one of the addresses. Whoever runs it decides which addresses mail may go to.',
+    'compose.refusedCeiling':
+        'A spending ceiling has been reached, so nothing goes out until the window it counts over turns over or whoever runs the deployment raises it.',
+    'compose.refusedContent':
+        'Screening refused what this message carries. Changing what it says, or what it attaches, is what would change that.',
+    'compose.refusedNotScanned':
+        'Part of this message could not be screened, so it was not sent. Taking off what could not be read is what would change that.',
+    'compose.refusedScreeningUnavailable':
+        'Screening is not answering, so nothing goes out until it does. The message is still here.',
+    'compose.refusedForAnotherReason':
+        'Your deployment refused to send it. Whoever runs it can say why from its own log.',
+    'compose.failedUnauthenticated':
+        'This client is no longer signed in. Sign in again — what you wrote is still here.',
+    'compose.failedUnauthorized': 'This credential may not do that on this deployment. Whoever runs it can grant that.',
+    'compose.failedUnavailable': 'Your deployment did not answer. What you wrote is kept here; try again.',
+    'compose.failedUnreadable':
+        'Your deployment answered, but this client could not act on the answer. That is a defect worth reporting.',
+
     'tabs.strip': 'Open tabs',
     'tabs.close': 'Close {title}',
     'tabs.closeAll': 'Close everything that is open',
@@ -350,6 +426,10 @@ export const en = {
     'grant.markMailRead':
         'This credential may not change a flag on your mail server, so opening a message leaves it unread there and this client shows what the server last reported. Whoever runs the deployment can grant that.',
 
+    'grant.composeMail':
+        'This credential may not write a draft on this deployment, so writing a message is not offered. Whoever runs the deployment can grant that.',
+    'grant.sendMail':
+        'This credential may not send mail from this deployment, so a message can be written and filed as a draft but not sent. Whoever runs the deployment can grant that.',
     'failure.unauthenticated': 'unauthenticated',
     'failure.unauthorized': 'unauthorized',
     'failure.unavailable': 'unavailable',

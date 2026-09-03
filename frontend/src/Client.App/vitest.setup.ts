@@ -73,6 +73,8 @@ if (typeof HTMLDialogElement.prototype.close !== 'function') {
         value(this: HTMLDialogElement, returnValue?: string) {
             this.open = false;
 
+            // What a component reads to tell which of a dialog's controls closed it, which is the platform's own way
+            // of answering that and therefore the part of `close` worth putting back with it.
             if (returnValue !== undefined) {
                 this.returnValue = returnValue;
             }

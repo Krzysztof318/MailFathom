@@ -385,6 +385,49 @@ The field promises what it does today, which is a phrase. Turning a sentence int
 lands on this screen rather than replacing it — which is why the filters here are objects with values in them for
 something to write into.
 
+## Writing a message
+
+`src/composer/` is the other half of the Mail space: everything above reads mail, and this is where one is written.
+It is one model drawn in two shapes — a window standing at the corner of a wide workspace, so the conversation behind
+it stays readable while a reply is written against it, and the whole screen at a narrow width, because a window over a
+phone-width column is a column nobody can read either. Which of the two is drawn is the width the client has, not the
+head it runs on.
+
+It is asked for from three unrelated places — the toolbar over the space, the control a narrow window puts at the
+corner a thumb reaches, and the answering controls beside a message — none of which is its parent, so `useComposing`
+is the context that carries the ask and `Composing.tsx` is the one place the screen is mounted. What is being written
+is deliberately not in that context: the composition belongs to the composer, so nothing above it can read half a
+message off the frame.
+
+**Two drafts are kept, and they are different promises.** What is being typed is written continuously to the tab's own
+store, so a reload returns to it — that is `keptComposition.ts`, and it is the session's store rather than the
+machine's because words, a subject, and the addresses they are for are personal data under the same rules as the mail
+already on the screen; signing out drops it in the same act that empties the workspace. The draft in the owner's own
+drafts folder is a separate thing that somebody asks for, because every revision of that one reaches their mail
+server — `useDraftAtDeployment.ts` holds it, and attaching a file and sending both file it first, each being an act the
+author asked for.
+
+**Nothing is sent without an explicit confirmation, and the confirmation names every address**, the blind copies
+included — those being the ones a header row never shows back. It also names what the message would go out without: no
+recipient, no subject, no words. None of the three refuses the send, because a message meant to go out that way is a
+message somebody meant; the confirmation is the moment to notice rather than the moment to be stopped. Once queued, the
+send can be taken back for as long as the deployment says it can, and what became of that is four answers rather than a
+success and a failure — a message already being transmitted cannot be recalled, and saying so is the answer.
+
+A refusal is a state of the screen rather than an error on it. Screening, the recipient policy, and a spending ceiling
+each refuse a send, and each is drawn as its own sentence saying what would change it; a temporary refusal says the
+message is still here. The four failure reasons are the four sentences they are everywhere else in the client.
+
+Two things it does not do yet, and both are somebody else's route rather than a decision taken here. **A recipient is
+completed from the conversation being answered rather than from the contact directory**, because that directory is not
+served to the client yet — `src/Client.Backend` names no contacts operation, and the field is a `datalist` so it gains
+one by being handed a longer list. And **the subject of an answer is read-only**: a save either names an account and a
+subject or names the message it answers and lets the deployment derive both, so an edited reply subject is a value the
+client surface has nowhere to put, and offering the field would be offering an edit that is discarded. The body is
+plain text for the same kind of reason — what the surface takes is a plain-text draft with an optional HTML
+alternative, and rich authoring is a stage of its own.
+
+
 ## Styling, and the two themes
 
 Tailwind is wired CSS-first through `@tailwindcss/vite`. The palette, the type scale, the radii, the shadow steps, the

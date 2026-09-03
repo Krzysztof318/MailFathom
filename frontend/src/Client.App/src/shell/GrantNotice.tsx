@@ -18,6 +18,8 @@ const capabilityNotices: Readonly<Record<ClientCapability, MessageKey>> = {
     readMail: 'grant.readMail',
     askMail: 'grant.askMail',
     markMailRead: 'grant.markMailRead',
+    composeMail: 'grant.composeMail',
+    sendMail: 'grant.sendMail',
 };
 
 export function GrantNotice({ withheld }: { readonly withheld: readonly ClientCapability[] }) {

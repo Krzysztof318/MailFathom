@@ -10,6 +10,7 @@ import { App } from './App';
 import type { ClientDeployment } from './deployment/adoptedDeployment';
 import { telemetryKey } from './device/deviceStore';
 import { AttachmentDeliveryContext, type AttachmentDelivery } from './deployment/attachmentDelivery';
+import { AttachmentUploadContext, type AttachmentUpload } from './deployment/attachmentUpload';
 import type { PortraitExchange } from './deployment/portraitExchange';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
 import { LocalizationProvider } from './localization/Localization';
@@ -372,6 +373,7 @@ function deploymentDrawingAConversation(): DeploymentTransport {
 
 /** A delivery nobody in these tests asks for, supplied because a row below the frame reads one from the context. */
 const deliversNothing: AttachmentDelivery = () => Promise.resolve('delivered');
+const uploadsNothing: AttachmentUpload = () => Promise.resolve(null);
 
 /** A deployment answering every route the same way, which is how a refusal to sign anybody in is stated. */
 function deploymentRefusing(answer: Answer): DeploymentTransport {
@@ -478,15 +480,17 @@ function renderApp(
                     <WorkspaceProvider>
                         <LinkOpenerContext value={() => Promise.resolve()}>
                             <AttachmentDeliveryContext value={deliversNothing}>
-                                <TelemetryContext value={telemetry}>
-                                    <App
-                                        credentials={credentials}
-                                        deployment={deployment}
-                                        portraits={drawsNobody}
-                                        send={send}
-                                        signedInWith={signedInWith}
-                                    />
-                                </TelemetryContext>
+                                <AttachmentUploadContext value={uploadsNothing}>
+                                    <TelemetryContext value={telemetry}>
+                                        <App
+                                            credentials={credentials}
+                                            deployment={deployment}
+                                            portraits={drawsNobody}
+                                            send={send}
+                                            signedInWith={signedInWith}
+                                        />
+                                    </TelemetryContext>
+                                </AttachmentUploadContext>
                             </AttachmentDeliveryContext>
                         </LinkOpenerContext>
                     </WorkspaceProvider>

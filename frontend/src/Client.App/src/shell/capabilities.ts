@@ -14,7 +14,7 @@ import { spaces, type Space } from '../routing/spaces';
 // a sentence on the screen has to say. The one table below is where the two meet, and it is exhaustive by its own type
 // so a capability added later does not compile until it says which grant it is reached under.
 
-export const clientCapabilities = ['readMail', 'askMail', 'markMailRead'] as const;
+export const clientCapabilities = ['readMail', 'askMail', 'markMailRead', 'composeMail', 'sendMail'] as const;
 
 /** Something the client offers a person, where the grant permits it. */
 export type ClientCapability = (typeof clientCapabilities)[number];
@@ -23,6 +23,8 @@ const capabilityGrants: Readonly<Record<ClientCapability, MailFathomPermission>>
     readMail: 'mailfathom.mail.read',
     askMail: 'mailfathom.mail.ask',
     markMailRead: 'mailfathom.mail.flags.write',
+    composeMail: 'mailfathom.mail.drafts.write',
+    sendMail: 'mailfathom.mail.send',
 };
 
 // Which capability each space is reached under. Every space that is still a placeholder carries none, because nothing

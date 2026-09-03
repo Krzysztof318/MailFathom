@@ -7,6 +7,7 @@ import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { adoptedDeployment } from './deployment/adoptedDeployment';
 import { AttachmentDeliveryContext, deliverAttachment } from './deployment/attachmentDelivery';
+import { AttachmentUploadContext, uploadAttachment } from './deployment/attachmentUpload';
 import { portraitExchange } from './deployment/portraitExchange';
 import { sendToDeployment } from './deployment/sendToDeployment';
 import { LocalizationProvider } from './localization/Localization';
@@ -64,15 +65,17 @@ async function open(root: HTMLElement): Promise<void> {
                     <WorkspaceProvider>
                         <LinkOpenerContext value={openLink}>
                             <AttachmentDeliveryContext value={deliverAttachment}>
-                                <TelemetryContext value={telemetry}>
-                                    <App
-                                        credentials={credentials}
-                                        deployment={deployment}
-                                        portraits={portraitExchange}
-                                        send={sendToDeployment}
-                                        signedInWith={signedInWith}
-                                    />
-                                </TelemetryContext>
+                                <AttachmentUploadContext value={uploadAttachment}>
+                                    <TelemetryContext value={telemetry}>
+                                        <App
+                                            credentials={credentials}
+                                            deployment={deployment}
+                                            portraits={portraitExchange}
+                                            send={sendToDeployment}
+                                            signedInWith={signedInWith}
+                                        />
+                                    </TelemetryContext>
+                                </AttachmentUploadContext>
                             </AttachmentDeliveryContext>
                         </LinkOpenerContext>
                     </WorkspaceProvider>

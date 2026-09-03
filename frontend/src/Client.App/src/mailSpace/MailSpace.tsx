@@ -3,6 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useComposing } from '../composer/useComposing';
+import { Control } from '../controls/Control';
 import { Icon } from '../controls/Icon';
 import { PlannedControl } from '../controls/PlannedControl';
 import { useLocalization } from '../localization/useLocalization';
@@ -82,13 +84,17 @@ export function MailSpace({
 }) {
     const { translate } = useLocalization();
     const { workspace, revise } = useWorkspace();
+    const composing = useComposing();
     const wide = useWideWorkspace();
     const [listWidth, setListWidth] = useState(() => readListWidth(person));
     const drawer = useRef<HTMLDialogElement>(null);
     const listColumn = useRef<HTMLElement>(null);
     const readingColumn = useRef<HTMLElement>(null);
 
-    const readingInFront = !wide && (workspace.selection !== null || workspace.conversation !== null);
+    // What is being written stands where what is being read stands, so the narrow shape brings the reading column
+    // in front of the list for a message somebody is writing exactly as it does for one they opened.
+    const readingInFront =
+        !wide && (workspace.selection !== null || workspace.conversation !== null || composing.opening !== null);
 
     // Read from the workspace rather than held here, because the column is not the only thing that draws differently
     // once it is folded: the tree inside it draws a symbol where it drew a name, and the tree is a region handed in
@@ -299,7 +305,17 @@ export function MailSpace({
 
             {/* Composing stands on the list in the narrow shape, where the toolbar carrying it is not drawn: the one
                 thing a phone-width reader reaches for from the list, at the corner a thumb reaches. */}
-            {wide || readingInFront ? null : (
+            {wide || readingInFront ? null : composing.offered ? (
+                <Control
+                    label={translate('mail.compose')}
+                    icon="edit_square"
+                    shape="floating"
+                    className="fixed right-4.5 bottom-22"
+                    onPress={() => {
+                        composing.compose({ kind: 'new' });
+                    }}
+                />
+            ) : (
                 <PlannedControl
                     label={translate('mail.compose')}
                     icon="edit_square"
