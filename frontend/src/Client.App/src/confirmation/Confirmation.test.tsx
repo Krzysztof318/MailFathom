@@ -4,7 +4,7 @@
 
 import { useRef } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LocalizationProvider } from '../localization/Localization';
 import { storeLocale } from '../localization/locale';
 import { Confirmation, type Reversal, type WayOut } from './Confirmation';
@@ -93,15 +93,24 @@ function press(said: string): void {
 
 // Leaving the question rather than answering it, which is what Escape and the platform's own close both are.
 //
-// The event is dispatched rather than left to `close()`, because jsdom queues that one and nothing in a synchronous
-// test drains the queue — so a `close()` alone reports nothing and every assertion below it would hold whatever the
-// component did. A press arrives here through `fireEvent` and needs no such help.
+// The event is dispatched rather than left to `close()`, and the reason is measured rather than assumed: with the
+// dispatch removed, deleting the empty-answer guard in `Confirmation.tsx` leaves every test below green, and with it
+// present that same deletion fails this one. `close()` alone sets `open` and leaves the event for a task nothing here
+// drains, so the assertions underneath would hold whatever the component did. A press needs no such help because it
+// arrives through `fireEvent`, which is why the tests above this one are not evidence about this path.
 function leave(): void {
     const dialog = screen.getByRole<HTMLDialogElement>('dialog');
 
     dialog.close();
     fireEvent(dialog, new Event('close'));
 }
+
+// The language a test stored is put back, storage being one store per file rather than per test: a Polish case left
+// standing would render every case declared after it in Polish, and the file's result would depend on the order it
+// ran in rather than on what the component does.
+afterEach(() => {
+    window.localStorage.clear();
+});
 
 describe('Confirmation', () => {
     it('does nothing on being opened, which is the whole of what a confirmation is for', () => {
