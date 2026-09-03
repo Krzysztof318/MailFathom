@@ -388,16 +388,16 @@ something to write into.
 ## Writing a message
 
 `src/composer/` is the other half of the Mail space: everything above reads mail, and this is where one is written.
-It is one model drawn in two shapes — a window standing at the corner of a wide workspace, so the conversation behind
-it stays readable while a reply is written against it, and the whole screen at a narrow width, because a window over a
-phone-width column is a column nobody can read either. Which of the two is drawn is the width the client has, not the
-head it runs on.
+It is one model drawn in two shapes — the reading column at a wide width, so what is being written stands exactly
+where what is being read stands and the mailboxes and the list stay beside it, and the whole screen at a narrow width,
+because a column that has to hold a header, four fields, and a footer has nothing left over to show a message
+underneath. Which of the two is drawn is the width the client has, not the head it runs on.
 
 It is asked for from three unrelated places — the toolbar over the space, the control a narrow window puts at the
 corner a thumb reaches, and the answering controls beside a message — none of which is its parent, so `useComposing`
-is the context that carries the ask and `Composing.tsx` is the one place the screen is mounted. What is being written
-is deliberately not in that context: the composition belongs to the composer, so nothing above it can read half a
-message off the frame.
+is the context that carries the ask and `App.tsx` is the one place the screen is mounted, because what is being written
+outlives moving between the spaces. What is being written is deliberately not in that context: the composition belongs
+to the composer, so nothing above it can read half a message off the frame.
 
 **Two drafts are kept, and they are different promises.** What is being typed is written continuously to the tab's own
 store, so a reload returns to it — that is `keptComposition.ts`, and it is the session's store rather than the
@@ -426,7 +426,6 @@ subject or names the message it answers and lets the deployment derive both, so 
 client surface has nowhere to put, and offering the field would be offering an edit that is discarded. The body is
 plain text for the same kind of reason — what the surface takes is a plain-text draft with an optional HTML
 alternative, and rich authoring is a stage of its own.
-
 
 ## Styling, and the two themes
 
