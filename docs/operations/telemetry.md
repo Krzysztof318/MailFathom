@@ -1,6 +1,6 @@
 # Telemetry and the Aspire dashboard
 
-<!-- describes: backend/src/Application/Observability/**, backend/src/Common/Observability/**, backend/src/Host/Observability/**, backend/src/Host/ServiceDefaultsExtensions.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Hosting/Workers/**, backend/src/Infrastructure/Observability/**, backend/src/Infrastructure/Mail/MailServerConnectionBudget.cs, backend/src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, backend/src/Infrastructure/HostApplicationBuilderExtensions.cs, backend/src/Mcp/Observability/**, backend/src/Cli/Diagnostics/**, backend/src/AppHost/**, backend/src/AI/ProviderAdapters/OpenAiCompatibleClientFactory.cs, frontend/src/Client.App/src/telemetry/**, frontend/src/Client.Backend/src/telemetry.ts -->
+<!-- describes: backend/src/Application/Observability/**, backend/src/Common/Observability/**, backend/src/Host/Observability/**, backend/src/Host/ServiceDefaultsExtensions.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Hosting/Workers/**, backend/src/Infrastructure/Observability/**, backend/src/Infrastructure/Mail/MailServerConnectionBudget.cs, backend/src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, backend/src/Infrastructure/HostApplicationBuilderExtensions.cs, backend/src/Mcp/Observability/**, backend/src/Cli/Diagnostics/**, backend/src/AppHost/**, backend/src/AI/ProviderAdapters/OpenAiCompatibleClientFactory.cs, frontend/src/Client.App/src/telemetry/**, frontend/src/Client.Backend/src/telemetry.ts, frontend/src/Client.Backend/src/mailAttachment.ts, frontend/src/Client.Backend/src/ownDisplayName.ts, frontend/src/Client.Backend/src/ownPortrait.ts -->
 
 The host instruments itself with OpenTelemetry throughout — logs, metrics, and traces — and exports none of it unless
 the environment names a destination. Today exactly one environment does that out of the box: a local run under the
@@ -1243,6 +1243,19 @@ are the client's own contract rather than words invented here — `read` and `fa
 `mailfathom.client.failure`, carrying which of `unauthenticated`, `unauthorized`, `unavailable`, or `unreadable` the
 client mapped the answer to. A failed request's span status is an error carrying no message: what failed is already the
 dimension beside it.
+
+**Every request the client makes is one of them, including the four it does not put on the wire itself.** A file a
+message carries, and the picture the signed-in person is drawn by, arrive as octets rather than as a document, so those
+four requests are composed by the half of the client that owns the wire and sent by the half that may name a browser
+API. Where the span begins and ends is the composing half's decision either way: it opens around the composition and
+the send together and closes on what the sending half made of the answer, so the record is the same shape as every
+other request's and the request carries the trace context exactly as one this client sent itself.
+
+**The outcome says whether an answer arrived, not whether the answer was yes.** A route that deliberately refuses — a
+name this deployment will not record, a person it holds no portrait for — has answered something a screen acts on, so
+it is `read`; so is a download the person waiting on it stopped, that being their own act rather than the deployment
+failing to answer. What `failed` names is the four an operator can act on, and a file larger than the message described
+is `unreadable` among them, the body having been refused rather than absent.
 
 **Moving between screens is the client's alone to report.** Every screen after the first is rendered rather than
 fetched, so the wait a person actually has is invisible from the deployment.

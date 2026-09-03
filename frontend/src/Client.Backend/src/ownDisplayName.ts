@@ -5,7 +5,7 @@
 import { failed, failureReasonForStatus, read, type ClientFailure, type ClientResult } from './failure';
 import { asRecord } from './json';
 import { headersFor, routeFor, type ClientSession } from './session';
-import { spanned } from './telemetry';
+import { reported, spanned } from './telemetry';
 import { send, type ClientResponse, type MailFathomTransport } from './transport';
 
 // What the signed-in person is called, which is the one thing a client drawing them cannot compose from the credential
@@ -84,20 +84,31 @@ export type OwnDisplayNameChange =
  * The answer carries the name as it was stored rather than as it was sent, because a name is trimmed on its way in and
  * a screen that redrew what was typed would show something the deployment does not hold.
  */
-export async function changeOwnDisplayName(
+export function changeOwnDisplayName(
     session: ClientSession,
     transport: MailFathomTransport,
     displayName: string,
 ): Promise<OwnDisplayNameChange> {
-    const response = await send(transport, {
-        method: 'POST',
-        path: routeFor(session, ownDisplayNameRoute),
-        headers: { ...headersFor(session), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ displayName }),
-        longestAnswer: longestDisplayNameAnswer,
-    });
+    return reported(
+        `POST ${ownDisplayNameRoute}`,
+        async () => {
+            const response = await send(transport, {
+                method: 'POST',
+                path: routeFor(session, ownDisplayNameRoute),
+                headers: { ...headersFor(session), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ displayName }),
+                longestAnswer: longestDisplayNameAnswer,
+            });
 
-    return changeOf(response);
+            return changeOf(response);
+        },
+
+        // `reported` rather than `spanned` because this answers an outcome of its own, and a refused name is recorded
+        // as a read: the deployment answered, and what a person does about it is to type another name. Recording it as
+        // a failure would put a typing mistake in the dimension an operator reads for a deployment that is not
+        // answering, and none of the four reasons is true of it either.
+        (change) => (change.outcome === 'failed' ? change.failure.reason : null),
+    );
 }
 
 function changeOf(response: ClientResponse | null): OwnDisplayNameChange {

@@ -6,11 +6,15 @@ import { describe, expect, it } from 'vitest';
 import {
     isPortraitImageType,
     largestPortraitOctets,
+    readOwnPortrait,
     readOwnPortraitRequest,
+    removeOwnPortrait,
     removeOwnPortraitRequest,
+    replaceOwnPortrait,
     replaceOwnPortraitRequest,
 } from './ownPortrait';
 import type { ClientSession } from './session';
+import type { ClientRequest } from './transport';
 
 const session: ClientSession = {
     baseAddress: 'https://mail.example.invalid',
@@ -56,6 +60,75 @@ describe('removeOwnPortraitRequest', () => {
         expect(request.method).toBe('DELETE');
         expect(request.path).toBe('https://mail.example.invalid/api/client/portrait');
         expect(request.headers['Authorization']).toBe('Basic dGVzdA==');
+    });
+});
+
+// The three operations the application reaches. What each of them records is asserted in `telemetry.test.ts`, which
+// is where a span can be read back from; what is asserted here is that the adapter is handed the request this module
+// composes and that its answer travels back untouched.
+describe('readOwnPortrait', () => {
+    it('hands the composed read to the adapter that puts it on the wire', async () => {
+        const asked: ClientRequest[] = [];
+
+        await readOwnPortrait(
+            session,
+            (request) => {
+                asked.push(request);
+
+                return Promise.resolve('drawn');
+            },
+            () => null,
+        );
+
+        expect(asked).toEqual([readOwnPortraitRequest(session)]);
+    });
+
+    it('answers exactly what the adapter answered, this package having no vocabulary for a picture', async () => {
+        const answer = await readOwnPortrait(
+            session,
+            () => Promise.resolve({ outcome: 'none' }),
+            () => null,
+        );
+
+        expect(answer).toEqual({ outcome: 'none' });
+    });
+});
+
+describe('replaceOwnPortrait', () => {
+    it('hands the composed replacement to the adapter, under the kind it was given', async () => {
+        const asked: ClientRequest[] = [];
+
+        await replaceOwnPortrait(
+            session,
+            'image/jpeg',
+            (request) => {
+                asked.push(request);
+
+                return Promise.resolve('stored');
+            },
+            () => null,
+        );
+
+        expect(asked).toEqual([replaceOwnPortraitRequest(session, 'image/jpeg')]);
+    });
+});
+
+describe('removeOwnPortrait', () => {
+    it('hands the composed removal to the adapter and answers what it answered', async () => {
+        const asked: ClientRequest[] = [];
+
+        const answer = await removeOwnPortrait(
+            session,
+            (request) => {
+                asked.push(request);
+
+                return Promise.resolve({ outcome: 'stored' });
+            },
+            () => null,
+        );
+
+        expect(asked).toEqual([removeOwnPortraitRequest(session)]);
+        expect(answer).toEqual({ outcome: 'stored' });
     });
 });
 

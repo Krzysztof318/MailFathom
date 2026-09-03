@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { logs } from '@opentelemetry/api-logs';
 import { metrics, trace } from '@opentelemetry/api';
 import { ExportResultCode } from '@opentelemetry/core';
-import { signIn, type ClientRequest, type ClientResponse } from '@mailfathom/client-backend';
+import { readOwnPortrait, signIn, type ClientRequest, type ClientResponse } from '@mailfathom/client-backend';
 import { startRecording, type ClientPipeline } from './exporting';
 
 // What this module does is register the three providers for the whole of a run and decide, from whether a session
@@ -139,6 +139,22 @@ describe('startRecording', () => {
         // The whole W3C form is asserted rather than the header merely being present: the version, a trace identifier,
         // the span identifier the deployment parents its own span on, and the sampled flag — which is what tells the
         // deployment this trace is being recorded and is the half a caller can turn off.
+        expect(asked.headers['traceparent']).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/);
+    });
+
+    it('joins a request this application sends itself to that span too, though nothing here awaits it', async () => {
+        running = startRecording();
+
+        // A portrait, an attachment, and a portrait write are composed by `Client.Backend` and put on the wire by an
+        // adapter in this package, because each answers in octets. The composition still happens inside the span that
+        // package opens — which is the whole of why it is reached through an operation rather than a request builder —
+        // and this is where that is observable, the context manager being registered by the call above.
+        const asked = await readOwnPortrait(
+            session,
+            (request) => Promise.resolve(request),
+            () => null,
+        );
+
         expect(asked.headers['traceparent']).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-01$/);
     });
 

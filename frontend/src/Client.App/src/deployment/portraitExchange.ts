@@ -5,9 +5,9 @@
 import {
     failureReasonForStatus,
     largestPortraitOctets,
-    readOwnPortraitRequest,
-    removeOwnPortraitRequest,
-    replaceOwnPortraitRequest,
+    readOwnPortrait,
+    removeOwnPortrait,
+    replaceOwnPortrait,
     type ClientFailureReason,
     type ClientRequest,
     type ClientSession,
@@ -17,8 +17,9 @@ import { readBoundedContent } from './boundedBody';
 
 // The third module in this directory that calls `fetch`, and the third for the same reason: `Client.Backend` declares
 // no DOM, so a `Blob`, a `File`, and a `FileReader` can only be named on this side of the boundary. What that package
-// still owns is the part that is the contract — the routes, the credential, the kinds, and the bound — all of which
-// arrive here as composed requests.
+// still owns is the part that is the contract — the routes, the credential, the kinds, the bound, and the span each
+// request is recorded under — so each of the three below is reached through that package's own operation, which hands
+// the composed request down to the `fetch` here and keeps the record around it.
 //
 // A read answers an address the client may draw rather than the octets themselves, so nothing above holds a picture.
 // That address is a data URL rather than a blob URL deliberately: a blob URL keeps its octets alive until somebody
@@ -58,76 +59,78 @@ export interface PortraitExchange {
 }
 
 export const portraitExchange: PortraitExchange = {
-    read: async (session, abandoned) => {
-        const request = readOwnPortraitRequest(session);
+    read: (session, abandoned) => readOwnPortrait(session, (request) => readPicture(request, abandoned), refusalOf),
 
-        let response: Response;
+    replace: (session, picture, type) =>
+        replaceOwnPortrait(session, type, (request) => stated(request, picture), refusalOf),
 
-        try {
-            response = await fetch(request.path, {
-                method: request.method,
-                headers: { ...request.headers },
-                signal: abandoned,
-            });
-        } catch {
-            return { outcome: 'refused', reason: 'unavailable' };
-        }
-
-        // Having no picture is an ordinary state of the screen rather than a failure on it: the initials are what the
-        // client draws instead, and it already has the name they come from.
-        if (response.status === 204) {
-            return { outcome: 'none' };
-        }
-
-        if (response.status !== 200) {
-            return { outcome: 'refused', reason: failureReasonForStatus(response.status) };
-        }
-
-        // An answer larger than a stored portrait could have been is not one this deployment wrote, and the bound is
-        // applied while the octets are read rather than once they are all in memory: what a ceiling at this boundary
-        // is for is that an oversized or endless answer never occupies memory at all, which matters most for an
-        // address a person named and this client has no reason yet to trust.
-        const octets = await readBoundedContent(response, largestPortraitOctets);
-
-        if (typeof octets === 'string') {
-            // An answer over the bound and a connection that stopped partway through both leave the screen with no
-            // picture to draw, which is the one thing it does about either.
-            return { outcome: 'refused', reason: 'unreadable' };
-        }
-
-        try {
-            const kind = response.headers.get('Content-Type') ?? '';
-
-            return { outcome: 'drawn', picture: await asDataUrl(new Blob([...octets], { type: kind })) };
-        } catch {
-            return { outcome: 'refused', reason: 'unreadable' };
-        }
-    },
-
-    replace: async (session, picture, type) => {
-        const request = replaceOwnPortraitRequest(session, type);
-
-        return await stated(request.method, request.path, request.headers, picture);
-    },
-
-    remove: async (session) => {
-        const request = removeOwnPortraitRequest(session);
-
-        return await stated(request.method, request.path, request.headers, null);
-    },
+    remove: (session) => removeOwnPortrait(session, (request) => stated(request, null), refusalOf),
 };
 
-/** Puts one write on the wire and reports whether it landed, an expected failure being a value here as everywhere. */
-async function stated(
-    method: ClientRequest['method'],
-    path: string,
-    headers: Readonly<Record<string, string>>,
-    body: Blob | null,
-): Promise<PortraitWrite> {
+/**
+ * Which failure an answer amounts to, for the record `Client.Backend` keeps of the request it composed.
+ *
+ * Having no picture is not one of them: a `204` is an answer the screen acts on by drawing the initials instead, and
+ * recording it as a failure would put an ordinary state of the screen in the dimension an operator reads for a
+ * deployment that is refusing or not answering. A read the screen gave up on is the one case this cannot separate: an
+ * abandoned `fetch` and an unreachable deployment arrive here as the same rejection and `PortraitRead` carries no
+ * outcome for the first, so both are recorded as `unavailable` — which is what the screen was told either way.
+ */
+function refusalOf(answer: PortraitRead | PortraitWrite): ClientFailureReason | null {
+    return answer.outcome === 'refused' ? answer.reason : null;
+}
+
+/** Fetches the picture and answers an address the client may draw it at, or why there is nothing to draw. */
+async function readPicture(request: ClientRequest, abandoned: AbortSignal): Promise<PortraitRead> {
     let response: Response;
 
     try {
-        response = await fetch(path, { method, headers: { ...headers }, body });
+        response = await fetch(request.path, {
+            method: request.method,
+            headers: { ...request.headers },
+            signal: abandoned,
+        });
+    } catch {
+        return { outcome: 'refused', reason: 'unavailable' };
+    }
+
+    // Having no picture is an ordinary state of the screen rather than a failure on it: the initials are what the
+    // client draws instead, and it already has the name they come from.
+    if (response.status === 204) {
+        return { outcome: 'none' };
+    }
+
+    if (response.status !== 200) {
+        return { outcome: 'refused', reason: failureReasonForStatus(response.status) };
+    }
+
+    // An answer larger than a stored portrait could have been is not one this deployment wrote, and the bound is
+    // applied while the octets are read rather than once they are all in memory: what a ceiling at this boundary is
+    // for is that an oversized or endless answer never occupies memory at all, which matters most for an address a
+    // person named and this client has no reason yet to trust.
+    const octets = await readBoundedContent(response, largestPortraitOctets);
+
+    if (typeof octets === 'string') {
+        // An answer over the bound and a connection that stopped partway through both leave the screen with no
+        // picture to draw, which is the one thing it does about either.
+        return { outcome: 'refused', reason: 'unreadable' };
+    }
+
+    try {
+        const kind = response.headers.get('Content-Type') ?? '';
+
+        return { outcome: 'drawn', picture: await asDataUrl(new Blob([...octets], { type: kind })) };
+    } catch {
+        return { outcome: 'refused', reason: 'unreadable' };
+    }
+}
+
+/** Puts one write on the wire and reports whether it landed, an expected failure being a value here as everywhere. */
+async function stated(request: ClientRequest, body: Blob | null): Promise<PortraitWrite> {
+    let response: Response;
+
+    try {
+        response = await fetch(request.path, { method: request.method, headers: { ...request.headers }, body });
     } catch {
         return { outcome: 'refused', reason: 'unavailable' };
     }
