@@ -160,7 +160,11 @@ export function App({
     // credential the deployment lets read. The route is admitted under the grant a reader already holds, so a
     // credential without it would meet a refusal the screen has nothing to do about, and a machine with no network
     // would meet nothing at all.
-    const preferences = useClientPreferences(readsMail && connection.online ? session : null, readMail);
+    const preferences = useClientPreferences(
+        readsMail && connection.online ? session : null,
+        readMail,
+        userNameIn(authorization),
+    );
 
     // What this client reports about itself goes out under the session that is signed in, so it starts when one exists
     // and stops with it. Signing out, or being pointed at another deployment, therefore leaves nothing queued for a

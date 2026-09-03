@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientResponse, ClientSession } from '@mailfathom/client-backend';
 import { App } from './App';
 import type { AdoptedDeployment } from './deployment/adoptedDeployment';
+import { telemetryKey } from './device/deviceStore';
 import { AttachmentDeliveryContext, type AttachmentDelivery } from './deployment/attachmentDelivery';
 import type { PortraitExchange } from './deployment/portraitExchange';
 import type { DeploymentTransport } from './deployment/sendToDeployment';
@@ -56,6 +57,9 @@ const workAccount = {
 
 /** What a run opens already holding, where something was kept for it. */
 const heldCredential = 'Basic dGVzdDpzZWNyZXQ=';
+
+/** Who `heldCredential` names, which is what the device's remembered telemetry answer is kept under. */
+const heldPerson = 'test';
 
 /** What the screen composes out of what `signIn` below types, which is what a test asserts was kept and presented. */
 const typedCredential = 'Basic b3duZXI6b3BlbiBzZXNhbWU=';
@@ -1587,7 +1591,7 @@ describe('App telemetry', () => {
     // What a restart owes somebody who turned it off on this machine: the decision is honoured from the first effect,
     // before the deployment has answered anything, rather than for the second it takes that answer to come back.
     it('honours a decision this device remembers before the deployment has answered again', async () => {
-        window.localStorage.setItem('mailfathom.telemetry', 'false');
+        window.localStorage.setItem(telemetryKey(heldPerson), 'false');
 
         const recording = telemetryRecording();
 

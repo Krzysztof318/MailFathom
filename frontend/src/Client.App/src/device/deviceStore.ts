@@ -21,17 +21,6 @@
 export const deviceKeys = {
     themeChoice: 'mailfathom.theme',
     locale: 'mailfathom.locale',
-
-    /**
-     * The last telemetry answer the deployment gave this person, kept so a restart honours it before the deployment
-     * answers again.
-     *
-     * It is the one value here that is not the device's own decision, and it is deliberately not a second opinion: the
-     * deployment holds the answer and this is a cache of it, read only until the first read comes back and written by
-     * nothing but that read and the switch itself. What it buys is the seconds between a client opening and the
-     * deployment answering, in which a client that had been told no would otherwise record and export again.
-     */
-    telemetry: 'mailfathom.telemetry',
 } as const;
 
 /** Reading a value the device holds, writing one, and removing one. */
@@ -76,6 +65,26 @@ export function deviceStore(): DeviceStore {
  */
 export function listWidthKey(person: string): string {
     return `mailfathom.listWidth.${digestOf(person)}`;
+}
+
+/**
+ * What the last telemetry answer the deployment gave is written under, which names the person for the same reason the
+ * width above does — and here it is a privacy obligation rather than a convenience.
+ *
+ * Two people sharing a machine hold two different answers, and one of them is a refusal. A single name for both would
+ * hand the second person the first person's answer for the length of one read, which is exactly long enough to record
+ * and export something they had declined; a name per person cannot, because a key nobody has written reads as nothing
+ * chosen and the unset answer is the deployment's own.
+ *
+ * It is the one value in this module that is not the device's own decision. The deployment holds the answer and this is
+ * a cache of it, read only until that person's own read comes back and written by nothing but that read and the switch
+ * itself. What it buys is the seconds between a client opening and the deployment answering, in which a client that had
+ * been told no would otherwise record and export again.
+ *
+ * The digest and its limits are the width's above, and so is what it keeps out of the store.
+ */
+export function telemetryKey(person: string): string {
+    return `mailfathom.telemetry.${digestOf(person)}`;
 }
 
 /** Whether this system has origin storage at all, which is the whole of what decides the implementation today. */

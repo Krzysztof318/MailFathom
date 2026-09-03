@@ -5,6 +5,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { ClientRequest, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
+import { telemetryKey } from '../device/deviceStore';
 import { ThemeProvider } from '../theme/Theme';
 import { useTheme } from '../theme/useTheme';
 import { useClientPreferences } from './useClientPreferences';
@@ -13,6 +14,11 @@ const session: ClientSession = {
     baseAddress: 'https://mail.example.invalid',
     authorization: 'Basic dGVzdA==',
 };
+
+// Who is signed in, which this hook is told beside the session because the device's remembered telemetry answer is
+// held under the person rather than under the machine.
+const anna = 'anna';
+const bartek = 'bartek';
 
 // The whole document, because the route answers with nothing less and the package refuses an answer missing a field.
 // Marking read is defaulted rather than named at each call, since only the tests below that are about it say anything.
@@ -42,13 +48,13 @@ function recording(body: string, status = 200): { transport: MailFathomTransport
 
 // The theme is read beside the settings because it is the one of them the device also holds, so what the deployment
 // did to it is only visible through the provider that paints it.
-function reading(transport: MailFathomTransport, asked: ClientSession | null = session) {
+function reading(transport: MailFathomTransport, asked: ClientSession | null = session, person: string | null = anna) {
     return renderHook(
-        ({ session: presenting }: { session: ClientSession | null }) => ({
-            preferences: useClientPreferences(presenting, transport),
+        ({ session: presenting, person: whose }: { session: ClientSession | null; person: string | null }) => ({
+            preferences: useClientPreferences(presenting, transport, whose),
             theme: useTheme(),
         }),
-        { initialProps: { session: asked }, wrapper: ThemeProvider },
+        { initialProps: { session: asked, person }, wrapper: ThemeProvider },
     );
 }
 
@@ -244,7 +250,7 @@ describe('useClientPreferences', () => {
             expect(requests).toHaveLength(1);
         });
 
-        rerender({ session: { ...session, authorization: 'Basic b3RoZXI=' } });
+        rerender({ session: { ...session, authorization: 'Basic b3RoZXI=' }, person: bartek });
 
         await waitFor(() => {
             expect(requests).toHaveLength(2);
@@ -261,7 +267,7 @@ describe('useClientPreferences', () => {
             expect(result.current.preferences.openMailInTabs).toBe(true);
         });
 
-        rerender({ session: null });
+        rerender({ session: null, person: anna });
 
         expect(result.current.preferences.openMailInTabs).toBe(false);
     });
@@ -276,8 +282,8 @@ describe('useClientPreferences', () => {
             expect(result.current.preferences.openMailInTabs).toBe(true);
         });
 
-        rerender({ session: null });
-        rerender({ session: { ...session, authorization: 'Basic b3RoZXI=' } });
+        rerender({ session: null, person: anna });
+        rerender({ session: { ...session, authorization: 'Basic b3RoZXI=' }, person: bartek });
 
         act(() => {
             result.current.preferences.chooseTabMode(true);
@@ -366,7 +372,7 @@ describe('useClientPreferences', () => {
                 expect(result.current.preferences.telemetryEnabled).toBe(false);
             });
 
-            expect(window.localStorage.getItem('mailfathom.telemetry')).toBe('false');
+            expect(window.localStorage.getItem(telemetryKey(anna))).toBe('false');
         });
 
         it('keeps what somebody chose here, without waiting for the deployment to confirm it', async () => {
@@ -381,11 +387,11 @@ describe('useClientPreferences', () => {
                 result.current.preferences.chooseTelemetry(false);
             });
 
-            expect(window.localStorage.getItem('mailfathom.telemetry')).toBe('false');
+            expect(window.localStorage.getItem(telemetryKey(anna))).toBe('false');
         });
 
         it('answers it while there is no session to read one with, rather than the unset answer', () => {
-            window.localStorage.setItem('mailfathom.telemetry', 'false');
+            window.localStorage.setItem(telemetryKey(anna), 'false');
 
             const { transport } = recording(stored({ telemetryEnabled: true, theme: 'system', openMailInTabs: false }));
             const { result } = reading(transport, null);
@@ -394,7 +400,7 @@ describe('useClientPreferences', () => {
         });
 
         it('is replaced by what the deployment answers, holding no second opinion beyond that', async () => {
-            window.localStorage.setItem('mailfathom.telemetry', 'false');
+            window.localStorage.setItem(telemetryKey(anna), 'false');
 
             const { transport } = recording(stored({ telemetryEnabled: true, theme: 'system', openMailInTabs: false }));
             const { result } = reading(transport);
@@ -403,7 +409,40 @@ describe('useClientPreferences', () => {
                 expect(result.current.preferences.telemetryEnabled).toBe(true);
             });
 
-            expect(window.localStorage.getItem('mailfathom.telemetry')).toBe('true');
+            expect(window.localStorage.getItem(telemetryKey(anna))).toBe('true');
+        });
+
+        // Signing out and back in as somebody else on one tab keeps this hook mounted, which is the case the whole
+        // derivation above exists for. The second person's own answer has not arrived yet, so what is drawn is what
+        // the device holds — and holding it for the machine rather than for the person would hand them the first
+        // person's permission for exactly as long as their own read takes, which is long enough to export under their
+        // credential something they had declined.
+        it('never answers one person with what this device remembers about another', () => {
+            window.localStorage.setItem(telemetryKey(anna), 'true');
+            window.localStorage.setItem(telemetryKey(bartek), 'false');
+
+            const { transport } = recording(stored({ telemetryEnabled: true, theme: 'system', openMailInTabs: false }));
+            const { result, rerender } = reading(transport, null, anna);
+
+            expect(result.current.preferences.telemetryEnabled).toBe(true);
+
+            rerender({ session: null, person: bartek });
+
+            expect(result.current.preferences.telemetryEnabled).toBe(false);
+        });
+
+        it('keeps one person’s answer without writing anything about another', async () => {
+            const { transport } = recording(
+                stored({ telemetryEnabled: false, theme: 'system', openMailInTabs: false }),
+            );
+            const { result } = reading(transport, session, bartek);
+
+            await waitFor(() => {
+                expect(result.current.preferences.telemetryEnabled).toBe(false);
+            });
+
+            expect(window.localStorage.getItem(telemetryKey(bartek))).toBe('false');
+            expect(window.localStorage.getItem(telemetryKey(anna))).toBeNull();
         });
     });
 });

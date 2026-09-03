@@ -1200,8 +1200,11 @@ held by the deployment rather than by the browser profile or the desktop install
 [one of the four client preferences](client-endpoint.md#the-preferences-routes), so declining once holds on every
 machine that person signs in from — and the client keeps the last answer it was given on the device as well, so a
 restart honours a decision before the first read comes back rather than recording for the second it takes. That cache
-is not a second opinion: nothing writes it but the deployment's answer and the switch itself, and a client that has
-been answered never reads it again for the rest of the run.
+is not a second opinion: nothing writes it but the deployment's answer and the switch itself, and a client holding that
+person's own answer never reads it again for the rest of their session. A sign-out, or somebody else signing in on the
+same tab, reads it again — and reads it **under that person's own name**, because the cache is kept per person rather
+than per machine: two people sharing a machine hold two answers, and one of them being a refusal is exactly why a
+single name for both would be a defect rather than a saving.
 
 **Off means nothing is recorded, not that records are dropped on the way out.** The switch stops the writing, so a
 person who declined pays nothing to run the client instead of paying for everything but the upload. What was recorded

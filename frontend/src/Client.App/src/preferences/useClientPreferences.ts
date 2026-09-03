@@ -44,9 +44,9 @@ export interface ClientPreferencesInForce {
     /**
      * Whether this deployment may be told what the person's client is doing.
      *
-     * Answered before the deployment has said anything, from what this device was last told, so that a client which
-     * had been turned off does not record and export for the second the first read takes. Everything else here is the
-     * deployment's answer alone.
+     * Answered before the deployment has said anything about this person, from what this device was last told about
+     * them, so that a client which had been turned off does not record and export for the second the first read takes.
+     * Everything else here is the deployment's answer alone.
      */
     readonly telemetryEnabled: boolean;
 
@@ -79,11 +79,17 @@ const heldForNobody: HeldPreferences = {
  * or a credential this deployment does not let read — in which case nothing is read and both settings are the
  * device's alone.
  * @param transport How a request reaches the deployment.
+ * @param person Who is signed in, or `null` where nobody is. It is asked for beside the session rather than read out
+ * of it because the two are absent at different moments: a session is withheld from this hook while the client is
+ * offline or the grant does not let it read, and somebody is still signed in through all of that. It decides one thing
+ * only — whose remembered telemetry answer the device is asked for — and getting it wrong is what would hand the next
+ * person the last person's answer.
  * @returns The settings in force, and the two ways of changing one.
  */
 export function useClientPreferences(
     session: ClientSession | null,
     transport: MailFathomTransport,
+    person: string | null,
 ): ClientPreferencesInForce {
     const { setThemeChoice } = useTheme();
     const [held, setHeld] = useState<HeldPreferences>(heldForNobody);
@@ -99,13 +105,6 @@ export function useClientPreferences(
     // want more recently than the document being fetched, and applying that answer on arrival would put the setting
     // back and then have to be undone by a second write nobody asked for.
     const reading = useRef<AbortController | null>(null);
-
-    // What this device was last told about telemetry, which stands in for the deployment's answer until one arrives and
-    // is replaced by every answer and every choice afterwards. It is state rather than a value read here, because the
-    // store is the device's rather than React's and reading it per render would be a storage read per render for a
-    // value that moves twice in a session. It is not a second copy of what the deployment holds: the two are different
-    // facts, and this one is only ever rendered while there is no answer for this session at all.
-    const [remembered, setRemembered] = useState(rememberedTelemetry);
 
     // Everything below reads through this rather than out of the state directly, which is what keeps one person's
     // answers off the next person's screen without a reset anywhere. Signing out and back in on one tab keeps this
@@ -137,8 +136,7 @@ export function useClientPreferences(
             const read = { session, preferences: answer.value, notStated: false };
 
             latest.current = read;
-            setRemembered(answer.value.telemetryEnabled);
-            rememberTelemetry(answer.value.telemetryEnabled);
+            rememberTelemetry(person, answer.value.telemetryEnabled);
             setHeld(read);
 
             // The deployment's answer replaces the device's, which is the whole of why these two settings are held
@@ -149,7 +147,7 @@ export function useClientPreferences(
         return () => {
             attempted.abort();
         };
-    }, [session, transport, setThemeChoice]);
+    }, [session, transport, person, setThemeChoice]);
 
     // What is on the screen changes because a person pressed something, so it changes in the handler rather than in an
     // effect watching what the handler set. The write states the whole document — the route takes nothing less — which
@@ -161,8 +159,7 @@ export function useClientPreferences(
         const chosen = { session, preferences, notStated: false };
 
         latest.current = chosen;
-        setRemembered(preferences.telemetryEnabled);
-        rememberTelemetry(preferences.telemetryEnabled);
+        rememberTelemetry(person, preferences.telemetryEnabled);
         setHeld(chosen);
 
         if (session === null) {
@@ -185,9 +182,16 @@ export function useClientPreferences(
     return {
         openMailInTabs: inForce.preferences.openMailInTabs,
         markReadOnOpen: inForce.preferences.markReadOnOpen,
-        // The one setting answered from the device while the deployment has said nothing for this session, for the
+        // The one setting answered from the device while the deployment has said nothing about this person, for the
         // reason `rememberedTelemetry.ts` gives. Every other one takes its unset answer, which a screen can draw.
-        telemetryEnabled: inForce.session === null ? remembered : inForce.preferences.telemetryEnabled,
+        //
+        // Derived here rather than held in state, and asked for under the person rather than for the machine. Both
+        // halves are the same rule `inForce` above is: a value that no longer belongs to whoever is signed in is not
+        // state to correct but state to stop reading, and holding this one would mean carrying the last person's
+        // answer across a sign-out on the same tab — which is the one direction a privacy answer may not be wrong in.
+        // It costs a storage read on the renders before an answer has arrived and none afterwards, the branch not
+        // being taken once there is one.
+        telemetryEnabled: inForce.session === null ? rememberedTelemetry(person) : inForce.preferences.telemetryEnabled,
         notStated: inForce.notStated,
         chooseTheme: (choice) => {
             setThemeChoice(choice);
