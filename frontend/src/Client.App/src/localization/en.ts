@@ -585,6 +585,15 @@ export const en = {
     'scope.fragment': 'Asking about the part of this message you selected: “{fragment}”',
     'scope.wholeMessage': 'Ask about the whole message instead',
 
+    'blocking.progress': 'How far the operation has got',
+    'blocking.progressReading': '{percentage} — do not close this window',
+    'blocking.noKnownFinish': 'No known finish time',
+    'blocking.doNotClose': 'Do not close the application — the operation is still running.',
+    'blocking.cancel': 'Cancel',
+    'blocking.stopQuestion': 'Are you sure you want to stop?',
+    'blocking.continue': 'Continue the operation',
+    'blocking.stop': 'Yes, stop',
+
     'link.goesTo': 'goes to {host}',
     'link.warningDisplayedHostDiffers': 'This link does not go where its words say. It goes to {host}.',
     'link.warningAsciiHost': 'This link goes to {host}, which is written {asciiHost}.',

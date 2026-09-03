@@ -58,6 +58,7 @@ export const iconNames = [
     'outbox',
     'pending_actions',
     'person',
+    'progress_activity',
     'reply',
     'reply_all',
     'report',

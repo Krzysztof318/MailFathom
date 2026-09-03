@@ -593,6 +593,15 @@ export const pl: Catalogue = {
     'scope.fragment': 'Pytanie dotyczy zaznaczonego fragmentu tej wiadomości: „{fragment}”',
     'scope.wholeMessage': 'Pytaj o całą wiadomość',
 
+    'blocking.progress': 'Jak daleko zaszła operacja',
+    'blocking.progressReading': '{percentage} — nie zamykaj tego okna',
+    'blocking.noKnownFinish': 'Bez znanego czasu zakończenia',
+    'blocking.doNotClose': 'Nie zamykaj aplikacji — operacja wciąż trwa.',
+    'blocking.cancel': 'Anuluj',
+    'blocking.stopQuestion': 'Na pewno przerwać?',
+    'blocking.continue': 'Kontynuuj operację',
+    'blocking.stop': 'Tak, przerwij',
+
     'link.goesTo': 'prowadzi do {host}',
     'link.warningDisplayedHostDiffers': 'Ten odnośnik nie prowadzi tam, gdzie mówią jego słowa. Prowadzi do {host}.',
     'link.warningAsciiHost': 'Ten odnośnik prowadzi do {host}, zapisanego jako {asciiHost}.',
