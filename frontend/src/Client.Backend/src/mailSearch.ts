@@ -6,6 +6,7 @@ import { failed, read, type ClientFailureReason, type ClientResult } from './fai
 import { asRecord } from './json';
 import { parseTimelineEntry, type MailTimelineEntry } from './mailTimeline';
 import { headersFor, routeFor, type ClientSession } from './session';
+import { spanned } from './telemetry';
 import { send, type MailFathomTransport } from './transport';
 
 // One page of the owner's mail ranked against what they are looking for. It is one route rather than two because
@@ -152,29 +153,31 @@ const semantics: readonly MailSemanticSearch[] = ['Inactive', 'Available', 'Degr
  * @param query The text to rank by, the filters that constrain, and where in the ranked list to continue from.
  * @returns The page, or why it never arrived.
  */
-export async function readMailSearch(
+export function readMailSearch(
     session: ClientSession,
     transport: MailFathomTransport,
     query: MailSearchQuery,
 ): Promise<ClientResult<MailSearchPage>> {
-    const response = await send(transport, {
-        method: 'GET',
-        path: routeFor(session, mailSearchRoute) + searchQueryString(query),
-        headers: headersFor(session),
-        longestAnswer: longestSearchAnswer,
+    return spanned(`GET ${mailSearchRoute}`, async () => {
+        const response = await send(transport, {
+            method: 'GET',
+            path: routeFor(session, mailSearchRoute) + searchQueryString(query),
+            headers: headersFor(session),
+            longestAnswer: longestSearchAnswer,
+        });
+
+        if (response === null) {
+            return failed('unavailable', null);
+        }
+
+        if (response.status !== 200) {
+            return failed(reasonForSearchStatus(response.status), response.status);
+        }
+
+        const page = parsePage(response.body, query.pageSize);
+
+        return page === null ? failed('unreadable', response.status) : read(page);
     });
-
-    if (response === null) {
-        return failed('unavailable', null);
-    }
-
-    if (response.status !== 200) {
-        return failed(reasonForSearchStatus(response.status), response.status);
-    }
-
-    const page = parsePage(response.body, query.pageSize);
-
-    return page === null ? failed('unreadable', response.status) : read(page);
 }
 
 /**

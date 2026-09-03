@@ -6,6 +6,7 @@ import { failed, failureReasonForStatus, read, type ClientResult } from './failu
 import { asRecord } from './json';
 import { parseTimelineEntry, type MailTimelineEntry } from './mailTimeline';
 import { headersFor, routeFor, type ClientSession } from './session';
+import { spanned } from './telemetry';
 import { send, type MailFathomTransport } from './transport';
 
 // One conversation, read across every folder and every account the owner holds. It is the one mail read that names no
@@ -110,30 +111,32 @@ const mostParticipants = 1_024;
  * @param cursor The cursor a previous page answered with, or `null` for the beginning of the conversation.
  * @returns The page, or why it never arrived.
  */
-export async function readMailThread(
+export function readMailThread(
     session: ClientSession,
     transport: MailFathomTransport,
     threadId: string,
     cursor: string | null,
 ): Promise<ClientResult<MailThreadPage>> {
-    const response = await send(transport, {
-        method: 'GET',
-        path: routeFor(session, mailThreadRoute(threadId)) + threadQueryString(cursor),
-        headers: headersFor(session),
-        longestAnswer: longestThreadAnswer,
+    return spanned('GET /threads/{threadId}', async () => {
+        const response = await send(transport, {
+            method: 'GET',
+            path: routeFor(session, mailThreadRoute(threadId)) + threadQueryString(cursor),
+            headers: headersFor(session),
+            longestAnswer: longestThreadAnswer,
+        });
+
+        if (response === null) {
+            return failed('unavailable', null);
+        }
+
+        if (response.status !== 200) {
+            return failed(failureReasonForStatus(response.status), response.status);
+        }
+
+        const page = parsePage(response.body);
+
+        return page === null ? failed('unreadable', response.status) : read(page);
     });
-
-    if (response === null) {
-        return failed('unavailable', null);
-    }
-
-    if (response.status !== 200) {
-        return failed(failureReasonForStatus(response.status), response.status);
-    }
-
-    const page = parsePage(response.body);
-
-    return page === null ? failed('unreadable', response.status) : read(page);
 }
 
 /** The query string one page is asked with: the size every read here runs under, and where in the conversation it starts. */

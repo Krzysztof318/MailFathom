@@ -126,5 +126,6 @@ export {
     type MailTimelineQuery,
 } from './mailTimeline';
 export { clientRoutePrefix, headersFor, routeFor, type ClientSession, type DeploymentAddress } from './session';
+export { telemetryEndpoints, telemetryName } from './telemetry';
 export { reachDeployment, signIn, type DeploymentGreeting, type SignInOutcome, type SignInRefusal } from './signIn';
 export { longestResponseBody, type ClientRequest, type ClientResponse, type MailFathomTransport } from './transport';
