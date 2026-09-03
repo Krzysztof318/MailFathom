@@ -21,14 +21,16 @@ const anna = 'anna';
 const bartek = 'bartek';
 
 // The whole document, because the route answers with nothing less and the package refuses an answer missing a field.
-// Marking read is defaulted rather than named at each call, since only the tests below that are about it say anything.
+// The two preferences no control in this hook's own tests moves are defaulted rather than named at each call, so only
+// the tests that are about one of them say anything about it.
 function stored(preferences: {
     telemetryEnabled: boolean;
     theme: string;
     openMailInTabs: boolean;
     markReadOnOpen?: boolean;
+    expandWholeThread?: boolean;
 }): string {
-    return JSON.stringify({ markReadOnOpen: true, ...preferences });
+    return JSON.stringify({ markReadOnOpen: true, expandWholeThread: false, ...preferences });
 }
 
 // The transport is the network boundary and the whole of what these tests fake, exactly as in the package that reads
@@ -158,6 +160,7 @@ describe('useClientPreferences', () => {
             theme: 'light',
             openMailInTabs: true,
             markReadOnOpen: true,
+            expandWholeThread: false,
         });
     });
 
@@ -184,6 +187,7 @@ describe('useClientPreferences', () => {
                 theme: 'light',
                 openMailInTabs: false,
                 markReadOnOpen: true,
+                expandWholeThread: false,
             });
         });
     });
@@ -237,6 +241,7 @@ describe('useClientPreferences', () => {
             theme: 'dark',
             openMailInTabs: true,
             markReadOnOpen: true,
+            expandWholeThread: false,
         });
     });
 
@@ -302,6 +307,7 @@ describe('useClientPreferences', () => {
             theme: 'system',
             openMailInTabs: true,
             markReadOnOpen: true,
+            expandWholeThread: false,
         });
     });
 
@@ -332,6 +338,7 @@ describe('useClientPreferences', () => {
             theme: 'dark',
             openMailInTabs: false,
             markReadOnOpen: true,
+            expandWholeThread: false,
         });
         expect(window.localStorage.getItem(telemetryKey(anna))).toBe('false');
     });

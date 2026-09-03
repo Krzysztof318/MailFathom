@@ -15,10 +15,12 @@ const settings: ClientPreferencesInForce = {
     openMailInTabs: false,
     markReadOnOpen: true,
     telemetryEnabled: true,
+    expandWholeThread: false,
     notStated: false,
     chooseTheme: () => undefined,
     chooseTabMode: () => undefined,
     chooseTelemetry: () => undefined,
+    chooseThreadExpansion: () => undefined,
 };
 
 const named: OwnProfileInForce = {
@@ -50,7 +52,6 @@ function renderSettings({
     render(
         <LocalizationProvider>
             <Settings
-                open
                 profile={profile}
                 preferences={preferences}
                 telemetryForwarding={telemetryForwarding}
@@ -58,6 +59,11 @@ function renderSettings({
             />
         </LocalizationProvider>,
     );
+}
+
+/** The second tab opened, which is where everything about the client rather than about the person is. */
+function openApplication(): void {
+    fireEvent.click(screen.getByRole('tab', { name: 'Application' }));
 }
 
 /** One file of a stated kind and size, which is the whole of what the client judges a chosen picture by. */
@@ -213,6 +219,7 @@ describe('Settings', () => {
 
     it('draws telemetry as the decision to withhold it, so the switch being on is the private answer', () => {
         renderSettings({ preferences: { ...settings, telemetryEnabled: false } });
+        openApplication();
 
         expect(screen.getByRole('switch', { name: /Do not send telemetry/u })).toHaveProperty('checked', true);
     });
@@ -220,6 +227,7 @@ describe('Settings', () => {
     it('hands the switch to what holds the preference, stated as what may be sent', () => {
         const chooseTelemetry = vi.fn();
         renderSettings({ preferences: { ...settings, chooseTelemetry } });
+        openApplication();
 
         fireEvent.click(screen.getByRole('switch', { name: /Do not send telemetry/u }));
 
@@ -228,24 +236,28 @@ describe('Settings', () => {
 
     it('says what withholding telemetry costs, and only while it is withheld', () => {
         renderSettings({ preferences: { ...settings, telemetryEnabled: true } });
+        openApplication();
 
         expect(screen.queryByText(/support is harder/u)).toBeNull();
     });
 
     it('says what withholding telemetry costs once it is withheld', () => {
         renderSettings({ preferences: { ...settings, telemetryEnabled: false } });
+        openApplication();
 
         expect(screen.getByText(/support is harder/u)).toBeDefined();
     });
 
     it('names where the records go, so the decision is about something rather than about a word', () => {
         renderSettings({ telemetryForwarding: forwardedTo });
+        openApplication();
 
         expect(screen.getByText(/Sent to https:\/\/mail\.example/u)).toBeDefined();
     });
 
     it('says what a record carries and what it never carries', () => {
         renderSettings();
+        openApplication();
 
         expect(screen.getByText(/never your mail, your addresses, your folders, or your password/u)).toBeDefined();
     });
@@ -254,6 +266,7 @@ describe('Settings', () => {
     // that decides nothing about a client that is already sending nothing.
     it('offers no switch where the deployment forwards no telemetry, and says why', () => {
         renderSettings({ telemetryForwarding: { answered: true, destination: null } });
+        openApplication();
 
         expect(screen.getByText(/forwards no telemetry/u)).toBeDefined();
         expect(screen.queryByRole('switch', { name: /Do not send telemetry/u })).toBeNull();
@@ -263,6 +276,7 @@ describe('Settings', () => {
     // it waits — so drawing the confirmed sentence here would say nothing is being sent while something is.
     it('says it is waiting rather than that there is nothing to turn off, before the deployment answers', () => {
         renderSettings({ telemetryForwarding: { answered: false } });
+        openApplication();
 
         expect(screen.getByText(/Waiting for this deployment to say whether it forwards telemetry/u)).toBeDefined();
         expect(screen.queryByText(/forwards no telemetry/u)).toBeNull();
@@ -271,8 +285,82 @@ describe('Settings', () => {
 
     it('offers the language here rather than in the menu that leads here', () => {
         renderSettings();
+        openApplication();
 
         expect(screen.getByRole('group', { name: 'Language' })).toBeDefined();
+    });
+
+    it('opens on the person rather than on the client, which is the order the design project puts the two in', () => {
+        renderSettings();
+
+        expect(screen.getByRole('tab', { selected: true })).toHaveProperty('textContent', 'Profile');
+        expect(screen.getByRole('textbox', { name: 'Full name' })).toBeDefined();
+        expect(screen.queryByRole('group', { name: 'Language' })).toBeNull();
+    });
+
+    it('announces the tab that is open as the selected one and draws only its own half', () => {
+        renderSettings();
+        openApplication();
+
+        expect(screen.getByRole('tab', { selected: true })).toHaveProperty('textContent', 'Application');
+        expect(screen.queryByRole('textbox', { name: 'Full name' })).toBeNull();
+    });
+
+    it('moves between the tabs with the arrow keys, which is the keyboard a tab list carries', () => {
+        renderSettings();
+
+        fireEvent.keyDown(screen.getByRole('tablist'), { key: 'ArrowRight' });
+
+        expect(screen.getByRole('tab', { selected: true })).toHaveProperty('textContent', 'Application');
+
+        fireEvent.keyDown(screen.getByRole('tablist'), { key: 'ArrowLeft' });
+
+        expect(screen.getByRole('tab', { selected: true })).toHaveProperty('textContent', 'Profile');
+    });
+
+    it('stays on the tab at the end of the list rather than wrapping round to the other one', () => {
+        renderSettings();
+
+        fireEvent.keyDown(screen.getByRole('tablist'), { key: 'ArrowLeft' });
+
+        expect(screen.getByRole('tab', { selected: true })).toHaveProperty('textContent', 'Profile');
+    });
+
+    it('leaves one tab stop on the list, which is the tab that is open', () => {
+        renderSettings();
+
+        expect(screen.getByRole('tab', { name: 'Profile' })).toHaveProperty('tabIndex', 0);
+        expect(screen.getByRole('tab', { name: 'Application' })).toHaveProperty('tabIndex', -1);
+    });
+
+    it('says where the name and the picture are held, and where they are not sent', () => {
+        renderSettings();
+
+        expect(screen.getByText(/Neither is sent to your mail server/u)).toBeDefined();
+    });
+
+    it('draws a conversation opening expanded as a choice that is off until it is made', () => {
+        renderSettings();
+        openApplication();
+
+        expect(screen.getByRole('switch', { name: /Expand the whole thread/u })).toHaveProperty('checked', false);
+    });
+
+    it('hands the thread-expansion switch to what holds the preference', () => {
+        const chooseThreadExpansion = vi.fn();
+        renderSettings({ preferences: { ...settings, chooseThreadExpansion } });
+        openApplication();
+
+        fireEvent.click(screen.getByRole('switch', { name: /Expand the whole thread/u }));
+
+        expect(chooseThreadExpansion).toHaveBeenCalledWith(true);
+    });
+
+    it('draws the thread-expansion switch as on where that is what the person set', () => {
+        renderSettings({ preferences: { ...settings, expandWholeThread: true } });
+        openApplication();
+
+        expect(screen.getByRole('switch', { name: /Expand the whole thread/u })).toHaveProperty('checked', true);
     });
 
     it('closes from its own control, which is the way out that does not need a keyboard', () => {

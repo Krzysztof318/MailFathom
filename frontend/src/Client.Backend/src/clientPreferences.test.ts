@@ -12,7 +12,13 @@ const session: ClientSession = {
     authorization: 'Basic dGVzdA==',
 };
 
-const stored = { telemetryEnabled: false, theme: 'dark', openMailInTabs: true, markReadOnOpen: false } as const;
+const stored = {
+    telemetryEnabled: false,
+    theme: 'dark',
+    openMailInTabs: true,
+    markReadOnOpen: false,
+    expandWholeThread: true,
+} as const;
 const storedBody = JSON.stringify(stored);
 
 // The transport is the network boundary and the whole of what a test here fakes. Neither route reads a header off an
@@ -48,7 +54,7 @@ describe('readClientPreferences', () => {
         expect(requests[0]?.headers['Authorization']).toBe('Basic dGVzdA==');
     });
 
-    it('reads the four preferences the deployment answered', async () => {
+    it('reads the five preferences the deployment answered', async () => {
         const answer = await readClientPreferences(session, answering({ status: 200, body: storedBody }));
 
         expect(answer).toStrictEqual({ outcome: 'read', value: stored });
@@ -89,6 +95,15 @@ describe('readClientPreferences', () => {
         [
             'an answer from a deployment older than one of the preferences',
             JSON.stringify({ telemetryEnabled: true, theme: 'dark', openMailInTabs: false }),
+        ],
+        [
+            'an answer from a deployment older than the thread-expansion preference',
+            JSON.stringify({
+                telemetryEnabled: true,
+                theme: 'dark',
+                openMailInTabs: false,
+                markReadOnOpen: true,
+            }),
         ],
     ])('refuses %s as unreadable rather than reading a document with a hole in it', async (_, body) => {
         const answer = await readClientPreferences(session, answering({ status: 200, body }));

@@ -264,7 +264,13 @@ async function servedByADeployment(page: Page): Promise<void> {
     // about the two preferences held on the deployment is that a choice made in one session is in force in the next,
     // and a route answering a fixed document would prove the read alone while quietly passing a client that wrote
     // nothing at all.
-    let held = { telemetryEnabled: true, theme: 'system', openMailInTabs: false, markReadOnOpen: true };
+    let held = {
+        telemetryEnabled: true,
+        theme: 'system',
+        openMailInTabs: false,
+        markReadOnOpen: true,
+        expandWholeThread: false,
+    };
 
     await page.route('**/api/client/preferences', (route) => {
         if (route.request().method() === 'POST') {
@@ -425,6 +431,12 @@ async function openSettings(page: Page): Promise<void> {
     await openAccountMenu(page);
     await page.getByRole('button', { name: 'Settings', exact: true }).click();
     await expect(page.getByRole('dialog', { name: 'Settings' })).toBeVisible();
+}
+
+/** The settings surface opened on its second tab, which is where everything about the client rather than the person is. */
+async function openApplicationSettings(page: Page): Promise<void> {
+    await openSettings(page);
+    await page.getByRole('tab', { name: 'Application' }).click();
 }
 
 /**
@@ -744,6 +756,7 @@ test('states the whole preferences document to the deployment when one of them i
         theme: 'dark',
         openMailInTabs: false,
         markReadOnOpen: true,
+        expandWholeThread: false,
     });
 });
 
@@ -754,7 +767,7 @@ test('opens again in the language that was chosen, after the page is loaded afre
     await expect(discover).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('lang', 'en');
 
-    await openSettings(page);
+    await openApplicationSettings(page);
     await page.getByRole('group', { name: 'Language' }).getByText('Polski', { exact: true }).click();
     await page.reload();
 
@@ -794,6 +807,40 @@ test('closes the settings screen on Escape, handing focus back to the row that o
 
     await expect(page.getByRole('dialog', { name: 'Settings' })).toBeHidden();
     await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeFocused();
+});
+
+// The two compositions the design project draws the settings surface in, and the one assertion only a browser can
+// make about them: jsdom computes no geometry, so what a unit test can prove is that the surface is one component
+// with one set of controls, and what is left is the composition itself.
+test('draws the settings surface as a card over the workspace in a wide window', async ({ page }) => {
+    await page.setViewportSize(wideWindow);
+    await openSignedIn(page);
+    await openSettings(page);
+
+    const panel = await page.getByRole('dialog', { name: 'Settings' }).boundingBox();
+
+    // The card's own measurements rather than merely "narrower than the window": a dialog the width utility failed to
+    // reach would still be a few pixels off the viewport's width once a scrollbar is counted, so bounding it below the
+    // window would pass for exactly the regression this test exists to catch. Both numbers are the tokens the design
+    // project's card is drawn at, in pixels at the root size this suite runs under — 28.75rem, and 78% of a 720-pixel
+    // window, which is the lower of that token's two terms here.
+    expect(panel?.width).toBeCloseTo(460, 0);
+    expect(panel?.height).toBeCloseTo(0.78 * wideWindow.height, 0);
+
+    // The workspace is still behind it, which is what makes changing one setting something that opens over what
+    // somebody was doing rather than a place they navigated to.
+    await expect(page.getByRole('heading', { name: 'Discover', level: 1 })).toBeVisible();
+});
+
+test('draws the settings surface as the whole screen in a single-pane window', async ({ page }) => {
+    await page.setViewportSize(narrowWindow);
+    await openSignedIn(page);
+    await openSettings(page);
+
+    const panel = await page.getByRole('dialog', { name: 'Settings' }).boundingBox();
+
+    expect(panel?.width).toBe(narrowWindow.width);
+    expect(panel?.height).toBe(narrowWindow.height);
 });
 
 // What language the client opens in when nobody has chosen one. Only a browser can answer it: `navigator.languages` is

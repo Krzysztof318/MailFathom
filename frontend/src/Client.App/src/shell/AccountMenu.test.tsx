@@ -26,10 +26,12 @@ const settings: ClientPreferencesInForce = {
     openMailInTabs: false,
     markReadOnOpen: true,
     telemetryEnabled: true,
+    expandWholeThread: false,
     notStated: false,
     chooseTheme: () => undefined,
     chooseTabMode: () => undefined,
     chooseTelemetry: () => undefined,
+    chooseThreadExpansion: () => undefined,
 };
 
 const nobody: OwnProfileInForce = {

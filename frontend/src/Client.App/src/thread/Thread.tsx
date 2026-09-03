@@ -58,11 +58,15 @@ export function Thread({
     transport,
     conversation,
     online,
+    expandWholeThread,
 }: {
     readonly session: ClientSession;
     readonly transport: MailFathomTransport;
     readonly conversation: OpenConversation;
     readonly online: boolean;
+
+    /** Whether the reader asked for conversations to open with every message drawn rather than at the one they came for. */
+    readonly expandWholeThread: boolean;
 }) {
     const { locale, translate } = useLocalization();
     const { revise } = useWorkspace();
@@ -80,9 +84,12 @@ export function Thread({
     // does: nothing in a conversation brings one back, and a conversation reached a second time is a second mount.
     const [settled, setSettled] = useState(false);
 
-    // Whether the messages before the latest are drawn. Decided once by where the reader arrived — a message the
-    // history holds cannot be arrived at while the history is hidden — and theirs from then on.
-    const [historyShown, setHistoryShown] = useState(false);
+    // Whether the messages before the latest are drawn. It opens on what the reader asked conversations to open on,
+    // and is then decided by where they arrived — a message the history holds cannot be arrived at while the history
+    // is hidden — and theirs from then on. The preference is read once, on mounting, because it says how a conversation
+    // *opens*: a switch moved while one is on the screen changes the next conversation rather than this one, which is
+    // also why the control below still hides a history the preference showed.
+    const [historyShown, setHistoryShown] = useState(expandWholeThread);
 
     const regions = useRef(new Map<string, HTMLElement>());
 
