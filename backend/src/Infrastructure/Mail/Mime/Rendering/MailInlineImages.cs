@@ -52,6 +52,32 @@ internal sealed class MailInlineImages
     /// <summary>Gets the resolution of a message that carries no picture of its own.</summary>
     public static MailInlineImages None { get; } = new([], resolved: 0, undrawn: 0);
 
+    /// <summary>Reads how many characters of a serialization are the pictures this resolution put into it.</summary>
+    /// <param name="serialized">The serialized markup to read.</param>
+    /// <returns>The characters those pictures occupy, counting every occurrence, because each one is in the string.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="serialized" /> is <see langword="null" />.</exception>
+    /// <remarks>
+    /// <para>
+    /// What a representation bounded in characters has to discount is what it inlined, and this resolution is the only
+    /// thing that knows what that was. Reading the answer out of the string instead — by matching whatever looks like a
+    /// <c>data:</c> URI — would discount a sender's own words the moment they happened to be shaped like one, which is
+    /// a bound a message could talk its way out of.
+    /// </para>
+    /// <para>
+    /// Occurrences rather than pictures, because a character bound is about how long the string is: one picture named
+    /// twice is written twice. The count is over a handful of entries, so it is a scan of the serialization per picture
+    /// rather than a parse of it.
+    /// </para>
+    /// </remarks>
+    public long CharactersOccupiedIn(string serialized)
+    {
+        ArgumentNullException.ThrowIfNull(serialized);
+
+        return this.byReference.Values
+            .Distinct(StringComparer.Ordinal)
+            .Sum(picture => (long)OccurrencesOf(serialized, picture) * picture.Length);
+    }
+
     /// <summary>Resolves the pictures the body asks for out of the message's own parts.</summary>
     /// <param name="message">The parsed message.</param>
     /// <param name="named">The references the body's pictures name, which is what the budget is spent on.</param>
@@ -131,6 +157,25 @@ internal sealed class MailInlineImages
         }
 
         return new MailInlineImages(byReference, resolved, undrawn);
+    }
+
+    /// <summary>Counts how many times one picture was written into a serialization.</summary>
+    /// <remarks>
+    /// The step advances by the picture's own length rather than by one, because a <c>data:</c> URI cannot overlap
+    /// itself and stepping by one would rescan every character of a megabyte-long reference.
+    /// </remarks>
+    private static int OccurrencesOf(string serialized, string picture)
+    {
+        var occurrences = 0;
+
+        for (var at = serialized.IndexOf(picture, StringComparison.Ordinal);
+            at >= 0;
+            at = serialized.IndexOf(picture, at + picture.Length, StringComparison.Ordinal))
+        {
+            occurrences++;
+        }
+
+        return occurrences;
     }
 
     /// <summary>Reads how many octets a composed <c>data:</c> URI carries, which is what the aggregate counts.</summary>

@@ -314,6 +314,34 @@ public sealed class SelfContainedHtmlProjectionTests
         Assert.Equal(EmailBodyTruncation.BodyCharacterLimit, representation.Truncation);
     }
 
+    /// <summary>Words shaped like an inlined picture buy the sender no room, because the bound discounts what was inlined rather than what looks inlined.</summary>
+    /// <remarks>
+    /// The discount exists for the pictures this pass put into the result. Reading it back out of the string instead
+    /// would let a message carry its own overshoot past the bound by writing a long unbroken word beginning with
+    /// <c>data:</c>, which is a bound a sender can talk their way out of.
+    /// </remarks>
+    [Fact]
+    public async Task ProduceAsync_SenderTextShapedLikeAPicture_IsStillHeldToTheCharacterBound()
+    {
+        // Arrange
+        // Sized so the two readings disagree: the source fits the bound, the serialization overshoots it by less than
+        // the token is long, and the closing tags are written by the serializer rather than by the sender. Discounting
+        // the token would therefore end the loop on the first pass with a result past the bound.
+        const int maxBodyCharacters = 2_000;
+        var wordsShapedLikeAPicture = "data:image/png;base64," + new string('A', 578);
+        var markup = $"<p>{wordsShapedLikeAPicture}</p>"
+            + string.Concat(Enumerable.Repeat("<div>", 150))
+            + "Readable";
+
+        // Act
+        var representation = await RepresentationOf(markup, maxBodyCharacters: maxBodyCharacters);
+
+        // Assert
+        Assert.True(
+            representation.Text.Length <= maxBodyCharacters,
+            $"the result held {representation.Text.Length} characters against a bound of {maxBodyCharacters}");
+    }
+
     /// <summary>A message's own pictures are discounted from the character bound, because they are bounded in octets instead.</summary>
     [Fact]
     public async Task ProduceAsync_PictureLongerThanTheCharacterBound_IsStillInlined()

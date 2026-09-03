@@ -132,7 +132,7 @@ internal static partial class SelfContainedHtmlProjection
         {
             source = MailTextBounds.TruncateAtTextElementBoundary(joined, sourceBudget);
             html = policy.Sanitize(source);
-            markupCharacters = MarkupCharactersIn(html);
+            markupCharacters = MarkupCharactersIn(html, images);
 
             // Scaled by how far the markup overshot rather than reduced by the overshoot, because closing tags are
             // proportional to what opened them: subtracting would undershoot to nothing on exactly the markup this
@@ -157,14 +157,19 @@ internal static partial class SelfContainedHtmlProjection
     /// report every message carrying a logo as markup too long to serve.
     /// </para>
     /// <para>
+    /// What is discounted is what this resolution inlined rather than whatever in the result is shaped like a picture.
+    /// A sender writing a long unbroken word beginning with <c>data:</c> is writing words, and discounting those would
+    /// let a message buy itself room past the bound by describing a picture instead of carrying one.
+    /// </para>
+    /// <para>
     /// What is left is the part a bound written for words can hold: a source that fits can still serialize past it,
     /// because deeply nested markup spends its allowance on opening tags and needs as much again to close them, and
     /// that growth is the sender's decision rather than the deployment's. It is the same failure the sanitized
     /// representation defends against, measured the same way.
     /// </para>
     /// </remarks>
-    private static int MarkupCharactersIn(string html) =>
-        html.Length - (int)Math.Min(SelfContainedHtmlImages.CharactersInlinedBy(html), html.Length);
+    private static int MarkupCharactersIn(string html, MailInlineImages images) =>
+        html.Length - (int)Math.Min(images.CharactersOccupiedIn(html), html.Length);
 
     /// <summary>Answers whether the serialized result carries nothing a renderer would execute.</summary>
     /// <remarks>

@@ -19,6 +19,13 @@ namespace MailFathom.Application.EmailContent.Rendering;
 /// The arithmetic behind one reference is <see cref="MailDocumentImages.OctetsBehind" /> rather than a second copy of
 /// it, so a picture counted here and the same picture counted in the tree come to the same number.
 /// </para>
+/// <para>
+/// It reads the string rather than what produced it, because by the time a read charges its budget the markup is all
+/// there is to read. So a sender's own words shaped like a reference are counted as one, which spends the budget on
+/// something carrying no octets — an over-charge, which shortens a later email of the same call rather than letting one
+/// through unbounded, and is the safe direction for a bound to be wrong in. The bound the projection holds *itself* to
+/// is the exact one, taken from the pictures it actually inlined rather than from the string it produced.
+/// </para>
 /// </remarks>
 public static partial class SelfContainedHtmlImages
 {
@@ -36,22 +43,6 @@ public static partial class SelfContainedHtmlImages
         ArgumentNullException.ThrowIfNull(markup);
 
         return InlinedPictures().Matches(markup).Sum(match => MailDocumentImages.OctetsBehind(match.Value));
-    }
-
-    /// <summary>Reads how many characters of the markup are the pictures inlined into it rather than what the sender wrote.</summary>
-    /// <param name="markup">The representation to read.</param>
-    /// <returns>The characters every inlined reference occupies, counting each occurrence, because each one is in the string.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="markup" /> is <see langword="null" />.</exception>
-    /// <remarks>
-    /// The counterpart of <see cref="OctetsIn" /> for the bound stated in characters, and it counts occurrences rather
-    /// than pictures: one picture named twice is in the string twice, and what a character bound is about is how long
-    /// the string is. A picture is discounted from that bound because it is already bounded in octets.
-    /// </remarks>
-    public static long CharactersInlinedBy(string markup)
-    {
-        ArgumentNullException.ThrowIfNull(markup);
-
-        return InlinedPictures().Matches(markup).Sum(match => (long)match.Length);
     }
 
     /// <summary>Matches a <c>data:</c> URI as every position the markup can carry one delimits it.</summary>
