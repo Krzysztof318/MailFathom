@@ -204,7 +204,7 @@ describe('ReadingPane', () => {
         drawing(deploymentDescribing());
         await screen.findByRole('heading', { name: 'Quarterly invoice', level: 2 });
 
-        expect(screen.queryByText('Files this message carries')).toBeNull();
+        expect(screen.queryByRole('list', { name: 'Files this message carries' })).toBeNull();
     });
 
     it('describes every file the message carries before any of them is fetched', async () => {
@@ -212,6 +212,7 @@ describe('ReadingPane', () => {
 
         expect(await screen.findByRole('button', { name: 'Download invoice.pdf' })).toBeDefined();
         expect(screen.getByRole('button', { name: 'Download photo.jpg' })).toBeDefined();
+        expect(screen.getByRole('list', { name: 'Files this message carries' })).toBeDefined();
     });
 
     it('says what a message carries besides its files, where any of it is true', async () => {

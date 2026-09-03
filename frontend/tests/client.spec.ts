@@ -1231,13 +1231,13 @@ test('stops a message’s own content at the reading ceiling and leaves everythi
     await openTheFirstMessage(page);
     await expect(page.getByRole('heading', messageHeading)).toBeVisible();
 
-    // The sender's own heading stands inside the message's content and the attachments heading beside it does not, so
-    // the two boxes are the whole comparison — same left edge, different widths. What the ceiling is worth in pixels
+    // The sender's own heading stands inside the message's content and the list of files beside it does not, so the
+    // two boxes are the whole comparison — same left edge, different widths. What the ceiling is worth in pixels
     // is the token's business rather than this suite's; what is asserted is the shape, because both ways of getting it
     // wrong are visible here and nowhere jsdom can reach. A ceiling dropped again draws the two at one width, and a
     // centred one moves the content's left edge off the edge everything around it keeps.
     const content = await boxOf(page.getByRole('heading', messageHeading));
-    const aroundIt = await boxOf(page.getByRole('heading', { name: 'Files this message carries' }));
+    const aroundIt = await boxOf(page.getByRole('list', { name: 'Files this message carries' }));
 
     expect(content.width).toBeLessThan(aroundIt.width);
     expect(content.x).toBeCloseTo(aroundIt.x, 0);
