@@ -787,7 +787,8 @@ GET /api/client/messages/0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90/body
 ```
 
 It answers with one message's body in both the renderings a reading pane draws from — the words, and the message
-reduced to a closed document tree:
+reduced to a closed document tree — and, where the read asked for it, in a third the surface that opens the sender's own
+layout reads:
 
 ```jsonc
 {
@@ -835,12 +836,14 @@ reduced to a closed document tree:
       }
     ]
   },
+  "selfContainedHtml": null,
   "remoteImagesRequested": false
 }
 ```
 
 **Both renderings travel together**, because a pane needs both: `document` says whether it was refused and `plainText`
-is what it falls back to. A client that had to ask twice would draw an empty pane in between.
+is what it falls back to. A client that had to ask twice would draw an empty pane in between. `selfContainedHtml` is
+present on every response and is `null` on a read that did not ask for it, which is what the example above shows.
 
 **The document is a closed tree, and that is the whole of what makes it safe to draw.** It is not sanitized markup: it
 is a list of typed blocks, and every value in one is text, a number, a colour in `#rrggbb`, or a member of a fixed set.
@@ -876,6 +879,24 @@ and the reader's own act is what should decide, message by message, whether a se
 Only pictures are ever retained; a style declaration's reference and a `background` attribute are dropped under both
 readings, because neither has anywhere in the contract to go.
 
+**Asking for the sender's own markup is a second request too:**
+
+```http
+GET /api/client/messages/0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90/body?fullHtml=true
+```
+
+The answer then carries `selfContainedHtml` beside the two renderings above — `text`, `originalCharacterCount`, and
+`truncation`, exactly as `plainText` does — and `null` on every read that did not ask, so the default read is unchanged
+and pays for none of it. What it holds is the message's own layout with the message's own pictures inlined, with
+nothing in it that a renderer would run and nothing in it that resolves against another host. `truncation` reads
+`InlineImageOctetLimit` where the message carried more of its own pictures than one representation inlines, which is
+the one bound that leaves the words whole and the pictures short.
+
+Both queries compose. `remoteImages=true` widens this representation further than it widens the tree — a background and
+a web font are restored beside the pictures, because a layout served without them is the reduction the surface was
+opened to escape — while an `@import` and the candidates of a `srcset` stay refused, because neither reaches the pass
+that decides a URL, and nothing executable is restored by either query.
+
 **A link carries where it actually goes, and what the deployment made of how it was written.** `target` is the resolved
 absolute address, carrying only `http`, `https`, or `mailto` — a `javascript:`, `data:`, `vbscript:`, or `file:` target
 is dropped and the words it was written on are kept. `host` is the host as a reader recognizes it and `asciiHost` is
@@ -897,6 +918,7 @@ first, because there was no body to reduce.
 | --- | --- | --- |
 | `storedEmailId` | The message's identifier, as a list row or a conversation published it | required, in the path |
 | `remoteImages` | `true` to fetch what the message asks for from other servers on this read alone | `false` |
+| `fullHtml` | `true` to also answer with the sender's own markup, self-contained | `false` |
 
 **A message this owner does not hold is answered `404`**, and so is one no deployment ever held, and so is one whose
 stored content is missing or damaged: nothing in the answer separates somebody else's mail from mail that never existed

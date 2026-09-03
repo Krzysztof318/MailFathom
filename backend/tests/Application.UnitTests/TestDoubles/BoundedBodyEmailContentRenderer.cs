@@ -79,7 +79,22 @@ internal sealed class BoundedBodyEmailContentRenderer(
                 attachments)
             {
                 Document = bounds.IncludeMailDocument ? DocumentCarryingAPicture(inlineImageOctets) : null,
+                SelfContainedHtmlBody = bounds.IncludeSelfContainedHtml
+                    ? MarkupCarryingAPicture(inlineImageOctets)
+                    : null,
             }));
+    }
+
+    /// <summary>Produces the self-contained markup with one picture of the stated size in it, for the same reason the document carries one.</summary>
+    /// <remarks>
+    /// A real <c>data:</c> URI again, because the use case reads this representation's octets back out of the string
+    /// the same way it reads the document's out of the tree, and both figures are spent against one budget.
+    /// </remarks>
+    private static EmailBodyRepresentation MarkupCarryingAPicture(int octets)
+    {
+        var markup = $"""<p>Body</p><img src="data:image/png;base64,{Convert.ToBase64String(new byte[octets])}">""";
+
+        return new EmailBodyRepresentation(markup, markup.Length, EmailBodyTruncation.None);
     }
 
     /// <summary>Produces a document whose one picture carries the stated octets, which is what the octet budget reads.</summary>

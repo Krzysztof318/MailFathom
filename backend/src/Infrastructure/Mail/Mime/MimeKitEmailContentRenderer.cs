@@ -5,6 +5,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using MailFathom.Application.EmailContent.Rendering;
+using MailFathom.Application.EmailContent.Rendering.Document;
 using MailFathom.Application.EmailContent.Storage;
 using MailFathom.Application.Emails.Extraction;
 using MailFathom.Domain.Emails;
@@ -140,6 +141,43 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
                     bounds.RemainingCharactersForRead - plainTextBody.Text.Length))
             : null;
 
+        var htmlParts = classification.BodyTextParts.Where(part => part.IsHtml).Select(part => part.Text).ToArray();
+
+        var remainingCharacters = bounds.RemainingCharactersForRead
+            - plainTextBody.Text.Length
+            - (sanitizedHtmlBody?.Text.Length ?? 0);
+
+        // The document is a representation of the same body and spends the same budget, so what the two before it
+        // returned is subtracted from what it may reduce. A read naming several emails would otherwise return a
+        // full document for each of them however much of the call's budget was already spent, which would make the
+        // size of the answer the senders' decision rather than the deployment's.
+        var document = bounds.IncludeMailDocument && !bodyIsUnreadable
+            ? await MailBodyProjection.ProduceAsync(
+                message,
+                htmlParts,
+                bounds.RetainRemoteImageReferences,
+                EmailBodyCharacterAllowance.Of(bounds.MaxCharactersPerRepresentation, remainingCharacters).MaxCharacters,
+                bounds.RemainingInlineImageOctetsForRead,
+                cancellationToken)
+            : null;
+
+        // Both budgets the document drew on are the same budgets rather than a second pair, so what it returned is
+        // taken off each of them before the markup is asked for. One caller asks for both — the client's reading pane
+        // requests the tree it draws and, where the reader opened the full-markup surface, the markup beside it — and
+        // handing each the whole allowance would answer one message with twice the words and twice the pictures the
+        // bounds name.
+        var selfContainedHtmlBody = bounds.IncludeSelfContainedHtml && !bodyIsUnreadable
+            ? await SelfContainedHtmlProjection.ProduceAsync(
+                message,
+                htmlParts,
+                bounds.RetainRemoteImageReferences,
+                EmailBodyCharacterAllowance.Of(
+                    bounds.MaxCharactersPerRepresentation,
+                    remainingCharacters - CharactersIn(document)),
+                RemainingImageOctetsAfter(document, bounds.RemainingInlineImageOctetsForRead),
+                cancellationToken)
+            : null;
+
         return new EmailContentRendering(
             MimeMessageHeaderReader.Read(message),
             bodyIsUnreadable ? EmailBodyRepresentation.Empty : plainTextBody,
@@ -149,25 +187,29 @@ internal sealed class MimeKitEmailContentRenderer : IEmailContentRenderer
             classification.Summary,
             classification.Attachments)
         {
-            // The document is a representation of the same body and spends the same budget, so what the two before it
-            // returned is subtracted from what it may reduce. A read naming several emails would otherwise return a
-            // full document for each of them however much of the call's budget was already spent, which would make the
-            // size of the answer the senders' decision rather than the deployment's.
-            Document = bounds.IncludeMailDocument && !bodyIsUnreadable
-                ? await MailBodyProjection.ProduceAsync(
-                    message,
-                    [.. classification.BodyTextParts.Where(part => part.IsHtml).Select(part => part.Text)],
-                    bounds.RetainRemoteImageReferences,
-                    EmailBodyCharacterAllowance.Of(
-                        bounds.MaxCharactersPerRepresentation,
-                        bounds.RemainingCharactersForRead
-                            - plainTextBody.Text.Length
-                            - (sanitizedHtmlBody?.Text.Length ?? 0)).MaxCharacters,
-                    bounds.RemainingInlineImageOctetsForRead,
-                    cancellationToken)
-                : null,
+            Document = document,
+            SelfContainedHtmlBody = selfContainedHtmlBody,
         };
     }
+
+    /// <summary>Reads what is left of the read's picture budget once the document has drawn on it.</summary>
+    /// <remarks>
+    /// Never below zero, because the two bounds this figure is narrowed against are both counts of octets a
+    /// representation may carry: a negative one would read as a budget the arithmetic below it cannot express rather
+    /// than as a budget already spent.
+    /// </remarks>
+    private static int RemainingImageOctetsAfter(MailDocument? document, int remaining) =>
+        document is null
+            ? remaining
+            : (int)Math.Max(remaining - MailDocumentImages.OctetsIn(document), 0);
+
+    /// <summary>Reads what a produced document spent of the read's character budget, which is the words it holds.</summary>
+    /// <remarks>
+    /// The same reading the use case charges the call with, so the figure taken off here and the figure taken off after
+    /// the email is answered are one number. Its pictures are not in it, because they are spent in octets instead.
+    /// </remarks>
+    private static int CharactersIn(MailDocument? document) =>
+        document is null ? 0 : MailDocumentTexts.Collect(document).Sum(text => text.Length);
 
     /// <summary>Names which forms of its own body the message wrote, out of the branch the walk settled on.</summary>
     /// <remarks>

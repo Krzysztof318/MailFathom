@@ -102,14 +102,6 @@
           "xunit.v3.core.mtp-v2": "[3.2.2]"
         }
       },
-      "AngleSharp.Css": {
-        "type": "Transitive",
-        "resolved": "1.0.0",
-        "contentHash": "yMpYcNkI/ZHTt+qZMczhHEAHZV0AZf75nqJ5LqERFXvJGOFLJjwr0eqaYXqYlt9JPojOd+OkZLlGbnsmKjmh+g==",
-        "dependencies": {
-          "AngleSharp": "[1.5.0, 2.0.0)"
-        }
-      },
       "Castle.Core": {
         "type": "Transitive",
         "resolved": "5.1.1",
@@ -618,6 +610,7 @@
           "AWSSDK.Core": "[4.0.102, )",
           "AWSSDK.S3": "[4.0.102.3, )",
           "AngleSharp": "[1.6.0, )",
+          "AngleSharp.Css": "[1.0.0, )",
           "Aspire.Npgsql.EntityFrameworkCore.PostgreSQL": "[13.4.6, )",
           "BouncyCastle.Cryptography": "[2.6.2, )",
           "DnsClient": "[1.8.0, )",
@@ -648,6 +641,15 @@
         "requested": "[1.6.0, )",
         "resolved": "1.6.0",
         "contentHash": "kVnhnZlM4Yww2KWqW3uSL8isvhYsrTTBMSPAgoF8ZhMrLSoay6783AP6dQxAj1J9gvWKi3OIM4ZezdE2Y4ufCQ=="
+      },
+      "AngleSharp.Css": {
+        "type": "CentralTransitive",
+        "requested": "[1.0.0, )",
+        "resolved": "1.0.0",
+        "contentHash": "yMpYcNkI/ZHTt+qZMczhHEAHZV0AZf75nqJ5LqERFXvJGOFLJjwr0eqaYXqYlt9JPojOd+OkZLlGbnsmKjmh+g==",
+        "dependencies": {
+          "AngleSharp": "[1.5.0, 2.0.0)"
+        }
       },
       "Aspire.Npgsql.EntityFrameworkCore.PostgreSQL": {
         "type": "CentralTransitive",

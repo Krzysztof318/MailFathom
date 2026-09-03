@@ -39,6 +39,13 @@ public sealed record EmailContentRenderingBounds(
     /// </remarks>
     public bool IncludeMailDocument { get; init; }
 
+    /// <summary>Gets whether to also produce the message's own markup with everything that runs or reports removed.</summary>
+    /// <remarks>
+    /// Opt-in like the other two, and the most expensive of the three: it carries the message's markup and inlines the
+    /// message's own pictures beside it, so a caller that never draws a layout pays for neither.
+    /// </remarks>
+    public bool IncludeSelfContainedHtml { get; init; }
+
     /// <summary>Gets whether the reduced document may carry the message's remote picture references.</summary>
     /// <remarks>
     /// <para>
@@ -48,8 +55,12 @@ public sealed record EmailContentRenderingBounds(
     /// reveals to whoever wrote it.
     /// </para>
     /// <para>
-    /// It widens exactly one thing — <c>http</c> and <c>https</c> on a picture's source, and nowhere else. A link's
-    /// target is unaffected because it was never fetched, and no other reference exists in the tree to widen.
+    /// In the reduced document it widens exactly one thing — <c>http</c> and <c>https</c> on a picture's source, and
+    /// nowhere else. A link's target is unaffected because it was never fetched, and no other reference exists in the
+    /// tree to widen. The self-contained markup has more that a renderer resolves unasked — a background and a web
+    /// font — so there it widens those as well, which is the same consent applied to everything that would have acted
+    /// on it. It restores no executable construct in either, and it restores no address the pass deciding a URL is
+    /// never asked about, which is what leaves an <c>@import</c> and a <c>srcset</c> refused in every read.
     /// </para>
     /// </remarks>
     public bool RetainRemoteImageReferences { get; init; }

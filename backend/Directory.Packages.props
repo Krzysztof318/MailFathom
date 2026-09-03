@@ -58,7 +58,14 @@
          reduction compiled against would be two readings of one body by two parsers, which is the thing the whole
          projection exists to avoid. MIT, and recorded in THIRD_PARTY_LICENSES.md as a direct dependency. -->
     <PackageVersion Include="AngleSharp" Version="1.6.0" />
-    <!-- Brings AngleSharp 1.6.0 and AngleSharp.Css 1.0.0 transitively, both MIT. The 9.1 line replaced the exact
+    <!-- The CSS object model the sanitizing policy names. It arrived transitively behind HtmlSanitizer and is pinned
+         directly for the same reason AngleSharp above is: the self-contained representation states which at-rules a
+         message may keep, and CssRuleType is that library's type rather than the sanitizer's. A version resolved for
+         the sanitizer that differed from the one this policy compiled against would decide the at-rule set somewhere
+         other than here. 1.0.0 is what HtmlSanitizer 9.1.974 already resolves, so the pin moved nothing in the
+         closure. MIT, and recorded in THIRD_PARTY_LICENSES.md as a direct dependency. -->
+    <PackageVersion Include="AngleSharp.Css" Version="1.0.0" />
+    <!-- Brings AngleSharp 1.6.0 and AngleSharp.Css 1.0.0, both MIT and both pinned directly above. The 9.1 line replaced the exact
          AngleSharp 0.17.1 pin the 9.0 line carried, which is what let the direct reference above be taken, and
          AngleSharp 1.6.0 publishes a net10.0 target of its own. -->
     <PackageVersion Include="HtmlSanitizer" Version="9.1.974" />

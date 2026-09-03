@@ -31,4 +31,12 @@ public enum EmailBodyTruncation
     /// reason it is named apart from the two bounds that describe how much was asked for.
     /// </remarks>
     SensitiveContentScanCeiling = 3,
+
+    /// <summary>The inline-picture bound cut it, because the message carried more of its own pictures than one representation inlines.</summary>
+    /// <remarks>
+    /// Only the self-contained representation reaches this one, and it names a loss the character bounds cannot: the
+    /// words all survived and a picture the sender attached did not. It is stated rather than left to a missing image,
+    /// because a picture that is absent and a picture that was never there look identical to a reader.
+    /// </remarks>
+    InlineImageOctetLimit = 4,
 }

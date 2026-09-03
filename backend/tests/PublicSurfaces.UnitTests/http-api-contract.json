@@ -494,6 +494,16 @@
           "remoteImagesRequested": {
             "type": "boolean"
           },
+          "selfContainedHtml": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ClientMailBodyTextResponse"
+              }
+            ]
+          },
           "storedEmailId": {
             "format": "uuid",
             "type": "string"
@@ -504,6 +514,7 @@
           "availability",
           "plainText",
           "document",
+          "selfContainedHtml",
           "remoteImagesRequested"
         ],
         "type": "object"
@@ -9056,6 +9067,13 @@
           {
             "in": "query",
             "name": "remoteImages",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "fullHtml",
             "schema": {
               "type": "boolean"
             }

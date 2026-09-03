@@ -52,6 +52,7 @@ internal static class ClientMailBodyEndpoint
     /// <summary>Serves one of the acting owner's messages as a body, or reports that there is no such message.</summary>
     /// <param name="storedEmailId">The message to read, as a list row or a conversation published it.</param>
     /// <param name="remoteImages">Whether the reader asked for this message's remote pictures, having been told what that reveals.</param>
+    /// <param name="fullHtml">Whether the reader opened the surface that draws the sender's own markup rather than the reduced tree.</param>
     /// <param name="content">Reads the message from the local copy, for a caller the read's own grant admits.</param>
     /// <param name="cancellationToken">Cancels the read when the client disconnects.</param>
     /// <returns><c>200</c> with the body, <c>404</c> where this owner has no such message, or <c>403</c> for a caller whose grant does not carry <c>mailfathom.mail.read</c>.</returns>
@@ -64,6 +65,7 @@ internal static class ClientMailBodyEndpoint
     internal static async Task<Results<Ok<ClientMailBodyResponse>, NotFound>> ReadBodyAsync(
         [FromRoute] Guid storedEmailId,
         [FromQuery] bool? remoteImages,
+        [FromQuery] bool? fullHtml,
         [FromServices] EmailContentReader content,
         CancellationToken cancellationToken)
     {
@@ -74,7 +76,7 @@ internal static class ClientMailBodyEndpoint
             return TypedResults.NotFound();
         }
 
-        var request = RequestFor(storedEmailId, remoteImages);
+        var request = RequestFor(storedEmailId, remoteImages, fullHtml);
 
         var result = await content.ReadContentAsync(request, cancellationToken);
 
@@ -86,16 +88,19 @@ internal static class ClientMailBodyEndpoint
     /// <summary>Composes the read this route makes, which is the whole of what the query decides.</summary>
     /// <param name="storedEmailId">The message to read.</param>
     /// <param name="remoteImages">The query as it arrived, absent where the reader said nothing.</param>
+    /// <param name="fullHtml">The query as it arrived, absent where the reader said nothing.</param>
     /// <returns>The request the use case is asked with.</returns>
     /// <remarks>
-    /// Named rather than inlined because what it decides is a privacy boundary: the pane never asks for markup, it
-    /// always asks for the tree, and an absent query means the same as a refusal rather than something to interpret.
-    /// A seam here is what lets that be asserted without standing up the read behind it.
+    /// Named rather than inlined because what it decides is a privacy boundary: the tree is what the pane draws and is
+    /// always asked for, the sender's own markup is asked for only where the reader opened that surface, and an absent
+    /// query of either kind means the same as a refusal rather than something to interpret. A seam here is what lets
+    /// that be asserted without standing up the read behind it.
     /// </remarks>
-    internal static GetEmailContentRequest RequestFor(Guid storedEmailId, bool? remoteImages) =>
+    internal static GetEmailContentRequest RequestFor(Guid storedEmailId, bool? remoteImages, bool? fullHtml) =>
         GetEmailContentRequest.Create([StoredEmailId.Create(storedEmailId)]) with
         {
             IncludeMailDocument = true,
+            IncludeSelfContainedHtml = fullHtml is true,
             RetainRemoteImageReferences = remoteImages is true,
         };
 }
@@ -105,6 +110,7 @@ internal static class ClientMailBodyEndpoint
 /// <param name="Availability">Whether the body could be read at all, or why it could not, as the state's own name.</param>
 /// <param name="PlainText">The message as words, which is a rendering in its own right and what a refused document is read as.</param>
 /// <param name="Document">The message reduced to the document tree the pane draws, which is present whenever the body could be read.</param>
+/// <param name="SelfContainedHtml">The sender's own markup with everything that runs or reports removed, present only where the reader opened that surface.</param>
 /// <param name="RemoteImagesRequested">Whether this read was the one the reader asked remote pictures for.</param>
 /// <remarks>
 /// <para>
@@ -126,6 +132,7 @@ internal sealed record ClientMailBodyResponse(
     string Availability,
     ClientMailBodyTextResponse PlainText,
     MailDocument? Document,
+    ClientMailBodyTextResponse? SelfContainedHtml,
     bool RemoteImagesRequested)
 {
     /// <summary>Describes one message's body for the wire.</summary>
@@ -142,6 +149,9 @@ internal sealed record ClientMailBodyResponse(
             message.Body.Availability.ToString(),
             ClientMailBodyTextResponse.For(message.Body.PlainText),
             message.Body.Document,
+            message.Body.SelfContainedHtml is { } selfContainedHtml
+                ? ClientMailBodyTextResponse.For(selfContainedHtml)
+                : null,
             remoteImagesRequested);
     }
 }
