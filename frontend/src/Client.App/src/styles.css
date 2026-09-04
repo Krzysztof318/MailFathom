@@ -15,10 +15,11 @@
  * a screen and the project disagree the project wins and the screen changes — the icon-sampled ramp that used to stand
  * here was replaced by this one for exactly that reason, accent included.
  *
- * The light values are the ones declared in `@theme`; the block after it redeclares exactly the same names for dark and
- * nothing else. It sits outside every cascade layer deliberately: Tailwind emits `@theme` into its own `theme` layer,
- * and an unlayered declaration wins over any layered one whatever its specificity, so the override cannot be reordered
- * out of effect by a later import.
+ * The light values are the ones declared in the `@theme` blocks — the palette, and the mailbox-mark ramp after it,
+ * which is `static` for the reason stated over it; the `:root[data-theme='dark']` block redeclares the names that
+ * differ under dark and nothing else. It sits outside every cascade layer deliberately: Tailwind emits `@theme` into
+ * its own `theme` layer, and an unlayered declaration wins over any layered one whatever its specificity, so the
+ * override cannot be reordered out of effect by a later import.
  *
  * The two families are served from the bundle and from nowhere else. A deployment that keeps mail on its own server
  * does not hand a font CDN a request per reader, and the desktop head has to render with no route out at all, so the
@@ -128,11 +129,6 @@
     /* What a matched run of text is drawn on, and the rule that marks a quoted fragment as the one that was cited. */
     --color-highlight: oklch(0.945 0.07 88);
     --color-highlight-line: oklch(0.775 0.145 85);
-
-    /* What tells one mailbox from the next in the column that lists them: a mark beside each account's name, in one of
-       two hues taken in turn, and the two blended for the row standing for every account at once. */
-    --color-mailbox-mark: oklch(0.555 0.185 262);
-    --color-mailbox-mark-alternate: oklch(0.63 0.08 205);
 
     /* What a sender's own markup is drawn on, and the one token here that does not follow the theme. A message's HTML
        was written against a white page — it sets its own foreground colours and expects the rest — so drawing it on a
@@ -327,6 +323,27 @@
     --font-mono: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, monospace;
 }
 
+/* What tells one mailbox from the next wherever they are listed: a mark in front of each account, taking these hues in
+   the order the accounts are read, and the first two blended for the row standing for every account at once. The
+   sequence is numbered rather than named because it is open-ended — a deployment reads as many mailboxes as it was
+   configured with, which is more than any design draws hues for — so it grows by declaring the next number here and
+   counting it in `controls/mailboxRamp.ts`, which is also where the rule for a mailbox past the last hue is stated.
+
+   It is `static` because a hue is reached through an ordinal rather than through a utility. Tailwind emits a theme
+   variable only where something it scanned names it, and no source names this one — so a fourth hue declared in the
+   palette block above would be dropped from the bundle and the fourth mailbox would be drawn with no mark at all.
+   Nothing else here needs that, which is why this is a block of its own rather than a modifier on the palette.
+
+   The first hue is the accent and follows it into the dark theme below. The ones after it do not follow the theme: the
+   design project draws each of them as one colour on both of its artboards, so a lightened dark counterpart would be a
+   hue this client invented rather than one it was given. Nothing is lost by that — each clears 4.9:1 against the dark
+   panel and the dark rail, which is more than either clears against the light ones. */
+@theme static {
+    --color-mailbox-mark-1: oklch(0.555 0.185 262);
+    --color-mailbox-mark-2: oklch(0.643 0.079 211);
+    --color-mailbox-mark-3: oklch(0.648 0.107 81);
+}
+
 /* The same names, dark. `data-theme` is written by `theme/Theme.tsx`, which resolves the follow-the-system choice
    before the first paint, so nothing on a screen ever asks which theme is in force. */
 :root[data-theme='dark'] {
@@ -366,8 +383,7 @@
     --color-highlight: oklch(0.345 0.055 85);
     --color-highlight-line: oklch(0.72 0.13 85);
 
-    --color-mailbox-mark: oklch(0.615 0.175 262);
-    --color-mailbox-mark-alternate: oklch(0.7 0.08 205);
+    --color-mailbox-mark-1: oklch(0.615 0.175 262);
 
     --color-inset: rgb(255 255 255 / 0.045);
     --color-shadow-soft: oklch(0.1 0.03 262 / 0.5);
