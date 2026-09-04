@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     The same two layers `ic_launcher.xml` composes, for a launcher that asks for the round icon. Without this file a
+     round request from API 26 upwards would resolve `@mipmap/ic_launcher_round` to the full-bleed raster beside it and
+     draw a differently composed mark from the square one; below 26 that raster is still what answers.
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+  <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
+  <background android:drawable="@color/ic_launcher_background"/>
+</adaptive-icon>

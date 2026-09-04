@@ -63,9 +63,9 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.10.1")
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.lifecycle:lifecycle-process:2.10.0")
-    testImplementation("junit:junit:4.13.2")
-    androidTestImplementation("androidx.test.ext:junit:1.1.4")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.0")
+    // The template's three test declarations are deliberately gone with the source sets that never existed: this
+    // project holds no `src/test/` and no `src/androidTest/`, what the client asserts is asserted in the suites under
+    // `frontend/`, and a pin nothing consumes is a licence review this repository would owe for nothing.
 }
 
 apply(from = "tauri.build.gradle.kts")

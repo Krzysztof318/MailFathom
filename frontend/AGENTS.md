@@ -110,7 +110,9 @@ What belongs here is the rule that follows from that, because no tool enforces i
   the second thing to do afterwards: `mipmap-*/ic_launcher_foreground.png` comes out full-bleed, while Android composes
   an adaptive icon from a 108dp layer of which only the centre 72dp survives the mask — so the artwork is inset to two
   thirds of each canvas with a transparent surround, or every launcher above API 26 crops the mark. `ic_launcher.png`
-  and `ic_launcher_round.png` beside them stay full-bleed, which is what the legacy launcher wants.
+  and `ic_launcher_round.png` beside them stay full-bleed, which is what a launcher below 26 draws; the manifest names
+  both through `android:icon` and `android:roundIcon`, and `mipmap-anydpi-v26/` carries an adaptive definition for each
+  so a round request above 26 composes the same two layers rather than the raster.
 - **A moved Tauri pin costs a regeneration.** The template ships with the CLI, so a project generated against an older
   one keeps whatever that version wrote. Move the pin, delete `src-tauri/gen/android/`, run `pnpm android:init`, put the
   hand-written decisions back, and read the diff — that diff is the upgrade, and a pin moved without it leaves the head
