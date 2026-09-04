@@ -7,7 +7,7 @@ For background on ADRs, see <https://adr.github.io/>.
 ## How MailFathom uses ADRs
 
 1. Create or modify an ADR only after explicit owner approval for that documentation change. The `Protected paths` check enforces this rather than leaving it to a reviewer: `docs/decisions/` is a protected directory, so a pull request touching this directory fails that check unless the repository owner authored it. Propose a decision in an issue and let the approving change carry the record.
-2. Copy `docs/decisions/adr-template.md` to `docs/decisions/NNNN-title-with-dashes.md`, where `NNNN` is the next sequence number. The next one is `0028`. `0018`, `0019`, and `0020` were withdrawn with the Uno Platform client they decided about, and a number that has been used once is never reused, so the sequence continued past that gap rather than filling it.
+2. Copy `docs/decisions/adr-template.md` to `docs/decisions/NNNN-title-with-dashes.md`, where `NNNN` is the next sequence number. The next one is `0029`. `0018`, `0019`, and `0020` were withdrawn with the Uno Platform client they decided about, and a number that has been used once is never reused, so the sequence continued past that gap rather than filling it.
    1. Check existing branches and pull requests when possible so the sequence number does not collide.
    2. Use `docs/decisions/adr-short-template.md` only for small decisions whose trade-offs are already clear.
 3. Edit the new ADR.
@@ -45,3 +45,4 @@ For background on ADRs, see <https://adr.github.io/>.
 - [0025: Publish MailFathom under AGPL-3.0-only, take the `-only` arm rather than `-or-later`, and leave the third-party acceptance policy exactly where it was](0025-publishing-mailfathom-under-agpl-3-0-only.md)
 - [0026: Let a person opening a message in the client mark it read on their own mail server, as a mutation their act authors rather than an effect of the read that served it](0026-marking-a-message-read-when-a-person-opens-it-in-the-client.md)
 - [0027: Build Android every night as one debug-signed artifact left on its run rather than a head this project supports, keep its credential in the platform's own protected storage as a third answer under ADR 0023, and hold the no-platform-branch rule with the shell as its only seam](0027-an-android-head-built-every-night-and-supported-by-nothing.md)
+- [0028: Keep no copy of mail and no queued write on the device, bound a client store to what the person themselves did rather than to what the deployment answered, and meet a deployment out of reach with a client that says so](0028-no-mail-on-the-device-and-an-honest-client-with-no-route-to-its-deployment.md)

@@ -84,6 +84,14 @@ Four things may never cross, in either direction:
   device alone, because a pane width says how much room this screen has rather than how somebody wants to work. Those
   two are the only settings held in both, and a setting that belongs to neither store is session state rather than a
   third place to keep one.
+- **No store keeps mail, and none of them keeps a write for later.**
+  [ADR 0028](../../docs/decisions/0028-no-mail-on-the-device-and-an-honest-client-with-no-route-to-its-deployment.md)
+  is the record and holds the reasoning: nothing about mail — a message, a header, a sender, a count, an attachment, a
+  search result, or anything derived from one — is written where it outlives the process, and what the session's store
+  may hold is what the person themselves did rather than what the deployment answered. A composition is the one
+  exception, because it is what they are writing rather than a copy of anything the deployment has. A client with no
+  route to its deployment therefore says so, which is the offline state § _UX_ already requires of every screen, and
+  never a cache it reads through.
 - **Store the smallest thing you cannot compute.** Everything computable from stored state is computed during render,
   not stored beside it and kept in step. Two pieces of state that must agree are one piece of state and a function; the
   bug this prevents is the pair that disagrees, which no type catches and no test finds unless somebody thought of it.
