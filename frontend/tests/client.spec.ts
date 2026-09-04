@@ -1397,10 +1397,11 @@ test('draws every row of the list at one height, which is what the window is ari
 });
 
 test('draws the three columns of the Mail space without the page scrolling sideways', async ({ page }) => {
-    // The width the composition opens out at, which is where the three columns have the least room they will ever
-    // have: any narrower and they are a stack instead. A column that held its width here rather than giving way is
-    // what would push the page wider than the window, and only a browser answers that — jsdom computes no geometry.
-    await page.setViewportSize({ width: 780, height: 800 });
+    // The width the third column arrives at, which is where the three of them have the least room they will ever have:
+    // one pixel narrower and the mailboxes are a drawer instead. A column that held its width here rather than giving
+    // way is what would push the page wider than the window, and only a browser answers that — jsdom computes no
+    // geometry.
+    await page.setViewportSize({ width: 1180, height: 800 });
 
     // With a message open, so the third column is the pane a reader actually gets rather than the note standing in
     // for it: the pane is the column that has to give way, and an empty one proves nothing about a filled one.

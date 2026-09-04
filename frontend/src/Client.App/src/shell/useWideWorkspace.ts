@@ -4,7 +4,7 @@
 
 import { useSyncExternalStore } from 'react';
 
-// The two widths a component has to ask about rather than compose against. A stylesheet answers a width question for
+// The three widths a component has to ask about rather than compose against. A stylesheet answers a width question for
 // anything CSS can lay out two ways from one tree, and that is almost everything; what it cannot do is decide *which*
 // of two screens is in the document, or whether a control is one a person may operate at all.
 //
@@ -65,30 +65,46 @@ function pointerIsCoarse() {
 
 // Built once each, because `useSyncExternalStore` compares the two functions it is handed by identity and a pair
 // rebuilt per render would resubscribe on every one of them.
-const workspaceWidth = widthAtLeast('--breakpoint-workspace', '48.75rem');
-const tabsWidth = widthAtLeast('--breakpoint-tabs', '73.75rem');
+const workspaceWidth = widthAtLeast('--breakpoint-workspace', '43.75rem');
+const paneWidth = widthAtLeast('--breakpoint-panes', '51.25rem');
+const desktopWidth = widthAtLeast('--breakpoint-desktop', '73.75rem');
 const coarsePointer = pointerIsCoarse();
 
 /**
- * Whether the window is at or above the width the workspace opens out at, kept current as it is resized across that
+ * Whether the window is at or above the width the phone shape stops at, kept current as it is resized across that
  * breakpoint.
  *
- * The narrow Mail space is what needs asking: it draws the list or the message and never both, so a row that is not on
- * the screen is not in the document either.
+ * What needs asking rather than composing is where a surface stands at all: bottom navigation is a row of five places
+ * and a rail is a column of nine, and a sheet rising from the foot of the window is a different element from a panel
+ * beside the rail.
  */
 export function useWideWorkspace(): boolean {
     return useSyncExternalStore(workspaceWidth.watch, workspaceWidth.matches);
 }
 
 /**
- * Whether the window is wide enough for the tab mode to be worth offering.
+ * Whether the window has room for the list and the message side by side, kept current as it is resized across that
+ * breakpoint.
  *
- * It is a second and wider breakpoint than the workspace's, because a rail beside two columns fits long before a row
- * of tabs above them does. Below it the switch is inert rather than absent: a control that vanished by width alone
- * would leave somebody who had turned it on with no way to reach it, and the row says why instead.
+ * The single-pane Mail space is what needs asking: it draws the list or the message and never both, so a row that is
+ * not on the screen is not in the document either — and going between them is navigation the back gesture returns
+ * through rather than a layout that changed.
  */
-export function useWideEnoughForTabs(): boolean {
-    return useSyncExternalStore(tabsWidth.watch, tabsWidth.matches);
+export function useTwoPanes(): boolean {
+    return useSyncExternalStore(paneWidth.watch, paneWidth.matches);
+}
+
+/**
+ * Whether the window is in the desktop composition rather than the tablet one.
+ *
+ * It is the widest of the three, and the design project draws three things at it together: the mailbox column stands
+ * beside the list rather than in a drawer over it, the toolbar's controls carry their labels, and the tab mode is
+ * worth offering at all — a row of tabs above the columns needs room a rail beside two of them does not. Below it the
+ * tab switch is inert rather than absent: a control that vanished by width alone would leave somebody who had turned
+ * it on with no way to reach it, and the row says why instead.
+ */
+export function useDesktopComposition(): boolean {
+    return useSyncExternalStore(desktopWidth.watch, desktopWidth.matches);
 }
 
 /**

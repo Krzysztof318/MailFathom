@@ -188,29 +188,36 @@
     --radius-3xl: 0.875rem;
     --radius-4xl: 1.125rem;
 
-    /* The width the workspace itself changes at: below it the workspace is a stack of screens under bottom
-       navigation, and at or above it a rail beside columns. Declared here so the point where narrow stops is one
-       decision rather than one per screen. The number is the project's, and it is a width rather than a device. */
-    --breakpoint-workspace: 48.75rem;
+    /* The three widths the shell is composed at, and they are the design project's own numbers rather than three
+       roundings of one idea. The project's prototype asks exactly these three questions of the width it was given, and
+       the client asks them under these names — so the four compositions the project frames fall out of the same
+       arithmetic rather than out of a breakpoint that happens to sit near each of them.
 
-    /* The second width the client changes at, and it belongs to one screen: the sign-in split stands as two
-       columns above it and stacks below it, which is wider than the workspace opens out at because a claim beside a
-       form needs more room than a rail beside a list. Declared here for the same reason the first one is. */
+       The first is where the phone shape stops. Below it the shell lays out in the reverse direction: the rail leaves
+       the side and becomes bottom navigation across the foot of the window, a sheet rises from the bottom instead of a
+       panel standing beside the rail, and a form is drawn for a finger rather than for a pointer — taller controls, and
+       fields at the size a phone browser treats as readable rather than one it zooms the page in to reach. The sign-in
+       screen turns its density at this same width, which is why it is one token: two names for 700 pixels is two
+       decisions free to disagree about which shape a window is in. */
+    --breakpoint-workspace: 43.75rem;
+
+    /* The second is where the space stops showing one pane at a time. Below it the Mail space draws the list *or* the
+       message and never both, and moving between them is navigation the back gesture returns through; at or above it
+       the two stand side by side and there is a boundary between them to move. It is wider than the first because a
+       window can carry a rail long before it can carry two columns beside one. */
+    --breakpoint-panes: 51.25rem;
+
+    /* The third is where the desktop composition begins, and it is one width with three consequences the project draws
+       together: the mailbox column stands beside the list rather than in a drawer over it, the toolbar's controls carry
+       their labels rather than standing as symbols alone, and the tab mode is worth offering at all — a row of tabs
+       above the columns needs room a rail beside two of them does not. Below it the shell is the tablet composition,
+       whatever the pointer driving it turns out to be. */
+    --breakpoint-desktop: 73.75rem;
+
+    /* The one width outside that scheme, and it belongs to one screen: the sign-in split stands as two columns above it
+       and stacks below it, which is wider than the workspace opens out at because a claim beside a form needs more room
+       than a rail beside a list. It is the sign-in artboard's own number rather than a fourth shell composition. */
     --breakpoint-split: 58.75rem;
-
-    /* The third, and the only one that decides whether a control may be operated rather than how something is
-       laid out: below it the tab mode is inert, because a row of tabs above the columns needs room a rail beside two
-       of them does not. Declared here for the same reason the other two are — a screen reaching for a width of its own
-       is the same drift as one reaching for a colour. */
-    --breakpoint-tabs: 73.75rem;
-
-    /* The fourth and last, and the only one about density rather than composition: at and above it a form is drawn for
-       a pointer, and below it the same form grows — taller controls a finger can hit, and fields at the size a phone
-       browser treats as readable rather than one it zooms the page in to reach. It is narrower than every other
-       breakpoint here because it is not a layout at all: a window can stack the sign-in screen's two halves and still
-       be driven with a mouse. The sign-in screen is the only one that reads it today, which is where the project draws
-       the change; it is a width rather than a device, exactly as the three above are. */
-    --breakpoint-compact: 43.75rem;
 
     /* One row of the message list. Declared here rather than in the list because it is a density decision like any
        other — and because the list is arithmetic over it: the window that keeps a mailbox of two hundred thousand

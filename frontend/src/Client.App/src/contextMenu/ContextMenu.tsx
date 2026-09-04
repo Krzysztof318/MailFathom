@@ -5,6 +5,7 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Icon } from '../controls/Icon';
 import type { IconName } from '../controls/icons';
+import { useScreenLayer } from '../shell/screenLayers';
 import { useWideWorkspace } from '../shell/useWideWorkspace';
 import { placedWithin, type MenuPoint } from './menuPlacement';
 
@@ -89,6 +90,11 @@ export function ContextMenu({
     useEffect(() => {
         walkable(panel.current)[0]?.focus();
     }, []);
+
+    // It stands over the row it was opened from, so the back gesture closes it before it does anything else — the same
+    // way out Escape and a press outside it take. The component is on the screen only while the menu is, which is why
+    // it is registered unconditionally.
+    useScreenLayer(true, onClose);
 
     // Closed by a press outside it rather than by the click that follows one. The tap ending a long press arrives as a
     // click with no press of its own behind it, so a menu listening for that would close under the finger that had

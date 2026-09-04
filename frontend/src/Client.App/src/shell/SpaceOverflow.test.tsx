@@ -2,10 +2,11 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, render, renderHook, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { LocalizationProvider } from '../localization/Localization';
 import type { Space } from '../routing/spaces';
+import { ScreenLayersContext, useScreenLayerStack, type ScreenLayers } from './screenLayers';
 import { SpaceOverflow } from './SpaceOverflow';
 
 // jsdom draws a closed popover hidden and opens none — it implements neither the invoker nor `showPopover` — so what
@@ -15,12 +16,51 @@ import { SpaceOverflow } from './SpaceOverflow';
 
 const handedTheAccount = 'The account control this sheet was handed.';
 
-function renderOverflow(spaces: readonly Space[] = ['tasks', 'cases'], current: Space | null = null): void {
+function renderOverflow(
+    spaces: readonly Space[] = ['tasks', 'cases'],
+    current: Space | null = null,
+): { readonly current: ScreenLayers } {
+    const { result } = renderHook(() => useScreenLayerStack());
+
     render(
         <LocalizationProvider>
-            <SpaceOverflow spaces={spaces} current={current} account={<button>{handedTheAccount}</button>} />
+            <ScreenLayersContext value={result.current}>
+                <SpaceOverflow spaces={spaces} current={current} account={<button>{handedTheAccount}</button>} />
+            </ScreenLayersContext>
         </LocalizationProvider>,
     );
+
+    return result;
+}
+
+/**
+ * The sheet as the platform would report it once it is open, which jsdom reports of nothing.
+ *
+ * `hidePopover` is what the shell closes it by and jsdom declares neither it nor `showPopover`, so the one the sheet
+ * would have is recorded; the toggle is the platform saying the state changed, which is what the component reads
+ * rather than holding an opinion of its own.
+ */
+function theSheetIsOpened(): ReturnType<typeof vi.fn> {
+    const sheet = document.getElementById('space-overflow');
+    const hidden = vi.fn();
+
+    if (sheet === null) {
+        throw new Error('The sheet was not drawn.');
+    }
+
+    Object.defineProperty(sheet, 'hidePopover', { configurable: true, value: hidden });
+
+    // jsdom declares no `ToggleEvent`, so the one thing the component reads off it is put on an ordinary event: what
+    // a popover reports is the state it moved to, and that is the whole of what is asked here.
+    const opening = new Event('toggle');
+
+    Object.defineProperty(opening, 'newState', { value: 'open' });
+
+    act(() => {
+        sheet.dispatchEvent(opening);
+    });
+
+    return hidden;
 }
 
 describe('SpaceOverflow', () => {
@@ -78,5 +118,20 @@ describe('SpaceOverflow', () => {
 
         expect(document.getElementById('space-overflow')?.contains(account)).toBe(true);
         expect(lastRow?.compareDocumentPosition(account)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+
+    // The sheet stands over the screen, so the back gesture reaches it before it navigates and a change of destination
+    // leaves none of it behind. Both are one registration, and this is what proves it was made at all.
+    it('closes the sheet when the back gesture reaches it, rather than leaving it over the next screen', () => {
+        const shell = renderOverflow();
+        const hidden = theSheetIsOpened();
+
+        expect(shell.current.depth).toBe(1);
+
+        act(() => {
+            shell.current.closeTop();
+        });
+
+        expect(hidden).toHaveBeenCalled();
     });
 });

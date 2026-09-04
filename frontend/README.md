@@ -154,15 +154,16 @@ exists at all and on what terms — one debug-signed APK, left on the run that b
 comes either from a nightly run or from `pnpm android:build` on somebody's own machine.
 Everything else under `gen/` is ignored; this one is tracked, because the decisions in it have nowhere else to live:
 
-| The decision                        | Where it is written                                                                                     | What it says                                                                                                                                                                                     |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| The application identifier          | `bundle.identifier` in `tauri.conf.json`, and nowhere else                                              | `io.github.krzysztof318.mailfathom` — the same one the desktop head carries, because it is one application                                                                                       |
-| The oldest release it installs on   | `bundle.android.minSdkVersion` in `tauri.conf.json`, and `minSdk` in `gen/android/app/build.gradle.kts` | 24, which is Tauri's own floor for the target. Gradle reads the second; the first is what a regeneration would render into it, and the two move together or the key is fiction                   |
-| What it asks the platform for       | `uses-permission` in `AndroidManifest.xml`                                                              | `INTERNET`, and nothing else. A notification permission arrives with the notification                                                                                                            |
-| What the APK's libraries resolve to | `dependencyLocking` in `gen/android/build.gradle.kts`, and `gen/android/app/gradle.lockfile` beside it  | The 80 artifacts behind the five declarations, fixed rather than resolved afresh on every build — `./gradlew :app:dependencies --write-locks` is what rewrites it                                |
-| What it refuses to let leave        | `android:allowBackup` and `res/xml/data_extraction_rules.xml`                                           | Both halves off: the cloud backup, and the device-to-device transfer that the attribute alone stops governing at API 31                                                                          |
-| Which platforms may open a link     | `platforms` in `capabilities/open-a-link.json`                                                          | Every platform this crate can be built for, named rather than left to the default of all of them — which is wider than what a release publishes, and narrower by iOS, for which no head is built |
-| The version the artifact reports    | `<VersionPrefix>` in `Version.props`, merged in by `run-tauri.ts`                                       | The same number as everything else, which is why `android init` runs through the wrapper too — the CLI reads `Cargo.toml` for it otherwise, and that states none                                 |
+| The decision                        | Where it is written                                                                                     | What it says                                                                                                                                                                                                                     |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The application identifier          | `bundle.identifier` in `tauri.conf.json`, and nowhere else                                              | `io.github.krzysztof318.mailfathom` — the same one the desktop head carries, because it is one application                                                                                                                       |
+| The oldest release it installs on   | `bundle.android.minSdkVersion` in `tauri.conf.json`, and `minSdk` in `gen/android/app/build.gradle.kts` | 24, which is Tauri's own floor for the target. Gradle reads the second; the first is what a regeneration would render into it, and the two move together or the key is fiction                                                   |
+| What it asks the platform for       | `uses-permission` in `AndroidManifest.xml`                                                              | `INTERNET`, and nothing else. A notification permission arrives with the notification                                                                                                                                            |
+| What the APK's libraries resolve to | `dependencyLocking` in `gen/android/build.gradle.kts`, and `gen/android/app/gradle.lockfile` beside it  | The 80 artifacts behind the five declarations, fixed rather than resolved afresh on every build — `./gradlew :app:dependencies --write-locks` is what rewrites it                                                                |
+| What it refuses to let leave        | `android:allowBackup` and `res/xml/data_extraction_rules.xml`                                           | Both halves off: the cloud backup, and the device-to-device transfer that the attribute alone stops governing at API 31                                                                                                          |
+| Where the back gesture goes         | `handleBackNavigation` in `MainActivity.kt`                                                             | Turned back on, which Tauri's own activity turns off: the gesture reaches the page as `popstate`, so all three heads answer it with the one mechanism the frame above carries and nothing in the client asks which head it is on |
+| Which platforms may open a link     | `platforms` in `capabilities/open-a-link.json`                                                          | Every platform this crate can be built for, named rather than left to the default of all of them — which is wider than what a release publishes, and narrower by iOS, for which no head is built                                 |
+| The version the artifact reports    | `<VersionPrefix>` in `Version.props`, merged in by `run-tauri.ts`                                       | The same number as everything else, which is why `android init` runs through the wrapper too — the CLI reads `Cargo.toml` for it otherwise, and that states none                                                                 |
 
 `tauri android init` **writes no file that already exists**, which is what makes both halves of that arrangement work
 and is the whole argument for committing rather than regenerating. Running it on a fresh clone restores whatever the
@@ -323,9 +324,22 @@ question, their scope, and their selection across. Only **Mail** is built — `s
 `implementedSpaces` — and the other six are present, named as placeholders, and say in a sentence that there is nothing
 behind them yet. They are drawn rather than hidden because the design project is what the client is measured against
 and it shows all seven; a rail with three destinations would be a different product from the one that was designed.
-The frame is one tree laid out two ways by the width it is given — a navigation rail beside the workspace at or above
-the `workspace` breakpoint, bottom navigation under a stack of screens below it — and nothing in it reads which head or
-which platform it is running on.
+The frame is one tree laid out by the width it is given, and nothing in it reads which head or which platform it is
+running on. Three `@theme` breakpoints decide it, and between them they give the four compositions the design project
+frames: below `workspace` the destinations are a bottom bar under a single pane, and every side panel is a drawer;
+from `workspace` up they are the rail beside the workspace again; from `panes` up the list and the message stand side
+by side; and from `desktop` up the mailboxes gain a column of their own beside them and the toolbar gives every
+control its name in words. The fold is a composition of its own out of that arithmetic rather than a case anything
+branches on — two panes, drawers, and a mailbox column still behind a control.
+
+The **back gesture** is answered by the same frame, and on all three heads by one mechanism: `src/shell/screenLayers.ts`
+records what stands over the screen as each surface opens, `src/shellOperations/backNavigation.ts` keeps one history
+entry per layer standing, and `src/App.tsx` unwinds them topmost first before the address moves at all. So a press closes a
+drawer, a dialog, a menu, or the message drawn in front of the list, one layer at a time, and only a screen with
+nothing over it lets the gesture leave the client. Taking the navigation to another destination closes every one of
+them instead of leaving a layer behind. Android reaches that through the committed `MainActivity`, which turns
+`handleBackNavigation` back on so the gesture arrives in the page as `popstate` exactly as it does in a browser —
+which is why no module here asks which head it is on.
 
 Two questions are answered before the frame is drawn at all: which deployment this client belongs to, and who is
 asking it. `src/signIn/` is where both are, as one form rather than two screens, because a person was handed the

@@ -106,15 +106,16 @@ const lifetimeMessages: Readonly<Record<CredentialLifetime, MessageKey>> = {
 // to the accent and the tint widens behind it — and it is written with `focus-within` on the box rather than on the
 // input, because the box is what the reveal control and the port hint stand inside.
 //
-// Everything that changes below the compact breakpoint is the same decision made twice: a control a finger has to hit
-// is taller than one a pointer has to hit, and a field a phone keyboard would zoom the page into is one set below the
-// size that browser treats as readable. So the generous size is the base and the compact one is the variant, which is
-// the direction a mobile-first breakpoint reads in.
+// Everything that changes below the workspace breakpoint is the same decision made twice: a control a finger has to
+// hit is taller than one a pointer has to hit, and a field a phone keyboard would zoom the page into is one set below
+// the size that browser treats as readable. So the generous size is the base and the tighter one is the variant, which
+// is the direction a mobile-first breakpoint reads in. It is the same width the workspace stops taking a phone's shape
+// at, which is why this screen names that breakpoint rather than one of its own.
 const fieldBox =
     'flex items-center gap-2 rounded-xl border border-line-strong bg-panel px-3 transition focus-within:border-accent focus-within:ring-3 focus-within:ring-accent-soft';
 
 const fieldInput =
-    'min-h-13 min-w-0 flex-1 bg-transparent text-xl text-text outline-none compact:min-h-11 compact:text-md';
+    'min-h-13 min-w-0 flex-1 bg-transparent text-xl text-text outline-none workspace:min-h-11 workspace:text-md';
 
 const fieldLabel = 'text-sm font-medium text-text-soft';
 
@@ -460,7 +461,7 @@ export function SignIn({
                             aria-label={translate(
                                 revealed ? 'signIn.hidePasswordControl' : 'signIn.revealPasswordControl',
                             )}
-                            className="-me-2 flex min-h-12 shrink-0 items-center rounded-lg px-3 text-md text-muted transition hover:bg-hover hover:text-text compact:min-h-8 compact:px-2 compact:text-sm"
+                            className="-me-2 flex min-h-12 shrink-0 items-center rounded-lg px-3 text-md text-muted transition hover:bg-hover hover:text-text workspace:min-h-8 workspace:px-2 workspace:text-sm"
                             type="button"
                             onClick={() => {
                                 setRevealed(!revealed);
@@ -501,7 +502,7 @@ export function SignIn({
 
                 <div className="flex items-center gap-3">
                     <button
-                        className="flex min-h-13 flex-1 items-center justify-center gap-2 rounded-full bg-accent px-4 text-lg font-semibold text-on-accent transition hover:bg-accent-strong disabled:opacity-70 compact:min-h-11.5 compact:text-md"
+                        className="flex min-h-13 flex-1 items-center justify-center gap-2 rounded-full bg-accent px-4 text-lg font-semibold text-on-accent transition hover:bg-accent-strong disabled:opacity-70 workspace:min-h-11.5 workspace:text-md"
                         disabled={presenting}
                         ref={submit}
                         type="submit"

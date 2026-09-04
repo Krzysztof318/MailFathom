@@ -2,10 +2,11 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ClientNotification } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
+import { ScreenLayersContext, useScreenLayerStack, type ScreenLayers } from '../shell/screenLayers';
 import { NotificationCentre } from './NotificationCentre';
 import type { NotificationCentre as Centre } from './useNotificationCentre';
 import type { PanelSwipe } from './usePanelSwipe';
@@ -69,12 +70,21 @@ function centre(held: Partial<Centre> = {}): Centre {
     };
 }
 
-function panel(held: Partial<Centre> = {}): void {
+function panel(held: Partial<Centre> = {}): { readonly current: ScreenLayers } {
+    // The shell around it, because the panel records itself as standing over the screen while it is shown. Its three
+    // functions are the same ones for the life of the stack, so the value handed to the provider stays current
+    // however the count moves.
+    const { result } = renderHook(() => useScreenLayerStack());
+
     render(
         <LocalizationProvider>
-            <NotificationCentre centre={centre(held)} swipe={swipe} />
+            <ScreenLayersContext value={result.current}>
+                <NotificationCentre centre={centre(held)} swipe={swipe} />
+            </ScreenLayersContext>
         </LocalizationProvider>,
     );
+
+    return result;
 }
 
 /** The row naming this notification, which is the list item its title sits in. */
@@ -295,5 +305,26 @@ describe('NotificationCentre', () => {
 
         expect(screen.queryByRole('menuitem', { name: 'Open the source' })).toBeNull();
         expect(screen.getByRole('menuitem', { name: 'Mark as unread' })).toBeDefined();
+    });
+
+    // The panel covers what it was opened over, so the back gesture reaches it before it navigates and a change of
+    // destination leaves it behind. It is the panel's own way out that is recorded rather than a second one, which is
+    // what makes the gesture clear what was picked as well as close the panel.
+    it('leaves by its own way out when the back gesture reaches it', () => {
+        const shell = panel();
+
+        expect(shell.current.depth).toBe(1);
+
+        act(() => {
+            shell.current.closeTop();
+        });
+
+        expect(acts.hide).toHaveBeenCalled();
+    });
+
+    it('records nothing over the screen while the centre is not being shown', () => {
+        const shell = panel({ shown: false });
+
+        expect(shell.current.depth).toBe(0);
     });
 });

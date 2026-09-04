@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MailAccount } from '@mailfathom/client-backend';
 import type { TelemetryForwarding } from '../deployment/telemetryForwarding';
@@ -14,6 +14,7 @@ import { WorkspaceProvider } from '../workspace/Workspace';
 import type { MailScope } from '../workspace/mailScope';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { AccountMenu } from './AccountMenu';
+import { ScreenLayersContext, useScreenLayerStack, type ScreenLayers } from './screenLayers';
 
 function mailbox(id: string, displayName: string): MailAccount {
     return {
@@ -120,19 +121,26 @@ function renderMenu({
     readonly profile?: OwnProfileInForce;
     readonly onSignOut?: () => void;
     readonly scope?: MailScope | null;
-} = {}): void {
+} = {}): { readonly current: ScreenLayers } {
+    // The shell around it, because the menu records itself as standing over the screen while it is open. Its three
+    // functions are the same ones for the life of the stack, so the value handed to the provider stays current
+    // however the count moves.
+    const { result } = renderHook(() => useScreenLayerStack());
+
     render(
         <LocalizationProvider>
             <ThemeProvider>
                 <WorkspaceProvider>
-                    <AccountMenu
-                        accounts={accounts}
-                        deploymentVersion={deploymentVersion}
-                        telemetryForwarding={telemetryForwarding}
-                        preferences={preferences}
-                        profile={profile}
-                        onSignOut={onSignOut}
-                    />
+                    <ScreenLayersContext value={result.current}>
+                        <AccountMenu
+                            accounts={accounts}
+                            deploymentVersion={deploymentVersion}
+                            telemetryForwarding={telemetryForwarding}
+                            preferences={preferences}
+                            profile={profile}
+                            onSignOut={onSignOut}
+                        />
+                    </ScreenLayersContext>
                     <ScopeProbe />
                     {scope === null ? null : <ScopeAs scope={scope} />}
                 </WorkspaceProvider>
@@ -143,6 +151,37 @@ function renderMenu({
     if (scope !== null) {
         scopeAsTheTreeWould();
     }
+
+    return result;
+}
+
+/**
+ * The menu as the platform would report it once it is open, which jsdom reports of nothing.
+ *
+ * `hidePopover` is what the shell closes it by and jsdom declares neither it nor `showPopover`, so the one the menu
+ * would have is recorded; the toggle is the platform saying the state changed, which is what the component reads
+ * rather than holding an opinion of its own. jsdom declares no `ToggleEvent` either, so the one thing read off it is
+ * put on an ordinary event.
+ */
+function theMenuIsOpened(): ReturnType<typeof vi.fn> {
+    const menu = document.getElementById('account-menu');
+    const hidden = vi.fn();
+
+    if (menu === null) {
+        throw new Error('The menu was not drawn.');
+    }
+
+    Object.defineProperty(menu, 'hidePopover', { configurable: true, value: hidden });
+
+    const opening = new Event('toggle');
+
+    Object.defineProperty(opening, 'newState', { value: 'open' });
+
+    act(() => {
+        menu.dispatchEvent(opening);
+    });
+
+    return hidden;
 }
 
 // jsdom draws a popover closed and never opens one — it implements neither the invoker nor `showPopover` — so what is
@@ -342,5 +381,72 @@ describe('AccountMenu', () => {
         fireEvent.click(screen.getByRole('radio', { name: 'Dark', hidden: true }));
 
         expect(chooseTheme).toHaveBeenCalledWith('dark');
+    });
+
+    // The menu stands over whichever screen the rail is beside, so the back gesture closes it before it navigates and
+    // taking the navigation to another destination leaves none of it behind. Both are one registration, and whether it
+    // is open stays the platform's answer — which is what the toggle below stands for.
+    it('closes the menu when the back gesture reaches it, rather than leaving it over the next screen', () => {
+        const shell = renderMenu();
+        const hidden = theMenuIsOpened();
+
+        expect(shell.current.depth).toBe(1);
+
+        act(() => {
+            shell.current.closeTop();
+        });
+
+        expect(hidden).toHaveBeenCalled();
+    });
+
+    it('records nothing over the screen while the menu has not been opened', () => {
+        const shell = renderMenu();
+
+        expect(shell.current.depth).toBe(0);
+    });
+
+    // Opening the settings screen folds this menu away, and leaving that screen by a way out of it puts the menu back
+    // on the row it was opened from. Clearing the screen is the one case that must not: putting it back there would
+    // open a menu over the space somebody has just arrived at, with focus moved into it, which is the trap clearing
+    // the screen exists to prevent.
+    it('leaves the menu folded away when the shell clears the screen from behind the settings screen', () => {
+        const shell = renderMenu();
+        const menu = document.getElementById('account-menu');
+        const reopened = vi.fn();
+
+        if (menu === null) {
+            throw new Error('The menu was not drawn.');
+        }
+
+        Object.defineProperty(menu, 'hidePopover', { configurable: true, value: vi.fn() });
+        Object.defineProperty(menu, 'showPopover', { configurable: true, value: reopened });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Settings', hidden: true }));
+        expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
+
+        act(() => {
+            shell.current.closeEvery();
+        });
+
+        expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
+        expect(reopened).not.toHaveBeenCalled();
+    });
+
+    it('puts the menu back where the settings screen was left by a way out of that screen', () => {
+        renderMenu();
+        const menu = document.getElementById('account-menu');
+        const reopened = vi.fn();
+
+        if (menu === null) {
+            throw new Error('The menu was not drawn.');
+        }
+
+        Object.defineProperty(menu, 'hidePopover', { configurable: true, value: vi.fn() });
+        Object.defineProperty(menu, 'showPopover', { configurable: true, value: reopened });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Settings', hidden: true }));
+        fireEvent.click(screen.getByRole('button', { name: 'Close settings' }));
+
+        expect(reopened).toHaveBeenCalled();
     });
 });

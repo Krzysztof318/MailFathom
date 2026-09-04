@@ -15,6 +15,7 @@ import { Settings } from '../settings/Settings';
 import { accountInScope, scopeOfAccount } from '../workspace/mailScope';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { TabModeSwitch, ThemeSegments } from './Preferences';
+import { useScreenLayer } from './screenLayers';
 import { useWideWorkspace } from './useWideWorkspace';
 
 // The menu at the foot of the rail, which is where the design project puts everything that is about the person rather
@@ -67,6 +68,7 @@ export function AccountMenu({
     const { translate } = useLocalization();
     const wide = useWideWorkspace();
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [standing, setStanding] = useState(false);
     const menu = useRef<HTMLDivElement>(null);
     const settingsRow = useRef<HTMLButtonElement>(null);
 
@@ -79,11 +81,28 @@ export function AccountMenu({
         setSettingsOpen(true);
     }
 
-    function closeSettings(): void {
+    // The menu comes back where the screen behind it was left by a way out of that screen — a control, Escape, or one
+    // press of the back gesture — and does not where the shell cleared everything on the way to another destination.
+    // Putting it back there would open a menu over the space somebody has just arrived at, with focus moved into it,
+    // which is the one thing clearing the screen exists to prevent.
+    function closeSettings(clearingTheScreen: boolean): void {
         setSettingsOpen(false);
+
+        if (clearingTheScreen) {
+            return;
+        }
+
         menu.current?.showPopover();
         settingsRow.current?.focus();
     }
+
+    // The menu stands over whichever screen the rail is beside, so the back gesture closes it before it navigates and
+    // taking the navigation to another destination leaves none of it behind. Whether it is open stays the platform's
+    // answer for the reason above: what is recorded here is the way to close it, never a second opinion about whether
+    // it is.
+    useScreenLayer(standing, () => {
+        menu.current?.hidePopover();
+    });
 
     return (
         <>
@@ -111,6 +130,9 @@ export function AccountMenu({
                 ref={menu}
                 id="account-menu"
                 popover="auto"
+                onToggle={(event) => {
+                    setStanding(event.newState === 'open');
+                }}
                 aria-label={translate('shell.accountMenu')}
                 className="inset-x-4 top-auto bottom-22 m-0 overflow-hidden rounded-2xl border border-line bg-panel p-0 text-base text-text shadow-overlay workspace:inset-x-auto workspace:bottom-4.5 workspace:left-26.5 workspace:w-54"
             >

@@ -10,6 +10,7 @@ import { Icon } from '../controls/Icon';
 import type { MenuPoint } from '../contextMenu/menuPlacement';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { useScreenLayer } from '../shell/screenLayers';
 import { useCurrentMinute } from './notificationAge';
 import { NotificationRow } from './NotificationRow';
 import { NotificationRowMenu } from './NotificationRowMenu';
@@ -99,6 +100,13 @@ export function NotificationCentre({
         }
     }, [centre.shown]);
 
+    // It covers the screen it was opened over, so the back gesture closes it before it navigates anywhere and taking
+    // the navigation to another destination leaves it behind. What closing it does is the panel's own way out, which
+    // clears what was picked and any menu standing on it as well.
+    useScreenLayer(centre.shown, () => {
+        leave();
+    });
+
     const drawn = filter === 'unread' ? centre.notifications.filter((row) => !row.read) : centre.notifications;
     const picked = selected.filter((id) => centre.notifications.some((row) => row.id === id));
 
@@ -127,7 +135,10 @@ export function NotificationCentre({
             // The two compositions are the design project's own: a sheet that stops above the bottom navigation in a
             // narrow window, and a panel standing beside the rail in a wide one. Where it comes from differs with it,
             // which is what the two motions and the two closed positions below say.
-            className={`fixed inset-x-0 top-0 bottom-navigation m-0 hidden h-auto max-h-none w-auto max-w-none open:flex flex-col overflow-visible rounded-t-4xl border-line bg-panel text-text shadow-dialog backdrop:bg-scrim workspace:end-auto workspace:bottom-0 workspace:start-rail workspace:w-notifications workspace:rounded-none workspace:border-e ${
+            // The panel is in the platform's top layer, where the frame's safe-area padding is not around it: the top
+            // inset is padded away inside it, and the bottom one is a margin because what the sheet stops above is the
+            // bottom navigation, which the frame has already lifted clear of the gesture bar.
+            className={`fixed inset-x-0 top-0 bottom-navigation m-0 mb-safe-bottom hidden h-auto max-h-none w-auto max-w-none open:flex flex-col overflow-visible rounded-t-4xl border-line bg-panel pt-safe-top text-text shadow-dialog backdrop:bg-scrim workspace:end-auto workspace:bottom-0 workspace:start-rail workspace:w-notifications workspace:rounded-none workspace:border-e ${
                 swipe.dragging
                     ? 'transition-none'
                     : swipe.springing

@@ -2,9 +2,10 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { LocalizationProvider } from '../localization/Localization';
+import { ScreenLayersContext, useScreenLayerStack, type ScreenLayers } from '../shell/screenLayers';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 
 const archiving = vi.fn();
@@ -15,12 +16,26 @@ const items: readonly ContextMenuItem[] = [
     { icon: 'delete', label: 'Delete', destroys: true, choose: vi.fn() },
 ];
 
-function menuOver(closed: () => void = vi.fn()): void {
+function menuOver(closed: () => void = vi.fn()): { readonly current: ScreenLayers } {
+    // The shell around it, because the menu records itself as standing over the screen for as long as it is drawn.
+    // Its three functions are the same ones for the life of the stack, so the value handed to the provider stays
+    // current however the count moves.
+    const { result } = renderHook(() => useScreenLayerStack());
+
     render(
         <LocalizationProvider>
-            <ContextMenu header="Contract annex — signatures" at={{ x: 40, y: 60 }} items={items} onClose={closed} />
+            <ScreenLayersContext value={result.current}>
+                <ContextMenu
+                    header="Contract annex — signatures"
+                    at={{ x: 40, y: 60 }}
+                    items={items}
+                    onClose={closed}
+                />
+            </ScreenLayersContext>
         </LocalizationProvider>,
     );
+
+    return result;
 }
 
 function walked(): HTMLElement[] {
@@ -132,5 +147,21 @@ describe('ContextMenu', () => {
 
         expect(archiving).toHaveBeenCalledOnce();
         expect(closed).toHaveBeenCalledOnce();
+    });
+
+    // It stands over whatever it was opened on, so the back gesture closes it before it navigates and a change of
+    // destination leaves none of it behind. It is on the screen for exactly as long as it is drawn, which is why the
+    // registration is unconditional rather than following a state of its own.
+    it('closes when the back gesture reaches it, rather than standing over the next screen', () => {
+        const closed = vi.fn();
+        const shell = menuOver(closed);
+
+        expect(shell.current.depth).toBe(1);
+
+        act(() => {
+            shell.current.closeTop();
+        });
+
+        expect(closed).toHaveBeenCalled();
     });
 });

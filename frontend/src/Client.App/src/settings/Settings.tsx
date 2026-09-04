@@ -10,6 +10,7 @@ import { VersionLine } from '../controls/VersionLine';
 import type { TelemetryForwarding } from '../deployment/telemetryForwarding';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { useScreenLayer } from '../shell/screenLayers';
 import type { ClientPreferencesInForce } from '../preferences/useClientPreferences';
 import type { OwnProfileInForce } from '../profile/useOwnProfile';
 import { LanguageSegments } from '../shell/Preferences';
@@ -65,7 +66,12 @@ export function Settings({
     /** What the deployment answered it is running, or `null` while nothing has answered, for the line at the foot. */
     readonly deploymentVersion: string | null;
 
-    readonly onClose: () => void;
+    /**
+     * Leaves this screen, and says which of the two ways out did it: `false` for a control on the screen, Escape, or
+     * one press of the back gesture, and `true` for the shell clearing everything on the way to another destination.
+     * The menu this was opened from is put back by the first and by none of the second.
+     */
+    readonly onClose: (clearingTheScreen: boolean) => void;
 }) {
     const { translate } = useLocalization();
     const panel = useRef<HTMLDialogElement>(null);
@@ -79,12 +85,29 @@ export function Settings({
         panel.current?.showModal();
     }, []);
 
+    // It stands over whichever screen opened it, so the back gesture closes it before it navigates anywhere, and going
+    // to another destination leaves it behind rather than over the screen somebody arrives at.
+    // Which of the two asked, carried across the element's own `close` event, which says nothing about why it fired.
+    // Every way out of this screen arrives at `onClose` through that one event — which is what keeps this screen with
+    // one path out — so the answer is put down here and read on the other side of it.
+    const clearingTheScreen = useRef(false);
+
+    useScreenLayer(true, (clearing) => {
+        clearingTheScreen.current = clearing;
+        panel.current?.close();
+    });
+
     return (
         <dialog
             ref={panel}
             aria-labelledby={named}
-            onClose={onClose}
-            className="m-0 h-full max-h-full w-full max-w-full rounded-none border-0 bg-panel p-0 text-base text-text backdrop:bg-scrim open:flex open:flex-col workspace:m-auto workspace:h-settings-card workspace:w-settings workspace:rounded-3xl workspace:border workspace:border-line workspace:shadow-dialog"
+            onClose={() => {
+                onClose(clearingTheScreen.current);
+            }}
+            // The insets are the screen's here rather than the frame's: a modal dialog stands in the platform's own top
+            // layer, so the padding the frame carries is not around it and a full-bleed settings screen would run under
+            // a cutout and under the gesture bar. The card composition has the frame around it again and takes none.
+            className="m-0 h-full max-h-full w-full max-w-full rounded-none border-0 bg-panel p-0 pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left text-base text-text backdrop:bg-scrim open:flex open:flex-col workspace:m-auto workspace:h-settings-card workspace:w-settings workspace:rounded-3xl workspace:border workspace:border-line workspace:p-0 workspace:shadow-dialog"
         >
             <div className="flex items-center gap-3 border-b border-line bg-sunken px-3.5 pt-3.5 pb-3 workspace:pt-2.5 workspace:pb-2.5">
                 <h2 id={named} className="text-2xl font-semibold workspace:text-md">

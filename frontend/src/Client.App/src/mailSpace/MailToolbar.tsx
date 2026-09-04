@@ -5,12 +5,14 @@
 import type { MailDraftAnswer } from '@mailfathom/client-backend';
 import { useComposing } from '../composer/useComposing';
 import { Control } from '../controls/Control';
+import type { ControlShape } from '../controls/controlShapes';
 import type { IconName } from '../controls/icons';
 import { PlannedControl } from '../controls/PlannedControl';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { MailboxActControls } from '../mailboxActs/MailboxActControls';
 import { actedMessages, useListedMail } from '../messageList/useListedMail';
+import { useDesktopComposition } from '../shell/useWideWorkspace';
 import { useWorkspace } from '../workspace/useWorkspace';
 
 // The strip the design project draws across the top of the Mail space: composing, and the eight things a person does
@@ -21,6 +23,12 @@ import { useWorkspace } from '../workspace/useWorkspace';
 // components below the frame that knows either, and neither is this strip's to own: the mail space already reads the
 // workspace, the composer is asked for from three unrelated places, which is what `useComposing` exists for, and where
 // the open message belongs is the list's, which is what `useListedMail` exists for.
+//
+// **How wide a control is drawn is the strip's own question**, and it is asked here rather than passed in for the same
+// reason: the design gives every control its name in words only in the composition that has room for a mailbox column
+// beside them, and draws the symbols alone at the tablet, the fold, and anywhere narrower. Nine names across a strip
+// that is already sharing its width with two panes is a strip that scrolls sideways, which is the one thing a toolbar
+// may not do.
 
 // Answering a message: which of the three answers each control writes, and the symbol and name the design gives it.
 const answers: readonly { readonly answer: MailDraftAnswer; readonly icon: IconName; readonly label: MessageKey }[] = [
@@ -35,6 +43,9 @@ export function MailToolbar() {
     const composing = useComposing();
     const listed = useListedMail();
     const open = workspace.selection;
+    const desktop = useDesktopComposition();
+    const composeShape: ControlShape = desktop ? 'primary' : 'primarySymbol';
+    const actShape: ControlShape = desktop ? 'labelled' : 'symbol';
 
     return (
         <div
@@ -46,13 +57,13 @@ export function MailToolbar() {
                 <Control
                     label={translate('mail.compose')}
                     icon="edit_square"
-                    shape="primary"
+                    shape={composeShape}
                     onPress={() => {
                         composing.compose({ kind: 'new' });
                     }}
                 />
             ) : (
-                <PlannedControl label={translate('mail.compose')} icon="edit_square" shape="primary" />
+                <PlannedControl label={translate('mail.compose')} icon="edit_square" shape={composeShape} />
             )}
 
             <span aria-hidden="true" className="mx-0.5 w-px self-stretch bg-line" />
@@ -66,7 +77,7 @@ export function MailToolbar() {
                         key={answering.icon}
                         label={translate(answering.label)}
                         icon={answering.icon}
-                        shape="symbol"
+                        shape={actShape}
                         onPress={() => {
                             composing.compose({ kind: 'answer', answers: answering.answer, storedEmailId: open });
                         }}
@@ -76,14 +87,14 @@ export function MailToolbar() {
                         key={answering.icon}
                         label={translate(answering.label)}
                         icon={answering.icon}
-                        shape="symbol"
+                        shape={actShape}
                     />
                 ),
             )}
 
             {/* The five that change the mailbox, over the one message that is open. With nothing open each of them
                 says so rather than being left out, for the reason the three answers above are drawn either way. */}
-            <MailboxActControls messages={open === null ? [] : actedMessages(listed, [open])} shape="symbol" />
+            <MailboxActControls messages={open === null ? [] : actedMessages(listed, [open])} shape={actShape} />
         </div>
     );
 }
