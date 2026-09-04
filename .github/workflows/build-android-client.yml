@@ -25,8 +25,8 @@ name: Build the Android client
 # than a choice to get wrong.
 #
 # **The whole Android toolchain comes from the runner image and nothing here installs or pins one.** The image carries
-# the SDK with the platform and build tools this project compiles against, three NDKs, five JDKs, and rustup; the two
-# steps below only say which of them to use. That is why the runner is pinned to a version rather than left on
+# the SDK with the platform and build tools this project compiles against, three NDK versions, five JDKs, and rustup;
+# the two steps below only say which of them to use. That is why the runner is pinned to a version rather than left on
 # `ubuntu-latest`: the image *is* the toolchain pin, so moving it is a decision about what the head is built with
 # rather than a routine bump. `THIRD_PARTY_LICENSES.md` records why none of those three earns a row of its own.
 #

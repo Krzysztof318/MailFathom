@@ -1151,9 +1151,9 @@ either, so a change breaking the Android build alone still merges green and fail
 catches a break in the toolchain itself rather than in this repository.
 
 Of the four prerequisites above the workflow installs one. The GitHub-hosted runner image already carries the SDK,
-several NDKs, several JDKs, and rustup, so the job only says which of them to use — which is why it pins the runner
-image rather than tracking `ubuntu-latest`: that image is the toolchain pin. What it does add is the Rust targets, and
-only the two the APK covers. A local machine is the case all four rows are written for.
+several NDK versions, several JDKs, and rustup, so the job only says which of them to use — which is why it pins the
+runner image rather than tracking `ubuntu-latest`: that image is the toolchain pin. What it does add is the Rust
+targets, and only the two the APK covers. A local machine is the case all four rows are written for.
 
 ## Code coverage
 
