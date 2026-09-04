@@ -572,6 +572,24 @@ describe('SignIn', () => {
             ),
         ).toBeDefined();
     });
+
+    // ADR 0027's amendment: a head whose protected storage is there and unreachable keeps nothing, and the sentence
+    // says which of the two reasons it was rather than borrowing the desktop's — which would tell somebody holding a
+    // device that offers a keychain that their device offers none.
+    it.each([
+        [
+            'notKeptStorageUnreachable' as const,
+            'Your password will not be kept, and you will be asked for it again the next time MailFathom starts — this device’s protected storage could not be reached, and MailFathom will not leave a password anywhere less safe.',
+        ],
+        [
+            'notKeptKeyInvalidated' as const,
+            'Your password will not be kept, and you will be asked for it again the next time MailFathom starts — this device discarded the key MailFathom kept it under, which is what changing the screen lock does.',
+        ],
+    ])('says nothing will be kept, and why, where the store reports %s', (lifetime, sentence) => {
+        renderScreen(signedIn, servingDeployment, lifetime);
+
+        expect(screen.getByText(sentence)).toBeDefined();
+    });
     // The screen the design project draws says three things about the connection before a password is typed into it:
     // what port will be reached, what it costs to turn TLS off, and whether the password about to be entered can be
     // read back. None of the three is decoration, so each is asserted here rather than looked at once.

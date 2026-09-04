@@ -10,10 +10,27 @@ import type { DeploymentAddress } from '@mailfathom/client-backend';
 //
 // The application depends on the three operations below and on one thing it reports — how long what it keeps survives —
 // and never on which of them it was handed. Which one is constructed is decided once, by `credentialStore` below, from
-// whether a shell is there to keep it in a keychain, and no screen underneath asks which head it is running on.
+// the arrangement a shell said it offers, and no screen underneath asks which head it is running on.
+//
+// A shell states that arrangement rather than a fact about its machine, because ADR 0027 decided that the same fact —
+// protected storage this client cannot reach — resolves one way where the page is the only other place to keep a
+// password and the other way where the platform kills the client constantly. Only the shell knows which of those it is,
+// so it answers with the arrangement itself and nothing here has to learn a platform's name to render the right
+// sentence.
 
-/** How long what a store keeps outlives the client, which is a sentence the sign-in screen renders before anybody types. */
-export type CredentialLifetime = 'untilSignedOut' | 'untilTheTabCloses' | 'untilTheClientCloses';
+/**
+ * How long what a store keeps outlives the client, which is a sentence the sign-in screen renders before anybody types.
+ *
+ * The last two are not durations so much as the absence of one, and they carry their reason because that is the half a
+ * person can act on: a store that would have kept the password and could not be reached is a different sentence from
+ * one whose key the operating system threw away, and neither is the desktop's "this machine offers no keychain".
+ */
+export type CredentialLifetime =
+    | 'untilSignedOut'
+    | 'untilTheTabCloses'
+    | 'untilTheClientCloses'
+    | 'notKeptStorageUnreachable'
+    | 'notKeptKeyInvalidated';
 
 /** Where the credential lives between starts: keep it, read it back, forget it, and say how long that lasts. */
 export interface CredentialStore {
@@ -26,7 +43,7 @@ export interface CredentialStore {
      * Keeps this credential for that deployment, answering whether it is stored.
      *
      * `false` is a store that would not write — a keychain locked between being found and being written to, a browser
-     * that stopped permitting storage — and it is answered for the same reason `forget` answers: the screen has
+     * that stopped permitting storage, a device whose protected storage keeps nothing — and it is answered for the same reason `forget` answers: the screen has
      * already told the person how long what it keeps will last, so a refused write that reported nothing would leave
      * them asked for the password again at the next start with nothing having said why.
      */
@@ -46,9 +63,13 @@ export interface CredentialStore {
 /**
  * The store this run keeps its credential in.
  *
- * A shell that answers is one offering an operating-system keychain, and a machine whose keychain cannot be reached
- * keeps the credential for the run exactly as a browser tab does — which is a supported outcome with wording of its
- * own rather than a silent fallback to a worse store.
+ * There is no shell on the web head, and the page's own storage is what is left. A shell answers with the arrangement
+ * it offers: the operating system's protected store where it has one, the run where it has none and the page is the
+ * safer of the two remaining answers, and neither where it has one it could not reach — which keeps nothing rather
+ * than writing a password to a page on a device that is killed and restarted all day.
+ *
+ * A shell that answers with something this client does not recognise is read as offering no store, which is the
+ * arrangement every shell that predates a newer answer was already giving.
  */
 export async function credentialStore(): Promise<CredentialStore> {
     const shell = window.__TAURI__;
@@ -57,9 +78,17 @@ export async function credentialStore(): Promise<CredentialStore> {
         return keptForTheRun('untilTheTabCloses');
     }
 
-    const reachable = await shell.core.invoke('keychain_reachable').catch(() => false);
+    const arrangement = await shell.core.invoke('credential_arrangement').catch(() => null);
 
-    return reachable === true ? keptInTheKeychain() : keptForTheRun('untilTheClientCloses');
+    switch (arrangement) {
+        case 'keptInTheStore':
+            return keptInTheProtectedStore();
+        case 'notKeptStorageUnreachable':
+        case 'notKeptKeyInvalidated':
+            return keptNowhere(arrangement);
+        default:
+            return keptForTheRun('untilTheClientCloses');
+    }
 }
 
 /** What the credential is written under, which names the deployment so a credential is never read back for another. */
@@ -75,7 +104,7 @@ function entryFor(deployment: DeploymentAddress): string {
  * with no expiry to limit it. What this buys over holding the value in memory is the reload, which a single-page
  * application meets far more often than a person expects to sign in.
  */
-function keptForTheRun(lifetime: CredentialLifetime): CredentialStore {
+function keptForTheRun(lifetime: 'untilTheTabCloses' | 'untilTheClientCloses'): CredentialStore {
     return {
         lifetime,
 
@@ -87,8 +116,27 @@ function keptForTheRun(lifetime: CredentialLifetime): CredentialStore {
     };
 }
 
-/** The credential kept in the operating system's own credential store, which the shell reaches and the WebView cannot. */
-function keptInTheKeychain(): CredentialStore {
+/**
+ * The credential kept nowhere at all, on a head whose shell has protected storage it could not reach.
+ *
+ * `keep` answers `false` because nothing was stored and the screen has to say so at the moment somebody signs in, and
+ * `forget` answers `true` because nothing is kept under that name for anything to remove — the same reading the page's
+ * own storage gives when it refuses every write.
+ */
+function keptNowhere(lifetime: 'notKeptStorageUnreachable' | 'notKeptKeyInvalidated'): CredentialStore {
+    return {
+        lifetime,
+
+        read: () => Promise.resolve(null),
+
+        keep: () => Promise.resolve(false),
+
+        forget: () => Promise.resolve(true),
+    };
+}
+
+/** The credential kept in the operating system's own protected store, which the shell reaches and the WebView cannot. */
+function keptInTheProtectedStore(): CredentialStore {
     return {
         lifetime: 'untilSignedOut',
 
@@ -108,7 +156,7 @@ function keptInTheKeychain(): CredentialStore {
         },
 
         forget: async (deployment) => {
-            // The shell's own answer, because a deletion nobody performed is a password left on the machine: the entry
+            // The shell's own answer, because a deletion nobody performed is a password left on the device: the entry
             // outlives uninstalling the application.
             return (await shellAnswers('forget_credential', { deployment: deployment.baseAddress })) === true;
         },
@@ -118,7 +166,7 @@ function keptInTheKeychain(): CredentialStore {
 /**
  * What the shell made of one command, or `null` where it refused or was not there.
  *
- * A keychain that will not answer leaves the client asking for the password again, which is the same outcome a browser
+ * A store that will not answer leaves the client asking for the password again, which is the same outcome a browser
  * refusing storage produces and is a smaller loss than a client that fails to open over it. Nothing is reported out of
  * here, because everything that could be reported is about a value this module exists to keep quiet.
  */

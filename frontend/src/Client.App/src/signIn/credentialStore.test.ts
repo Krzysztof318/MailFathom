@@ -48,16 +48,16 @@ describe('credentialStore', () => {
         expect(store.lifetime).toBe('untilTheTabCloses');
     });
 
-    it('keeps a credential until sign-out where the shell reaches a keychain', async () => {
-        shellAnswering({ keychain_reachable: true });
+    it('keeps a credential until sign-out where the shell offers a protected store', async () => {
+        shellAnswering({ credential_arrangement: 'keptInTheStore' });
 
         const store = await credentialStore();
 
         expect(store.lifetime).toBe('untilSignedOut');
     });
 
-    it('keeps a credential for the run where the shell reaches no keychain, rather than writing it to a file', async () => {
-        shellAnswering({ keychain_reachable: false });
+    it('keeps a credential for the run where the shell offers no store, rather than writing it to a file', async () => {
+        shellAnswering({ credential_arrangement: 'keptForTheRun' });
 
         const store = await credentialStore();
 
@@ -65,11 +65,66 @@ describe('credentialStore', () => {
     });
 
     it('keeps a credential for the run where the shell will not answer at all', async () => {
-        shellAnswering({ keychain_reachable: new Error('no keychain here') });
+        shellAnswering({ credential_arrangement: new Error('no store here') });
 
         const store = await credentialStore();
 
         expect(store.lifetime).toBe('untilTheClientCloses');
+    });
+
+    it('keeps a credential for the run where the shell answers with an arrangement this client does not know', async () => {
+        shellAnswering({ credential_arrangement: 'keptSomewhereNewer' });
+
+        const store = await credentialStore();
+
+        expect(store.lifetime).toBe('untilTheClientCloses');
+    });
+
+    it.each([
+        ['protected storage it could not reach', 'notKeptStorageUnreachable'],
+        ['a key the device discarded', 'notKeptKeyInvalidated'],
+    ])('keeps a credential nowhere where the shell reports %s', async (_, arrangement) => {
+        shellAnswering({ credential_arrangement: arrangement });
+
+        const store = await credentialStore();
+
+        expect(store.lifetime).toBe(arrangement);
+    });
+});
+
+describe('a credential kept nowhere', () => {
+    // ADR 0027's amendment, and the one place a store deliberately keeps nothing: a head whose protected storage was
+    // there and could not be reached never falls back to the page, because a device that kills the client all day
+    // would leave that password readable by anything reaching the origin for far longer than a tab ever does.
+    it.each(['notKeptStorageUnreachable', 'notKeptKeyInvalidated'])(
+        'reads back nothing and writes nothing anywhere the page can see, reporting %s',
+        async (arrangement) => {
+            shellAnswering({ credential_arrangement: arrangement });
+            const store = await credentialStore();
+
+            expect(await store.keep(deployment, authorization)).toBe(false);
+            expect(await store.read(deployment)).toBeNull();
+            expect(window.sessionStorage.length).toBe(0);
+            expect(window.localStorage.length).toBe(0);
+        },
+    );
+
+    it('reports the credential as gone, because nothing was ever kept under that name', async () => {
+        shellAnswering({ credential_arrangement: 'notKeptStorageUnreachable' });
+        const store = await credentialStore();
+
+        expect(await store.forget(deployment)).toBe(true);
+    });
+
+    it('asks the shell for nothing beyond the arrangement it already answered', async () => {
+        const asked = shellAnswering({ credential_arrangement: 'notKeptKeyInvalidated' });
+        const store = await credentialStore();
+
+        await store.keep(deployment, authorization);
+        await store.read(deployment);
+        await store.forget(deployment);
+
+        expect(asked).toEqual([{ command: 'credential_arrangement', argument: undefined }]);
     });
 });
 
@@ -122,9 +177,9 @@ describe('a credential kept for the run', () => {
     });
 });
 
-describe('a credential kept in the keychain', () => {
+describe('a credential kept in the shell’s protected store', () => {
     it('asks the shell for what it kept, naming the deployment the credential was given for', async () => {
-        const asked = shellAnswering({ keychain_reachable: true, read_credential: authorization });
+        const asked = shellAnswering({ credential_arrangement: 'keptInTheStore', read_credential: authorization });
         const store = await credentialStore();
 
         expect(await store.read(deployment)).toBe(authorization);
@@ -135,14 +190,14 @@ describe('a credential kept in the keychain', () => {
     });
 
     it('reads back nothing where the shell answered with something that is not a credential', async () => {
-        shellAnswering({ keychain_reachable: true, read_credential: null });
+        shellAnswering({ credential_arrangement: 'keptInTheStore', read_credential: null });
         const store = await credentialStore();
 
         expect(await store.read(deployment)).toBeNull();
     });
 
     it('hands the shell the finished header value to keep, and nothing else about it', async () => {
-        const asked = shellAnswering({ keychain_reachable: true, keep_credential: true });
+        const asked = shellAnswering({ credential_arrangement: 'keptInTheStore', keep_credential: true });
         const store = await credentialStore();
 
         await store.keep(deployment, authorization);
@@ -157,7 +212,7 @@ describe('a credential kept in the keychain', () => {
         ['a keychain that would not write the entry', false],
         ['a keychain that could not be reached at all', new Error('the keychain is locked')],
     ])('reports the credential as not kept where the shell answered with %s', async (_, answer) => {
-        shellAnswering({ keychain_reachable: true, keep_credential: answer });
+        shellAnswering({ credential_arrangement: 'keptInTheStore', keep_credential: answer });
         const store = await credentialStore();
 
         // A keychain found at startup can be locked by the time it is written to, and the screen has already said the
@@ -167,7 +222,7 @@ describe('a credential kept in the keychain', () => {
     });
 
     it('asks the shell to delete the entry when the credential is forgotten', async () => {
-        const asked = shellAnswering({ keychain_reachable: true, forget_credential: true });
+        const asked = shellAnswering({ credential_arrangement: 'keptInTheStore', forget_credential: true });
         const store = await credentialStore();
 
         expect(await store.forget(deployment)).toBe(true);
@@ -181,7 +236,7 @@ describe('a credential kept in the keychain', () => {
         ['a keychain that would not delete the entry', false],
         ['a keychain that could not be reached at all', new Error('the keychain is locked')],
     ])('reports the credential as still kept where the shell answered with %s', async (_, answer) => {
-        shellAnswering({ keychain_reachable: true, forget_credential: answer });
+        shellAnswering({ credential_arrangement: 'keptInTheStore', forget_credential: answer });
         const store = await credentialStore();
 
         // The screen has already said that signing out is what removes the password, so a deletion nobody performed
@@ -190,7 +245,10 @@ describe('a credential kept in the keychain', () => {
     });
 
     it('asks for the credential again where the keychain refuses, rather than failing the screen', async () => {
-        shellAnswering({ keychain_reachable: true, read_credential: new Error('the keychain is locked') });
+        shellAnswering({
+            credential_arrangement: 'keptInTheStore',
+            read_credential: new Error('the keychain is locked'),
+        });
         const store = await credentialStore();
 
         expect(await store.read(deployment)).toBeNull();
@@ -203,7 +261,7 @@ describe('a credential kept in the keychain', () => {
         }
 
         shellAnswering({
-            keychain_reachable: true,
+            credential_arrangement: 'keptInTheStore',
             keep_credential: new Error('the keychain is locked'),
             read_credential: new Error('the keychain is locked'),
         });
