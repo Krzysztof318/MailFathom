@@ -51,12 +51,25 @@ describe('ListedMailProvider', () => {
         const listed = held();
         const everything = vi.fn();
 
-        listed.listing(everything);
+        listed.listing({ selectAll: everything, takeFocus: () => undefined });
         listed.selectAll();
 
         listed.listing(null);
         listed.selectAll();
 
         expect(everything).toHaveBeenCalledOnce();
+    });
+
+    it('hands focus to the list that registered it, and to nothing at all once no list is on the screen', () => {
+        const listed = held();
+        const focused = vi.fn();
+
+        listed.listing({ selectAll: () => undefined, takeFocus: focused });
+        listed.takeFocus();
+
+        listed.listing(null);
+        listed.takeFocus();
+
+        expect(focused).toHaveBeenCalledOnce();
     });
 });

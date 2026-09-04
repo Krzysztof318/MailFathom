@@ -46,6 +46,7 @@ const refusalSaid: Readonly<Record<ActRefusal, MessageKey>> = {
     noTrashFolder: 'act.noTrashFolder',
     severalAccounts: 'act.severalAccounts',
     noOtherFolder: 'act.noOtherFolder',
+    foldersUnknown: 'act.foldersUnknown',
 };
 
 // How many messages the question about deleting counts, in the forms a language has for the noun.

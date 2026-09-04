@@ -101,6 +101,10 @@ export function MailboxActsProvider({
     const toasts = useToasts();
     const [kept, setKept] = useState<Held>(heldForNobody);
 
+    // How many times the folders have been asked for, which is what the second attempt is: the read is an effect, so
+    // asking again is a value it depends on rather than a call from the toast that offered it.
+    const [attempts, setAttempts] = useState(0);
+
     // Derived rather than cleared, for the reason `readMarking/ReadMarking.tsx` gives: signing out and back in on one
     // tab keeps this component mounted, and the previous person's pending acts would otherwise be drawn over the next
     // person's mail — and their folders read as this one's.
@@ -116,6 +120,10 @@ export function MailboxActsProvider({
     //
     // ponytail: a second reader of `/folders`. One read the whole client shares is the upgrade, and the moment to take
     // it is when a third surface needs the tree.
+    //
+    // A read that does not answer is said rather than dropped, and it is said once with the way out on it: without the
+    // folders the three acts that file a message are refused as `foldersUnknown`, which is a sentence nobody can act on
+    // unless the client offers them the second attempt.
     useEffect(() => {
         if (session === null || !online || !moves) {
             return;
@@ -124,19 +132,38 @@ export function MailboxActsProvider({
         let listening = true;
 
         void readMailFolders(session, transport).then((answer) => {
-            if (listening && answer.outcome === 'read') {
+            if (!listening) {
+                return;
+            }
+
+            if (answer.outcome === 'read') {
                 setKept((current) => ({
                     session,
                     directory: answer.value,
                     asked: current.session === session ? current.asked : new Map(),
                 }));
+
+                return;
             }
+
+            toasts.raise({
+                kind: 'warning',
+                title: translate('act.foldersNotRead', {
+                    reason: translate(failureLabels[answer.failure.reason]),
+                }),
+                action: {
+                    label: translate('act.readFoldersAgain'),
+                    take: () => {
+                        setAttempts((made) => made + 1);
+                    },
+                },
+            });
         });
 
         return () => {
             listening = false;
         };
-    }, [session, transport, online, moves]);
+    }, [session, transport, online, moves, attempts, toasts, translate]);
 
     function refusalOf(act: MailboxAct, messages: readonly ActedMessage[]) {
         return refusalFor(act, messages, held.directory, { flags, moves });

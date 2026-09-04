@@ -13,7 +13,7 @@ import { useWorkspace, type Workspace } from '../workspace/useWorkspace';
 import { openingListing, rowsPerPage } from './listing';
 import { MessageList } from './MessageList';
 import { rememberedListing, rememberListing } from './rememberedListings';
-import { ListedMailContext, nothingListed } from './useListedMail';
+import { ListedMailContext, nothingListed, type ListedMailbox } from './useListedMail';
 
 const session: ClientSession = { baseAddress: 'https://mail.example.invalid', authorization: 'Basic dGVzdA==' };
 
@@ -433,11 +433,11 @@ describe('MessageList', () => {
     });
 
     it('selects everything it is showing when a surface outside it asks, and stops offering that as it leaves', async () => {
-        const asked: ((() => void) | null)[] = [];
+        const asked: (ListedMailbox | null)[] = [];
         const listed = {
             ...nothingListed,
-            listing: (selectingAll: (() => void) | null) => {
-                asked.push(selectingAll);
+            listing: (list: ListedMailbox | null) => {
+                asked.push(list);
             },
         };
 
@@ -445,7 +445,7 @@ describe('MessageList', () => {
 
         await rows();
         act(() => {
-            asked.at(-1)?.();
+            asked.at(-1)?.selectAll();
         });
 
         expect(carried().selected).toHaveLength(rowsPerPage);
@@ -453,6 +453,28 @@ describe('MessageList', () => {
         drawn.unmount();
 
         expect(asked.at(-1)).toBeNull();
+    });
+
+    // The bar above the list hands focus back before it clears the selection and disappears, and the row the keyboard
+    // was left on is where a reader was before they picked anything out.
+    it('puts focus back on the row it left the keyboard on when a surface outside it hands focus over', async () => {
+        const asked: (ListedMailbox | null)[] = [];
+        const listed = {
+            ...nothingListed,
+            listing: (list: ListedMailbox | null) => {
+                asked.push(list);
+            },
+        };
+
+        render(<ListedMailContext value={listed}>{listUnder(answering(wholeFolder))}</ListedMailContext>);
+
+        const drawn = await rows();
+
+        act(() => {
+            asked.at(-1)?.takeFocus();
+        });
+
+        expect(document.activeElement).toBe(drawn[0]);
     });
 
     it('moves through the list from the keyboard and selects what it moves onto', async () => {

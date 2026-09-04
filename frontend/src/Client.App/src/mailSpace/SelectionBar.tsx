@@ -46,7 +46,11 @@ export function SelectionBar() {
     // a count of what pressing an act would not touch.
     const messages = actedMessages(listed, workspace.selected);
 
+    // Clearing the selection takes this bar off the screen, and with it the control that was just pressed — so focus
+    // goes back to the list before the selection goes, rather than being left on an element about to be removed. The
+    // list is where the reader picked the messages out, and the row it left focus on is where they were.
     function clear(): void {
+        listed.takeFocus();
         revise({ selected: [] });
     }
 

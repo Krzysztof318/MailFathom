@@ -270,6 +270,37 @@ describe('MailboxActsProvider', () => {
         expect(submitted(deployment)).toStrictEqual([]);
     });
 
+    it('says the folders were not read and offers the read again, rather than refusing as if the account had none', async () => {
+        const deployment = deploymentAnswering();
+        let answered = 503;
+
+        const failing: Deployment = {
+            requests: deployment.requests,
+            transport: (request) => {
+                if (request.path.endsWith('/folders') && answered !== 200) {
+                    deployment.requests.push(request);
+
+                    return Promise.resolve({ status: answered, body: '', headers: {} });
+                }
+
+                return deployment.transport(request);
+            },
+        };
+
+        const { held } = acting(failing);
+
+        await screen.findByText('Your folders were not read: unavailable.');
+
+        expect(held().refusalOf('archive', [invoice])).toBe('foldersUnknown');
+
+        answered = 200;
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+        await waitFor(() => {
+            expect(held().refusalOf('archive', [invoice])).toBeNull();
+        });
+    });
+
     it('reads no folders for a credential that may not file mail, an act it refuses needing no destination', () => {
         const deployment = deploymentAnswering();
 

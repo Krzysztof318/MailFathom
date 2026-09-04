@@ -43,7 +43,10 @@ export type ActRefusal =
     | 'severalAccounts'
 
     /** The one account has no other folder to file into. */
-    | 'noOtherFolder';
+    | 'noOtherFolder'
+
+    /** This client has not read the folders, so it does not know where the act would file to. */
+    | 'foldersUnknown';
 
 /** The folder an account labels with that role, or `null` where its configuration labels none. */
 export function folderWithRole(
@@ -102,10 +105,18 @@ export function refusalFor(
         return 'notOffered';
     }
 
+    if (act === 'flag' || act === 'markUnread') {
+        return null;
+    }
+
+    // The three acts below are folder moves, and folders this client has not read are not folders an account does not
+    // have. Said apart for that reason: a read that failed and a mailbox labelling no archive would otherwise reach a
+    // reader as the same sentence, and only one of the two is something they can do anything about.
+    if (directory === null) {
+        return 'foldersUnknown';
+    }
+
     switch (act) {
-        case 'flag':
-        case 'markUnread':
-            return null;
         case 'archive':
             return everyAccountHas(directory, messages, 'Archive') ? null : 'noArchiveFolder';
         case 'delete':
@@ -113,10 +124,19 @@ export function refusalFor(
         case 'move':
             return accountsAmong(messages).length > 1
                 ? 'severalAccounts'
-                : destinationsFor(directory, messages).length === 0
-                  ? 'noOtherFolder'
-                  : null;
+                : movesSomething(directory, messages)
+                  ? null
+                  : 'noOtherFolder';
     }
+}
+
+// Whether any folder on offer would actually take a message somewhere it is not. An account with one folder offers
+// exactly the folder its mail already sits in, which is a dialog with nothing in it to choose — while a selection
+// spread across two folders of a two-folder account has two destinations that each move half of it.
+function movesSomething(directory: MailFolderDirectory, messages: readonly ActedMessage[]): boolean {
+    return destinationsFor(directory, messages).some((destination) =>
+        messages.some((message) => message.folder !== destination.alias),
+    );
 }
 
 /**

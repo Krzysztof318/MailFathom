@@ -287,8 +287,23 @@ export function MessageList({
     // Registered on every render rather than against a dependency list, because what is registered closes over the rows
     // held at that moment — and it is a reference being written rather than state being set, so nothing re-renders.
     useEffect(() => {
-        listed.listing(() => {
-            select(rows.map(identityOf));
+        listed.listing({
+            selectAll: () => {
+                select(rows.map(identityOf));
+            },
+
+            // Straight onto the row where it is drawn, and asked of the next commit where it is not: the bar hands
+            // focus over before it clears the selection, so the row is in the document at that moment, and a list
+            // scrolled away from the focused row is the case the commit below answers.
+            takeFocus: () => {
+                const row = elements.current.get(focusedRow);
+
+                if (row === undefined) {
+                    wantsFocus.current = true;
+                } else {
+                    row.focus();
+                }
+            },
         });
 
         return () => {

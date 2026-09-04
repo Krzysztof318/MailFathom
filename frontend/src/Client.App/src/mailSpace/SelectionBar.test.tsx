@@ -94,6 +94,22 @@ describe('SelectionBar', () => {
         expect(everything).toHaveBeenCalledOnce();
     });
 
+    // The bar goes off the screen the moment the selection does, taking the pressed control with it, so focus has to
+    // be somewhere else before that happens or a keyboard reader is left on the document body.
+    it.each(['Clear the selection', 'Archive'])(
+        'hands focus back to the list before %s takes this bar away',
+        (name) => {
+            const focused = vi.fn();
+
+            drawBar(['message-1'], {}, { takeFocus: focused });
+
+            fireEvent.click(screen.getByRole('button', { name }));
+
+            expect(focused).toHaveBeenCalledOnce();
+            expect(carried().selected).toStrictEqual([]);
+        },
+    );
+
     it('acts over everything picked out, and lets the selection go once the act has been asked for', () => {
         const performed = vi.fn();
 

@@ -12,6 +12,10 @@ import type { ActedMessage } from '../mailboxActs/useMailboxActs';
 // pages the list has scrolled away from — while an act on one has to name the account it is in and the folder it is
 // leaving. The list is the only thing that ever knew either, so this is where it says so.
 //
+// **Focus is the third question**, and it is here for the same reason: the selection bar disappears the moment it
+// clears the selection, taking the pressed control with it, and the place a reader was before they picked messages out
+// is the row the list left focus on. Only the list knows which row that is.
+//
 // **Selecting everything is the list's own act**, not a rewrite of the selection from outside: what *everything* means
 // is the rows the list is holding, which is a window over a folder rather than the folder. So the bar draws the
 // control and the list performs it, and a screen with no list on it performs nothing.
@@ -37,8 +41,17 @@ export interface ListedMail {
     /** Selects every message the list is showing, and does nothing where no list is on the screen. */
     readonly selectAll: () => void;
 
+    /** Puts focus back on the row the list left it on, which is where a bar above it hands focus before it goes. */
+    readonly takeFocus: () => void;
+
     /** Says which list is on the screen, and `null` as it leaves. */
-    readonly listing: (selectingAll: (() => void) | null) => void;
+    readonly listing: (list: ListedMailbox | null) => void;
+}
+
+/** What a list on the screen answers for, filled by the list itself and by nothing above it. */
+export interface ListedMailbox {
+    readonly selectAll: () => void;
+    readonly takeFocus: () => void;
 }
 
 /** What a tree with no provider above it reads, which is a client where nothing outside a list can reach into one. */
@@ -46,6 +59,7 @@ export const nothingListed: ListedMail = {
     placeOf: () => null,
     drew: () => undefined,
     selectAll: () => undefined,
+    takeFocus: () => undefined,
     listing: () => undefined,
 };
 

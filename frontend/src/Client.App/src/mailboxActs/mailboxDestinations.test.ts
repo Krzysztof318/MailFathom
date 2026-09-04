@@ -123,6 +123,28 @@ describe('refusalFor', () => {
             'noOtherFolder',
         );
     });
+
+    it('refuses a move for an account whose only folder is the one the messages are already in', () => {
+        const oneFolder = directoryOf({ work: [folder('work-inbox', 'Inbox', ['INBOX'])] });
+
+        expect(refusalFor('move', [inWork('message-1')], oneFolder, everythingOffered)).toBe('noOtherFolder');
+    });
+
+    it('offers a move where a folder would take at least one of the messages somewhere it is not', () => {
+        const twoFolders = directoryOf({
+            work: [folder('work-inbox', 'Inbox', ['INBOX']), folder('work-clients', null, ['Clients'])],
+        });
+        const filed: ActedMessage = { storedEmailId: 'message-2', account: 'work', folder: 'work-clients' };
+
+        expect(refusalFor('move', [inWork('message-1'), filed], twoFolders, everythingOffered)).toBeNull();
+    });
+
+    it.each(['archive', 'delete', 'move'] as const)(
+        'says the folders are unread rather than blaming the account for %s, which are different things',
+        (act) => {
+            expect(refusalFor(act, [inWork('message-1')], null, everythingOffered)).toBe('foldersUnknown');
+        },
+    );
 });
 
 describe('filingFor', () => {

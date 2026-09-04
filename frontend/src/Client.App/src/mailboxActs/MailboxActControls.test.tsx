@@ -119,7 +119,8 @@ describe('MailboxActControls', () => {
         ['nothingToActOn', 'Archive — nothing is open or selected for this to be about.'],
         ['noArchiveFolder', 'Archive — this account names no archive folder, so there is nowhere to archive to.'],
         ['severalAccounts', 'Archive — messages from several accounts cannot be filed into one folder.'],
-        ['noOtherFolder', 'Archive — this account has no folder to file into.'],
+        ['noOtherFolder', 'Archive — this account has no other folder to file into.'],
+        ['foldersUnknown', 'Archive — MailFathom has not read your folders, so it cannot say where this would go.'],
     ] as [ActRefusal, string][])(
         'says %s in the control’s own name rather than refusing after the press',
         (refusal, said) => {

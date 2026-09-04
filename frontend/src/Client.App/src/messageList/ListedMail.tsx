@@ -4,7 +4,7 @@
 
 import { useRef, useState, type ReactNode } from 'react';
 import type { ActedMessage } from '../mailboxActs/useMailboxActs';
-import { ListedMailContext, mostPlacesRemembered, type ListedMail } from './useListedMail';
+import { ListedMailContext, mostPlacesRemembered, type ListedMail, type ListedMailbox } from './useListedMail';
 
 // What the list has drawn, held for the surfaces above it. What it holds is refs on purpose: nothing in them changes
 // what is on the screen, and re-rendering on every arriving page would cost the list its scrolling — the one
@@ -13,7 +13,7 @@ import { ListedMailContext, mostPlacesRemembered, type ListedMail } from './useL
 
 export function ListedMailProvider({ children }: { readonly children: ReactNode }) {
     const places = useRef(new Map<string, ActedMessage>());
-    const selectingAll = useRef<(() => void) | null>(null);
+    const mailbox = useRef<ListedMailbox | null>(null);
 
     // Built once, so the value never changes identity and no consumer re-renders because of this provider.
     const [listed] = useState<ListedMail>(() => ({
@@ -37,10 +37,13 @@ export function ListedMailProvider({ children }: { readonly children: ReactNode 
             }
         },
         selectAll: () => {
-            selectingAll.current?.();
+            mailbox.current?.selectAll();
         },
-        listing: (selectAll) => {
-            selectingAll.current = selectAll;
+        takeFocus: () => {
+            mailbox.current?.takeFocus();
+        },
+        listing: (list) => {
+            mailbox.current = list;
         },
     }));
 
