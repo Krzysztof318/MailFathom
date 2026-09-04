@@ -123,12 +123,18 @@ export function MessageList({
     const [pressed, setPressed] = useState<{ readonly row: number; readonly at: MenuPoint } | null>(null);
     const [questioned, setQuestioned] = useState<readonly ActedMessage[]>([]);
 
+    // Whether the reader has been put back where they were. State rather than a ref, because what depends on it is what
+    // the list asks the deployment for, and that is worked out during render: a list restored into a page it opened
+    // from a cursor spends the commit before the scroller is moved with its window at the leading end of that page,
+    // which is where the read below would ask for the page before it. Nobody scrolled there, and a hundred rows joining
+    // above the reader between two frames is a reader taken a page back up the folder.
+    const [restored, setRestored] = useState(false);
+
     const scroller = useRef<HTMLDivElement>(null);
     const deleting = useRef<HTMLDialogElement>(null);
     const filing = useRef<HTMLDialogElement>(null);
     const elements = useRef(new Map<number, HTMLLIElement>());
     const dragging = useRef(false);
-    const restored = useRef(false);
     const wantsFocus = useRef(false);
 
     const rowCount = rowCountOf(held);
@@ -151,13 +157,20 @@ export function MessageList({
     //
     // It is `null` for a list that wants nothing, which is also how a read in flight reads: the answer is what changes
     // it, so nothing has to be kept saying whether one is out. A network gap and a failure both make it `null`, which
-    // ends the read they interrupted rather than letting it outlive them.
+    // ends the read they interrupted rather than letting it outlive them. It is `null` on the one commit between the
+    // first page arriving and the reader being put back into it as well, for the reason `restored` above gives: what
+    // the window says on that commit is where the list drew before it was placed rather than where it is, and a page
+    // asked for on that reading is a page nobody scrolled to. A list standing on no rows is placed by that same
+    // reading — there is nowhere to put anybody back into, and it is what a page that answered with nothing but a
+    // cursor onward leaves, which is a list that has to keep reading rather than one waiting to be placed.
     const wanted =
         !online || failure !== null
             ? null
             : held.slots.length === 0
               ? { cursor: opening.cursor, direction: opening.readAs, refilling: null }
-              : wantedFor(held, drawn.first, lastDrawn);
+              : restored || rowCount === 0
+                ? wantedFor(held, drawn.first, lastDrawn)
+                : null;
 
     // Named apart so the effect below depends on what the request *is* rather than on the object naming it. A fresh
     // object every render would put a request on the wire every render; these three change only when the page wanted
@@ -249,9 +262,16 @@ export function MessageList({
         // The reader is put back where they were once there is something to put them back into, and once only: every
         // later scroll is theirs. The measured height rather than the one in state, because both happen on this commit
         // and the one in state is a render behind.
-        if (!restored.current && rowCount > 0) {
-            restored.current = true;
-            element.scrollTop = offsetOfRow(opening.rowInPage, measured > 0 ? measured : rowHeight);
+        if (!restored && rowCount > 0) {
+            const placed = offsetOfRow(opening.rowInPage, measured > 0 ? measured : rowHeight);
+
+            // The window is moved with the scroller rather than left to the scroll event the assignment raises. That
+            // event is delivered on the browser's own schedule, and the render that lets the read below go out again
+            // is this one — so a window still reading zero here is a page asked for from where the list was before it
+            // was placed. The event still arrives and still carries this offset, which sets no state a second time.
+            element.scrollTop = placed;
+            setScrollTop(placed);
+            setRestored(true);
         }
 
         if (wantsFocus.current && focusedIsDrawn) {
@@ -262,7 +282,7 @@ export function MessageList({
                 wantsFocus.current = false;
             }
         }
-    }, [viewport, rowHeight, rowCount, drawn.first, opening.rowInPage, focusedRow, focusedIsDrawn]);
+    }, [viewport, rowHeight, rowCount, drawn.first, opening.rowInPage, focusedRow, focusedIsDrawn, restored]);
 
     // A window resized changes how many rows the list draws, and a resize is not a commit. The scroller's own size is
     // read on the commit that follows, which is what this asks for.
@@ -354,7 +374,7 @@ export function MessageList({
         // made rather than a position they drifted to: leaving the moment after making it keeps it.
         rememberListing(session.baseAddress, scope, restarted);
         setOpening(restarted);
-        restored.current = false;
+        setRestored(false);
         setListing(chosen);
         setHeld(nothingHeld);
         setFailure(null);

@@ -247,6 +247,51 @@ describe('MessageList', () => {
         expect(requests[0]?.path).toContain('cursor=where-they-were');
     });
 
+    it('reads nothing above the page it continued into, which nobody scrolled to', async () => {
+        rememberListing(session.baseAddress, everything, {
+            order: 'newestFirst',
+            filters: openingListing.filters,
+            cursor: 'where-they-were',
+            readAs: 'forward',
+            rowInPage: rowsPerPage - 1,
+        });
+
+        const { transport, requests } = recording(
+            pageOf(
+                Array.from({ length: rowsPerPage }, (_, at) => message(at)),
+                { previousCursor: 'the-page-above' },
+            ),
+        );
+
+        renderList(transport);
+        await rows();
+
+        expect(requests.map((asked) => asked.path).filter((path) => path.includes('direction=backward'))).toStrictEqual(
+            [],
+        );
+    });
+
+    it('keeps reading past a page that answered with no rows and a cursor onward', async () => {
+        const requests: ClientRequest[] = [];
+        const transport: MailFathomTransport = (request) => {
+            requests.push(request);
+
+            return Promise.resolve({
+                status: 200,
+                headers: {},
+                body:
+                    requests.length === 1
+                        ? pageOf([], { nextCursor: 'the-page-after' })
+                        : pageOf([message(0)], { previousCursor: 'the-page-above' }),
+            });
+        };
+
+        renderList(transport);
+        await rows();
+
+        expect(requests[1]?.path).toContain('cursor=the-page-after');
+    });
+
     it('says what failed and offers the way out of the one failure a second attempt answers', async () => {
         renderList(answering('', 503));
 

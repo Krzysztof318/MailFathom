@@ -681,6 +681,13 @@ test('moves a keyboard through a narrow window in the order the window shows', a
     // the space at the top of the window. Only a browser answers this: jsdom has no sequential focus navigation.
     // The freshness line is the first thing the space holds, and it is a disclosure onto the account-by-account
     // reading of the same sentence — so it is where a keyboard arrives before any of the controls beneath it.
+    //
+    // Waited for before the first key rather than after it: until the accounts have answered, that line is a sentence
+    // saying the deployment is being reached, which is text rather than a disclosure and takes no focus at all. A Tab
+    // pressed then lands on the control below it and stays there, and every assertion after it would be reading a tab
+    // order the window was not yet showing.
+    await expect(page.getByText('Every account is up to date.')).toBeVisible();
+
     await page.keyboard.press('Tab');
     await expect(page.getByText('Every account is up to date.')).toBeFocused();
 
