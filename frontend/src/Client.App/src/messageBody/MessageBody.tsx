@@ -108,9 +108,7 @@ export function MessageBody({
 
     return (
         <div className="flex flex-col gap-4">
-            {embedded === null ? null : (
-                <p className="text-sm text-muted">{translate(embedded.insteadBecause)}</p>
-            )}
+            {embedded === null ? null : <p className="text-sm text-muted">{translate(embedded.insteadBecause)}</p>}
 
             {body.document === null ? null : (
                 <RemoteContent
