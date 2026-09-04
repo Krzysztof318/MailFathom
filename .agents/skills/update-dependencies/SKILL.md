@@ -62,7 +62,7 @@ own. Noticing one while doing something else is worth a sentence in the report, 
    the old version's behaviour, is the part a search-and-replace would leave standing.
 
    **A client pin costs a census as well as a row.** § *The client's three dependency closures* records each of the
-   client's two graphs as a count — how many packages under which terms, and every one carrying a condition — and a pin
+   client's three graphs as a count — how many packages under which terms, and every one carrying a condition — and a pin
    that moved resolved a new graph. Re-run that section's enumeration commands and write what they printed; the script
    says so when it moves one, and nothing else will.
 

@@ -1050,8 +1050,9 @@ report_register_obligations() {
     printf '\n'
     printf '%s\n' 'A client pin moved, so the closure behind it resolved again. The register records each of the three'
     printf '%s\n' 'closures as a census — how many packages, under which terms, and which of them carry a condition — and'
-    printf '%s\n' 'nothing above recomputes one. Re-run the enumeration commands in § How the inventory is produced and'
-    printf '%s\n' 'read the result against § The client'"'"'s three dependency closures before calling the row done.'
+    printf '%s\n' 'nothing above recomputes one. Re-run that closure'"'"'s own enumeration command in § How the'
+    printf '%s\n' 'inventory is produced, and read the result against § The client'"'"'s three dependency closures'
+    printf '%s\n' 'before calling the row done.'
   fi
 }
 

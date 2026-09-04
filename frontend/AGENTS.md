@@ -113,6 +113,12 @@ What belongs here is the rule that follows from that, because no tool enforces i
   and `ic_launcher_round.png` beside them stay full-bleed, which is what a launcher below 26 draws; the manifest names
   both through `android:icon` and `android:roundIcon`, and `mipmap-anydpi-v26/` carries an adaptive definition for each
   so a round request above 26 composes the same two layers rather than the raster.
+- **The Android closure is locked, and a moved declaration rewrites the lock file.** `gen/android/build.gradle.kts`
+  turns on `dependencyLocking`, and `gen/android/app/gradle.lockfile` beside it is what fixes the artifacts behind the
+  five declarations — Gradle reads a bare version as a preference otherwise, and a transitive published upstream would
+  change what the APK carries with no line moving in a diff. So a changed declaration runs
+  `./gradlew :app:dependencies --write-locks` in the same change, exactly as a moved npm pin regenerates
+  `pnpm-lock.yaml`, and the register's census is re-read against what that printed.
 - **A moved Tauri pin costs a regeneration.** The template ships with the CLI, so a project generated against an older
   one keeps whatever that version wrote. Move the pin, delete `src-tauri/gen/android/`, run `pnpm android:init`, put the
   hand-written decisions back, and read the diff — that diff is the upgrade, and a pin moved without it leaves the head

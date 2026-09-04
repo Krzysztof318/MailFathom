@@ -1834,7 +1834,7 @@ a `frontend` `package.json`, `frontend/pnpm-lock.yaml`,
 client. `scripts/update-dependencies.sh` now reads both of the client's families
 too, so a pin behind its upstream is caught before review; what review still
 catches alone is the half no survey computes — the census the register records
-for each of the client's two closures, which a moved pin invalidates without
+for each of the client's three closures, which a moved pin invalidates without
 changing a line of any manifest.
 
 The client's npm family obliges a third pair, and its register is the only one
