@@ -1540,7 +1540,7 @@ mailbox. It is [the preferences routes](#the-preferences-routes)' reasoning rath
 [the mutation routes](#the-mutation-routes)' — a person whose mail accounts an administrator maintains does not hold a
 write grant and still has to be able to clear their own bell.
 
-**A notification is kept for three months and no longer**, and one pointing at a message is erased with that message.
+**A notification is kept for thirty days and no longer**, and one pointing at a message is erased with that message.
 Both are the record's own bounds rather than these routes', so a centre that reaches back no further has aged out
 rather than lost anything.
 

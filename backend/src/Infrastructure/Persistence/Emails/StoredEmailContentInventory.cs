@@ -80,7 +80,6 @@ internal sealed class StoredEmailContentInventory(MailFathomDbContext dbContext)
                 email.Subject,
                 email.SentAt,
                 email.SizeOctets,
-                email.IsRemotelySeen,
                 email.FiledFromOutgoingEmailId,
             })
             .ToArrayAsync(cancellationToken);
@@ -94,7 +93,13 @@ internal sealed class StoredEmailContentInventory(MailFathomDbContext dbContext)
                     candidate.Subject,
                     candidate.SentAt,
                     candidate.SizeOctets,
-                    candidate.IsRemotelySeen),
+
+                    // These occurrences were discovered by an earlier run, which is where the server's own report of
+                    // the seen flag was and is not recoverable now: the stored column is the backward pass's to write,
+                    // on a schedule that need not have reached this row, and asking the server again would be the
+                    // second fetch per message this design refuses. So the reconstruction states what a refill is —
+                    // content stored for a message already stored — which is the reading no arrival can follow from.
+                    IsRemotelySeen: true),
                 candidate.FiledFromOutgoingEmailId is not null)),
         ];
     }

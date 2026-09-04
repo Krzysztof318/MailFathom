@@ -17,6 +17,8 @@ namespace MailFathom.Application.Synchronization;
 /// stored row because the row's flag is written by the backward pass, whose window need not cover what the forward pass
 /// has just stored — so a message stored in this run has no reconciled flag to consult and would read as unread
 /// whatever the server said. What turns on it is whether the run reports the message as mail that arrived.
+/// A reconstruction describing an occurrence some earlier run discovered therefore has no such report to carry and
+/// says <see langword="true" />, which is the reading no arrival can follow from, rather than a column it must not read.
 /// </param>
 public sealed record RemoteEmailMetadata(
     EmailOccurrenceId OccurrenceId,

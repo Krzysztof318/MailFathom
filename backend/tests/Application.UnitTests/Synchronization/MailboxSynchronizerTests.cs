@@ -2749,6 +2749,7 @@ public sealed class MailboxSynchronizerTests
 
         // Assert
         Assert.Equal(1, result.StoredEmailCount);
+        Assert.Equal(0, result.ArrivedEmailCount);
         await context.AssertJoinedToTheSendAsync();
     }
 
@@ -2768,6 +2769,7 @@ public sealed class MailboxSynchronizerTests
 
         // Assert
         Assert.Equal(1, result.StoredEmailCount);
+        Assert.Equal(0, result.ArrivedEmailCount);
         await context.AssertJoinedToTheSendAsync();
     }
 
@@ -2785,26 +2787,6 @@ public sealed class MailboxSynchronizerTests
         Assert.Equal(1, result.StoredEmailCount);
         Assert.Equal(1, result.ArrivedEmailCount);
         await context.AssertStoredAsArrivingMailAsync();
-    }
-
-    /// <summary>
-    /// The owner wrote it, so nothing about it reached them. A copy MailFathom filed lands in a folder like any other
-    /// message and carries whatever flags the server gave it, which is why the filing record rather than the folder or
-    /// the flag is what keeps it out of the count.
-    /// </summary>
-    [Fact]
-    public async Task SynchronizeAsync_ACopyThisDeploymentFiled_IsNeverReportedAsArrivedMail()
-    {
-        // Arrange
-        var context = new FiledCopyContext(uid: ImapUid.Create(34));
-        context.FileCopyAtPlacement();
-
-        // Act
-        var result = await context.SynchronizeAsync();
-
-        // Assert
-        Assert.Equal(1, result.StoredEmailCount);
-        Assert.Equal(0, result.ArrivedEmailCount);
     }
 
     /// <summary>Answers as a deployment that has never filed a copy of its own outgoing mail, which is most of them.</summary>
