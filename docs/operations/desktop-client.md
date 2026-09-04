@@ -40,10 +40,12 @@ Nothing is published for macOS, and iOS is not a head this project builds at all
 
 **Android is the third head, and nothing on this page applies to it.** Under
 [ADR 0027](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0027-an-android-head-built-every-night-and-supported-by-nothing.md) the same shell builds one
-debug-signed APK on the nightly channel, left on its run: there is no release asset, no store listing, no update
-channel, and no download address that outlives a run's artifact retention. It is a build somebody tries rather than a
-client they live in, and nothing about it is supported. What it is, in full, is that record; how a developer builds one
-is [building the Android head](local-development.md#building-the-android-head).
+debug-signed APK left on the run that built it: there is no release asset, no store listing, no update channel, and no
+download address that outlives a run's artifact retention. It is a build somebody tries rather than a client they live
+in, and nothing about it is supported. **No run produces one yet**, either: the nightly job that record describes is
+[#1615](https://github.com/Krzysztof318/MailFathom/issues/1615), so what makes an APK today is a developer's own
+machine. What the head is, in full, is that record; how one is built is
+[building the Android head](local-development.md#building-the-android-head).
 
 ## What an installer does, and what it does not
 

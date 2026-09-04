@@ -63,9 +63,9 @@ exactly as `Directory.Packages.props` and the `packages.lock.json` files are for
   the upstream, the exact revision or version the files were taken at, and the paths they were written to. That is
   where the client's typeface and its symbols are recorded, and it is the other half of the rule in
   `frontend/src/AGENTS.md` § _UI_ that keeps them out of an external origin.
-- A pin that moves costs the register a second thing the service's does not. Both client closures are recorded there as
-  a census as well as a row — § _The client's two dependency closures_ — and nothing recomputes one, so re-run that
-  section's enumeration commands in the same change and write what they printed.
+- A pin that moves costs the register a second thing the service's does not. Every client closure is recorded there as
+  a census as well as a row — § _The client's three dependency closures_ — and nothing recomputes one, so re-run that
+  section's enumeration command for the closure the pin belongs to, in the same change, and write what it printed.
 - An npm pin costs a third thing, and it is the one that ships. `src/Client.App/public/THIRD-PARTY-NOTICES.txt` is the
   notice the bundle carries: `pnpm build` copies it verbatim into the output every published image and every desktop
   package redistributes, and it names each redistributed package and its version. So a moved npm pin is read against
@@ -106,16 +106,21 @@ What belongs here is the rule that follows from that, because no tool enforces i
   `assets/icon-1254.png`, which is what the launcher shows and is why it is run at all here — and beside that it writes
   a macOS `.icns`, an iOS set, and the Windows Store logos, none of which any bundle this repository builds carries.
   Delete those again before staging, so `src-tauri/icons/` keeps naming the five files three bundle formats actually
-  read rather than every size the tool can produce.
+  read rather than every size the tool can produce. **Its adaptive-icon foregrounds are wrong as written**, and that is
+  the second thing to do afterwards: `mipmap-*/ic_launcher_foreground.png` comes out full-bleed, while Android composes
+  an adaptive icon from a 108dp layer of which only the centre 72dp survives the mask — so the artwork is inset to two
+  thirds of each canvas with a transparent surround, or every launcher above API 26 crops the mark. `ic_launcher.png`
+  and `ic_launcher_round.png` beside them stay full-bleed, which is what the legacy launcher wants.
 - **A moved Tauri pin costs a regeneration.** The template ships with the CLI, so a project generated against an older
   one keeps whatever that version wrote. Move the pin, delete `src-tauri/gen/android/`, run `pnpm android:init`, put the
   hand-written decisions back, and read the diff — that diff is the upgrade, and a pin moved without it leaves the head
   building against a template nobody looked at. `$update-dependencies` is where a pin moves at all. A regeneration also moves what
   the APK carries, so re-run the Android enumeration in `THIRD_PARTY_LICENSES.md` § _How the inventory is produced_ and write what
   it printed into that closure's row: nothing recomputes a census, exactly as with the two above.
-- **The head is exempt from no rule and gated by no pull request.** Its build runs on the nightly channel rather than in
-  either verification gate, which is ADR 0027's accepted cost — so a change that breaks the Android toolchain alone
-  merges green, and running `pnpm android:build` by hand is what a change reaching this crate owes instead.
+- **The head is exempt from no rule and gated by nothing at all.** No verification gate, no pull request check, and —
+  until [#1615](https://github.com/Krzysztof318/MailFathom/issues/1615) lands the nightly job ADR 0027 describes — no
+  workflow builds it. A change that breaks the Android toolchain alone therefore merges green with nothing to notice
+  it, and running `pnpm android:build` by hand is what a change reaching this crate owes instead.
 - **Nothing Android's belongs above the shell.** The credential store, the system notification, and the back gesture are
   shell operations resolved at the composition root, and `frontend/src/AGENTS.md` § _The two heads_ is the rule that
   keeps a component from asking which head it is on. A third head does not widen that permission.

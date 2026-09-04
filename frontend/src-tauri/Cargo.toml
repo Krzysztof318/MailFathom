@@ -25,8 +25,10 @@ publish = false
 # The shell is a library so that Android can start it, and `src/main.rs` is the three lines that start it on the desktop.
 # The three crate types are what each head links: `cdylib` is the shared object the Android application loads and calls
 # the generated JNI entry point in, `staticlib` is what an iOS head would link were one built, and `rlib` is what the
-# desktop binary beside it depends on. `_lib` on the end is not decoration — a library may not carry the same name as a
-# binary in the same package, and the binary is the one whose name a person sees.
+# desktop binary beside it depends on. The `_lib` suffix is Tauri's mobile template convention, which keeps a library's
+# artifacts from overwriting a binary's where a toolchain derives both file names from one crate name; Cargo permits a
+# library and a binary sharing a name, so nothing here required it, and it is written the template's way so a
+# regeneration finds what it expects.
 [lib]
 name = "mailfathom_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]

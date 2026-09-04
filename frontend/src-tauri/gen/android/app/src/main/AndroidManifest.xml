@@ -7,12 +7,15 @@
      One permission, and it is the one the client cannot work without: it talks to a deployment over HTTP. Nothing else
      is asked for — no storage, no contacts, no camera, no location, and no notification permission, which arrives with
      the notification itself under issue 1620 rather than ahead of it.
+
+     Three things the template declared are gone rather than kept: the leanback feature and the TV launcher category,
+     which would put this on the launcher of a device class nothing here is designed for — the client composes from a
+     width and a pointer, and neither describes a television; and the `FileProvider` over the whole cache and external
+     root, which nothing shares a file through today, so what it would buy is a grantable handle over the WebView's own
+     mail-derived cache. Whatever first needs to share a file declares the one directory it shares.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
-
-    <!-- AndroidTV support -->
-    <uses-feature android:name="android.software.leanback" android:required="false" />
 
     <!--
          `allowBackup` and `dataExtractionRules` are both ADR 0027's, and both halves are the decision: the first turns
@@ -28,7 +31,7 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:theme="@style/Theme.mailfathom_desktop"
+        android:theme="@style/Theme.MailFathom"
         android:usesCleartextTraffic="${usesCleartextTraffic}">
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
@@ -39,19 +42,7 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
-                <!-- AndroidTV support -->
-                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <provider
-          android:name="androidx.core.content.FileProvider"
-          android:authorities="${applicationId}.fileprovider"
-          android:exported="false"
-          android:grantUriPermissions="true">
-          <meta-data
-            android:name="android.support.FILE_PROVIDER_PATHS"
-            android:resource="@xml/file_paths" />
-        </provider>
     </application>
 </manifest>

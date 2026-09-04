@@ -995,7 +995,7 @@ Two families are surveyed and never rewritten:
 
 It never edits `THIRD_PARTY_LICENSES.md` either. A row there is a completed review written as prose — what the component is used for, what its terms oblige, which of them a distribution has to discharge — and a machine cannot restate one. What `--apply` prints instead, for every pin it actually rewrote, is the register lines still naming the version that pin moved from, by line number, so that edit is guided rather than searched for. A survey prints none of it: a pin nothing moved leaves the register saying something still true, and sending a reader to a correct row is worse than saying nothing.
 
-A moved client pin costs the register one thing more, and the run says so rather than leaving it to be found. The register records each of the client's two closures as a census — how many packages resolve under which terms, and every one of them carrying a condition — and a census is a count nothing here recomputes from a manifest. So re-running the two enumeration commands in that file's § *The client's two dependency closures* is part of the same change as the pin, exactly as regenerating the lock file is.
+A moved client pin costs the register one thing more, and the run says so rather than leaving it to be found. The register records each of the client's closures as a census — how many packages resolve under which terms, and every one of them carrying a condition — and a census is a count nothing here recomputes from a manifest. So re-running that closure's enumeration command from that file's § *The client's three dependency closures* is part of the same change as the pin, exactly as regenerating the lock file is.
 
 The survey needs the network: nuget.org, registry.npmjs.org, crates.io, the .NET release index, GitHub through `gh`, and the three registries the images live in. It is not part of either verification script and nothing gates on it, for the reason [the actions section below](#keeping-the-pinned-actions-current) gives about proposals: what a dependency is worth updating to is a judgement each time, and this is the reading that makes the judgement cheap.
 
@@ -1141,10 +1141,12 @@ in this repository or in its secrets. Installing it is `adb install -r` against 
 needs USB debugging on, and an emulator needs an `x86_64` system image because that is the architecture this build
 covers beside `arm64-v8a`.
 
-**Neither verification gate builds this head**, and no pull request check does either. It runs on the nightly channel,
-which is what makes an Android toolchain break a nightly that failed rather than a wait everybody pays for on every
-change; the cost is that a change breaking the Android build alone merges green, so a change reaching
-`frontend/src-tauri/` is worth running `pnpm android:build` against by hand.
+**Nothing builds this head but the command above.** Neither verification gate reaches it, no pull request check does,
+and no workflow does either: the nightly job
+[ADR 0027](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0027-an-android-head-built-every-night-and-supported-by-nothing.md)
+assigns it is [#1615](https://github.com/Krzysztof318/MailFathom/issues/1615) and has not landed. So a change breaking
+the Android build alone merges green with nothing to notice it, and running `pnpm android:build` by hand is what a
+change reaching `frontend/src-tauri/` owes until that job exists.
 
 ## Code coverage
 
