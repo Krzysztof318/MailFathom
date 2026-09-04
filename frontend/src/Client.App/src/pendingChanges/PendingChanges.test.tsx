@@ -195,6 +195,42 @@ describe('PendingChangesProvider', () => {
         expect([...new URL(requests[0]?.path ?? '').searchParams.getAll('record')]).toStrictEqual([recordId, 'second']);
     });
 
+    // Somebody opening one message after another produces a change each time, and each one lands while the wait for
+    // the last read is still running. The wait belongs to the round rather than to the queue, so it ends when it was
+    // always going to end — a client that started the five seconds afresh on every change would never read at all.
+    it('asks on time however often somebody adds another change while it is waiting', async () => {
+        const { transport, requests } = standingAt('pending');
+
+        following(transport);
+        hand(submission(recorded(recordId)));
+        await pass(followedChangeInterval - 1_000);
+
+        hand(submission(recorded('second'), ['another']));
+        await pass(1_000);
+
+        expect(requests).toHaveLength(1);
+    });
+
+    // Marking another message read says nothing about whether the deployment has started answering, so it may not
+    // buy the client another attempt: a person reading their mail would otherwise hold it one short of giving up for
+    // as long as they kept reading, never stopping and never saying it had.
+    it('does not let a new change clear the failures the deployment has earned', async () => {
+        const { transport, requests } = unreachable();
+
+        following(transport);
+        hand(submission(recorded(recordId)));
+
+        for (let attempt = 0; attempt < mostFollowingAttempts - 1; attempt += 1) {
+            await pass(followedChangeInterval);
+        }
+
+        hand(submission(recorded('second'), ['another']));
+        await pass(followedChangeInterval);
+        await pass(followedChangeInterval * 3);
+
+        expect(requests).toHaveLength(mostFollowingAttempts);
+    });
+
     it('stops saying a change is waiting once the mailbox has taken it, without saying anything about it', async () => {
         following(standingAt('completed').transport);
 

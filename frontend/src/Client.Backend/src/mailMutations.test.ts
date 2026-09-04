@@ -186,6 +186,47 @@ describe('markMailRead', () => {
 
         expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
     });
+
+    // The records one message became are what the queue follows it by, so a list that is not one is refused rather
+    // than read as a message that wrote nothing down — which is the shape a change nobody follows would arrive in.
+    it('refuses a message whose records are not a list', async () => {
+        const answer = await markMailRead(
+            session,
+            answering({
+                status: 200,
+                body: JSON.stringify({ results: [{ storedEmailId, outcome: 'recorded', changes: 'one' }] }),
+            }),
+            [storedEmailId],
+        );
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
+
+    it('refuses a message naming more records than one change can produce', async () => {
+        const answer = await markMailRead(
+            session,
+            answering({
+                status: 200,
+                body: JSON.stringify({
+                    results: [
+                        {
+                            storedEmailId,
+                            outcome: 'recorded',
+                            // One past the eight the module bounds a single message's records at, which is itself
+                            // well above the three a flag route can write — the bound is not a caller's to name.
+                            changes: Array.from({ length: 9 }, (_, at) => ({
+                                recordId: `record-${String(at)}`,
+                                state: 'pending',
+                            })),
+                        },
+                    ],
+                }),
+            }),
+            [storedEmailId],
+        );
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
 });
 
 describe('changeMailFlags', () => {
@@ -397,6 +438,23 @@ describe('readMailMutationRecords', () => {
             answering({
                 status: 200,
                 body: JSON.stringify({ changes: [{ recordId, state: 'pending', outcomeUnknown: false }] }),
+            }),
+            [recordId],
+        );
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
+
+    // The one field on this answer a person acts on rather than waits through, so a value that is not the boolean it
+    // is declared as is refused: read loosely, it would say a mailbox is settled where the deployment said nothing.
+    it('refuses a record whose unknown-outcome field is not a boolean', async () => {
+        const answer = await readMailMutationRecords(
+            session,
+            answering({
+                status: 200,
+                body: JSON.stringify({
+                    changes: [{ recordId, storedEmailId, state: 'completed', outcomeUnknown: 'yes' }],
+                }),
             }),
             [recordId],
         );

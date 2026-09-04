@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useEffectEvent, useState, type ReactNode } from 'react';
 import {
     mostRecordsPerRead,
     readMailMutationRecords,
@@ -74,6 +74,7 @@ export function PendingChangesProvider({
     const toasts = useToasts();
     const [held, setHeld] = useState<Held>(nothingHeld);
     const [attempts, setAttempts] = useState(0);
+    const [round, setRound] = useState(0);
 
     // Derived rather than cleared, for the reason `readMarking/ReadMarking.tsx` gives: signing out and back in on one
     // tab keeps this component mounted, and the previous person's changes would otherwise be followed under the next
@@ -82,103 +83,121 @@ export function PendingChangesProvider({
     const following = inForce.followed;
     const stoppedFollowing = attempts >= mostFollowingAttempts;
 
-    // Every answered read replaces what is held, so the wait below is re-armed by its own answer rather than by a
-    // token beside it: the effect depends on the queue, and the queue is rebuilt each time it is asked about.
-    useEffect(() => {
-        if (session === null || following.length === 0 || attempts >= mostFollowingAttempts) {
+    // What re-arms the wait is a round of its own rather than the queue it read, and that is the whole reason `round`
+    // exists. Adding a change gives `followed` a new array, so an effect depending on the queue would cancel its own
+    // pending wait every time somebody opened another message — and a person reading faster than the interval would
+    // defer the read indefinitely, which is exactly the bounded following this module promises not to do.
+    const follows = following.length > 0;
+
+    // Reads the queue, the credential, and the failure count as they are when the wait ends rather than as they were
+    // when it was armed, which is what lets the wait be armed once and left alone. Adding a change while one is in
+    // flight changes what the next read asks about; it never changes when that read happens.
+    const readWhereChangesStand = useEffectEvent((stillWanted: () => boolean) => {
+        if (session === null) {
             return;
         }
 
-        let abandoned = false;
+        const asking = session;
 
         // The oldest first and a page at a time, which is what replaying the queue in order means here: the route
         // names each record in the request line and refuses a longer read whole.
         const page = following.slice(0, mostRecordsPerRead);
 
-        const waiting = setTimeout(() => {
-            void (async () => {
-                const answer = await readMailMutationRecords(
-                    session,
-                    transport,
-                    page.map((change) => change.recordId),
-                );
+        void (async () => {
+            const answer = await readMailMutationRecords(
+                asking,
+                transport,
+                page.map((change) => change.recordId),
+            );
 
-                if (abandoned) {
-                    return;
-                }
+            if (!stillWanted()) {
+                return;
+            }
 
-                if (answer.outcome === 'failed') {
-                    setAttempts(attempts + 1);
+            setRound((current) => current + 1);
 
-                    // Said where the budget runs out rather than from a render reading that it has: the same sentence
-                    // raised by every later render would be the client telling somebody once a frame.
-                    if (attempts + 1 >= mostFollowingAttempts) {
-                        toasts.raise({
-                            kind: 'warning',
-                            title: translate('pendingChange.stoppedFollowing'),
-                            body: translate('pendingChange.stoppedFollowingBody', {
-                                total: new Intl.NumberFormat(locale).format(mostFollowingAttempts),
-                            }),
-                            action: {
-                                label: translate('pendingChange.followAgain'),
-                                take: () => {
-                                    setAttempts(0);
-                                },
-                            },
-                        });
-                    }
+            if (answer.outcome === 'failed') {
+                setAttempts(attempts + 1);
 
-                    return;
-                }
-
-                const standings = new Map(answer.value.map((record) => [record.recordId, standingOf(record)]));
-                const stillWaiting: FollowedChange[] = [];
-                const undecided: HeldUndecided[] = [];
-
-                for (const change of page) {
-                    const standing = standings.get(change.recordId);
-
-                    // A record the deployment no longer answers for is absent from the answer rather than refused,
-                    // which is what a folder this credential may no longer read looks like from here. There is nothing
-                    // left to follow and nothing that failed, so it leaves the queue in silence.
-                    if (standing === undefined || standing === 'converged') {
-                        continue;
-                    }
-
-                    if (standing === 'waiting') {
-                        stillWaiting.push(change);
-                    } else {
-                        undecided.push({ ...change, standing });
-                    }
-                }
-
-                setHeld((current) =>
-                    current.session === session
-                        ? {
-                              session,
-                              followed: [...stillWaiting, ...current.followed.slice(page.length)],
-                              undecided: [...current.undecided, ...undecided],
-                          }
-                        : current,
-                );
-                setAttempts(0);
-
-                for (const change of undecided) {
+                // Said where the budget runs out rather than from a render reading that it has: the same sentence
+                // raised by every later render would be the client telling somebody once a frame.
+                if (attempts + 1 >= mostFollowingAttempts) {
                     toasts.raise({
-                        kind: change.standing === 'exhausted' ? 'error' : 'warning',
-                        title: translate('pendingChange.undecided'),
-                        body: translate(standingReasons[change.standing]),
-                        action: { label: translate('pendingChange.askAgain'), take: change.askAgain },
+                        kind: 'warning',
+                        title: translate('pendingChange.stoppedFollowing'),
+                        body: translate('pendingChange.stoppedFollowingBody', {
+                            total: new Intl.NumberFormat(locale).format(mostFollowingAttempts),
+                        }),
+                        action: {
+                            label: translate('pendingChange.followAgain'),
+                            take: () => {
+                                setAttempts(0);
+                            },
+                        },
                     });
                 }
-            })();
+
+                return;
+            }
+
+            const standings = new Map(answer.value.map((record) => [record.recordId, standingOf(record)]));
+            const stillWaiting: FollowedChange[] = [];
+            const undecided: HeldUndecided[] = [];
+
+            for (const change of page) {
+                const standing = standings.get(change.recordId);
+
+                // A record the deployment no longer answers for is absent from the answer rather than refused, which
+                // is what a folder this credential may no longer read looks like from here. There is nothing left to
+                // follow and nothing that failed, so it leaves the queue in silence.
+                if (standing === undefined || standing === 'converged') {
+                    continue;
+                }
+
+                if (standing === 'waiting') {
+                    stillWaiting.push(change);
+                } else {
+                    undecided.push({ ...change, standing });
+                }
+            }
+
+            setHeld((current) =>
+                current.session === asking
+                    ? {
+                          session: asking,
+                          followed: [...stillWaiting, ...current.followed.slice(page.length)],
+                          undecided: [...current.undecided, ...undecided],
+                      }
+                    : current,
+            );
+            setAttempts(0);
+
+            for (const change of undecided) {
+                toasts.raise({
+                    kind: change.standing === 'exhausted' ? 'error' : 'warning',
+                    title: translate('pendingChange.undecided'),
+                    body: translate(standingReasons[change.standing]),
+                    action: { label: translate('pendingChange.askAgain'), take: change.askAgain },
+                });
+            }
+        })();
+    });
+
+    useEffect(() => {
+        if (session === null || !follows || attempts >= mostFollowingAttempts) {
+            return;
+        }
+
+        let abandoned = false;
+        const waiting = setTimeout(() => {
+            readWhereChangesStand(() => !abandoned);
         }, followedChangeInterval);
 
         return () => {
             abandoned = true;
             clearTimeout(waiting);
         };
-    }, [session, transport, following, attempts, toasts, translate, locale]);
+    }, [session, follows, attempts, round]);
 
     function report(submission: ChangeSubmission, outcome: MailMutationOutcome, storedEmailIds: readonly string[]) {
         const reason = refusalReasons[outcome];
@@ -243,12 +262,14 @@ export function PendingChangesProvider({
             },
         }));
 
+        // The failure count is the poll's own and is cleared by the poll alone. A change arriving says nothing about
+        // whether the deployment has started answering, and clearing it here would let somebody marking mail read
+        // hold the client at four failures for ever — never stopping, and never saying it had.
         setHeld((current) => {
             const carried = current.session === session ? current : nothingHeld;
 
             return { session, followed: [...carried.followed, ...arriving], undecided: carried.undecided };
         });
-        setAttempts(0);
     }
 
     function settle(recordId: string, resolution: ChangeResolution): void {

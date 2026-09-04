@@ -326,13 +326,18 @@ function parseRecord(entry: unknown): MailMutationRecord | null {
     const state = record['state'];
     const outcomeUnknown = record['outcomeUnknown'];
 
-    if (typeof recordId !== 'string' || typeof storedEmailId !== 'string' || !isRecordState(state)) {
+    if (
+        typeof recordId !== 'string' ||
+        typeof storedEmailId !== 'string' ||
+        !isRecordState(state) ||
+        typeof outcomeUnknown !== 'boolean'
+    ) {
         return null;
     }
 
     // What a record was retried, when it was written, and which failure it last met are deliberately not read. A
     // screen says a change is on its way or that it stopped, and a field parsed for nobody is a field to keep true.
-    return { recordId, storedEmailId, state, outcomeUnknown: outcomeUnknown === true };
+    return { recordId, storedEmailId, state, outcomeUnknown };
 }
 
 function answerOf(response: ClientResponse | null): ClientResult<readonly MailMutationResult[]> {
