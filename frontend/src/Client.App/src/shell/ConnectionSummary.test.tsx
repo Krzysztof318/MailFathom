@@ -12,6 +12,7 @@ import type {
     MailAccountDirectory,
 } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
+import { PendingChangesContext, nothingPending, type PendingChanges } from '../pendingChanges/usePendingChanges';
 import { ConnectionSummary } from './ConnectionSummary';
 import { mostReconnectionAttempts, type Connection } from './useConnection';
 
@@ -54,20 +55,22 @@ function failing(reason: ClientFailureReason, status: number | null = 503): Clie
     return { outcome: 'failed', failure: { reason, status } };
 }
 
-function renderSummary(connection: Partial<Connection>): void {
+function renderSummary(connection: Partial<Connection>, pending: PendingChanges = nothingPending): void {
     render(
         <LocalizationProvider>
-            <ConnectionSummary
-                connection={{
-                    session: reading,
-                    accounts: null,
-                    readAt: null,
-                    online: true,
-                    attempts: 0,
-                    reread: () => undefined,
-                    ...connection,
-                }}
-            />
+            <PendingChangesContext value={pending}>
+                <ConnectionSummary
+                    connection={{
+                        session: reading,
+                        accounts: null,
+                        readAt: null,
+                        online: true,
+                        attempts: 0,
+                        reread: () => undefined,
+                        ...connection,
+                    }}
+                />
+            </PendingChangesContext>
         </LocalizationProvider>,
     );
 }
@@ -280,5 +283,20 @@ describe('ConnectionSummary', () => {
         renderSummary({ session: reading, accounts: failing('unavailable'), readAt });
 
         expect(screen.queryByText(/503/)).toBeNull();
+    });
+
+    // A change the mailbox has not taken yet is at its most worth reading exactly when this line has nothing else to
+    // report, so it stands above every sentence below rather than inside one of their branches.
+    it('says a change is still waiting even while nothing about the deployment has answered', () => {
+        renderSummary(
+            { session: null },
+            {
+                ...nothingPending,
+                waiting: [{ recordId: 'record', storedEmailId: 'message', act: 'markRead' }],
+            },
+        );
+
+        expect(screen.getByText('Reaching your deployment…')).toBeDefined();
+        expect(screen.getByText('One change has not reached your mailbox yet.')).toBeDefined();
     });
 });

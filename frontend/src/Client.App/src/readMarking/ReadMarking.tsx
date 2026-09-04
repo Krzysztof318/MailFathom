@@ -9,6 +9,7 @@ import {
     type ClientSession,
     type MailFathomTransport,
 } from '@mailfathom/client-backend';
+import { usePendingChanges } from '../pendingChanges/usePendingChanges';
 import {
     ReadMarkingContext,
     nothingMarkedRead,
@@ -54,6 +55,7 @@ export function ReadMarkingProvider({
 
     readonly children: ReactNode;
 }) {
+    const pending = usePendingChanges();
     const [drawn, setDrawn] = useState<HeldMarkings>({ session: null, marked: new Map() });
     const submitted = useRef<HeldMarkings>({ session: null, marked: new Map() });
 
@@ -99,25 +101,48 @@ export function ReadMarkingProvider({
         }
     }
 
-    function submit(asking: ClientSession, batch: readonly string[]): void {
-        void markMailRead(asking, transport, batch).then((answer) => {
-            // A marking the deployment did not write down is one the row must stop claiming. Both cases arrive here:
-            // a submission that never reached it, and a message it answered about with anything but `recorded` — mail
-            // that has moved on since the list drew it, or an account it no longer serves.
-            const recorded =
-                answer.outcome === 'read'
-                    ? new Set(
-                          answer.value
-                              .filter((result) => result.outcome === 'recorded')
-                              .map((result) => result.storedEmailId),
-                      )
-                    : new Set<string>();
+    function remark(storedEmailIds: readonly string[], markedIn: ReadonlyMap<string, MarkedIn>): void {
+        for (const storedEmailId of storedEmailIds) {
+            const at = markedIn.get(storedEmailId);
 
-            const refused = batch.filter((storedEmailId) => !recorded.has(storedEmailId));
-
-            if (refused.length > 0 && submitted.current.session === asking) {
-                forget(refused);
+            if (at !== undefined) {
+                submitted.current.marked.set(storedEmailId, at);
             }
+        }
+
+        keep();
+    }
+
+    function submit(asking: ClientSession, batch: readonly string[]): void {
+        // Where each of these was counted as unread, captured before anything can drop it, so that asking again after
+        // a refusal restores exactly what letting go took away. It lives as long as some change from this batch is
+        // still being followed and no longer, because that is what holds the two callbacks below.
+        const markedIn = new Map(
+            batch.flatMap((storedEmailId) => {
+                const at = submitted.current.marked.get(storedEmailId);
+
+                return at === undefined ? [] : ([[storedEmailId, at]] as const);
+            }),
+        );
+
+        void markMailRead(asking, transport, batch).then((answer) => {
+            if (submitted.current.session !== asking) {
+                return;
+            }
+
+            // What became of the batch is not this component's to interpret. Which refusals are said out loud, which
+            // records are followed until the mailbox agrees, and which of those turn into a question are one rule
+            // stated in `pendingChanges/`, and what marking read owes it is only what its own two answers mean.
+            pending.follow({
+                act: 'markRead',
+                asked: batch,
+                results: answer.outcome === 'read' ? answer.value : null,
+                askAgain: (storedEmailIds) => {
+                    remark(storedEmailIds, markedIn);
+                    submit(asking, storedEmailIds);
+                },
+                letGo: forget,
+            });
         });
     }
 

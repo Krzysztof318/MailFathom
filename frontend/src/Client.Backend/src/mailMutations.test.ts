@@ -3,7 +3,14 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import { changeMailFlags, markMailRead, mostMessagesPerMutation, moveMail } from './mailMutations';
+import {
+    changeMailFlags,
+    markMailRead,
+    mostMessagesPerMutation,
+    mostRecordsPerRead,
+    moveMail,
+    readMailMutationRecords,
+} from './mailMutations';
 import type { ClientSession } from './session';
 import type { ClientRequest, ClientResponse, MailFathomTransport } from './transport';
 
@@ -13,6 +20,7 @@ const session: ClientSession = {
 };
 
 const storedEmailId = '2f7d4f2a-6c1e-4e0a-9a2f-1b0c9d8e7f60';
+const recordId = '0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a91';
 
 type Answer = Omit<ClientResponse, 'headers'>;
 
@@ -75,10 +83,49 @@ describe('markMailRead', () => {
         expect(answer).toStrictEqual({
             outcome: 'read',
             value: [
-                { storedEmailId, outcome: 'recorded' },
-                { storedEmailId: 'gone', outcome: 'message-not-found' },
+                { storedEmailId, outcome: 'recorded', changes: [] },
+                { storedEmailId: 'gone', outcome: 'message-not-found', changes: [] },
             ],
         });
+    });
+
+    it('answers the records a written-down change became, so its caller can follow each of them', async () => {
+        const answer = await markMailRead(
+            session,
+            answering({
+                status: 200,
+                body: JSON.stringify({
+                    results: [
+                        {
+                            storedEmailId,
+                            outcome: 'recorded',
+                            changes: [{ recordId, mutation: 'set-seen', state: 'pending' }],
+                        },
+                    ],
+                }),
+            }),
+            [storedEmailId],
+        );
+
+        expect(answer).toStrictEqual({
+            outcome: 'read',
+            value: [{ storedEmailId, outcome: 'recorded', changes: [{ recordId, state: 'pending' }] }],
+        });
+    });
+
+    it('refuses a record standing somewhere this client does not know, rather than following it blind', async () => {
+        const answer = await markMailRead(
+            session,
+            answering({
+                status: 200,
+                body: JSON.stringify({
+                    results: [{ storedEmailId, outcome: 'recorded', changes: [{ recordId, state: 'halfway' }] }],
+                }),
+            }),
+            [storedEmailId],
+        );
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
     });
 
     // The deployment refuses a batch past its bound whole rather than partly, so a caller that sent one would have
@@ -216,8 +263,8 @@ describe('moveMail', () => {
         expect(answer).toStrictEqual({
             outcome: 'read',
             value: [
-                { storedEmailId, outcome: 'recorded' },
-                { storedEmailId: 'second', outcome: 'already-in-destination' },
+                { storedEmailId, outcome: 'recorded', changes: [] },
+                { storedEmailId: 'second', outcome: 'already-in-destination', changes: [] },
             ],
         });
     });
@@ -242,5 +289,134 @@ describe('moveMail', () => {
         ]);
 
         expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unauthorized', status: 403 } });
+    });
+});
+
+describe('readMailMutationRecords', () => {
+    it('names each record it asks about on the client surface’s mutation route', async () => {
+        const { transport, requests } = recording({ status: 200, body: JSON.stringify({ changes: [] }) });
+
+        await readMailMutationRecords(session, transport, [recordId, 'a b']);
+
+        expect(requests[0]?.method).toBe('GET');
+        expect(requests[0]?.path).toBe(
+            `https://mail.example.invalid/api/client/mutations?record=${recordId}&record=a%20b`,
+        );
+        expect(requests[0]?.headers['Authorization']).toBe('Basic dGVzdA==');
+    });
+
+    it('answers where each change stands', async () => {
+        const answer = await readMailMutationRecords(
+            session,
+            answering({
+                status: 200,
+                body: JSON.stringify({
+                    changes: [
+                        {
+                            recordId,
+                            storedEmailId,
+                            mutation: 'set-seen',
+                            state: 'converging',
+                            outcomeUnknown: false,
+                            attemptCount: 2,
+                        },
+                    ],
+                }),
+            }),
+            [recordId],
+        );
+
+        expect(answer).toStrictEqual({
+            outcome: 'read',
+            value: [{ recordId, storedEmailId, state: 'converging', outcomeUnknown: false }],
+        });
+    });
+
+    it('reads a record whose command went out and was never answered as one whose outcome is unknown', async () => {
+        const answer = await readMailMutationRecords(
+            session,
+            answering({
+                status: 200,
+                body: JSON.stringify({
+                    changes: [{ recordId, storedEmailId, state: 'completed', outcomeUnknown: true }],
+                }),
+            }),
+            [recordId],
+        );
+
+        expect(answer).toStrictEqual({
+            outcome: 'read',
+            value: [{ recordId, storedEmailId, state: 'completed', outcomeUnknown: true }],
+        });
+    });
+
+    // A record belonging to somebody else, or one in a folder this caller may no longer read, is absent rather than
+    // refused — so an answer shorter than the read is the ordinary case and says nothing went wrong.
+    it('reads an answer naming none of the records asked about as an empty answer', async () => {
+        const answer = await readMailMutationRecords(
+            session,
+            answering({ status: 200, body: JSON.stringify({ changes: [] }) }),
+            [recordId],
+        );
+
+        expect(answer).toStrictEqual({ outcome: 'read', value: [] });
+    });
+
+    it('names no more records than one read may carry', async () => {
+        const asked = Array.from({ length: mostRecordsPerRead + 5 }, (_, at) => `record-${String(at)}`);
+        const { transport, requests } = recording({ status: 200, body: JSON.stringify({ changes: [] }) });
+
+        await readMailMutationRecords(session, transport, asked);
+
+        expect(requests[0]?.path.split('record=')).toHaveLength(mostRecordsPerRead + 1);
+    });
+
+    it('refuses an answer naming more records than the read could have', async () => {
+        const answer = await readMailMutationRecords(
+            session,
+            answering({
+                status: 200,
+                body: JSON.stringify({
+                    changes: Array.from({ length: mostRecordsPerRead + 1 }, () => ({
+                        recordId,
+                        storedEmailId,
+                        state: 'pending',
+                        outcomeUnknown: false,
+                    })),
+                }),
+            }),
+            [recordId],
+        );
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
+
+    it('refuses a record naming no message, rather than following a change against nothing', async () => {
+        const answer = await readMailMutationRecords(
+            session,
+            answering({
+                status: 200,
+                body: JSON.stringify({ changes: [{ recordId, state: 'pending', outcomeUnknown: false }] }),
+            }),
+            [recordId],
+        );
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
+
+    it('says the deployment could not be reached where nothing answered', async () => {
+        const answer = await readMailMutationRecords(
+            session,
+            () => Promise.reject(new Error('the connection was refused')),
+            [recordId],
+        );
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unavailable', status: null } });
+    });
+
+    it('says the credential must sign in again where the deployment refused it', async () => {
+        const answer = await readMailMutationRecords(session, answering({ status: 401, body: '' }), [recordId]);
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unauthenticated', status: 401 } });
     });
 });

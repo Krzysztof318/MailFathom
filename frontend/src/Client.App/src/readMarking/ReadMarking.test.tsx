@@ -5,6 +5,9 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { ClientRequest, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
+import { LocalizationProvider } from '../localization/Localization';
+import { PendingChangesProvider } from '../pendingChanges/PendingChanges';
+import { ToastsProvider } from '../toasts/Toasts';
 import { ReadMarkingProvider } from './ReadMarking';
 import { drawnUnread, useReadMarking, type MessageOpened } from './useReadMarking';
 
@@ -54,11 +57,20 @@ function marking(
 ) {
     const signedIn = asked === undefined ? session : asked;
 
+    // What became of a submission is read by the queue that follows changes, and what that queue says is said on the
+    // toast surface. Both are above this provider wherever the client actually runs, so both are above it here: a
+    // marking proven against a tree that follows nothing would be proven against an arrangement nobody ships.
     return renderHook(() => useReadMarking(), {
         wrapper: ({ children }) => (
-            <ReadMarkingProvider session={signedIn} transport={transport} marking={marking}>
-                {children}
-            </ReadMarkingProvider>
+            <LocalizationProvider>
+                <ToastsProvider>
+                    <PendingChangesProvider session={signedIn} transport={transport}>
+                        <ReadMarkingProvider session={signedIn} transport={transport} marking={marking}>
+                            {children}
+                        </ReadMarkingProvider>
+                    </PendingChangesProvider>
+                </ToastsProvider>
+            </LocalizationProvider>
         ),
     });
 }
