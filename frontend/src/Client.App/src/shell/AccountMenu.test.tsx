@@ -30,11 +30,13 @@ const settings: ClientPreferencesInForce = {
     markReadOnOpen: true,
     telemetryEnabled: true,
     expandWholeThread: false,
+    embeddedHtmlMessages: false,
     notStated: false,
     chooseTheme: () => undefined,
     chooseTabMode: () => undefined,
     chooseTelemetry: () => undefined,
     chooseThreadExpansion: () => undefined,
+    chooseMessageView: () => undefined,
 };
 
 const nobody: OwnProfileInForce = {

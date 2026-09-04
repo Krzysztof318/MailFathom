@@ -8,6 +8,7 @@ import { ShowFullHtml } from '../fullHtml/ShowFullHtml';
 import type { MessageKey } from '../localization/en';
 import { wordInstant } from '../localization/instants';
 import { useLocalization } from '../localization/useLocalization';
+import { useEmbeddedHtmlMessages } from '../preferences/messageView';
 
 // What a message displays above its body: what it is called, who wrote it, when, and everybody else it names. The
 // author stands on its own line because it is what a reader checks first, and the rest is a disclosure the platform
@@ -19,6 +20,11 @@ import { useLocalization } from '../localization/useLocalization';
 // fourth beside them does exist: the control that opens the sender's own markup on a surface of its own, which is the
 // message head's because that is where the design project draws it and because it is a fact about this message rather
 // than about the body underneath it.
+//
+// That fourth control is drawn in the reduced view and in no other. With the embedded HTML view chosen the markup is
+// already on the screen under this head, so a control offering to open it would open a second copy of what is being
+// read — which is why it goes rather than being disabled: there is nothing left for it to do rather than something it
+// may not do here.
 //
 // Every value here is text a sender chose. It is drawn as text and never as markup, so a display name written to look
 // like an address, a heading, or a control arrives as the characters it is.
@@ -48,6 +54,7 @@ export function MessageHeaders({
     readonly onShowFullHtml: () => void;
 }) {
     const { locale, translate } = useLocalization();
+    const embeddedHtml = useEmbeddedHtmlMessages();
 
     const authors = headers.participants.filter((participant) => participant.role === 'From');
     const others = headers.participants.filter((participant) => participant.role !== 'From');
@@ -65,7 +72,7 @@ export function MessageHeaders({
                     <PlannedControl label={translate('mail.reply')} icon="reply" />
                     <PlannedControl label={translate('mail.forward')} icon="forward" />
                     <PlannedControl label={translate('mail.flag')} icon="flag" />
-                    <ShowFullHtml onShow={onShowFullHtml} />
+                    {embeddedHtml ? null : <ShowFullHtml onShow={onShowFullHtml} />}
                 </div>
             </div>
 

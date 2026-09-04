@@ -1276,21 +1276,23 @@ and somebody who set the client up the way they work should not have to set it u
   "theme": "system",
   "openMailInTabs": false,
   "markReadOnOpen": true,
-  "expandWholeThread": false
+  "expandWholeThread": false,
+  "embeddedHtmlMessages": false
 }
 ```
 
-**It holds five preferences and nothing else.** Whether this deployment may be told what the person's client is doing;
+**It holds six preferences and nothing else.** Whether this deployment may be told what the person's client is doing;
 what the client is painted in, which is `system`, `light`, or `dark`; whether opening a message opens a tab rather
-than replacing what is on the screen; whether opening a message marks it read on the person's own mail server; and
-whether opening a conversation draws every message in it rather than the one it was opened at. Each of them says how
+than replacing what is on the screen; whether opening a message marks it read on the person's own mail server; whether
+opening a conversation draws every message in it rather than the one it was opened at; and whether an open message
+draws the sender's own markup rather than the reduced text. Each of them says how
 somebody wants to work, which is why it belongs to the person. The language does not, and stays on the device: it is
 resolved for somebody who has not signed in and may never get a session. Neither does the width a person drags the
 message list to, which describes the screen in front of them.
 
-**Unset reads as telemetry on, the theme following the machine, tabs off, marking read on, and a conversation opening at
-the message it was opened at.** A person who has set nothing is answered a document rather than a refusal, so a first
-run draws a screen. The theme is still resolved on the device
+**Unset reads as telemetry on, the theme following the machine, tabs off, marking read on, a conversation opening at
+the message it was opened at, and a message read as the reduced text.** A person who has set nothing is answered a
+document rather than a refusal, so a first run draws a screen. The theme is still resolved on the device
 before sign-in — the client cannot wait on the network to paint itself, and there is no session to read this over above
 the sign-in screen — and what this answers replaces that device value once a session exists.
 
@@ -1308,6 +1310,16 @@ the message it was opened at and the messages before it stand behind one control
 what the client does, and what a reader who came from a search result wants. With it on, the same conversation opens
 with all of them drawn. It is read when a conversation opens rather than watched while one is on the screen, so moving
 the switch changes the next conversation rather than the one being read, and the control is still there either way.
+
+**`embeddedHtmlMessages` decides which of the two renderings an open message is drawn as.** With it unset or off, a
+message is the reduced document tree
+[ADR 0024](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0024-rendering-mail-in-the-client-as-a-closed-document-tree.md)
+takes, and the sender's own markup is one control away on the message head. With it on, every open message draws that
+markup inline instead and the control on the head goes, having nowhere left to take anybody. It changes what a read
+asks for rather than only what is drawn: a client in the reduced view never asks for the self-contained
+representation, so turning this on is what puts `fullHtml=true` on
+[the body route](#the-message-body-route). A message whose markup this deployment holds none of, or served cut short, falls
+back to the reduced tree with the reason named rather than to an empty frame.
 
 **A write states the whole document.** It is a closed set rather than a patch: a key nothing binds is refused rather
 than stored, a theme this deployment does not publish is refused naming the three that are, and a preference the body

@@ -23,7 +23,7 @@ namespace MailFathom.Host.UnitTests.Api;
 /// </summary>
 public sealed class ClientPreferencesEndpointTests
 {
-    private static readonly ClientPreferences Chosen = new(false, ClientThemeChoice.Dark, true, false, true);
+    private static readonly ClientPreferences Chosen = new(false, ClientThemeChoice.Dark, true, false, true, true);
 
     [Fact]
     public async Task ReadAsync_APersonWhoHasSetSomething_HandsThemWhatTheySet()
@@ -45,11 +45,12 @@ public sealed class ClientPreferencesEndpointTests
         Assert.True(preferences.OpenMailInTabs);
         Assert.False(preferences.MarkReadOnOpen);
         Assert.True(preferences.ExpandWholeThread);
+        Assert.True(preferences.EmbeddedHtmlMessages);
     }
 
     /// <summary>A first run is a screen rather than an error, so every preference is answered whether or not it was ever set.</summary>
     [Fact]
-    public async Task ReadAsync_APersonWhoHasSetNothing_AnswersTelemetryOnTheMachinesThemeNoTabsMarkingReadAndNoExpansion()
+    public async Task ReadAsync_APersonWhoHasSetNothing_AnswersTelemetryOnTheMachinesThemeNoTabsMarkingReadNoExpansionAndTheReducedText()
     {
         // Arrange
         var store = Substitute.For<IClientPreferencesStore>();
@@ -68,6 +69,7 @@ public sealed class ClientPreferencesEndpointTests
         Assert.False(preferences.OpenMailInTabs);
         Assert.True(preferences.MarkReadOnOpen);
         Assert.False(preferences.ExpandWholeThread);
+        Assert.False(preferences.EmbeddedHtmlMessages);
     }
 
     /// <summary>The row is one only this deployment writes, so a reader learns what to do about it and nothing about what it held.</summary>
@@ -102,7 +104,7 @@ public sealed class ClientPreferencesEndpointTests
         // Act
         var result = await ClientPreferencesEndpoint.SaveAsync(
             SignedIn(store),
-            new ClientPreferencesRequest(false, "dark", true, false, true),
+            new ClientPreferencesRequest(false, "dark", true, false, true, true),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -130,7 +132,7 @@ public sealed class ClientPreferencesEndpointTests
         // Assert
         await store.Received(1).SaveAsync(
             SyntheticMailOwner.Deployment,
-            new ClientPreferences(true, ClientThemeChoice.Light, false, true, false),
+            new ClientPreferences(true, ClientThemeChoice.Light, false, true, false, false),
             Arg.Any<CancellationToken>());
     }
 
@@ -146,7 +148,7 @@ public sealed class ClientPreferencesEndpointTests
         // Act
         var result = await ClientPreferencesEndpoint.SaveAsync(
             SignedIn(store),
-            new ClientPreferencesRequest(true, "system", false, true, false),
+            new ClientPreferencesRequest(true, "system", false, true, false, false),
             TestContext.Current.CancellationToken);
 
         // Assert
@@ -196,7 +198,7 @@ public sealed class ClientPreferencesEndpointTests
     {
         // Act
         var request = JsonSerializer.Deserialize<ClientPreferencesRequest>(
-            """{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true,"markReadOnOpen":false,"expandWholeThread":true}""",
+            """{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true,"markReadOnOpen":false,"expandWholeThread":true,"embeddedHtmlMessages":true}""",
             WebFormat);
 
         // Assert
@@ -214,6 +216,29 @@ public sealed class ClientPreferencesEndpointTests
 
         // Assert
         Assert.False(request!.Stated()!.ExpandWholeThread);
+    }
+
+    /// <summary>The sixth preference binds like the five beside it, and a body written before it existed reads as the reduced text rather than as the sender's own markup.</summary>
+    [Fact]
+    public void Deserialize_ABodyOmittingTheMessageView_StatesItAsTheReducedText()
+    {
+        // Act
+        var request = JsonSerializer.Deserialize<ClientPreferencesRequest>(
+            """{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true,"markReadOnOpen":false,"expandWholeThread":true}""",
+            WebFormat);
+
+        // Assert
+        Assert.False(request!.Stated()!.EmbeddedHtmlMessages);
+    }
+
+    /// <summary>The document is closed, so a body stating the message view under a name this build does not publish is refused rather than stored.</summary>
+    [Fact]
+    public void Deserialize_ABodyNamingTheMessageViewSomethingElse_IsRefused()
+    {
+        // Assert
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<ClientPreferencesRequest>(
+            """{"embeddedHtml":true}""",
+            WebFormat));
     }
 
     /// <summary>How the transport reads a body, so the binding these assert is the one a request actually meets.</summary>

@@ -6,6 +6,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MailMessageHeaders } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
+import { EmbeddedHtmlMessagesContext } from '../preferences/messageView';
 import { MessageHeaders } from './MessageHeaders';
 
 const headers: MailMessageHeaders = {
@@ -157,5 +158,19 @@ describe('MessageHeaders and the sender own markup', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Show the full HTML version' }));
 
         expect(shown).not.toHaveBeenCalled();
+    });
+
+    // The control goes rather than being drawn disabled: a reader whose messages already *are* the sender's own markup
+    // has nowhere for it to take them, and a control that would do nothing is one they have to work out is pointless.
+    it('draws no way to a second copy of the markup a reader is already reading', () => {
+        render(
+            <LocalizationProvider>
+                <EmbeddedHtmlMessagesContext value>
+                    <MessageHeaders headers={headers} onShowFullHtml={() => undefined} />
+                </EmbeddedHtmlMessagesContext>
+            </LocalizationProvider>,
+        );
+
+        expect(screen.queryByRole('button', { name: 'Show the full HTML version' })).toBeNull();
     });
 });

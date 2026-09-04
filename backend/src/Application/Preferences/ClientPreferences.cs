@@ -10,11 +10,12 @@ namespace MailFathom.Application.Preferences;
 /// <param name="OpenMailInTabs">Whether opening a message opens a tab rather than replacing what is on the screen.</param>
 /// <param name="MarkReadOnOpen">Whether opening a message in the client marks it read on the owner's own mail server.</param>
 /// <param name="ExpandWholeThread">Whether opening a conversation draws every message in it rather than the one it was opened at.</param>
+/// <param name="EmbeddedHtmlMessages">Whether an open message draws the sender's own markup inline rather than the reduced text.</param>
 /// <remarks>
 /// <para>
-/// A closed set of five rather than a settings service. Each of them says how somebody wants to work rather than what
+/// A closed set of six rather than a settings service. Each of them says how somebody wants to work rather than what
 /// the screen in front of them is like, which is why they belong to the person and not to the browser profile or the
-/// desktop install they happened to set them in — and why a sixth is added when there is a sixth to add.
+/// desktop install they happened to set them in — and why a seventh is added when there is a seventh to add.
 /// </para>
 /// <para>
 /// Marking read is here rather than on the mail account for the reason
@@ -38,7 +39,8 @@ public sealed record ClientPreferences(
     ClientThemeChoice Theme,
     bool OpenMailInTabs,
     bool MarkReadOnOpen,
-    bool ExpandWholeThread)
+    bool ExpandWholeThread,
+    bool EmbeddedHtmlMessages)
 {
     /// <summary>Gets what a person who has set nothing is answered with.</summary>
     /// <remarks>
@@ -48,7 +50,8 @@ public sealed record ClientPreferences(
     /// who has not asked for them is reading one message at a time. Marking read is on, because every mail client the
     /// owner already uses does it and a client that leaves their read state behind is one they keep another beside.
     /// A conversation opens at the message it was opened at, because that is the message somebody came for and the
-    /// history behind it is one control away.
+    /// history behind it is one control away. A message is read as the reduced text, because that is what this client
+    /// has always drawn and the sender's own markup is a surface somebody asks for rather than one they are handed.
     /// </remarks>
-    public static ClientPreferences Unset { get; } = new(true, ClientThemeChoice.System, false, true, false);
+    public static ClientPreferences Unset { get; } = new(true, ClientThemeChoice.System, false, true, false, false);
 }

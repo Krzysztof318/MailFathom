@@ -33,6 +33,9 @@ export interface ClientPreferences {
 
     /** Whether opening a conversation draws every message in it rather than the one it was opened at. */
     readonly expandWholeThread: boolean;
+
+    /** Whether an open message draws the sender's own markup inline rather than the reduced text this client reduces to. */
+    readonly embeddedHtmlMessages: boolean;
 }
 
 /**
@@ -47,12 +50,13 @@ export const unsetClientPreferences: ClientPreferences = {
     openMailInTabs: false,
     markReadOnOpen: true,
     expandWholeThread: false,
+    embeddedHtmlMessages: false,
 };
 
 /**
  * The most of one preferences answer this package reads before refusing it.
  *
- * The document is five scalars, so this is far above anything the deployment will legitimately send and far below
+ * The document is six scalars, so this is far above anything the deployment will legitimately send and far below
  * anything worth buffering. It is the same order the write route bounds its request body at, for the same reason:
  * what the bound guards against is an answer that was never a preferences document.
  */
@@ -137,12 +141,14 @@ function parsePreferences(body: string): ClientPreferences | null {
     const openMailInTabs = record['openMailInTabs'];
     const markReadOnOpen = record['markReadOnOpen'];
     const expandWholeThread = record['expandWholeThread'];
+    const embeddedHtmlMessages = record['embeddedHtmlMessages'];
 
     if (
         typeof telemetryEnabled !== 'boolean' ||
         typeof openMailInTabs !== 'boolean' ||
         typeof markReadOnOpen !== 'boolean' ||
-        typeof expandWholeThread !== 'boolean'
+        typeof expandWholeThread !== 'boolean' ||
+        typeof embeddedHtmlMessages !== 'boolean'
     ) {
         return null;
     }
@@ -151,7 +157,7 @@ function parsePreferences(body: string): ClientPreferences | null {
         return null;
     }
 
-    return { telemetryEnabled, theme, openMailInTabs, markReadOnOpen, expandWholeThread };
+    return { telemetryEnabled, theme, openMailInTabs, markReadOnOpen, expandWholeThread, embeddedHtmlMessages };
 }
 
 function isThemePreference(value: unknown): value is ClientThemePreference {

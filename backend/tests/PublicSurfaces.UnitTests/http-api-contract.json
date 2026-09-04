@@ -1806,6 +1806,12 @@
       "ClientPreferencesRequest": {
         "additionalProperties": false,
         "properties": {
+          "embeddedHtmlMessages": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
           "expandWholeThread": {
             "type": [
               "null",
@@ -1841,6 +1847,9 @@
       },
       "ClientPreferencesResponse": {
         "properties": {
+          "embeddedHtmlMessages": {
+            "type": "boolean"
+          },
           "expandWholeThread": {
             "type": "boolean"
           },
@@ -1862,7 +1871,8 @@
           "theme",
           "openMailInTabs",
           "markReadOnOpen",
-          "expandWholeThread"
+          "expandWholeThread",
+          "embeddedHtmlMessages"
         ],
         "type": "object"
       },
