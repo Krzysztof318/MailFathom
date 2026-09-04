@@ -164,6 +164,18 @@ public sealed class NotificationMappingTests
         Assert.Throws<ArgumentOutOfRangeException>(() => NotificationMapping.ToNotification(entity));
     }
 
+    /// <summary>The screen column is refused on the same terms, because either target shape read back without its column would lead nowhere.</summary>
+    [Fact]
+    public void ToNotification_ARowNamingAScreenShapeWithoutItsColumn_IsRefused()
+    {
+        // Arrange
+        var entity = NotificationMapping.ToEntity(Compose(NotificationTarget.ToScreen(NotificationScreen.Settings)));
+        entity.TargetScreen = null;
+
+        // Act and assert
+        Assert.Throws<ArgumentOutOfRangeException>(() => NotificationMapping.ToNotification(entity));
+    }
+
     private static Notification Compose(NotificationTarget target, string? source = "work") =>
         Notification.Compose(
             NotificationId.Create(Guid.CreateVersion7(OccurredAt)),
