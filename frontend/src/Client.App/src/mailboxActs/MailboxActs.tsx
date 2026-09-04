@@ -83,14 +83,42 @@ const heldForNobody: Held = { session: null, directory: null, asked: new Map() }
  * serves, or a message already where it was asked to go. Each is that message's own answer rather than the request's,
  * which is what lets the rest of a batch stand — and it is read the same way whichever direction the act was going in.
  */
-function writtenDown(answers: readonly ClientResult<readonly MailMutationResult[]>[]): ReadonlySet<string> {
+function writtenDown(batches: readonly Submitted[]): ReadonlySet<string> {
     return new Set(
-        answers.flatMap((answer) =>
+        batches.flatMap(({ answer }) =>
             answer.outcome === 'read'
                 ? answer.value.filter((result) => result.outcome === 'recorded').map((result) => result.storedEmailId)
                 : [],
         ),
     );
+}
+
+/** The messages a batch answered for without writing them down, which is not a batch that never answered at all. */
+function refusedBy(batches: readonly Submitted[], written: ReadonlySet<string>): readonly string[] {
+    return batches
+        .filter(({ answer }) => answer.outcome === 'read')
+        .flatMap(({ messages }) => messages)
+        .filter((message) => !written.has(message.storedEmailId))
+        .map((message) => message.storedEmailId);
+}
+
+/** Why a batch never reached the deployment, or `null` where every one of them did. */
+function failureAmong(batches: readonly Submitted[]): ClientFailureReason | null {
+    const failed = batches.find(({ answer }) => answer.outcome === 'failed')?.answer;
+
+    return failed?.outcome === 'failed' ? failed.failure.reason : null;
+}
+
+/**
+ * One batch as it went out: the messages it carried, beside what the deployment answered about them.
+ *
+ * Paired rather than answered alone, because a submission over the bound is several batches and they do not answer
+ * together — one may be written down while the next never reaches the deployment at all. Only the pairing says which
+ * messages that failure was about, and everything the screen reports afterwards turns on the difference.
+ */
+interface Submitted {
+    readonly messages: readonly ActedMessage[];
+    readonly answer: ClientResult<readonly MailMutationResult[]>;
 }
 
 export function MailboxActsProvider({
@@ -218,47 +246,59 @@ export function MailboxActsProvider({
         });
     }
 
-    /** Puts one act on the wire as batches the submission bound admits, and answers with one result per message. */
+    /** Puts one act on the wire as batches the submission bound admits, each answered beside what it carried. */
     async function submitted(
         asking: ClientSession,
         act: MailboxAct,
         messages: readonly ActedMessage[],
         destination: MoveDestination | undefined,
-    ): Promise<readonly ClientResult<readonly MailMutationResult[]>[]> {
-        const filing =
-            act === 'flag' || act === 'markUnread'
-                ? []
-                : filingFor(act, messages, held.directory, destination?.alias ?? null);
+    ): Promise<readonly Submitted[]> {
+        const changesFlags = act === 'flag' || act === 'markUnread';
+        const filing = changesFlags ? [] : filingFor(act, messages, held.directory, destination?.alias ?? null);
+        const filed = new Set(filing.map((one) => one.storedEmailId));
+
+        // `filingFor` keeps the order it was given and drops only a message the act files nowhere, so the messages
+        // below and the filings above are one list read twice rather than two lists that have to agree.
+        const carried = changesFlags ? messages : messages.filter((message) => filed.has(message.storedEmailId));
 
         // Split rather than truncated: the route refuses a longer batch whole, so a message silently dropped here
         // would be a row drawn as filed against a mailbox nobody told.
-        const batches: Promise<ClientResult<readonly MailMutationResult[]>>[] = [];
+        const batches: Promise<Submitted>[] = [];
 
-        if (act === 'flag' || act === 'markUnread') {
-            const changes = messages.map((message) =>
-                act === 'flag'
-                    ? { storedEmailId: message.storedEmailId, flagged: true }
-                    : { storedEmailId: message.storedEmailId, seen: false },
-            );
+        for (let from = 0; from < carried.length; from += mostMessagesPerMutation) {
+            const batch = carried.slice(from, from + mostMessagesPerMutation);
+            const answering = changesFlags
+                ? changeMailFlags(
+                      asking,
+                      transport,
+                      batch.map((message) =>
+                          act === 'flag'
+                              ? { storedEmailId: message.storedEmailId, flagged: true }
+                              : { storedEmailId: message.storedEmailId, seen: false },
+                      ),
+                  )
+                : moveMail(asking, transport, filing.slice(from, from + mostMessagesPerMutation));
 
-            for (let from = 0; from < changes.length; from += mostMessagesPerMutation) {
-                batches.push(changeMailFlags(asking, transport, changes.slice(from, from + mostMessagesPerMutation)));
-            }
-        } else {
-            for (let from = 0; from < filing.length; from += mostMessagesPerMutation) {
-                batches.push(moveMail(asking, transport, filing.slice(from, from + mostMessagesPerMutation)));
-            }
+            batches.push(answering.then((answer) => ({ messages: batch, answer })));
         }
 
         return Promise.all(batches);
     }
 
-    /** Reports what an act came to, and offers the way back where the act has one. */
+    /**
+     * Reports what an act came to, and offers the way back where the act has one.
+     *
+     * All three at once where a submission came to all three: a batch that was written down is reported as written
+     * down however the batch after it ended, because what the deployment holds does not turn on what it was asked
+     * next. The two that did not land are said apart, a message the deployment answered about being a different thing
+     * from one it never answered for at all.
+     */
     function report(
         act: MailboxAct,
         recorded: readonly ActedMessage[],
         refused: readonly string[],
         destination: MoveDestination | undefined,
+        failure: ClientFailureReason | null,
     ): void {
         if (recorded.length > 0) {
             // The way back is the toast's single action, which is the design project's own: the two acts that change a
@@ -286,6 +326,13 @@ export function MailboxActsProvider({
         if (refused.length > 0) {
             toasts.raise({ kind: 'warning', title: translate('act.someNotChanged') });
         }
+
+        if (failure !== null) {
+            toasts.raise({
+                kind: 'error',
+                title: translate('act.failed', { reason: translate(failureLabels[failure]) }),
+            });
+        }
     }
 
     /**
@@ -300,34 +347,29 @@ export function MailboxActsProvider({
             return;
         }
 
-        const back = messages.map((message) => ({
-            storedEmailId: message.storedEmailId,
-            destinationFolder: message.folder,
-        }));
+        const batches: Promise<Submitted>[] = [];
 
-        const batches: Promise<ClientResult<readonly MailMutationResult[]>>[] = [];
+        for (let from = 0; from < messages.length; from += mostMessagesPerMutation) {
+            const batch = messages.slice(from, from + mostMessagesPerMutation);
 
-        for (let from = 0; from < back.length; from += mostMessagesPerMutation) {
-            batches.push(moveMail(session, transport, back.slice(from, from + mostMessagesPerMutation)));
+            batches.push(
+                moveMail(
+                    session,
+                    transport,
+                    batch.map((message) => ({
+                        storedEmailId: message.storedEmailId,
+                        destinationFolder: message.folder,
+                    })),
+                ).then((answer) => ({ messages: batch, answer })),
+            );
         }
 
-        void Promise.all(batches).then((answers) => {
-            const failed = answers.find((answer) => answer.outcome === 'failed');
-
-            if (failed?.outcome === 'failed') {
-                toasts.raise({
-                    kind: 'error',
-                    title: translate('act.failed', { reason: translate(failureLabels[failed.failure.reason]) }),
-                });
-
-                return;
-            }
-
+        void Promise.all(batches).then((answered) => {
             // Each message's own answer, exactly as the act itself is read: a mailbox that moved on between the act
             // and the press has messages the reverse move cannot write down either, and a row whose way back was not
             // recorded is still on its way to where the act put it — so it goes on saying so rather than being
-            // forgotten on the strength of a batch that answered.
-            const written = writtenDown(answers);
+            // forgotten on the strength of a batch that answered for something else.
+            const written = writtenDown(answered);
             const returned = messages.filter((message) => written.has(message.storedEmailId));
 
             forget(returned.map((message) => message.storedEmailId));
@@ -336,8 +378,17 @@ export function MailboxActsProvider({
                 toasts.raise({ kind: 'neutral', title: translate('act.undone'), body: counted(returned.length) });
             }
 
-            if (returned.length < messages.length) {
+            if (refusedBy(answered, written).length > 0) {
                 toasts.raise({ kind: 'warning', title: translate('act.someNotChanged') });
+            }
+
+            const failure = failureAmong(answered);
+
+            if (failure !== null) {
+                toasts.raise({
+                    kind: 'error',
+                    title: translate('act.failed', { reason: translate(failureLabels[failure]) }),
+                });
             }
         });
     }
@@ -349,27 +400,15 @@ export function MailboxActsProvider({
 
         remember(act, messages);
 
-        void submitted(session, act, messages, destination).then((answers) => {
-            const failed = answers.find((answer) => answer.outcome === 'failed');
-
-            if (failed?.outcome === 'failed') {
-                forget(messages.map((message) => message.storedEmailId));
-                toasts.raise({
-                    kind: 'error',
-                    title: translate('act.failed', { reason: translate(failureLabels[failed.failure.reason]) }),
-                });
-
-                return;
-            }
-
-            const written = writtenDown(answers);
+        void submitted(session, act, messages, destination).then((answered) => {
+            // A batch that was written down stands whatever the batch beside it came to: two hundred messages the
+            // deployment holds are two hundred messages it holds, and forgetting them because the next batch never
+            // reached it would leave every one of those rows saying nothing while the mailbox says otherwise.
+            const written = writtenDown(answered);
             const recorded = messages.filter((message) => written.has(message.storedEmailId));
-            const refused = messages
-                .filter((message) => !written.has(message.storedEmailId))
-                .map((message) => message.storedEmailId);
 
-            forget(refused);
-            report(act, recorded, refused, destination);
+            forget(messages.filter((message) => !written.has(message.storedEmailId)).map((one) => one.storedEmailId));
+            report(act, recorded, refusedBy(answered, written), destination, failureAmong(answered));
         });
     }
 

@@ -13,6 +13,7 @@ import type {
 } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
 import { ToastsProvider } from '../toasts/Toasts';
+import { mostMessagesPerMutation } from '@mailfathom/client-backend';
 import { MailboxActsProvider } from './MailboxActs';
 import { useMailboxActs, type ActedMessage, type MailboxActs } from './useMailboxActs';
 
@@ -297,6 +298,60 @@ describe('MailboxActsProvider', () => {
         await waitFor(() => {
             expect(held().asked.has('message-1')).toBe(false);
         });
+    });
+
+    // A submission over the bound is several batches and they do not answer together. What one of them was written
+    // down for is written down, however the batch beside it ended: a row cleared on the strength of somebody else's
+    // failure is a client disagreeing with the mailbox about mail the deployment is holding.
+    it('keeps what one batch wrote down when the batch beside it never reached the deployment', async () => {
+        const requests: ClientRequest[] = [];
+        const spread = Array.from({ length: mostMessagesPerMutation + 1 }, (_, at) => ({
+            storedEmailId: `message-${String(at)}`,
+            account: 'work',
+            folder: 'work-inbox',
+        }));
+
+        const deployment: Deployment = {
+            requests,
+            transport: (request) => {
+                requests.push(request);
+
+                if (request.path.endsWith('/folders')) {
+                    return Promise.resolve({ status: 200, body: folders, headers: {} });
+                }
+
+                const asked = JSON.parse(request.body ?? '{}') as { changes?: { storedEmailId: string }[] };
+                const changes = asked.changes ?? [];
+
+                // The full batch is written down and the one message left over never gets an answer at all.
+                return Promise.resolve(
+                    changes.length === mostMessagesPerMutation
+                        ? {
+                              status: 200,
+                              body: JSON.stringify({
+                                  results: changes.map(({ storedEmailId }) => ({ storedEmailId, outcome: 'recorded' })),
+                              }),
+                              headers: {},
+                          }
+                        : { status: 503, body: '', headers: {} },
+                );
+            },
+        };
+
+        const { held } = acting(deployment);
+
+        perform(held, 'flag', spread);
+
+        await screen.findByText('That change was not made: unavailable.');
+
+        expect(screen.getByText('Flagged')).toBeDefined();
+        expect(screen.getByText('200 messages')).toBeDefined();
+
+        await waitFor(() => {
+            expect(held().asked.has(`message-${String(mostMessagesPerMutation)}`)).toBe(false);
+        });
+
+        expect(held().asked.get('message-0')).toBe('flag');
     });
 
     it('asks a deployment for nothing where the credential may not write what the act writes', () => {
