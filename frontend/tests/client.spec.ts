@@ -691,6 +691,11 @@ test('opens the account menu from its control and hands focus back to it on Esca
     await control.click();
     await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
 
+    // The mailbox rows are the first thing under the person's name and the first thing a keyboard reaches, because
+    // each is a control that puts that mailbox in scope rather than a line to read.
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('button', { name: 'Work' })).toBeFocused();
+
     await page.keyboard.press('Tab');
     await expect(page.getByRole('switch', { name: /Tab mode/u })).toBeFocused();
 
