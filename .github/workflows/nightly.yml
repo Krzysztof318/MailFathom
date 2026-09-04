@@ -275,6 +275,31 @@ jobs:
       ref: ${{ needs.decide.outputs.revision }}
       version: ${{ needs.decide.outputs.version }}
 
+  # The third head, on exactly the terms the desktop bundles sit on above and never on a release's: one debug-signed
+  # APK from the same revision, left on this run, attached to nothing. This channel is the only thing that builds it at
+  # all, which is what the job buys — the Android toolchain is the largest set of prerequisites in this repository and
+  # nothing else exercises it, so a break in it is a nightly that failed rather than a discovery made at the moment
+  # somebody wants the head.
+  #
+  # It gates nothing, and that is a stated cost rather than an oversight: a change breaking the Android build alone
+  # merges green and fails here, which is the price of keeping an SDK, an NDK, a JDK, and Gradle out of every pull
+  # request.
+  # See docs/decisions/0027-an-android-head-built-every-night-and-supported-by-nothing.md.
+  android-client:
+    name: Android client
+    needs:
+      - decide
+      # The channel's gate and its own stack's, for the reason the desktop client waits for both.
+      - verify
+      - verify-client
+    if: needs.decide.outputs.publish == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-android-client.yml
+    with:
+      ref: ${{ needs.decide.outputs.revision }}
+      version: ${{ needs.decide.outputs.version }}
+
   publish:
     name: Publish
     needs:

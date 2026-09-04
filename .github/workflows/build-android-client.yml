@@ -1,0 +1,195 @@
+# Copyright © 2026 Krzysztof Kasprowicz
+# Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
+# Project repository: https://github.com/Krzysztof318/MailFathom
+
+name: Build the Android client
+
+# The one place MailFathom's Android head is built at all. A nightly calls it and leaves the result on the run; nothing
+# else calls it, and nothing ever will attach it to anything — under
+# docs/decisions/0027-an-android-head-built-every-night-and-supported-by-nothing.md this artifact has no release page,
+# no store listing, no update channel, and no address outliving a run's artifact retention. It gates nothing, on the
+# same terms the desktop bundles and the command binaries already sit on that channel: the client's own gate has
+# already run against the source by then, and an Android toolchain break is worth finding without becoming a reason
+# nobody gets a nightly image.
+#
+# **The APK is a debug build signed with the debug certificate, and that is the decision rather than the consequence of
+# omitting a flag.** No release signing key, keystore, `keystore.properties`, or store credential exists in this
+# repository or in its secrets, and none is created for this — so there is no release path to take even if somebody
+# wanted one. What the debug certificate buys is enforced by the platform rather than by this comment: such an APK
+# cannot be published to a store and cannot be installed over a release-signed install, which is what keeps a nightly
+# from becoming a release by accumulation. `pnpm android:build` is where `--debug` is written, beside the two
+# architectures, so this job states the decision and the client's own manifest carries it.
+#
+# **One APK covers `arm64-v8a` and `x86_64`** — every phone and tablet somebody would run it on, and the emulator. The
+# Gradle project's `universal` flavour is what merges both into one file, so there is one artifact to download rather
+# than a choice to get wrong.
+#
+# **The whole Android toolchain comes from the runner image and nothing here installs or pins one.** The image carries
+# the SDK with the platform and build tools this project compiles against, three NDK versions, five JDKs, and rustup;
+# the two steps below only say which of them to use. That is why the runner is pinned to a version rather than left on
+# `ubuntu-latest`: the image *is* the toolchain pin, so moving it is a decision about what the head is built with
+# rather than a routine bump. `THIRD_PARTY_LICENSES.md` records why none of those three earns a row of its own.
+#
+# **What a cold run costs, and what the caches do about it.** The Rust half dominates and no cache touches it: the
+# shell's crate closure is compiled once per architecture, from scratch, on every run — compiled output under
+# `target/` is deliberately not cached here for the reason `build-desktop-client.yml` gives, it being gigabytes against
+# a repository-wide cache budget on a job nothing waits for. So expect tens of minutes whether the caches hit or miss.
+# What they remove is the downloading either side of that: the pnpm store, the crate registry, and the Gradle
+# distribution with the 80 Android artifacts the committed lock file fixes. A cold run pays those on top; a warm one
+# pays the compilation alone. The APK the run uploads is around 240 MB, because a debug build keeps the JNI debug
+# symbols for both architectures — a property of the build type ADR 0027 fixed rather than one this job chose.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'The commit SHA to build. Resolved by the caller, so what is built is never re-resolved from a moving ref.'
+        required: true
+        type: string
+      version:
+        description: 'The full stamped version the APK reports and is named after, for example `0.8.0-nightly.41-3f1c9ab`.'
+        required: true
+        type: string
+    outputs:
+      artifact:
+        description: 'The name of the uploaded artifact holding the APK and the checksum file.'
+        value: ${{ jobs.build.outputs.artifact }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-24.04
+    outputs:
+      artifact: ${{ steps.collect.outputs.artifact }}
+    env:
+      # What makes the version an input rather than a second resolution. `frontend/src-tauri/run-tauri.ts` merges it
+      # into the Tauri configuration, which is what names the APK's `versionName` and its version code; without it the
+      # wrapper reads `Version.props` itself and would name the release rather than the nightly identifier the caller
+      # resolved. Both commands below get it, because `android init` writes the generated Gradle files the build then
+      # reads.
+      MAILFATHOM_VERSION: ${{ inputs.version }}
+    steps:
+      - name: Check out the commit being built
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+
+      # `engines.node` in the client's manifest is where the Node version is decided, so it is read from there rather
+      # than restated here — the same arrangement the client's own gate and the desktop build use.
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: frontend/package.json
+
+      - name: Install pnpm
+        run: npm install --global "$(jq --raw-output .packageManager frontend/package.json)"
+
+      # The two of the build's three variables the image leaves no usable value for. `ANDROID_HOME` it already exports;
+      # `NDK_HOME` is Tauri's own name for the versioned NDK directory and nothing sets it, and `JAVA_HOME` is the
+      # image's JDK 17 while Gradle 8.14.3 is what the committed wrapper runs — JDK 21 is what this project builds that
+      # with, per
+      # `docs/operations/local-development.md`, and a JDK too new fails inside Gradle's own startup rather than in
+      # anything named after Android. The image's default NDK is taken rather than its newest, for the same reason the
+      # runner is pinned: the newest is whichever one the image most recently added.
+      - name: Point the build at the toolchain the runner image carries
+        run: |
+          set -euo pipefail
+
+          {
+            printf 'NDK_HOME=%s\n' "${ANDROID_NDK:-$ANDROID_NDK_LATEST_HOME}"
+            printf 'JAVA_HOME=%s\n' "$JAVA_HOME_21_X64"
+          } >> "$GITHUB_ENV"
+
+      # The two the APK covers and no others. The Tauri CLI reads rustup directly, and Rust itself is whatever stable
+      # the runner image carries — this repository pins no toolchain, and what fixes the build is `Cargo.lock`, which
+      # `run-tauri.ts` makes binding by handing Cargo `--locked`.
+      - name: Add the Android Rust targets
+        run: rustup target add aarch64-linux-android x86_64-linux-android
+
+      - name: Resolve the pnpm store directory
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+      # Both keys below are deliberately the ones the desktop build writes on its own Linux runner rather than keys of
+      # this job's own, so the two share one entry apiece instead of storing the same bytes twice against a
+      # repository-wide cache budget. Neither holds anything target-specific: a pnpm store holds what the lock file
+      # names, and the Cargo caches hold downloaded crate *sources*. What differs per Android target is compiled
+      # output, and that is not cached here at all.
+      - name: Cache the pnpm store
+        uses: actions/cache@v6
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: pnpm-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+
+      - name: Cache the Cargo dependencies
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-${{ runner.os }}-${{ hashFiles('frontend/src-tauri/Cargo.lock') }}
+
+      # The Gradle distribution the committed wrapper downloads and verifies, and the module cache holding the
+      # artifacts `app/gradle.lockfile` fixes. Both keys are the files that decide those two contents, so a moved
+      # distribution or a rewritten lock file misses rather than restoring something stale.
+      - name: Cache the Gradle distribution and modules
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/wrapper
+            ~/.gradle/caches/modules-2
+          key: gradle-${{ hashFiles('frontend/src-tauri/gen/android/gradle/wrapper/gradle-wrapper.properties', 'frontend/src-tauri/gen/android/app/gradle.lockfile') }}
+
+      - name: Restore the client workspace
+        run: pnpm --dir frontend install --frozen-lockfile
+
+      # The committed Gradle project is the half holding decisions; the half Tauri regenerates from `tauri.conf.json`
+      # is gitignored and absent from a fresh checkout — `settings.gradle` applies a `tauri.settings.gradle` that does
+      # not exist until this runs. It is safe to re-run at any time and compiles nothing.
+      - name: Restore the generated half of the Gradle project
+        run: pnpm --dir frontend run android:init
+
+      # `--apk --debug --target aarch64 x86_64` is written in the client's manifest rather than here, so the artifact's
+      # two defining properties — a debug build, and the two architectures — are one decision in one place that a
+      # developer's own build takes too.
+      - name: Build the APK
+        run: pnpm --dir frontend run android:build
+
+      # Named after the version so a downloaded file says which build it is, and after the build type so it says what
+      # it is not: a debug-signed APK is not something to install over anything. Exactly one file is expected, the
+      # `universal` flavour being what merges both architectures — more than one would mean the build started emitting
+      # a file per architecture, which is a change in what this artifact is rather than something to quietly pick from.
+      - name: Collect the APK and take its checksum
+        id: collect
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p artifacts/android
+
+          mapfile -t built < <(find frontend/src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk')
+
+          if [[ "${#built[@]}" -ne 1 ]]; then
+            printf '::error::Expected exactly one APK, found %d: %s\n' "${#built[@]}" "${built[*]-}"
+            exit 1
+          fi
+
+          cp "${built[0]}" "artifacts/android/mailfathom-client-${VERSION}-android-debug.apk"
+
+          # Nothing rewrites the file between here and whoever downloads it, and it carries no code signature anybody
+          # outside this run can check, so this is the only thing that verifies it.
+          ( cd artifacts/android && sha256sum ./* > "mailfathom-client-${VERSION}-android.sha256" )
+
+          echo "artifact=android-client" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the APK and the checksum file
+        uses: actions/upload-artifact@v7
+        with:
+          name: android-client
+          path: artifacts/android
+          if-no-files-found: error

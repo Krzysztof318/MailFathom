@@ -131,8 +131,8 @@ two native packages depend on the distribution's copies and carry none of it. ma
 [ADR 0027](../docs/decisions/0027-an-android-head-built-every-night-and-supported-by-nothing.md) is what says the head
 exists at all and on what terms — one debug-signed APK, left on the run that built it, supported by nothing — and
 `gen/android/` is the Android Studio project `pnpm android:init` generates from `tauri.conf.json` and this crate.
-**No pipeline builds it yet**: the nightly job that record describes is [#1615](https://github.com/Krzysztof318/MailFathom/issues/1615),
-so until that lands `pnpm android:build` on somebody's own machine is what produces an APK.
+**One pipeline builds it**: `Build the Android client`, which `Nightly` calls and no release channel does, so an APK
+comes either from a nightly run or from `pnpm android:build` on somebody's own machine.
 Everything else under `gen/` is ignored; this one is tracked, because the decisions in it have nowhere else to live:
 
 | The decision                        | Where it is written                                                                                     | What it says                                                                                                                                                                                     |
