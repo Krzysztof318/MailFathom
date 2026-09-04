@@ -176,13 +176,29 @@ are reported and nothing else is:
 
 | What the run observed | What it says | Where it leads |
 | --- | --- | --- |
-| It committed new mail | One notification for the run, carrying the count — never one per message | The mailbox |
+| Mail arrived for the person | One notification for the run, carrying the count — never one per message | The mailbox |
 | It ended with folders it did not finish | How many of how many, and that MailFathom will try again | Nowhere |
 | A mail server refused this account's credential | That the account needs signing in again and is no longer being fetched | The settings |
 
+**Arrival is narrower than what a run stored, and the run decides it where it stores rather than by a query
+afterwards.** A message counts as arrival when all three of these hold, and it is not arrival when any one of them
+fails:
+
+| The run stored it | Why it decides arrival |
+| --- | --- |
+| in a folder whose role is the inbox | Mail the run brought into an archive, a sent folder, or a junk folder is mail it fetched rather than mail waiting for somebody. A server-side rule delivering into a custom folder is real mail arriving, and whether MailFathom says so is a question left open rather than answered here |
+| while the server had not marked it `\Seen` | The person read it somewhere else, so it is news to nobody. The flag is the one the server reported when it described the message, which rides the discovery fetch and costs no second round trip and no write |
+| and MailFathom did not put it there itself | Two of its own acts land a message in a folder like any other arrival: a copy it filed of the owner's own outgoing message, which the person wrote, and a copy a rule made into a folder mapped as the inbox, which carries the source's flags and would otherwise announce the message it was copied from. Each is recognized by the record of the act rather than by the folder or the flag, and the run already suppresses the appearance each of them raises |
+
+Everything else a run stores is still stored, still indexed, and still searchable; it is only the sentence about
+arrival that it is left out of. A mailbox's first runs therefore backfill years of history without announcing it, which
+is what the narrowing is chiefly for.
+
 **One notification for the run is the rule rather than this worker's choice.** A run that commits forty messages is one
 arrival to somebody who was away, and forty rows would bury every other kind of notification under one mailbox's
-traffic. A run that committed nothing, and a run that finished every folder it scheduled, say nothing at all.
+traffic. A run whose arrival count is zero says nothing at all — a run that stored nothing, a run that stored only
+outside the inbox, and a run that stored only mail already read are the same silence — and neither does a run that
+finished every folder it scheduled.
 
 **A condition already standing unread is not said twice.** Each notification names the condition it was raised for, and
 the schema refuses a second unread row for the same one — so an account whose credential is refused on every run for a
@@ -194,7 +210,7 @@ says is that mail arrived rather than how much is waiting, which the mailbox its
 
 **Nothing in a notification is read from mail.** A count, an account identifier, and a fixed sentence are what a row
 carries, so no subject, address, body fragment, filename, or credential material can reach it. What makes it derived
-personal data anyway is that it says something reached this person's mailbox and when, which the ninety-day retention
+personal data anyway is that it says something reached this person's mailbox and when, which the thirty-day retention
 bound and the two cascades answer for; the bound is swept on each account's own run beside the audit-trail retention
 passes.
 

@@ -262,9 +262,9 @@ internal sealed partial class AccountSynchronizationSupervisor
                         resolvedFolders.Add(resolvedFolder);
                     }
 
-                    if (folderRun.StoredEmailCount > 0)
+                    if (folderRun.ArrivedEmailCount > 0)
                     {
-                        Interlocked.Add(ref arrivedEmailCount, folderRun.StoredEmailCount);
+                        Interlocked.Add(ref arrivedEmailCount, folderRun.ArrivedEmailCount);
                     }
 
                     // A plain write rather than an interlocked one: every writer writes the same value, and awaiting
@@ -943,7 +943,7 @@ internal sealed partial class AccountSynchronizationSupervisor
 
             this.RecordFolderRun(folder, result);
 
-            return new FolderRunOutcome(Succeeded: true, result.Folder, result.StoredEmailCount);
+            return new FolderRunOutcome(Succeeded: true, result.Folder, result.ArrivedEmailCount);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -1567,7 +1567,7 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// <summary>States what one folder's turn through a run produced.</summary>
     /// <param name="Succeeded">Whether the folder completed, which excludes a deferral and an unexpected failure alike.</param>
     /// <param name="ResolvedFolder">The binding the folder ran under, or <see langword="null" /> when the alias resolved to none.</param>
-    /// <param name="StoredEmailCount">How many occurrences the folder committed with their content, which is what the run reports as arrived mail.</param>
+    /// <param name="ArrivedEmailCount">How many of the folder's stored occurrences were mail arriving for the person, which is what the run reports as arrived mail.</param>
     /// <param name="CredentialRefused">
     /// Whether the mail server refused the account's credential, which is the one failure here that a later run cannot
     /// clear on its own and is therefore reported to the person rather than only waited out.
@@ -1575,7 +1575,7 @@ internal sealed partial class AccountSynchronizationSupervisor
     private readonly record struct FolderRunOutcome(
         bool Succeeded,
         MailFolderResolution? ResolvedFolder,
-        int StoredEmailCount = 0,
+        int ArrivedEmailCount = 0,
         bool CredentialRefused = false)
     {
         /// <summary>Gets the outcome of a folder that neither completed nor left a binding worth watching.</summary>
@@ -1583,6 +1583,6 @@ internal sealed partial class AccountSynchronizationSupervisor
 
         /// <summary>Gets the outcome of a folder the mail server would not let this account reach at all.</summary>
         internal static FolderRunOutcome CredentialWasRefused =>
-            new(Succeeded: false, ResolvedFolder: null, StoredEmailCount: 0, CredentialRefused: true);
+            new(Succeeded: false, ResolvedFolder: null, ArrivedEmailCount: 0, CredentialRefused: true);
     }
 }

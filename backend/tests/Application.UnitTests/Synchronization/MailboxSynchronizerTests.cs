@@ -52,8 +52,18 @@ public sealed class MailboxSynchronizerTests
     private static readonly MailFolderMapping InboxMapping =
         MailFolderMapping.ToSpecialUse(InboxAlias, MailFolderSpecialUse.Inbox);
 
+    private static readonly MailFolderAlias ArchiveAlias = MailFolderAlias.Create("archive");
+
+    private static readonly RemoteFolderPath ArchiveRemotePath = RemoteFolderPath.Create("Archive", '/');
+
+    private static readonly MailFolderMapping ArchiveMapping =
+        MailFolderMapping.ToSpecialUse(ArchiveAlias, MailFolderSpecialUse.Archive);
+
     private static readonly MailFolderResolution InboxFolder =
         MailFolderResolution.FirstBindingOf(InboxAlias, InboxRemotePath);
+
+    private static readonly MailFolderResolution ArchiveFolder =
+        MailFolderResolution.FirstBindingOf(ArchiveAlias, ArchiveRemotePath);
 
     private static readonly MailTransportSecurityPolicy RequiredTlsPolicy = MailTransportSecurityPolicy.Create(
         MailConnectionSecurity.TlsOnConnect,
@@ -84,7 +94,7 @@ public sealed class MailboxSynchronizerTests
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
         var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
         var synchronizer = CreateSynchronizer(sessionFactory, checkpointStore, sessionScopeFactory, metadataRepository, contentStore, clock, options);
-        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero), 128);
+        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero), 128, IsRemotelySeen: false);
         var content = new RemoteEmailContent(occurrence, new ReadOnlyMemory<byte>([1, 2, 3]));
         var storedEmailId = StoredEmailId.Create(Guid.CreateVersion7());
         var metadataStored = false;
@@ -117,6 +127,90 @@ public sealed class MailboxSynchronizerTests
         await checkpointStore.Received(1).SaveCheckpointAsync(persistenceSession, MailAccountIdentity.Create(SyntheticMailOwner.Deployment, accountId), folder.Id, Arg.Any<SynchronizationCheckpoint?>(), Arg.Is<SynchronizationCheckpoint>(checkpoint => checkpoint!.LastSeenUid == uid), CancellationToken.None);
     }
 
+    /// <summary>What a run reports as arrived mail: stored in the inbox, and unread on the server when it was stored.</summary>
+    [Fact]
+    public async Task SynchronizeAsync_UnreadMessageStoredInTheInbox_ReportsItAsArrivedMail()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var occurrence = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(10));
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
+        var arrangement = ArrangeContentRun(options, uidValidity, [MetadataOf(occurrence, 600)], occurrence.Uid);
+        StubRetrievedContent(arrangement.Session, options, occurrence, 600);
+
+        // Act
+        var result = await arrangement.Synchronizer.SynchronizeAsync(
+            MailAccountIdentity.Create(SyntheticMailOwner.Deployment, accountId),
+            InboxMapping,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.StoredEmailCount);
+        Assert.Equal(1, result.ArrivedEmailCount);
+    }
+
+    /// <summary>
+    /// Mail the server had already marked <c>\Seen</c> is news to nobody: the person read it somewhere else, and a run
+    /// that says it arrived is announcing a backfill rather than an arrival.
+    /// </summary>
+    [Fact]
+    public async Task SynchronizeAsync_MessageTheServerHadAlreadyMarkedRead_StoresItWithoutReportingItAsArrival()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var occurrence = EmailOccurrenceId.Create(accountId, InboxFolder.Id, uidValidity, ImapUid.Create(10));
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
+        var arrangement = ArrangeContentRun(
+            options,
+            uidValidity,
+            [MetadataOf(occurrence, 600, isRemotelySeen: true)],
+            occurrence.Uid);
+        StubRetrievedContent(arrangement.Session, options, occurrence, 600);
+
+        // Act
+        var result = await arrangement.Synchronizer.SynchronizeAsync(
+            MailAccountIdentity.Create(SyntheticMailOwner.Deployment, accountId),
+            InboxMapping,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.StoredEmailCount);
+        Assert.Equal(0, result.ArrivedEmailCount);
+    }
+
+    /// <summary>
+    /// Only the inbox raises an arrival. Mail this run stored in an archive, a sent folder, or anywhere else the
+    /// account synchronizes is mail the run fetched rather than mail waiting for a person.
+    /// </summary>
+    [Fact]
+    public async Task SynchronizeAsync_UnreadMessageStoredOutsideTheInbox_StoresItWithoutReportingItAsArrival()
+    {
+        // Arrange
+        var accountId = MailAccountId.Create("primary");
+        var uidValidity = ImapUidValidity.Create(5);
+        var occurrence = EmailOccurrenceId.Create(accountId, ArchiveFolder.Id, uidValidity, ImapUid.Create(10));
+        var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
+        var arrangement = ArrangeContentRun(
+            options,
+            uidValidity,
+            [MetadataOf(occurrence, 600)],
+            occurrence.Uid,
+            runFolder: ArchiveFolder);
+        StubRetrievedContent(arrangement.Session, options, occurrence, 600);
+
+        // Act
+        var result = await arrangement.Synchronizer.SynchronizeAsync(
+            MailAccountIdentity.Create(SyntheticMailOwner.Deployment, accountId),
+            ArchiveMapping,
+            CancellationToken.None);
+
+        // Assert
+        Assert.Equal(1, result.StoredEmailCount);
+        Assert.Equal(0, result.ArrivedEmailCount);
+    }
+
     /// <summary>The run records what the classification gate says about an arriving message, although it derives nothing from it.</summary>
     /// <remarks>
     /// The two withholding answers are reached nowhere else: every later stage either sees a message the gate admits or
@@ -140,7 +234,7 @@ public sealed class MailboxSynchronizerTests
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
         var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
         var gateTelemetry = new RecordingDerivedWorkGateTelemetry();
-        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero), 128);
+        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero), 128, IsRemotelySeen: false);
         var synchronizer = CreateSynchronizer(
             sessionFactory,
             checkpointStore,
@@ -192,7 +286,7 @@ public sealed class MailboxSynchronizerTests
         var jobStore = Substitute.For<IJobStore>();
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
         var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
-        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero), 128);
+        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero), 128, IsRemotelySeen: false);
         var synchronizer = CreateSynchronizer(
             sessionFactory,
             checkpointStore,
@@ -243,7 +337,7 @@ public sealed class MailboxSynchronizerTests
         var jobStore = Substitute.For<IJobStore>();
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
         var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
-        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero), 4096);
+        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero), 4096, IsRemotelySeen: false);
         var synchronizer = CreateSynchronizer(
             sessionFactory,
             checkpointStore,
@@ -350,7 +444,9 @@ public sealed class MailboxSynchronizerTests
     /// A copy leaves the email where it was, so nothing is carried across and the second live occurrence is a second
     /// local email, which is what
     /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0008-copied-message-local-identity.md">ADR 0008</see>
-    /// decided. What it must not do is set a rule off, which is a question about provenance rather than about rows.
+    /// decided. What it must not do is set a rule off or be reported to the person as mail that arrived, both of which
+    /// are questions about provenance rather than about rows: an IMAP copy carries the source's flags, so a copy of an
+    /// unread message is itself unread and would otherwise announce the message it was copied from.
     /// </remarks>
     [Fact]
     public async Task SynchronizeAsync_DiscoversTheOccurrenceACopyPlaced_StoresItAndWithholdsTheArrival()
@@ -399,6 +495,7 @@ public sealed class MailboxSynchronizerTests
 
         // Assert
         Assert.Equal(1, result.StoredEmailCount);
+        Assert.Equal(0, result.ArrivedEmailCount);
         Assert.Equal(0, result.RelocatedEmailCount);
         await metadataRepository.DidNotReceiveWithAnyArgs().TryCarryToOccurrenceAsync(
             Arg.Any<IPersistenceSession>(),
@@ -675,7 +772,7 @@ public sealed class MailboxSynchronizerTests
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
         var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024 };
         var synchronizer = CreateSynchronizer(sessionFactory, checkpointStore, sessionScopeFactory, metadataRepository, contentStore, clock, options);
-        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero), 2048);
+        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero), 2048, IsRemotelySeen: false);
         checkpointStore.GetCheckpointAsync(MailAccountIdentity.Create(SyntheticMailOwner.Deployment, accountId), folder.Id, CancellationToken.None).Returns(SynchronizationCheckpoint.None(uidValidity));
         sessionFactory.OpenReadOnlyAsync(accountId, folder, Arg.Any<MailTransportSecurityPolicy>(), CancellationToken.None).Returns(session);
         session.GetUidValidityAsync(CancellationToken.None).Returns(uidValidity);
@@ -760,7 +857,7 @@ public sealed class MailboxSynchronizerTests
             clock,
             options,
             synchronizationWindow: window);
-        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero), 128);
+        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero), 128, IsRemotelySeen: false);
         checkpointStore.GetCheckpointAsync(MailAccountIdentity.Create(SyntheticMailOwner.Deployment, accountId), folder.Id, CancellationToken.None).Returns(SynchronizationCheckpoint.None(uidValidity));
         sessionFactory.OpenReadOnlyAsync(accountId, folder, Arg.Any<MailTransportSecurityPolicy>(), CancellationToken.None).Returns(session);
         session.GetUidValidityAsync(CancellationToken.None).Returns(uidValidity);
@@ -855,7 +952,7 @@ public sealed class MailboxSynchronizerTests
             clock,
             options,
             synchronizationWindow: window);
-        var includedMetadata = new RemoteEmailMetadata(includedOccurrence, "message-90@example.test", "Subject", new DateTimeOffset(2026, 7, 20, 8, 0, 0, TimeSpan.Zero), 128);
+        var includedMetadata = new RemoteEmailMetadata(includedOccurrence, "message-90@example.test", "Subject", new DateTimeOffset(2026, 7, 20, 8, 0, 0, TimeSpan.Zero), 128, IsRemotelySeen: false);
         checkpointStore.GetCheckpointAsync(MailAccountIdentity.Create(SyntheticMailOwner.Deployment, accountId), folder.Id, CancellationToken.None).Returns(SynchronizationCheckpoint.None(uidValidity));
         sessionFactory.OpenReadOnlyAsync(accountId, folder, Arg.Any<MailTransportSecurityPolicy>(), CancellationToken.None).Returns(session);
         session.GetUidValidityAsync(CancellationToken.None).Returns(uidValidity);
@@ -895,7 +992,7 @@ public sealed class MailboxSynchronizerTests
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero));
         var options = new MailboxSynchronizationOptions { MaxMetadataBatchSize = 25, MaxRawMimeBytes = 1024, MaxMetadataBatchesPerRun = 1 };
         var synchronizer = CreateSynchronizer(sessionFactory, checkpointStore, sessionScopeFactory, metadataRepository, contentStore, clock, options);
-        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero), 0);
+        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero), 0, IsRemotelySeen: false);
         checkpointStore.GetCheckpointAsync(MailAccountIdentity.Create(SyntheticMailOwner.Deployment, accountId), folder.Id, CancellationToken.None).Returns(SynchronizationCheckpoint.None(uidValidity));
         sessionFactory.OpenReadOnlyAsync(accountId, folder, Arg.Any<MailTransportSecurityPolicy>(), CancellationToken.None).Returns(session);
         session.GetUidValidityAsync(CancellationToken.None).Returns(uidValidity);
@@ -938,7 +1035,7 @@ public sealed class MailboxSynchronizerTests
             contentStore,
             clock,
             options);
-        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", clock.GetUtcNow(), 128);
+        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", clock.GetUtcNow(), 128, IsRemotelySeen: false);
         var content = new RemoteEmailContent(occurrence, new ReadOnlyMemory<byte>([1, 2, 3]));
         var contentFetched = false;
         checkpointStore.GetCheckpointAsync(MailAccountIdentity.Create(SyntheticMailOwner.Deployment, accountId), folder.Id, CancellationToken.None).Returns(SynchronizationCheckpoint.None(uidValidity));
@@ -1021,13 +1118,15 @@ public sealed class MailboxSynchronizerTests
             "message-1@example.test",
             "First",
             new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero),
-            128);
+            128,
+            IsRemotelySeen: false);
         var secondMetadata = new RemoteEmailMetadata(
             secondOccurrence,
             "message-2@example.test",
             "Second",
             new DateTimeOffset(2026, 7, 24, 9, 0, 0, TimeSpan.Zero),
-            128);
+            128,
+            IsRemotelySeen: false);
         var firstContent = new RemoteEmailContent(firstOccurrence, new ReadOnlyMemory<byte>([1]));
         var secondContent = new RemoteEmailContent(secondOccurrence, new ReadOnlyMemory<byte>([2]));
         checkpointStore.GetCheckpointAsync(MailAccountIdentity.Create(SyntheticMailOwner.Deployment, accountId), folder.Id, CancellationToken.None).Returns(SynchronizationCheckpoint.None(uidValidity));
@@ -1183,7 +1282,8 @@ public sealed class MailboxSynchronizerTests
             "message-1@example.test",
             "Subject",
             new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero),
-            128);
+            128,
+            IsRemotelySeen: false);
         var content = new RemoteEmailContent(occurrence, new ReadOnlyMemory<byte>([1, 2, 3]));
         var storedEmailId = StoredEmailId.Create(Guid.CreateVersion7());
         checkpointStore.GetCheckpointAsync(MailAccountIdentity.Create(SyntheticMailOwner.Deployment, accountId), folder.Id, CancellationToken.None)
@@ -1279,7 +1379,8 @@ public sealed class MailboxSynchronizerTests
             "message-1@example.test",
             "Subject",
             new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero),
-            128);
+            128,
+            IsRemotelySeen: false);
         var content = new RemoteEmailContent(occurrence, new ReadOnlyMemory<byte>([1, 2, 3]));
         var storedEmailId = StoredEmailId.Create(Guid.CreateVersion7());
         var initialCheckpoint = SynchronizationCheckpoint.None(uidValidity);
@@ -1693,7 +1794,7 @@ public sealed class MailboxSynchronizerTests
             clock,
             options,
             mimeReader: mimeReader);
-        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", null, 128);
+        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", null, 128, IsRemotelySeen: false);
         var content = new RemoteEmailContent(occurrence, new ReadOnlyMemory<byte>([1, 2, 3]));
         checkpointStore.GetCheckpointAsync(MailAccountIdentity.Create(SyntheticMailOwner.Deployment, accountId), folder.Id, CancellationToken.None).Returns(SynchronizationCheckpoint.None(uidValidity));
         sessionFactory.OpenReadOnlyAsync(accountId, folder, Arg.Any<MailTransportSecurityPolicy>(), CancellationToken.None).Returns(session);
@@ -1745,7 +1846,7 @@ public sealed class MailboxSynchronizerTests
             clock,
             options,
             mimeReader: mimeReader);
-        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", null, 128);
+        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", null, 128, IsRemotelySeen: false);
         checkpointStore.GetCheckpointAsync(MailAccountIdentity.Create(SyntheticMailOwner.Deployment, accountId), folder.Id, CancellationToken.None).Returns(SynchronizationCheckpoint.None(uidValidity));
         sessionFactory.OpenReadOnlyAsync(accountId, folder, Arg.Any<MailTransportSecurityPolicy>(), CancellationToken.None).Returns(session);
         session.GetUidValidityAsync(CancellationToken.None).Returns(uidValidity);
@@ -1797,7 +1898,7 @@ public sealed class MailboxSynchronizerTests
             clock,
             options,
             mimeReader: mimeReader);
-        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", null, 128);
+        var metadata = new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", null, 128, IsRemotelySeen: false);
         checkpointStore.GetCheckpointAsync(MailAccountIdentity.Create(SyntheticMailOwner.Deployment, accountId), folder.Id, CancellationToken.None).Returns(SynchronizationCheckpoint.None(uidValidity));
         sessionFactory.OpenReadOnlyAsync(accountId, folder, Arg.Any<MailTransportSecurityPolicy>(), CancellationToken.None).Returns(session);
         session.GetUidValidityAsync(CancellationToken.None).Returns(uidValidity);
@@ -1860,8 +1961,8 @@ public sealed class MailboxSynchronizerTests
         session.GetUidValidityAsync(CancellationToken.None).Returns(uidValidity);
         session.GetEmailBatchAfterAsync(null, 25, MailSynchronizationWindow.Unbounded, CancellationToken.None).Returns(new RemoteEmailMetadataBatch(
             [
-                new RemoteEmailMetadata(unreadableOccurrence, "message-1@example.test", "Subject", null, 128),
-                new RemoteEmailMetadata(readableOccurrence, "message-2@example.test", "Subject", null, 128),
+                new RemoteEmailMetadata(unreadableOccurrence, "message-1@example.test", "Subject", null, 128, IsRemotelySeen: false),
+                new RemoteEmailMetadata(readableOccurrence, "message-2@example.test", "Subject", null, 128, IsRemotelySeen: false),
             ],
             ImapUid.Create(11),
             HasMore: false));
@@ -1915,7 +2016,7 @@ public sealed class MailboxSynchronizerTests
         sessionFactory.OpenReadOnlyAsync(accountId, folder, Arg.Any<MailTransportSecurityPolicy>(), CancellationToken.None).Returns(session);
         session.GetUidValidityAsync(CancellationToken.None).Returns(uidValidity);
         session.GetEmailBatchAfterAsync(null, 25, MailSynchronizationWindow.Unbounded, CancellationToken.None).Returns(new RemoteEmailMetadataBatch(
-            [new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", null, 2048)],
+            [new RemoteEmailMetadata(occurrence, "message-1@example.test", "Subject", null, 2048, IsRemotelySeen: false)],
             uid,
             HasMore: false));
 
@@ -2106,12 +2207,16 @@ public sealed class MailboxSynchronizerTests
         remoteFolderCatalog
             .ListFoldersAsync(Arg.Any<MailAccountId>(), Arg.Any<MailTransportSecurityPolicy>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<RemoteFolder>>(
-                [new RemoteFolder(InboxRemotePath, [MailFolderSpecialUse.Inbox])]));
+                [
+                    new RemoteFolder(InboxRemotePath, [MailFolderSpecialUse.Inbox]),
+                    new RemoteFolder(ArchiveRemotePath, [MailFolderSpecialUse.Archive]),
+                ]));
 
         var resolutionStore = Substitute.For<IMailFolderResolutionStore>();
         resolutionStore
             .GetCurrentResolutionAsync(Arg.Any<MailAccountIdentity>(), Arg.Any<MailFolderAlias>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<MailFolderResolution?>(InboxFolder));
+            .Returns(call => Task.FromResult<MailFolderResolution?>(
+                call.Arg<MailFolderAlias>() == ArchiveMapping.Alias ? ArchiveFolder : InboxFolder));
 
         return new MailFolderResolver(
             remoteFolderCatalog,
@@ -2416,7 +2521,8 @@ public sealed class MailboxSynchronizerTests
             "relocated@example.test",
             "Subject",
             new DateTimeOffset(2026, 8, 7, 8, 0, 0, TimeSpan.Zero),
-            128);
+            128,
+            IsRemotelySeen: false);
 
         session.GetUidValidityAsync(Arg.Any<CancellationToken>()).Returns(uidValidity);
         session
@@ -2643,6 +2749,7 @@ public sealed class MailboxSynchronizerTests
 
         // Assert
         Assert.Equal(1, result.StoredEmailCount);
+        Assert.Equal(0, result.ArrivedEmailCount);
         await context.AssertJoinedToTheSendAsync();
     }
 
@@ -2662,6 +2769,7 @@ public sealed class MailboxSynchronizerTests
 
         // Assert
         Assert.Equal(1, result.StoredEmailCount);
+        Assert.Equal(0, result.ArrivedEmailCount);
         await context.AssertJoinedToTheSendAsync();
     }
 
@@ -2677,6 +2785,7 @@ public sealed class MailboxSynchronizerTests
 
         // Assert
         Assert.Equal(1, result.StoredEmailCount);
+        Assert.Equal(1, result.ArrivedEmailCount);
         await context.AssertStoredAsArrivingMailAsync();
     }
 
@@ -3249,12 +3358,16 @@ public sealed class MailboxSynchronizerTests
         await arrangement.Session.Received(1).FetchEmailContentWithoutSettingSeenAsync(occurrence, options.MaxRawMimeBytes, CancellationToken.None);
     }
 
-    private static RemoteEmailMetadata MetadataOf(EmailOccurrenceId occurrenceId, long sizeOctets) => new(
+    private static RemoteEmailMetadata MetadataOf(
+        EmailOccurrenceId occurrenceId,
+        long sizeOctets,
+        bool isRemotelySeen = false) => new(
         occurrenceId,
         $"message-{occurrenceId.Uid.Value}@example.test",
         "Subject",
         new DateTimeOffset(2026, 7, 24, 8, 0, 0, TimeSpan.Zero),
-        sizeOctets);
+        sizeOctets,
+        isRemotelySeen);
 
     private static void StubRetrievedContent(
         IMailboxSession session,
@@ -3322,8 +3435,10 @@ public sealed class MailboxSynchronizerTests
         RawMimeMemoryBudget? rawMimeMemoryBudget = null,
         StoredContentCeiling? storedContentCeiling = null,
         IOwnerStoredContentLedger? ownerContentLedger = null,
-        SpamClassificationSettings? classificationSettings = null)
+        SpamClassificationSettings? classificationSettings = null,
+        MailFolderResolution? runFolder = null)
     {
+        var folder = runFolder ?? InboxFolder;
         var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
         var metadataRepository = Substitute.For<IEmailMetadataRepository>();
         var persistenceSessionFactory = Substitute.For<IPersistenceSessionFactory>();
@@ -3343,10 +3458,10 @@ public sealed class MailboxSynchronizerTests
             return persistenceSession;
         });
         checkpointStore
-            .GetCheckpointAsync(Arg.Any<MailAccountIdentity>(), InboxFolder.Id, Arg.Any<CancellationToken>())
+            .GetCheckpointAsync(Arg.Any<MailAccountIdentity>(), folder.Id, Arg.Any<CancellationToken>())
             .Returns(storedCheckpoint ?? SynchronizationCheckpoint.None(uidValidity));
         sessionFactory
-            .OpenReadOnlyAsync(Arg.Any<MailAccountId>(), InboxFolder, Arg.Any<MailTransportSecurityPolicy>(), Arg.Any<CancellationToken>())
+            .OpenReadOnlyAsync(Arg.Any<MailAccountId>(), folder, Arg.Any<MailTransportSecurityPolicy>(), Arg.Any<CancellationToken>())
             .Returns(session);
         session.GetUidValidityAsync(Arg.Any<CancellationToken>()).Returns(uidValidity);
         session
@@ -3456,7 +3571,8 @@ public sealed class MailboxSynchronizerTests
                 MintedMessageId,
                 "Subject",
                 new DateTimeOffset(2026, 8, 19, 8, 0, 0, TimeSpan.Zero),
-                128);
+                128,
+                IsRemotelySeen: false);
 
             var checkpointStore = Substitute.For<ISynchronizationCheckpointStore>();
             checkpointStore

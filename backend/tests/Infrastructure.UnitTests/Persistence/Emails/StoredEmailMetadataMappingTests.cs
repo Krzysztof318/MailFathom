@@ -630,7 +630,7 @@ public sealed class StoredEmailMetadataMappingTests
         };
 
     private static RemoteEmailMetadata CreateRemoteMetadata(string internetMessageId) =>
-        new(OccurrenceId, internetMessageId, "Quarterly report", SentAt, SizeOctets: 4096);
+        new(OccurrenceId, internetMessageId, "Quarterly report", SentAt, SizeOctets: 4096, IsRemotelySeen: false);
 
     private static EmailOccurrenceId OccurrenceId => EmailOccurrenceId.Create(
         MailAccountId.Create("primary"),

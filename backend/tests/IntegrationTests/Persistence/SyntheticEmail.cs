@@ -66,12 +66,14 @@ internal static class SyntheticEmail
     /// <param name="occurrenceId">The occurrence the summary describes.</param>
     /// <param name="subject">The subject, which is how a test recognizes its own row.</param>
     /// <param name="sizeOctets">The size the server reported.</param>
+    /// <param name="isRemotelySeen">Whether the server had marked the message read, which decides whether a run reports it as arrival.</param>
     /// <returns>The remote summary.</returns>
     internal static RemoteEmailMetadata RemoteMetadataOf(
         EmailOccurrenceId occurrenceId,
         string subject,
-        long sizeOctets = 2048) =>
-        new(occurrenceId, $"{subject}@mailfathom.test", subject, SentAt, sizeOctets);
+        long sizeOctets = 2048,
+        bool isRemotelySeen = false) =>
+        new(occurrenceId, $"{subject}@mailfathom.test", subject, SentAt, sizeOctets, isRemotelySeen);
 
     /// <summary>The address every extraction reports as the sender unless a test names another.</summary>
     internal const string DefaultSenderAddress = "sender@mailfathom.test";
