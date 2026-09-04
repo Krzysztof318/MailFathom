@@ -42,11 +42,13 @@ function renderSettings({
     profile = named,
     preferences = settings,
     telemetryForwarding = forwardedTo,
+    deploymentVersion = '0.9.0',
     onClose = () => undefined,
 }: {
     readonly profile?: OwnProfileInForce;
     readonly preferences?: ClientPreferencesInForce;
     readonly telemetryForwarding?: TelemetryForwarding;
+    readonly deploymentVersion?: string | null;
     readonly onClose?: () => void;
 } = {}): void {
     render(
@@ -55,6 +57,7 @@ function renderSettings({
                 profile={profile}
                 preferences={preferences}
                 telemetryForwarding={telemetryForwarding}
+                deploymentVersion={deploymentVersion}
                 onClose={onClose}
             />
         </LocalizationProvider>,
@@ -370,5 +373,25 @@ describe('Settings', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Close settings' }));
 
         expect(onClose).toHaveBeenCalledOnce();
+    });
+
+    it('says what the client and the deployment are running, at its foot', () => {
+        renderSettings({ deploymentVersion: '0.9.0' });
+
+        expect(screen.getByText(/deployment 0\.9\.0/u)).toBeDefined();
+    });
+
+    it('says what the client alone is running while the deployment has answered nothing', () => {
+        renderSettings({ deploymentVersion: null });
+
+        expect(screen.queryByText(/, deployment /u)).toBeNull();
+        expect(screen.getByText(/^MailFathom Client /u)).toBeDefined();
+    });
+
+    it('says it under either tab, that being about the client rather than about what is open', () => {
+        renderSettings({ deploymentVersion: '0.9.0' });
+        openApplication();
+
+        expect(screen.getByText(/deployment 0\.9\.0/u)).toBeDefined();
     });
 });

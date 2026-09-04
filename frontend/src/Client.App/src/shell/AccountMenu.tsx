@@ -12,36 +12,40 @@ import { useLocalization } from '../localization/useLocalization';
 import type { ClientPreferencesInForce } from '../preferences/useClientPreferences';
 import type { OwnProfileInForce } from '../profile/useOwnProfile';
 import { Settings } from '../settings/Settings';
+import { accountInScope, scopeOfAccount } from '../workspace/mailScope';
+import { useWorkspace } from '../workspace/useWorkspace';
 import { TabModeSwitch, ThemeSegments } from './Preferences';
 
 // The menu at the foot of the rail, which is where the design project puts everything that is about the person rather
-// than about the mail: who they are, which mailboxes this deployment reads for them, the two settings that follow them
-// between machines, what the client and the deployment are running, where the client is reading from, the way into
-// everything else about them, and the way out. It is the platform's own popover rather than a menu built out of state —
-// it opens and closes from the control that names it, closes on Escape and on a press outside it, and hands focus back
-// to that control, none of which this file has to write.
+// than about the mail: who they are, which mailboxes this deployment reads for them and which of those the client is
+// scoped to, the two settings that follow them between machines, the way into everything else about them, and the way
+// out. It is the platform's own popover rather than a menu built out of state — it opens and closes from the control
+// that names it, closes on Escape and on a press outside it, and hands focus back to that control, none of which this
+// file has to write.
 //
-// The language is not here and is on the settings screen, which is where the design project draws it: the menu holds
-// what somebody reaches for between messages, and what language the client reads in is set once.
+// Two things a reader might expect here are deliberately elsewhere, both because the design project draws them there.
+// The language is on the settings screen: the menu holds what somebody reaches for between messages, and what language
+// the client reads in is set once. What the client and the deployment are running is on the sign-in screen and at the
+// foot of that same settings screen, which is where somebody looks for a version — this menu only carries the
+// deployment's version through to the screen its own row opens.
+//
+// The way out of a deployment somebody named themselves is not here either, and that one is not a design decision:
+// pointing the client elsewhere ends the session anyway, so the sign-in screen the frame falls back to is where it is
+// offered and where it still works when a kept password has stopped being accepted.
 
 export function AccountMenu({
     accounts,
     deploymentVersion,
-    readingFrom,
     telemetryForwarding,
     preferences,
     profile,
-    onPointSomewhereElse,
     onSignOut,
 }: {
     /** The mailboxes this deployment reads for the signed-in person, which is empty while nothing has answered. */
     readonly accounts: readonly MailAccount[];
 
-    /** What the deployment answered it is running, or `null` while nothing has answered. */
+    /** What the deployment answered it is running, or `null` while nothing has answered, for the screen below. */
     readonly deploymentVersion: string | null;
-
-    /** The address somebody named for the deployment, or `null` where the origin that served the client is it. */
-    readonly readingFrom: string | null;
 
     /**
      * What this deployment has said about forwarding this client's own records, which the settings screen behind this
@@ -57,7 +61,6 @@ export function AccountMenu({
     /** Who the client is drawing, which this menu shows and the screen behind its own row edits. */
     readonly profile: OwnProfileInForce;
 
-    readonly onPointSomewhereElse: () => void;
     readonly onSignOut: () => void;
 }) {
     const { translate } = useLocalization();
@@ -105,30 +108,6 @@ export function AccountMenu({
                         <p className="truncate font-semibold">{profile.displayName}</p>
                     )}
 
-                    <p className="font-mono text-xs text-muted">
-                        {deploymentVersion === null
-                            ? translate('shell.clientVersion', { client: __MAILFATHOM_VERSION__ })
-                            : translate('shell.versions', {
-                                  client: __MAILFATHOM_VERSION__,
-                                  deployment: deploymentVersion,
-                              })}
-                    </p>
-
-                    {readingFrom === null ? null : (
-                        <p className="flex flex-wrap items-baseline gap-x-2 text-xs text-muted">
-                            <span className="break-all">
-                                {translate('deployment.reachedAt', { address: readingFrom })}
-                            </span>
-                            <button
-                                type="button"
-                                className="text-accent-strong hover:underline"
-                                onClick={onPointSomewhereElse}
-                            >
-                                {translate('deployment.change')}
-                            </button>
-                        </p>
-                    )}
-
                     <Mailboxes accounts={accounts} />
                 </div>
 
@@ -174,6 +153,7 @@ export function AccountMenu({
                     profile={profile}
                     preferences={preferences}
                     telemetryForwarding={telemetryForwarding}
+                    deploymentVersion={deploymentVersion}
                     onClose={closeSettings}
                 />
             ) : null}
@@ -181,16 +161,26 @@ export function AccountMenu({
     );
 }
 
-// Which mailboxes this deployment reads for the person, which is what makes the menu about them rather than about the
-// client. The mark is the one the folder tree draws in front of the same mailbox's folders, so a mailbox keeps one
-// colour wherever it appears; the ordinal is shifted by one because that tree's first mark stands for every mailbox at
-// once and this list has no such row.
+// Which mailboxes this deployment reads for the person, and which of them the client is scoped to — the second place
+// that is chosen, the folder tree being the first. It writes the same `MailScope` into the same workspace that tree
+// writes, so the two are one decision drawn twice rather than two notions of which mailbox is in scope; anything that
+// held its own would be the pair that comes to disagree.
+//
+// The mark is the one the folder tree draws in front of the same mailbox's folders, so a mailbox keeps one colour
+// wherever it appears; the ordinal is shifted by one because that tree's first mark stands for every mailbox at once
+// and this list has no such row.
+//
+// The check follows the account a scope belongs to rather than the scope itself, which is what makes it right for the
+// folder scopes too: somebody reading one folder of their work mailbox is in that mailbox, and the row saying so is
+// the same row they would press to widen the scope back out to all of it. Every mailbox at once, and a role spanning
+// them, belong to no account and are checked nowhere — which is the tree's own answer as well.
 //
 // Nothing is drawn where nothing answered. An empty list is a deployment that has not answered yet, one whose accounts
 // this credential may not read, and one that declares no mailbox — three sentences the connection summary already says
 // in the space a person is looking at, and repeating any of them here would be saying it twice.
 function Mailboxes({ accounts }: { readonly accounts: readonly MailAccount[] }) {
     const { translate } = useLocalization();
+    const { workspace, revise } = useWorkspace();
 
     // The words over the list name the list rather than heading a section: the menu stands inside a space whose own
     // heading level is the space's, and a heading opened here would be one out of order in a popover.
@@ -200,6 +190,8 @@ function Mailboxes({ accounts }: { readonly accounts: readonly MailAccount[] }) 
         return null;
     }
 
+    const inScope = accountInScope(workspace.scope);
+
     return (
         <>
             <p id={named} className="pt-1.5 text-2xs tracking-widest text-faint uppercase">
@@ -208,9 +200,26 @@ function Mailboxes({ accounts }: { readonly accounts: readonly MailAccount[] }) 
 
             <ul aria-labelledby={named} className="flex flex-col">
                 {accounts.map((account, ordinal) => (
-                    <li key={account.id} className="flex items-center gap-2 py-0.75 text-muted">
-                        <MailboxMark ordinal={ordinal + 1} className="size-1.5" />
-                        <span className="min-w-0 truncate text-xs">{account.displayName}</span>
+                    <li key={account.id} className="flex">
+                        {/* The row is a button rather than a list item somebody may click: what it does is an act, so
+                            it takes focus, answers Enter and Space, and is announced as something to press without
+                            any of that being written here. `aria-current` is what says which one is in scope — the
+                            check beside it is that same fact drawn, for a reader who is looking. */}
+                        <button
+                            type="button"
+                            aria-current={account.id === inScope ? 'true' : undefined}
+                            className="-mx-1 flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-0.75 text-start text-muted transition hover:bg-hover hover:text-text"
+                            onClick={() => {
+                                revise({ scope: scopeOfAccount(account.id) });
+                            }}
+                        >
+                            <MailboxMark ordinal={ordinal + 1} className="size-1.5" />
+                            <span className="min-w-0 flex-1 truncate text-xs">{account.displayName}</span>
+
+                            {account.id === inScope ? (
+                                <Icon name="check" className="size-3.5 shrink-0 text-accent-strong" />
+                            ) : null}
+                        </button>
                     </li>
                 ))}
             </ul>

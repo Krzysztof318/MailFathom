@@ -162,9 +162,14 @@ export function SignIn({
     // The view changed, so focus is placed rather than left wherever the previous screen had it: on what this screen
     // has to say about why it is back where there is something, and otherwise on the first thing the form is asking to
     // have filled. Moving focus is an imperative browser API, which is what an effect is for.
+    //
+    // It runs again when the deployment changes, because that is the other view change this screen has: pointing away
+    // from a chosen address puts an address field on a form that had none, and this screen is often already standing
+    // when that happens — somebody signs out of the frame first and points elsewhere from here. Leaving focus in the
+    // login field would leave them typing a password against a deployment they have just abandoned.
     useEffect(() => {
         (notified.current ?? address.current ?? name.current)?.focus();
-    }, []);
+    }, [deployment]);
 
     // An attempt is answered for the deployment it was started against, so one whose deployment was abandoned while it
     // ran is called off rather than allowed to answer: the way out of a chosen address sits above this form and stays

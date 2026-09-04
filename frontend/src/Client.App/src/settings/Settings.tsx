@@ -6,6 +6,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { Icon } from '../controls/Icon';
 import { PersonAvatar } from '../controls/PersonAvatar';
 import { Switch } from '../controls/Switch';
+import { VersionLine } from '../controls/VersionLine';
 import type { TelemetryForwarding } from '../deployment/telemetryForwarding';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
@@ -48,6 +49,7 @@ export function Settings({
     profile,
     preferences,
     telemetryForwarding,
+    deploymentVersion,
     onClose,
 }: {
     /** Who the client is drawing, and the three ways this surface changes it. */
@@ -58,6 +60,9 @@ export function Settings({
 
     /** What this deployment has said about forwarding this client's telemetry, including that it has said nothing. */
     readonly telemetryForwarding: TelemetryForwarding;
+
+    /** What the deployment answered it is running, or `null` while nothing has answered, for the line at the foot. */
+    readonly deploymentVersion: string | null;
 
     readonly onClose: () => void;
 }) {
@@ -113,6 +118,14 @@ export function Settings({
                     <Application preferences={preferences} telemetryForwarding={telemetryForwarding} />
                 )}
             </div>
+
+            {/* Outside the scrolling panel and under both tabs, which is where the design project draws it: what is
+                running is about the client rather than about whichever half of this surface is open, and a line that
+                scrolled away with the profile would be one somebody has to go looking for. */}
+            <VersionLine
+                deploymentVersion={deploymentVersion}
+                className="border-t border-line bg-sunken px-4 py-2.5 text-center text-2xs text-faint"
+            />
         </dialog>
     );
 }

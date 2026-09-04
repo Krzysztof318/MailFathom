@@ -12,6 +12,7 @@ import { forgetComposition } from './composer/keptComposition';
 import { ComposingContext } from './composer/useComposing';
 import { BrandMark } from './controls/BrandMark';
 import { SecondaryButton } from './controls/SecondaryButton';
+import { VersionLine } from './controls/VersionLine';
 import {
     forgetDeployment,
     storeDeployment,
@@ -538,11 +539,9 @@ export function App({
                                     <AccountMenu
                                         accounts={mailAccounts}
                                         deploymentVersion={deploymentSession?.version ?? null}
-                                        readingFrom={adopted?.origin === 'chosen' ? baseAddress : null}
                                         telemetryForwarding={telemetryForwardedBy(deploymentSession, baseAddress)}
                                         preferences={preferences}
                                         profile={profile}
-                                        onPointSomewhereElse={pointSomewhereElse}
                                         onSignOut={signOut}
                                     />
                                 }
@@ -716,10 +715,9 @@ function SignInScreen({
 
             <main className="flex flex-1 justify-center overflow-y-auto px-4 py-8 split:items-center split:px-12">
                 <div className="flex w-full max-w-sm flex-col gap-6">
-                    {/* The client's version is not here: the design draws neither, and the account menu already
-                        reports it beside the deployment's own once there is a session to read it against — which is
-                        where somebody comparing the two would look. Off this row the two pickers fit one line at the
-                        narrowest width, which is the composition the design draws. */}
+                    {/* The version is not on this row and is at the foot of the form, which is where the design
+                        project draws it. Off this row the two pickers fit one line at the narrowest width, which is
+                        the composition the design draws. */}
                     <div className="flex flex-wrap items-center justify-end gap-3.5">
                         <ThemeChoice />
                         <LanguageChoice />
@@ -755,6 +753,13 @@ function SignInScreen({
                     ) : (
                         <ConfigurationRefused refusal={refusal} />
                     )}
+
+                    {/* The foot of the form, under the refusal as well as under the form: what is running is one of
+                        the first things asked of somebody reporting that a deployment will not take them, and it is
+                        the client's own version alone here because no deployment has answered anything yet.
+                        The design project's foot row carries a help line on the left of it, which this client draws
+                        nowhere: no deployment publishes an address to send somebody to. */}
+                    <VersionLine deploymentVersion={null} className="text-end text-2xs text-faint" />
                 </div>
             </main>
         </div>
