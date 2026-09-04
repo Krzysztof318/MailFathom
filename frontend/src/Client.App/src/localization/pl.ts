@@ -231,6 +231,53 @@ export const pl: Catalogue = {
     'mail.listWidthHint':
         'Przeciągnij, aby zmienić szerokość listy. Dwuklik lub klawisz Home przywraca szerokość początkową.',
 
+    'select.bar': 'Działania na zaznaczonych wiadomościach',
+    'select.count.one': '{count} zaznaczona',
+    'select.count.few': '{count} zaznaczone',
+    'select.count.many': '{count} zaznaczonych',
+    'select.count.other': '{count} zaznaczonych',
+    'select.all': 'Zaznacz wszystkie',
+    'select.clear': 'Wyczyść zaznaczenie',
+
+    'act.archived': 'Zarchiwizowano',
+    'act.deleted': 'Przeniesiono do kosza',
+    'act.flagged': 'Oflagowano',
+    'act.markedUnread': 'Oznaczono jako nieprzeczytane',
+    'act.filed': 'Przeniesiono do „{folder}”',
+    'act.messages.one': '{count} wiadomość',
+    'act.messages.few': '{count} wiadomości',
+    'act.messages.many': '{count} wiadomości',
+    'act.messages.other': '{count} wiadomości',
+    'act.undo': 'Cofnij',
+    'act.undone': 'Przywrócono na miejsce',
+    'act.failed': 'Nie wprowadziliśmy tej zmiany: {reason}.',
+    'act.someNotChanged':
+        'Części z tych wiadomości nie zmieniliśmy. Twoje wdrożenie nie udostępnia ich już tam, gdzie narysowała je lista.',
+    'act.archiving': 'Archiwizujemy…',
+    'act.deleting': 'Przenosimy do kosza…',
+    'act.flagging': 'Flagujemy…',
+    'act.markingUnread': 'Oznaczamy jako nieprzeczytaną…',
+    'act.filing': 'Przenosimy…',
+    'act.underway': '{control} — to już jest w drodze na Twój serwer pocztowy.',
+    'act.notOffered': '{control} — to poświadczenie nie może zmieniać poczty na Twoim serwerze.',
+    'act.nothingToActOn': '{control} — nic nie jest otwarte ani zaznaczone, czego miałoby to dotyczyć.',
+    'act.noArchiveFolder': '{control} — to konto nie wskazuje katalogu archiwum, więc nie ma dokąd archiwizować.',
+    'act.noTrashFolder': '{control} — to konto nie wskazuje kosza, więc nie ma dokąd usuwać.',
+    'act.severalAccounts': '{control} — wiadomości z kilku kont nie przeniesiemy do jednego katalogu.',
+    'act.noOtherFolder': '{control} — to konto nie ma innego katalogu, do którego można przenieść.',
+    'act.foldersUnknown': '{control} — MailFathom nie odczytał Twoich katalogów, więc nie wie, dokąd to trafi.',
+    'act.foldersNotRead': 'Nie odczytaliśmy Twoich katalogów: {reason}.',
+    'act.readFoldersAgain': 'Spróbuj ponownie',
+    'act.cancel': 'Anuluj',
+    'act.deleteQuestion.one': 'Usunąć {count} wiadomość?',
+    'act.deleteQuestion.few': 'Usunąć {count} wiadomości?',
+    'act.deleteQuestion.many': 'Usunąć {count} wiadomości?',
+    'act.deleteQuestion.other': 'Usunąć {count} wiadomości?',
+    'act.deleteConsequence': 'Każdą z nich przenosimy do kosza konta, na którym się znajduje.',
+    'act.deleteConfirm': 'Przenieś do kosza',
+    'act.moveTitle': 'Przenieś do innego katalogu',
+    'act.moveClose': 'Zamknij',
+
     'compose.titleNew': 'Nowa wiadomość',
     'compose.titleReply': 'Odpowiedź',
     'compose.titleReplyAll': 'Odpowiedź do wszystkich',
@@ -375,7 +422,6 @@ export const pl: Catalogue = {
     'list.onlyWithAttachments': 'Tylko z załącznikami',
     'list.includeJunk': 'Uwzględnij spam',
     'list.selectSeveral': 'Zaznacz wiele',
-    'list.selectedCount': 'Zaznaczono: {count}',
 
     'list.unread': 'Nieprzeczytana',
     'list.flagged': 'Oznaczona',
@@ -454,8 +500,10 @@ export const pl: Catalogue = {
         'To poświadczenie nie może odczytywać poczty w tym wdrożeniu, więc nie pokazujemy żadnej skrzynki ani wiadomości. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
     'grant.askMail':
         'To poświadczenie nie może zadawać pytań Twojej poczcie w tym wdrożeniu, więc nie oferujemy pytania. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
-    'grant.markMailRead':
-        'To poświadczenie nie może zmieniać flag na Twoim serwerze poczty, więc otwarcie wiadomości pozostawia ją tam nieprzeczytaną, a klient pokazuje to, co serwer zgłosił ostatnio. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
+    'grant.writeMailFlags':
+        'To poświadczenie nie może zmieniać flag na Twoim serwerze poczty, więc otwarcie wiadomości pozostawia ją tam nieprzeczytaną, nie oferujemy flagowania ani oznaczania jako nieprzeczytanej, a klient pokazuje to, co serwer zgłosił ostatnio. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
+    'grant.fileMail':
+        'To poświadczenie nie może przenosić poczty do innego katalogu w tym wdrożeniu, więc nie oferujemy archiwizowania, usuwania ani przenoszenia. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
 
     'grant.composeMail':
         'To poświadczenie nie może zapisywać szkiców w tym wdrożeniu, więc nie oferujemy pisania wiadomości. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',

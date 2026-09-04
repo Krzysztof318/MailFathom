@@ -45,6 +45,7 @@ import { ListSettings } from './ListSettings';
 import { narrowed, queryFor, type MailListing } from './listing';
 import { extendedTo, inReadingOrder, onlySelected, withToggled } from './messageSelection';
 import { rememberedListing, rememberListing } from './rememberedListings';
+import { useListedMail } from './useListedMail';
 
 // The client's message list, which is where a mail client is judged: it stays smooth at message forty thousand, it puts
 // a returning reader back where they were, and it lets somebody pick out four messages for the question they are about
@@ -96,6 +97,7 @@ export function MessageList({
 }) {
     const { translate } = useLocalization();
     const { workspace, revise } = useWorkspace();
+    const listed = useListedMail();
     // Where this list opens: how the folder was last read and where in it the reader was. State rather than a value
     // computed each render, because it is read back once the first page has arrived and because changing the order or
     // a filter replaces it with the leading end of the list the change asks for.
@@ -174,6 +176,10 @@ export function MessageList({
                 if (result.outcome === 'failed') {
                     setFailure(result.failure);
                 } else {
+                    // Where each message belongs, written down as the page arrives, because the surfaces that act on a
+                    // selection are outside this column and the identities the workspace holds say neither which
+                    // account a message is in nor which folder it would be leaving.
+                    listed.drew(result.value.emails);
                     setHeld((current) => answered(current, result.value, asked));
                 }
             },
@@ -182,7 +188,7 @@ export function MessageList({
         return () => {
             listening = false;
         };
-    }, [session, transport, scope, listing, wantedCursor, wantedDirection, wantedRefilling]);
+    }, [session, transport, scope, listing, wantedCursor, wantedDirection, wantedRefilling, listed]);
 
     // Where the reader is, written down once they have stopped moving, and again the moment the page goes away —
     // whichever comes first. The second is what makes a reload a continuation rather than a race with the first: a
@@ -273,6 +279,37 @@ export function MessageList({
             window.removeEventListener('pointercancel', release);
         };
     }, []);
+
+    // Taking the listing in at once is asked for from the selection bar, which stands above this column and holds none
+    // of what *everything* means: the rows this list is holding are a window over a folder rather than the folder. So
+    // the bar draws the control and this performs it, and a screen with no list on it performs nothing.
+    //
+    // Registered on every render rather than against a dependency list, because what is registered closes over the rows
+    // held at that moment — and it is a reference being written rather than state being set, so nothing re-renders.
+    useEffect(() => {
+        listed.listing({
+            selectAll: () => {
+                select(rows.map(identityOf));
+            },
+
+            // Straight onto the row where it is drawn, and asked of the next commit where it is not: the bar hands
+            // focus over before it clears the selection, so the row is in the document at that moment, and a list
+            // scrolled away from the focused row is the case the commit below answers.
+            takeFocus: () => {
+                const row = elements.current.get(focusedRow);
+
+                if (row === undefined) {
+                    wantsFocus.current = true;
+                } else {
+                    row.focus();
+                }
+            },
+        });
+
+        return () => {
+            listed.listing(null);
+        };
+    });
 
     // Scrolling is where the list stops holding what the reader has moved away from. Here rather than in an effect
     // watching the window, because dropping rows is what a scroll did rather than something to reconcile afterwards —
@@ -481,11 +518,9 @@ export function MessageList({
                         }}
                     />
 
-                    {workspace.selected.length === 0 ? null : (
-                        <p className="text-sm text-muted" role="status">
-                            {translate('list.selectedCount', { count: String(workspace.selected.length) })}
-                        </p>
-                    )}
+                    {/* How many messages are picked out is said once, on the selection bar above this column, which is
+                        where the acts over them are too. A second count here would be the same sentence in two places
+                        and the two would be read as being about different things. */}
 
                     {/* A read that failed with rows already drawn is the partial state: what is on the screen stays, and
                         what is missing is said above it rather than replacing it. */}

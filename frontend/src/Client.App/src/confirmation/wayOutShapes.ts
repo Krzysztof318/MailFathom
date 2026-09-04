@@ -12,10 +12,13 @@
 /**
  * How a way out is drawn, which follows what pressing it costs rather than where it sits in the row.
  *
- * `back` leaves the act undone, `act` is the thing being confirmed, and `aside` is a second way out that gives
- * something up without being the act — discarding what was written rather than filing it is the one today.
+ * `back` leaves the act undone, `act` is the thing being confirmed, `aside` is a second way out that gives something
+ * up without being the act — discarding what was written rather than filing it is the one today — and `destroy` is the
+ * act where what it does is take something away: mail out of the folder it is in, or an operation half-finished. It is
+ * the accent's weight in the error hue, which is how the design project draws the one control a reader should not
+ * press by reflex.
  */
-export type Manner = 'back' | 'aside' | 'act';
+export type Manner = 'back' | 'aside' | 'act' | 'destroy';
 
 // Exhaustive by its own type, so a manner added to the union fails to compile until it has been decided what it looks
 // like.
@@ -23,4 +26,5 @@ export const mannerDrawn: Readonly<Record<Manner, string>> = {
     back: 'rounded-lg border border-line bg-sunken px-3.75 py-2 text-base text-text-soft transition hover:bg-hover',
     aside: 'rounded-lg border border-warning px-3.75 py-2 text-base text-warning-text transition hover:bg-warning-soft',
     act: 'rounded-lg bg-accent px-4 py-2 text-base font-semibold text-on-accent transition hover:opacity-90',
+    destroy: 'rounded-lg bg-error px-4 py-2 text-base font-semibold text-on-accent transition hover:opacity-90',
 };

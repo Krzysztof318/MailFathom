@@ -8,7 +8,9 @@ import { MessageMarkers } from '../controls/MessageMarkers';
 import { Organisation } from '../controls/Organisation';
 import { ReceivedAt } from '../controls/ReceivedAt';
 import { SenderAvatar } from '../controls/SenderAvatar';
+import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { actPending, useMailboxActs, type MailboxAct } from '../mailboxActs/useMailboxActs';
 import { drawnUnread, useReadMarking } from '../readMarking/useReadMarking';
 
 // One row of mail, which is its own component for the reason a tree's row is: it is what carries state, a keyboard
@@ -25,6 +27,17 @@ import { drawnUnread, useReadMarking } from '../readMarking/useReadMarking';
 // when, what about, and a line for a sentence about the message rather than from it — why a search result is in the
 // list today, and what MailFathom made of the message when stage 3 lands. A row given none keeps the space, so the row
 // that gains one is this row rather than a taller one.
+
+// What the row says while a change this client asked for has not been seen to have reached the mail server. A mailbox
+// mutation is durable the moment it is written down and converges minutes later, so a row that said nothing would leave
+// somebody pressing archive twice; the sentence goes on its own once the change has arrived.
+const actPendingSaid: Readonly<Record<MailboxAct, MessageKey>> = {
+    flag: 'act.flagging',
+    markUnread: 'act.markingUnread',
+    archive: 'act.archiving',
+    delete: 'act.deleting',
+    move: 'act.filing',
+};
 
 export function MessageRow({
     email,
@@ -53,6 +66,12 @@ export function MessageRow({
 }) {
     const { translate } = useLocalization();
     const marking = useReadMarking();
+    const acts = useMailboxActs();
+
+    // The act this row is still waiting on. It is what the reserved line says while it stands, ahead of whatever the
+    // screen would otherwise put there: a message on its way out of the folder is the more urgent fact about the row
+    // than why a search found it.
+    const acting = actPending(acts, email);
 
     // What the deployment last reported, less what this client has marked read since. The two are not the same for
     // minutes at a time: marking read is a durable mutation the account's own pass carries to the mail server, and the
@@ -62,7 +81,11 @@ export function MessageRow({
     // The row stays in the list either way, including a list narrowed to unread mail. A message drawn read is a message
     // the person is reading; taking its row out from under them the moment the pane rendered it would be the list
     // disagreeing with the pane about what is open, and the next read of the folder is what removes it.
-    const unread = drawnUnread(marking, email.id, email.unread);
+    //
+    // A message this client has just asked to be marked unread is drawn unread from the press, for the same reason and
+    // in the other direction: the two statements are one pending mutation each, and the row draws from whichever of
+    // them was asked for last.
+    const unread = acting === 'markUnread' || drawnUnread(marking, email.id, email.unread);
 
     return (
         <li
@@ -122,10 +145,10 @@ export function MessageRow({
             {/* The reserved line. Hidden from the accessibility tree where it holds nothing, so a row with nothing
                 to say about itself is not announced as one with an empty line in it. */}
             <div
-                aria-hidden={note === undefined ? 'true' : undefined}
+                aria-hidden={acting === null && note === undefined ? 'true' : undefined}
                 className="h-4 overflow-hidden text-xs text-muted"
             >
-                {note}
+                {acting === null ? note : translate(actPendingSaid[acting])}
             </div>
         </li>
     );

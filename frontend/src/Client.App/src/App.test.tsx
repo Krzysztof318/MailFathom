@@ -20,6 +20,7 @@ import type { CredentialLifetime, CredentialStore } from './signIn/credentialSto
 import { mostReconnectionAttempts } from './shell/useConnection';
 import { noTelemetry, TelemetryContext, type ClientEvent, type ClientTelemetry } from './telemetry/clientTelemetry';
 import { ThemeProvider } from './theme/Theme';
+import { ToastsProvider } from './toasts/Toasts';
 import { LinkOpenerContext } from './shellOperations/linkOpener';
 import { WorkspaceProvider } from './workspace/Workspace';
 
@@ -481,23 +482,25 @@ function renderApp(
         <StrictMode>
             <LocalizationProvider>
                 <ThemeProvider>
-                    <WorkspaceProvider>
-                        <LinkOpenerContext value={() => Promise.resolve()}>
-                            <AttachmentExchangeContext value={deliversNothing}>
-                                <AttachmentUploadContext value={uploadsNothing}>
-                                    <TelemetryContext value={telemetry}>
-                                        <App
-                                            credentials={credentials}
-                                            deployment={deployment}
-                                            portraits={drawsNobody}
-                                            send={send}
-                                            signedInWith={signedInWith}
-                                        />
-                                    </TelemetryContext>
-                                </AttachmentUploadContext>
-                            </AttachmentExchangeContext>
-                        </LinkOpenerContext>
-                    </WorkspaceProvider>
+                    <ToastsProvider>
+                        <WorkspaceProvider>
+                            <LinkOpenerContext value={() => Promise.resolve()}>
+                                <AttachmentExchangeContext value={deliversNothing}>
+                                    <AttachmentUploadContext value={uploadsNothing}>
+                                        <TelemetryContext value={telemetry}>
+                                            <App
+                                                credentials={credentials}
+                                                deployment={deployment}
+                                                portraits={drawsNobody}
+                                                send={send}
+                                                signedInWith={signedInWith}
+                                            />
+                                        </TelemetryContext>
+                                    </AttachmentUploadContext>
+                                </AttachmentExchangeContext>
+                            </LinkOpenerContext>
+                        </WorkspaceProvider>
+                    </ToastsProvider>
                 </ThemeProvider>
             </LocalizationProvider>
         </StrictMode>,
@@ -828,7 +831,7 @@ describe('App', () => {
         // sentence is asserted on the screen rather than the withholding being asserted on its own.
         expect(
             screen.getByText(
-                'This credential may not change a flag on your mail server, so opening a message leaves it unread there and this client shows what the server last reported. Whoever runs the deployment can grant that.',
+                'This credential may not change a flag on your mail server, so opening a message leaves it unread there, flagging and marking unread are not offered, and this client shows what the server last reported. Whoever runs the deployment can grant that.',
             ),
         ).toBeDefined();
     });
@@ -1016,6 +1019,8 @@ describe('App session', () => {
 
         expect(await screen.findByText(/This credential may not read mail on this deployment/)).toBeDefined();
         expect(screen.getByText(/This credential may not ask questions of your mail/)).toBeDefined();
+        expect(screen.getByText(/This credential may not change a flag on your mail server/)).toBeDefined();
+        expect(screen.getByText(/This credential may not file mail in another folder/)).toBeDefined();
         expect(screen.queryByRole('link', { name: 'Mail' })).toBeNull();
     });
 

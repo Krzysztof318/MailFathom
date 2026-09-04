@@ -3,8 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import type { ReactElement } from 'react';
-import { fireEvent, render, screen, within, type RenderResult } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { act, fireEvent, render, screen, within, type RenderResult } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientSession, MailAccount, MailFathomTransport } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
 import { everything, type MailScope } from '../workspace/mailScope';
@@ -13,6 +13,7 @@ import { useWorkspace, type Workspace } from '../workspace/useWorkspace';
 import { openingListing, rowsPerPage } from './listing';
 import { MessageList } from './MessageList';
 import { rememberedListing, rememberListing } from './rememberedListings';
+import { ListedMailContext, nothingListed, type ListedMailbox } from './useListedMail';
 
 const session: ClientSession = { baseAddress: 'https://mail.example.invalid', authorization: 'Basic dGVzdA==' };
 
@@ -419,14 +420,61 @@ describe('MessageList', () => {
         expect(carried().selection).toBeNull();
     });
 
-    it('says how many messages are picked out', async () => {
-        renderList(answering(wholeFolder));
+    it('says where the mail it drew belongs, which is what an act on a selection needs and the workspace never keeps', async () => {
+        const listed = { ...nothingListed, drew: vi.fn() };
+
+        render(<ListedMailContext value={listed}>{listUnder(answering(wholeFolder))}</ListedMailContext>);
 
         await rows();
-        fireEvent.pointerDown(row(1));
-        fireEvent.pointerDown(row(3), { ctrlKey: true });
 
-        expect(screen.getByText('2 selected')).toBeDefined();
+        expect(listed.drew).toHaveBeenCalledWith(
+            expect.arrayContaining([expect.objectContaining({ id: 'message-1', account: 'work', folder: 'INBOX' })]),
+        );
+    });
+
+    it('selects everything it is showing when a surface outside it asks, and stops offering that as it leaves', async () => {
+        const asked: (ListedMailbox | null)[] = [];
+        const listed = {
+            ...nothingListed,
+            listing: (list: ListedMailbox | null) => {
+                asked.push(list);
+            },
+        };
+
+        const drawn = render(<ListedMailContext value={listed}>{listUnder(answering(wholeFolder))}</ListedMailContext>);
+
+        await rows();
+        act(() => {
+            asked.at(-1)?.selectAll();
+        });
+
+        expect(carried().selected).toHaveLength(rowsPerPage);
+
+        drawn.unmount();
+
+        expect(asked.at(-1)).toBeNull();
+    });
+
+    // The bar above the list hands focus back before it clears the selection and disappears, and the row the keyboard
+    // was left on is where a reader was before they picked anything out.
+    it('puts focus back on the row it left the keyboard on when a surface outside it hands focus over', async () => {
+        const asked: (ListedMailbox | null)[] = [];
+        const listed = {
+            ...nothingListed,
+            listing: (list: ListedMailbox | null) => {
+                asked.push(list);
+            },
+        };
+
+        render(<ListedMailContext value={listed}>{listUnder(answering(wholeFolder))}</ListedMailContext>);
+
+        const drawn = await rows();
+
+        act(() => {
+            asked.at(-1)?.takeFocus();
+        });
+
+        expect(document.activeElement).toBe(drawn[0]);
     });
 
     it('moves through the list from the keyboard and selects what it moves onto', async () => {

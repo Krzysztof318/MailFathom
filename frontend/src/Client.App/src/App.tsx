@@ -30,6 +30,8 @@ import { useLocalization } from './localization/useLocalization';
 import { NothingOpen } from './mailSpace/NothingOpen';
 import { TabStrip } from './mailSpace/TabStrip';
 import { useOpenTabs } from './mailSpace/useOpenTabs';
+import { MailboxActsProvider } from './mailboxActs/MailboxActs';
+import { ListedMailProvider } from './messageList/ListedMail';
 import { MessageList } from './messageList/MessageList';
 import { forgetListings } from './messageList/rememberedListings';
 import { useClientPreferences } from './preferences/useClientPreferences';
@@ -175,6 +177,13 @@ export function App({
     const readsMail = deploymentSession !== null && offers(deploymentSession, 'readMail');
     const writesMail = deploymentSession !== null && offers(deploymentSession, 'composeMail');
 
+    // The two grants the acts on a mailbox are reached under, which are separate for the reason
+    // `shell/capabilities.ts` gives: a wrong flag misdescribes mail somebody can still find, and a wrong move puts it
+    // somewhere else. A credential holding one and not the other therefore meets a control that says so on the acts it
+    // may not perform, rather than a strip that refuses everything.
+    const writesFlags = deploymentSession !== null && offers(deploymentSession, 'writeMailFlags');
+    const filesMail = deploymentSession !== null && offers(deploymentSession, 'fileMail');
+
     // What is being written, held here for the reason the workspace is: the three controls that ask for it are each
     // several components below this, and what it replaces is a region this frame composes. It is the opening alone —
     // the message itself is the composer's, so nothing here can read half a message off the frame.
@@ -268,7 +277,7 @@ export function App({
     // of every account they read, and the grant says whether this credential may write a flag at all. Either missing is
     // the same client — one that draws what the mail server last reported and marks nothing.
     const markingRead =
-        preferences.markReadOnOpen && deploymentSession !== null && offers(deploymentSession, 'markMailRead');
+        preferences.markReadOnOpen && deploymentSession !== null && offers(deploymentSession, 'writeMailFlags');
 
     // Whether the person is working in tabs, which is the two halves of that question and nothing else: what they set,
     // and a window with room for a row of tabs above the columns. Below that width the mode is inert rather than off —
@@ -386,170 +395,189 @@ export function App({
         // the row that draws a message, the folder tree that counts unread mail, and the body that marks one on being
         // drawn. What it holds goes with the credential, exactly as the workspace does.
         <ReadMarkingProvider session={session} transport={readMail} marking={markingRead}>
-            {/* Above the frame rather than inside the mail space, because what is being written outlives moving
+            {/* Above the frame for the reason the marking is, and above the acts because the acts read it: what the
+            list has drawn is where a message belongs, and every act on one has to name that. It holds nothing that is
+            drawn, so nothing below re-renders because of it. */}
+            <ListedMailProvider>
+                {/* Above the frame as well, because four surfaces reach the same five acts — the toolbar over what is
+            open, the bar over a selection, the row that draws one as pending, and the message somebody swiped — and a
+            second implementation of *archive* is how two of them come to file mail differently. */}
+                <MailboxActsProvider
+                    session={readsMail ? session : null}
+                    transport={readMail}
+                    online={connection.online}
+                    flags={writesFlags}
+                    moves={filesMail}
+                >
+                    {/* Above the frame rather than inside the mail space, because what is being written outlives moving
             between the spaces, and because the three controls that ask for it are each several components below here.
             Writing is offered where the credential may file a draft; one that may not is told so by the strip above
             rather than by a screen that refuses every act. */}
-            <ComposingContext value={composing}>
-                {/* Above the frame as well, and for a stronger reason than the composer's: what it draws covers
+                    <ComposingContext value={composing}>
+                        {/* Above the frame as well, and for a stronger reason than the composer's: what it draws covers
                 everything below it, and the operations that ask for it — a mailbox migration, a bulk change, an
                 export — each begin somewhere different and none of them is the parent of what has to be covered. The
                 surface itself is the platform's own modal dialog, so where it sits in the document decides nothing
                 about where it is drawn; it stands first here because it stands in front of everything. */}
-                <BlockingContext value={blocking}>
-                    <BlockingOverlay operation={blockedOn} />
+                        <BlockingContext value={blocking}>
+                            <BlockingOverlay operation={blockedOn} />
 
-                    {/* Beside them for the composer's own reason, one component further down: the row that opens a
+                            {/* Beside them for the composer's own reason, one component further down: the row that opens a
                     file a message carries sits three components below the frame that owns what is open, and none of
                     the three between them has a reason to name a file it never opens. */}
-                    <OpenAttachmentContext value={openTabs.openAttachment}>
-                        <div className="flex h-dvh flex-col bg-rail pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left workspace:flex-row">
-                            <div
-                                ref={workspaceRegion}
-                                tabIndex={-1}
-                                className="flex min-h-0 min-w-0 flex-1 flex-col bg-page"
-                            >
-                                {/* Inside the frame as well as on the sign-in screen, because a credential that could not be kept is
+                            <OpenAttachmentContext value={openTabs.openAttachment}>
+                                <div className="flex h-dvh flex-col bg-rail pt-safe-top pr-safe-right pb-safe-bottom pl-safe-left workspace:flex-row">
+                                    <div
+                                        ref={workspaceRegion}
+                                        tabIndex={-1}
+                                        className="flex min-h-0 min-w-0 flex-1 flex-col bg-page"
+                                    >
+                                        {/* Inside the frame as well as on the sign-in screen, because a credential that could not be kept is
                     learned about at the moment somebody successfully signed in — which is the one of these sentences
                     whose reader is already past that screen. Beside it, and in the same strip, is what this credential
                     may not do: both are statements about the credential rather than about anything it read. */}
-                                {notices.length === 0 && withheld.length === 0 ? null : (
-                                    <div className="flex flex-col gap-2 border-b border-line-soft bg-panel px-4 py-2 workspace:px-8">
-                                        <CredentialNotices notices={notices} />
-                                        <GrantNotice withheld={withheld} />
-                                    </div>
-                                )}
+                                        {notices.length === 0 && withheld.length === 0 ? null : (
+                                            <div className="flex flex-col gap-2 border-b border-line-soft bg-panel px-4 py-2 workspace:px-8">
+                                                <CredentialNotices notices={notices} />
+                                                <GrantNotice withheld={withheld} />
+                                            </div>
+                                        )}
 
-                                {/* The region the space is drawn in is there before the deployment says which space that is, so
+                                        {/* The region the space is drawn in is there before the deployment says which space that is, so
                     nothing on the screen moves under a reader when the answer arrives. Until it does, what stands in
                     the region is what the connection says — reaching, retrying, offline, or refused — because that is
                     the only thing on the screen there is to read, and the way out of a deployment that never answers
                     has to be somewhere. */}
-                                {space === null ? (
-                                    <main className="flex-1 px-4 py-6 workspace:px-8">
-                                        <ConnectionSummary connection={connection} />
-                                    </main>
-                                ) : (
-                                    <Space
-                                        space={space}
-                                        // Who is signed in, taken apart in the one module that composes a credential and never here.
-                                        // A screen never sees the credential; what it is handed is the name the deployment knows the
-                                        // person by, which is what a preference kept per person on this machine is written under.
-                                        person={userNameIn(authorization)}
-                                        // Asking is what the field is for, so a credential that may not ask is not shown one. It is
-                                        // absent rather than disabled: a control nobody can use says less about why than the sentence
-                                        // above does. Where it stands is the space's decision, which is why it is handed in rather
-                                        // than drawn here.
-                                        intent={
-                                            // Not while a message is being written: what stands at the foot of that column then is
-                                            // the composer's own footer, and two rows of controls under one column is two answers
-                                            // to what the primary act is.
-                                            written === null &&
-                                            deploymentSession !== null &&
-                                            offers(deploymentSession, 'askMail') ? (
-                                                <IntentField accounts={mailAccounts} />
-                                            ) : null
-                                        }
-                                        status={<ConnectionSummary connection={connection} />}
-                                        folders={
-                                            session === null || !readsMail ? null : (
-                                                <FolderTree
-                                                    session={session}
-                                                    transport={readMail}
-                                                    online={connection.online}
-                                                />
-                                            )
-                                        }
-                                        list={
-                                            session === null || !readsMail ? null : (
-                                                // Both keyed by the scope, so pointing at another mailbox starts a list and a search
-                                                // rather than resetting either: every value below belongs to one mailbox read one way,
-                                                // and a search carries the mailbox it was made in as a filter it would go on showing.
-                                                // Searching stands above the list rather than beside it because it is where somebody
-                                                // reaches for it — looking at a folder, with the message not in front of them — and
-                                                // what it finds is drawn in the same column with the same row.
-                                                <MailSearch
-                                                    key={scopeKey(workspace.scope)}
-                                                    session={session}
-                                                    transport={readMail}
-                                                    scope={workspace.scope}
-                                                    accounts={mailAccounts}
-                                                    online={connection.online}
-                                                    onOpen={openTabs.openMail}
-                                                >
-                                                    <MessageList
-                                                        key={scopeKey(workspace.scope)}
-                                                        session={session}
-                                                        transport={readMail}
-                                                        scope={workspace.scope}
-                                                        accounts={mailAccounts}
-                                                        online={connection.online}
-                                                        onOpen={openTabs.openMail}
-                                                    />
-                                                </MailSearch>
-                                            )
-                                        }
-                                        tabs={
-                                            /* A map of what is open, so it is drawn only where there is something to map: an empty
+                                        {space === null ? (
+                                            <main className="flex-1 px-4 py-6 workspace:px-8">
+                                                <ConnectionSummary connection={connection} />
+                                            </main>
+                                        ) : (
+                                            <Space
+                                                space={space}
+                                                // Who is signed in, taken apart in the one module that composes a credential and never here.
+                                                // A screen never sees the credential; what it is handed is the name the deployment knows the
+                                                // person by, which is what a preference kept per person on this machine is written under.
+                                                person={userNameIn(authorization)}
+                                                // Asking is what the field is for, so a credential that may not ask is not shown one. It is
+                                                // absent rather than disabled: a control nobody can use says less about why than the sentence
+                                                // above does. Where it stands is the space's decision, which is why it is handed in rather
+                                                // than drawn here.
+                                                intent={
+                                                    // Not while a message is being written: what stands at the foot of that column then is
+                                                    // the composer's own footer, and two rows of controls under one column is two answers
+                                                    // to what the primary act is.
+                                                    written === null &&
+                                                    deploymentSession !== null &&
+                                                    offers(deploymentSession, 'askMail') ? (
+                                                        <IntentField accounts={mailAccounts} />
+                                                    ) : null
+                                                }
+                                                status={<ConnectionSummary connection={connection} />}
+                                                folders={
+                                                    session === null || !readsMail ? null : (
+                                                        <FolderTree
+                                                            session={session}
+                                                            transport={readMail}
+                                                            online={connection.online}
+                                                        />
+                                                    )
+                                                }
+                                                list={
+                                                    session === null || !readsMail ? null : (
+                                                        // Both keyed by the scope, so pointing at another mailbox starts a list and a search
+                                                        // rather than resetting either: every value below belongs to one mailbox read one way,
+                                                        // and a search carries the mailbox it was made in as a filter it would go on showing.
+                                                        // Searching stands above the list rather than beside it because it is where somebody
+                                                        // reaches for it — looking at a folder, with the message not in front of them — and
+                                                        // what it finds is drawn in the same column with the same row.
+                                                        <MailSearch
+                                                            key={scopeKey(workspace.scope)}
+                                                            session={session}
+                                                            transport={readMail}
+                                                            scope={workspace.scope}
+                                                            accounts={mailAccounts}
+                                                            online={connection.online}
+                                                            onOpen={openTabs.openMail}
+                                                        >
+                                                            <MessageList
+                                                                key={scopeKey(workspace.scope)}
+                                                                session={session}
+                                                                transport={readMail}
+                                                                scope={workspace.scope}
+                                                                accounts={mailAccounts}
+                                                                online={connection.online}
+                                                                onOpen={openTabs.openMail}
+                                                            />
+                                                        </MailSearch>
+                                                    )
+                                                }
+                                                tabs={
+                                                    /* A map of what is open, so it is drawn only where there is something to map: an empty
                                    strip over an empty pane would say the same thing twice. */
-                                            inTabs && openTabs.tabs.length > 0 ? (
-                                                <TabStrip
-                                                    tabs={openTabs.tabs}
-                                                    active={openTabs.active}
-                                                    onActivate={openTabs.activate}
-                                                    onClose={openTabs.close}
-                                                    onCloseEverything={openTabs.closeEverything}
-                                                />
-                                            ) : null
-                                        }
-                                        mail={
-                                            // A message being written stands where one being read stands, which is the design
-                                            // project's composition rather than a window over it — and what is open is still open
-                                            // underneath, so closing the composer is a return rather than a second thing to find.
-                                            // Keyed by what is being written, so asking for an answer while a message of its own is
-                                            // open starts that answer rather than pouring it into the fields already on the screen.
-                                            written === null || session === null ? (
-                                                whatIsOpen()
-                                            ) : (
-                                                <Composer
-                                                    key={openingKey(written)}
-                                                    session={session}
-                                                    transport={readMail}
-                                                    accounts={mailAccounts}
-                                                    opening={written}
-                                                    online={connection.online}
-                                                    onClosed={composing.close}
-                                                />
-                                            )
-                                        }
-                                    />
-                                )}
-                            </div>
+                                                    inTabs && openTabs.tabs.length > 0 ? (
+                                                        <TabStrip
+                                                            tabs={openTabs.tabs}
+                                                            active={openTabs.active}
+                                                            onActivate={openTabs.activate}
+                                                            onClose={openTabs.close}
+                                                            onCloseEverything={openTabs.closeEverything}
+                                                        />
+                                                    ) : null
+                                                }
+                                                mail={
+                                                    // A message being written stands where one being read stands, which is the design
+                                                    // project's composition rather than a window over it — and what is open is still open
+                                                    // underneath, so closing the composer is a return rather than a second thing to find.
+                                                    // Keyed by what is being written, so asking for an answer while a message of its own is
+                                                    // open starts that answer rather than pouring it into the fields already on the screen.
+                                                    written === null || session === null ? (
+                                                        whatIsOpen()
+                                                    ) : (
+                                                        <Composer
+                                                            key={openingKey(written)}
+                                                            session={session}
+                                                            transport={readMail}
+                                                            accounts={mailAccounts}
+                                                            opening={written}
+                                                            online={connection.online}
+                                                            onClosed={composing.close}
+                                                        />
+                                                    )
+                                                }
+                                            />
+                                        )}
+                                    </div>
 
-                            {/* Navigation is last in the document because the keyboard follows the document rather than the layout,
+                                    {/* Navigation is last in the document because the keyboard follows the document rather than the layout,
                 and the narrow composition puts it at the bottom of the screen: written the other way round, a reader
                 tabbing into a narrow window would reach the bottom bar before the header above it. The wide
                 composition then carries the one mismatch CSS cannot remove — a rail drawn on the left out of a node
                 that comes last — because no single document order matches both shapes, and content before navigation
                 is the direction a skip link exists to manufacture rather than the one it works around. */}
-                            <SpaceNavigation
-                                offered={offeredSpaces}
-                                current={space}
-                                account={
-                                    <AccountMenu
-                                        accounts={mailAccounts}
-                                        deploymentVersion={deploymentSession?.version ?? null}
-                                        telemetryForwarding={telemetryForwardedBy(deploymentSession, baseAddress)}
-                                        preferences={preferences}
-                                        profile={profile}
-                                        onSignOut={signOut}
+                                    <SpaceNavigation
+                                        offered={offeredSpaces}
+                                        current={space}
+                                        account={
+                                            <AccountMenu
+                                                accounts={mailAccounts}
+                                                deploymentVersion={deploymentSession?.version ?? null}
+                                                telemetryForwarding={telemetryForwardedBy(
+                                                    deploymentSession,
+                                                    baseAddress,
+                                                )}
+                                                preferences={preferences}
+                                                profile={profile}
+                                                onSignOut={signOut}
+                                            />
+                                        }
                                     />
-                                }
-                            />
-                        </div>
-                    </OpenAttachmentContext>
-                </BlockingContext>
-            </ComposingContext>
+                                </div>
+                            </OpenAttachmentContext>
+                        </BlockingContext>
+                    </ComposingContext>
+                </MailboxActsProvider>
+            </ListedMailProvider>
         </ReadMarkingProvider>
     );
 }

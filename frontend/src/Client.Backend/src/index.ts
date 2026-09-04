@@ -116,9 +116,14 @@ export {
     type MailSenderVerdict,
 } from './mailMessage';
 export {
+    changeMailFlags,
     mailFlagMutationsRoute,
+    mailMoveMutationsRoute,
     markMailRead,
+    moveMail,
     mostMessagesPerMutation,
+    type MailFlagChange,
+    type MailMove,
     type MailMutationOutcome,
     type MailMutationResult,
 } from './mailMutations';

@@ -14,15 +14,27 @@ import { spaces, type Space } from '../routing/spaces';
 // a sentence on the screen has to say. The one table below is where the two meet, and it is exhaustive by its own type
 // so a capability added later does not compile until it says which grant it is reached under.
 
-export const clientCapabilities = ['readMail', 'askMail', 'markMailRead', 'composeMail', 'sendMail'] as const;
+export const clientCapabilities = [
+    'readMail',
+    'askMail',
+    'writeMailFlags',
+    'fileMail',
+    'composeMail',
+    'sendMail',
+] as const;
 
 /** Something the client offers a person, where the grant permits it. */
 export type ClientCapability = (typeof clientCapabilities)[number];
 
+// One capability per grant rather than one per act: two capabilities behind one permission would be two sentences
+// saying the same thing in the strip that reports what a credential may not do. `writeMailFlags` is therefore what
+// marking read on open and flagging from the toolbar are both reached under, and filing mail elsewhere is a grant of
+// its own because a mail server treats the two differently — a wrong flag misdescribes mail somebody can still find.
 const capabilityGrants: Readonly<Record<ClientCapability, MailFathomPermission>> = {
     readMail: 'mailfathom.mail.read',
     askMail: 'mailfathom.mail.ask',
-    markMailRead: 'mailfathom.mail.flags.write',
+    writeMailFlags: 'mailfathom.mail.flags.write',
+    fileMail: 'mailfathom.mail.move',
     composeMail: 'mailfathom.mail.drafts.write',
     sendMail: 'mailfathom.mail.send',
 };

@@ -255,27 +255,29 @@ describe('MailSpace, wide', () => {
         expect(screen.getByRole('button', { name: 'Needs a decision — not built yet' })).toBeDefined();
     });
 
-    it('draws every unbuilt action of the toolbar as one that says so in its own name', () => {
+    it('draws every action of the toolbar, each saying in its own name why it cannot act here', () => {
         renderSpace(true);
 
         const toolbar = screen.getByRole('toolbar', { name: 'Mail actions' });
-        const names = [
-            'New message',
-            'Reply',
-            'Reply all',
-            'Forward',
-            'Archive',
-            'Delete',
-            'Flag',
-            'Mark unread',
-            'Move',
-        ];
 
-        for (const name of names) {
-            expect(toolbar.textContent).toBeDefined();
+        expect(toolbar.textContent).toBeDefined();
+
+        for (const name of ['New message', 'Reply', 'Reply all', 'Forward']) {
             expect(screen.getByRole('button', { name: `${name} — not built yet` }).getAttribute('aria-disabled')).toBe(
                 'true',
             );
+        }
+
+        // The five that change a mailbox are refused for a reason of their own rather than for not being built: this
+        // space is drawn with no session above it, which is a client that may change nothing.
+        for (const name of ['Archive', 'Delete', 'Flag', 'Mark unread', 'Move']) {
+            expect(
+                screen
+                    .getByRole('button', {
+                        name: `${name} — this credential may not change mail on your mail server.`,
+                    })
+                    .getAttribute('aria-disabled'),
+            ).toBe('true');
         }
     });
 
