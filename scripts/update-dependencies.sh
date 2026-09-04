@@ -46,9 +46,9 @@ set -euo pipefail
 #
 # The client's two families are read exactly like the service's and cost the register one thing more, which is why the
 # report says so rather than leaving it to be discovered. Each of them is recorded there as a direct pin beside a census
-# of the closure it resolves to — § *The client's two dependency closures* — and a census is a count this script cannot
-# recompute from a manifest. So a moved client pin obliges the census as well as the row, and re-running the two
-# enumeration commands that section names is part of the prose edit rather than a step after it.
+# of the closure it resolves to — § *The client's three dependency closures* — and a census is a count this script cannot
+# recompute from a manifest. So a moved client pin obliges the census as well as the row, and re-running that
+# closure's own enumeration command from that section is part of the prose edit rather than a step after it.
 #
 # Network access is required, to nuget.org, to the .NET release index, to registry.npmjs.org, to crates.io, to GitHub
 # through `gh`, and to the three registries the images live in. Anything that does not resolve is reported as
@@ -1048,10 +1048,11 @@ report_register_obligations() {
 
   if [[ "$client_moved" == 'true' ]]; then
     printf '\n'
-    printf '%s\n' 'A client pin moved, so the closure behind it resolved again. The register records each of the two'
+    printf '%s\n' 'A client pin moved, so the closure behind it resolved again. The register records each of the three'
     printf '%s\n' 'closures as a census — how many packages, under which terms, and which of them carry a condition — and'
-    printf '%s\n' 'nothing above recomputes one. Re-run the enumeration commands in § How the inventory is produced and'
-    printf '%s\n' 'read the result against § The client'"'"'s two dependency closures before calling the row done.'
+    printf '%s\n' 'nothing above recomputes one. Re-run that closure'"'"'s own enumeration command in § How the'
+    printf '%s\n' 'inventory is produced, and read the result against § The client'"'"'s three dependency closures'
+    printf '%s\n' 'before calling the row done.'
   fi
 }
 

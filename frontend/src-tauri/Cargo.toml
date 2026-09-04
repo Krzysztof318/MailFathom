@@ -2,7 +2,8 @@
 # Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 # Project repository: https://github.com/Krzysztof318/MailFathom
 
-# The desktop head's crate, and the third toolchain ADR 0021 accepted when it chose Tauri.
+# The native shell's crate — the desktop head and, under ADR 0027, the Android one — and the third toolchain ADR 0021
+# accepted when it chose Tauri.
 #
 # It carries no `version`. Tauri falls back to this one only when the configuration names none, and `run-tauri.ts`
 # always merges `<VersionPrefix>` from `Version.props` in, so a number written here would be a second declaration free
@@ -20,6 +21,17 @@
 name = "mailfathom-desktop"
 edition = "2024"
 publish = false
+
+# The shell is a library so that Android can start it, and `src/main.rs` is the three lines that start it on the desktop.
+# The three crate types are what each head links: `cdylib` is the shared object the Android application loads and calls
+# the generated JNI entry point in, `staticlib` is what an iOS head would link were one built, and `rlib` is what the
+# desktop binary beside it depends on. The `_lib` suffix is Tauri's mobile template convention, which keeps a library's
+# artifacts from overwriting a binary's where a toolchain derives both file names from one crate name; Cargo permits a
+# library and a binary sharing a name, so nothing here required it, and it is written the template's way so a
+# regeneration finds what it expects.
+[lib]
+name = "mailfathom_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "=2.6.3", features = [] }

@@ -1,7 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "open-a-link",
-  "description": "The one thing the bundle may ask of this shell: hand a link a reader followed to the system browser. Narrowed to the three schemes a message body may carry, which is the same allow-list the service applies while it reduces the body, so a link the pane cannot draw is also one this window cannot be asked to open. The plugin's own default set is deliberately not taken: it also grants revealing a file in the desktop file manager and opening a telephone address, and the application asks for neither.",
+  "description": "The one thing the bundle may ask of this shell: hand a link a reader followed to the system browser. Narrowed to the three schemes a message body may carry, which is the same allow-list the service applies while it reduces the body, so a link the pane cannot draw is also one this window cannot be asked to open. The plugin's own default set is deliberately not taken: it also grants revealing a file in the desktop file manager and opening a telephone address, and the application asks for neither. Every platform this crate can be built for is named rather than left to the default of all of them, which is a wider list than the heads a release publishes: macOS is here because a contributor can build the desktop head there even though nothing is published for it, and iOS is left off because no head is built for it at all. So a target added later is granted this deliberately rather than by omission — and the Android head is on the list because the application asks for the operation without knowing which head answers, and a WebView that navigated to a sender's page would have replaced the client with it there exactly as a desktop window would.",
+  "platforms": ["linux", "macOS", "windows", "android"],
   "windows": ["main"],
   "permissions": [
     {

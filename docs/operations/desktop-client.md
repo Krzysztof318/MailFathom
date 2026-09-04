@@ -5,11 +5,12 @@
 What a release publishes for somebody who wants MailFathom's client as an application on their own machine rather than
 as a page a deployment serves: which platforms, in which formats, what each installer does, and what none of them does.
 
-The client has two heads and one source tree. The **web head** is the bundle every published container image carries and
-a deployment serves once it is switched on — [the client endpoint](client-endpoint.md) is that page. The **desktop
-head** is the same bundle wrapped in a Tauri shell, built per platform and attached to a release as an installer. This
-page is about the second one. Nothing here is a local command; [building and testing the
-client](local-development.md#building-and-testing-the-client) is how a developer builds either head.
+The client has three heads and one source tree, and a release publishes two of them. The **web head** is the bundle
+every published container image carries and a deployment serves once it is switched on — [the client
+endpoint](client-endpoint.md) is that page. The **desktop head** is the same bundle wrapped in a Tauri shell, built per
+platform and attached to a release as an installer. This page is about the second one. Nothing here is a local command;
+[building and testing the client](local-development.md#building-and-testing-the-client) is how a developer builds any of
+them.
 
 ## What is published, and for what
 
@@ -35,7 +36,16 @@ because the packages link against its glibc and that makes the image a compatibi
 on Ubuntu 24.04 needs glibc 2.39 or later, so a distribution released before it — Ubuntu 22.04, Debian 12 — installs
 the package and cannot start the application. Build it yourself there, or use the web head, until that floor moves.
 
-Nothing is published for macOS, and neither Android nor iOS is a head this project builds at all.
+Nothing is published for macOS, and iOS is not a head this project builds at all.
+
+**Android is the third head, and nothing on this page applies to it.** Under
+[ADR 0027](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0027-an-android-head-built-every-night-and-supported-by-nothing.md) the same shell builds one
+debug-signed APK left on the run that built it: there is no release asset, no store listing, no update channel, and no
+download address that outlives a run's artifact retention. It is a build somebody tries rather than a client they live
+in, and nothing about it is supported. **No run produces one yet**, either: the nightly job that record describes is
+[#1615](https://github.com/Krzysztof318/MailFathom/issues/1615), so what makes an APK today is a developer's own
+machine. What the head is, in full, is that record; how one is built is
+[building the Android head](local-development.md#building-the-android-head).
 
 ## What an installer does, and what it does not
 

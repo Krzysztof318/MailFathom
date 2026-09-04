@@ -63,9 +63,9 @@ exactly as `Directory.Packages.props` and the `packages.lock.json` files are for
   the upstream, the exact revision or version the files were taken at, and the paths they were written to. That is
   where the client's typeface and its symbols are recorded, and it is the other half of the rule in
   `frontend/src/AGENTS.md` § _UI_ that keeps them out of an external origin.
-- A pin that moves costs the register a second thing the service's does not. Both client closures are recorded there as
-  a census as well as a row — § _The client's two dependency closures_ — and nothing recomputes one, so re-run that
-  section's enumeration commands in the same change and write what they printed.
+- A pin that moves costs the register a second thing the service's does not. Every client closure is recorded there as
+  a census as well as a row — § _The client's three dependency closures_ — and nothing recomputes one, so re-run that
+  section's enumeration command for the closure the pin belongs to, in the same change, and write what it printed.
 - An npm pin costs a third thing, and it is the one that ships. `src/Client.App/public/THIRD-PARTY-NOTICES.txt` is the
   notice the bundle carries: `pnpm build` copies it verbatim into the output every published image and every desktop
   package redistributes, and it names each redistributed package and its version. So a moved npm pin is read against
@@ -91,6 +91,47 @@ a side effect of writing the screen that wanted one thing it does.
 The router is the one of the four whose absence has already been argued rather than merely inherited: the client
 reaches each space at a fragment address and reads it back through `hashchange`, which
 [the workspace's page](README.md) describes. So a change proposing one is answering that argument, not filling a gap.
+
+## The Android head
+
+`src-tauri/gen/android/` is a generated Gradle project that is nevertheless **committed and reviewed like source**, and
+[the workspace's page](README.md) holds what is decided in it and why it is tracked when nothing else under `gen/` is.
+What belongs here is the rule that follows from that, because no tool enforces it:
+
+- **Edit the committed project rather than a regeneration of it.** `tauri android init` writes no file that already
+  exists, so it can neither undo an edit nor re-apply one. A change to the manifest, the permissions, the backup rules,
+  or the Gradle build is an edit to the tracked file, in a change that says what moved and why — never a command run by
+  hand whose output the next person has to reproduce.
+- **`tauri icon` writes more icons than this repository keeps.** It fills the Android project's `mipmap-*` from
+  `assets/icon-1254.png`, which is what the launcher shows and is why it is run at all here — and beside that it writes
+  a macOS `.icns`, an iOS set, and the Windows Store logos, none of which any bundle this repository builds carries.
+  Delete those again before staging, so `src-tauri/icons/` keeps naming the five files three bundle formats actually
+  read rather than every size the tool can produce. **Its adaptive-icon foregrounds are wrong as written**, and that is
+  the second thing to do afterwards: `mipmap-*/ic_launcher_foreground.png` comes out full-bleed, while Android composes
+  an adaptive icon from a 108dp layer of which only the centre 72dp survives the mask — so the artwork is inset to two
+  thirds of each canvas with a transparent surround, or every launcher above API 26 crops the mark. `ic_launcher.png`
+  and `ic_launcher_round.png` beside them stay full-bleed, which is what a launcher below 26 draws; the manifest names
+  both through `android:icon` and `android:roundIcon`, and `mipmap-anydpi-v26/` carries an adaptive definition for each
+  so a round request above 26 composes the same two layers rather than the raster.
+- **The Android closure is locked, and a moved declaration rewrites the lock file.** `gen/android/build.gradle.kts`
+  turns on `dependencyLocking`, and `gen/android/app/gradle.lockfile` beside it is what fixes the artifacts behind the
+  five declarations — Gradle reads a bare version as a preference otherwise, and a transitive published upstream would
+  change what the APK carries with no line moving in a diff. So a changed declaration runs
+  `./gradlew :app:dependencies --write-locks` in the same change, exactly as a moved npm pin regenerates
+  `pnpm-lock.yaml`, and the register's census is re-read against what that printed.
+- **A moved Tauri pin costs a regeneration.** The template ships with the CLI, so a project generated against an older
+  one keeps whatever that version wrote. Move the pin, delete `src-tauri/gen/android/`, run `pnpm android:init`, put the
+  hand-written decisions back, and read the diff — that diff is the upgrade, and a pin moved without it leaves the head
+  building against a template nobody looked at. `$update-dependencies` is where a pin moves at all. A regeneration also moves what
+  the APK carries, so re-run the Android enumeration in `THIRD_PARTY_LICENSES.md` § _How the inventory is produced_ and write what
+  it printed into that closure's row: nothing recomputes a census, exactly as with the two above.
+- **The head is exempt from no rule and gated by nothing at all.** No verification gate, no pull request check, and —
+  until [#1615](https://github.com/Krzysztof318/MailFathom/issues/1615) lands the nightly job ADR 0027 describes — no
+  workflow builds it. A change that breaks the Android toolchain alone therefore merges green with nothing to notice
+  it, and running `pnpm android:build` by hand is what a change reaching this crate owes instead.
+- **Nothing Android's belongs above the shell.** The credential store, the system notification, and the back gesture are
+  shell operations resolved at the composition root, and `frontend/src/AGENTS.md` § _The two heads_ is the rule that
+  keeps a component from asking which head it is on. A third head does not widen that permission.
 
 ## Driving the running client in a real browser
 

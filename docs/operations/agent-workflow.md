@@ -92,8 +92,12 @@ The full gate rejects remaining untracked files, fetches `origin main` and
 requires the branch to contain that freshly fetched base, and then runs the flow
 of each stack the change reaches. The server's is repository tools, the solution,
 a Release build, all unit tests through the aggregate 85% coverage target, and a
-verifying formatting pass; the client's is its own solution restored, both heads
-built, its unit suite run, and its own verifying formatting pass. The client's
+verifying formatting pass; the client's is its own workspace restored, the bundle
+built, its unit suite run, and its own verifying formatting pass. The bundle is
+the whole of what it builds, because no native head is built by either gate —
+which the desktop head's own page states as a cost and which
+[ADR 0027](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0027-an-android-head-built-every-night-and-supported-by-nothing.md)
+accepts for the Android one. The client's
 suite reports its own coverage as it runs and no threshold is enforced on it, so
 the service's is the one figure either gate can fail on. Whichever ran, it then
 checks committed branch changes, staged changes, and unstaged changes for
@@ -1830,7 +1834,7 @@ a `frontend` `package.json`, `frontend/pnpm-lock.yaml`,
 client. `scripts/update-dependencies.sh` now reads both of the client's families
 too, so a pin behind its upstream is caught before review; what review still
 catches alone is the half no survey computes — the census the register records
-for each of the client's two closures, which a moved pin invalidates without
+for each of the client's three closures, which a moved pin invalidates without
 changing a line of any manifest.
 
 The client's npm family obliges a third pair, and its register is the only one
