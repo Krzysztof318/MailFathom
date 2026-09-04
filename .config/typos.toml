@@ -75,7 +75,18 @@
 # because that is the shape the workflow can apply to a file list. A glob, a negation, or a name matching at any depth
 # would be exact only on the walk, so the step widens to the whole checkout instead of guessing, and its own comment
 # says which patterns those are.
-extend-exclude = ['frontend/pnpm-lock.yaml', 'frontend/src/Client.App/src/localization/pl.ts']
+#
+# `frontend/src-tauri/gen/android/gradle/wrapper/gradle-wrapper.jar` is the Gradle wrapper the Android head's committed
+# project runs through, and it is a compiled archive rather than a file anybody wrote. It is here rather than left to
+# the checker's own binary detection because that detection reads a sample and this archive's deflated entries carry
+# no NUL byte in it — so the file arrives as prose and a dictionary reports two-letter runs out of compressed bytes.
+# Excluding the one file rather than the directory around it keeps the Gradle build scripts, the Kotlin sources, and
+# the manifest comments beside it checked, which is where that project's actual prose is.
+extend-exclude = [
+  'frontend/pnpm-lock.yaml',
+  'frontend/src/Client.App/src/localization/pl.ts',
+  'frontend/src-tauri/gen/android/gradle/wrapper/gradle-wrapper.jar',
+]
 
 # Hidden files are checked, which is not the default. Most of the prose that decides how this
 # repository works lives behind a leading dot — the workflows under `.github/`, the skills under
