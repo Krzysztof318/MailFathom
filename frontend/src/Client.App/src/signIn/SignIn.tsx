@@ -98,6 +98,8 @@ const lifetimeMessages: Readonly<Record<CredentialLifetime, MessageKey>> = {
     untilSignedOut: 'signIn.keptUntilSignedOut',
     untilTheTabCloses: 'signIn.keptUntilTheTabCloses',
     untilTheClientCloses: 'signIn.keptUntilTheClientCloses',
+    notKeptStorageUnreachable: 'signIn.notKeptStorageUnreachable',
+    notKeptKeyInvalidated: 'signIn.notKeptKeyInvalidated',
 };
 
 // One shape for every field on this screen, stated once. The focus treatment is the design project's — the line goes

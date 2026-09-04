@@ -95,6 +95,10 @@ export const en = {
         'Your password is kept until you close this tab, and you will be asked for it again — a password left in a browser can be read by anything that reaches this page.',
     'signIn.keptUntilTheClientCloses':
         'Your password is kept until you close MailFathom, and you will be asked for it again — this machine offers no keychain to keep it in safely.',
+    'signIn.notKeptStorageUnreachable':
+        'Your password will not be kept, and you will be asked for it again the next time MailFathom starts — this device’s protected storage could not be reached, and MailFathom will not leave a password anywhere less safe.',
+    'signIn.notKeptKeyInvalidated':
+        'Your password will not be kept, and you will be asked for it again the next time MailFathom starts — this device can no longer give back the key MailFathom stored it under, so anything kept earlier has been removed.',
 
     'connect.address': 'Server',
     'connect.addressConfigured':

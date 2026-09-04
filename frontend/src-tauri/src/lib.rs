@@ -7,10 +7,12 @@
 // belongs to the bundle it wraps, which is what keeps a screen one screen across every head.
 //
 // Four of the five commands below are what ADR 0023 decided this shell would offer, and they are the application's only
-// reach into Rust that this repository wrote. They are commands this application defines rather than a plugin's, so the
-// capability system does not gate them and no `capabilities/` file names them; what does reach them is the Tauri API
-// the WebView is given through `withGlobalTauri` in `tauri.conf.json`, which is why this shell pins no JavaScript
-// binding of its own.
+// reach into Rust that this repository wrote. What answers them lives in `credentials.rs` beside this file, in two
+// implementations selected by target — the desktop keychain and, per ADR 0027, the Android Keystore — because that is
+// the one operation whose *answer* differs between the heads rather than only its mechanism. They are commands this
+// application defines rather than a plugin's, so the capability system does not gate them and no `capabilities/` file
+// names them; what does reach them is the Tauri API the WebView is given through `withGlobalTauri` in
+// `tauri.conf.json`, which is why this shell pins no JavaScript binding of its own.
 //
 // Each is `async` for one reason: Tauri runs a synchronous command on the main thread, and every one of these ends in a
 // blocking call to something outside the process — a credential store, which on Linux is a D-Bus round trip that waits
@@ -42,12 +44,10 @@
 // head exists here at all, and ADR 0021's position that nothing in the *application* branches on a platform is
 // untouched by a shell that carries one attribute.
 
-use keyring::Entry;
+mod credentials;
+
 use std::collections::HashMap;
 use tauri::Manager;
-
-/// The service every entry is written under, beside the deployment address the credential was given for.
-const CREDENTIAL_SERVICE: &str = "MailFathom";
 
 /// The file an operator writes beside the application's own configuration, in the directory this platform gives it.
 const CONFIGURATION_FILE: &str = "client.conf";
@@ -59,44 +59,31 @@ const LONGEST_CONFIGURATION_FILE: u64 = 64 * 1024;
 const SERVICE_ADDRESS: &str = "serviceAddress";
 const PERMIT_CLEAR_TEXT: &str = "permitClearText";
 
-/// Whether this machine offers a credential store at all, which is what the sign-in screen tells a person before they type.
+/// Where this shell will keep the credential, which is the sentence the sign-in screen renders before anybody types.
 ///
-/// A machine with no Secret Service provider running answers `false`, and the client then keeps the credential for the
-/// run and says so. Reading the store's initialization rather than writing a probe entry is what keeps this from
-/// leaving anything behind on a machine that is only being asked a question.
+/// It is the arrangement rather than a fact about the machine, because the same fact resolves differently per head and
+/// only the shell knows which head it is; `credentials.rs` holds the reasoning.
 #[tauri::command]
-async fn keychain_reachable() -> bool {
-    Entry::store_status().is_ok()
+async fn credential_arrangement() -> &'static str {
+    credentials::arrangement().await
 }
 
 /// Keeps the finished header value for one deployment, answering whether it was kept.
 #[tauri::command]
 async fn keep_credential(deployment: String, authorization: String) -> bool {
-    entry(&deployment).is_some_and(|entry| entry.set_password(&authorization).is_ok())
+    credentials::keep(deployment, authorization).await
 }
 
 /// The header value kept for one deployment, or nothing where none was kept or the store would not answer.
 #[tauri::command]
 async fn read_credential(deployment: String) -> Option<String> {
-    entry(&deployment).and_then(|entry| entry.get_password().ok())
+    credentials::read(deployment).await
 }
 
 /// Deletes what was kept for one deployment, which is what sign-out does and the only thing that removes it.
-///
-/// An entry that is already gone is the outcome asked for rather than a failure, so it answers the same as a deletion.
 #[tauri::command]
 async fn forget_credential(deployment: String) -> bool {
-    entry(&deployment).is_some_and(|entry| {
-        matches!(
-            entry.delete_credential(),
-            Ok(()) | Err(keyring::Error::NoEntry)
-        )
-    })
-}
-
-/// The entry a deployment's credential is written under, or nothing where the store could not be reached.
-fn entry(deployment: &str) -> Option<Entry> {
-    Entry::new(CREDENTIAL_SERVICE, deployment).ok()
+    credentials::forget(deployment).await
 }
 
 /// What each of the three places an operator configures this client from said, whether or not any of it is usable.
@@ -197,10 +184,16 @@ fn from_configuration_file(app: &tauri::AppHandle) -> HashMap<&'static str, Stri
 /// point calls it from the activity the platform started.
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
+    let shell = tauri::Builder::default().plugin(tauri_plugin_opener::init());
+
+    // The Android head's credential store is a Kotlin class in its own application module, and a plugin is how Tauri
+    // reaches one. Nothing registers on the desktop, where the same four commands answer out of the `keyring` crate.
+    #[cfg(target_os = "android")]
+    let shell = shell.plugin(credentials::registration());
+
+    shell
         .invoke_handler(tauri::generate_handler![
-            keychain_reachable,
+            credential_arrangement,
             keep_credential,
             read_credential,
             forget_credential,

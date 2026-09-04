@@ -95,6 +95,10 @@ export const pl: Catalogue = {
         'Twoje hasło jest przechowywane do zamknięcia tej karty i zapytamy o nie ponownie — hasło pozostawione w przeglądarce może odczytać wszystko, co ma dostęp do tej strony.',
     'signIn.keptUntilTheClientCloses':
         'Twoje hasło jest przechowywane do zamknięcia MailFathom i zapytamy o nie ponownie — ten komputer nie udostępnia pęku kluczy, w którym można je bezpiecznie przechować.',
+    'signIn.notKeptStorageUnreachable':
+        'Twoje hasło nie zostanie zapamiętane i zapytamy o nie ponownie przy następnym uruchomieniu MailFathom — nie udało się sięgnąć do chronionego magazynu tego urządzenia, a MailFathom nie zostawi hasła w mniej bezpiecznym miejscu.',
+    'signIn.notKeptKeyInvalidated':
+        'Twoje hasło nie zostanie zapamiętane i zapytamy o nie ponownie przy następnym uruchomieniu MailFathom — to urządzenie nie potrafi już zwrócić klucza, pod którym MailFathom je przechowywał, więc to, co zapisano wcześniej, zostało usunięte.',
 
     'connect.address': 'Serwer',
     'connect.addressConfigured':

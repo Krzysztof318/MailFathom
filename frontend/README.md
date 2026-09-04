@@ -78,16 +78,28 @@ one upstream plugin.
 
 The commands exist for one reason: [ADR 0023](../docs/decisions/0023-where-the-client-keeps-the-credential-it-signs-in-with.md)
 keeps the credential this head signs in with in the operating system's own store, which a webview cannot reach and a
-shell can. `keychain_reachable` says whether there is a store to keep one in, and `keep_credential`, `read_credential`,
-and `forget_credential` are the three operations on it. Two of them answer whether they succeeded, which is what lets
-the client say that a store refused to delete rather than report a sign-out that did not happen; none of them answers
-_why_ one failed, because everything a failure could name is about a password. No capability file names them, and
-writing one would be a mistake rather than an omission: Tauri gates its own plugin commands through an access-control
+shell can. `credential_arrangement` says where the credential will live this run, and `keep_credential`,
+`read_credential`, and `forget_credential` are the three operations on it. Two of them answer whether they succeeded,
+which is what lets the client say that a store refused to delete rather than report a sign-out that did not happen;
+none of them answers _why_ one failed, because everything a failure could name is about a password. No capability file
+names them, and writing one would be a mistake rather than an omission: Tauri gates its own plugin commands through an
+access-control
 list and never an application's, so a `capabilities/` entry naming these four would grant the webview reach into
 plugins nothing here pins. What the webview reaches them through is `app.withGlobalTauri` in `tauri.conf.json`, which
 puts `invoke` on `window.__TAURI__`, and that is what lets this shell pin no JavaScript binding of its own: the four
 commands are this repository's, so nothing upstream publishes a package for them and writing one would be a package of
 ours to keep in step with them.
+
+What answers those four is `src/credentials.rs`, in two implementations selected by target: the desktop reaches the
+machine's keychain through the `keyring` crate, and the Android head reaches the Android Keystore through a Kotlin
+class in `gen/android/app/src/main/java/io/github/krzysztof318/mailfathom/CredentialStorePlugin.kt`, registered as a
+Tauri Android plugin.
+[ADR 0027](../docs/decisions/0027-an-android-head-built-every-night-and-supported-by-nothing.md) is the amendment that
+put it there, and it is why the first command answers with an _arrangement_ rather than with whether a store exists:
+the same fact — protected storage this client cannot reach — is a fallback to the page on the desktop and a refusal to
+keep anything at all on a phone, and only the shell knows which head it is on. The Kotlin side reaches the Keystore
+directly, with AES-GCM, rather than through `androidx.security:security-crypto`, whose every API is deprecated with no
+further release planned — so the head carries no dependency for it and the APK's closure is the one it already had.
 
 The plugin is `tauri-plugin-opener`, and it is there because opening a followed link outside the application is the one
 thing the desktop head cannot do from the page. Its commands are a plugin's rather than this repository's, so they are
