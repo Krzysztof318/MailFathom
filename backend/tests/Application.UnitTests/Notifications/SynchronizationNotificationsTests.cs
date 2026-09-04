@@ -215,6 +215,30 @@ public sealed class SynchronizationNotificationsTests
         Assert.Equal("newMessageCount", refusal.ParamName);
     }
 
+    /// <summary>
+    /// Nothing bounds a configured account identifier, and both places one reaches are bounded, so an outsized one is
+    /// still reported rather than silently disabling every notification that account would ever produce.
+    /// </summary>
+    [Fact]
+    public async Task ReportRefusedCredentialAsync_AnAccountIdentifierPastEveryBound_IsStillRecorded()
+    {
+        // Arrange
+        var store = new InMemoryNotificationStore();
+        var notifications = CreateNotifications(store);
+        var outsized = MailAccountIdentity.Create(
+            SyntheticMailOwner.Deployment,
+            MailAccountId.Create(new string('w', 400)));
+
+        // Act
+        await notifications.ReportRefusedCredentialAsync(outsized, TestContext.Current.CancellationToken);
+
+        // Assert
+        var notification = Assert.Single(store.Recorded);
+        Assert.Null(notification.Source);
+        Assert.StartsWith("credential-refused:", notification.DeduplicationKey.Value, StringComparison.Ordinal);
+        Assert.True(notification.DeduplicationKey.Value.Length <= NotificationDeduplicationKey.MaximumLength);
+    }
+
     private static SynchronizationNotifications CreateNotifications(INotificationStore store) =>
         new(store, new FakeTimeProvider(RunInstant));
 }

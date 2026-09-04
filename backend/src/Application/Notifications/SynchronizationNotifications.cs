@@ -77,7 +77,7 @@ public sealed class SynchronizationNotifications
                 ? "1 new message arrived."
                 : string.Create(CultureInfo.InvariantCulture, $"{newMessageCount} new messages arrived."),
             NotificationTarget.ToScreen(NotificationScreen.Mail),
-            $"mail-arrived:{account.Id.Value}",
+            condition: "mail-arrived",
             cancellationToken);
     }
 
@@ -114,7 +114,7 @@ public sealed class SynchronizationNotifications
                 CultureInfo.InvariantCulture,
                 $"{failedFolderCount} of {scheduledFolderCount} folders did not finish. MailFathom will try again."),
             NotificationTarget.Nothing,
-            $"synchronization-incomplete:{account.Id.Value}",
+            condition: "synchronization-incomplete",
             cancellationToken);
     }
 
@@ -135,7 +135,7 @@ public sealed class SynchronizationNotifications
             title: "This account needs signing in again",
             body: "The mail server refused the credential MailFathom holds, so this account is no longer being fetched.",
             NotificationTarget.ToScreen(NotificationScreen.Settings),
-            $"credential-refused:{account.Id.Value}",
+            condition: "credential-refused",
             cancellationToken);
 
     private Task<bool> RecordAsync(
@@ -144,10 +144,17 @@ public sealed class SynchronizationNotifications
         string title,
         string body,
         NotificationTarget target,
-        string deduplicationKey,
+        string condition,
         CancellationToken cancellationToken)
     {
         var occurredAt = this.timeProvider.GetUtcNow();
+        var accountId = account.Id.Value;
+
+        // An account identifier is the operator's own text and nothing bounds its length, while both places one
+        // reaches here are bounded columns. The key reduces an outsized one to a digest of itself; the source line is
+        // a label rather than an identity, so an identifier that cannot be shown leaves the kind as the whole of it
+        // rather than being shown truncated as an account nobody configured.
+        var source = accountId.Length <= Notification.MaximumSourceLength ? accountId : null;
 
         return this.store.RecordAsync(
             Notification.Compose(
@@ -156,9 +163,9 @@ public sealed class SynchronizationNotifications
                 kind,
                 title,
                 body,
-                account.Id.Value,
+                source,
                 target,
-                NotificationDeduplicationKey.Create(deduplicationKey),
+                NotificationDeduplicationKey.For(condition, account.Id.Value),
                 occurredAt),
             cancellationToken);
     }

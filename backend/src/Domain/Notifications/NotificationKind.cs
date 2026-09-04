@@ -8,7 +8,7 @@ namespace MailFathom.Domain.Notifications;
 /// <remarks>
 /// The kind says how a row is drawn and grouped rather than where it leads, which is why it is separate from
 /// <see cref="NotificationTarget" />: a mail notification may lead to a message, to a screen, or nowhere, and so may a
-/// calendar one. The four kinds nothing produces yet are declared because the stages that build calendars, tasks, and
+/// calendar one. The three kinds nothing produces yet are declared because the stages that build calendars, tasks, and
 /// cases write into this same record rather than into stores of their own, so the set is the record's rather than one
 /// producer's.
 /// </remarks>

@@ -354,6 +354,12 @@ it recurs. Being partial is also what makes it the index an unread count is answ
 owner's rows in it. `ix_notifications_owner_occurred` covers `(OwnerId, OccurredAt, Id)`, which is the centre's own page
 order and the order the retention sweep erases in.
 
+The key is composed from MailFathom's own word for the condition and the account it is about, and it is bounded at 256
+characters while nothing bounds a configured account identifier. An identifier too long to fit is therefore replaced by
+a digest of itself rather than truncated, because two accounts sharing a long prefix would otherwise share one
+condition and silence each other's statements; the same identifier is left off the row's source line entirely, since a
+label that cannot be shown is better absent than shown as an account nobody configured.
+
 **A notification is kept for ninety days after the thing it describes happened.** The bound is the record's own rather
 than an operator's setting, because a notification is the client's working state rather than a history a deployment
 undertakes to hold, and the sweep rides each account's own synchronization run beside the audit-trail retention passes.
