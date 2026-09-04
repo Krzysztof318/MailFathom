@@ -191,6 +191,17 @@ describe('AccountMenu', () => {
     it('names nobody while nothing has answered, rather than a placeholder somebody would read as a name', () => {
         renderMenu({ profile: nobody });
 
+        // The control carries its own name and nothing else: no initials, and no stand-in for a person the deployment
+        // has not named. Its own name is what a row in the overflow sheet draws beside the circle.
+        expect(screen.getByRole('button', { name: 'Account and preferences' }).textContent).toBe(
+            'Account and preferences',
+        );
+    });
+
+    it('is the circle alone in the rail, where it stands among symbols rather than among named rows', () => {
+        atTabWidth(true);
+        renderMenu({ profile: nobody });
+
         expect(screen.getByRole('button', { name: 'Account and preferences' }).textContent).toBe('');
     });
 

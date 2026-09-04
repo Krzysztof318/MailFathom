@@ -168,6 +168,23 @@ export {
     type MailTimelineQuery,
 } from './mailTimeline';
 export {
+    longestNotificationPage,
+    markAllNotificationsRead,
+    markAllNotificationsReadRoute,
+    notificationsRoute,
+    readNotifications,
+    readUnreadNotificationCount,
+    setNotificationRead,
+    unreadNotificationCountRoute,
+    type ClientNotification,
+    type MarkedNotifications,
+    type NotificationKind,
+    type NotificationPage,
+    type NotificationReadState,
+    type NotificationScreen,
+    type NotificationTarget,
+} from './notifications';
+export {
     changeOwnDisplayName,
     longestDisplayNameAnswer,
     ownDisplayNameRoute,

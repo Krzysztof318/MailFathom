@@ -231,6 +231,14 @@
     --spacing-mailboxes-folded: 4.8125rem;
     --spacing-drawer: 16.375rem;
 
+    /* The notification centre, in the two shapes the design project draws it: how wide the panel is beside the rail,
+       and how tall the bottom navigation is — which the panel reads as well as the navigation itself, because the
+       narrow shape is a sheet that stops above the bar rather than covering it. Both are the project's own, and the
+       second is here rather than left to whatever the bar's contents come to precisely because two things have to
+       agree about it. */
+    --spacing-notifications: 25rem;
+    --spacing-navigation: 4rem;
+
     /* The settings surface, in the composition where it is a card rather than the whole screen: the width the design
        project draws it at, and the height it holds whatever is in it — so its body scrolls inside a card that does not
        change size as somebody moves between its two tabs, and a tall window does not stretch it past what it needs.
@@ -289,6 +297,13 @@
        Two of the three carry no duration here, and deliberately: how long a toast stands and how long it takes to
        leave are two numbers in `toasts/useToasts.ts`, and the card is what hands each animation the one it is timed
        against — so an animation and the timer beside it cannot come to disagree. */
+    /* The two curves a surface that slides rather than fades is moved on. The first is what a sheet rising from the
+       bottom of a narrow window travels on, and it is also what a gesture released short of its threshold springs
+       back on; the second is what a panel entering from the side of a wide one travels on. Both are the design
+       project's own, and they are named here so the three utilities below — and nothing else — carry them. */
+    --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+    --ease-panel: cubic-bezier(0.3, 0.7, 0.1, 1);
+
     --animate-toast-arriving: toast-arriving 240ms cubic-bezier(0.2, 0.85, 0.3, 1) backwards;
     --animate-toast-leaving: toast-leaving ease forwards;
     --animate-toast-lifetime: toast-lifetime linear both;
@@ -400,6 +415,34 @@
 @utility progress-unknown {
     width: 38%;
     animation: progress-unknown 1.4s ease-in-out infinite;
+}
+
+/* How the notification centre travels, in the three motions the design project gives it: a sheet rising from the foot
+   of a narrow window, a panel entering from the side of a wide one, and the return a gesture released short of its
+   threshold makes. Each is a duration and a curve together rather than two utilities on the element, for the reason
+   the token block gives about motion being decided once — and the durations are here rather than in the theme because
+   nothing else in the client is timed against them. `prefers-reduced-motion` removes all three by the rule at the foot
+   of this file, which leaves the panel arriving at where it was going without travelling there. */
+@utility motion-sheet {
+    /* `display` and `overlay` are in the list beside the transform because a dialog is taken out of the document and
+       off the top layer the moment it is closed, so a panel that travelled away without them would vanish instead. */
+    transition-property: transform, opacity, display, overlay;
+    transition-duration: 300ms;
+    transition-timing-function: var(--ease-sheet);
+    transition-behavior: allow-discrete;
+}
+
+@utility motion-panel {
+    transition-property: transform, opacity, display, overlay;
+    transition-duration: 260ms;
+    transition-timing-function: var(--ease-panel);
+    transition-behavior: allow-discrete;
+}
+
+@utility motion-spring {
+    transition-property: transform, opacity;
+    transition-duration: 260ms;
+    transition-timing-function: var(--ease-sheet);
 }
 
 @keyframes progress-unknown {

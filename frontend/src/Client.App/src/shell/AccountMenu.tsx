@@ -15,6 +15,7 @@ import { Settings } from '../settings/Settings';
 import { accountInScope, scopeOfAccount } from '../workspace/mailScope';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { TabModeSwitch, ThemeSegments } from './Preferences';
+import { useWideWorkspace } from './useWideWorkspace';
 
 // The menu at the foot of the rail, which is where the design project puts everything that is about the person rather
 // than about the mail: who they are, which mailboxes this deployment reads for them and which of those the client is
@@ -64,6 +65,7 @@ export function AccountMenu({
     readonly onSignOut: () => void;
 }) {
     const { translate } = useLocalization();
+    const wide = useWideWorkspace();
     const [settingsOpen, setSettingsOpen] = useState(false);
     const menu = useRef<HTMLDivElement>(null);
     const settingsRow = useRef<HTMLButtonElement>(null);
@@ -85,13 +87,22 @@ export function AccountMenu({
 
     return (
         <>
+            {/* The control is the circle alone at the foot of the rail, where the design project draws it beside six
+                other symbols, and a named row at the foot of the overflow sheet, where it stands among rows that each
+                carry a name. Same control, same menu, same accessible name — what changes is that a row in a list of
+                rows says what it is rather than leaving a lone circle to be recognised. */}
             <button
                 type="button"
                 popoverTarget="account-menu"
-                aria-label={translate('shell.account')}
-                className="flex size-8.5 shrink-0 items-center justify-center rounded-full text-text-soft shadow-raised transition hover:-translate-y-px hover:shadow-overlay"
+                aria-label={wide ? translate('shell.account') : undefined}
+                className={
+                    wide
+                        ? 'flex size-8.5 shrink-0 items-center justify-center rounded-full text-text-soft shadow-raised transition hover:-translate-y-px hover:shadow-overlay'
+                        : 'flex min-h-13 w-full items-center gap-3.5 rounded-xl px-2.5 text-start text-text transition hover:bg-hover'
+                }
             >
                 <PersonAvatar displayName={profile.displayName} picture={profile.picture} place="menu" />
+                {wide ? null : <span className="truncate">{translate('shell.account')}</span>}
             </button>
 
             {/* No display utility on the popover itself: the platform hides a closed popover with `display: none` from

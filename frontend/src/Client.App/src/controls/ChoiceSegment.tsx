@@ -42,7 +42,7 @@ export function ChoiceSegment({
     return (
         <label
             className={`cursor-pointer transition has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent ${look.shape} ${
-                chosen ? 'bg-accent font-semibold text-on-accent' : look.unchosen
+                chosen ? look.chosen : look.unchosen
             }`}
         >
             <input

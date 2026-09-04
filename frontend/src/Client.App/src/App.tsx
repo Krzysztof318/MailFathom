@@ -3,7 +3,12 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { ClientSession, DeploymentAddress, MailFathomTransport } from '@mailfathom/client-backend';
+import type {
+    ClientSession,
+    DeploymentAddress,
+    MailFathomTransport,
+    NotificationTarget,
+} from '@mailfathom/client-backend';
 import { BlockingOverlay } from './blocking/BlockingOverlay';
 import { BlockingContext, type BlockingOperation } from './blocking/useBlocking';
 import { Composer } from './composer/Composer';
@@ -35,6 +40,11 @@ import { MailboxActsProvider } from './mailboxActs/MailboxActs';
 import { ListedMailProvider } from './messageList/ListedMail';
 import { MessageList } from './messageList/MessageList';
 import { forgetListings } from './messageList/rememberedListings';
+import { NotificationBell } from './notifications/NotificationBell';
+import { followTarget } from './notifications/notificationDestination';
+import { NotificationCentre } from './notifications/NotificationCentre';
+import { usePanelSwipe } from './notifications/usePanelSwipe';
+import { useNotificationCentre } from './notifications/useNotificationCentre';
 import { PendingChangesProvider } from './pendingChanges/PendingChanges';
 import { EmbeddedHtmlMessagesContext } from './preferences/messageView';
 import { useClientPreferences } from './preferences/useClientPreferences';
@@ -42,6 +52,7 @@ import { useOwnProfile } from './profile/useOwnProfile';
 import { ReadMarkingProvider } from './readMarking/ReadMarking';
 import { AttachmentView } from './readingPane/AttachmentView';
 import { ReadingPane } from './readingPane/ReadingPane';
+import { addressOf } from './routing/spaces';
 import { useSpace } from './routing/useSpace';
 import { MailSearch } from './search/MailSearch';
 import { offers, spacesOffered, withheldFrom } from './shell/capabilities';
@@ -53,7 +64,7 @@ import { LanguageChoice, ThemeChoice } from './shell/Preferences';
 import { Space } from './shell/Space';
 import { SpaceNavigation } from './shell/SpaceNavigation';
 import { useConnection } from './shell/useConnection';
-import { useWideEnoughForTabs } from './shell/useWideWorkspace';
+import { useCoarsePointer, useWideEnoughForTabs, useWideWorkspace } from './shell/useWideWorkspace';
 import { userNameIn } from './signIn/credentialEntry';
 import { CredentialNotices, type CredentialNotice } from './signIn/CredentialNotices';
 import type { CredentialStore } from './signIn/credentialStore';
@@ -293,6 +304,47 @@ export function App({
     // the menu that shows it because the settings screen behind that menu writes it, and two reads made separately
     // would disagree the moment one of them did.
     const profile = useOwnProfile(readsMail && connection.online ? session : null, readMail, portraits);
+
+    // Where a notification leads. What each target kind comes to is `notifications/notificationDestination.ts`, which
+    // is where it can be asserted without a frame around it; what this supplies is the two things this client can
+    // actually do about one, because opening a message and reaching a space are the frame's rather than a mapping's.
+    const followNotification = useCallback(
+        (target: NotificationTarget): void => {
+            followTarget(target, {
+                openMail: (storedEmailId) => {
+                    openTabs.openMail(storedEmailId, null);
+                },
+                goTo: (space) => {
+                    window.location.hash = addressOf(space);
+                },
+            });
+        },
+        [openTabs],
+    );
+
+    // Asked for on the three conditions the mail itself is, and on the grant the routes are admitted under: the
+    // notification routes read what this deployment holds about one person's mail, so a credential that may not read
+    // mail meets no bell rather than a bell that answers nothing.
+    // The network is not part of that condition, and deliberately: what was read before it went stays on the screen
+    // rather than being cleared, which is the offline state every other surface here holds to. The reads themselves
+    // stop, which is what the hook is handed `online` for.
+    const notifications = useNotificationCentre(
+        readsMail ? session : null,
+        readMail,
+        connection.online,
+        followNotification,
+    );
+
+    // The two gestures belong to the phone composition and to a coarse pointer, which is the one place this frame asks
+    // what the pointer can do: everything else about the two compositions is a width the stylesheet already answers.
+    const coarsePointer = useCoarsePointer();
+    const wideWorkspace = useWideWorkspace();
+    const swipe = usePanelSwipe(
+        notifications.shown,
+        readsMail && coarsePointer && !wideWorkspace,
+        notifications.show,
+        notifications.hide,
+    );
 
     function signedIn(reached: DeploymentAddress, presented: string): void {
         if (adopted === null) {
@@ -577,6 +629,24 @@ export function App({
                                             <SpaceNavigation
                                                 offered={offeredSpaces}
                                                 current={space}
+                                                onPointerDown={swipe.onNavigationPointerDown}
+                                                onClickCapture={swipe.onNavigationClickCapture}
+                                                notifications={
+                                                    // Offered on the grant the routes are admitted under, and absent
+                                                    // rather than inert without it: a bell that could never answer is
+                                                    // a control saying less about why than not drawing it does.
+                                                    readsMail ? (
+                                                        <NotificationBell
+                                                            unreadCount={notifications.unreadCount}
+                                                            shown={notifications.shown}
+                                                            onPress={
+                                                                notifications.shown
+                                                                    ? notifications.hide
+                                                                    : notifications.show
+                                                            }
+                                                        />
+                                                    ) : null
+                                                }
                                                 account={
                                                     <AccountMenu
                                                         accounts={mailAccounts}
@@ -591,6 +661,16 @@ export function App({
                                                     />
                                                 }
                                             />
+
+                                            {/* Outside the frame's own columns because it stands over all of them,
+                                                and inside the frame because it goes with the credential: it is the
+                                                platform's own modal dialog, so where it sits in the document decides
+                                                nothing about where it is drawn. It is mounted whether or not it is
+                                                open, which is what lets it travel on and off the screen rather than
+                                                appearing and disappearing. */}
+                                            {readsMail ? (
+                                                <NotificationCentre centre={notifications} swipe={swipe} />
+                                            ) : null}
                                         </div>
                                     </OpenAttachmentContext>
                                 </BlockingContext>

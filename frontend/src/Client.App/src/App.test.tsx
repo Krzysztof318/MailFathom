@@ -1405,6 +1405,7 @@ describe('App deployment', () => {
                 'https://elsewhere.example.invalid/api/client/accounts',
                 'https://elsewhere.example.invalid/api/client/preferences',
                 'https://elsewhere.example.invalid/api/client/display-name',
+                'https://elsewhere.example.invalid/api/client/notifications/unread-count',
             ]);
         });
     });
@@ -1482,6 +1483,7 @@ describe('App deployment', () => {
                 'https://mail.example.test/api/client/accounts',
                 'https://mail.example.test/api/client/preferences',
                 'https://mail.example.test/api/client/display-name',
+                'https://mail.example.test/api/client/notifications/unread-count',
             ]);
         });
     });
@@ -1652,10 +1654,12 @@ describe('App deployment', () => {
                 'https://first.example.invalid/api/client/accounts',
                 'https://first.example.invalid/api/client/preferences',
                 'https://first.example.invalid/api/client/display-name',
+                'https://first.example.invalid/api/client/notifications/unread-count',
                 'https://second.example.invalid/api/client/session',
                 'https://second.example.invalid/api/client/accounts',
                 'https://second.example.invalid/api/client/preferences',
                 'https://second.example.invalid/api/client/display-name',
+                'https://second.example.invalid/api/client/notifications/unread-count',
             ]);
         });
     });
