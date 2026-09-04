@@ -92,6 +92,34 @@ The router is the one of the four whose absence has already been argued rather t
 reaches each space at a fragment address and reads it back through `hashchange`, which
 [the workspace's page](README.md) describes. So a change proposing one is answering that argument, not filling a gap.
 
+## The Android head
+
+`src-tauri/gen/android/` is a generated Gradle project that is nevertheless **committed and reviewed like source**, and
+[the workspace's page](README.md) holds what is decided in it and why it is tracked when nothing else under `gen/` is.
+What belongs here is the rule that follows from that, because no tool enforces it:
+
+- **Edit the committed project rather than a regeneration of it.** `tauri android init` writes no file that already
+  exists, so it can neither undo an edit nor re-apply one. A change to the manifest, the permissions, the backup rules,
+  or the Gradle build is an edit to the tracked file, in a change that says what moved and why — never a command run by
+  hand whose output the next person has to reproduce.
+- **`tauri icon` writes more icons than this repository keeps.** It fills the Android project's `mipmap-*` from
+  `assets/icon-1254.png`, which is what the launcher shows and is why it is run at all here — and beside that it writes
+  a macOS `.icns`, an iOS set, and the Windows Store logos, none of which any bundle this repository builds carries.
+  Delete those again before staging, so `src-tauri/icons/` keeps naming the five files three bundle formats actually
+  read rather than every size the tool can produce.
+- **A moved Tauri pin costs a regeneration.** The template ships with the CLI, so a project generated against an older
+  one keeps whatever that version wrote. Move the pin, delete `src-tauri/gen/android/`, run `pnpm android:init`, put the
+  hand-written decisions back, and read the diff — that diff is the upgrade, and a pin moved without it leaves the head
+  building against a template nobody looked at. `$update-dependencies` is where a pin moves at all. A regeneration also moves what
+  the APK carries, so re-run the Android enumeration in `THIRD_PARTY_LICENSES.md` § _How the inventory is produced_ and write what
+  it printed into that closure's row: nothing recomputes a census, exactly as with the two above.
+- **The head is exempt from no rule and gated by no pull request.** Its build runs on the nightly channel rather than in
+  either verification gate, which is ADR 0027's accepted cost — so a change that breaks the Android toolchain alone
+  merges green, and running `pnpm android:build` by hand is what a change reaching this crate owes instead.
+- **Nothing Android's belongs above the shell.** The credential store, the system notification, and the back gesture are
+  shell operations resolved at the composition root, and `frontend/src/AGENTS.md` § _The two heads_ is the rule that
+  keeps a component from asking which head it is on. A third head does not widen that permission.
+
 ## Driving the running client in a real browser
 
 A screen is not proven by compiling. The client is served by `pnpm dev` and driven with

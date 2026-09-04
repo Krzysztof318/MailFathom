@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     What this head refuses to let the platform copy off the device, per ADR 0027. `android:allowBackup="false"` in the
+     manifest already answers the cloud backup on every release; this file answers it again for API 31 and above, where
+     that attribute alone no longer dependably governs device-to-device transfer and the behaviour varies by
+     manufacturer. Every domain is excluded in both sections rather than a path list being kept current, because
+     nothing this head writes is promised to survive anything and none of it is worth carrying to another phone.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>

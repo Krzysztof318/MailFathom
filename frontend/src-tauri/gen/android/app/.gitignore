@@ -1,0 +1,12 @@
+/src/main/**/generated
+/src/main/jniLibs/**/*.so
+/src/main/assets/tauri.conf.json
+/tauri.build.gradle.kts
+/proguard-tauri.pro
+/tauri.properties
+
+# Added to what `tauri android init` wrote, because the build leaves more here than the template knew about: every file
+# `bundle.resources` names is copied into `assets/` on the way to the APK, which is this repository's own `LICENSE` and
+# `NOTICE`. The line above already names the one asset Tauri knew it would write; this one covers the rest of the
+# directory, so nothing under it is committed and the full verification gate has no untracked file to refuse.
+/src/main/assets/

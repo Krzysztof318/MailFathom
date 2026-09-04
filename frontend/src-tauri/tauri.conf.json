@@ -52,6 +52,9 @@
       "deb": {
         "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"]
       }
+    },
+    "android": {
+      "minSdkVersion": 24
     }
   }
 }

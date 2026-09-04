@@ -1099,6 +1099,53 @@ to the GNU host triple at some point is the case to notice, because that is the 
 `frontend/README.md` is where the shell itself is described — what it owns, where each of its decisions is written
 down, and why the version reaches it as a configuration patch rather than as a number in a manifest.
 
+### Building the Android head
+
+The same crate builds an Android head, on the terms
+[ADR 0027](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0027-an-android-head-built-every-night-and-supported-by-nothing.md) sets: one debug-signed APK a
+night, left on its run, supported by nothing. It needs everything the desktop head needs except the WebView packages —
+Android supplies its own — plus the largest set of prerequisites in this repository, which is why they are written out
+here rather than left to a tool to complain about.
+
+```bash
+cd frontend
+pnpm android:init    # restore whatever the committed Gradle project is missing; safe to re-run at any time
+pnpm android:dev     # the client on a running emulator or an attached device, against the development server
+pnpm android:build   # one debug APK under src-tauri/gen/android/app/build/outputs/apk/
+```
+
+Four things have to be on the machine, and three of them are found through an environment variable rather than through
+the path:
+
+| What | Where it comes from | What tells the build about it |
+| --- | --- | --- |
+| The Android SDK, with the platform and build tools for the compile target | Android Studio, or the `commandlinetools` package and `sdkmanager` | `ANDROID_HOME` |
+| The NDK | `sdkmanager --install "ndk;<version>"`, which puts it under `$ANDROID_HOME/ndk/` | `NDK_HOME`, naming the versioned directory itself rather than the one above it |
+| A JDK | The distribution's own, or the one Android Studio bundles | `JAVA_HOME` |
+| Four Rust targets | `rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android` | `rustup`, which the Tauri CLI reads directly |
+
+```bash
+export ANDROID_HOME="$HOME/Android/Sdk"
+export NDK_HOME="$ANDROID_HOME/ndk/$(ls -1 "$ANDROID_HOME/ndk" | tail -n 1)"
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+```
+
+**The JDK is the one worth naming a version for.** Gradle refuses a JDK newer than the release it was built against, so
+the newest one a machine happens to have is the wrong default — the wrapper this project generated runs Gradle 8.14.3,
+and JDK 21 is the safe answer for it. A JDK too new fails inside Gradle's own startup rather than in anything named
+after Android, which is the confusing half.
+
+**The APK the build produces is a debug build signed with the debug certificate**, which is the decision rather than a
+consequence of running the command without a release flag: no release signing key, keystore, or store credential exists
+in this repository or in its secrets. Installing it is `adb install -r` against the file the command names; a device
+needs USB debugging on, and an emulator needs an `x86_64` system image because that is the architecture this build
+covers beside `arm64-v8a`.
+
+**Neither verification gate builds this head**, and no pull request check does either. It runs on the nightly channel,
+which is what makes an Android toolchain break a nightly that failed rather than a wait everybody pays for on every
+change; the cost is that a change breaking the Android build alone merges green, so a change reaching
+`frontend/src-tauri/` is worth running `pnpm android:build` against by hand.
+
 ## Code coverage
 
 Both stacks are measured and one of them is enforced. The service's figure is the repository's only coverage threshold,

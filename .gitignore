@@ -33,14 +33,21 @@ frontend/src/Client.App/dist/
 frontend/.playwright/
 .playwright-cli/
 
-# What the desktop shell's build writes. `frontend/src-tauri/target/` holds the compiled crate graph and the bundles
+# What the native shell's build writes. `frontend/src-tauri/target/` holds the compiled crate graph and the bundles
 # built from it, and it is named in full for the same reason: a bare `target/` is a directory name common enough to
-# catch something else. `frontend/src-tauri/gen/` is the access-control schemas Tauri derives from the configuration on
-# every build, which describe what the crate already states. `frontend/src-tauri/Cargo.lock` is committed rather than
-# ignored, because the shell is an application whose crate closure is reviewed and recorded, not a library resolving
-# afresh per build.
+# catch something else. `frontend/src-tauri/gen/schemas/` is the access-control schemas Tauri derives from the
+# configuration on every build, which describe what the crate already states. `frontend/src-tauri/Cargo.lock` is
+# committed rather than ignored, because the shell is an application whose crate closure is reviewed and recorded, not
+# a library resolving afresh per build.
+#
+# `frontend/src-tauri/gen/android/` beside those two is generated once and then committed, which is the opposite call
+# and is argued in `frontend/AGENTS.md` § *The Android head*: the permission set, the backup exclusions ADR 0027
+# decided, the icons, and the Gradle build are decisions this repository took, `tauri android init` writes no file that
+# already exists so it can never re-apply them, and an ignored project is therefore one that silently reverts to the
+# template on every clean machine. What that project's build writes is kept out by the `.gitignore` files Tauri
+# generated inside it, so nothing here has to name a build directory twice.
 frontend/src-tauri/target/
-frontend/src-tauri/gen/
+frontend/src-tauri/gen/schemas/
 
 # What a documentation build writes beside its own configuration. `api/` is the reference generated from the XML
 # comments in `backend/src/`, and `_site/` is the rendered site when docfx is run without an output directory;

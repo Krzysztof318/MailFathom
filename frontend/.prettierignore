@@ -5,9 +5,13 @@ src/Client.App/dist/
 # commit for the reason `playwright.config.ts` gives; this keeps the formatter from reporting on it in the meantime.
 .playwright/
 
-# What the desktop shell's build writes: the compiled crate graph and the bundles built from it, and the access-control
+# What the native shell's build writes: the compiled crate graph and the bundles built from it, and the access-control
 # schemas Tauri derives from the configuration. Prettier reaches the JSON files inside both otherwise, which is a build
 # directory being formatted rather than source.
+#
+# `src-tauri/gen/android/` is committed rather than generated per build, and it stays here for a different reason: it
+# is a Gradle project written by `tauri android init` in that tool's own style, so formatting it would put this
+# workspace's rules on a file the next regeneration writes back its way.
 src-tauri/target/
 src-tauri/gen/
 

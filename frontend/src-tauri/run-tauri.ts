@@ -17,9 +17,14 @@
 // tells both halves about it removes that: `MAILFATHOM_DEV_PORT` is what the Vite configuration listens on and
 // `build.devUrl` is what the shell loads, and neither is a number anybody typed.
 //
-// `pnpm desktop:dev` and `pnpm desktop:build` are what run this. Reaching the CLI through its own JavaScript API
-// rather than through a shell keeps the command one process on every platform, which a quoted JSON argument in a
-// package manifest would not be.
+// `pnpm desktop:dev`, `pnpm desktop:build`, `pnpm android:init`, `pnpm android:dev` and `pnpm android:build` are what
+// run this. Reaching the CLI through its own JavaScript API rather than through a shell keeps the command one process
+// on every platform, which a quoted JSON argument in a package manifest would not be.
+//
+// The Android head goes through here for the same reason the desktop one does, and for a sharper one: `tauri android
+// init` reads the version out of `Cargo.toml` when the configuration states none, and this repository's `Cargo.toml`
+// deliberately states none — so the command aborts rather than generating a project, and the number a person would
+// otherwise write into a Gradle file to get past that is the second declaration this wrapper exists to prevent.
 
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -93,7 +98,13 @@ if (declaredVersion.includes('-')) {
     };
 }
 
-if (forwardedArguments[0] === 'dev') {
+// The command is the last word before the first option: `dev` and `build` on the desktop, `android dev`,
+// `android build` and `android init` on the phone. Reading the last argument instead would name a target rather than a
+// command, `android build` being invoked with `--target aarch64 x86_64` after it.
+const firstOption = forwardedArguments.findIndex((argument) => argument.startsWith('-'));
+const command = (firstOption === -1 ? forwardedArguments : forwardedArguments.slice(0, firstOption)).at(-1);
+
+if (command === 'dev') {
     const developmentPort = String(await reserveFreePort());
     process.env['MAILFATHOM_DEV_PORT'] = developmentPort;
     configurationPatch['build'] = { devUrl: `http://localhost:${developmentPort}` };
@@ -102,4 +113,13 @@ if (forwardedArguments[0] === 'dev') {
 // Everything after `--` is handed to the runner, which is Cargo. `--locked` is what makes a `Cargo.toml` that has
 // moved away from `Cargo.lock` a refusal to build rather than a lock file quietly rewritten under the reviewed crate
 // closure, and it is the counterpart of the `--frozen-lockfile` both verification gates install pnpm with.
-await run([...forwardedArguments, '--config', JSON.stringify(configurationPatch), '--', '--locked'], 'run-tauri');
+//
+// `android init` is the one command that compiles nothing — it generates the Gradle project and stops — so it takes no
+// runner arguments and the CLI refuses an invocation carrying them.
+const invocation = [...forwardedArguments, '--config', JSON.stringify(configurationPatch)];
+
+if (command !== 'init') {
+    invocation.push('--', '--locked');
+}
+
+await run(invocation, 'run-tauri');

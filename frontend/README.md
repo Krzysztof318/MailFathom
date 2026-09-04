@@ -1,9 +1,11 @@
 # The client workspace
 
 `frontend/` is a [pnpm](https://pnpm.io/) workspace holding the two packages the MailFathom client is split into, and
-`src-tauri/` beside them holding the desktop shell that wraps what they build. It shares no build file and no
-configuration file with the service under `backend/`; the two meet only over the HTTP API served beneath
-`/api/client`, which [the client endpoint](../docs/operations/client-endpoint.md) describes.
+`src-tauri/` beside them holding the native shell that wraps what they build — the desktop head, and under
+[ADR 0027](../docs/decisions/0027-an-android-head-built-every-night-and-supported-by-nothing.md) an Android one that is
+built every night and supported by nothing. It shares no build file and no configuration file with the service under
+`backend/`; the two meet only over the HTTP API served beneath `/api/client`, which
+[the client endpoint](../docs/operations/client-endpoint.md) describes.
 
 ```bash
 pnpm install --frozen-lockfile   # restore, refusing to rewrite pnpm-lock.yaml
@@ -11,6 +13,9 @@ pnpm dev                         # the development server
 pnpm build                       # the static bundle, into src/Client.App/dist/
 pnpm desktop:dev                 # the desktop shell around that server, rebuilt as the shell changes
 pnpm desktop:build               # the desktop application and its installers
+pnpm android:init                # restore anything missing from the committed Gradle project
+pnpm android:dev                 # the client on a running emulator or an attached device, against that server
+pnpm android:build               # one debug APK covering arm64-v8a and x86_64
 pnpm typecheck                   # both packages and eslint.config.ts, under the strict set below
 pnpm lint                        # every rule an error, no warning tolerated
 pnpm test                        # both packages' suites, once, non-interactively
@@ -18,9 +23,10 @@ pnpm test:browser                # build the bundle and drive it in a real brows
 pnpm format                      # rewrite; pnpm format:check reports instead
 ```
 
-The two `desktop:` commands need a Rust toolchain and the platform's WebView development packages; none of the others
-does. [Local development](../docs/operations/local-development.md) has them and names the failure a missing one
-produces.
+The two `desktop:` commands need a Rust toolchain and the platform's WebView development packages, and the three
+`android:` ones need an Android SDK, an NDK, a JDK, and four more Rust targets on top of that; none of the others needs
+any of it. [Local development](../docs/operations/local-development.md) has both sets and names the failure a missing
+one produces.
 
 `packageManager` in `package.json` names the pnpm version this lock file was written by, and `engines` the Node
 version the toolchain is run under. Corepack no longer ships with Node, so `pnpm` comes from a global install and that
@@ -54,17 +60,20 @@ beside it:
 request to a response — and `Client.App` supplies the adapter that calls one. That is the boundary's consequence
 rather than an abstraction kept in case a second transport appears.
 
-## The desktop shell, and why it is not a third package
+## The native shell, and why it is not a third package
 
 `src-tauri/` is a Rust crate rather than a workspace package, and it sits beside `src/` rather than inside it because
-it is not application source: `frontend/src/` is TypeScript throughout and holds what both heads render, while the
-shell holds what only one of them has. It owns the window, the application identity, and the installers — nothing
-else. A screen is written once and reaches the web head and the desktop head unchanged, which is the property ADR 0021
-chose Tauri for; a platform difference that genuinely exists belongs here or in one stated rule in `styles.css`, and
-never in a component.
+it is not application source: `frontend/src/` is TypeScript throughout and holds what every head renders, while the
+shell holds what only a native one has. It owns the window, the application identity, and the installers — nothing
+else. A screen is written once and reaches the web head, the desktop head, and the Android head unchanged, which is the
+property ADR 0021 chose Tauri for; a platform difference that genuinely exists belongs here or in one stated rule in
+`styles.css`, and never in a component.
 
-`src/main.rs` is the whole of it, and there is no library target beside it. What it holds beyond the window is four
-commands of this repository's own and one upstream plugin.
+`src/lib.rs` is the whole of it, and `src/main.rs` beside it is the three lines the desktop binary needs. The split is
+Android's and only Android's: an application there is started by the platform through a JNI entry point in a shared
+object rather than by running an executable, so `run` carries `#[cfg_attr(mobile, tauri::mobile_entry_point)]` and both
+heads start from the same function. What the file holds beyond the window is four commands of this repository's own and
+one upstream plugin.
 
 The commands exist for one reason: [ADR 0023](../docs/decisions/0023-where-the-client-keeps-the-credential-it-signs-in-with.md)
 keeps the credential this head signs in with in the operating system's own store, which a webview cannot reach and a
@@ -86,17 +95,19 @@ gated where the four above are not: `capabilities/open-a-link.json` grants the w
 runs in the page, so it names the operation the application actually makes and nothing beside it. A second permission
 is added the same way, by the change that needs it.
 
-| What                                                                | Where it is decided                                                                                                      |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Product name, application identifier, window title and minimum size | `src-tauri/tauri.conf.json`                                                                                              |
-| The version the application reports                                 | `<VersionPrefix>` in `Version.props`, merged in by `src-tauri/run-tauri.ts`                                              |
-| Which crates the shell links, and at which versions                 | `src-tauri/Cargo.toml`, resolved into the committed `Cargo.lock`                                                         |
-| Whether the webview may call the shell's own commands               | `app.withGlobalTauri` in `src-tauri/tauri.conf.json`, which is what puts `invoke` on `window.__TAURI__`                  |
-| What the webview may load, connect to, and submit to                | `app.security.csp` in `src-tauri/tauri.conf.json`, which Tauri serves as the document's own Content-Security-Policy      |
-| What the webview may ask a registered plugin for                    | `src-tauri/capabilities/`, one file per capability                                                                       |
-| The icon every bundle carries                                       | `src-tauri/icons/`, generated from `assets/icon-1254.png` with `pnpm exec tauri icon`                                    |
-| The terms every bundle installs beside the application              | `bundle.resources` in `src-tauri/tauri.conf.json`, which takes the repository's own `LICENSE` and `NOTICE`               |
-| What a Linux package declares it needs                              | `bundle.linux.deb.depends` in `src-tauri/tauri.conf.json`; the `rpm` names none, per `docs/operations/desktop-client.md` |
+| What                                                                | Where it is decided                                                                                                             |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Product name, application identifier, window title and minimum size | `src-tauri/tauri.conf.json`                                                                                                     |
+| The version the application reports                                 | `<VersionPrefix>` in `Version.props`, merged in by `src-tauri/run-tauri.ts`                                                     |
+| Which crates the shell links, and at which versions                 | `src-tauri/Cargo.toml`, resolved into the committed `Cargo.lock`                                                                |
+| Whether the webview may call the shell's own commands               | `app.withGlobalTauri` in `src-tauri/tauri.conf.json`, which is what puts `invoke` on `window.__TAURI__`                         |
+| What the webview may load, connect to, and submit to                | `app.security.csp` in `src-tauri/tauri.conf.json`, which Tauri serves as the document's own Content-Security-Policy             |
+| What the webview may ask a registered plugin for                    | `src-tauri/capabilities/`, one file per capability                                                                              |
+| The icon every bundle carries                                       | `src-tauri/icons/` and the Android project's `mipmap-*`, both generated from `assets/icon-1254.png` with `pnpm exec tauri icon` |
+| The terms every bundle installs beside the application              | `bundle.resources` in `src-tauri/tauri.conf.json`, which takes the repository's own `LICENSE` and `NOTICE`                      |
+| What a Linux package declares it needs                              | `bundle.linux.deb.depends` in `src-tauri/tauri.conf.json`; the `rpm` names none, per `docs/operations/desktop-client.md`        |
+| The oldest Android release the head installs on                     | `bundle.android.minSdkVersion` in `src-tauri/tauri.conf.json`                                                                   |
+| What the Android head asks the platform for, and what it refuses    | `src-tauri/gen/android/app/src/main/AndroidManifest.xml` and the `res/xml/data_extraction_rules.xml` beside it                  |
 
 **The version is never typed into a manifest.** `tauri.conf.json` carries no `version` and neither does `Cargo.toml`;
 `run-tauri.ts` reads `scripts/read-declared-version.sh` and hands the answer to the Tauri CLI as a configuration
@@ -114,6 +125,29 @@ absent, and so is an `appimage` — that format packages the host's own GTK and 
 artifact, several of them LGPL-2.1-or-later, which `THIRD_PARTY_LICENSES.md` decides against redistributing where the
 two native packages depend on the distribution's copies and carry none of it. macOS is not built at all, which is why
 `icons/` carries no `.icns`.
+
+**The Android head is a fourth thing this crate builds, and its Gradle project is committed.**
+[ADR 0027](../docs/decisions/0027-an-android-head-built-every-night-and-supported-by-nothing.md) is what says the head
+exists at all and on what terms — one debug-signed APK a night, left on its run, supported by nothing — and
+`gen/android/` is the Android Studio project `pnpm android:init` generates from `tauri.conf.json` and this crate.
+Everything else under `gen/` is ignored; this one is tracked, because the decisions in it have nowhere else to live:
+
+| The decision                      | Where it is written                                               | What it says                                                                                                                                                     |
+| --------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The application identifier        | `bundle.identifier` in `tauri.conf.json`, and nowhere else        | `io.github.krzysztof318.mailfathom` — the same one the desktop head carries, because it is one application                                                       |
+| The oldest release it installs on | `bundle.android.minSdkVersion` in `tauri.conf.json`               | 24, which is Tauri's own floor for the target, stated rather than inherited so an upgrade cannot move it quietly. Nothing this head reaches for asks for more    |
+| What it asks the platform for     | `uses-permission` in `AndroidManifest.xml`                        | `INTERNET`, and nothing else. A notification permission arrives with the notification                                                                            |
+| What it refuses to let leave      | `android:allowBackup` and `res/xml/data_extraction_rules.xml`     | Both halves off: the cloud backup, and the device-to-device transfer that the attribute alone stops governing at API 31                                          |
+| Which heads may open a link       | `platforms` in `capabilities/open-a-link.json`                    | Every head this repository builds, named rather than left to the default of all of them                                                                          |
+| The version the artifact reports  | `<VersionPrefix>` in `Version.props`, merged in by `run-tauri.ts` | The same number as everything else, which is why `android init` runs through the wrapper too — the CLI reads `Cargo.toml` for it otherwise, and that states none |
+
+`tauri android init` **writes no file that already exists**, which is what makes both halves of that arrangement work
+and is the whole argument for committing rather than regenerating. Running it on a fresh clone restores whatever the
+project is missing and leaves every edited file alone, so it is safe at any time and is what `pnpm android:init` is
+for; and an _ignored_ project would silently revert to the template on every clean machine, taking the permission set
+and the backup exclusions with it. The cost is the other side of the same property: a Tauri upgrade brings a new
+template that the committed project will not pick up, so moving the pin means regenerating this directory deliberately
+and reading the diff, which `frontend/AGENTS.md` § _The Android head_ states as a rule.
 
 **The development port is reserved rather than fixed.** `pnpm desktop:dev` starts the Vite development server and
 loads it in the shell, so a change to a screen reloads in the desktop window exactly as it does in a browser tab —
