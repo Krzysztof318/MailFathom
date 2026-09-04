@@ -64,20 +64,26 @@ describe('credentialStore', () => {
         expect(store.lifetime).toBe('untilTheClientCloses');
     });
 
-    it('keeps a credential for the run where the shell will not answer at all', async () => {
-        shellAnswering({ credential_arrangement: new Error('no store here') });
+    // An answer this client cannot read says nothing about which head it is on, and the page is the wrong guess on one
+    // of the two: keeping nothing is the only resolution that is safe wherever the shell turns out to be running.
+    it.each([
+        ['will not answer at all', new Error('no store here')],
+        ['answers with an arrangement this client does not know', 'keptSomewhereNewer'],
+    ])('keeps a credential nowhere where the shell %s', async (_, answer) => {
+        shellAnswering({ credential_arrangement: answer });
 
         const store = await credentialStore();
 
-        expect(store.lifetime).toBe('untilTheClientCloses');
+        expect(store.lifetime).toBe('notKeptStorageUnreachable');
     });
 
-    it('keeps a credential for the run where the shell answers with an arrangement this client does not know', async () => {
+    it('writes nothing the page can see where the shell answers with an arrangement this client does not know', async () => {
         shellAnswering({ credential_arrangement: 'keptSomewhereNewer' });
-
         const store = await credentialStore();
 
-        expect(store.lifetime).toBe('untilTheClientCloses');
+        expect(await store.keep(deployment, authorization)).toBe(false);
+        expect(window.sessionStorage.length).toBe(0);
+        expect(window.localStorage.length).toBe(0);
     });
 
     it.each([

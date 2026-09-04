@@ -43,9 +43,10 @@ export interface CredentialStore {
      * Keeps this credential for that deployment, answering whether it is stored.
      *
      * `false` is a store that would not write — a keychain locked between being found and being written to, a browser
-     * that stopped permitting storage, a device whose protected storage keeps nothing — and it is answered for the same reason `forget` answers: the screen has
-     * already told the person how long what it keeps will last, so a refused write that reported nothing would leave
-     * them asked for the password again at the next start with nothing having said why.
+     * that stopped permitting storage, a device whose protected storage keeps nothing — and it is answered for the
+     * same reason `forget` answers: the screen has already told the person how long what it keeps will last, so a
+     * refused write that reported nothing would leave them asked for the password again at the next start with
+     * nothing having said why.
      */
     keep(deployment: DeploymentAddress, authorization: string): Promise<boolean>;
 
@@ -68,8 +69,10 @@ export interface CredentialStore {
  * safer of the two remaining answers, and neither where it has one it could not reach — which keeps nothing rather
  * than writing a password to a page on a device that is killed and restarted all day.
  *
- * A shell that answers with something this client does not recognise is read as offering no store, which is the
- * arrangement every shell that predates a newer answer was already giving.
+ * A shell that answers with something this client cannot read — an arrangement it does not know, or a command that
+ * refused — keeps nothing, which is the only answer that is safe on both heads. Reading it as the run instead would
+ * put the password in the page's own storage, and the client cannot tell whether the device it is on is one ADR 0027
+ * refuses that for; where the answer is unreadable, so is the head.
  */
 export async function credentialStore(): Promise<CredentialStore> {
     const shell = window.__TAURI__;
@@ -83,11 +86,12 @@ export async function credentialStore(): Promise<CredentialStore> {
     switch (arrangement) {
         case 'keptInTheStore':
             return keptInTheProtectedStore();
-        case 'notKeptStorageUnreachable':
+        case 'keptForTheRun':
+            return keptForTheRun('untilTheClientCloses');
         case 'notKeptKeyInvalidated':
             return keptNowhere(arrangement);
         default:
-            return keptForTheRun('untilTheClientCloses');
+            return keptNowhere('notKeptStorageUnreachable');
     }
 }
 
