@@ -8,6 +8,8 @@ using System.Net.Sockets;
 using MailFathom.Application.Emails.Embeddings;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Resilience;
+using MailFathom.Application.Synchronization.Sessions;
+using MailFathom.Domain.Accounts;
 using MailFathom.Infrastructure.Mail;
 using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.ObjectStorage;
@@ -69,6 +71,20 @@ public sealed class TransientFailureClassifierTests
 
         // Assert
         Assert.False(isTransient);
+    }
+
+    /// <summary>The adapter's own name for the same refusal has to be classified alike, or naming it would make it retryable.</summary>
+    [Theory]
+    [MemberData(nameof(MailDependencies))]
+    public void IsTransientFailure_MailCredentialRefusalTheAdapterTranslated_IsTerminal(OutboundDependency dependency)
+    {
+        // Arrange
+        var failure = new MailboxCredentialRefusedException(
+            MailAccountId.Create("work"),
+            new AuthenticationException("The server rejected the credential."));
+
+        // Act, Assert
+        Assert.False(this.classifier.IsTransientFailure(dependency, failure));
     }
 
     [Theory]

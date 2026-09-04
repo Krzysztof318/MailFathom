@@ -796,7 +796,7 @@ as it is on the folder run above.
 | `mailfathom.mail.account` | Both | MailFathom's own configured alias for the account |
 | `mailfathom.mail.folder` | Folder | MailFathom's own configured alias for the folder |
 | `mailfathom.mail.sync.outcome` | Both | How it ended: `succeeded`, `failed`, `interrupted`, and for a folder also `alias_unresolved` or `alias_ambiguous` |
-| `mailfathom.mail.sync.failure` | Folder | What stopped it: `concurrency_conflict`, `mail_server_unavailable`, or `unexpected` |
+| `mailfathom.mail.sync.failure` | Folder | What stopped it: `concurrency_conflict`, `mail_server_unavailable`, `credential_refused`, or `unexpected` |
 | `mailfathom.mail.sync.folders`, `…folders.failed` | Cycle | How many folders the cycle scheduled, and how many did not complete |
 | `mailfathom.mail.sync.stored`, `…skipped` | Folder | What the folder stored with its content, and what it recorded from the envelope alone |
 
@@ -804,6 +804,10 @@ as it is on the folder run above.
 would be an account approached less often for having been stopped. An alias that named no single advertised folder is
 kept apart for the same reason: it is a configuration mistake an edit remedies, so it is an outcome rather than a
 failure, and it counts against nothing.
+
+`credential_refused` is separate from `unexpected` for the opposite reason: it is the one failure here nothing waits
+out. Every other value names a condition a later run may clear on its own, and this one names a credential a person has
+to replace, so it is the count an alert is worth attaching to.
 
 | Instrument | What it answers |
 | --- | --- |

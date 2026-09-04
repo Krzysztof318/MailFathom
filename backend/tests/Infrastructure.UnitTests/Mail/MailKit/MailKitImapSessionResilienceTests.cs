@@ -195,13 +195,16 @@ public sealed class MailKitImapSessionResilienceTests
         var factory = CreateFactory(resilience, () => client.Client, settingsProvider);
 
         // Act
-        await Assert.ThrowsAsync<global::MailKit.Security.AuthenticationException>(() => factory.OpenReadOnlyAsync(
+        var refusal = await Assert.ThrowsAsync<MailboxCredentialRefusedException>(() => factory.OpenReadOnlyAsync(
             PrimaryAccount,
             InboxFolder,
             TlsOnConnectWithPlainPolicy,
             CancellationToken.None));
 
-        // Assert
+        // Assert: the adapter's own failure names the account and keeps the mail library's refusal underneath it, so
+        // a worker acts on which account needs a person without reading a mail-library type.
+        Assert.Equal(PrimaryAccount, refusal.AccountId);
+        Assert.IsType<global::MailKit.Security.AuthenticationException>(refusal.InnerException);
         Assert.Equal(1, client.ConnectCount);
         Assert.Single(resolvedMaterial);
     }

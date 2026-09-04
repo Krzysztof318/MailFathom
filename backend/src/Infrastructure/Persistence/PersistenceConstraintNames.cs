@@ -474,4 +474,19 @@ internal static class PersistenceConstraintNames
     /// <summary>The index every administrative listing of one owner's credentials is answered from.</summary>
     /// <remarks>Stated because it covers the owner and the provisioning instant together, which is the listing's own order, and a name composed from the two properties would say nothing about that being why.</remarks>
     internal const string OwnerCredentialOwnerIndexName = "ix_owner_credentials_owner_created_at";
+
+    /// <summary>The constraint that keeps one unread notification per condition, whatever a repeated raise attempts.</summary>
+    /// <remarks>
+    /// It is partial rather than whole, which is the deduplication rule itself: a condition already standing unread is
+    /// not said again, and one the person has read is free to be said again when it recurs. The store reads it, because
+    /// a raise that loses the race to another writer is a condition already stated rather than a provider failure.
+    /// </remarks>
+    internal const string NotificationUnreadConditionUniqueIndexName = "ix_notifications_owner_unread_condition";
+
+    /// <summary>The index a person's notification centre is both read and aged through.</summary>
+    /// <remarks>
+    /// It covers the owner and the instant together because both readers walk exactly that: the centre lists one
+    /// person's notifications newest first, and retention erases the same person's oldest.
+    /// </remarks>
+    internal const string NotificationTimelineIndexName = "ix_notifications_owner_occurred";
 }

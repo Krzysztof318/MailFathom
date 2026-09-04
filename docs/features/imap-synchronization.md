@@ -153,6 +153,57 @@ Together they separate a folder with nothing left to fetch from one that has bee
 Both show a checkpoint that has stopped moving; only the folder's last outcome says which is which, and a folder that
 raises before committing leaves that outcome as the sole signal, since each run of it still reports itself as finished.
 
+### A refused credential is reported rather than waited out
+
+Every other folder failure above is something a later run may clear on its own, which is what the backoff is for. A mail
+server that refuses the credential MailFathom holds will refuse it identically on every run until somebody replaces it,
+so the run separates that case from the rest: the adapter translates the mail library's refusal into
+`MailboxCredentialRefusedException` at the point it authenticates, the supervisor catches that on its own branch, files
+the folder as `CredentialRefused`, and logs it at error level rather than at the warning level a deferral carries. The
+folder still counts as failed and the account still backs off, because there is nothing else useful to do with the
+attempt; what the separation buys is that the condition is nameable — by an operator reading
+`mfctl mailbox status`, by the `credential_refused` outcome on the folder-run counter, and by the person whose account
+it is.
+
+A TLS handshake that fails is deliberately not folded into this. It says nothing about the credential, and reporting it
+as one would send a person to replace a password that is working.
+
+### What a run tells the person whose mailbox it is
+
+A run ends by writing down what happened for somebody who was not at the screen while it happened, into the
+[notification record](../architecture/stored-email-schema.md#what-happened-while-nobody-was-looking). Three conditions
+are reported and nothing else is:
+
+| What the run observed | What it says | Where it leads |
+| --- | --- | --- |
+| It committed new mail | One notification for the run, carrying the count — never one per message | The mailbox |
+| It ended with folders it did not finish | How many of how many, and that MailFathom will try again | Nowhere |
+| A mail server refused this account's credential | That the account needs signing in again and is no longer being fetched | The settings |
+
+**One notification for the run is the rule rather than this worker's choice.** A run that commits forty messages is one
+arrival to somebody who was away, and forty rows would bury every other kind of notification under one mailbox's
+traffic. A run that committed nothing, and a run that finished every folder it scheduled, say nothing at all.
+
+**A condition already standing unread is not said twice.** Each notification names the condition it was raised for, and
+the schema refuses a second unread row for the same one — so an account whose credential is refused on every run for a
+week leaves one statement rather than a week of them, and reading it frees the condition to be said again if it recurs.
+[The deduplication index](../architecture/stored-email-schema.md#what-happened-while-nobody-was-looking) is where that
+is enforced. Arrived mail is one of those conditions, so a standing unread arrival keeps the count of the run that
+raised it: a later run bringing more mail adds no second row and does not restate the first one's number. What the row
+says is that mail arrived rather than how much is waiting, which the mailbox itself answers when the row is opened.
+
+**Nothing in a notification is read from mail.** A count, an account identifier, and a fixed sentence are what a row
+carries, so no subject, address, body fragment, filename, or credential material can reach it. What makes it derived
+personal data anyway is that it says something reached this person's mailbox and when, which the ninety-day retention
+bound and the two cascades answer for; the bound is swept on each account's own run beside the audit-trail retention
+passes.
+
+**Reporting never fails a run.** It happens after every pass that can still commit mail, so the count is the run's whole
+arrival rather than whatever had landed when the report was composed, and a failure there is logged without putting the
+account into backoff — fetching an account's mail less often because a report could not be written would answer the
+wrong problem with the wrong remedy. Nothing is replayed either: what the next run says is what that run observed,
+because a stale count is worse than a missing one.
+
 ### Shutdown stops scheduling first and drains second
 
 Host shutdown cancels scheduling for every supervisor at once, so no further run starts and no further folder of a run

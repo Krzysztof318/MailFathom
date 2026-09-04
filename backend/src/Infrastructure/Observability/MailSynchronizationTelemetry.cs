@@ -84,6 +84,7 @@ public sealed class MailSynchronizationTelemetry : IMailSynchronizationPhaseTele
 
     internal const string ConcurrencyConflictFailureName = "concurrency_conflict";
     internal const string MailServerUnavailableFailureName = "mail_server_unavailable";
+    internal const string CredentialRefusedFailureName = "credential_refused";
     internal const string UnexpectedFailureName = "unexpected";
 
     private readonly ConcurrentDictionary<string, AccountSchedule> scheduleByAccount = new(StringComparer.Ordinal);
@@ -481,6 +482,14 @@ public sealed class MailSynchronizationTelemetry : IMailSynchronizationPhaseTele
         /// <param name="folderAlias">MailFathom's own name for the folder.</param>
         public void MailServerUnavailable(string folderAlias) =>
             this.Failed(folderAlias, MailServerUnavailableFailureName);
+
+        /// <summary>Records a folder the mail server would not let this account reach, because it refused the credential.</summary>
+        /// <param name="folderAlias">MailFathom's own name for the folder.</param>
+        /// <remarks>
+        /// Separate from every other failure name because an operator acts on it rather than waits it out: the count
+        /// under this name is the one that means somebody has to replace a credential.
+        /// </remarks>
+        public void CredentialRefused(string folderAlias) => this.Failed(folderAlias, CredentialRefusedFailureName);
 
         /// <summary>Records a folder that ended in a way nothing above it anticipated.</summary>
         /// <param name="folderAlias">MailFathom's own name for the folder, or the configured alias where no mapping was built.</param>

@@ -14,6 +14,7 @@ using MailFathom.Infrastructure.Mail.OAuth;
 using MailFathom.Infrastructure.Resilience;
 using MailKit;
 using MailKit.Net.Imap;
+using MailKit.Security;
 
 namespace MailFathom.Infrastructure.Mail.MailKit;
 
@@ -636,31 +637,43 @@ internal sealed class MailKitImapConnection : IAsyncDisposable
             this.transportSecurityPolicy.Authentication,
             settings.AccountId);
 
-        if (MailKitTransportSecurityMapping.TrySelectAccessTokenMechanism(
-            attemptClient.AuthenticationMechanisms,
-            this.transportSecurityPolicy.Authentication,
-            out var tokenMechanism))
+        try
         {
-            await MailKitAccessTokenAuthentication.AuthenticateAsync(
-                this.accessTokenSource,
-                tokenMechanism,
-                settings.AccountId,
-                settings.UserName,
-                attemptClient.AuthenticateAsync,
-                cancellationToken);
+            if (MailKitTransportSecurityMapping.TrySelectAccessTokenMechanism(
+                attemptClient.AuthenticationMechanisms,
+                this.transportSecurityPolicy.Authentication,
+                out var tokenMechanism))
+            {
+                await MailKitAccessTokenAuthentication.AuthenticateAsync(
+                    this.accessTokenSource,
+                    tokenMechanism,
+                    settings.AccountId,
+                    settings.UserName,
+                    attemptClient.AuthenticateAsync,
+                    cancellationToken);
 
-            return;
+                return;
+            }
+
+            // Startup validation refuses an account whose policy needs a password and configures none, so this is a
+            // configured shape rather than a value that might be missing.
+            var password = settings.Material.Password
+                ?? throw new InvalidOperationException(
+                    $"Account '{settings.AccountId}' authenticates with a password and resolved none.");
+
+            // MailKit's authentication contract takes a string, so an un-erasable copy of the password is unavoidable
+            // here. It is created at the call itself and never stored, logged, or passed on.
+            await attemptClient.AuthenticateAsync(settings.UserName, password.RevealAsString(), cancellationToken);
         }
-
-        // Startup validation refuses an account whose policy needs a password and configures none, so this is a
-        // configured shape rather than a value that might be missing.
-        var password = settings.Material.Password
-            ?? throw new InvalidOperationException(
-                $"Account '{settings.AccountId}' authenticates with a password and resolved none.");
-
-        // MailKit's authentication contract takes a string, so an un-erasable copy of the password is unavoidable
-        // here. It is created at the call itself and never stored, logged, or passed on.
-        await attemptClient.AuthenticateAsync(settings.UserName, password.RevealAsString(), cancellationToken);
+        catch (AuthenticationException refusal)
+        {
+            // The one failure here a later run cannot fix, so it leaves the adapter as its own application failure
+            // rather than as a mail-library type a worker would have to recognize. A TLS handshake failure arrives as
+            // System.Security.Authentication.AuthenticationException instead and is deliberately not caught: it says
+            // nothing about the credential, and calling it a refused one would send a person to replace a working
+            // password.
+            throw new MailboxCredentialRefusedException(this.accountId, refusal);
+        }
     }
 
     /// <summary>Selects the pinned folder with this connection's fixed access, once it is confirmed to be the one the session started on.</summary>

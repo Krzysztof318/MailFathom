@@ -204,6 +204,9 @@ public readonly record struct MailFathomErrorCode
     /// <summary>Gets subcategory 1, authentication: a mail server advertises no authentication mechanism the account's policy permits.</summary>
     public static MailFathomErrorCode MailAuthenticationMechanismUnavailable { get; } = new(21001);
 
+    /// <summary>Gets subcategory 1, authentication: a mail server refused the credential MailFathom holds for an account.</summary>
+    public static MailFathomErrorCode MailboxCredentialRefused { get; } = new(21002);
+
     /// <summary>Gets subcategory 2, session availability: a mail server did not serve an operation within the resilience budget configured for it.</summary>
     public static MailFathomErrorCode MailboxUnavailable { get; } = new(22001);
 
@@ -985,6 +988,7 @@ public readonly record struct MailFathomErrorCode
         PrincipalNotAuthorized,
         DeploymentMailOwnerUnresolved,
         MailAuthenticationMechanismUnavailable,
+        MailboxCredentialRefused,
         MailboxUnavailable,
         MailboxFolderRecreated,
         MailboxAnswerIncomplete,
