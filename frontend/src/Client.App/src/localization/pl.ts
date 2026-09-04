@@ -728,6 +728,8 @@ export const pl: Catalogue = {
     'pendingChange.stoppedFollowing': 'Ten klient przestał sprawdzać, dokąd doszły Twoje zmiany.',
     'pendingChange.stoppedFollowingBody':
         'Twoje wdrożenie nie odpowiedziało {total} razy z rzędu. Same zmiany są zapisane i nadal są wprowadzane.',
+    'pendingChange.stoppedFollowingReason':
+        'Twoje wdrożenie odpowiedziało, ale ten klient nie mógł nic z tą odpowiedzią zrobić: {reason}. Nic nie jest sprawdzane, dopóki o to nie poprosisz.',
     'pendingChange.followAgain': 'Sprawdź ponownie',
 
     'toast.surface': 'Komunikaty',

@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import type { MailMutationOutcome } from '@mailfathom/client-backend';
+import type { ClientFailureReason, MailMutationOutcome } from '@mailfathom/client-backend';
 import type { MessageKey } from '../localization/en';
 import type { ChangeAct } from './changeStandings';
 import type { UndecidedChange } from './usePendingChanges';
@@ -63,4 +63,12 @@ export const waitingCounts: Readonly<Record<Intl.LDMLPluralRule, MessageKey>> = 
     few: 'pendingChange.waiting.few',
     many: 'pendingChange.waiting.many',
     other: 'pendingChange.waiting.other',
+};
+
+/** What each way a read can fail is called, which is what a person is told when following stops for one of them. */
+export const failureLabels: Readonly<Record<ClientFailureReason, MessageKey>> = {
+    unauthenticated: 'failure.unauthenticated',
+    unauthorized: 'failure.unauthorized',
+    unavailable: 'failure.unavailable',
+    unreadable: 'failure.unreadable',
 };

@@ -91,6 +91,20 @@ function standingAt(
     };
 }
 
+/** A deployment that answers every read with the status named, which is an answer rather than a silence. */
+function refusing(status: number): { transport: MailFathomTransport; requests: ClientRequest[] } {
+    const requests: ClientRequest[] = [];
+
+    return {
+        requests,
+        transport: (request) => {
+            requests.push(request);
+
+            return Promise.resolve({ status, headers: {}, body: '' });
+        },
+    };
+}
+
 function unreachable(): { transport: MailFathomTransport; requests: ClientRequest[] } {
     const requests: ClientRequest[] = [];
 
@@ -352,6 +366,26 @@ describe('PendingChangesProvider', () => {
 
         expect(letGo).toStrictEqual([storedEmailId]);
         expect(screen.queryByText('Marked read')).toBeNull();
+    });
+
+    // A credential the deployment refused is refused on the fifth attempt exactly as on the first, so spending the
+    // budget on it would waste four reads and then tell somebody nothing answered — when something did.
+    it('stops at once where the deployment answered and the answer was not one to retry', async () => {
+        const { transport, requests } = refusing(401);
+
+        following(transport);
+        hand(submission(recorded(recordId)));
+        await pass(followedChangeInterval);
+
+        expect(
+            screen.getByText(
+                'Your deployment answered, but this client could not act on the answer: unauthenticated. Nothing is being checked until you ask it to.',
+            ),
+        ).toBeTruthy();
+
+        await pass(followedChangeInterval * 3);
+
+        expect(requests).toHaveLength(1);
     });
 
     it('stops asking where changes stand once the deployment has not answered enough times running', async () => {

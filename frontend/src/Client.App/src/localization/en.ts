@@ -719,6 +719,8 @@ export const en = {
     'pendingChange.stoppedFollowing': 'This client stopped checking where your changes have got to.',
     'pendingChange.stoppedFollowingBody':
         'Your deployment did not answer {total} times running. The changes themselves are written down and are still being made.',
+    'pendingChange.stoppedFollowingReason':
+        'Your deployment answered, but this client could not act on the answer: {reason}. Nothing is being checked until you ask it to.',
     'pendingChange.followAgain': 'Check again',
 
     'toast.surface': 'Notices',

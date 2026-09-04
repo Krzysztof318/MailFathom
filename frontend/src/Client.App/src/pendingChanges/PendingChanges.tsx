@@ -12,7 +12,7 @@ import {
 } from '@mailfathom/client-backend';
 import { useLocalization } from '../localization/useLocalization';
 import { useToasts } from '../toasts/useToasts';
-import { refusalReasons, refusalTitles, standingReasons } from './changeWording';
+import { failureLabels, refusalReasons, refusalTitles, standingReasons } from './changeWording';
 import { readSubmission, standingOf, type ChangeSubmission, type PendingChange } from './changeStandings';
 import {
     followedChangeInterval,
@@ -25,7 +25,7 @@ import {
 
 // What this client has asked its mailbox for since it was opened, followed until each change lands or turns into a
 // question. It holds nothing durable, which is
-// [ADR 0028](../../../../docs/decisions/0028-no-mail-on-the-device-and-an-honest-client-with-no-route-to-its-deployment.md)'s
+// [ADR 0028](../../../../../docs/decisions/0028-no-mail-on-the-device-and-an-honest-client-with-no-route-to-its-deployment.md)'s
 // decision rather than this module's: a change reaches the deployment or it does not happen, so what is followed here
 // is always a record the deployment already wrote down, and this goes when the tab does.
 //
@@ -117,6 +117,22 @@ export function PendingChangesProvider({
             setRound((current) => current + 1);
 
             if (answer.outcome === 'failed') {
+                // Only a deployment that did not answer is worth asking again. A credential it refused, or an answer
+                // this client could not read, is the same on the fifth attempt as on the first — so following stops
+                // there and then, and says which of the two happened rather than claiming nothing answered.
+                if (answer.failure.reason !== 'unavailable') {
+                    setAttempts(mostFollowingAttempts);
+                    toasts.raise({
+                        kind: 'error',
+                        title: translate('pendingChange.stoppedFollowing'),
+                        body: translate('pendingChange.stoppedFollowingReason', {
+                            reason: translate(failureLabels[answer.failure.reason]),
+                        }),
+                    });
+
+                    return;
+                }
+
                 setAttempts(attempts + 1);
 
                 // Said where the budget runs out rather than from a render reading that it has: the same sentence
