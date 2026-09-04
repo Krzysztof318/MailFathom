@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using MailFathom.Application.Accounts;
+using MailFathom.Application.Signals;
 using MailFathom.Application.Synchronization.Administration;
 using MailFathom.Domain.Accounts;
 using MailFathom.Host.Configuration;
@@ -35,6 +36,7 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
     private readonly ISettingsSnapshot<MailSynchronizationOptions> settings;
     private readonly MailSynchronizationTelemetry telemetry;
     private readonly MailSynchronizationRunLedger runLedger;
+    private readonly ClientSignals signals;
     private readonly ILoggerFactory loggerFactory;
     private readonly ILogger<MailSynchronizationCoordinator> logger;
     private readonly TimeProvider timeProvider;
@@ -44,6 +46,7 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
     /// <param name="settings">Supplies the snapshot the supervised account set is read from.</param>
     /// <param name="telemetry">Published to by every supervisor this coordinator starts, which is why one instance is handed to all of them.</param>
     /// <param name="runLedger">Written to by every supervisor this coordinator starts, for the reason the telemetry is: it is one account of what the whole process is doing.</param>
+    /// <param name="signals">Handed to every supervisor this coordinator starts, for the reason the telemetry is: one publisher folds what every account observed rather than one per account.</param>
     /// <param name="loggerFactory">Supplies this coordinator's logger and the logger of every supervisor it starts, so a supervisor logs under its own category.</param>
     /// <param name="timeProvider">Drives the supervision interval and bounds the shutdown drain.</param>
     public MailSynchronizationCoordinator(
@@ -51,6 +54,7 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
         ISettingsSnapshot<MailSynchronizationOptions> settings,
         MailSynchronizationTelemetry telemetry,
         MailSynchronizationRunLedger runLedger,
+        ClientSignals signals,
         ILoggerFactory loggerFactory,
         TimeProvider timeProvider)
     {
@@ -60,6 +64,7 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
         this.settings = settings;
         this.telemetry = telemetry;
         this.runLedger = runLedger;
+        this.signals = signals;
         this.loggerFactory = loggerFactory;
         this.logger = loggerFactory.CreateLogger<MailSynchronizationCoordinator>();
         this.timeProvider = timeProvider;
@@ -219,6 +224,7 @@ internal sealed partial class MailSynchronizationCoordinator : BackgroundService
             pushNotifications,
             this.telemetry,
             this.runLedger,
+            this.signals,
             this.loggerFactory.CreateLogger<AccountSynchronizationSupervisor>());
 
         return supervisor.RunAsync(schedulingToken, workUnitToken);

@@ -4,8 +4,10 @@
 
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import {
+    mostReconnectionAttempts,
     readDeploymentSession,
     readMailAccounts,
+    reconnectionDelay,
     type ClientResult,
     type DeploymentSession,
     type MailAccountDirectory,
@@ -22,27 +24,9 @@ import { offers } from './capabilities';
 // deployment's to narrow while the client is open, and a client acting on the grant it was handed at sign-in would keep
 // offering what the service has since begun refusing.
 
-/** The most times the client reaches for a deployment that is not answering before it waits to be asked. */
-export const mostReconnectionAttempts = 5;
-
-const firstReconnectionDelay = 1_000;
-const longestReconnectionDelay = 30_000;
-
-/**
- * How long to wait before the attempt after this one, in milliseconds.
- *
- * The wait doubles and is capped, so a deployment that is down for a while is not asked hundreds of times, and the
- * spread keeps a fleet of clients that all lost the same deployment from coming back in step with each other.
- *
- * @param made How many automatic attempts have already been made since the last answer.
- * @param drawn A value in `[0, 1)`, which the caller draws so that this stays a function of its arguments.
- * @returns The delay to wait, between three quarters and five quarters of the nominal one for that attempt.
- */
-export function reconnectionDelay(made: number, drawn: number): number {
-    const nominal = Math.min(firstReconnectionDelay * 2 ** made, longestReconnectionDelay);
-
-    return Math.round(nominal * (0.75 + drawn / 2));
-}
+// The schedule is the package's rather than this hook's: the signal channel reopens on the same one, and two
+// definitions of how long to wait would be two answers to one question.
+export { mostReconnectionAttempts, reconnectionDelay };
 
 /** What the deployment last said, and how current what is on the screen therefore is. */
 export interface Connection {

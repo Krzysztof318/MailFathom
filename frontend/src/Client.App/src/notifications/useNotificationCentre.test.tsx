@@ -9,10 +9,17 @@ import type {
     ClientNotification,
     ClientRequest,
     ClientSession,
+    ClientSignal,
     MailFathomTransport,
     NotificationTarget,
 } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
+import {
+    SignalledChangesContext,
+    nothingSignalled,
+    type SignalListener,
+    type SignalledChanges,
+} from '../signals/signalledChanges';
 import { ToastsProvider } from '../toasts/Toasts';
 import { unreadCountInterval, useNotificationCentre, type NotificationCentre } from './useNotificationCentre';
 
@@ -105,9 +112,32 @@ let led: NotificationTarget | null = null;
 /** Who the tree is signed in as, read while the wrapper renders so one mounted tree can be handed a second credential. */
 let signedInAs: ClientSession | null = session;
 
+/** A deployment a test speaks for, so what a raised notification does to the bell is asserted rather than polled for. */
+function deploymentSaying(): { changes: SignalledChanges; say: (signal: ClientSignal) => void } {
+    const listeners = new Set<SignalListener>();
+
+    return {
+        changes: {
+            listen: (listener) => {
+                listeners.add(listener);
+
+                return () => {
+                    listeners.delete(listener);
+                };
+            },
+        },
+        say: (signal) => {
+            for (const listener of [...listeners]) {
+                listener(signal);
+            }
+        },
+    };
+}
+
 function centreOf(
     transport: MailFathomTransport,
     signedIn: ClientSession | null = session,
+    changes: SignalledChanges = nothingSignalled,
 ): { result: { current: NotificationCentre }; signInAsSomebodyElse: () => void; rerender: () => void } {
     signedInAs = signedIn;
 
@@ -119,7 +149,9 @@ function centreOf(
         {
             wrapper: ({ children }: { readonly children: ReactNode }) => (
                 <LocalizationProvider>
-                    <ToastsProvider>{children}</ToastsProvider>
+                    <ToastsProvider>
+                        <SignalledChangesContext value={changes}>{children}</SignalledChangesContext>
+                    </ToastsProvider>
                 </LocalizationProvider>
             ),
         },
@@ -464,5 +496,47 @@ describe('useNotificationCentre', () => {
         await settled();
 
         expect(result.current.failure).toBe('unavailable');
+    });
+    it('reads the count when the deployment says a notification was raised, without waiting out the interval', async () => {
+        const signalling = deploymentSaying();
+        const held = { unreadCount: 1, notifications: [mail] };
+        const { transport, hold } = deployment(held);
+
+        const { result } = centreOf(transport, session, signalling.changes);
+
+        await settled();
+        expect(result.current.unreadCount).toBe(1);
+
+        hold(4);
+        await act(async () => {
+            signalling.say({
+                kind: 'notification.raised',
+                notificationKind: 'Mail',
+                headline: 'Ada Lovelace wrote',
+                secondLine: 'About the engine',
+                unreadCount: 4,
+            });
+            await vi.advanceTimersByTimeAsync(0);
+        });
+
+        expect(result.current.unreadCount).toBe(4);
+    });
+
+    it('reads nothing about a signal that is not about a notification', async () => {
+        const signalling = deploymentSaying();
+        const held = { unreadCount: 1, notifications: [mail] };
+        const { transport, requests } = deployment(held);
+
+        centreOf(transport, session, signalling.changes);
+        await settled();
+
+        const before = requests.length;
+
+        await act(async () => {
+            signalling.say({ kind: 'account.state', account: 'work' });
+            await vi.advanceTimersByTimeAsync(0);
+        });
+
+        expect(requests.length).toBe(before);
     });
 });

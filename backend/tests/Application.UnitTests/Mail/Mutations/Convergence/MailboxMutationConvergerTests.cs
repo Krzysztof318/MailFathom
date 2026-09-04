@@ -443,6 +443,7 @@ public sealed class MailboxMutationConvergerTests
                 this.WriteSessionFactory,
                 commitPolicy,
                 this.AuditTrail,
+                ClientSignalPublishers.ReachingNobody,
                 new MailboxMutationOptions { MaximumAttempts = maximumAttempts });
 
             var transportSecurityPolicyReader = Substitute.For<IMailTransportSecurityPolicyReader>();

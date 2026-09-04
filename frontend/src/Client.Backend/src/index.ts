@@ -203,7 +203,27 @@ export {
     replaceOwnPortrait,
     type PortraitImageType,
 } from './ownPortrait';
+export { mostReconnectionAttempts, reconnectionDelay } from './reconnection';
 export { clientRoutePrefix, headersFor, routeFor, type ClientSession, type DeploymentAddress } from './session';
+export {
+    hubAddressFor,
+    mostNamedSignalEmails,
+    openSignalStream,
+    parseClientSignal,
+    readSignalTicket,
+    signalHubRoute,
+    signalMethod,
+    signalTicketParameter,
+    signalTicketRoute,
+    type ClientSignal,
+    type MailFathomSignalChannel,
+    type SignalChannelHandle,
+    type SignalChannelOpening,
+    type SignalNotificationKind,
+    type SignalStream,
+    type SignalStreamSchedule,
+    type SignalTicket,
+} from './signals';
 export { telemetryEndpoints, telemetryName } from './telemetry';
 export { reachDeployment, signIn, type DeploymentGreeting, type SignInOutcome, type SignInRefusal } from './signIn';
 export { longestResponseBody, type ClientRequest, type ClientResponse, type MailFathomTransport } from './transport';

@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Signals;
 using MailFathom.Application.Synchronization.Sessions;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Emails;
@@ -49,6 +50,7 @@ public sealed class MailboxReconciler
     private readonly IMailboxMutationReconciliationStore mutationStore;
     private readonly IRemotelyDeletedEmailDispositionReader dispositionReader;
     private readonly OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy;
+    private readonly ClientSignals signals;
     private readonly TimeProvider timeProvider;
     private readonly MailboxSynchronizationOptions options;
 
@@ -57,6 +59,7 @@ public sealed class MailboxReconciler
     /// <param name="mutationStore">Says which of the disappearances are changes MailFathom itself made.</param>
     /// <param name="dispositionReader">Answers what the account being reconciled does with an email its server no longer holds.</param>
     /// <param name="concurrencyRetryPolicy">Commits one window's outcome, retrying a conflict with a competing writer.</param>
+    /// <param name="signals">Tells an open client which stored mail this window moved, so what is on the screen catches up.</param>
     /// <param name="timeProvider">Stamps the observation, which is what advances the window across runs.</param>
     /// <param name="options">Bounds one window.</param>
     /// <exception cref="ArgumentNullException">Thrown when any argument is <see langword="null" />.</exception>
@@ -65,6 +68,7 @@ public sealed class MailboxReconciler
         IMailboxMutationReconciliationStore mutationStore,
         IRemotelyDeletedEmailDispositionReader dispositionReader,
         OptimisticConcurrencyRetryPolicy concurrencyRetryPolicy,
+        ClientSignals signals,
         TimeProvider timeProvider,
         MailboxSynchronizationOptions options)
     {
@@ -72,6 +76,7 @@ public sealed class MailboxReconciler
         ArgumentNullException.ThrowIfNull(mutationStore);
         ArgumentNullException.ThrowIfNull(dispositionReader);
         ArgumentNullException.ThrowIfNull(concurrencyRetryPolicy);
+        ArgumentNullException.ThrowIfNull(signals);
         ArgumentNullException.ThrowIfNull(timeProvider);
         ArgumentNullException.ThrowIfNull(options);
 
@@ -79,6 +84,7 @@ public sealed class MailboxReconciler
         this.mutationStore = mutationStore;
         this.dispositionReader = dispositionReader;
         this.concurrencyRetryPolicy = concurrencyRetryPolicy;
+        this.signals = signals;
         this.timeProvider = timeProvider;
         this.options = options;
     }
@@ -179,6 +185,8 @@ public sealed class MailboxReconciler
 
         var emailsRemain = window.Count == this.options.MaxReconciledEmailsPerRun;
 
+        this.AnnounceWhatMoved(account, folder.Alias, outcome);
+
         return new MailboxReconciliationResult(
             outcome.StillPresent.Count + outcome.ConfirmedUnchanged.Count,
             outcome.Disappeared.Count,
@@ -196,6 +204,40 @@ public sealed class MailboxReconciler
                     attributed.MutationRecordId)),
                 .. flagChanges.Suppressed,
             ]);
+    }
+
+    /// <summary>Tells an open client which stored mail this window moved, once the window is committed.</summary>
+    /// <remarks>
+    /// After the commit rather than inside it, because a signal is an instruction to re-read and a client that acted on
+    /// one before the transaction landed would read the state the window was replacing. A window that moved nothing
+    /// says nothing, which is every window on a mailbox nobody is changing.
+    /// <para>
+    /// What crosses is the account, the folder, and the stored identities — no flag, no count of which kind of change,
+    /// and nothing derived from a message. Which of them changed is what the client re-reads to find out.
+    /// </para>
+    /// </remarks>
+    private void AnnounceWhatMoved(
+        MailAccountIdentity account,
+        MailFolderAlias folder,
+        ReconciledFolderOutcome outcome)
+    {
+        if (!this.signals.Reaches)
+        {
+            return;
+        }
+
+        var moved = outcome.StillPresent
+            .Select(static observed => observed.StoredEmailId)
+            .Concat(outcome.Disappeared)
+            .Concat(outcome.RemovedByOwnMutation.Select(static attributed => attributed.StoredEmailId))
+            .ToArray();
+
+        if (moved.Length == 0)
+        {
+            return;
+        }
+
+        this.signals.Publish(ClientSignal.MailChanged(account, folder, moved));
     }
 
     /// <summary>Separates the disappearances MailFathom caused from the ones the disposition answers for.</summary>

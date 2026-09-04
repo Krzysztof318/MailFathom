@@ -10,6 +10,7 @@ using MailFathom.Host.Hosting.Startup;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Mcp;
 using MailFathom.Host.Security.Transport;
+using MailFathom.Host.Signals;
 using MailFathom.Mcp;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
@@ -85,6 +86,14 @@ internal static class HostPipeline
         // arrived where the probes are not served is refused before it can report dependency state to whoever can
         // reach it.
         app.UseSurfaceIsolation(composition.Listeners.SurfacesByPort(), app.Environment);
+
+        if (composition.Client.Enabled)
+        {
+            // What lets the signal hub accept an upgrade at all, and behind the isolation above so a listener that does
+            // not serve the client surface never reaches it. It is added on whether this deployment serves the client
+            // rather than beside the routes, because middleware is the process's pipeline and a route is not.
+            app.UseWebSockets();
+        }
 
         MapHealthProbes(app, composition);
 
@@ -406,6 +415,11 @@ internal static class HostPipeline
         {
             clientApi.RequireAuthorization(TransportSurface.Client.AccessPolicyName);
         }
+
+        // Outside the group deliberately, and the reasoning is in ClientSignalEndpoints: a long-lived connection is not
+        // a request, so this surface's request timeout and its rate limiter are the wrong treatment for it, and what
+        // bounds a client reconnecting is the ticket route inside the group that every reconnection has to spend.
+        app.MapHub<ClientSignalHub>(ClientSignalEndpoints.HubPath);
 
         if (composition.Client.AllowsOAuth)
         {

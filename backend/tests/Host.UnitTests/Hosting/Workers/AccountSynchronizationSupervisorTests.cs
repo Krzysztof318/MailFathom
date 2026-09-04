@@ -10,6 +10,7 @@ using MailFathom.Application.Folders;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Rules.Evaluation;
+using MailFathom.Application.Signals;
 using MailFathom.Application.Spam.Runs;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Administration;
@@ -1102,6 +1103,53 @@ public sealed class AccountSynchronizationSupervisorTests
         return ruleStore;
     }
 
+    /// <summary>A finished run leaves whatever a client draws behind its freshness line out of date, so it says so.</summary>
+    [Fact]
+    public async Task RunAsync_WhenARunFinishes_SignalsThatTheAccountsStateMoved()
+    {
+        // Arrange
+        // The second run reaching the mail server is what proves the first one finished, which is the moment the
+        // signal is raised at: stopping supervision on the first folder instead would leave the cycle interrupted,
+        // and an interrupted cycle deliberately says nothing.
+        var attemptCount = 0;
+        var secondRunStarted = new TaskCompletionSource();
+        await using var emptyMailbox = CreateEmptyMailbox();
+        var sessionFactory = Substitute.For<IMailboxSessionFactory>();
+        sessionFactory
+            .OpenReadOnlyAsync(
+                Arg.Any<MailAccountId>(),
+                Arg.Any<MailFolderResolution>(),
+                Arg.Any<MailTransportSecurityPolicy>(),
+                Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                if (Interlocked.Increment(ref attemptCount) == 2)
+                {
+                    secondRunStarted.TrySetResult();
+                }
+
+                return Task.FromResult(emptyMailbox);
+            });
+        using var harness = CreateHarness(
+            SynchronizationTestHost.CreateSingleAccountOptions(enabled: true, "INBOX"),
+            sessionFactory);
+
+        // Act
+        await harness.SuperviseWhileAdvancingUntilAsync(secondRunStarted.Task);
+
+        harness.SignalClock.Advance(ClientSignals.FoldingWindow);
+        await harness.Signals.DrainAsync();
+
+        // Assert
+        var signal = Assert.Single(
+            harness.SignalChannel.Published,
+            published => published.Kind == ClientSignalKind.AccountState);
+        Assert.Equal(SyntheticMailOwner.Deployment, signal.Owner);
+        Assert.Equal(MailAccountId.Create("primary"), signal.Account);
+        Assert.Null(signal.Folder);
+        Assert.Empty(signal.Emails);
+    }
+
     private static IMailboxSessionFactory CreateFailingSessionFactory(
         List<string> attemptedFolders,
         TaskCompletionSource runReached,
@@ -1273,6 +1321,7 @@ public sealed class AccountSynchronizationSupervisorTests
             this.Logger = new RecordingLogger<AccountSynchronizationSupervisor>();
             this.PushLogger = new RecordingLogger<AccountPushNotificationWatch>();
             this.RunLedger = new MailSynchronizationRunLedger(clock);
+            this.Signals = new ClientSignals([this.SignalChannel], this.SignalClock);
             this.supervisor = new AccountSynchronizationSupervisor(
                 account,
                 services.GetRequiredService<IServiceScopeFactory>(),
@@ -1285,10 +1334,21 @@ public sealed class AccountSynchronizationSupervisorTests
                     clock),
                 services.GetRequiredService<MailSynchronizationTelemetry>(),
                 this.RunLedger,
+                this.Signals,
                 this.Logger);
         }
 
         internal MailSynchronizationRunLedger RunLedger { get; }
+
+        /// <summary>Gets what this run told a client, which most tests here have no claim about.</summary>
+        internal RecordingClientSignalChannel SignalChannel { get; } = new();
+
+        /// <summary>Gets the clock the signal window is measured against, which is a second one deliberately.</summary>
+        /// <remarks>Not the supervisor's own: these tests advance that one by whole minutes to run a backoff out, and a folding window measured against it would tick hundreds of times per advance for a delivery no test is waiting on.</remarks>
+        internal FakeTimeProvider SignalClock { get; } = new();
+
+        /// <summary>Gets the publisher the supervisor raises through.</summary>
+        internal ClientSignals Signals { get; }
 
         internal StubSettingsSnapshot<MailSynchronizationOptions> Settings { get; }
 

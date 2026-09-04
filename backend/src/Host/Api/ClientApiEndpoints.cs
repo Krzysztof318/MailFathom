@@ -7,6 +7,7 @@ using MailFathom.Domain.Access;
 using MailFathom.Host.Configuration.Endpoints;
 using MailFathom.Host.Observability.ClientTelemetry;
 using MailFathom.Host.Security.Endpoints;
+using MailFathom.Host.Signals;
 using MailFathom.Versioning;
 
 namespace MailFathom.Host.Api;
@@ -56,6 +57,12 @@ namespace MailFathom.Host.Api;
 /// routes because what they serve is the deployment's own working state about a person rather than their mailbox, and
 /// both ways of marking one read are admitted under the reading grant for the reason the preferences write is: a
 /// person whose mail accounts an administrator maintains still has to be able to clear their own bell.
+/// </para>
+/// <para>
+/// The signal ticket route, which <see cref="ClientSignalEndpoints" /> describes, is how a client obtains the
+/// short-lived value it opens the live channel against. It is the one route here whose answer is a credential, and it
+/// is the only part of that channel served in this group: the hub itself is mapped outside it, for the reasons that
+/// type holds.
 /// </para>
 /// <para>
 /// The telemetry routes, which <see cref="ClientTelemetryEndpoint" /> describes, are the one family here that is not
@@ -119,6 +126,7 @@ internal static class ClientApiEndpoints
         api.MapClientDrafts();
         api.MapClientOutbox();
         api.MapClientNotifications();
+        api.MapClientSignalTicket();
         api.MapClientTelemetry();
 
         return api;

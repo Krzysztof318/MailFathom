@@ -1499,10 +1499,13 @@ refused — rather than a second reading of the mailbox.
 | `POST /api/client/notifications/{notificationId}/read-state` | Puts one notification into the read state the body states |
 | `POST /api/client/notifications/read` | Marks every one of the person's unread notifications read |
 
-**Nothing here streams.** This surface has no server-sent events and gains none for this, so a client asks on an
-interval and when it comes back to the foreground. The count is the answer it asks for most, which is why it stands on
-a route of its own: a badge derived from a page would cost a screen's worth of rows to draw one number, and it is
-answered from the same index the deduplication rule already declares.
+**A raised notification reaches an open client at once, and the routes above are still what it reads.**
+[The signal channel](#the-signal-channel) says that a row was written and how many now stand unread; the panel then
+re-reads a page over these routes, so nothing about the record travels twice and a client with no channel behaves
+exactly as one that never had it — it asks on an interval and when it comes back to the foreground. The count is the
+answer it asks for most, which is why it stands on a route of its own: a badge derived from a page would cost a
+screen's worth of rows to draw one number, and it is answered from the same index the deduplication rule already
+declares.
 
 **A page is clamped rather than refused.** A request naming no `pageSize` is served 30, one naming more than 100 is
 served 100, and one naming zero or a negative number is served the default. That is the one place this reading differs
@@ -1615,6 +1618,67 @@ metrics](telemetry.md#what-the-client-telemetry-proxy-emits) instead, which is w
 [the same list](#browser-origins) every other route here is served to, and no origin is admitted here that the rest of
 the surface refuses.
 
+### The signal channel
+
+A client that is open is told what changed rather than left to find out on its interval. The channel is one SignalR hub
+beneath this surface's prefix, it carries statements in one direction — from the deployment to the client — and it
+declares no method a client can call: a client still acts over the routes above, which is where its permission is
+judged, its request is bounded, and its act is recorded.
+
+| Route | What it does |
+| --- | --- |
+| `POST /api/client/signals/ticket` | Mints the single-use ticket a connection is opened against |
+| `/api/client/signals` | The hub itself, reached over a WebSocket carrying that ticket |
+
+**A connection is opened against a ticket, because a browser cannot put a header on a WebSocket.** The client mints one
+over the route above — an ordinary authenticated route on this surface, requiring `mailfathom.mail.read` like the mail
+it announces — and hands it to the connection. A ticket names the owner the credential behind it already named, is
+drawn from a cryptographically secure source, lives 30 seconds, and stops working the first time it is presented, so one
+read out of a proxy's access log or a browser's own history is already spent or already expired. Nothing else opens a
+connection: a connection presenting nothing, something malformed, something expired, or something already spent is
+closed without being told which.
+
+**One owner's signals reach that owner's connections and no other's.** A connection joins a group named from the owner's
+own identifier the moment it is admitted, and every statement is published to one group; nothing here reads a group name
+a caller supplied, because nothing here takes one.
+
+**What crosses is what changed, never what it changed to.** A signal is an instruction to look again: it names a count,
+an account alias, a folder alias, and a stored identity, and no subject, address, body fragment, filename, or attachment
+name reaches it at any size. The one exception is a raised notification's own headline and second line, which are the
+record's already-derived text and reach a client entitled to read that record over
+[the notification routes](#the-notification-routes). Five things are said:
+
+| Signal | What it says |
+| --- | --- |
+| `mail.arrived` | A run committed mail into one folder, and how much |
+| `mail.changed` | Stored mail in one folder is no longer what a client last read, naming up to 100 of the rows |
+| `folders.changed` | The set of folders an account mirrors has moved |
+| `notification.raised` | A notification was written, with its kind, its two lines, and how many now stand unread |
+| `account.state` | An account's synchronization run finished, so what a client says about it is out of date |
+
+**Statements are folded per owner, per kind, and per place over half a second.** A run committing a folder's worth of
+mail is one arrival to the person who was away from the screen rather than one statement per message, and two folders'
+arrivals stay two statements so a client is never told that mail arrived without being told where to look.
+
+**A client with no channel behaves exactly as one that never had it.** Every screen re-reads over the routes above, and
+the channel only decides when. So a deployment behind a reverse proxy that does not pass the WebSocket upgrade, or one
+whose client could not connect for any other reason, serves the same client with the same data on its own interval;
+the client says nothing about a channel that is merely down, and reconnects on a bounded jittered backoff.
+
+**A proxy in front of this endpoint has to pass the upgrade** — `Upgrade` and `Connection` on the request, and no
+buffering or idle timeout shorter than a connection that is meant to stand open. Nothing here fails when it does not;
+the client falls back to its interval, which is what makes this safe to deploy behind a proxy nobody reconfigured.
+
+**The hub is deliberately outside this surface's request timeout and rate limiter**, and the minting route is
+deliberately inside both. `ClientEndpoint:RequestTimeout` would abandon a connection meant to stand open at the same
+bound it abandons a request for a page of mail, and `ClientEndpoint:RateLimiting` would count an open connection
+against the capacity a browser is spending reading mail. What is bounded instead is the minting, which a reconnect
+cannot avoid — and a deployment holding as many unspent tickets as it will hold answers `503` rather than growing.
+
+**The connection is served only where this endpoint is.** The hub sits beneath this surface's route prefix, so a
+listener that does not serve the client surface answers it `404` exactly as it answers every other route here, and a
+deployment with `ClientEndpoint:Enabled` unset serves no hub and holds no ticket.
+
 ## Credentials do not cross surfaces
 
 A key admitted under `McpEndpoint` or `AdminEndpoint` authenticates nothing here, and one admitted here authenticates
@@ -1721,6 +1785,10 @@ key guessing.
 the health probes answering while the client endpoint is refusing. A default limiter would count a readiness probe
 against the same capacity a browser is spending, and a deployment under load would start failing the probe that decides
 whether it is taken out of service.
+
+**Neither reaches [the signal channel's hub](#the-signal-channel)**, which is mapped outside this surface's route group
+for that reason, and both reach the route that mints its tickets — so a client reconnecting in a loop is bounded by the
+minting it cannot avoid rather than by a timeout on the connection itself.
 
 ## Transport security
 

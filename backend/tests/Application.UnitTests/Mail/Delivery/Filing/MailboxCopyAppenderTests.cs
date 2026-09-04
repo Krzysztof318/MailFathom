@@ -438,6 +438,7 @@ public sealed class MailboxCopyAppenderTests
                 this.folderResolutions,
                 Substitute.For<IMailFolderMappingChangeAuditor>(),
                 persistenceSessions,
+                ClientSignalPublishers.ReachingNobody,
                 this.clock),
             this.transportSecurityPolicies);
 

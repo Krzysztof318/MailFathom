@@ -61,6 +61,13 @@ beside it:
 request to a response — and `Client.App` supplies the adapter that calls one. That is the boundary's consequence
 rather than an abstraction kept in case a second transport appears.
 
+The deployment's signal channel is the same shape and the same reason. `Client.Backend` owns what a connection _is_ —
+the ticket it is opened against, the address it is opened at, what a payload has to be before it becomes a signal, and
+how long to wait before opening again — and publishes a `MailFathomSignalChannel` beside a `SignalStreamSchedule`;
+`src/Client.App/src/signals/signalChannel.ts` is the one module that names `@microsoft/signalr`, because that package's
+type declarations name the DOM. What the deployment says has changed then reaches a screen through context, and each
+screen decides for itself what to read again.
+
 ## The native shell, and why it is not a third package
 
 `src-tauri/` is a Rust crate rather than a workspace package, and it sits beside `src/` rather than inside it because

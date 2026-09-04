@@ -5,7 +5,14 @@
 import { StrictMode } from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ClientRequest, ClientResponse, ClientSession, DeploymentAddress } from '@mailfathom/client-backend';
+import type {
+    ClientRequest,
+    ClientResponse,
+    ClientSession,
+    DeploymentAddress,
+    MailFathomSignalChannel,
+    SignalStreamSchedule,
+} from '@mailfathom/client-backend';
 import { App } from './App';
 import type { ClientDeployment } from './deployment/adoptedDeployment';
 import { telemetryKey } from './device/deviceStore';
@@ -473,6 +480,16 @@ const drawsNobody: PortraitExchange = {
     remove: () => Promise.resolve({ outcome: 'refused', reason: 'unavailable' }),
 };
 
+// A deployment serving no signal channel, which is what every test here is against: the stream mints a ticket, fails
+// to open anything, and waits on a schedule that never fires — so the screens below behave exactly as they did before
+// there was a channel at all, which is the thing these tests are asserting.
+const noSignalChannel: MailFathomSignalChannel = () => Promise.reject(new Error('no channel here'));
+
+const neverReopens: SignalStreamSchedule = {
+    wait: () => new Promise<void>(() => undefined),
+    draw: () => 0,
+};
+
 function renderApp(
     deployment: ClientDeployment = servedFrom,
     signedInWith: string | null = heldCredential,
@@ -493,8 +510,10 @@ function renderApp(
                                             <App
                                                 credentials={credentials}
                                                 deployment={deployment}
+                                                openSignals={noSignalChannel}
                                                 portraits={drawsNobody}
                                                 send={send}
+                                                signalSchedule={neverReopens}
                                                 signedInWith={signedInWith}
                                             />
                                         </TelemetryContext>
@@ -1405,6 +1424,7 @@ describe('App deployment', () => {
                 'https://elsewhere.example.invalid/api/client/accounts',
                 'https://elsewhere.example.invalid/api/client/preferences',
                 'https://elsewhere.example.invalid/api/client/display-name',
+                'https://elsewhere.example.invalid/api/client/signals/ticket',
                 'https://elsewhere.example.invalid/api/client/notifications/unread-count',
             ]);
         });
@@ -1483,6 +1503,7 @@ describe('App deployment', () => {
                 'https://mail.example.test/api/client/accounts',
                 'https://mail.example.test/api/client/preferences',
                 'https://mail.example.test/api/client/display-name',
+                'https://mail.example.test/api/client/signals/ticket',
                 'https://mail.example.test/api/client/notifications/unread-count',
             ]);
         });
@@ -1654,11 +1675,13 @@ describe('App deployment', () => {
                 'https://first.example.invalid/api/client/accounts',
                 'https://first.example.invalid/api/client/preferences',
                 'https://first.example.invalid/api/client/display-name',
+                'https://first.example.invalid/api/client/signals/ticket',
                 'https://first.example.invalid/api/client/notifications/unread-count',
                 'https://second.example.invalid/api/client/session',
                 'https://second.example.invalid/api/client/accounts',
                 'https://second.example.invalid/api/client/preferences',
                 'https://second.example.invalid/api/client/display-name',
+                'https://second.example.invalid/api/client/signals/ticket',
                 'https://second.example.invalid/api/client/notifications/unread-count',
             ]);
         });

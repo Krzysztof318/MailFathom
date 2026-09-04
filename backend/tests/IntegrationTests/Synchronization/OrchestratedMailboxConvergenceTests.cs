@@ -21,6 +21,7 @@ using MailFathom.Infrastructure.Resilience;
 using MailFathom.IntegrationTests.Mailbox;
 using MailFathom.IntegrationTests.Orchestration;
 using MailFathom.IntegrationTests.Persistence;
+using MailFathom.TestSupport;
 using MailKit.Net.Imap;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -253,6 +254,7 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
                 scope.GetRequiredService<IMailboxWriteSessionFactory>(),
                 commitPolicy,
                 scope.GetRequiredService<IMailboxMutationAuditTrail>(),
+                ClientSignalPublishers.ReachingNobody,
                 new MailboxMutationOptions()),
             scope.GetRequiredService<IMailTransportSecurityPolicyReader>(),
             commitPolicy,
@@ -328,6 +330,7 @@ public sealed class OrchestratedMailboxConvergenceTests(MailFathomOrchestrationF
                 new MailKitImapWriteSessionFactory(pool, CreateTelemetry()),
                 commitPolicy,
                 scope.GetRequiredService<IMailboxMutationAuditTrail>(),
+                ClientSignalPublishers.ReachingNobody,
                 new MailboxMutationOptions()),
             scope.GetRequiredService<IMailTransportSecurityPolicyReader>(),
             commitPolicy,

@@ -179,6 +179,7 @@ internal sealed class SpamClassificationHarness
                 this.Bindings,
                 Substitute.For<IMailFolderMappingChangeAuditor>(),
                 sessionFactory,
+                ClientSignalPublishers.ReachingNobody,
                 this.Clock),
             transportSecurityPolicies);
     }

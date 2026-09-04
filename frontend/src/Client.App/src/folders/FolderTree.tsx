@@ -15,6 +15,7 @@ import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { useReadMarking } from '../readMarking/useReadMarking';
+import { useSignalledChanges } from '../signals/signalledChanges';
 import { scopeKey } from '../workspace/mailScope';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { FolderRow } from './FolderRow';
@@ -63,7 +64,13 @@ export function FolderTree({
     const { translate } = useLocalization();
     const { workspace, revise } = useWorkspace();
     const { marked } = useReadMarking();
+    const signalledChanges = useSignalledChanges();
     const [attempt, setAttempt] = useState(0);
+
+    // A second counter, and deliberately not the one above: an attempt is a read with nothing worth keeping behind it
+    // and it replaces the tree with a line saying so, while this one is a read the deployment asked for underneath a
+    // tree somebody is looking at. Raising `attempt` for it would blank the column every time mail arrived.
+    const [refreshed, setRefreshed] = useState(0);
     const [answered, setAnswered] = useState<Answered | null>(null);
     const [focused, setFocused] = useState<string | null>(null);
     const [connected, setConnected] = useState(online);
@@ -100,7 +107,24 @@ export function FolderTree({
         return () => {
             listening = false;
         };
-    }, [session, transport, attempt, online]);
+    }, [session, transport, attempt, refreshed, online]);
+
+    // Three of the five kinds move this tree, because all three move a count it draws: mail arriving in a folder, a
+    // message changing folder or read state, and the mapping itself moving. It re-reads under whatever is drawn rather
+    // than replacing it, so a reader whose pointer is on a row keeps the row.
+    useEffect(
+        () =>
+            signalledChanges.listen((signal) => {
+                if (
+                    signal.kind === 'folders.changed' ||
+                    signal.kind === 'mail.arrived' ||
+                    signal.kind === 'mail.changed'
+                ) {
+                    setRefreshed((token) => token + 1);
+                }
+            }),
+        [signalledChanges],
+    );
 
     if (!online) {
         return <Note>{translate('connection.offline')}</Note>;

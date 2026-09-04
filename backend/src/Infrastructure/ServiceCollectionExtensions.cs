@@ -73,6 +73,7 @@ using MailFathom.Application.SensitiveContent;
 using MailFathom.Application.SensitiveContent.Derivation;
 using MailFathom.Application.SensitiveContent.Detection;
 using MailFathom.Application.SensitiveContent.Egress;
+using MailFathom.Application.Signals;
 using MailFathom.Application.Spam;
 using MailFathom.Application.Spam.Actions;
 using MailFathom.Application.Spam.Gating;
@@ -1148,6 +1149,10 @@ public static class ServiceCollectionExtensions
         // What a person is told about while nobody is looking at the screen, and the pass that ages it out. Scoped
         // like every other store, because the raise opens a session on the scope's own context.
         services.AddScoped<INotificationStore, PersistedNotificationStore>();
+        // The one publisher every raise site reaches, and a singleton because the window it folds over spans several
+        // scopes: a run's folders each have a scope of their own, and folding them is the whole point. It holds no
+        // scoped service and is disposed with the container, which drains whatever a window was still holding.
+        services.AddSingleton<ClientSignals>();
         services.AddScoped<SynchronizationNotifications>();
         services.AddScoped<NotificationRetention>();
         services.AddScoped<OwnNotifications>();

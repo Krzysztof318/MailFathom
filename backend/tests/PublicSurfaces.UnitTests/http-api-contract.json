@@ -1902,6 +1902,22 @@
         ],
         "type": "object"
       },
+      "ClientSignalTicketResponse": {
+        "properties": {
+          "expiresAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "ticket": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticket",
+          "expiresAt"
+        ],
+        "type": "object"
+      },
       "ClientUnreadNotificationCountResponse": {
         "properties": {
           "unreadCount": {
@@ -10138,6 +10154,30 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ClientSessionResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/signals/ticket": {
+      "post": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientSignalTicketResponse"
                 }
               }
             },

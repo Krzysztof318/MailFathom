@@ -16,6 +16,7 @@ using MailFathom.Host.Configuration.Mail;
 using MailFathom.Host.Observability.ClientTelemetry;
 using MailFathom.Host.Security.Endpoints;
 using MailFathom.Host.Security.Transport;
+using MailFathom.Host.Signals;
 using MailFathom.Host.UnitTests.TestDoubles;
 using MailFathom.TestSupport;
 using Microsoft.AspNetCore.Authorization;
@@ -168,6 +169,7 @@ public sealed class ClientApiEndpointsTests
                 $"{ClientEndpointOptions.RoutePrefix}{ClientOwnerRecordEndpoint.MailAccountsRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientOwnerRecordEndpoint.MailAccountRemovalRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientApiEndpoints.SessionRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientSignalEndpoints.TicketRoute}",
                 .. ClientTelemetrySignal.All
                     .Select(signal =>
                         $"{ClientEndpointOptions.RoutePrefix}{ClientTelemetryEndpoint.TelemetryRoutePrefix}{signal.Route}")
@@ -254,6 +256,7 @@ public sealed class ClientApiEndpointsTests
                 $"POST {prefix}{ClientOwnerRecordEndpoint.RecordRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
                 $"POST {prefix}{ClientOwnerRecordEndpoint.MailAccountsRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
                 $"POST {prefix}{ClientOwnerRecordEndpoint.MailAccountRemovalRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
+                $"POST {prefix}{ClientSignalEndpoints.TicketRoute} -> {MailFathomPermission.MailRead.Name}",
                 .. ClientTelemetrySignal.All
                     .Select(signal =>
                         $"POST {prefix}{ClientTelemetryEndpoint.TelemetryRoutePrefix}{signal.Route} -> none")
@@ -322,6 +325,7 @@ public sealed class ClientApiEndpointsTests
                         || WritesTheCallersOwnPreferences(endpoint)
                         || WritesTheCallersOwnPortrait(endpoint)
                         || MarksTheCallersOwnNotificationsRead(endpoint)
+                        || MintsTheCallersOwnSignalTicket(endpoint)
                         || HandsOverTheClientsOwnTelemetry(endpoint),
                         $"{method} {endpoint} changes something under a grant that does not say so."));
             });
@@ -375,6 +379,20 @@ public sealed class ClientApiEndpointsTests
         && $"/{route.RoutePattern.RawText?.TrimStart('/')}" is var path
         && (path == $"{ClientEndpointOptions.RoutePrefix}{ClientNotificationEndpoints.ReadStateRoute}"
             || path == $"{ClientEndpointOptions.RoutePrefix}{ClientNotificationEndpoints.MarkAllReadRoute}");
+
+    /// <summary>Reports whether a route mints the caller's own connection ticket, by the route it is served at.</summary>
+    /// <remarks>
+    /// The route rather than the grant, for the reason the three writes above are named that way. It is a <c>POST</c>
+    /// because minting a single-use credential changes state and a <c>GET</c> would be a route a cache, a prefetch, or
+    /// a link preview could spend a ticket through — and what it changes is a ticket this deployment issued to the
+    /// caller for the caller's own connection. Nothing reaches a mail server, nothing moves in a mailbox, and the
+    /// channel it opens announces only the mail the reading grant already admits, so the reading grant is what it is
+    /// published under. Naming the one route keeps the claim narrow.
+    /// </remarks>
+    private static bool MintsTheCallersOwnSignalTicket(Endpoint endpoint) =>
+        endpoint is RouteEndpoint route
+        && $"/{route.RoutePattern.RawText?.TrimStart('/')}"
+            == $"{ClientEndpointOptions.RoutePrefix}{ClientSignalEndpoints.TicketRoute}";
 
     /// <summary>Reports whether a route is the client posting its own telemetry, which changes nothing this deployment holds.</summary>
     /// <remarks>The path rather than the grant here, because these are published under none by design — the caller is handing over what it recorded about itself, and no permission in the mailbox half names that act.</remarks>

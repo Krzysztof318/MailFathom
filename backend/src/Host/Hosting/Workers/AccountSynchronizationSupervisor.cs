@@ -13,6 +13,7 @@ using MailFathom.Application.Persistence;
 using MailFathom.Application.Retrieval.AskMail.Audit;
 using MailFathom.Application.Rules.Evaluation;
 using MailFathom.Application.Rules.History;
+using MailFathom.Application.Signals;
 using MailFathom.Application.Spam.Runs;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Administration;
@@ -49,6 +50,7 @@ internal sealed partial class AccountSynchronizationSupervisor
     private readonly AccountPushNotificationWatch pushNotifications;
     private readonly MailSynchronizationTelemetry telemetry;
     private readonly MailSynchronizationRunLedger runLedger;
+    private readonly ClientSignals signals;
     private readonly ILogger<AccountSynchronizationSupervisor> logger;
 
     /// <summary>Initializes a supervisor for one configured account.</summary>
@@ -59,6 +61,7 @@ internal sealed partial class AccountSynchronizationSupervisor
     /// <param name="pushNotifications">Ends the wait between runs early when a watched folder changes; owned by this supervisor and disposed with it.</param>
     /// <param name="telemetry">Publishes the run as a span with its folders beneath it, and the counts and waits an operator reads without opening a log; it also measures how long a run took.</param>
     /// <param name="runLedger">Holds what this supervisor is doing for the administrative surface, which is what an operator without a metrics stack reads it from.</param>
+    /// <param name="signals">Tells whatever the owner has open that mail arrived and that the run finished, so a screen catches up without waiting for its own interval.</param>
     /// <param name="logger">Records run outcomes, which carry account and folder aliases and no message-level data.</param>
     public AccountSynchronizationSupervisor(
         MailAccountIdentity account,
@@ -68,6 +71,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         AccountPushNotificationWatch pushNotifications,
         MailSynchronizationTelemetry telemetry,
         MailSynchronizationRunLedger runLedger,
+        ClientSignals signals,
         ILogger<AccountSynchronizationSupervisor> logger)
     {
         this.account = account;
@@ -77,6 +81,7 @@ internal sealed partial class AccountSynchronizationSupervisor
         this.pushNotifications = pushNotifications;
         this.telemetry = telemetry;
         this.runLedger = runLedger;
+        this.signals = signals;
         this.logger = logger;
     }
 
@@ -265,6 +270,18 @@ internal sealed partial class AccountSynchronizationSupervisor
                     if (folderRun.ArrivedEmailCount > 0)
                     {
                         Interlocked.Add(ref arrivedEmailCount, folderRun.ArrivedEmailCount);
+
+                        // Said here rather than with the run's report, because this is where the folder is known and a
+                        // client refills the list for a folder rather than for an account. The publisher folds the
+                        // statements of one folder into one, so a folder that committed its mail in several batches
+                        // still reaches a screen as one arrival.
+                        if (folderRun.ResolvedFolder is { } arrivedIn)
+                        {
+                            this.signals.Publish(ClientSignal.MailArrived(
+                                this.account,
+                                arrivedIn.Alias,
+                                folderRun.ArrivedEmailCount));
+                        }
                     }
 
                     // A plain write rather than an interlocked one: every writer writes the same value, and awaiting
@@ -321,6 +338,12 @@ internal sealed partial class AccountSynchronizationSupervisor
             scheduledFolders.Length,
             failedFolderCount,
             convergenceFailed);
+
+        // Said on the same condition and from the same place the ledger is written, because it is that reading going
+        // out of date: a client draws the account's freshness line from what the ledger holds, so a run that finished
+        // whichever way it went leaves that line stale. The signal names the account and nothing about the state it is
+        // in, for the reason ClientSignal.AccountState gives — the reading is derived in one place and this is not it.
+        this.signals.Publish(ClientSignal.AccountState(this.account));
 
         this.LogAccountRunFinished(
             this.account.Id.Value,

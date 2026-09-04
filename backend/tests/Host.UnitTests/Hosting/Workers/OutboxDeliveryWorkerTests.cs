@@ -13,6 +13,7 @@ using MailFathom.Application.Mail.Delivery.Outbox;
 using MailFathom.Application.Mail.Mutations;
 using MailFathom.Application.Mail.Mutations.Destinations;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Signals;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Delivery;
 using MailFathom.Domain.Emails;
@@ -210,6 +211,9 @@ public sealed class OutboxDeliveryWorkerTests
                 TimeSpan.FromMinutes(1),
                 TimeSpan.FromMinutes(5),
                 TimeSpan.FromHours(8)));
+            // Composed with no channel behind it, so the filing side resolves while what a pass says about a folder
+            // reaches nobody: what this class is about is when the loop takes a pass.
+            collection.AddSingleton<ClientSignals>();
             collection.AddScoped<OptimisticConcurrencyRetryPolicy>();
             collection.AddScoped<MailOutboxDelivery>();
 

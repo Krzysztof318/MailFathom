@@ -6,6 +6,8 @@ import { describe, expect, it } from 'vitest';
 import type { MailTimelineEntry, MailTimelinePage } from '@mailfathom/client-backend';
 import {
     answered,
+    arrivalNoticed,
+    changeNoticed,
     cursorAfter,
     cursorBefore,
     heldRows,
@@ -242,5 +244,59 @@ describe('heldRows', () => {
 describe('cursorBefore', () => {
     it('answers nothing at the beginning of a list read from its leading end', () => {
         expect(cursorBefore(readForward(2))).toBeNull();
+    });
+});
+
+describe('arrivalNoticed', () => {
+    it('drops the leading page so the rows a reader is at the top of are read again', () => {
+        const held = arrivalNoticed(readForward(3));
+
+        expect(held.slots[0]?.emails).toBeNull();
+        expect(held.slots[1]?.emails).not.toBeNull();
+        expect(held.slots[2]?.emails).not.toBeNull();
+    });
+
+    it('keeps the list the length it was, so nothing under the reader moves', () => {
+        expect(rowCountOf(arrivalNoticed(readForward(3)))).toBe(rowCountOf(readForward(3)));
+    });
+
+    it('asks for the leading page again only while it is on the screen', () => {
+        const held = arrivalNoticed(readForward(3));
+
+        expect(wantedFor(held, 0, 1)?.refilling).toBe(0);
+        expect(wantedFor(held, 8, 9)).toBeNull();
+    });
+
+    it('leaves a list that has read nothing alone', () => {
+        expect(arrivalNoticed(nothingHeld)).toBe(nothingHeld);
+    });
+});
+
+describe('changeNoticed', () => {
+    it('drops the pages holding the mail the deployment named and no others', () => {
+        const held = changeNoticed(readForward(3), ['message-5']);
+
+        expect(held.slots[0]?.emails).not.toBeNull();
+        expect(held.slots[1]?.emails).toBeNull();
+        expect(held.slots[2]?.emails).not.toBeNull();
+    });
+
+    it('drops every page holding one of them', () => {
+        const held = changeNoticed(readForward(3), ['message-1', 'message-9']);
+
+        expect(held.slots[0]?.emails).toBeNull();
+        expect(held.slots[1]?.emails).not.toBeNull();
+        expect(held.slots[2]?.emails).toBeNull();
+    });
+
+    it('leaves the list the object it was where it holds none of them', () => {
+        const held = readForward(3);
+
+        expect(changeNoticed(held, ['message-999'])).toBe(held);
+        expect(changeNoticed(held, [])).toBe(held);
+    });
+
+    it('keeps the list the length it was', () => {
+        expect(rowCountOf(changeNoticed(readForward(3), ['message-5']))).toBe(rowCountOf(readForward(3)));
     });
 });

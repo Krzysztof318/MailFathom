@@ -366,6 +366,7 @@ public sealed class MailSynchronizationCoordinatorTests
                 settings,
                 services.GetRequiredService<MailSynchronizationTelemetry>(),
                 new MailSynchronizationRunLedger(clock),
+                ClientSignalPublishers.ReachingNobody,
                 this.loggerFactory,
                 clock);
         }

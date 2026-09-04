@@ -588,6 +588,7 @@ public sealed class MailRuleActionRecorderTests
                 this.folders,
                 Substitute.For<IMailFolderMappingChangeAuditor>(),
                 persistenceSessionFactory,
+                ClientSignalPublishers.ReachingNobody,
                 new FakeTimeProvider(new DateTimeOffset(2026, 8, 12, 9, 0, 0, TimeSpan.Zero))),
             transportSecurityPolicies);
     }

@@ -92,6 +92,7 @@ internal sealed class OutgoingMailFilingHarness
                 this.folderResolutions,
                 Substitute.For<IMailFolderMappingChangeAuditor>(),
                 persistenceSessions,
+                ClientSignalPublishers.ReachingNobody,
                 clock),
             transportSecurityPolicies);
 

@@ -213,6 +213,7 @@ internal sealed class DraftedMailDeployment
                 folderResolutions,
                 Substitute.For<IMailFolderMappingChangeAuditor>(),
                 persistenceSessions,
+                ClientSignalPublishers.ReachingNobody,
                 clock),
             transportSecurityPolicies);
 

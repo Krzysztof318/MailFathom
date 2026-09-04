@@ -18,6 +18,7 @@ import { SenderAvatar } from '../controls/SenderAvatar';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { useReadMarking } from '../readMarking/useReadMarking';
+import { useSignalledChanges } from '../signals/signalledChanges';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { Message } from '../messageBody/Message';
 import { Attachments } from './Attachments';
@@ -52,10 +53,20 @@ const failureLabels: Readonly<Record<ClientFailureReason, MessageKey>> = {
 // that reads it.
 const longestFragment = 2000;
 
-/** What is being read: which message, and which attempt at it. A change to either reads again. */
+/** What is being read: which message, which attempt at it, and whether the attempt may show. A change to any reads again. */
 interface Read {
     readonly storedEmailId: string;
     readonly attempt: number;
+
+    /**
+     * Whether what is already drawn stays on the screen while this attempt is in flight.
+     *
+     * A reader who pressed the retry control asked for the read and is owed the sentence saying it is happening. A
+     * reader whose message the deployment said had changed asked for nothing, so replacing what they are reading with
+     * *Reading your mail…* would take the message away from somebody who did not touch anything — which is the same
+     * defect as moving a row under them.
+     */
+    readonly quietly: boolean;
 }
 
 interface Answered {
@@ -137,7 +148,8 @@ function OpenMessage({
     const { locale, translate } = useLocalization();
     const { revise } = useWorkspace();
     const { markRead } = useReadMarking();
-    const [read, setRead] = useState<Read>({ storedEmailId, attempt: 0 });
+    const signalledChanges = useSignalledChanges();
+    const [read, setRead] = useState<Read>({ storedEmailId, attempt: 0, quietly: false });
     const [answer, setAnswer] = useState<Answered | null>(null);
     const [connected, setConnected] = useState(online);
 
@@ -151,7 +163,7 @@ function OpenMessage({
     // A message changing under this component invalidates what is being read, which React answers by adjusting state
     // during the render rather than in an effect that would draw the previous message's answer once first.
     if (read.storedEmailId !== storedEmailId) {
-        setRead({ storedEmailId, attempt: 0 });
+        setRead({ storedEmailId, attempt: 0, quietly: false });
     }
 
     // A failure the network gap itself caused goes with the gap, so what stands while there is no network is the
@@ -187,6 +199,19 @@ function OpenMessage({
         };
     }, [session, transport, read, online]);
 
+    // A message the deployment says has changed is read again where it is the one on the screen, quietly, so what a
+    // reader is part-way through stays in front of them until the new answer replaces it. A signal naming other mail is
+    // not this message's business: the list it names re-reads its own rows.
+    useEffect(
+        () =>
+            signalledChanges.listen((signal) => {
+                if (signal.kind === 'mail.changed' && signal.emails.includes(storedEmailId)) {
+                    setRead((current) => ({ storedEmailId, attempt: current.attempt + 1, quietly: true }));
+                }
+            }),
+        [signalledChanges, storedEmailId],
+    );
+
     // The fragment somebody selected belonged to the message they were reading, so it goes when the message does:
     // carrying it into the next one would scope a question to words that are no longer on the screen. It happens as the
     // message changes rather than once the next one has been read, because the words are already gone by then.
@@ -214,7 +239,10 @@ function OpenMessage({
         revise({ fragment: fragment === '' ? null : fragment });
     }
 
-    const held = answer?.read === read ? answer : null;
+    // The answer to the attempt in flight, or — while a quiet attempt is in flight — the one already on the screen,
+    // which is what keeps a signalled re-read from blanking a message its reader is part-way through.
+    const held =
+        answer?.read === read || (read.quietly && answer?.read.storedEmailId === read.storedEmailId) ? answer : null;
     const drawable = held?.result.outcome === 'read';
 
     // A message opening is a view change, so focus goes to the start of it rather than staying on whatever opened it —
@@ -264,7 +292,7 @@ function OpenMessage({
                     <SecondaryButton
                         label={translate('connection.retry')}
                         onActivate={() => {
-                            setRead({ storedEmailId, attempt: read.attempt + 1 });
+                            setRead({ storedEmailId, attempt: read.attempt + 1, quietly: false });
                         }}
                     />
                 ) : null}

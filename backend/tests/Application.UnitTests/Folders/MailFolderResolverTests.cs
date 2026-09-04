@@ -4,6 +4,7 @@
 
 using MailFathom.Application.Folders;
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Signals;
 using MailFathom.Domain.Accounts;
 using MailFathom.Domain.Folders;
 using MailFathom.Domain.Transport;
@@ -392,6 +393,48 @@ public sealed class MailFolderResolverTests
     }
 
     /// <summary>Builds a resolver over a server that advertises exactly the folders a test names.</summary>
+    /// <summary>A binding the resolver wrote is a folder tree that moved, so an open client is told to read it again.</summary>
+    [Fact]
+    public async Task ResolveAsync_RecordingANewBinding_SignalsThatTheAccountsFoldersMoved()
+    {
+        // Arrange
+        var context = new ResolverContext(
+            new RemoteFolder(RemoteFolderPath.Create("INBOX", '/'), [MailFolderSpecialUse.Inbox]));
+        var mapping = MailFolderMapping.ToSpecialUse(MailFolderAlias.Create("inbox"), MailFolderSpecialUse.Inbox);
+
+        // Act
+        await context.Resolver.ResolveAsync(PrimaryAccount, mapping, RequiredTlsPolicy, CancellationToken.None);
+
+        context.Clock.Advance(ClientSignals.FoldingWindow);
+        await context.Signals.DrainAsync();
+
+        // Assert
+        var signal = Assert.Single(context.SignalChannel.Published);
+        Assert.Equal(ClientSignalKind.FoldersChanged, signal.Kind);
+        Assert.Equal(PrimaryAccount.Id, signal.Account);
+        Assert.Null(signal.Folder);
+    }
+
+    /// <summary>A resolution that changed no binding is a tree that did not move, and says nothing.</summary>
+    [Fact]
+    public async Task ResolveAsync_ResolvingTheSameBindingAgain_SignalsOnlyTheFirstTime()
+    {
+        // Arrange
+        var context = new ResolverContext(
+            new RemoteFolder(RemoteFolderPath.Create("INBOX", '/'), [MailFolderSpecialUse.Inbox]));
+        var mapping = MailFolderMapping.ToSpecialUse(MailFolderAlias.Create("inbox"), MailFolderSpecialUse.Inbox);
+
+        // Act
+        await context.Resolver.ResolveAsync(PrimaryAccount, mapping, RequiredTlsPolicy, CancellationToken.None);
+        await context.Resolver.ResolveAsync(PrimaryAccount, mapping, RequiredTlsPolicy, CancellationToken.None);
+
+        context.Clock.Advance(ClientSignals.FoldingWindow);
+        await context.Signals.DrainAsync();
+
+        // Assert
+        Assert.Single(context.SignalChannel.Published);
+    }
+
     private sealed class ResolverContext
     {
         internal static readonly DateTimeOffset ResolvedAt = new(2026, 7, 28, 9, 0, 0, TimeSpan.Zero);
@@ -447,14 +490,25 @@ public sealed class MailFolderResolverTests
                     return Task.FromResult(RemoteFolderPath.Create(configuredPath.Value, AdvertisedDelimiter));
                 });
 
+            this.Signals = new ClientSignals([this.SignalChannel], this.Clock);
             this.Resolver = new MailFolderResolver(
                 remoteFolderCatalog,
                 this.FolderCreator,
                 this.ResolutionStore,
                 this.MappingChangeAuditor,
                 this.PersistenceSessionFactory,
-                new FakeTimeProvider(ResolvedAt));
+                this.Signals,
+                this.Clock);
         }
+
+        /// <summary>Gets the clock the resolver stamps a binding with, and the one the signal window is measured against.</summary>
+        internal FakeTimeProvider Clock { get; } = new(ResolvedAt);
+
+        /// <summary>Gets what this arrangement told a client, which most tests here have no claim about.</summary>
+        internal RecordingClientSignalChannel SignalChannel { get; } = new();
+
+        /// <summary>Gets the publisher the resolver raises through.</summary>
+        internal ClientSignals Signals { get; }
 
         internal MailFolderResolver Resolver { get; }
 

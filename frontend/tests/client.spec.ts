@@ -525,6 +525,34 @@ test('asks for a credential before any mail, and opens the frame once one is acc
     await expect(page.getByRole('heading', { name: 'Discover', level: 1 })).toBeVisible();
 });
 
+test('reads its mail exactly as it always did against a deployment serving no signal channel', async ({ page }) => {
+    const asked: string[] = [];
+    const logged: string[] = [];
+
+    page.on('request', (request) => {
+        asked.push(new URL(request.url()).pathname);
+    });
+    page.on('console', (message) => {
+        logged.push(message.text());
+    });
+
+    // Nothing routes the ticket, so this deployment answers it the way one built before the channel existed does: the
+    // preview server has no such route and refuses it. That is the whole arrangement — what follows is every screen
+    // behaving as it does in every other test in this file.
+    await openSignedIn(page);
+    await page.getByRole('link', { name: 'Mail' }).click();
+
+    await expect(page.getByRole('tree', { name: 'Mailboxes and folders' })).toBeVisible();
+    await expect(page.getByRole('listbox', { name: 'Messages' })).toBeVisible();
+    await expect(page.getByRole('option', { name: /Message 0$/ })).toBeVisible();
+
+    // The client did try, which is what makes the assertion above about a channel rather than about a client that
+    // never reached for one — and it said nothing anywhere about having failed, because a channel that is down is not
+    // a sentence a person reading their mail is owed.
+    expect(asked).toContain('/api/client/signals/ticket');
+    expect(logged.filter((line) => line.toLowerCase().includes('signal'))).toStrictEqual([]);
+});
+
 test('sends the password as one Basic header the bundle composed, on every request it makes', async ({ page }) => {
     const presented: [string, string | undefined][] = [];
 

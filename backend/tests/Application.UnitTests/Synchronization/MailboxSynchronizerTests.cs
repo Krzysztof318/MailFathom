@@ -2073,6 +2073,7 @@ public sealed class MailboxSynchronizerTests
             Substitute.For<IMailFolderResolutionStore>(),
             Substitute.For<IMailFolderMappingChangeAuditor>(),
             persistenceSessionFactory,
+            ClientSignalPublishers.ReachingNobody,
             timeProvider);
     }
 
@@ -2095,6 +2096,7 @@ public sealed class MailboxSynchronizerTests
             resolutionStore,
             Substitute.For<IMailFolderMappingChangeAuditor>(),
             Substitute.For<IPersistenceSessionFactory>(),
+            ClientSignalPublishers.ReachingNobody,
             new FakeTimeProvider(new DateTimeOffset(2026, 8, 18, 12, 0, 0, TimeSpan.Zero)));
     }
 
@@ -2224,6 +2226,7 @@ public sealed class MailboxSynchronizerTests
             resolutionStore,
             Substitute.For<IMailFolderMappingChangeAuditor>(),
             persistenceSessionFactory,
+            ClientSignalPublishers.ReachingNobody,
             timeProvider);
     }
 
@@ -2860,6 +2863,7 @@ public sealed class MailboxSynchronizerTests
                 mutations,
                 CreateDispositionReader(RemotelyDeletedEmailDisposition.RetainTombstone),
                 concurrencyRetryPolicy,
+                ClientSignalPublishers.ReachingNobody,
                 timeProvider,
                 options),
             new DerivedWorkGate(

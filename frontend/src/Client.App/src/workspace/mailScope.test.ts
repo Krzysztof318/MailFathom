@@ -11,6 +11,7 @@ import {
     sameScope,
     scopeKey,
     scopeOfAccount,
+    scopeReaches,
     type MailScope,
 } from './mailScope';
 
@@ -90,5 +91,23 @@ describe('roleRank', () => {
 
     it('offers a folder playing no role after every folder that plays one', () => {
         expect(roleRank(null)).toBeGreaterThan(roleRank('Outbox'));
+    });
+});
+
+describe('scopeReaches', () => {
+    it.each<{ scope: MailScope; account: string; folder: string | null; reached: boolean }>([
+        { scope: everything, account: 'personal', folder: 'Archive', reached: true },
+        { scope: { kind: 'role', role: 'Inbox' }, account: 'personal', folder: 'Archive', reached: true },
+        { scope: { kind: 'account', accountId: 'work' }, account: 'work', folder: 'Archive', reached: true },
+        { scope: { kind: 'account', accountId: 'work' }, account: 'personal', folder: 'INBOX', reached: false },
+        { scope: workInbox, account: 'work', folder: 'INBOX', reached: true },
+        { scope: workInbox, account: 'work', folder: 'Archive', reached: false },
+        { scope: workInbox, account: 'personal', folder: 'INBOX', reached: false },
+    ])('answers $reached for $account', ({ scope, account, folder, reached }) => {
+        expect(scopeReaches(scope, account, folder)).toBe(reached);
+    });
+
+    it('reaches a folder scope with a change named against the account alone', () => {
+        expect(scopeReaches(workInbox, 'work', null)).toBe(true);
     });
 });

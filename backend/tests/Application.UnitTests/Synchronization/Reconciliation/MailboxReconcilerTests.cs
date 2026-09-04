@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using MailFathom.Application.Persistence;
+using MailFathom.Application.Signals;
 using MailFathom.Application.Synchronization;
 using MailFathom.Application.Synchronization.Reconciliation;
 using MailFathom.Application.Synchronization.Sessions;
@@ -1201,7 +1202,7 @@ public sealed class MailboxReconcilerTests
     public async Task ReconcileAsync_FolderHoldsNothingLocally_ReachesNoServerAndReportsNoWork()
     {
         // Arrange
-        var store = new FakeReconciliationStore([]);
+        var store = new FakeReconciliationStore(StoredOccurrences());
         await using var mailboxSession = CreateSessionHolding();
         var reconciler = CreateReconciler(store, RemotelyDeletedEmailDisposition.RetainTombstone);
 
@@ -1521,12 +1522,81 @@ public sealed class MailboxReconcilerTests
         return mailboxSession;
     }
 
+    /// <summary>A pass that moved something says so once, naming the rows a reader has to read again.</summary>
+    [Fact]
+    public async Task ReconcileAsync_WithAClientListening_SignalsTheOccurrencesThatMovedInThatFolder()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(StoredOccurrences(10, 11, 12));
+        await using var mailboxSession = CreateSessionHolding(10, 12);
+        var channel = new RecordingClientSignalChannel();
+        var clock = new FakeTimeProvider(RunInstant);
+        await using var signals = new ClientSignals([channel], clock);
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.RetainTombstone,
+            timeProvider: clock,
+            signals: signals);
+
+        // Act
+        await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        clock.Advance(ClientSignals.FoldingWindow);
+        await signals.DrainAsync();
+
+        // Assert
+        var signal = Assert.Single(channel.Published);
+        Assert.Equal(ClientSignalKind.MailChanged, signal.Kind);
+        Assert.Equal(Account.Id, signal.Account);
+        Assert.Equal(InboxFolder.Alias, signal.Folder);
+        Assert.Equal(3, signal.Emails.Count);
+    }
+
+    /// <summary>A pass that moved nothing says nothing, so an idle deployment is silent rather than chatty.</summary>
+    [Fact]
+    public async Task ReconcileAsync_WithNothingMoved_SignalsNothing()
+    {
+        // Arrange
+        var store = new FakeReconciliationStore(StoredOccurrences());
+        await using var mailboxSession = CreateSessionHolding();
+        var channel = new RecordingClientSignalChannel();
+        var clock = new FakeTimeProvider(RunInstant);
+        await using var signals = new ClientSignals([channel], clock);
+        var reconciler = CreateReconciler(
+            store,
+            RemotelyDeletedEmailDisposition.RetainTombstone,
+            timeProvider: clock,
+            signals: signals);
+
+        // Act
+        await reconciler.ReconcileAsync(
+            mailboxSession,
+            Account,
+            InboxFolder,
+            SelectedUidValidity,
+            reconciledThroughModSeq: null,
+            CancellationToken.None);
+
+        clock.Advance(ClientSignals.FoldingWindow);
+        await signals.DrainAsync();
+
+        // Assert
+        Assert.Empty(channel.Published);
+    }
+
     private static MailboxReconciler CreateReconciler(
         FakeReconciliationStore store,
         RemotelyDeletedEmailDisposition disposition,
         int maxReconciledEmailsPerRun = 100,
         FakeTimeProvider? timeProvider = null,
-        InMemoryMailboxMutationReconciliationStore? mutationStore = null)
+        InMemoryMailboxMutationReconciliationStore? mutationStore = null,
+        ClientSignals? signals = null)
     {
         var clock = timeProvider ?? new FakeTimeProvider(RunInstant);
         var sessionFactory = Substitute.For<IPersistenceSessionFactory>();
@@ -1540,6 +1610,7 @@ public sealed class MailboxReconcilerTests
             mutationStore ?? new InMemoryMailboxMutationReconciliationStore(),
             dispositionReader,
             new OptimisticConcurrencyRetryPolicy(sessionFactory, new PersistenceConcurrencyOptions(), clock),
+            signals ?? ClientSignalPublishers.ReachingNobody,
             clock,
             new MailboxSynchronizationOptions { MaxReconciledEmailsPerRun = maxReconciledEmailsPerRun });
     }
