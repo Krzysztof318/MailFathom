@@ -235,6 +235,13 @@ public sealed class MailboxSynchronizer
         var collection = this.contactCollection.OpenRun(account, folderRole);
 
         var storedCount = 0;
+
+        // What the run reports as arrived mail, decided here rather than by a query afterwards: the folder's role and
+        // the server's own flag are both in hand at the moment an occurrence is stored, and neither survives to a later
+        // reader — the stored row's flag belongs to the backward pass, and no consumer of the count should have to
+        // reconstruct which of a run's messages were news.
+        var arrivedCount = 0;
+        var storesArrivingMail = folderRole == MailFolderSpecialUse.Inbox;
         var skippedOversizedCount = 0;
         var deferredForStorageCount = 0;
         var deferredForOwnerStorageCount = 0;
@@ -339,6 +346,13 @@ public sealed class MailboxSynchronizer
                     {
                         case StoredEmailContentAvailability.Available:
                             storedCount++;
+
+                            // A copy MailFathom filed of the owner's own outgoing message is never arrival, whatever
+                            // folder it landed in: the person wrote it, so nothing about it reached them.
+                            if (storesArrivingMail && !metadata.IsRemotelySeen && filing is null)
+                            {
+                                arrivedCount++;
+                            }
 
                             break;
 
@@ -452,6 +466,7 @@ public sealed class MailboxSynchronizer
         return MailboxSynchronizationResult.Synchronized(
             folder,
             storedCount,
+            arrivedCount,
             skippedOversizedCount,
             unreadableMimeCount + refill.UnreadableMimeEmailCount,
             relocatedCount,
@@ -1179,6 +1194,12 @@ public enum MailboxSynchronizationOutcome
 /// <param name="Outcome">Whether the run reached a folder.</param>
 /// <param name="Folder">The binding the run worked under, which is present exactly when <paramref name="Outcome" /> is <see cref="MailboxSynchronizationOutcome.Synchronized" />.</param>
 /// <param name="StoredEmailCount">How many occurrences were stored with their content.</param>
+/// <param name="ArrivedEmailCount">
+/// How many of the stored occurrences were mail arriving for the person: stored in the inbox, unread on the server when
+/// the run stored them, and not a copy MailFathom filed of the owner's own outgoing message. It is a subset of
+/// <paramref name="StoredEmailCount" /> and is what a run reports as arrived mail, so no consumer has to rebuild the
+/// rule from a count that means something wider.
+/// </param>
 /// <param name="SkippedOversizedEmailCount">How many occurrences were stored as metadata only.</param>
 /// <param name="UnreadableMimeEmailCount">How many stored occurrences carried MIME that enrichment could not read.</param>
 /// <param name="RelocatedEmailCount">
@@ -1205,6 +1226,7 @@ public sealed record MailboxSynchronizationResult(
     MailboxSynchronizationOutcome Outcome,
     MailFolderResolution? Folder,
     int StoredEmailCount,
+    int ArrivedEmailCount,
     int SkippedOversizedEmailCount,
     int UnreadableMimeEmailCount,
     int RelocatedEmailCount,
@@ -1217,6 +1239,7 @@ public sealed record MailboxSynchronizationResult(
     /// <summary>Reports a run that reached its folder.</summary>
     /// <param name="folder">The binding the run worked under.</param>
     /// <param name="storedEmailCount">How many occurrences were stored with their content.</param>
+    /// <param name="arrivedEmailCount">How many of those were unread inbox mail the owner did not send themselves.</param>
     /// <param name="skippedOversizedEmailCount">How many occurrences were stored as metadata only.</param>
     /// <param name="unreadableMimeEmailCount">How many stored occurrences carried unreadable MIME.</param>
     /// <param name="relocatedEmailCount">How many discovered occurrences carried an existing local email across.</param>
@@ -1230,6 +1253,7 @@ public sealed record MailboxSynchronizationResult(
     public static MailboxSynchronizationResult Synchronized(
         MailFolderResolution folder,
         int storedEmailCount,
+        int arrivedEmailCount,
         int skippedOversizedEmailCount,
         int unreadableMimeEmailCount,
         int relocatedEmailCount,
@@ -1247,6 +1271,7 @@ public sealed record MailboxSynchronizationResult(
             MailboxSynchronizationOutcome.Synchronized,
             folder,
             storedEmailCount,
+            arrivedEmailCount,
             skippedOversizedEmailCount,
             unreadableMimeEmailCount,
             relocatedEmailCount,
@@ -1280,6 +1305,7 @@ public sealed record MailboxSynchronizationResult(
         return new MailboxSynchronizationResult(
             outcome,
             Folder: null,
+            0,
             0,
             0,
             0,

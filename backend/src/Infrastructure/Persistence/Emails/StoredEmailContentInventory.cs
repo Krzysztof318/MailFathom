@@ -80,6 +80,7 @@ internal sealed class StoredEmailContentInventory(MailFathomDbContext dbContext)
                 email.Subject,
                 email.SentAt,
                 email.SizeOctets,
+                email.IsRemotelySeen,
                 email.FiledFromOutgoingEmailId,
             })
             .ToArrayAsync(cancellationToken);
@@ -92,7 +93,8 @@ internal sealed class StoredEmailContentInventory(MailFathomDbContext dbContext)
                     candidate.InternetMessageId,
                     candidate.Subject,
                     candidate.SentAt,
-                    candidate.SizeOctets),
+                    candidate.SizeOctets,
+                    candidate.IsRemotelySeen),
                 candidate.FiledFromOutgoingEmailId is not null)),
         ];
     }

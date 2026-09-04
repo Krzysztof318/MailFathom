@@ -316,7 +316,7 @@ cannot both read nothing and then collide on the key. Erasing an owner takes the
 
 ## What happened while nobody was looking
 
-`notifications` holds what a person is told about — a synchronization run that committed new mail, and the system
+`notifications` holds what a person is told about — a synchronization run that brought them mail, and the system
 conditions that run distinguishes. It belongs to the deployment rather than to a device, because the read state has to
 be the same in both heads and on a second machine, and because most of what produces a row is visible only to the
 service.
@@ -360,9 +360,12 @@ a digest of itself rather than truncated, because two accounts sharing a long pr
 condition and silence each other's statements; the same identifier is left off the row's source line entirely, since a
 label that cannot be shown is better absent than shown as an account nobody configured.
 
-**A notification is kept for ninety days after the thing it describes happened.** The bound is the record's own rather
+**A notification is kept for thirty days after the thing it describes happened.** The bound is the record's own rather
 than an operator's setting, because a notification is the client's working state rather than a history a deployment
 undertakes to hold, and the sweep rides each account's own synchronization run beside the audit-trail retention passes.
+A month is what a working set is: long enough that somebody back from leave still finds what happened while they were
+away, and short enough that the table never becomes the thing the bound exists to prevent — three months of a person's
+arrivals is their mailbox in miniature.
 
 ## What an owner signs in with
 
@@ -1473,7 +1476,7 @@ and the folder alias, never a subject, an address, a file name, or a line of wha
 mutation history: a row says that something reached this person's mailbox and when, without saying what. It therefore
 inherits the source message's obligations wherever it names one, and the cascade from `stored_emails` is what makes that
 structural — a notification offering to open a message that has been erased is exactly the row that must not survive.
-What the rows naming no message carry instead is a bound of the record's own: ninety days from the instant described,
+What the rows naming no message carry instead is a bound of the record's own: thirty days from the instant described,
 swept on each account's own run. Nothing in the table reaches a log, a metric, a trace, or an exception message; the
 owner's generated identifier and the account alias are what a failure names, and they are the two values that are not
 personal data.

@@ -206,6 +206,75 @@ public sealed class MailKitImapMailboxSessionTests
         Assert.Equal(new DateTimeOffset(2026, 7, 24, 6, 30, 0, TimeSpan.Zero), metadata.SentAt);
     }
 
+    /// <summary>
+    /// The seen state rides the discovery fetch, so a run knows what the server had marked read without a second round
+    /// trip. The requested items are asserted for the reason the reconciliation fetch asserts its own: every item here
+    /// is answered out of the envelope and folder state, and adding a body or header item would set <c>\Seen</c> on
+    /// every message a run discovers.
+    /// </summary>
+    [Theory]
+    [InlineData(MessageFlags.Seen, true)]
+    [InlineData(MessageFlags.None, false)]
+    public async Task GetEmailBatchAfterAsync_ServerReportsFlags_CarriesTheSeenStateWithoutFetchingItSeparately(
+        MessageFlags flags,
+        bool expectedIsRemotelySeen)
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient();
+        var folder = CreateSelectedFolder();
+        var uid = new UniqueId(10);
+        var summary = CreateSummary(uid);
+        summary.Flags.Returns(flags);
+        folder.UidNext.Returns(new UniqueId(11));
+        folder.SearchAsync(Arg.Any<SearchQuery>(), Arg.Any<CancellationToken>()).Returns([uid]);
+        folder.FetchAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Any<IFetchRequest>(),
+            Arg.Any<CancellationToken>()).Returns([summary]);
+        await using var session = await OpenSessionAsync(resilience, client, folder);
+
+        // Act
+        var batch = await session.GetEmailBatchAfterAsync(null, 100, MailSynchronizationWindow.Unbounded, CancellationToken.None);
+
+        // Assert
+        Assert.Equal(expectedIsRemotelySeen, Assert.Single(batch.Emails).IsRemotelySeen);
+        Assert.Equal(MailKitImapMailboxSession.DiscoverySummaryItems, RequestedFetchItems(folder));
+        await folder.DidNotReceive().StoreAsync(Arg.Any<IList<UniqueId>>(), Arg.Any<IStoreFlagsRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// A server that answered without <c>FLAGS</c> said nothing about whether the message had been read, and the safe
+    /// reading of that silence is the one that reports less: an arrival stated about mail somebody already read is the
+    /// defect the flag exists to remove.
+    /// </summary>
+    [Fact]
+    public async Task GetEmailBatchAfterAsync_ServerAnswersWithoutFlags_TreatsTheMessageAsAlreadyRead()
+    {
+        // Arrange
+        using var resilience = CreateSingleAttemptResilience();
+        var client = new FakeImapClient();
+        var folder = CreateSelectedFolder();
+        var uid = new UniqueId(10);
+
+        // Built before the stubbing rather than inside it: constructing a substitute configures NSubstitute's ambient
+        // call context, which would consume the call the Returns below is meant to answer.
+        var flaglessSummary = CreateSummary(uid);
+        folder.UidNext.Returns(new UniqueId(11));
+        folder.SearchAsync(Arg.Any<SearchQuery>(), Arg.Any<CancellationToken>()).Returns([uid]);
+        folder.FetchAsync(
+            Arg.Any<IList<UniqueId>>(),
+            Arg.Any<IFetchRequest>(),
+            Arg.Any<CancellationToken>()).Returns([flaglessSummary]);
+        await using var session = await OpenSessionAsync(resilience, client, folder);
+
+        // Act
+        var batch = await session.GetEmailBatchAfterAsync(null, 100, MailSynchronizationWindow.Unbounded, CancellationToken.None);
+
+        // Assert
+        Assert.True(Assert.Single(batch.Emails).IsRemotelySeen);
+    }
+
     /// <summary>A half-established connection is unusable, so it is closed rather than asked for a graceful logout it may never answer.</summary>
     [Fact]
     public async Task OpenReadOnlyAsync_FolderOpenFails_AbandonsTheConnectionWithoutASecondCommand()

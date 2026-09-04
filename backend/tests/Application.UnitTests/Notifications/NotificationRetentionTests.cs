@@ -20,6 +20,18 @@ public sealed class NotificationRetentionTests
 
     private static readonly DateTimeOffset RunInstant = new(2026, 9, 3, 12, 0, 0, TimeSpan.Zero);
 
+    /// <summary>
+    /// The number is asserted rather than derived, because every other test here reads the window symbolically and
+    /// would go on passing if it moved. A month is what the record undertakes to hold, and widening it is a privacy
+    /// decision rather than a tuning one.
+    /// </summary>
+    [Fact]
+    public void Window_AnyDeployment_HoldsANotificationForThirtyDays()
+    {
+        // Arrange, Act, Assert
+        Assert.Equal(TimeSpan.FromDays(30), NotificationRetention.Window);
+    }
+
     /// <summary>The window is measured back from now and the pass is bounded, so a backlog clears over several runs.</summary>
     [Fact]
     public async Task EraseExpiredAsync_AnyOwner_ErasesWhatHappenedBeforeTheWindowUpToTheBound()

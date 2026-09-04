@@ -91,6 +91,17 @@ internal sealed class MailKitImapMailboxSession(
     internal const MessageSummaryItems ReconciliationSummaryItems =
         MessageSummaryItems.Flags | MessageSummaryItems.UniqueId;
 
+    /// <summary>The only items the discovery fetch may ever ask for.</summary>
+    /// <remarks>
+    /// It is bound by the same read-only invariant as <see cref="ReconciliationSummaryItems" /> and named for the same
+    /// reason: every item here is answered out of the envelope and the folder's own state, so the command IMAP receives
+    /// cannot set <c>\Seen</c> on the messages a run is discovering. <c>FLAGS</c> rides the fetch that was already being
+    /// issued, which is what lets a run know whether the server had marked a message read without a second round trip
+    /// and without touching it.
+    /// </remarks>
+    internal const MessageSummaryItems DiscoverySummaryItems =
+        MessageSummaryItems.Envelope | MessageSummaryItems.UniqueId | MessageSummaryItems.Size | MessageSummaryItems.Flags;
+
     /// <inheritdoc />
     public ValueTask DisposeAsync() => connection.DisposeAsync();
 
@@ -196,15 +207,20 @@ internal sealed class MailKitImapMailboxSession(
         var inspectedThroughUid = hasMore ? batchedUids[^1].Id : highestAssignedUid.Value;
         var summaries = batchedUids.Length == 0
             ? []
-            : await openFolder.FetchAsync(batchedUids, MessageSummaryItems.Envelope | MessageSummaryItems.UniqueId | MessageSummaryItems.Size, cancellationToken);
+            : await openFolder.FetchAsync(batchedUids, DiscoverySummaryItems, cancellationToken);
 
         var uidValidity = ImapUidValidity.Create(openFolder.UidValidity);
+
+        // A server that answered without FLAGS leaves the message indistinguishable from one it reported as unread,
+        // and the safe reading of that silence is the one that reports less rather than more: an arrival stated about
+        // mail the person had already read is the defect this flag exists to remove.
         var messages = summaries.Select(summary => new RemoteEmailMetadata(
             EmailOccurrenceId.Create(accountId, folder.Id, uidValidity, ImapUid.Create(summary.UniqueId.Id)),
             summary.Envelope?.MessageId,
             summary.Envelope?.Subject,
             summary.Envelope?.Date?.ToUniversalTime(),
-            summary.Size ?? 0)).ToArray();
+            summary.Size ?? 0,
+            summary.Flags?.HasFlag(MessageFlags.Seen) ?? true)).ToArray();
 
         return new RemoteEmailMetadataBatch(messages, ImapUid.Create(inspectedThroughUid), hasMore);
     }

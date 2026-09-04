@@ -28,10 +28,12 @@ public sealed class NotificationRetention
     /// It is a constant rather than a setting because there is no operator decision behind it to take. The audit
     /// trails are configurable because keeping a history of a person's mailbox is something a deployment undertakes
     /// deliberately and answers for; a notification is the client's own working state, produced whether anybody asked
-    /// or not, and a knob for it would be configuration nobody has a reason to move. Three months is long enough that
-    /// somebody returning from leave still finds what happened and short enough that the table stays a working set.
+    /// or not, and a knob for it would be configuration nobody has a reason to move. A month is what a working set is:
+    /// long enough that somebody back from leave still finds what happened while they were away, and short enough that
+    /// the table never becomes the thing the bound exists to prevent — three months of a person's arrivals is their
+    /// mailbox in miniature, kept by a record nobody undertook to keep a history in.
     /// </remarks>
-    public static readonly TimeSpan Window = TimeSpan.FromDays(90);
+    public static readonly TimeSpan Window = TimeSpan.FromDays(30);
 
     /// <summary>The greatest number of notifications one pass erases.</summary>
     /// <remarks>
