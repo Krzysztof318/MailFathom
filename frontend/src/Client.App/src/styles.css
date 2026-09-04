@@ -116,11 +116,14 @@
     --color-warning-text: oklch(0.46 0.135 55);
     --color-warning-soft: oklch(0.955 0.045 75);
 
-    /* The weight above a warning, and the project draws it filled rather than tinted: it is what the one control that
-       destroys work in progress is painted with, so it carries `on-accent` as its words rather than a tint of itself.
-       Only the fill is here, because only the fill is drawn — the tint and the text weight the two states above carry
-       are added when a screen actually needs them. */
+    /* The weight above a warning, and the one a warning is not: something failed. It is a hue of its own rather than a
+       heavier warning, because a message that was not sent and a message that was sent to fewer people than asked are
+       different statements and the design project draws them apart. The fill is what the one control that destroys
+       work in progress is painted with, so it carries `on-accent` as its words rather than a tint of itself; the tint
+       and the text weight beside it are what a surface reporting a failure is drawn from. */
     --color-error: oklch(0.545 0.195 25);
+    --color-error-text: oklch(0.47 0.18 25);
+    --color-error-soft: oklch(0.958 0.028 25);
 
     /* What a matched run of text is drawn on, and the rule that marks a quoted fragment as the one that was cited. */
     --color-highlight: oklch(0.945 0.07 88);
@@ -283,6 +286,41 @@
        this file that removes every animation. */
     --animate-spin: spin 1.2s linear infinite;
 
+    /* What a toast does beyond that: it arrives from the edge it is stacked against, it leaves the same way, and the
+       bar along its bottom edge empties over its lifetime. All three are the design project's, and they are declared
+       here for the reason every other duration is — a component writing one of its own is the same drift as one
+       writing a colour. A toast following an operation turns the symbol above rather than one of its own.
+       Two of the three carry no duration here, and deliberately: how long a toast stands and how long it takes to
+       leave are two numbers in `toasts/useToasts.ts`, and the card is what hands each animation the one it is timed
+       against — so an animation and the timer beside it cannot come to disagree. */
+    --animate-toast-arriving: toast-arriving 240ms cubic-bezier(0.2, 0.85, 0.3, 1) backwards;
+    --animate-toast-leaving: toast-leaving ease forwards;
+    --animate-toast-lifetime: toast-lifetime linear both;
+
+    @keyframes toast-arriving {
+        from {
+            opacity: 0;
+            transform: translateX(22px) scale(0.97);
+        }
+    }
+
+    @keyframes toast-leaving {
+        to {
+            opacity: 0;
+            transform: translateX(22px) scale(0.97);
+        }
+    }
+
+    @keyframes toast-lifetime {
+        from {
+            transform: scaleX(1);
+        }
+
+        to {
+            transform: scaleX(0);
+        }
+    }
+
     --font-sans:
         'Instrument Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
         sans-serif;
@@ -322,6 +360,8 @@
     --color-warning-text: oklch(0.87 0.1 62);
     --color-warning-soft: oklch(0.315 0.05 50);
     --color-error: oklch(0.66 0.19 25);
+    --color-error-text: oklch(0.845 0.105 25);
+    --color-error-soft: oklch(0.325 0.078 22);
 
     --color-highlight: oklch(0.345 0.055 85);
     --color-highlight-line: oklch(0.72 0.13 85);

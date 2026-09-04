@@ -612,6 +612,21 @@ export const en = {
     'link.warningAsciiHost': 'This link goes to {host}, which is written {asciiHost}.',
     'link.warningWorthChecking': 'This link is worth checking before you follow it. It goes to {host}.',
     'link.couldNotOpen': 'This link could not be opened.',
+
+    'toast.surface': 'Notices',
+    'toast.close': 'Close',
+    'toast.neutral': 'Confirmation',
+    'toast.success': 'Success',
+    'toast.error': 'Error',
+    'toast.warning': 'Warning',
+    'toast.info': 'Information',
+    'toast.running': 'In progress',
+    'toast.stopOperation': 'Stop the operation',
+    'toast.stopQuestion': 'Stop the operation?',
+    'toast.keepGoing': 'Keep going',
+    'toast.stopIsFinal': 'Stopping is not taken back — the operation would have to be started again.',
+    'toast.stopped': 'Stopped',
+    'toast.stoppedNothingWritten': 'The operation was stopped before anything was written, so nothing changed.',
 } as const;
 
 /** Every message a screen may ask for. A key absent here does not compile at the call site. */
