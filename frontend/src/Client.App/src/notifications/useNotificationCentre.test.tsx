@@ -88,7 +88,14 @@ function deployment(held: { unreadCount: number; notifications: readonly unknown
     };
 }
 
-function answer(body: string): Promise<{ status: number; headers: Record<string, string>; body: string }> {
+/** What a transport answers with, named because a test that holds one back has to say what it is holding. */
+interface Answer {
+    status: number;
+    headers: Record<string, string>;
+    body: string;
+}
+
+function answer(body: string): Promise<Answer> {
     return Promise.resolve({ status: 200, headers: {}, body });
 }
 
@@ -382,6 +389,70 @@ describe('useNotificationCentre', () => {
         expect(result.current.unreadCount).toBe(0);
         expect(result.current.notifications).toEqual([]);
         expect(result.current.shown).toBe(false);
+    });
+
+    // A read is cancelled by the controller its effect owns; a write cannot be, so what it does when it lands is the
+    // only guard there is. Both markings are asserted rather than one, because each has a continuation of its own.
+    it.each([
+        [
+            'one row',
+            (centre: NotificationCentre) => {
+                centre.markRead(['n-mail'], true);
+            },
+        ],
+        [
+            'everything',
+            (centre: NotificationCentre) => {
+                centre.markAllRead();
+            },
+        ],
+    ])('drops the answer to a marking of %s that lands after somebody else has signed in', async (_named, mark) => {
+        let landing: ((answered: Answer) => void) | null = null;
+        const held = { unreadCount: 1 };
+
+        const transport: MailFathomTransport = (request) => {
+            if (request.path.endsWith('/read-state') || request.path.endsWith('/read')) {
+                return new Promise<Answer>((resolve) => {
+                    landing = resolve;
+                });
+            }
+
+            return request.path.endsWith('/unread-count')
+                ? answer(JSON.stringify({ unreadCount: held.unreadCount }))
+                : answer(JSON.stringify({ notifications: [mail], nextCursor: null }));
+        };
+
+        const { result, signInAsSomebodyElse } = centreOf(transport);
+
+        act(() => {
+            result.current.show();
+        });
+        await settled();
+
+        act(() => {
+            mark(result.current);
+        });
+
+        held.unreadCount = 2;
+        act(() => {
+            signInAsSomebodyElse();
+        });
+        await settled();
+
+        expect(result.current.unreadCount).toBe(2);
+
+        // The previous person's mailbox answering, long after they signed out. It says nine, and nine is the one
+        // number the person now reading must never be shown.
+        act(() => {
+            landing?.({
+                status: 200,
+                headers: {},
+                body: JSON.stringify({ id: 'n-mail', read: true, markedRead: 1, unreadCount: 9 }),
+            });
+        });
+        await settled();
+
+        expect(result.current.unreadCount).toBe(2);
     });
 
     it('says why the page could not be read rather than drawing an empty centre', async () => {

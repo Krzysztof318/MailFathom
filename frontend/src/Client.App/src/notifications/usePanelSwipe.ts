@@ -211,27 +211,29 @@ export function usePanelSwipe(shown: boolean, offered: boolean, onOpen: () => vo
                 gesture.closing,
             );
 
-            if (gesture.closing === settles) {
-                // The gesture finished where it was going: closing settles into closed, opening into open. The panel
-                // going away is the frame's to do, and the transition it leaves on takes it there.
+            if (settles) {
+                // The gesture finished where it was going. The offset goes, so the panel is drawn where its own state
+                // says rather than where a finger left it; only the closing direction has anything to tell the frame,
+                // because the opening one already told it at the handover.
                 setOffset(null);
                 setSpringing(false);
 
-                if (settles) {
+                if (gesture.closing) {
                     onClose();
                 }
 
                 return;
             }
 
+            // It did not, so it goes back to where it started — which is not the same act in the two directions. A
+            // panel being pushed away was open before the gesture and springs back to open; a panel being pulled up
+            // was closed, and was put on the screen at the handover, so going back means closing it again.
             if (gesture.closing) {
                 springBack();
 
                 return;
             }
 
-            // An opening gesture that did not reach the threshold leaves the panel closed again, which it was already
-            // put on the screen for: it goes back down under its own transition rather than springing.
             setOffset(null);
             setSpringing(false);
             onClose();

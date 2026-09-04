@@ -19,6 +19,7 @@ export const pl: Catalogue = {
     'shell.versions': 'Klient {client}, wdrożenie {deployment}',
     'shell.account': 'Konto i ustawienia',
     'shell.accountMenu': 'Konto',
+    'shell.more': 'Więcej',
     'shell.mailboxes': 'Skrzynki',
     'shell.tabMode': 'Tryb zakładek',
     'shell.tabModeTooNarrow': 'dostępne na szerszym ekranie',

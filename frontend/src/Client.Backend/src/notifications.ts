@@ -44,6 +44,13 @@ const longestNotificationsAnswer = 128 * 1024;
 /** The most of an answer to any of the three routes that report a count or one row, which each compose to a line. */
 const longestNotificationAnswer = 1_024;
 
+// Every field of a row is bounded as the row is walked rather than left to the page's own ceiling, which is what
+// `mailTimeline.ts` does beside this and for the same reason: a page cap stops a mailbox arriving in one answer and
+// stops nothing about one row spending the whole budget on a title. What the two numbers are sized for is what a row
+// draws — an identifier a deployment issued, and a line of prose a person reads on a row two lines tall.
+const longestNotificationIdentity = 256;
+const longestNotificationText = 4_096;
+
 /** What part of MailFathom a notification is about, which is what a row is drawn by. */
 export type NotificationKind = 'Mail' | 'Calendar' | 'Case' | 'Task' | 'System';
 
@@ -273,15 +280,15 @@ function parseNotification(value: unknown): ClientNotification | null {
     const occurredAt = record['occurredAt'];
     const isRead = record['read'];
 
-    if (typeof id !== 'string' || id === '' || typeof title !== 'string' || typeof body !== 'string') {
+    if (!isNotificationIdentity(id) || !isNotificationText(title) || !isNotificationText(body)) {
         return null;
     }
 
-    if (typeof occurredAt !== 'string' || typeof isRead !== 'boolean' || !isKind(kind)) {
+    if (!isNotificationIdentity(occurredAt) || typeof isRead !== 'boolean' || !isKind(kind)) {
         return null;
     }
 
-    if (source !== null && typeof source !== 'string') {
+    if (source !== null && !isNotificationText(source)) {
         return null;
     }
 
@@ -304,9 +311,7 @@ function parseTarget(value: unknown): NotificationTarget | null {
         case 'Nothing':
             return { kind: 'Nothing' };
         case 'Message':
-            return typeof storedEmailId === 'string' && storedEmailId !== ''
-                ? { kind: 'Message', storedEmailId }
-                : null;
+            return isNotificationIdentity(storedEmailId) ? { kind: 'Message', storedEmailId } : null;
         case 'Screen':
             return isScreen(screen) ? { kind: 'Screen', screen } : null;
         default:
@@ -350,6 +355,18 @@ function bodyRecord(body: string): Readonly<Record<string, unknown>> | null {
 // exact for are each an answer this deployment did not produce.
 function countField(value: unknown): number | null {
     return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+// An identifier a deployment issued, and an instant it stated, are each a short string this client only ever passes
+// back or hands to `Intl` — so the same bound answers for both, and an empty one is no identifier at all.
+function isNotificationIdentity(value: unknown): value is string {
+    return typeof value === 'string' && value.length > 0 && value.length <= longestNotificationIdentity;
+}
+
+// A line somebody reads. Empty is permitted here and nowhere above: a notification with no body is a title on its own,
+// which is a row this client draws rather than an answer it refuses.
+function isNotificationText(value: unknown): value is string {
+    return typeof value === 'string' && value.length <= longestNotificationText;
 }
 
 function isKind(value: unknown): value is NotificationKind {

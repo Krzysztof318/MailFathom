@@ -23,6 +23,20 @@ export const spaces = ['discover', 'mail', 'cases', 'agent', 'tasks', 'calendar'
 
 export type Space = (typeof spaces)[number];
 
+// A rail down the side of a wide window has room for all seven; the bottom bar of a narrow one has five places, and
+// the design project spends them on three spaces, the bell, and an overflow holding everything else. So the bar is a
+// partition of the set above rather than the first few of it, and the two halves are declared here beside the order
+// they are drawn in — the navigation reads which spaces it has room for rather than counting them.
+//
+// The overflow's order is the design project's own and is not the order the rail draws them in: what a sheet opened
+// on purpose lists is not the same reading as a rail somebody's eye travels down.
+
+/** The spaces the bottom bar carries itself. */
+export const barSpaces: readonly Space[] = ['discover', 'mail', 'agent'];
+
+/** The rest, which the bar reaches through its overflow, in the order the overflow lists them. */
+export const overflowSpaces: readonly Space[] = ['tasks', 'cases', 'calendar', 'people'];
+
 /** Where the client opens, and where an address naming no space resolves to. */
 export const defaultSpace: Space = 'discover';
 

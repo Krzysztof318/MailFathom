@@ -126,6 +126,17 @@ export function useNotificationCentre(
     // nothing to reset.
     const [credential, setCredential] = useState(session);
 
+    // The same rule for a write that is still in flight. A read is cancelled by the controller its effect owns, but a
+    // write's continuation belongs to the render that started it and cannot be cancelled — so it is asked whose it is
+    // when it lands, against a ref that always holds the credential in force rather than the one that render closed
+    // over. Without it, a mark-read answered after somebody signed out and somebody else signed in would write the
+    // previous account's counted state over what the new one is being shown.
+    const inForce = useRef(session);
+
+    useEffect(() => {
+        inForce.current = session;
+    }, [session]);
+
     if (credential !== session) {
         setCredential(session);
         setUnreadCount(0);
@@ -305,6 +316,10 @@ export function useNotificationCentre(
 
         for (const row of changed) {
             void setNotificationRead(session, transport, row.id, read).then((answer) => {
+                if (inForce.current !== session) {
+                    return;
+                }
+
                 if (answer.outcome === 'read') {
                     counted.current = { session, count: answer.value.unreadCount };
                     setUnreadCount(answer.value.unreadCount);
@@ -334,6 +349,10 @@ export function useNotificationCentre(
         setUnreadCount(0);
 
         void markAllNotificationsRead(session, transport).then((answer) => {
+            if (inForce.current !== session) {
+                return;
+            }
+
             if (answer.outcome === 'read') {
                 counted.current = { session, count: answer.value.unreadCount };
                 setUnreadCount(answer.value.unreadCount);

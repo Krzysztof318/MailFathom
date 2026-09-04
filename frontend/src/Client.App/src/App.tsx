@@ -41,6 +41,7 @@ import { ListedMailProvider } from './messageList/ListedMail';
 import { MessageList } from './messageList/MessageList';
 import { forgetListings } from './messageList/rememberedListings';
 import { NotificationBell } from './notifications/NotificationBell';
+import { followTarget } from './notifications/notificationDestination';
 import { NotificationCentre } from './notifications/NotificationCentre';
 import { usePanelSwipe } from './notifications/usePanelSwipe';
 import { useNotificationCentre } from './notifications/useNotificationCentre';
@@ -304,23 +305,19 @@ export function App({
     // would disagree the moment one of them did.
     const profile = useOwnProfile(readsMail && connection.online ? session : null, readMail, portraits);
 
-    // Where a notification leads, which is the frame's answer rather than the centre's: the centre knows what the
-    // deployment said a notification is about, and this is the only place that knows what this client can open.
-    //
-    // A target naming a screen the client has no address for leaves the reader where they were, which is what the
-    // notification centre's own scope asks for: the settings surface is reached from the account menu rather than from
-    // an address today, so a notification pointing at it is read and closes the panel without moving anybody.
+    // Where a notification leads. What each target kind comes to is `notifications/notificationDestination.ts`, which
+    // is where it can be asserted without a frame around it; what this supplies is the two things this client can
+    // actually do about one, because opening a message and reaching a space are the frame's rather than a mapping's.
     const followNotification = useCallback(
         (target: NotificationTarget): void => {
-            if (target.kind === 'Message') {
-                openTabs.openMail(target.storedEmailId, null);
-
-                return;
-            }
-
-            if (target.kind === 'Screen' && target.screen === 'Mail') {
-                window.location.hash = addressOf('mail');
-            }
+            followTarget(target, {
+                openMail: (storedEmailId) => {
+                    openTabs.openMail(storedEmailId, null);
+                },
+                goTo: (space) => {
+                    window.location.hash = addressOf(space);
+                },
+            });
         },
         [openTabs],
     );

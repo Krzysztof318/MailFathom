@@ -447,7 +447,16 @@ async function signIn(page: Page): Promise<void> {
 
 /** The account menu at the foot of the navigation opened, which is where the preferences and signing out live. */
 async function openAccountMenu(page: Page): Promise<void> {
-    await page.getByRole('button', { name: 'Account and preferences' }).click();
+    const control = page.getByRole('button', { name: 'Account and preferences' });
+
+    // The rail carries the control itself. The bottom bar has five places and spends them on three spaces, the bell,
+    // and the overflow, so in a narrow window what is about the person stands one press further in — which is where
+    // the design project puts it and what this helper has to know to reach it at either width.
+    if (!(await control.isVisible())) {
+        await page.getByRole('button', { name: 'More' }).click();
+    }
+
+    await control.click();
     await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible();
 }
 
@@ -651,8 +660,16 @@ test('puts the navigation beside the workspace in a wide window and under it in 
     const narrowSpace = await boxOf(space);
     expect(bottomBar.y).toBeGreaterThanOrEqual(narrowSpace.y + narrowSpace.height);
 
-    // Nothing is hidden by width alone: the same three destinations are reachable in both shapes.
+    // Nothing is hidden by width alone. The bar has five places and spends them on three spaces, the bell, and an
+    // overflow, so a space it has no room for is reached through that rather than dropped — which only a browser can
+    // say, the platform's own popover being what opens and what closes it.
+    await expect(page.getByRole('link', { name: 'Cases' })).toBeHidden();
+
+    await page.getByRole('button', { name: 'More' }).click();
     await expect(page.getByRole('link', { name: 'Cases' })).toBeVisible();
+
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('link', { name: 'Cases' })).toBeHidden();
 });
 
 test('moves a keyboard through a narrow window in the order the window shows', async ({ page }) => {
@@ -670,16 +687,24 @@ test('moves a keyboard through a narrow window in the order the window shows', a
     await page.keyboard.press('Tab');
     await expect(page.getByRole('searchbox', { name: 'Ask your mail' })).toBeFocused();
 
-    // Past the question's own two controls, the bar: the destinations first and the account last, which is where the
-    // design project puts what is about the person rather than about a space.
+    // Past the question's own two controls, the bar's five places in the order the design project draws them: three
+    // spaces, then the bell, then the overflow that holds everything else — the account among it.
     await page.keyboard.press('Tab');
     await page.keyboard.press('Tab');
     await page.keyboard.press('Tab');
     await expect(page.getByRole('link', { name: 'Discover' })).toBeFocused();
 
-    await page.getByRole('link', { name: /^People/u }).focus();
+    await page.getByRole('link', { name: /^Agent/u }).focus();
     await page.keyboard.press('Tab');
-    await expect(page.getByRole('button', { name: 'Account and preferences' })).toBeFocused();
+    await expect(page.getByRole('button', { name: 'Notifications' })).toBeFocused();
+
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('button', { name: 'More' })).toBeFocused();
+
+    // Nothing in the bar comes after the overflow, so the account is reached by opening it rather than by tabbing past
+    // it — which is what a bar of five places costs and what the sheet is for.
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('button', { name: 'Account and preferences' })).toBeVisible();
 });
 
 test('opens the account menu from its control and hands focus back to it on Escape', async ({ page }) => {
@@ -720,7 +745,17 @@ test('stays usable at the narrowest width a supported head presents', async ({ p
     await expect(page.getByRole('heading', { name: 'Discover', level: 1 })).toBeVisible();
     await expect(page.getByRole('searchbox', { name: 'Ask your mail' })).toBeVisible();
     await expect(page.getByRole('combobox', { name: 'Mailbox in scope' })).toBeVisible();
-    await expect(page.getByRole('navigation', { name: 'Spaces' }).getByRole('link')).toHaveCount(7);
+
+    // Three of the seven stand in the bar itself and the other four behind its overflow, which is what makes five
+    // places enough for seven destinations. Reached rather than dropped is the whole of the claim, so both halves are
+    // counted and the sheet is opened to count the second.
+    const bar = page.getByRole('navigation', { name: 'Spaces' });
+
+    await expect(bar.getByRole('link')).toHaveCount(3);
+
+    await page.getByRole('button', { name: 'More' }).click();
+    await expect(bar.getByRole('link')).toHaveCount(7);
+    await expect(page.getByRole('button', { name: 'Account and preferences' })).toBeVisible();
 });
 
 test('signs in at the narrowest width a supported head presents', async ({ page }) => {

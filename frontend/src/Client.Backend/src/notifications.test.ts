@@ -156,6 +156,18 @@ describe('readNotifications', () => {
         ['no identifier', { ...arrived, id: '' }],
         ['a read state that is not a state', { ...arrived, read: 'yes' }],
         ['a source that is not a line', { ...arrived, source: 7 }],
+        ['an identifier past what a deployment issues', { ...arrived, id: 'n'.repeat(257) }],
+        [
+            'a message target naming an identifier past that',
+            { ...arrived, target: { kind: 'Message', messageId: 'm'.repeat(257) } },
+        ],
+        [
+            'an instant past what one is written in',
+            { ...arrived, occurredAt: '2026-09-04T09:41:00+00:00'.padEnd(257, ' ') },
+        ],
+        ['a title past what a row draws', { ...arrived, title: 'T'.repeat(4_097) }],
+        ['a body past what a row draws', { ...arrived, body: 'B'.repeat(4_097) }],
+        ['a source past what a row draws', { ...arrived, source: 'S'.repeat(4_097) }],
     ])('reports a row carrying %s as unreadable rather than rendering it', async (_named, entry) => {
         const answer = await readNotifications(session, answering({ status: 200, body: page([entry]) }), 25);
 

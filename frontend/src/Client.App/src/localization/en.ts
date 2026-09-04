@@ -20,6 +20,7 @@ export const en = {
     'shell.versions': 'Client {client}, deployment {deployment}',
     'shell.account': 'Account and preferences',
     'shell.accountMenu': 'Account',
+    'shell.more': 'More',
     'shell.mailboxes': 'Mailboxes',
     'shell.tabMode': 'Tab mode',
     'shell.tabModeTooNarrow': 'available on a wider screen',

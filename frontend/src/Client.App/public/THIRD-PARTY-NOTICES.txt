@@ -212,7 +212,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 Material Symbols Rounded, at commit 84ccef280841abfac506afc4ad4a2782f6d0a1d0
 https://github.com/google/material-design-icons
 
-The client's iconography, committed under src/Client.App/src/assets/icons/ as sixty-five outlines
+The client's iconography, committed under src/Client.App/src/assets/icons/ as sixty-six outlines
 at weight 300 with FILL 0 and GRAD 0. Each file is the upstream one, unmodified; the build reads
 the single path out of each and inlines it, so what the bundle carries is the outline rather than
 a font fetched from a CDN.
