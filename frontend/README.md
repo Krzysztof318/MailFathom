@@ -321,6 +321,21 @@ them draw the same row: the folder's list, and what a search found. A second arr
 the client would stop looking like one product, and a second copy of the windowing is how the two would stop agreeing
 on what a row measures.
 
+`src/contextMenu/` is what a row offers, and it is one component rather than a menu per list because the design draws
+the same one on seven of them. Two gestures open it and each is the platform's own: the second button under a fine
+pointer, replacing the browser's own menu, and a press held under a coarse one, which cancels past a small drift rather
+than on any movement — a finger resting on glass reports jitter — and suppresses the tap it would otherwise have been,
+so a finger that meant to open a message does, and one that meant to ask what the row offers never does both. `rowPress.ts` is those two openers, and `menuPlacement.ts` keeps the panel inside the pane,
+because a menu drawn past an edge hides the acts at the bottom of it and those are the destructive ones. Where it stands
+follows the width and nothing else: anchored at the gesture where there is room, and centred as a sheet where there is
+not.
+
+**Nothing in it performs an act.** Every item calls what the toolbar above the list calls and reports through the same
+toasts, so filing a message from its row and filing it from the strip are one act asked for two ways rather than two
+implementations that will come to disagree; the two acts standing behind a question are raised by the list instead,
+because the question outlives the menu that asked it. It is also how a finger reaches the multi-selection at all — that
+is the menu's first item, and it is what the list draws instead of a check control of its own.
+
 What a row opens is what the reading pane beside it draws. The list writes the message into the workspace and the pane
 reads it from there, so the two meet over one value rather than over each other — and nothing is open until a reader
 has opened it.

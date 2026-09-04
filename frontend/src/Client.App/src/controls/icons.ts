@@ -28,6 +28,7 @@ export const iconNames = [
     'campaign',
     'cancel',
     'check',
+    'check_box',
     'check_circle',
     'chevron_left',
     'chevron_right',

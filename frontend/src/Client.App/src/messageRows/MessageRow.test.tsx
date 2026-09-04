@@ -2,10 +2,12 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { MailTimelineEntry } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
+import type { MenuPoint } from '../contextMenu/menuPlacement';
+import { pressDrift, pressOpensAfter } from '../contextMenu/rowPress';
 import { MailboxActsContext, nothingActed, type MailboxAct, type MailboxActs } from '../mailboxActs/useMailboxActs';
 import { ReadMarkingContext, nothingMarkedRead, type MarkedIn, type ReadMarking } from '../readMarking/useReadMarking';
 import { MessageRow } from './MessageRow';
@@ -62,6 +64,43 @@ function drawRow(
 
     return screen.getByRole('option');
 }
+
+// The row as a pointer meets it: what pointing at it came to, and what a press on it opened. The clock is fake because
+// the press is a timer, and it is released after every test in this file.
+function pointedRow({
+    onPoint = vi.fn(),
+    onPress = vi.fn(),
+}: {
+    onPoint?: (event: unknown) => void;
+    onPress?: (at: MenuPoint) => void;
+} = {}): HTMLElement {
+    vi.useFakeTimers();
+
+    render(
+        <LocalizationProvider>
+            <ul>
+                <MessageRow
+                    email={email}
+                    position={1}
+                    open={false}
+                    selected={false}
+                    focusable
+                    onOpen={() => undefined}
+                    onPoint={onPoint}
+                    onPress={onPress}
+                    onPointerEnter={() => undefined}
+                    onElement={() => undefined}
+                />
+            </ul>
+        </LocalizationProvider>,
+    );
+
+    return screen.getByRole('option');
+}
+
+afterEach(() => {
+    vi.useRealTimers();
+});
 
 /** What a client that has asked for this act on exactly this message carries, pending the deployment's own pass. */
 function asking(act: MailboxAct, storedEmailId = email.id): MailboxActs {
@@ -155,5 +194,69 @@ describe('MessageRow', () => {
         ).lastElementChild;
 
         expect(reserved?.textContent).toBe('');
+    });
+});
+
+describe('MessageRow, under a pointer', () => {
+    it('acts as a mouse goes down, because that same press may go on to sweep a run of rows', () => {
+        const pointed = vi.fn();
+        const row = pointedRow({ onPoint: pointed });
+
+        fireEvent.pointerDown(row, { pointerType: 'mouse' });
+
+        expect(pointed).toHaveBeenCalledOnce();
+    });
+
+    it('waits for a finger to be lifted before it acts, the same touch being able to become a press', () => {
+        const pointed = vi.fn();
+        const row = pointedRow({ onPoint: pointed });
+
+        fireEvent.pointerDown(row, { pointerType: 'touch', clientX: 10, clientY: 10 });
+
+        expect(pointed).not.toHaveBeenCalled();
+
+        fireEvent.pointerUp(row, { pointerType: 'touch', clientX: 10, clientY: 10 });
+
+        expect(pointed).toHaveBeenCalledOnce();
+    });
+
+    it('opens the row’s menu once the finger has been held, and acts on nothing when it is lifted', () => {
+        const pointed = vi.fn();
+        const pressed = vi.fn();
+        const row = pointedRow({ onPoint: pointed, onPress: pressed });
+
+        fireEvent.pointerDown(row, { pointerType: 'touch', clientX: 10, clientY: 20 });
+
+        act(() => {
+            vi.advanceTimersByTime(pressOpensAfter);
+        });
+
+        fireEvent.pointerUp(row, { pointerType: 'touch', clientX: 10, clientY: 20 });
+
+        expect(pressed).toHaveBeenCalledWith({ x: 10, y: 20 });
+        expect(pointed).not.toHaveBeenCalled();
+    });
+
+    it('opens nothing where the finger travelled, which is a list being scrolled rather than a row being held', () => {
+        const pressed = vi.fn();
+        const row = pointedRow({ onPress: pressed });
+
+        fireEvent.pointerDown(row, { pointerType: 'touch', clientX: 10, clientY: 20 });
+        fireEvent.pointerMove(row, { pointerType: 'touch', clientX: 10, clientY: 20 + pressDrift + 1 });
+
+        act(() => {
+            vi.advanceTimersByTime(pressOpensAfter);
+        });
+
+        expect(pressed).not.toHaveBeenCalled();
+    });
+
+    it('opens the row’s menu on the pointer’s own menu gesture', () => {
+        const pressed = vi.fn();
+        const row = pointedRow({ onPress: pressed });
+
+        fireEvent.contextMenu(row, { clientX: 33, clientY: 44 });
+
+        expect(pressed).toHaveBeenCalledWith({ x: 33, y: 44 });
     });
 });

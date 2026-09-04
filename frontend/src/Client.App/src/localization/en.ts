@@ -230,6 +230,7 @@ export const en = {
     'mail.flag': 'Flag',
     'mail.markUnread': 'Mark unread',
     'mail.move': 'Move',
+    'mail.selectMessages': 'Select messages',
     'mail.backToList': 'Back to the list',
     'mail.listColumn': 'Message list',
     'mail.readingColumn': 'What is open',
@@ -423,7 +424,6 @@ export const en = {
     'list.onlyFlagged': 'Only flagged',
     'list.onlyWithAttachments': 'Only with attachments',
     'list.includeJunk': 'Include junk',
-    'list.selectSeveral': 'Select several',
 
     'list.unread': 'Unread',
     'list.flagged': 'Flagged',
