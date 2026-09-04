@@ -22,11 +22,11 @@ public sealed class ClientPreferencesDocumentTests
     {
         // Act
         var document = ClientPreferencesDocument.Render(
-            new ClientPreferences(false, ClientThemeChoice.Dark, true, false, true));
+            new ClientPreferences(false, ClientThemeChoice.Dark, true, false, true, true));
 
         // Assert
         Assert.Equal(
-            """{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true,"markReadOnOpen":false,"expandWholeThread":true}""",
+            """{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true,"markReadOnOpen":false,"expandWholeThread":true,"embeddedHtmlMessages":true}""",
             document);
     }
 
@@ -39,7 +39,7 @@ public sealed class ClientPreferencesDocumentTests
 
         // Assert
         Assert.Equal(
-            """{"telemetryEnabled":true,"theme":"system","openMailInTabs":false,"markReadOnOpen":true,"expandWholeThread":false}""",
+            """{"telemetryEnabled":true,"theme":"system","openMailInTabs":false,"markReadOnOpen":true,"expandWholeThread":false,"embeddedHtmlMessages":false}""",
             document);
     }
 
@@ -47,7 +47,7 @@ public sealed class ClientPreferencesDocumentTests
     public void Parse_ADocumentThisBuildWrote_ReadsBackWhatWasWritten()
     {
         // Arrange
-        var chosen = new ClientPreferences(false, ClientThemeChoice.Light, true, false, true);
+        var chosen = new ClientPreferences(false, ClientThemeChoice.Light, true, false, true, true);
 
         // Act
         var read = ClientPreferencesDocument.Parse(ClientPreferencesDocument.Render(chosen));
@@ -74,7 +74,19 @@ public sealed class ClientPreferencesDocumentTests
         var read = ClientPreferencesDocument.Parse("""{"theme":"dark"}""");
 
         // Assert
-        Assert.Equal(new ClientPreferences(true, ClientThemeChoice.Dark, false, true, false), read);
+        Assert.Equal(new ClientPreferences(true, ClientThemeChoice.Dark, false, true, false, false), read);
+    }
+
+    /// <summary>The reduced text is what the client drew before the message view was a preference, so a row written then reads as that rather than as the sender's own markup.</summary>
+    [Fact]
+    public void Parse_ARowWrittenBeforeTheMessageViewWasAPreference_AnswersItAsTheReducedText()
+    {
+        // Act
+        var read = ClientPreferencesDocument.Parse(
+            """{"telemetryEnabled":false,"theme":"dark","openMailInTabs":true,"markReadOnOpen":true,"expandWholeThread":true}""");
+
+        // Assert
+        Assert.False(read.EmbeddedHtmlMessages);
     }
 
     /// <summary>Opening a conversation at the message it was opened at is what the client did before the preference existed, so a row written then reads as that rather than as expanding.</summary>

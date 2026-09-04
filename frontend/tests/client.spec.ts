@@ -291,6 +291,7 @@ async function servedByADeployment(page: Page): Promise<void> {
         openMailInTabs: false,
         markReadOnOpen: true,
         expandWholeThread: false,
+        embeddedHtmlMessages: false,
     };
 
     await page.route('**/api/client/preferences', (route) => {
@@ -787,6 +788,7 @@ test('states the whole preferences document to the deployment when one of them i
         openMailInTabs: false,
         markReadOnOpen: true,
         expandWholeThread: false,
+        embeddedHtmlMessages: false,
     });
 });
 

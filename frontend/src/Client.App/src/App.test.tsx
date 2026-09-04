@@ -127,6 +127,7 @@ function preferencesAnswering(telemetryEnabled: boolean): Answer {
             openMailInTabs: false,
             markReadOnOpen: true,
             expandWholeThread: false,
+            embeddedHtmlMessages: false,
         }),
     };
 }
@@ -292,6 +293,7 @@ function deploymentWorkingInTabs(): DeploymentTransport {
                     openMailInTabs: true,
                     markReadOnOpen: true,
                     expandWholeThread: false,
+                    embeddedHtmlMessages: false,
                 }),
             }),
         );

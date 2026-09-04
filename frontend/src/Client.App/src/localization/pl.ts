@@ -164,6 +164,14 @@ export const pl: Catalogue = {
     'settings.profileHeld':
         'Imię, nazwisko i zdjęcie przechowuje wdrożenie, na które się logujesz, więc idą za Tobą między maszynami. Żadne z nich nie trafia na Twój serwer poczty.',
     'settings.messageView': 'Widok wiadomości',
+    'settings.messageViewReduced': 'Uproszczony',
+    'settings.messageViewHtml': 'HTML',
+    'settings.messageViewReducedExplanation':
+        'Wiadomości pokazują oczyszczony tekst; pełny HTML otwierasz ikoną przy nagłówku.',
+    'settings.messageViewHtmlExplanation':
+        'Wiadomości pokazują osadzoną treść HTML; przełącznik HTML przy nagłówku wiadomości znika.',
+    'settings.messageViewHtmlWarning':
+        'Ryzyko bezpieczeństwa: HTML z wiadomości może zawierać ukryte piksele śledzące, podszywające się układy i odnośniki phishingowe. Renderujemy go w izolacji, ale sam podgląd może ujawnić nadawcy, że wiadomość została otwarta.',
     'settings.expandWholeThread': 'Rozwijaj cały wątek automatycznie',
     'settings.expandWholeThreadExplanation':
         'Bez tego wątek otwiera się na wybranej wiadomości, a pozostałe są pod przyciskiem.',
@@ -551,6 +559,14 @@ export const pl: Catalogue = {
     'body.remotePicturesShownCount': 'Obrazów pobranych od nadawcy: {count}',
     'body.undrawnPicturesCount': 'Obrazów zbyt dużych, by je narysować: {count}',
     'body.quotedHistory': 'Rozmowa cytowana w tej wiadomości',
+    'body.markupFitting': 'Dopasowywanie wysokości do treści…',
+    'body.markupIsolated': 'Treść HTML nadawcy w izolacji — skrypty i zdalne zasoby zablokowane',
+    'body.markupNotMeasured': 'Nie udało się zmierzyć wysokości treści — ta jedna ramka przewija się osobno',
+    'body.markupAbsent': 'Nadawca nie napisał sformatowanej wersji tej wiadomości, więc pokazujemy wersję uproszczoną.',
+    'body.markupTruncated':
+        'Ta wiadomość jest dłuższa, niż zwraca jeden odczyt, więc zamiast wersji nadawcy pokazujemy uproszczoną.',
+    'body.markupPicturesTruncated':
+        'Część obrazów z tej wiadomości jest większa, niż zwraca jeden odczyt, więc zamiast wersji nadawcy pokazujemy uproszczoną.',
 
     'fullHtml.show': 'Pokaż pełną wersję HTML',
     'fullHtml.question': 'Pokazać pełny HTML?',

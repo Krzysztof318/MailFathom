@@ -6,6 +6,7 @@ import { useEffect, useRef } from 'react';
 import type {
     MailBody,
     MailBodyAvailability,
+    MailBodyTruncation,
     MailDocument,
     MailDocumentBlock,
     MailDocumentRefusal,
@@ -13,13 +14,15 @@ import type {
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import type { Locale } from '../localization/locale';
+import { EmbeddedMessageMarkup } from './MessageMarkupFrame';
 import { MessageBlocks } from './MessageBlocks';
 import { splitQuotedHistory } from './quotedHistory';
 
-// One message's body, drawn from the closed document tree the service reduced it to and never from markup. What this
-// component owns is everything around the blocks: whether there is a body at all, whether the reduction refused it and
-// the words are what is read instead, what the message asked to load from somebody else's server, and what a bound
-// left out. None of it is silent — a fallback nobody is told about reads as a message the sender wrote badly.
+// One message's body, drawn from the closed document tree the service reduced it to — or, where the reader chose the
+// embedded HTML view, from the self-contained representation the same read carries. What this component owns is
+// everything around either: whether there is a body at all, whether the reduction refused it and the words are what is
+// read instead, what the message asked to load from somebody else's server, and what a bound left out. None of it is
+// silent — a fallback nobody is told about reads as a message the sender wrote badly.
 
 const availabilityMessages: Readonly<Record<Exclude<MailBodyAvailability, 'Readable'>, MessageKey>> = {
     EncryptedNotReadableLocally: 'body.encryptedNotReadable',
@@ -33,14 +36,51 @@ const refusalMessages: Readonly<Record<Exclude<MailDocumentRefusal, 'None'>, Mes
     NothingRenderable: 'body.refusedNothingRenderable',
 };
 
+// Why the embedded view fell back to the reduced tree, which is said in every case rather than in some of them: a
+// message quietly drawn as text under a setting that promised markup reads as the setting having stopped working.
+// A bound that cut the representation is one of those cases — half a document in a frame is a message that stops
+// mid-sentence with nothing saying so, and the tree beside it is whole.
+const markupCutShort: Readonly<Record<Exclude<MailBodyTruncation, 'None'>, MessageKey>> = {
+    BodyCharacterLimit: 'body.markupTruncated',
+    ReadCharacterBudget: 'body.markupTruncated',
+    SensitiveContentScanCeiling: 'body.markupTruncated',
+    InlineImageOctetLimit: 'body.markupPicturesTruncated',
+};
+
+// What the embedded view draws for this message: the representation where there is a whole one, and otherwise the
+// reason it is not being drawn, with the reduced tree underneath it. Exactly one of the two is ever present.
+function markupOrWhyNot(body: MailBody): {
+    readonly markup: string | null;
+    readonly insteadBecause: MessageKey | null;
+} {
+    const representation = body.selfContainedHtml;
+
+    if (representation === null || representation.text === '') {
+        return { markup: null, insteadBecause: 'body.markupAbsent' };
+    }
+
+    return representation.truncation === 'None'
+        ? { markup: representation.text, insteadBecause: null }
+        : { markup: null, insteadBecause: markupCutShort[representation.truncation] };
+}
+
 export function MessageBody({
     body,
     asking,
+    embeddedHtml = false,
     quotedHistoryOnRequest = false,
     onShowRemotePictures,
 }: {
     readonly body: MailBody;
     readonly asking: boolean;
+
+    /**
+     * Whether this message is being drawn as the sender's own markup rather than as the reduced tree.
+     *
+     * It is what the read actually asked for rather than what the setting says, which is what keeps a message drawn
+     * from an answer read before the setting moved from being reported as markup that was never fetched.
+     */
+    readonly embeddedHtml?: boolean;
 
     /**
      * Whether the conversation this message quoted is folded away until a reader asks for it.
@@ -63,8 +103,18 @@ export function MessageBody({
         return <p className="text-warning">{translate(availabilityMessages[body.availability])}</p>;
     }
 
+    const embedded = embeddedHtml ? markupOrWhyNot(body) : null;
+    const markup = embedded?.markup ?? null;
+    const insteadBecause = embedded?.insteadBecause ?? null;
+
+    // What the message asked to load from somebody else's server stands above either rendering rather than only above
+    // the reduced one. The ask is part of the read, so it reaches the representation exactly as it reaches the tree —
+    // and this is the only place in the client it can be made, which is what would have made a message opened in the
+    // embedded view one whose blocked pictures nobody could ever ask for.
     return (
         <div className="flex flex-col gap-4">
+            {insteadBecause === null ? null : <p className="text-sm text-muted">{translate(insteadBecause)}</p>}
+
             {body.document === null ? null : (
                 <RemoteContent
                     document={body.document}
@@ -74,7 +124,9 @@ export function MessageBody({
                 />
             )}
 
-            {drawn === null ? (
+            {markup !== null ? (
+                <EmbeddedMessageMarkup markup={markup} />
+            ) : drawn === null ? (
                 <ReadAsWords body={body} />
             ) : (
                 <article className="flex flex-col gap-3">

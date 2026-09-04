@@ -4,7 +4,7 @@
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import type { MailBody, MailDocument, MailDocumentBlock } from '@mailfathom/client-backend';
+import type { MailBody, MailBodyText, MailDocument, MailDocumentBlock } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
 import { MessageBody } from './MessageBody';
 import { LinkOpenerContext } from '../shellOperations/linkOpener';
@@ -75,6 +75,26 @@ const replyQuotingWhatItAnswers: MailBody = {
 
 function drawing(body: MailBody, onShowRemotePictures: () => void = () => undefined, asking = false) {
     return render(inThePane(body, onShowRemotePictures, asking));
+}
+
+/** The representation the service serves a reader who chose the sender's own markup, and a body carrying one. */
+const markup: MailBodyText = {
+    text: '<html><head></head><body><p>As the sender wrote it.</p></body></html>',
+    originalCharacterCount: 69,
+    truncation: 'None',
+};
+
+const withMarkup: MailBody = { ...readable, selfContainedHtml: markup };
+
+/** The same body drawn for a reader whose messages are the sender's own markup rather than the reduced text. */
+function inTheEmbeddedView(body: MailBody, onShowRemotePictures: () => void = () => undefined) {
+    return (
+        <LocalizationProvider>
+            <LinkOpenerContext value={() => Promise.resolve()}>
+                <MessageBody body={body} asking={false} embeddedHtml onShowRemotePictures={onShowRemotePictures} />
+            </LinkOpenerContext>
+        </LocalizationProvider>
+    );
 }
 
 describe('MessageBody', () => {
@@ -272,5 +292,74 @@ describe('MessageBody', () => {
 
         expect(screen.getByText('A drawn message.')).toBeDefined();
         expect(screen.queryByText('The conversation this message quoted')).toBeNull();
+    });
+
+    // The second reading surface. What is asserted below is which of the two a message is drawn as, and what a reader
+    // is told where the one they chose has nothing to draw — never that the markup rendered, which is a browser's
+    // answer and the browser suite's to give.
+    describe('drawn as the sender wrote it', () => {
+        it('draws the reduced tree for a reader who chose it, whatever the deployment served beside it', () => {
+            render(inThePane(withMarkup, () => undefined));
+
+            expect(screen.getByText('A drawn message.')).toBeDefined();
+            expect(screen.queryByTitle("The sender's own markup, drawn in isolation")).toBeNull();
+        });
+
+        it('draws the sender’s own markup for a reader who chose it', () => {
+            render(inTheEmbeddedView(withMarkup));
+
+            const frame = screen.getByTitle("The sender's own markup, drawn in isolation");
+
+            expect(frame.getAttribute('srcdoc')).toContain('<p>As the sender wrote it.</p>');
+            expect(screen.queryByText('A drawn message.')).toBeNull();
+        });
+
+        it('falls back to the reduced tree, saying so, where the deployment served no markup for this message', () => {
+            render(inTheEmbeddedView(readable));
+
+            expect(screen.getByText(/^The sender wrote no formatted version/u)).toBeDefined();
+            expect(screen.getByText('A drawn message.')).toBeDefined();
+            expect(screen.queryByTitle("The sender's own markup, drawn in isolation")).toBeNull();
+        });
+
+        it('falls back to the reduced tree, naming the bound, where the markup was cut short', () => {
+            render(
+                inTheEmbeddedView({
+                    ...withMarkup,
+                    selfContainedHtml: { ...markup, truncation: 'BodyCharacterLimit' },
+                }),
+            );
+
+            expect(screen.getByText(/longer than one read returns/u)).toBeDefined();
+            expect(screen.getByText('A drawn message.')).toBeDefined();
+        });
+
+        it('offers the ask for the sender’s pictures here too, this being the only place it can be made', () => {
+            let asked = 0;
+            render(
+                inTheEmbeddedView(
+                    { ...withMarkup, document: { ...drawnDocument, removedRemoteReferenceCount: 2 } },
+                    () => {
+                        asked += 1;
+                    },
+                ),
+            );
+
+            expect(screen.getByTitle("The sender's own markup, drawn in isolation")).toBeDefined();
+            fireEvent.click(screen.getByRole('button', { name: 'Load pictures from the sender' }));
+
+            expect(asked).toBe(1);
+        });
+
+        it('names the pictures rather than the length where that is the bound the markup met', () => {
+            render(
+                inTheEmbeddedView({
+                    ...withMarkup,
+                    selfContainedHtml: { ...markup, truncation: 'InlineImageOctetLimit' },
+                }),
+            );
+
+            expect(screen.getByText(/^Some of the pictures this message carried/u)).toBeDefined();
+        });
     });
 });

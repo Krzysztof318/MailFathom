@@ -47,6 +47,7 @@ export const iconNames = [
     'flag',
     'folder',
     'forward',
+    'gpp_maybe',
     'group',
     'handshake',
     'inbox',

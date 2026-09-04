@@ -14,6 +14,7 @@ import type { ClientPreferencesInForce } from '../preferences/useClientPreferenc
 import type { OwnProfileInForce } from '../profile/useOwnProfile';
 import { LanguageSegments } from '../shell/Preferences';
 import { chosenPortrait, type PortraitChoice } from './chosenPortrait';
+import { MessageView, MessageViewWarning } from './MessageView';
 
 // The surface behind the account menu's own row, and the one place the client edits the person rather than the mail.
 //
@@ -31,9 +32,9 @@ import { chosenPortrait, type PortraitChoice } from './chosenPortrait';
 // It is mounted while it is open and unmounted when it closes, which is what makes "the tab last open is remembered
 // nowhere" a property of the tree rather than a reset somebody has to remember to write.
 //
-// One control the project draws is missing, and deliberately: the choice between the simplified and the HTML view of a
-// message edits a preference this deployment does not hold, so drawing it would be a switch that decides nothing. It is
-// #1508, and the section heading it belongs under is here because the thread-expansion switch stands under it too.
+// The *message view* section holds two controls in the order the design project draws them: which of the two reading
+// surfaces a message opens on, and whether a conversation opens with every message drawn. The first is a choice
+// between two named things and the second is a switch, which is what the project draws and what each of them is.
 
 /** Which half of the surface is being read, in the order the design project puts the two tabs in. */
 const tabs = ['profile', 'application'] as const;
@@ -55,7 +56,7 @@ export function Settings({
     /** Who the client is drawing, and the three ways this surface changes it. */
     readonly profile: OwnProfileInForce;
 
-    /** The settings that follow the person, of which this surface edits two. */
+    /** The settings that follow the person, of which this surface edits three. */
     readonly preferences: ClientPreferencesInForce;
 
     /** What this deployment has said about forwarding this client's telemetry, including that it has said nothing. */
@@ -251,7 +252,9 @@ function Application({
             <Divider />
 
             <SectionName>{translate('settings.messageView')}</SectionName>
+            <MessageView preferences={preferences} />
             <ThreadExpansion preferences={preferences} />
+            <MessageViewWarning preferences={preferences} />
 
             <Divider />
 

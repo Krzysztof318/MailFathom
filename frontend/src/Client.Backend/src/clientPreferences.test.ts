@@ -18,6 +18,7 @@ const stored = {
     openMailInTabs: true,
     markReadOnOpen: false,
     expandWholeThread: true,
+    embeddedHtmlMessages: true,
 } as const;
 const storedBody = JSON.stringify(stored);
 
@@ -54,7 +55,7 @@ describe('readClientPreferences', () => {
         expect(requests[0]?.headers['Authorization']).toBe('Basic dGVzdA==');
     });
 
-    it('reads the five preferences the deployment answered', async () => {
+    it('reads the six preferences the deployment answered', async () => {
         const answer = await readClientPreferences(session, answering({ status: 200, body: storedBody }));
 
         expect(answer).toStrictEqual({ outcome: 'read', value: stored });
@@ -103,6 +104,16 @@ describe('readClientPreferences', () => {
                 theme: 'dark',
                 openMailInTabs: false,
                 markReadOnOpen: true,
+            }),
+        ],
+        [
+            'an answer from a deployment older than the message-view preference',
+            JSON.stringify({
+                telemetryEnabled: true,
+                theme: 'dark',
+                openMailInTabs: false,
+                markReadOnOpen: true,
+                expandWholeThread: false,
             }),
         ],
     ])('refuses %s as unreadable rather than reading a document with a hole in it', async (_, body) => {

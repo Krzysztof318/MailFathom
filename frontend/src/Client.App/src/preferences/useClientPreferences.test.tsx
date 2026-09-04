@@ -21,16 +21,22 @@ const anna = 'anna';
 const bartek = 'bartek';
 
 // The whole document, because the route answers with nothing less and the package refuses an answer missing a field.
-// The two preferences no control in this hook's own tests moves are defaulted rather than named at each call, so only
-// the tests that are about one of them say anything about it.
+// The three preferences no control in this hook's own tests moves are defaulted rather than named at each call, so
+// only the tests that are about one of them say anything about it.
 function stored(preferences: {
     telemetryEnabled: boolean;
     theme: string;
     openMailInTabs: boolean;
     markReadOnOpen?: boolean;
     expandWholeThread?: boolean;
+    embeddedHtmlMessages?: boolean;
 }): string {
-    return JSON.stringify({ markReadOnOpen: true, expandWholeThread: false, ...preferences });
+    return JSON.stringify({
+        markReadOnOpen: true,
+        expandWholeThread: false,
+        embeddedHtmlMessages: false,
+        ...preferences,
+    });
 }
 
 // The transport is the network boundary and the whole of what these tests fake, exactly as in the package that reads
@@ -94,6 +100,24 @@ describe('useClientPreferences', () => {
 
         await waitFor(() => {
             expect(result.current.preferences.markReadOnOpen).toBe(false);
+        });
+    });
+
+    it('answers the message view as the reduced text before anything has been read', () => {
+        const { transport } = recording(stored({ telemetryEnabled: true, theme: 'dark', openMailInTabs: true }));
+        const { result } = reading(transport);
+
+        expect(result.current.preferences.embeddedHtmlMessages).toBe(false);
+    });
+
+    it('answers the message view as the sender’s own markup once the person has chosen it', async () => {
+        const { transport } = recording(
+            stored({ telemetryEnabled: true, theme: 'system', openMailInTabs: false, embeddedHtmlMessages: true }),
+        );
+        const { result } = reading(transport);
+
+        await waitFor(() => {
+            expect(result.current.preferences.embeddedHtmlMessages).toBe(true);
         });
     });
 
@@ -161,6 +185,7 @@ describe('useClientPreferences', () => {
             openMailInTabs: true,
             markReadOnOpen: true,
             expandWholeThread: false,
+            embeddedHtmlMessages: false,
         });
     });
 
@@ -188,6 +213,7 @@ describe('useClientPreferences', () => {
                 openMailInTabs: false,
                 markReadOnOpen: true,
                 expandWholeThread: false,
+                embeddedHtmlMessages: false,
             });
         });
     });
@@ -242,6 +268,7 @@ describe('useClientPreferences', () => {
             openMailInTabs: true,
             markReadOnOpen: true,
             expandWholeThread: false,
+            embeddedHtmlMessages: false,
         });
     });
 
@@ -308,6 +335,7 @@ describe('useClientPreferences', () => {
             openMailInTabs: true,
             markReadOnOpen: true,
             expandWholeThread: false,
+            embeddedHtmlMessages: false,
         });
     });
 
@@ -339,6 +367,7 @@ describe('useClientPreferences', () => {
             openMailInTabs: false,
             markReadOnOpen: true,
             expandWholeThread: false,
+            embeddedHtmlMessages: false,
         });
         expect(window.localStorage.getItem(telemetryKey(anna))).toBe('false');
     });

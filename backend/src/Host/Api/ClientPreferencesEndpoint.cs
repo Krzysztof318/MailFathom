@@ -44,7 +44,7 @@ internal static class ClientPreferencesEndpoint
 
     /// <summary>The greatest request body the write route reads before refusing it.</summary>
     /// <remarks>
-    /// Far above five scalars and their JSON escaping, and far below anything worth an allocation. The document is
+    /// Far above six scalars and their JSON escaping, and far below anything worth an allocation. The document is
     /// closed, so what the bound guards against is not a large record but a body that was never a preferences document
     /// at all; it is answered <c>413</c> before the handler is reached, as every other write on this surface is.
     /// </remarks>
@@ -129,11 +129,12 @@ internal static class ClientPreferencesEndpoint
 /// <param name="OpenMailInTabs">Whether opening a message opens a tab, or nothing for the unset answer.</param>
 /// <param name="MarkReadOnOpen">Whether opening a message marks it read on their mail server, or nothing for the unset answer.</param>
 /// <param name="ExpandWholeThread">Whether a conversation opens with every message drawn, or nothing for the unset answer.</param>
+/// <param name="EmbeddedHtmlMessages">Whether an open message draws the sender's own markup inline, or nothing for the unset answer.</param>
 /// <remarks>
 /// <para>
 /// Bound strictly: a key nothing here binds fails the bind rather than being stored, which is what keeps the document
-/// closed — it holds five preferences because five is what a client can state, not because a writer happened to send
-/// five. Every one of them is optional, and an omitted one is committed as its unset answer rather than left at
+/// closed — it holds six preferences because six is what a client can state, not because a writer happened to send
+/// six. Every one of them is optional, and an omitted one is committed as its unset answer rather than left at
 /// whatever the row held.
 /// </para>
 /// <para>
@@ -149,7 +150,8 @@ internal sealed record ClientPreferencesRequest(
     string? Theme = null,
     bool? OpenMailInTabs = null,
     bool? MarkReadOnOpen = null,
-    bool? ExpandWholeThread = null)
+    bool? ExpandWholeThread = null,
+    bool? EmbeddedHtmlMessages = null)
 {
     /// <summary>Reads the request as the whole set the write commits.</summary>
     /// <returns>The preferences, with every one the body omitted answered as unset, or <see langword="null" /> when the body names a theme this build does not publish.</returns>
@@ -167,7 +169,8 @@ internal sealed record ClientPreferencesRequest(
             theme,
             this.OpenMailInTabs ?? ClientPreferences.Unset.OpenMailInTabs,
             this.MarkReadOnOpen ?? ClientPreferences.Unset.MarkReadOnOpen,
-            this.ExpandWholeThread ?? ClientPreferences.Unset.ExpandWholeThread);
+            this.ExpandWholeThread ?? ClientPreferences.Unset.ExpandWholeThread,
+            this.EmbeddedHtmlMessages ?? ClientPreferences.Unset.EmbeddedHtmlMessages);
     }
 }
 
@@ -177,6 +180,7 @@ internal sealed record ClientPreferencesRequest(
 /// <param name="OpenMailInTabs">Whether opening a message opens a tab rather than replacing what is on the screen.</param>
 /// <param name="MarkReadOnOpen">Whether opening a message marks it read on the owner's own mail server.</param>
 /// <param name="ExpandWholeThread">Whether a conversation opens with every message drawn rather than at the one it was opened at.</param>
+/// <param name="EmbeddedHtmlMessages">Whether an open message draws the sender's own markup inline rather than the reduced text.</param>
 /// <remarks>
 /// Every preference is answered, whether or not the person ever set it, so a client renders one screen rather than one
 /// per combination of what happens to be stored. What it does not report is when anything was set or from where: this
@@ -188,7 +192,8 @@ internal sealed record ClientPreferencesResponse(
     string Theme,
     bool OpenMailInTabs,
     bool MarkReadOnOpen,
-    bool ExpandWholeThread)
+    bool ExpandWholeThread,
+    bool EmbeddedHtmlMessages)
 {
     /// <summary>Describes one person's preferences on the wire.</summary>
     /// <param name="preferences">What they set.</param>
@@ -203,6 +208,7 @@ internal sealed record ClientPreferencesResponse(
             preferences.Theme.Name,
             preferences.OpenMailInTabs,
             preferences.MarkReadOnOpen,
-            preferences.ExpandWholeThread);
+            preferences.ExpandWholeThread,
+            preferences.EmbeddedHtmlMessages);
     }
 }

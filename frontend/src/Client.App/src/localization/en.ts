@@ -162,6 +162,14 @@ export const en = {
     'settings.profileHeld':
         'Your name and picture are held by the deployment you signed in to, so they follow you between machines. Neither is sent to your mail server.',
     'settings.messageView': 'Message view',
+    'settings.messageViewReduced': 'Reduced',
+    'settings.messageViewHtml': 'HTML',
+    'settings.messageViewReducedExplanation':
+        'Messages are shown as cleaned-up text; the full HTML is one control away on the message head.',
+    'settings.messageViewHtmlExplanation':
+        "Messages show the sender's own HTML inline; the HTML control on the message head goes.",
+    'settings.messageViewHtmlWarning':
+        'A security risk: HTML from a message can carry hidden tracking pixels, layouts that imitate somebody else, and phishing links. It is drawn in isolation, but showing it at all can tell the sender the message was opened.',
     'settings.expandWholeThread': 'Expand the whole thread automatically',
     'settings.expandWholeThreadExplanation':
         'Without it, a conversation opens at the message you chose and the rest sit behind a control.',
@@ -543,6 +551,15 @@ export const en = {
     'body.remotePicturesShownCount': 'Pictures loaded from the sender: {count}',
     'body.undrawnPicturesCount': 'Pictures too large to draw: {count}',
     'body.quotedHistory': 'The conversation this message quoted',
+    'body.markupFitting': 'Fitting the height to the content…',
+    'body.markupIsolated': "The sender's HTML in isolation — scripts and remote resources blocked",
+    'body.markupNotMeasured': 'The height of this content could not be measured, so this one frame scrolls on its own',
+    'body.markupAbsent':
+        'The sender wrote no formatted version of this message, so it is shown as the reduced version instead.',
+    'body.markupTruncated':
+        "This message is longer than one read returns, so the sender's version is shown as the reduced version instead.",
+    'body.markupPicturesTruncated':
+        "Some of the pictures this message carried are larger than one read returns, so the sender's version is shown as the reduced version instead.",
 
     'fullHtml.show': 'Show the full HTML version',
     'fullHtml.question': 'Show the full HTML?',

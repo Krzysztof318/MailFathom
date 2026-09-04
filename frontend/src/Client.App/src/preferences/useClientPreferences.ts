@@ -58,6 +58,14 @@ export interface ClientPreferencesInForce {
      */
     readonly expandWholeThread: boolean;
 
+    /**
+     * Whether an open message draws the sender's own markup inline rather than the reduced text.
+     *
+     * Unset reads as off, which is what this client has always drawn: the closed document tree ADR 0024 takes, with the
+     * sender's own markup on the second surface one control away.
+     */
+    readonly embeddedHtmlMessages: boolean;
+
     /** Whether the deployment refused the last change, which is the one thing about this a screen has to say out loud. */
     readonly notStated: boolean;
 
@@ -65,6 +73,7 @@ export interface ClientPreferencesInForce {
     readonly chooseTabMode: (openMailInTabs: boolean) => void;
     readonly chooseTelemetry: (telemetryEnabled: boolean) => void;
     readonly chooseThreadExpansion: (expandWholeThread: boolean) => void;
+    readonly chooseMessageView: (embeddedHtmlMessages: boolean) => void;
 }
 
 // What is held, and whose it is. The session is carried beside the document rather than trusted to have stayed the
@@ -93,7 +102,7 @@ const heldForNobody: HeldPreferences = {
  * offline or the grant does not let it read, and somebody is still signed in through all of that. It decides one thing
  * only — whose remembered telemetry answer the device is asked for — and getting it wrong is what would hand the next
  * person the last person's answer.
- * @returns The settings in force, and the four ways of changing one.
+ * @returns The settings in force, and the five ways of changing one.
  */
 export function useClientPreferences(
     session: ClientSession | null,
@@ -213,6 +222,7 @@ export function useClientPreferences(
         // being taken once there is one.
         telemetryEnabled: inForce.session === null ? rememberedTelemetry(person) : inForce.preferences.telemetryEnabled,
         expandWholeThread: inForce.preferences.expandWholeThread,
+        embeddedHtmlMessages: inForce.preferences.embeddedHtmlMessages,
         notStated: inForce.notStated,
         chooseTheme: (choice) => {
             setThemeChoice(choice);
@@ -226,6 +236,9 @@ export function useClientPreferences(
         },
         chooseThreadExpansion: (expandWholeThread) => {
             state({ ...composedFrom(), expandWholeThread });
+        },
+        chooseMessageView: (embeddedHtmlMessages) => {
+            state({ ...composedFrom(), embeddedHtmlMessages });
         },
     };
 }

@@ -14,6 +14,7 @@ import {
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { useEmbeddedHtmlMessages } from '../preferences/messageView';
 import { MessageBody } from './MessageBody';
 
 // One message's body, read and drawn. Which message that is, and everything the reading pane lays out around it, is
@@ -23,6 +24,11 @@ import { MessageBody } from './MessageBody';
 // Asking for pictures re-reads that one message with the ask in the query, and neither this component nor anything
 // beneath it writes the answer down: leaving the message and coming back asks again, which is the whole of what
 // ADR 0024 permits to be remembered.
+//
+// **Which of the two reading surfaces a message is drawn on is asked here rather than passed in**, because this is
+// where the read is composed: the sender's own markup is a second thing the body route answers, so the setting is part
+// of what is being asked for rather than something the drawing decides afterwards. That is also what keeps the
+// representation off every other read — a client in the reduced view never asks for it.
 
 const failureLabels: Readonly<Record<ClientFailureReason, MessageKey>> = {
     unauthenticated: 'failure.unauthenticated',
@@ -31,10 +37,14 @@ const failureLabels: Readonly<Record<ClientFailureReason, MessageKey>> = {
     unreadable: 'failure.unreadable',
 };
 
-/** What is being read: which message, under which ask, and which attempt at it. A change to any of the three reads. */
+/** What is being read: which message, under which asks, and which attempt at it. A change to any of them may read. */
 interface Read {
     readonly storedEmailId: string;
     readonly remotePictures: boolean;
+
+    /** Whether this read asks for the sender's own markup, which only the embedded view does. */
+    readonly markup: boolean;
+
     readonly attempt: number;
 }
 
@@ -57,6 +67,23 @@ function drawableUnder(answer: Answered | null, read: Read): Answered | null {
     }
 
     return answer.read.remotePictures && !read.remotePictures ? null : answer;
+}
+
+/**
+ * Whether the answer in hand already covers what the current read asks for, and there is therefore nothing to fetch.
+ *
+ * The markup is the one ask an older answer may satisfy in one direction only: an answer read with it carries the
+ * reduced tree as well, so changing the view back draws what is already here, while an answer read without it has
+ * nothing for the embedded view to draw and has to be read again. That is what makes changing the view twice cost one
+ * read rather than two, and it is why the read carries the ask rather than the setting deciding after the fact.
+ */
+function covers(had: Read | undefined, wants: Read): boolean {
+    return (
+        had?.storedEmailId === wants.storedEmailId &&
+        had.attempt === wants.attempt &&
+        had.remotePictures === wants.remotePictures &&
+        (had.markup || !wants.markup)
+    );
 }
 
 interface MessageToDraw {
@@ -95,7 +122,8 @@ export function Message({
     onBodyDrawn,
 }: MessageToDraw) {
     const { translate } = useLocalization();
-    const [read, setRead] = useState<Read>({ storedEmailId, remotePictures: false, attempt: 0 });
+    const embeddedHtml = useEmbeddedHtmlMessages();
+    const [read, setRead] = useState<Read>({ storedEmailId, remotePictures: false, markup: embeddedHtml, attempt: 0 });
 
     // The answer carries the read it came from, so whether one is still in flight is computed rather than kept beside
     // it: two pieces of state that must agree is one piece of state and a function, and the answer to a previous read
@@ -107,27 +135,47 @@ export function Message({
     // pictures, telling its sender it was opened. React's answer to a prop that invalidates state is to adjust it
     // during render rather than in an effect, which is why this is an assignment and not a second read.
     if (read.storedEmailId !== storedEmailId) {
-        setRead({ storedEmailId, remotePictures: false, attempt: 0 });
+        setRead({ storedEmailId, remotePictures: false, markup: embeddedHtml, attempt: 0 });
+    } else if (read.markup !== embeddedHtml) {
+        // The view changed under a message already on the screen. That is a changed ask rather than a changed message,
+        // so the pictures and the attempt stay where they are — and the read below is skipped entirely where what is
+        // held already carries what the new view draws.
+        setRead({ ...read, markup: embeddedHtml });
     }
 
+    // What still has to be read, or `null` where the answer in hand already covers it. Written as the effect's own
+    // dependency rather than as a guard inside it, so that an answer arriving is what stops the next read rather than
+    // a condition evaluated over state the effect would have to depend on to see.
+    const outstanding = covers(answer?.read, read) ? null : read;
+
     useEffect(() => {
+        if (outstanding === null) {
+            return;
+        }
+
         let listening = true;
 
-        const ask = { remoteImages: read.remotePictures, fullHtml: false };
+        const ask = { remoteImages: outstanding.remotePictures, fullHtml: outstanding.markup };
 
-        void readMailBody(session, transport, read.storedEmailId, ask).then((answered) => {
+        void readMailBody(session, transport, outstanding.storedEmailId, ask).then((answered) => {
             if (listening) {
-                setAnswer({ read, result: answered });
+                setAnswer({ read: outstanding, result: answered });
             }
         });
 
         return () => {
             listening = false;
         };
-    }, [session, transport, read]);
+    }, [session, transport, outstanding]);
 
     const held = drawableUnder(answer, read);
-    const reading = held?.read !== read;
+    const reading = outstanding !== null;
+
+    // Which read is in flight, rather than whether one is. Only the ask for the sender's pictures has a surface that
+    // reports it — the button somebody pressed, with the wait beneath it — so a read begun by anything else, and
+    // changing the view over an open message is one, would otherwise put "Loading them…" under a button nobody
+    // touched. What separates the two is that the answer being drawn was read without the pictures.
+    const askingForPictures = outstanding !== null && outstanding.remotePictures && !held?.read.remotePictures;
 
     // Which message's words are actually on the screen, which is the whole of what opening one means here — `null`
     // while a read is in flight and for a read that failed, because neither put anything in front of anybody.
@@ -176,7 +224,7 @@ export function Message({
                     <SecondaryButton
                         label={translate('body.showWithoutRemotePictures')}
                         onActivate={() => {
-                            setRead({ storedEmailId, remotePictures: false, attempt: read.attempt + 1 });
+                            setRead({ ...read, remotePictures: false, attempt: read.attempt + 1 });
                         }}
                     />
                 ) : null}
@@ -187,7 +235,11 @@ export function Message({
     return (
         <MessageBody
             body={held.result.value}
-            asking={reading}
+            asking={askingForPictures}
+            /* Both halves rather than the setting alone: the view has to be the one in force *and* the answer on the
+               screen has to be one that was read under it, so a message drawn from an earlier answer stays the reduced
+               tree until the representation arrives instead of reporting markup nobody fetched. */
+            embeddedHtml={read.markup && held.read.markup}
             quotedHistoryOnRequest={quotedHistoryOnRequest}
             onShowRemotePictures={() => {
                 setRead({ ...read, remotePictures: true });

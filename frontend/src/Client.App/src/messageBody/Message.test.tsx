@@ -7,6 +7,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { ClientResponse, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
+import { EmbeddedHtmlMessagesContext } from '../preferences/messageView';
 import { Message } from './Message';
 
 // The transport is handed in, so nothing here replaces a module: the request, the parsing, and the failure mapping
@@ -113,6 +114,42 @@ function readingReported(onBodyDrawn: () => void, storedEmailId = 'stub-message'
             </LocalizationProvider>
         </StrictMode>
     );
+}
+
+/** The same message read by somebody whose messages are the sender's own markup, or the reduced text. */
+function readingUnder(embeddedHtmlMessages: boolean) {
+    return (
+        <StrictMode>
+            <LocalizationProvider>
+                <EmbeddedHtmlMessagesContext value={embeddedHtmlMessages}>
+                    <Message session={session} transport={transport} storedEmailId="stub-message" />
+                </EmbeddedHtmlMessagesContext>
+            </LocalizationProvider>
+        </StrictMode>
+    );
+}
+
+// A deployment that serves the sender's own markup to a read that asked for it, and the reduced tree alone to one that
+// did not. The answer varies with the ask because the package refuses a body carrying markup nobody asked for, which is
+// the service's contract rather than this test's convenience — and an answer that asked for the markup carries the
+// reduced tree as well, which is the whole reason changing the view back costs no read.
+function answeringWithMarkupWhenAsked(): void {
+    answer = (path) =>
+        Promise.resolve(
+            path.includes('fullHtml=true')
+                ? {
+                      status: 200,
+                      body: JSON.stringify({
+                          ...readableBody,
+                          selfContainedHtml: {
+                              text: '<html><head></head><body><p>As the sender wrote it.</p></body></html>',
+                              originalCharacterCount: 69,
+                              truncation: 'None',
+                          },
+                      }),
+                  }
+                : bodyAnswering(false),
+        );
 }
 
 /** A reply: what somebody wrote, above the message they were answering. */
@@ -352,5 +389,85 @@ describe('Message', () => {
         await waitFor(() => {
             expect(drawn).toHaveLength(2);
         });
+    });
+});
+
+// The read is composed here, so which view a reader chose is part of what is asked for rather than something the
+// drawing decides afterwards. That makes the representation cost a read — which is what these are about: it is asked
+// for only where it will be drawn, and a view changed back draws what is already held rather than reading again.
+describe('Message and the view a reader chose', () => {
+    beforeEach(() => {
+        answering(bodyAnswering(false));
+        asked = [];
+    });
+
+    it('asks for nothing but the reduced tree for a reader who chose it', async () => {
+        render(readingUnder(false));
+
+        await screen.findByText('A drawn message.');
+
+        expect(readsAsked()).toStrictEqual([`${baseAddress}/api/client/messages/stub-message/body`]);
+    });
+
+    it('asks for the sender’s own markup only for a reader who chose it', async () => {
+        answeringWithMarkupWhenAsked();
+
+        render(readingUnder(true));
+
+        await screen.findByTitle("The sender's own markup, drawn in isolation");
+
+        expect(readsAsked()).toStrictEqual([`${baseAddress}/api/client/messages/stub-message/body?fullHtml=true`]);
+    });
+
+    it('reads the message again when a reader changes to the view the answer in hand cannot draw', async () => {
+        answeringWithMarkupWhenAsked();
+
+        const opened = render(readingUnder(false));
+        await screen.findByText('A drawn message.');
+
+        opened.rerender(readingUnder(true));
+        await screen.findByTitle("The sender's own markup, drawn in isolation");
+
+        expect(readsAsked()).toStrictEqual([
+            `${baseAddress}/api/client/messages/stub-message/body`,
+            `${baseAddress}/api/client/messages/stub-message/body?fullHtml=true`,
+        ]);
+    });
+
+    // What the wait is reported as belongs to the read that started it. The pictures are the one ask with a surface of
+    // its own — the button, with the wait beneath it — so a read begun by changing the view must not borrow it.
+    it('says the pictures are loading while the ask for them is in flight', async () => {
+        render(readingUnder(false));
+        await screen.findByText('A drawn message.');
+
+        answer = () => new Promise<Answer>(() => undefined);
+        fireEvent.click(screen.getByRole('button', { name: 'Load pictures from the sender' }));
+
+        expect(await screen.findByText('Loading them…')).toBeDefined();
+    });
+
+    it('says nothing about the pictures while the read a changed view started is in flight', async () => {
+        answeringWithMarkupWhenAsked();
+
+        const opened = render(readingUnder(false));
+        await screen.findByText('A drawn message.');
+
+        answer = () => new Promise<Answer>(() => undefined);
+        opened.rerender(readingUnder(true));
+
+        expect(screen.getByRole('button', { name: 'Load pictures from the sender' })).toBeDefined();
+        expect(screen.queryByText('Loading them…')).toBeNull();
+    });
+
+    it('draws the reduced tree from the answer it already holds rather than reading the message again', async () => {
+        answeringWithMarkupWhenAsked();
+
+        const opened = render(readingUnder(true));
+        await screen.findByTitle("The sender's own markup, drawn in isolation");
+
+        opened.rerender(readingUnder(false));
+        await screen.findByText('A drawn message.');
+
+        expect(readsAsked()).toStrictEqual([`${baseAddress}/api/client/messages/stub-message/body?fullHtml=true`]);
     });
 });
