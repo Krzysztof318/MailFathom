@@ -1141,12 +1141,19 @@ in this repository or in its secrets. Installing it is `adb install -r` against 
 needs USB debugging on, and an emulator needs an `x86_64` system image because that is the architecture this build
 covers beside `arm64-v8a`.
 
-**Nothing builds this head but the command above.** Neither verification gate reaches it, no pull request check does,
-and no workflow does either: the nightly job
+**One workflow builds this head and nothing else does.** Neither verification gate reaches it and no pull request check
+does: the only thing that runs it is `Build the Android client`, which `Nightly` calls once the client's own gate has
+passed, on the terms
 [ADR 0027](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0027-an-android-head-built-every-night-and-supported-by-nothing.md)
-assigns it is [#1615](https://github.com/Krzysztof318/MailFathom/issues/1615) and has not landed. So a change breaking
-the Android build alone merges green with nothing to notice it, and running `pnpm android:build` by hand is what a
-change reaching `frontend/src-tauri/` owes until that job exists.
+sets — the APK and a checksum beside it, left on the run that built them and attached to nothing. It gates nothing
+either, so a change breaking the Android build alone still merges green and fails that night. Running
+`pnpm android:build` by hand is therefore what a change reaching `frontend/src-tauri/` owes, and the nightly is what
+catches a break in the toolchain itself rather than in this repository.
+
+Of the four prerequisites above the workflow installs one. The GitHub-hosted runner image already carries the SDK,
+several NDKs, several JDKs, and rustup, so the job only says which of them to use — which is why it pins the runner
+image rather than tracking `ubuntu-latest`: that image is the toolchain pin. What it does add is the Rust targets, and
+only the two the APK covers. A local machine is the case all four rows are written for.
 
 ## Code coverage
 

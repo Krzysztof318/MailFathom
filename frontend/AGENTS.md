@@ -125,10 +125,10 @@ What belongs here is the rule that follows from that, because no tool enforces i
   building against a template nobody looked at. `$update-dependencies` is where a pin moves at all. A regeneration also moves what
   the APK carries, so re-run the Android enumeration in `THIRD_PARTY_LICENSES.md` § _How the inventory is produced_ and write what
   it printed into that closure's row: nothing recomputes a census, exactly as with the two above.
-- **The head is exempt from no rule and gated by nothing at all.** No verification gate, no pull request check, and —
-  until [#1615](https://github.com/Krzysztof318/MailFathom/issues/1615) lands the nightly job ADR 0027 describes — no
-  workflow builds it. A change that breaks the Android toolchain alone therefore merges green with nothing to notice
-  it, and running `pnpm android:build` by hand is what a change reaching this crate owes instead.
+- **The head is exempt from no rule and gated by nothing at all.** No verification gate and no pull request check
+  reaches it; the one thing that builds it is the nightly job ADR 0027 describes, `Build the Android client`, and that
+  job gates nothing either. A change that breaks the Android toolchain alone therefore merges green and fails a
+  nightly, so running `pnpm android:build` by hand is what a change reaching this crate owes.
 - **Nothing Android's belongs above the shell.** The credential store, the system notification, and the back gesture are
   shell operations resolved at the composition root, and `frontend/src/AGENTS.md` § _The two heads_ is the rule that
   keeps a component from asking which head it is on. A third head does not widen that permission.

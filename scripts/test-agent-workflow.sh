@@ -7469,6 +7469,61 @@ the_desktop_publication_is_stamped_with_the_version_its_caller_resolved() {
   fi
 }
 
+# What keeps the Android artifact from becoming a release by accumulation. ADR 0027 rests the whole
+# distinction on two properties — the build is debug-signed, and no signing material exists here to
+# make it anything else — and both are the kind that a single well-meant commit restores by copying
+# Tauri's own documented signing step, whose example writes `keystore.properties` from secrets. So the
+# absence is asserted rather than described: a keystore, a key, a signing configuration, or a workflow
+# reading one fails here, in the repository this contract suite already reads, rather than in a review
+# somebody has to remember to make. The version half is the same assertion the desktop build carries
+# above and for the same reason — the wrapper resolves its own number when nothing hands it one, and a
+# nightly's identifier is not in `Version.props` at all.
+the_android_artifact_is_debug_signed_and_stamped_from_its_caller() {
+  local workflow_directory="$source_repository_root/.github/workflows"
+  local workflow="$workflow_directory/build-android-client.yml"
+  local manifest="$source_repository_root/frontend/package.json"
+  local failures=''
+  local offenders
+
+  grep -qE "^[[:space:]]+MAILFATHOM_VERSION: \\\$\{\{ inputs\.version \}\}$" "$workflow" ||
+    failures+='build-android-client.yml does not hand the version it was given to the build. '
+
+  # Both defining properties of the artifact sit in one script, so a developer's own build and the
+  # nightly produce the same thing rather than agreeing by coincidence.
+  jq --exit-status --raw-output '.scripts["android:build"] | select(contains("--debug"))' "$manifest" > /dev/null ||
+    failures+='frontend/package.json: android:build does not build the debug variant. '
+  jq --exit-status --raw-output '.scripts["android:build"] | select(contains("--target aarch64 x86_64"))' "$manifest" > /dev/null ||
+    failures+='frontend/package.json: android:build does not cover arm64-v8a and x86_64. '
+
+  [[ "$(extract_workflow_job_uses "$workflow_directory/nightly.yml" android-client)" == './.github/workflows/build-android-client.yml' ]] ||
+    failures+='nightly.yml: android-client does not call build-android-client.yml. '
+
+  # No release channel calls it, which is the other half of what "left on the run" means: a release
+  # attaching this artifact would be the exact confusion ADR 0027 refuses.
+  [[ -z "$(extract_workflow_job_uses "$workflow_directory/release.yml" android-client)" ]] ||
+    failures+='release.yml calls the Android build, which would attach an unsupported artifact to a release. '
+
+  offenders="$(git -C "$source_repository_root" ls-files -- \
+    '*keystore.properties' '*key.properties' '*.jks' '*.keystore' | sort || true)"
+  [[ -z "$offenders" ]] ||
+    failures+="signing material is committed: $(printf '%s' "$offenders" | tr '\n' ' ')"
+
+  # A signing configuration is what a release build reads, and a workflow writing one from secrets is
+  # how Tauri's own documentation gets there. Neither exists, and neither may. Comment lines are
+  # dropped before the match, because saying in a file why the thing is absent is the opposite of
+  # declaring it — and `.gitignore` naming a keystore is what keeps a stray one untracked.
+  offenders="$(grep -rE 'signingConfig|storeFile|ANDROID_KEY|keystore\.properties' \
+    "$source_repository_root/frontend/src-tauri/gen/android" "$workflow_directory" 2>/dev/null |
+    grep -vE ':[[:space:]]*(#|//)' | grep -vE '/\.gitignore:' | cut -d: -f1 | sort -u || true)"
+  [[ -z "$offenders" ]] ||
+    failures+="a signing configuration is declared: $(printf '%s' "$offenders" | tr '\n' ' ')"
+
+  if [[ -n "$failures" ]]; then
+    printf 'The Android artifact is not the unsigned-for-distribution build ADR 0027 decided: %s\n' "$failures" >&2
+    return 1
+  fi
+}
+
 # The mutation score answers what coverage stopped answering, and it is worth that only while nobody
 # has to reach it. Every way it could quietly become a gate is checked here rather than left to
 # whoever next edits one of the three files it lives in: the runtime is tens of minutes, the test
@@ -8898,6 +8953,7 @@ run_test every_checkout_refuses_to_persist_credentials
 run_test the_release_restores_the_annotated_tag_before_asserting_it
 run_test no_channel_builds_an_artifact_before_the_commit_has_verified
 run_test the_desktop_publication_is_stamped_with_the_version_its_caller_resolved
+run_test the_android_artifact_is_debug_signed_and_stamped_from_its_caller
 run_test the_mutation_score_is_reported_and_never_gated
 run_test a_paid_provider_run_is_never_the_default
 run_test only_the_recorded_workflows_use_pull_request_target
