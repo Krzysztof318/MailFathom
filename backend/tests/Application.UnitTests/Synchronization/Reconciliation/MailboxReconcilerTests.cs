@@ -1522,12 +1522,21 @@ public sealed class MailboxReconcilerTests
         return mailboxSession;
     }
 
-    /// <summary>A pass that moved something says so once, naming the rows a reader has to read again.</summary>
+    /// <summary>A pass names the rows a reader has to read again, and leaves out the ones the server only described a second time.</summary>
     [Fact]
-    public async Task ReconcileAsync_WithAClientListening_SignalsTheOccurrencesThatMovedInThatFolder()
+    public async Task ReconcileAsync_WithAClientListening_NamesWhatMovedAndNotWhatTheServerMerelyDescribed()
     {
         // Arrange
-        var store = new FakeReconciliationStore(StoredOccurrences(10, 11, 12));
+        // The server describes 10 and 12 and has lost 11. Only 10's reading differs from what the last run recorded,
+        // so 12 is a described occurrence that moved nothing — which is every occurrence in every window on a server
+        // without CONDSTORE, and is what this signal must not name.
+        IReadOnlyList<StoredOccurrence> occurrences =
+        [
+            .. ObservedOccurrence(10, isSeen: true),
+            .. StoredOccurrences(11),
+            .. ObservedOccurrence(12, isSeen: false),
+        ];
+        var store = new FakeReconciliationStore(occurrences);
         await using var mailboxSession = CreateSessionHolding(10, 12);
         var channel = new RecordingClientSignalChannel();
         var clock = new FakeTimeProvider(RunInstant);
@@ -1555,7 +1564,9 @@ public sealed class MailboxReconcilerTests
         Assert.Equal(ClientSignalKind.MailChanged, signal.Kind);
         Assert.Equal(Account.Id, signal.Account);
         Assert.Equal(InboxFolder.Alias, signal.Folder);
-        Assert.Equal(3, signal.Emails.Count);
+        Assert.Equal(
+            [occurrences[0].StoredEmailId, occurrences[1].StoredEmailId],
+            [.. signal.Emails.OrderBy(email => email.Value)]);
     }
 
     /// <summary>A pass that moved nothing says nothing, so an idle deployment is silent rather than chatty.</summary>

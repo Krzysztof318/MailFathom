@@ -3,7 +3,6 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.Buffers.Text;
-using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using MailFathom.Domain.Access;
 
@@ -54,7 +53,17 @@ internal sealed class ClientSignalTickets
     /// <summary>What separates the two halves, chosen because it is safe in a query string and absent from base64url.</summary>
     private const char Separator = '.';
 
-    private readonly ConcurrentDictionary<string, OutstandingTicket> outstanding = new(StringComparer.Ordinal);
+    /// <summary>The most a presented value may be before it is refused unread.</summary>
+    /// <remarks>
+    /// A bound this boundary states itself rather than one it inherits. What arrives is a query-string parameter off a
+    /// WebSocket handshake, so its length is bounded today by Kestrel's request-line limit and by whatever a reverse
+    /// proxy in front of it allows — neither of which is this type's to rely on, and both of which an operator
+    /// configures. A ticket this type minted is a little over eighty characters, so anything past this is not one.
+    /// </remarks>
+    private const int LongestPresentedTicket = 256;
+
+    private readonly Dictionary<string, OutstandingTicket> outstanding = new(StringComparer.Ordinal);
+    private readonly Lock gate = new();
     private readonly TimeProvider timeProvider;
 
     /// <summary>Initializes the store over the clock its lifetimes are measured against.</summary>
@@ -72,25 +81,31 @@ internal sealed class ClientSignalTickets
     /// <returns>The minted ticket and when it expires, or <see langword="null" /> when the bound is reached.</returns>
     internal MintedClientSignalTicket? Mint(MailOwnerId owner)
     {
-        // Swept only where the bound is what would refuse this mint, because that is the only moment the difference
-        // between a live ticket and a spent one matters. Sweeping on every mint would walk the whole store per
-        // connection for a store that is nearly always tiny, which is a cost paid on the ordinary path to tidy state
-        // the bound below already limits.
-        if (this.outstanding.Count >= MostOutstandingTickets)
-        {
-            this.SweepExpired();
-        }
-
-        if (this.outstanding.Count >= MostOutstandingTickets)
-        {
-            return null;
-        }
-
         var identifier = RandomText(IdentifierByteCount);
         var secret = RandomNumberGenerator.GetBytes(SecretByteCount);
         var expiresAt = this.timeProvider.GetUtcNow() + Lifetime;
 
-        this.outstanding[identifier] = new OutstandingTicket(owner, secret, expiresAt);
+        // Counted and admitted under one lock, because a bound read and then written to is a bound several callers can
+        // each find room under and then all exceed. Minting happens once per connection rather than once per request,
+        // so what a lock costs here is nothing measurable against what it is stating.
+        lock (this.gate)
+        {
+            // Swept only where the bound is what would refuse this mint, because that is the only moment the difference
+            // between a live ticket and a spent one matters. Sweeping on every mint would walk the whole store per
+            // connection for a store that is nearly always tiny, which is a cost paid on the ordinary path to tidy
+            // state the bound below already limits.
+            if (this.outstanding.Count >= MostOutstandingTickets)
+            {
+                this.SweepExpired();
+            }
+
+            if (this.outstanding.Count >= MostOutstandingTickets)
+            {
+                return null;
+            }
+
+            this.outstanding[identifier] = new OutstandingTicket(owner, secret, expiresAt);
+        }
 
         return new MintedClientSignalTicket(
             string.Concat(identifier, Separator.ToString(), Base64Url.EncodeToString(secret)),
@@ -103,7 +118,9 @@ internal sealed class ClientSignalTickets
     /// <remarks>Removing before comparing is what makes a ticket single-use even against two connections presenting it at once: the loser finds nothing to remove and is refused, whichever of them wrote the value first.</remarks>
     internal MailOwnerId? Redeem(string? presented)
     {
-        if (string.IsNullOrEmpty(presented))
+        // Bounded before it is walked rather than after, which is the order every other untrusted length here is read
+        // in: a value past this is refused without an index, a slice, or a decode having been spent on it.
+        if (string.IsNullOrEmpty(presented) || presented.Length > LongestPresentedTicket)
         {
             return null;
         }
@@ -115,9 +132,14 @@ internal sealed class ClientSignalTickets
             return null;
         }
 
-        if (!this.outstanding.TryRemove(presented[..separator], out var ticket))
+        OutstandingTicket? ticket;
+
+        lock (this.gate)
         {
-            return null;
+            if (!this.outstanding.Remove(presented[..separator], out ticket))
+            {
+                return null;
+            }
         }
 
         var proof = presented.AsSpan(separator + 1);
@@ -135,16 +157,18 @@ internal sealed class ClientSignalTickets
         Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(byteCount));
 
     /// <summary>Removes what can no longer be presented, so the bound above measures live tickets rather than history.</summary>
+    /// <remarks>Called under <c>gate</c>, which is what lets it enumerate the store while removing from it.</remarks>
     private void SweepExpired()
     {
         var now = this.timeProvider.GetUtcNow();
+        var expired = this.outstanding
+            .Where(held => held.Value.ExpiresAt < now)
+            .Select(static held => held.Key)
+            .ToArray();
 
-        foreach (var (identifier, ticket) in this.outstanding)
+        foreach (var identifier in expired)
         {
-            if (ticket.ExpiresAt < now)
-            {
-                this.outstanding.TryRemove(identifier, out _);
-            }
+            this.outstanding.Remove(identifier);
         }
     }
 

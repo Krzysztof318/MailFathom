@@ -8,6 +8,7 @@ using MailFathom.Domain.Emails;
 using MailFathom.Domain.Folders;
 using MailFathom.TestSupport;
 using Microsoft.Extensions.Time.Testing;
+using NSubstitute;
 using Xunit;
 
 namespace MailFathom.Application.UnitTests.Signals;
@@ -155,7 +156,9 @@ public sealed class ClientSignalsTests
     public async Task Publish_AChannelThatFails_LeavesTheRemainingChannelDeliveredAndTheNextWindowRunning()
     {
         // Arrange
-        var failing = new FailingClientSignalChannel();
+        var failing = Substitute.For<IClientSignalChannel>();
+        failing.PublishAsync(Arg.Any<ClientSignal>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new InvalidOperationException("This channel cannot deliver.")));
         var recording = new RecordingClientSignalChannel();
         var clock = new FakeTimeProvider();
         await using var signals = new ClientSignals([failing, recording], clock);
@@ -234,11 +237,5 @@ public sealed class ClientSignalsTests
 
         // Assert
         Assert.Equal(4, Assert.Single(channel.Published).Count);
-    }
-
-    private sealed class FailingClientSignalChannel : IClientSignalChannel
-    {
-        public Task PublishAsync(ClientSignal signal, CancellationToken cancellationToken) =>
-            Task.FromException(new InvalidOperationException("This channel cannot deliver."));
     }
 }
