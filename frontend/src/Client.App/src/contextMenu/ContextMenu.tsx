@@ -139,8 +139,10 @@ export function ContextMenu({
 
     return (
         <>
-            {/* What the page is dimmed to behind the menu, and what keeps the pointer's own menu gesture from opening
-                a second one over the first. Everything else about leaving is the two effects above. */}
+            {/* What the page is dimmed to behind the menu. A second menu gesture out here is a reader pointing
+                somewhere else, so the browser's own menu is refused and this one goes; the panel refuses the same
+                gesture on its own account below, because it paints over this rather than inside it. Everything else
+                about leaving is the two effects above. */}
             <div
                 aria-hidden="true"
                 className="fixed inset-0 z-70 bg-scrim"
@@ -164,6 +166,11 @@ export function ContextMenu({
                         wide && placed === null ? 'invisible' : ''
                     }`}
                     onKeyDown={onKeyDown}
+                    // The same gesture landing on the menu itself asks for what is already open, so it is refused and
+                    // nothing else happens: closing here would take the menu away from somebody who pointed at it.
+                    onContextMenu={(event) => {
+                        event.preventDefault();
+                    }}
                 >
                     <p id={names} className="truncate px-3 pt-1 pb-1.5 text-2xs tracking-widest text-muted">
                         {header}

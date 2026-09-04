@@ -115,6 +115,15 @@ describe('ContextMenu', () => {
         expect(closed).not.toHaveBeenCalled();
     });
 
+    it('refuses the pointer’s own menu gesture inside itself as well as outside, and stays where it is', () => {
+        const closed = vi.fn();
+
+        menuOver(closed);
+
+        expect(fireEvent.contextMenu(screen.getByRole('menuitem', { name: 'Archive' }))).toBe(false);
+        expect(closed).not.toHaveBeenCalled();
+    });
+
     it('performs the item that was chosen and goes', () => {
         const closed = vi.fn();
 
