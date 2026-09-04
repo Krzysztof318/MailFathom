@@ -64,7 +64,7 @@ import { Thread } from './thread/Thread';
 import { attachmentKey, OpenAttachmentContext, type OpenedAttachment } from './workspace/openAttachment';
 import { conversationKey, type OpenConversation } from './workspace/openConversation';
 import { scopeKey } from './workspace/mailScope';
-import { emptyWorkspace, useWorkspace } from './workspace/useWorkspace';
+import { emptyWorkspace, useWorkspace, type Workspace } from './workspace/useWorkspace';
 
 // The frame Discover, Mail, and Cases are held in, and the only thing in the client that survives moving between them.
 // It is one tree laid out two ways by the width it is given — a rail beside a workspace, or bottom navigation under a
@@ -361,7 +361,7 @@ export function App({
         // position and each of them draws what a row was opened, so a boundary around any one of them would leave the
         // other three uncontained.
         return (
-            <Containment region="reading_pane">
+            <Containment drawing={whatTheColumnDraws(workspace)} region="reading_pane">
                 <OpenMail
                     session={session}
                     transport={readMail}
@@ -621,6 +621,17 @@ function openingKey(opening: ComposerOpening): string {
 // Keyed by the conversation together with the message it was opened at, because what a conversation opens with is
 // decided once from what it holds then: opening the same conversation at another message is a screen of its own rather
 // than the same one adjusted. The file is keyed for the same reason and by the same rule.
+// What the reading column is drawing, as one value the boundary around it compares against the last one. Every surface
+// that stands in that position is in it rather than the message alone, because each is a different thing to draw: a
+// file that could not be shown says nothing about the conversation behind it, and a message the pane failed on says
+// nothing about the next message somebody opens.
+function whatTheColumnDraws(workspace: Workspace): string {
+    const attachment = workspace.attachment === null ? '' : attachmentKey(workspace.attachment);
+    const conversation = workspace.conversation === null ? '' : conversationKey(workspace.conversation);
+
+    return [workspace.selection ?? '', workspace.fullHtml ?? '', conversation, attachment].join('\n');
+}
+
 function OpenMail({
     session,
     transport,

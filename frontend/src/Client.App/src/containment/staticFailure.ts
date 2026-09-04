@@ -21,6 +21,10 @@ export function showStaticFailure(): void {
     }
 
     const shown = carried.content.cloneNode(true);
+
+    // Read out of the fragment before it is inserted, because appending a fragment empties it: what is put in the
+    // document is this element, and a reference taken afterwards would have nothing left to take.
+    const surface = shown instanceof DocumentFragment ? shown.firstElementChild : null;
     const root = document.getElementById('root');
 
     // Appended where there is no root, because a document that carries none is exactly the failure this stands for.
@@ -28,5 +32,12 @@ export function showStaticFailure(): void {
         document.body.append(shown);
     } else {
         root.replaceChildren(shown);
+    }
+
+    // This replaces everything that was on the screen, which is the largest view change the client can make, so focus
+    // goes to it for the reason § _UX_ places focus on any other: whatever held it a moment ago is no longer in the
+    // document. The alert says it to a screen reader; this is what puts everybody else at the start of it.
+    if (surface instanceof HTMLElement) {
+        surface.focus();
     }
 }

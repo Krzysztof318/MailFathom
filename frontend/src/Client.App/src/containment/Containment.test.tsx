@@ -26,16 +26,20 @@ function Fragile() {
     return <button type="button">{drawn}</button>;
 }
 
-function renderContained(): void {
-    render(
+function contained(drawing?: string) {
+    return (
         <LocalizationProvider>
             <p>{beside}</p>
 
-            <Containment region="reading_pane">
+            <Containment drawing={drawing} region="reading_pane">
                 <Fragile />
             </Containment>
-        </LocalizationProvider>,
+        </LocalizationProvider>
     );
+}
+
+function renderContained(drawing?: string) {
+    return render(contained(drawing));
 }
 
 describe('Containment', () => {
@@ -91,6 +95,26 @@ describe('Containment', () => {
 
         expect(screen.getByRole('alert').textContent).toContain(
             'This part of MailFathom stopped working again. Everything around it is unaffected.',
+        );
+    });
+
+    it('draws the next thing the region is asked for, rather than holding a failure over it', () => {
+        const { rerender } = renderContained('the message that failed');
+
+        failing = false;
+        rerender(contained('the next message'));
+
+        expect(screen.queryByRole('alert')).toBeNull();
+        expect(screen.getByRole('button', { name: drawn })).toBeDefined();
+    });
+
+    it('reads a failure on the next thing as a first failure rather than as a repeat of the last one', () => {
+        const { rerender } = renderContained('the message that failed');
+
+        rerender(contained('the next message'));
+
+        expect(screen.getByRole('alert').textContent).toContain(
+            'This part of MailFathom stopped working. Everything around it is unaffected.',
         );
     });
 

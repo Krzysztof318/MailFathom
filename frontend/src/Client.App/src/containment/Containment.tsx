@@ -25,6 +25,16 @@ interface ContainmentProps {
     /** Which region this stands around, which is what a contained failure is reported under. */
     readonly region: ClientRegion;
 
+    /**
+     * What the region is currently drawing, where the region draws one of many things.
+     *
+     * A boundary holds its failure until something clears it, and React clears one for nothing: a changed prop does
+     * not reset it. So a pane that failed on one message would go on saying so over the next message somebody opened,
+     * which is a failure of one thing spreading to everything after it. Naming what is being drawn is what tells the
+     * two apart — the same thing failing again, and a different thing that has not been tried yet.
+     */
+    readonly drawing?: string | undefined;
+
     readonly children: ReactNode;
 }
 
@@ -34,6 +44,9 @@ interface ContainmentState {
 
     /** How many times it has failed, which is what tells a first failure from one that came back. */
     readonly failures: number;
+
+    /** What was being drawn when this last rendered, which is what a change is read against. */
+    readonly drawn: string | undefined;
 }
 
 export class Containment extends Component<ContainmentProps, ContainmentState> {
@@ -41,10 +54,25 @@ export class Containment extends Component<ContainmentProps, ContainmentState> {
     // draws, and `display: contents` is what keeps a wrapper that exists for the keyboard out of the layout.
     private readonly recovered = createRef<HTMLDivElement>();
 
-    override state: ContainmentState = { failed: false, failures: 0 };
+    override state: ContainmentState = { failed: false, failures: 0, drawn: this.props.drawing };
 
     static getDerivedStateFromError(): Pick<ContainmentState, 'failed'> {
         return { failed: true };
+    }
+
+    // A region asked to draw something else starts again, however the last thing went: the failure that is being held
+    // was about what is no longer on the screen, and the count with it — the next thing to draw has not failed once,
+    // let alone twice. Derived from the props rather than handled in an effect, so nothing renders the stale surface
+    // for a frame first.
+    static getDerivedStateFromProps(
+        props: ContainmentProps,
+        state: ContainmentState,
+    ): Pick<ContainmentState, 'failed' | 'failures' | 'drawn'> | null {
+        if (props.drawing === state.drawn) {
+            return null;
+        }
+
+        return { failed: false, failures: 0, drawn: props.drawing };
     }
 
     // Counted here rather than in the derivation above, which is handed the error and not the state before it. A

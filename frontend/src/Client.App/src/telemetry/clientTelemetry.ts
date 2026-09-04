@@ -257,13 +257,18 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
 const plainClassName = /^[A-Za-z][A-Za-z0-9]{0,39}$/;
 
 function classOf(error: unknown): string {
-    // Read as a value rather than reached through, because this runs where React is already handling a failure and a
-    // thrown value carries whatever the throwing code left on it — including no constructor at all. Telemetry is never
-    // the reason a screen fails, and that has to hold on the path a screen fails on.
-    const constructor: unknown = error instanceof Error ? error.constructor : undefined;
-    const named = typeof constructor === 'function' ? constructor.name : typeof error;
+    // Read as a value rather than reached through, and read inside a guard, because this runs where React is already
+    // handling a failure and a thrown value carries whatever the throwing code left on it — no constructor at all, or
+    // an accessor that throws in its turn. Telemetry is never the reason a screen fails, and that has to hold on the
+    // path a screen fails on, so anything unreadable is reported as exactly that.
+    try {
+        const constructor: unknown = error instanceof Error ? error.constructor : undefined;
+        const named = typeof constructor === 'function' ? constructor.name : typeof error;
 
-    return plainClassName.test(named) ? named : 'unknown';
+        return plainClassName.test(named) ? named : 'unknown';
+    } catch {
+        return 'unknown';
+    }
 }
 
 const severities: Readonly<Record<ClientEvent, SeverityNumber>> = {

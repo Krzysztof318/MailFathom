@@ -245,6 +245,28 @@ describe('clientTelemetryForThisApplication', () => {
         expect(record?.attributes['mailfathom.client.error']).toBe('unknown');
     });
 
+    // A value thrown while React is unwinding carries whatever the throwing code left on it, and reading it is not
+    // safe: a proxy or a defined accessor answers a read with a throw of its own. Telemetry is never the reason a
+    // screen fails, least of all on the path a screen fails on.
+    it('reports a thrown value it cannot read the class of as unreadable, rather than failing in its turn', async () => {
+        const unreadable = new Error('A value whose own class refuses to be read.');
+        Object.defineProperty(unreadable, 'constructor', {
+            get: () => {
+                throw new TypeError('This value refuses to say what it is.');
+            },
+        });
+
+        const telemetry = clientTelemetryForThisApplication();
+
+        expect(() => {
+            telemetry.renderFailed('reading_pane', unreadable);
+        }).not.toThrow();
+
+        const [record] = await written(() => records.getFinishedLogRecords());
+
+        expect(record?.attributes['mailfathom.client.error']).toBe('unknown');
+    });
+
     it('carries no part of the credential or the address into anything it records', async () => {
         const telemetry = clientTelemetryForThisApplication();
 

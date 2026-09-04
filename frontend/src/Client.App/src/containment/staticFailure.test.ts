@@ -12,10 +12,14 @@ const drawn = 'What was left of the client';
 
 function documentCarryingTheSurface(): void {
     const template = document.createElement('template');
+    const surface = document.createElement('div');
     const heading = document.createElement('h1');
 
     heading.textContent = carried;
-    template.content.append(heading);
+    surface.append(heading);
+    surface.setAttribute('role', 'alert');
+    surface.tabIndex = -1;
+    template.content.append(surface);
     template.id = 'client-failed';
     document.body.append(template);
 }
@@ -51,6 +55,16 @@ describe('showStaticFailure', () => {
         showStaticFailure();
 
         expect(document.body.textContent).toContain(carried);
+    });
+
+    // Everything that was on the screen has just been replaced, so whatever held focus is no longer in the document.
+    it('puts the reader at the start of what it put in front of them', () => {
+        documentWithARoot();
+        documentCarryingTheSurface();
+
+        showStaticFailure();
+
+        expect(document.activeElement).toBe(document.querySelector('#root [role="alert"]'));
     });
 
     it('leaves a document carrying no such surface as it found it', () => {
