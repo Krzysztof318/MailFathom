@@ -10,6 +10,7 @@ import { Composer } from './composer/Composer';
 import type { ComposerOpening } from './composer/composition';
 import { forgetComposition } from './composer/keptComposition';
 import { ComposingContext } from './composer/useComposing';
+import { Containment } from './containment/Containment';
 import { BrandMark } from './controls/BrandMark';
 import { SecondaryButton } from './controls/SecondaryButton';
 import { VersionLine } from './controls/VersionLine';
@@ -354,20 +355,27 @@ export function App({
             return null;
         }
 
+        // The one region of this client that draws a document assembled out of mail somebody else sent, which is where
+        // a defect nobody anticipated is most likely to be met. Contained here rather than further in, because what a
+        // reader needs when a message cannot be drawn is the list they opened it from: the surfaces below stand in one
+        // position and each of them draws what a row was opened, so a boundary around any one of them would leave the
+        // other three uncontained.
         return (
-            <OpenMail
-                session={session}
-                transport={readMail}
-                conversation={workspace.conversation}
-                fullHtml={workspace.fullHtml}
-                attachment={workspace.attachment}
-                storedEmailId={workspace.selection}
-                online={connection.online}
-                expandWholeThread={preferences.expandWholeThread}
-                onShowFullHtml={openTabs.openFullHtml}
-                onCloseFullHtml={openTabs.closeFullHtml}
-                onCloseAttachment={openTabs.closeAttachment}
-            />
+            <Containment region="reading_pane">
+                <OpenMail
+                    session={session}
+                    transport={readMail}
+                    conversation={workspace.conversation}
+                    fullHtml={workspace.fullHtml}
+                    attachment={workspace.attachment}
+                    storedEmailId={workspace.selection}
+                    online={connection.online}
+                    expandWholeThread={preferences.expandWholeThread}
+                    onShowFullHtml={openTabs.openFullHtml}
+                    onCloseFullHtml={openTabs.closeFullHtml}
+                    onCloseAttachment={openTabs.closeAttachment}
+                />
+            </Containment>
         );
     }
 

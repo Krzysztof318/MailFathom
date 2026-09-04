@@ -1200,6 +1200,43 @@ test('leaves the markup surface for the message it was opened from, and asks aga
     await expect(page.getByRole('heading', { name: 'Show the full HTML?' })).toBeVisible();
 });
 
+// A failure the pane cannot survive, induced by refusing the element every reading surface is built around: the frame
+// draws no `article` at all, so this reaches the region under test and nothing else. It is the one way to produce an
+// unexpected throw in the built bundle without the client carrying a seam for it, and what is being proven is what
+// only a browser can say — that a real render failure in the real bundle costs the pane rather than the document.
+// Written as an expression rather than as a closure, for the reason the overflow check above gives: this suite is
+// compiled without a DOM declaration on purpose, so a function naming `document` would be the one thing that changes.
+const refuseTheElementAMessageIsDrawnAs = `
+    (() => {
+        const create = document.createElement.bind(document);
+
+        document.createElement = (name, options) => {
+            if (name === 'article') {
+                throw new TypeError('This message cannot be drawn.');
+            }
+
+            return create(name, options);
+        };
+    })()
+`;
+
+test('keeps the frame usable when the reading pane throws while it is being drawn', async ({ page }) => {
+    await openTheFirstMessage(page);
+    await expect(page.getByRole('article', messageRegion)).toBeVisible();
+
+    await page.evaluate(refuseTheElementAMessageIsDrawnAs);
+    await page.getByRole('listbox', { name: 'Messages' }).getByRole('option').nth(1).click();
+
+    // The pane says what happened rather than the document going blank, and everything the frame holds is still there
+    // to be used: the list that opened it, the mailboxes beside it, and the way to another space.
+    await expect(page.getByRole('alert')).toContainText('This part of MailFathom stopped working.');
+    await expect(page.getByRole('listbox', { name: 'Messages' })).toBeVisible();
+
+    await page.getByRole('link', { name: 'Discover' }).click();
+
+    await expect(page.getByRole('heading', { name: 'Discover', level: 1 })).toBeVisible();
+});
+
 // What only a browser can say about the message list: every row is one height, the document holds a window of rows
 // rather than the folder, and a reader who leaves and comes back is put back where they were. Everything else about
 // it — the paging arithmetic, the states, the selection, and every sentence — is jsdom's and lives in the unit suite
