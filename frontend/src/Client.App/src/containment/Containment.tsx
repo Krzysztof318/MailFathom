@@ -93,8 +93,12 @@ export class Containment extends Component<ContainmentProps, ContainmentState> {
     };
 
     override render(): ReactNode {
+        // Keyed by what was being drawn, because a surface standing for one failure is not the surface standing for the
+        // next: React would otherwise reconcile the two as one element — the attempt at the new thing throws before it
+        // commits, so what the fallback is compared against is the fallback already on the screen — and the effect that
+        // places focus, which runs on mount, would not run for a reader who has just asked for something else.
         if (this.state.failed) {
-            return <FailedRegion again={this.state.failures > 1} onRetry={this.retry} />;
+            return <FailedRegion again={this.state.failures > 1} key={this.state.drawn} onRetry={this.retry} />;
         }
 
         return (

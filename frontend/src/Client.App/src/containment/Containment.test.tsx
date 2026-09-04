@@ -118,6 +118,16 @@ describe('Containment', () => {
         );
     });
 
+    it('puts the reader at the start of the surface again when the next thing fails in its turn', () => {
+        const { rerender } = renderContained('the message that failed');
+
+        screen.getByRole('alert').blur();
+        expect(document.activeElement).toBe(document.body);
+        rerender(contained('the next message'));
+
+        expect(document.activeElement).toBe(screen.getByRole('alert'));
+    });
+
     it('offers the way out again after it failed a second time, rather than leaving nothing to press', () => {
         renderContained();
 

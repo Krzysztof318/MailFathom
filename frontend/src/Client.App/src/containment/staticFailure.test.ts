@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { showStaticFailure } from './staticFailure';
 
 // What `index.html` carries and what the client had drawn, built as elements rather than written as markup — this
@@ -58,13 +58,17 @@ describe('showStaticFailure', () => {
     });
 
     // Everything that was on the screen has just been replaced, so whatever held focus is no longer in the document.
-    it('puts the reader at the start of what it put in front of them', () => {
+    // Waited for rather than read straight away, because focus is taken a task later than the surface is shown — the
+    // source says what React does about focus during its own handling of the failure this stands for.
+    it('puts the reader at the start of what it put in front of them', async () => {
         documentWithARoot();
         documentCarryingTheSurface();
 
         showStaticFailure();
 
-        expect(document.activeElement).toBe(document.querySelector('#root [role="alert"]'));
+        await vi.waitFor(() => {
+            expect(document.activeElement).toBe(document.querySelector('#root [role="alert"]'));
+        });
     });
 
     it('leaves a document carrying no such surface as it found it', () => {

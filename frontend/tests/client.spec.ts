@@ -1237,6 +1237,41 @@ test('keeps the frame usable when the reading pane throws while it is being draw
     await expect(page.getByRole('heading', { name: 'Discover', level: 1 })).toBeVisible();
 });
 
+// The failure no boundary is left to contain, induced by refusing the element every surface in this client is built
+// out of: the region fails, the boundary around it fails drawing what it says instead, and so does the last-resort
+// boundary above it — which is what leaves React with nothing to render and unmounts the root. Only a browser can say
+// what is left then, because what stands there is markup the document itself carries rather than anything the bundle
+// renders, and `main.tsx` wiring `onUncaughtError` to it is not a claim jsdom can make about the built bundle.
+const refuseTheElementEverySurfaceIsBuiltFrom = `
+    (() => {
+        const create = document.createElement.bind(document);
+
+        document.createElement = (name, options) => {
+            if (name === 'div') {
+                throw new TypeError('Nothing in this client can be drawn.');
+            }
+
+            return create(name, options);
+        };
+    })()
+`;
+
+test('says so in the document itself when a failure escapes every boundary the client has', async ({ page }) => {
+    await openSignedIn(page, '/#/mail');
+    await expect(page.getByRole('listbox', { name: 'Messages' }).getByRole('option').first()).toBeVisible();
+
+    await page.evaluate(refuseTheElementEverySurfaceIsBuiltFrom);
+    await page.getByRole('listbox', { name: 'Messages' }).getByRole('option').nth(1).click();
+
+    // Nothing of the client is left, so what a reader is owed is a document that says what happened rather than an
+    // empty one — announced, and holding the keyboard, whatever it was on having gone with the tree.
+    const carried = page.getByRole('alert');
+
+    await expect(carried).toContainText('MailFathom stopped');
+    await expect(carried).toBeFocused();
+    await expect(page.getByRole('listbox', { name: 'Messages' })).toHaveCount(0);
+});
+
 // What only a browser can say about the message list: every row is one height, the document holds a window of rows
 // rather than the folder, and a reader who leaves and comes back is put back where they were. Everything else about
 // it — the paging arithmetic, the states, the selection, and every sentence — is jsdom's and lives in the unit suite

@@ -37,7 +37,15 @@ export function showStaticFailure(): void {
     // This replaces everything that was on the screen, which is the largest view change the client can make, so focus
     // goes to it for the reason § _UX_ places focus on any other: whatever held it a moment ago is no longer in the
     // document. The alert says it to a screen reader; this is what puts everybody else at the start of it.
+    //
+    // Taken after the caller's own work rather than during it. This is called from inside React's handling of a
+    // failure it could not contain, and React puts focus back where it was before that work when it is done — measured
+    // in the built bundle, where focus placed here synchronously, or in a microtask, is on the document body a moment
+    // later and only a task waited out survives it. Nothing else in this client has to wait: no other surface is put
+    // in front of somebody from inside React's own commit.
     if (surface instanceof HTMLElement) {
-        surface.focus();
+        setTimeout(() => {
+            surface.focus();
+        });
     }
 }
