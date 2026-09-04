@@ -155,4 +155,45 @@ public sealed class NotificationTests
             NotificationTarget.Nothing,
             NotificationDeduplicationKey.Create("something-happened:work"),
             OccurredAt);
+    /// <summary>The read state is the one thing a store says and a producer never does, which is why restoring takes it and composing does not.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Restore_ARowThisDeploymentAlreadyKept_CarriesTheReadStateItWasStoredUnder(bool isRead)
+    {
+        // Act
+        var notification = Notification.Restore(
+            NotificationId.Create(Guid.CreateVersion7()),
+            Owner,
+            NotificationKind.System,
+            title: "Something happened",
+            body: "Something happened that nobody was at the screen for.",
+            source: null,
+            NotificationTarget.Nothing,
+            NotificationDeduplicationKey.Create("something-happened"),
+            new DateTimeOffset(2026, 9, 3, 8, 0, 0, TimeSpan.Zero),
+            isRead);
+
+        // Assert
+        Assert.Equal(isRead, notification.IsRead);
+    }
+
+    /// <summary>A row read back is input from outside this process however it got there, so restoring validates what composing validates.</summary>
+    [Fact]
+    public void Restore_ARowWhoseOwnerNamesNobody_IsRefusedExactlyAsComposingOneIs()
+    {
+        // Act and assert
+        Assert.Throws<ArgumentException>(() => Notification.Restore(
+            NotificationId.Create(Guid.CreateVersion7()),
+            default,
+            NotificationKind.System,
+            title: "Something happened",
+            body: "Something happened that nobody was at the screen for.",
+            source: null,
+            NotificationTarget.Nothing,
+            NotificationDeduplicationKey.Create("something-happened"),
+            new DateTimeOffset(2026, 9, 3, 8, 0, 0, TimeSpan.Zero),
+            isRead: false));
+    }
+
 }

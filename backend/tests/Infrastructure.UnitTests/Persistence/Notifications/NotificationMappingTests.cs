@@ -93,6 +93,77 @@ public sealed class NotificationMappingTests
         Assert.Null(entity.Source);
     }
 
+    /// <summary>A row read back is the notification it was written from, the read state included — which is the one field a store says and a producer never does.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ToNotification_ARowThisDeploymentWrote_IsTheNotificationItWasWrittenFrom(bool isRead)
+    {
+        // Arrange
+        var notification = Compose(NotificationTarget.Nothing);
+        var entity = NotificationMapping.ToEntity(notification);
+        entity.IsRead = isRead;
+
+        // Act
+        var restored = NotificationMapping.ToNotification(entity);
+
+        // Assert
+        Assert.Equal(notification.Id, restored.Id);
+        Assert.Equal(notification.Owner, restored.Owner);
+        Assert.Equal(notification.Kind, restored.Kind);
+        Assert.Equal(notification.Title, restored.Title);
+        Assert.Equal(notification.Body, restored.Body);
+        Assert.Equal(notification.Source, restored.Source);
+        Assert.Equal(notification.DeduplicationKey, restored.DeduplicationKey);
+        Assert.Equal(notification.OccurredAt, restored.OccurredAt);
+        Assert.Equal(isRead, restored.IsRead);
+    }
+
+    /// <summary>The three columns a target flattened into are read back as the one shape they came from.</summary>
+    [Fact]
+    public void ToNotification_ARowLeadingToAMessage_ReadsTheMessageBackAsItsTarget()
+    {
+        // Arrange
+        var message = StoredEmailId.Create(Guid.NewGuid());
+        var entity = NotificationMapping.ToEntity(Compose(NotificationTarget.ToMessage(message)));
+
+        // Act
+        var target = NotificationMapping.ToNotification(entity).Target;
+
+        // Assert
+        Assert.Equal(NotificationTargetKind.Message, target.Kind);
+        Assert.Equal(message, target.Message);
+        Assert.Null(target.Screen);
+    }
+
+    [Fact]
+    public void ToNotification_ARowLeadingToAScreen_ReadsTheScreenBackAsItsTarget()
+    {
+        // Arrange
+        var entity = NotificationMapping.ToEntity(
+            Compose(NotificationTarget.ToScreen(NotificationScreen.Settings)));
+
+        // Act
+        var target = NotificationMapping.ToNotification(entity).Target;
+
+        // Assert
+        Assert.Equal(NotificationTargetKind.Screen, target.Kind);
+        Assert.Null(target.Message);
+        Assert.Equal(NotificationScreen.Settings, target.Screen);
+    }
+
+    /// <summary>A row naming a shape without the column that shape is carried in is refused rather than read as a target leading nowhere.</summary>
+    [Fact]
+    public void ToNotification_ARowNamingAShapeWithoutItsColumn_IsRefused()
+    {
+        // Arrange
+        var entity = NotificationMapping.ToEntity(Compose(NotificationTarget.ToMessage(StoredEmailId.Create(Guid.NewGuid()))));
+        entity.TargetStoredEmailId = null;
+
+        // Act and assert
+        Assert.Throws<ArgumentOutOfRangeException>(() => NotificationMapping.ToNotification(entity));
+    }
+
     private static Notification Compose(NotificationTarget target, string? source = "work") =>
         Notification.Compose(
             NotificationId.Create(Guid.CreateVersion7(OccurredAt)),

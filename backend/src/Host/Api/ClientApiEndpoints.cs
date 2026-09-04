@@ -51,6 +51,13 @@ namespace MailFathom.Host.Api;
 /// document and reading a switch should not carry a photograph.
 /// </para>
 /// <para>
+/// The notification routes, which <see cref="ClientNotificationEndpoints" /> describes, are the centre a person reads
+/// what happened to them in while nobody was looking. They stand beside the preferences rather than among the mail
+/// routes because what they serve is the deployment's own working state about a person rather than their mailbox, and
+/// both ways of marking one read are admitted under the reading grant for the reason the preferences write is: a
+/// person whose mail accounts an administrator maintains still has to be able to clear their own bell.
+/// </para>
+/// <para>
 /// The telemetry routes, which <see cref="ClientTelemetryEndpoint" /> describes, are the one family here that is not
 /// about mail: they take the client's own OTLP export and forward it to the collector this deployment already exports
 /// to, because the collector's address and its credential belong to the deployment and a browser bundle holding either
@@ -111,6 +118,7 @@ internal static class ClientApiEndpoints
         api.MapClientMailMutations();
         api.MapClientDrafts();
         api.MapClientOutbox();
+        api.MapClientNotifications();
         api.MapClientTelemetry();
 
         return api;

@@ -124,6 +124,77 @@ public sealed record Notification
         NotificationDeduplicationKey deduplicationKey,
         DateTimeOffset occurredAt)
     {
+        Validate(owner, kind, id, deduplicationKey, target);
+
+        return new Notification(
+            id,
+            owner,
+            kind,
+            Bounded(title, MaximumTitleLength, nameof(title)),
+            Bounded(body, MaximumBodyLength, nameof(body)),
+            source is null ? null : Bounded(source, MaximumSourceLength, nameof(source)),
+            target,
+            deduplicationKey,
+            occurredAt,
+            isRead: false);
+    }
+
+    /// <summary>Restores a notification this deployment already kept, with the read state it was stored under.</summary>
+    /// <param name="id">What addresses the notification.</param>
+    /// <param name="owner">The owner it happened to.</param>
+    /// <param name="kind">What part of MailFathom it is about.</param>
+    /// <param name="title">The headline the row is drawn with.</param>
+    /// <param name="body">The second line the row is drawn with.</param>
+    /// <param name="source">What the source line names beyond the kind, or <see langword="null" /> where the kind is the whole of it.</param>
+    /// <param name="target">Where opening it leads.</param>
+    /// <param name="deduplicationKey">The condition it was raised for.</param>
+    /// <param name="occurredAt">When the thing it describes happened.</param>
+    /// <param name="isRead">Whether the person has read it.</param>
+    /// <returns>The notification as it stands.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="target" /> is <see langword="null" />.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="title" /> or <paramref name="body" /> is blank, when <paramref name="source" /> is present and blank, when <paramref name="owner" /> names nobody, or when <paramref name="id" /> or <paramref name="deduplicationKey" /> is the struct default.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="kind" /> is not a declared kind, or when a text exceeds the bound stated for it.</exception>
+    /// <remarks>
+    /// It validates exactly what <see cref="Compose" /> validates rather than trusting the store, because a row read
+    /// back is input from outside this process however it got there: a hand-edited table and a migration that widened
+    /// a column reach a reader the same way a producer does. The one thing it takes that composing does not is the
+    /// read state, which is the store's to say and never a producer's.
+    /// </remarks>
+    public static Notification Restore(
+        NotificationId id,
+        MailOwnerId owner,
+        NotificationKind kind,
+        string title,
+        string body,
+        string? source,
+        NotificationTarget target,
+        NotificationDeduplicationKey deduplicationKey,
+        DateTimeOffset occurredAt,
+        bool isRead)
+    {
+        Validate(owner, kind, id, deduplicationKey, target);
+
+        return new Notification(
+            id,
+            owner,
+            kind,
+            Bounded(title, MaximumTitleLength, nameof(title)),
+            Bounded(body, MaximumBodyLength, nameof(body)),
+            source is null ? null : Bounded(source, MaximumSourceLength, nameof(source)),
+            target,
+            deduplicationKey,
+            occurredAt,
+            isRead);
+    }
+
+    /// <summary>Refuses the identities and the kind that no notification can be built from, whether composed or restored.</summary>
+    private static void Validate(
+        MailOwnerId owner,
+        NotificationKind kind,
+        NotificationId id,
+        NotificationDeduplicationKey deduplicationKey,
+        NotificationTarget target)
+    {
         ArgumentNullException.ThrowIfNull(target);
 
         if (!owner.IsSpecified)
@@ -149,18 +220,6 @@ public sealed record Notification
                 "A notification names the condition it was raised for, so the deduplication rule has something to hold.",
                 nameof(deduplicationKey));
         }
-
-        return new Notification(
-            id,
-            owner,
-            kind,
-            Bounded(title, MaximumTitleLength, nameof(title)),
-            Bounded(body, MaximumBodyLength, nameof(body)),
-            source is null ? null : Bounded(source, MaximumSourceLength, nameof(source)),
-            target,
-            deduplicationKey,
-            occurredAt,
-            isRead: false);
     }
 
     private static string Bounded(string value, int maximumLength, string parameterName)

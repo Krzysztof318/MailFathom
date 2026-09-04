@@ -1150,6 +1150,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INotificationStore, PersistedNotificationStore>();
         services.AddScoped<SynchronizationNotifications>();
         services.AddScoped<NotificationRetention>();
+        services.AddScoped<OwnNotifications>();
         services.AddScoped<IMailboxMutationPerformer, MailboxMutationPerformer>();
         // A singleton, because the gauges it publishes are the process's and the account snapshots behind them outlive
         // any one run; the pass that fills them is scoped like everything else that reaches a mail server.
