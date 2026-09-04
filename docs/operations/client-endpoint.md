@@ -1,6 +1,6 @@
 # The client endpoint
 
-<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientOwnerRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Configuration/OwnerSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Observability/ClientTelemetry/** -->
+<!-- describes: backend/src/AppHost/Program.cs, backend/src/AppHost/OrchestrationContract.cs, backend/src/Host/Configuration/Endpoints/ClientEndpointOptions.cs, backend/src/Host/Configuration/Endpoints/ClientApplicationOptions.cs, backend/src/Host/Api/ClientApiEndpoints.cs, backend/src/Host/Api/ClientMailAccountsEndpoint.cs, backend/src/Host/Api/ClientMailFoldersEndpoint.cs, backend/src/Host/Api/ClientMailTimelineEndpoint.cs, backend/src/Host/Api/ClientMailThreadEndpoint.cs, backend/src/Host/Api/ClientMailMessageEndpoint.cs, backend/src/Host/Api/ClientMailBodyEndpoint.cs, backend/src/Host/Api/ClientMailAttachmentEndpoint.cs, backend/src/Host/Api/AttachmentContentResponse.cs, backend/src/Host/Api/ProtectedResourceMetadataEndpoint.cs, backend/src/Host/Security/Endpoints/ClientTransportSecurityExtensions.cs, backend/src/Host/Hosting/ClientApplicationFiles.cs, backend/src/Host/Hosting/Warnings/ClientTransportSecurityWarning.cs, backend/src/Host/Hosting/Warnings/PasswordClearTextTransportWarning.cs, backend/src/Host/Api/ClientOwnerRecordEndpoint.cs, backend/src/Host/Api/ClientPortraitEndpoint.cs, backend/src/Host/Api/ClientDisplayNameEndpoint.cs, backend/src/Host/Configuration/OwnerSettings/Administration/OwnDisplayName.cs, backend/src/Host/Api/ClientMailMutationsEndpoint.cs, backend/src/Host/Api/ClientDraftEndpoints.cs, backend/src/Host/Api/ClientDraftResponses.cs, backend/src/Host/Api/ClientOutboxEndpoints.cs, backend/src/Host/Api/ClientNotificationEndpoints.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Observability/ClientTelemetry/** -->
 
 Where the MailFathom client reaches the service, what a deployment has to enable before it answers, and what a person's
 mail client presents to get in.
@@ -91,6 +91,10 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `GET /api/client/outbox/{outgoingEmailId}` | `mailfathom.mail.send` |
 | `POST /api/client/outbox/cancellation` | `mailfathom.mail.send` |
 | `POST /api/client/outbox/requeue` | `mailfathom.mail.send` |
+| `GET /api/client/notifications` | `mailfathom.mail.read` |
+| `GET /api/client/notifications/unread-count` | `mailfathom.mail.read` |
+| `POST /api/client/notifications/{notificationId}/read-state` | `mailfathom.mail.read` |
+| `POST /api/client/notifications/read` | `mailfathom.mail.read` |
 | `GET /api/client/preferences` | `mailfathom.mail.read` |
 | `POST /api/client/preferences` | `mailfathom.mail.read` |
 | `GET /api/client/portrait` | `mailfathom.mail.read` |
@@ -1468,6 +1472,65 @@ an unknown number of duplicates asked for in one request.
 **Every route here is `mailfathom.mail.send`, the two readings included.** What an outbox says is what this owner is
 sending, so a credential granted to read a mailbox learns nothing here, and withdrawing a send is part of sending
 rather than a power beside it.
+
+### The notification routes
+
+These are the notification centre: what happened to a person while nobody was looking at their screen, how much of it
+they have not read, and both ways of marking it read. What they serve is a record this deployment produced — an
+[IMAP synchronization](../features/imap-synchronization.md) run writing down that mail arrived or that a credential was
+refused — rather than a second reading of the mailbox.
+
+| Route | What it does |
+| --- | --- |
+| `GET /api/client/notifications` | Reads one page of the signed-in person's notifications, newest first |
+| `GET /api/client/notifications/unread-count` | Reports how many of them stand unread, without reading a page |
+| `POST /api/client/notifications/{notificationId}/read-state` | Puts one notification into the read state the body states |
+| `POST /api/client/notifications/read` | Marks every one of the person's unread notifications read |
+
+**Nothing here streams.** This surface has no server-sent events and gains none for this, so a client asks on an
+interval and when it comes back to the foreground. The count is the answer it asks for most, which is why it stands on
+a route of its own: a badge derived from a page would cost a screen's worth of rows to draw one number, and it is
+answered from the same index the deduplication rule already declares.
+
+**A page is clamped rather than refused.** A request naming no `pageSize` is served 30, one naming more than 100 is
+served 100, and one naming zero or a negative number is served the default. That is the one place this reading differs
+from [the mail list](#the-mail-list-route) and [the outbox](#the-outbox-routes), which refuse a page size out of range:
+those serve an operator or a query composed by hand, and this serves a panel asking for as much as it can draw, where a
+refusal is an error a screen has to render instead of a list. The `cursor` is the one thing here that is refused,
+because a boundary this deployment never issued names no page and answering it with the newest one would be a panel
+silently jumping back to the top. Paging is keyset rather than offset, so a notification raised while somebody is
+reading neither shifts the window nor repeats a row; the walk ends when `nextCursor` is absent rather than when a page
+comes back short.
+
+**No route names an owner.** The person is the one the credential authenticated, exactly as on
+[the record routes](#the-record-routes), so a reading of somebody else's centre cannot be composed. The one route that
+names a record names it by identifier, and **a notification another person holds answers `404` exactly as one nobody
+holds** — so nothing here reports whether such a notification exists.
+
+**A row carries what a list draws and stops there**: the kind, a headline, a second line, what the source line names
+beyond the kind, where opening it leads, when the thing it describes happened, and whether it has been read. The title
+and the second line were derived when the notification was produced, so drawing the centre re-reads no mail — and no
+mail body, no address, and no attachment reaches these answers at any size. The condition the notification was raised
+for is absent as well: it is the deduplication rule's own name for a thing rather than anything a screen renders.
+
+**Marking one unread can be refused, and only in that direction.** One unread notification stands per condition, so a
+condition said again after this one was read already stands unread in its place; asking for the older one back is
+answered `409` and the row stays read. Marking read is never refused, and asking for the state a notification already
+stands in is answered as done rather than as an error.
+
+**Both writes answer with what a client redraws from.** The read-state route reports the notification, its new state,
+and how many remain unread; the mark-all route reports how many it moved and that none remain. Neither needs the page
+to be fetched again to find out what the request produced.
+
+**Every route here is `mailfathom.mail.read`, the two writes included.** Marking a notification read changes what this
+deployment draws for one person about mail they can already see: it reaches no mail server and moves nothing in a
+mailbox. It is [the preferences routes](#the-preferences-routes)' reasoning rather than
+[the mutation routes](#the-mutation-routes)' — a person whose mail accounts an administrator maintains does not hold a
+write grant and still has to be able to clear their own bell.
+
+**A notification is kept for three months and no longer**, and one pointing at a message is erased with that message.
+Both are the record's own bounds rather than these routes', so a centre that reaches back no further has aged out
+rather than lost anything.
 
 ### The telemetry routes
 

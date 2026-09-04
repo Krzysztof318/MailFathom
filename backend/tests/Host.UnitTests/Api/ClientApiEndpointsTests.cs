@@ -150,6 +150,10 @@ public sealed class ClientApiEndpointsTests
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailMutationsEndpoint.FlagWithdrawalsRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailMutationsEndpoint.MoveMutationsRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailMutationsEndpoint.MoveWithdrawalsRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientNotificationEndpoints.NotificationsRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientNotificationEndpoints.MarkAllReadRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientNotificationEndpoints.UnreadCountRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientNotificationEndpoints.ReadStateRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientOutboxEndpoints.OutboxRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientOutboxEndpoints.OutboxCancellationRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientOutboxEndpoints.OutboxRequeueRoute}",
@@ -224,6 +228,8 @@ public sealed class ClientApiEndpointsTests
                 $"GET {prefix}{ClientMailAttachmentEndpoint.MailAttachmentRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailBodyEndpoint.MailBodyRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientMailMutationsEndpoint.MutationsRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientNotificationEndpoints.NotificationsRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"GET {prefix}{ClientNotificationEndpoints.UnreadCountRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientOutboxEndpoints.OutboxRoute} -> {MailFathomPermission.MailSend.Name}",
                 $"GET {prefix}{ClientOutboxEndpoints.OutboxSendRoute} -> {MailFathomPermission.MailSend.Name}",
                 $"GET {prefix}{ClientPortraitEndpoint.PortraitRoute} -> {MailFathomPermission.MailRead.Name}",
@@ -239,6 +245,8 @@ public sealed class ClientApiEndpointsTests
                 $"POST {prefix}{ClientMailMutationsEndpoint.FlagWithdrawalsRoute} -> {MailFathomPermission.MailFlagsWrite.Name}",
                 $"POST {prefix}{ClientMailMutationsEndpoint.MoveMutationsRoute} -> {MailFathomPermission.MailMove.Name}",
                 $"POST {prefix}{ClientMailMutationsEndpoint.MoveWithdrawalsRoute} -> {MailFathomPermission.MailMove.Name}",
+                $"POST {prefix}{ClientNotificationEndpoints.MarkAllReadRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"POST {prefix}{ClientNotificationEndpoints.ReadStateRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientOutboxEndpoints.OutboxCancellationRoute} -> {MailFathomPermission.MailSend.Name}",
                 $"POST {prefix}{ClientOutboxEndpoints.OutboxRequeueRoute} -> {MailFathomPermission.MailSend.Name}",
                 $"POST {prefix}{ClientPortraitEndpoint.PortraitRoute} -> {MailFathomPermission.MailRead.Name}",
@@ -313,6 +321,7 @@ public sealed class ClientApiEndpointsTests
                         || IsPublishedAsAWrite(endpoint)
                         || WritesTheCallersOwnPreferences(endpoint)
                         || WritesTheCallersOwnPortrait(endpoint)
+                        || MarksTheCallersOwnNotificationsRead(endpoint)
                         || HandsOverTheClientsOwnTelemetry(endpoint),
                         $"{method} {endpoint} changes something under a grant that does not say so."));
             });
@@ -352,6 +361,20 @@ public sealed class ClientApiEndpointsTests
         endpoint is RouteEndpoint route
         && $"/{route.RoutePattern.RawText?.TrimStart('/')}"
             == $"{ClientEndpointOptions.RoutePrefix}{ClientPortraitEndpoint.PortraitRoute}";
+
+    /// <summary>Reports whether a route marks the caller's own notifications read, by the two routes they are served at.</summary>
+    /// <remarks>
+    /// The routes rather than the grant, for the reason the preferences and portrait writes are named that way. What
+    /// these change is what this deployment draws for one person about mail they can already see: nothing reaches a
+    /// mail server, nothing moves in a mailbox, and a person whose mail accounts an administrator maintains does not
+    /// hold a write grant and still has to be able to clear their own bell. Naming the two keeps the claim narrow — a
+    /// third write published under the read grant fails this rather than joining it.
+    /// </remarks>
+    private static bool MarksTheCallersOwnNotificationsRead(Endpoint endpoint) =>
+        endpoint is RouteEndpoint route
+        && $"/{route.RoutePattern.RawText?.TrimStart('/')}" is var path
+        && (path == $"{ClientEndpointOptions.RoutePrefix}{ClientNotificationEndpoints.ReadStateRoute}"
+            || path == $"{ClientEndpointOptions.RoutePrefix}{ClientNotificationEndpoints.MarkAllReadRoute}");
 
     /// <summary>Reports whether a route is the client posting its own telemetry, which changes nothing this deployment holds.</summary>
     /// <remarks>The path rather than the grant here, because these are published under none by design — the caller is handing over what it recorded about itself, and no permission in the mailbox half names that act.</remarks>
@@ -414,6 +437,31 @@ public sealed class ClientApiEndpointsTests
 
         Assert.Equal(
             ClientPreferencesEndpoint.MaxWriteRequestBytes,
+            write.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata>()!.MaxRequestBodySize);
+    }
+
+    /// <summary>
+    /// The read-state write carries a bound of its own, which is the smallest on this surface: the body is one boolean,
+    /// so what the bound guards against is a body that was never a read-state document rather than a large one.
+    /// </summary>
+    [Fact]
+    public void MapClientApi_TheNotificationReadStateWrite_CarriesItsOwnRequestBodyBound()
+    {
+        // Arrange
+        var endpoints = BuildRouteBuilder();
+
+        // Act
+        endpoints.MapClientApi();
+
+        // Assert
+        var write = endpoints.Materialize()
+            .OfType<RouteEndpoint>()
+            .Single(endpoint =>
+                $"/{endpoint.RoutePattern.RawText?.TrimStart('/')}"
+                    == $"{ClientEndpointOptions.RoutePrefix}{ClientNotificationEndpoints.ReadStateRoute}");
+
+        Assert.Equal(
+            ClientNotificationEndpoints.MaxWriteRequestBytes,
             write.Metadata.GetMetadata<Microsoft.AspNetCore.Http.Metadata.IRequestSizeLimitMetadata>()!.MaxRequestBodySize);
     }
 
