@@ -261,10 +261,8 @@ export function readMailMutationRecords(
     transport: MailFathomTransport,
     recordIds: readonly string[],
 ): Promise<ClientResult<readonly MailMutationRecord[]>> {
-    const asked = recordIds
-        .slice(0, mostRecordsPerRead)
-        .map((recordId) => `record=${encodeURIComponent(recordId)}`)
-        .join('&');
+    const naming = recordIds.slice(0, mostRecordsPerRead);
+    const asked = naming.map((recordId) => `record=${encodeURIComponent(recordId)}`).join('&');
 
     return spanned(`GET ${mailMutationRecordsRoute}`, async () =>
         recordsOf(
@@ -274,11 +272,12 @@ export function readMailMutationRecords(
                 headers: headersFor(session),
                 longestAnswer: longestRecordsAnswer,
             }),
+            naming.length,
         ),
     );
 }
 
-function recordsOf(response: ClientResponse | null): ClientResult<readonly MailMutationRecord[]> {
+function recordsOf(response: ClientResponse | null, asked: number): ClientResult<readonly MailMutationRecord[]> {
     if (response === null) {
         return failed('unavailable', null);
     }
@@ -287,13 +286,16 @@ function recordsOf(response: ClientResponse | null): ClientResult<readonly MailM
         return failed(failureReasonForStatus(response.status), response.status);
     }
 
-    const records = parseRecords(response.body);
+    const records = parseRecords(response.body, asked);
 
     return records === null ? failed('unreadable', response.status) : read(records);
 }
 
-function parseRecords(body: string): readonly MailMutationRecord[] | null {
-    const answered = parsedArray(body, 'changes', mostRecordsPerRead);
+function parseRecords(body: string, asked: number): readonly MailMutationRecord[] | null {
+    // Bounded by what this read actually named rather than by what the route permits, the way `mailTimeline.ts` and
+    // `mailSearch.ts` bound their own pages: an answer carrying records nobody asked about is one this client has no
+    // way to place, and reading it would put somebody else's change in front of a person as though it were theirs.
+    const answered = parsedArray(body, 'changes', asked);
 
     if (answered === null) {
         return null;

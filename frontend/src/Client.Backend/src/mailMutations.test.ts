@@ -412,6 +412,26 @@ describe('readMailMutationRecords', () => {
         expect(requests[0]?.path.split('record=')).toHaveLength(mostRecordsPerRead + 1);
     });
 
+    // Bounded by the read rather than by the route: a record this caller never named is one it has no way to place,
+    // and following it would put somebody else's change in front of a person as though it were their own.
+    it('refuses an answer naming more records than the read itself asked about', async () => {
+        const answer = await readMailMutationRecords(
+            session,
+            answering({
+                status: 200,
+                body: JSON.stringify({
+                    changes: [
+                        { recordId, storedEmailId, state: 'pending', outcomeUnknown: false },
+                        { recordId: 'unasked', storedEmailId, state: 'pending', outcomeUnknown: false },
+                    ],
+                }),
+            }),
+            [recordId],
+        );
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
+
     it('refuses an answer naming more records than the read could have', async () => {
         const answer = await readMailMutationRecords(
             session,
