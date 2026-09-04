@@ -418,6 +418,41 @@ describe('PendingChangesProvider', () => {
         expect(requests).toHaveLength(mostFollowingAttempts + 1);
     });
 
+    // A deployment that stopped answering one credential has said nothing about the next, so the next person arrives
+    // at a client that is still willing to ask rather than at one that had already given up on somebody else.
+    it('gives the next person a client that has not given up on their deployment', async () => {
+        const { transport, requests } = unreachable();
+        const { signInAsSomebodyElse } = following(transport);
+
+        hand(submission(recorded(recordId)));
+        await giveUp();
+        await afterTheToast();
+
+        act(signInAsSomebodyElse);
+        hand(submission(recorded(recordId)));
+        await pass(followedChangeInterval);
+
+        expect(screen.queryByText('This client stopped checking where your changes have got to.')).toBeNull();
+        expect(requests).toHaveLength(mostFollowingAttempts + 1);
+    });
+
+    // The row that asked the question goes when it is answered, and the focus goes with it unless it is placed first.
+    it('leaves the reader on the change still waiting for an answer when one is settled', async () => {
+        const secondRecordId = '0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a92';
+
+        following(standingAt('dead-lettered').transport);
+        hand(submission(recorded(recordId, secondRecordId)));
+        await pass(followedChangeInterval);
+        await afterTheToast();
+
+        fireEvent.click(screen.getAllByRole('button', { name: 'Let it go' })[0] ?? document.body);
+
+        const [remaining] = screen.getAllByRole('listitem');
+
+        expect(screen.getAllByRole('listitem')).toHaveLength(1);
+        expect(document.activeElement).toBe(remaining);
+    });
+
     it('follows nothing of the last person’s under the next person’s credential', () => {
         const { signInAsSomebodyElse } = following(standingAt('pending').transport);
 

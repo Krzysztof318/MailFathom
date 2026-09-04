@@ -59,6 +59,14 @@ interface HeldUndecided extends UndecidedChange {
 
 const nothingHeld: Held = { session: null, followed: [], undecided: [] };
 
+/** How many reads running the deployment has not answered, and whose credential it did not answer them under. */
+interface Failures {
+    readonly session: ClientSession | null;
+    readonly count: number;
+}
+
+const noFailures: Failures = { session: null, count: 0 };
+
 export function PendingChangesProvider({
     session,
     transport,
@@ -73,13 +81,16 @@ export function PendingChangesProvider({
     const { locale, translate } = useLocalization();
     const toasts = useToasts();
     const [held, setHeld] = useState<Held>(nothingHeld);
-    const [attempts, setAttempts] = useState(0);
+    const [failures, setFailures] = useState<Failures>(noFailures);
     const [round, setRound] = useState(0);
 
     // Derived rather than cleared, for the reason `readMarking/ReadMarking.tsx` gives: signing out and back in on one
     // tab keeps this component mounted, and the previous person's changes would otherwise be followed under the next
-    // person's credential.
+    // person's credential. The failure count is derived the same way and for the same reason: a deployment that
+    // stopped answering one credential has said nothing about the next, and the next would otherwise arrive at a
+    // client that had already given up without ever asking for them.
     const inForce = held.session === session ? held : nothingHeld;
+    const attempts = failures.session === session ? failures.count : 0;
     const following = inForce.followed;
     const stoppedFollowing = attempts >= mostFollowingAttempts;
 
@@ -121,7 +132,7 @@ export function PendingChangesProvider({
                 // this client could not read, is the same on the fifth attempt as on the first — so following stops
                 // there and then, and says which of the two happened rather than claiming nothing answered.
                 if (answer.failure.reason !== 'unavailable') {
-                    setAttempts(mostFollowingAttempts);
+                    setFailures({ session: asking, count: mostFollowingAttempts });
                     toasts.raise({
                         kind: 'error',
                         title: translate('pendingChange.stoppedFollowing'),
@@ -133,7 +144,7 @@ export function PendingChangesProvider({
                     return;
                 }
 
-                setAttempts(attempts + 1);
+                setFailures({ session: asking, count: attempts + 1 });
 
                 // Said where the budget runs out rather than from a render reading that it has: the same sentence
                 // raised by every later render would be the client telling somebody once a frame.
@@ -147,7 +158,7 @@ export function PendingChangesProvider({
                         action: {
                             label: translate('pendingChange.followAgain'),
                             take: () => {
-                                setAttempts(0);
+                                setFailures({ session: asking, count: 0 });
                             },
                         },
                     });
@@ -186,7 +197,7 @@ export function PendingChangesProvider({
                       }
                     : current,
             );
-            setAttempts(0);
+            setFailures({ session: asking, count: 0 });
 
             for (const change of undecided) {
                 toasts.raise({
@@ -316,7 +327,7 @@ export function PendingChangesProvider({
         follow,
         settle,
         followAgain: () => {
-            setAttempts(0);
+            setFailures({ session, count: 0 });
         },
     };
 

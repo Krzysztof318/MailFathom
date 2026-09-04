@@ -2,10 +2,11 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+import { useRef } from 'react';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import { useLocalization } from '../localization/useLocalization';
 import { actNames, standingReasons, waitingCounts } from './changeWording';
-import { usePendingChanges, type UndecidedChange } from './usePendingChanges';
+import { usePendingChanges, type ChangeResolution, type UndecidedChange } from './usePendingChanges';
 
 // What this client has asked its mailbox for and has not yet been told the end of, said where a person already looks
 // to find out how current what they are reading is. It stands above the freshness summary rather than inside its
@@ -19,6 +20,21 @@ import { usePendingChanges, type UndecidedChange } from './usePendingChanges';
 export function PendingChangeLines() {
     const { locale, translate } = useLocalization();
     const { waiting, undecided, stoppedFollowing, settle, followAgain } = usePendingChanges();
+    const rows = useRef(new Map<string, HTMLLIElement>());
+    const counted = useRef<HTMLParagraphElement>(null);
+
+    // Answering a question takes the row that asked it off the screen, and the focus with it unless it is placed
+    // first. The row after this one is where the reader is left, the row before it where this was the last one, and
+    // the count line where the list itself empties — each of the three already on the screen, so the placement
+    // happens while the row being answered is still mounted. Answering the last one with nothing left waiting takes
+    // the whole surface away, as closing the last tab takes the strip away, and what replaced it takes the focus.
+    function answer(recordId: string, resolution: ChangeResolution): void {
+        const at = undecided.findIndex((change) => change.recordId === recordId);
+        const next = undecided[at + 1] ?? undecided[at - 1];
+
+        settle(recordId, resolution);
+        (next === undefined ? counted.current : (rows.current.get(next.recordId) ?? null))?.focus();
+    }
 
     if (waiting.length === 0 && undecided.length === 0) {
         return null;
@@ -27,7 +43,7 @@ export function PendingChangeLines() {
     return (
         <div className="flex flex-col gap-2">
             {waiting.length === 0 ? null : (
-                <p className="text-sm text-muted" role="status">
+                <p className="text-sm text-muted" ref={counted} role="status" tabIndex={-1}>
                     {translate(waitingCounts[new Intl.PluralRules(locale).select(waiting.length)], {
                         count: new Intl.NumberFormat(locale).format(waiting.length),
                     })}
@@ -47,14 +63,26 @@ export function PendingChangeLines() {
             {undecided.length === 0 ? null : (
                 <ul className="flex flex-col gap-2">
                     {undecided.map((change) => (
-                        <li key={change.recordId}>
+                        <li
+                            key={change.recordId}
+                            ref={(row) => {
+                                if (row !== null) {
+                                    rows.current.set(change.recordId, row);
+                                }
+
+                                return () => {
+                                    rows.current.delete(change.recordId);
+                                };
+                            }}
+                            tabIndex={-1}
+                        >
                             <UndecidedLine
                                 change={change}
                                 onAskAgain={() => {
-                                    settle(change.recordId, 'askAgain');
+                                    answer(change.recordId, 'askAgain');
                                 }}
                                 onLetGo={() => {
-                                    settle(change.recordId, 'letGo');
+                                    answer(change.recordId, 'letGo');
                                 }}
                             />
                         </li>

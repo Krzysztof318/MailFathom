@@ -222,6 +222,49 @@ describe('ReadMarkingProvider', () => {
         expect(drawnUnread(result.current, 'first', true)).toBe(false);
     });
 
+    // The question outlives the answer that raised it: the toast offering it is on the screen for seconds and knows
+    // nothing about who is signed in, so a person arriving in that window must not find themselves submitting a write
+    // under the credential that left.
+    it('submits nothing for the person who signed out when the change is asked for again', async () => {
+        const requests: ClientRequest[] = [];
+        const refused: MailFathomTransport = (request) => {
+            requests.push(request);
+
+            return Promise.reject(new Error('the connection was refused'));
+        };
+
+        let signedIn: ClientSession = session;
+
+        const { result, rerender } = renderHook(() => useReadMarking(), {
+            wrapper: ({ children }) => (
+                <LocalizationProvider>
+                    <ToastsProvider>
+                        <PendingChangesProvider session={signedIn} transport={refused}>
+                            <ReadMarkingProvider session={signedIn} transport={refused} marking>
+                                {children}
+                            </ReadMarkingProvider>
+                        </PendingChangesProvider>
+                    </ToastsProvider>
+                </LocalizationProvider>
+            ),
+        });
+
+        act(() => {
+            result.current.markRead(opened('first'));
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+        });
+
+        signedIn = somebodyElse;
+        rerender();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+        expect(requests).toHaveLength(1);
+    });
+
     it('says where each marked message was counted, so a folder’s count can answer for it', async () => {
         const { transport } = recording();
         const { result } = marking(transport);
