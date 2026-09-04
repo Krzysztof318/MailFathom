@@ -214,6 +214,44 @@ describe('MailboxActsProvider', () => {
         });
     });
 
+    // The mailbox may have moved on between the act and the press, so the way back is read per message exactly as the
+    // act is: a row whose reverse move was not written down is still on its way to where the act put it.
+    it('counts only the messages the way back was written down for, and goes on claiming the rest', async () => {
+        const archived = deploymentAnswering();
+        const refusingTheWayBack = deploymentAnswering({ 'message-2': 'message-not-found' });
+
+        // The archive is written down for both, and the reverse move — the one naming the folder they came from — is
+        // refused for one of them, which is the mailbox having moved on between the press and the way back.
+        const deployment: Deployment = {
+            requests: archived.requests,
+            transport: (request) =>
+                (request.body ?? '').includes('work-inbox')
+                    ? refusingTheWayBack.transport(request)
+                    : archived.transport(request),
+        };
+
+        const { held } = acting(deployment);
+
+        await waitFor(() => {
+            expect(held().refusalOf('archive', [invoice])).toBeNull();
+        });
+
+        perform(held, 'archive', [invoice, receipt]);
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
+
+        await screen.findByText('Put back where it was');
+        await screen.findByText(
+            'Some of those messages were not changed. Your deployment no longer serves them where the list drew them.',
+        );
+
+        expect(screen.getByText('1 message')).toBeDefined();
+        await waitFor(() => {
+            expect(held().asked.has('message-1')).toBe(false);
+        });
+        expect(held().asked.get('message-2')).toBe('archive');
+    });
+
     it('says a message is being acted on from the press, which is what a row draws while an account is unreachable', async () => {
         const deployment = deploymentAnswering();
         const { held } = acting(deployment);

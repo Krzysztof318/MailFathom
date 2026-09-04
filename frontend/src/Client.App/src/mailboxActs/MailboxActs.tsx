@@ -76,6 +76,23 @@ interface Held {
 
 const heldForNobody: Held = { session: null, directory: null, asked: new Map() };
 
+/**
+ * The messages a submission was actually written down for, which a batch that answered does not say by itself.
+ *
+ * A message the deployment did not record is mail that has moved on since the list drew it, an account it no longer
+ * serves, or a message already where it was asked to go. Each is that message's own answer rather than the request's,
+ * which is what lets the rest of a batch stand — and it is read the same way whichever direction the act was going in.
+ */
+function writtenDown(answers: readonly ClientResult<readonly MailMutationResult[]>[]): ReadonlySet<string> {
+    return new Set(
+        answers.flatMap((answer) =>
+            answer.outcome === 'read'
+                ? answer.value.filter((result) => result.outcome === 'recorded').map((result) => result.storedEmailId)
+                : [],
+        ),
+    );
+}
+
 export function MailboxActsProvider({
     session,
     transport,
@@ -288,8 +305,6 @@ export function MailboxActsProvider({
             destinationFolder: message.folder,
         }));
 
-        forget(messages.map((message) => message.storedEmailId));
-
         const batches: Promise<ClientResult<readonly MailMutationResult[]>>[] = [];
 
         for (let from = 0; from < back.length; from += mostMessagesPerMutation) {
@@ -299,16 +314,31 @@ export function MailboxActsProvider({
         void Promise.all(batches).then((answers) => {
             const failed = answers.find((answer) => answer.outcome === 'failed');
 
-            toasts.raise(
-                failed?.outcome === 'failed'
-                    ? {
-                          kind: 'error',
-                          title: translate('act.failed', {
-                              reason: translate(failureLabels[failed.failure.reason]),
-                          }),
-                      }
-                    : { kind: 'neutral', title: translate('act.undone'), body: counted(back.length) },
-            );
+            if (failed?.outcome === 'failed') {
+                toasts.raise({
+                    kind: 'error',
+                    title: translate('act.failed', { reason: translate(failureLabels[failed.failure.reason]) }),
+                });
+
+                return;
+            }
+
+            // Each message's own answer, exactly as the act itself is read: a mailbox that moved on between the act
+            // and the press has messages the reverse move cannot write down either, and a row whose way back was not
+            // recorded is still on its way to where the act put it — so it goes on saying so rather than being
+            // forgotten on the strength of a batch that answered.
+            const written = writtenDown(answers);
+            const returned = messages.filter((message) => written.has(message.storedEmailId));
+
+            forget(returned.map((message) => message.storedEmailId));
+
+            if (returned.length > 0) {
+                toasts.raise({ kind: 'neutral', title: translate('act.undone'), body: counted(returned.length) });
+            }
+
+            if (returned.length < messages.length) {
+                toasts.raise({ kind: 'warning', title: translate('act.someNotChanged') });
+            }
         });
     }
 
@@ -332,17 +362,7 @@ export function MailboxActsProvider({
                 return;
             }
 
-            // A message the deployment did not write the act down for is one the row must stop claiming: mail that has
-            // moved on since the list drew it, an account it no longer serves, or a message already where it was asked
-            // to go. Each is that message's own answer rather than the request's, which is what lets the rest stand.
-            const written = new Set(
-                answers.flatMap((answer) =>
-                    answer.outcome === 'read'
-                        ? answer.value.filter((result) => result.outcome === 'recorded').map((r) => r.storedEmailId)
-                        : [],
-                ),
-            );
-
+            const written = writtenDown(answers);
             const recorded = messages.filter((message) => written.has(message.storedEmailId));
             const refused = messages
                 .filter((message) => !written.has(message.storedEmailId))
