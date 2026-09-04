@@ -107,6 +107,15 @@ describe('TabStrip', () => {
         expect(tab('No subject')).toBeDefined();
     });
 
+    // Two different absences: a message the sender gave no subject and a file the sender gave no name. Calling the
+    // second one "no subject" would name a thing a file does not have, which is why the fallback reads the kind.
+    it('names a file the sender named nothing as an unnamed file rather than as a message with no subject', () => {
+        renderStrip([tabFor('attachment', 'message-4:0', null)], null);
+
+        expect(tab('Unnamed file')).toBeDefined();
+        expect(screen.queryByRole('tab', { name: 'No subject' })).toBeNull();
+    });
+
     it('draws a tab of each kind, so what a tab holds is legible before it is read', () => {
         renderStrip(
             [

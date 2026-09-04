@@ -12,7 +12,7 @@ import { readBoundedContent } from './boundedBody';
 //
 // What that package still owns is everything that is the contract — the route, the credential, what the file declares
 // itself to be, and what an answer means — so this hands back the status and the body and decides nothing about
-// either. It is the mirror of `attachmentDelivery.ts`: that one reads octets off the wire, this one writes them to it.
+// either. It is the mirror of `attachmentExchange.ts`: that one reads octets off the wire, this one writes them to it.
 
 /**
  * Uploads one file as the body of the composed request.

@@ -196,6 +196,45 @@ describe('the markup surface beside the selection', () => {
     });
 });
 
+// A file a message carries stands in front of that message exactly as a conversation does, and is closed by the same
+// rule for the same reason: nothing should be read over a message it does not belong to.
+describe('the file beside the selection', () => {
+    const attachment = {
+        storedEmailId: 'the-message-it-was-opened-from',
+        attachment: {
+            position: 0,
+            fileName: 'figures.png',
+            wasFileNameNormalized: false,
+            mediaType: 'image/png',
+            sizeOctets: 2_048,
+        },
+    };
+
+    it('closes the file when a different message is picked, so nothing is read over a message it is not part of', () => {
+        applying([{ selection: 'the-message-it-was-opened-from' }, { attachment }, { selection: 'another-message' }]);
+
+        expect(carried().attachment).toBeNull();
+        expect(carried().selection).toBe('another-message');
+    });
+
+    it('keeps the file where the same message is picked again, which changes nothing', () => {
+        applying([
+            { selection: 'the-message-it-was-opened-from' },
+            { attachment },
+            { selection: 'the-message-it-was-opened-from' },
+        ]);
+
+        expect(carried().attachment).toEqual(attachment);
+    });
+
+    it('leaves a revision naming both alone, because that is a file being opened rather than abandoned', () => {
+        applying([{ selection: 'another-message', attachment }]);
+
+        expect(carried().attachment).toEqual(attachment);
+        expect(carried().selection).toBe('another-message');
+    });
+});
+
 describe('useWorkspace', () => {
     it('refuses to answer outside the provider rather than inventing a workspace of its own', () => {
         expect(() => {

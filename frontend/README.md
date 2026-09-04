@@ -367,6 +367,25 @@ that true across a reload, by refusing to keep the value and refusing to read on
 is the one file in this tree permitted to write `srcdoc` at all, and `eslint.config.ts` names it by path rather than
 letting a call site suppress the rule.
 
+A file a message carries opens on a third surface, in the same place and by the same rule: `readingPane/Attachment.tsx`
+is the row that describes it, and `readingPane/AttachmentView.tsx` is what a press on it opens — a tab of its own where
+somebody works in tabs, and standing in front of the message where they do not. Opening and downloading are two controls
+on that row rather than one, because they are two acts: the chip opens the file inside the client and the control at its
+end writes it to the person's machine, so looking at something never costs a trip to a downloads folder. It reads the one route the download
+already used, `/api/client/messages/{storedEmailId}/attachments/{position}`, under the size the message declared, so
+nothing new is exposed by showing a file rather than saving it.
+
+**What it draws is decided by kind rather than by attempt**, in `readingPane/shownAttachment.ts`, and the module carries
+the reasoning: a raster picture is drawn in an `img`, where the element itself is what makes a sender's octets safe;
+text is decoded under the character set the message declared and drawn as text. Everything else — a PDF, an SVG, a
+document — says so and offers the download it already had, because the answer has to be the same in a browser and in
+the WebView the desktop head loads, and neither an engine mode nor a bundled viewer is a promise both keep. So the
+decision is a short list of kinds and two size ceilings rather than a `try`: a file this client will not show is named
+as one before anything is fetched, which is also what keeps a reader from waiting for a read that was never going to
+draw. Nothing an attachment carries reaches a host other than the deployment, on the rule [ADR
+0024](../docs/decisions/0024-rendering-mail-in-the-client-as-a-closed-document-tree.md) states for a message's own
+markup and for the same reason.
+
 `src/search/` stands above that list rather than on a screen of its own, because that is where somebody reaches for
 it: they are looking at a folder and the message is not in front of them. It reads `/api/client/emails/search`, which
 ranks by words and by meaning at once and says in its answer which of the two happened — so a page ranked by words

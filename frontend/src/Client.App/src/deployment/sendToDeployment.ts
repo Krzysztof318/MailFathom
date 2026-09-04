@@ -6,8 +6,8 @@ import { longestResponseBody, type MailFathomTransport } from '@mailfathom/clien
 
 // The adapter `Client.Backend` asks its caller for. That package declares no DOM, so `fetch` is called in this
 // directory and nowhere else in the client — which is what makes the boundary a resolution error rather than a
-// convention. This module is the whole of the transport that answers with text; `attachmentDelivery.ts` beside it is
-// the one operation that answers with octets instead, which is why it is a second module rather than a second export.
+// convention. This module is the whole of the transport that answers with text; `attachmentExchange.ts` beside it is
+// what answers with octets instead, which is why it is a second module rather than a second export.
 
 /**
  * The transport for one attempt, which the signal abandons when the person waiting on it gives up.

@@ -4,6 +4,7 @@
 
 import { createContext, useContext } from 'react';
 import { everything, type MailScope } from './mailScope';
+import type { OpenedAttachment } from './openAttachment';
 import type { OpenConversation } from './openConversation';
 
 // What a person carries between the spaces. Discover, Mail, and Cases are one application rather than three, and this
@@ -57,6 +58,16 @@ export interface Workspace {
     readonly fullHtml: string | null;
 
     /**
+     * The file being read in front of what is open, or `null` where the message itself is what is being read.
+     *
+     * Beside the selection for the same reason the conversation is: the way out of a file is the message it was opened
+     * from, so holding both is what makes closing it a return. The two are never both on the screen — a file opened
+     * from a message inside a conversation stands in front of the conversation as well — which is why the viewer reads
+     * this before either of them rather than beside them.
+     */
+    readonly attachment: OpenedAttachment | null;
+
+    /**
      * The part of what is open that a question would be asked about, or `null` where the whole of it is.
      *
      * It is the words a person selected rather than a position in anything, because what the intent field does with it
@@ -102,6 +113,7 @@ export const emptyWorkspace: Workspace = {
     selection: null,
     conversation: null,
     fullHtml: null,
+    attachment: null,
     fragment: null,
     selected: [],
     question: '',

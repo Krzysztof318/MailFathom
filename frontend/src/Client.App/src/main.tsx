@@ -6,7 +6,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { adoptedDeployment } from './deployment/adoptedDeployment';
-import { AttachmentDeliveryContext, deliverAttachment } from './deployment/attachmentDelivery';
+import { attachmentExchange, AttachmentExchangeContext } from './deployment/attachmentExchange';
 import { AttachmentUploadContext, uploadAttachment } from './deployment/attachmentUpload';
 import { portraitExchange } from './deployment/portraitExchange';
 import { sendToDeployment } from './deployment/sendToDeployment';
@@ -67,7 +67,7 @@ async function open(root: HTMLElement): Promise<void> {
                     <ThemeProvider>
                         <WorkspaceProvider>
                             <LinkOpenerContext value={openLink}>
-                                <AttachmentDeliveryContext value={deliverAttachment}>
+                                <AttachmentExchangeContext value={attachmentExchange}>
                                     <AttachmentUploadContext value={uploadAttachment}>
                                         <TelemetryContext value={telemetry}>
                                             <App
@@ -79,7 +79,7 @@ async function open(root: HTMLElement): Promise<void> {
                                             />
                                         </TelemetryContext>
                                     </AttachmentUploadContext>
-                                </AttachmentDeliveryContext>
+                                </AttachmentExchangeContext>
                             </LinkOpenerContext>
                         </WorkspaceProvider>
                     </ThemeProvider>

@@ -6,7 +6,8 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { MailAttachment } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
-import { Attachment, type Downloading } from './Attachment';
+import { Attachment } from './Attachment';
+import type { Download } from './downloadingAttachment';
 
 const invoice: MailAttachment = {
     position: 1,
@@ -16,11 +17,13 @@ const invoice: MailAttachment = {
     sizeOctets: 2_048,
 };
 
+const described: Download = { stage: 'described' };
+
 function drawing(
     attachment: MailAttachment,
-    downloading?: Downloading,
-): { onDownload: () => void; onStop: () => void } {
-    const controls = { onDownload: vi.fn(), onStop: vi.fn() };
+    downloading: Download = described,
+): { onOpen: () => void; onDownload: () => void; onStop: () => void } {
+    const controls = { onOpen: vi.fn(), onDownload: vi.fn(), onStop: vi.fn() };
 
     render(
         <LocalizationProvider>
@@ -39,15 +42,14 @@ describe('Attachment', () => {
 
         expect(screen.getByText('invoice.pdf')).toBeDefined();
         expect(screen.getByText('pdf')).toBeDefined();
-        expect(screen.getByRole('button', { name: 'Download invoice.pdf' }).getAttribute('title')).toBe(
-            'application/pdf',
-        );
+        expect(screen.getByRole('button', { name: 'Open invoice.pdf' }).getAttribute('title')).toBe('application/pdf');
         expect(screen.getByText(sizeReadAs(2_048))).toBeDefined();
     });
 
     it('names an unnamed part rather than offering a control with nothing to say', () => {
         drawing({ ...invoice, fileName: null });
 
+        expect(screen.getByRole('button', { name: 'Open Unnamed file' })).toBeDefined();
         expect(screen.getByRole('button', { name: 'Download Unnamed file' })).toBeDefined();
     });
 
@@ -67,12 +69,24 @@ describe('Attachment', () => {
         ).toBeDefined();
     });
 
-    it('asks for the file when the chip is pressed', () => {
+    // Opening and downloading are two acts and two controls, which is what keeps a reader who wanted to look at
+    // something from having to find it in a downloads folder afterwards.
+    it('opens the file when the chip is pressed, and downloads nothing', () => {
+        const controls = drawing(invoice);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open invoice.pdf' }));
+
+        expect(controls.onOpen).toHaveBeenCalledTimes(1);
+        expect(controls.onDownload).not.toHaveBeenCalled();
+    });
+
+    it('asks for the file when the control beside the chip is pressed, and opens nothing', () => {
         const controls = drawing(invoice);
 
         fireEvent.click(screen.getByRole('button', { name: 'Download invoice.pdf' }));
 
         expect(controls.onDownload).toHaveBeenCalledTimes(1);
+        expect(controls.onOpen).not.toHaveBeenCalled();
     });
 
     it('asks for nothing more while the file is still arriving', () => {
@@ -81,6 +95,14 @@ describe('Attachment', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Download invoice.pdf' }));
 
         expect(controls.onDownload).not.toHaveBeenCalled();
+    });
+
+    it('opens the file while it is arriving, because looking at it stops nothing', () => {
+        const controls = drawing(invoice, { stage: 'arriving', octets: 0 });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Open invoice.pdf' }));
+
+        expect(controls.onOpen).toHaveBeenCalledTimes(1);
     });
 
     it('says how much has arrived while the file is still arriving', () => {

@@ -1039,10 +1039,12 @@ test('describes an attached file before it is fetched, and fetches it only when 
 
     await openTheFirstMessage(page);
 
+    const chip = page.getByRole('button', { name: 'Open orders.csv' });
     const download = page.getByRole('button', { name: 'Download orders.csv' });
+    await expect(chip).toBeVisible();
+    await expect(chip).toHaveAttribute('title', 'text/csv');
+    await expect(chip.getByText('csv', { exact: true })).toBeVisible();
     await expect(download).toBeVisible();
-    await expect(download).toHaveAttribute('title', 'text/csv');
-    await expect(download.getByText('csv', { exact: true })).toBeVisible();
 
     // Nothing about the file has been fetched at this point, which is what keeps opening a message the same cost
     // whether the sender attached a note or a video. Only a browser can say so: the source says what the pane intends
@@ -1055,6 +1057,26 @@ test('describes an attached file before it is fetched, and fetches it only when 
     // The file reaches the person as a file rather than as a page, which is a browser event and nothing jsdom has.
     expect((await offered).suggestedFilename()).toBe('orders.csv');
     await expect(page.getByText('orders.csv was downloaded.')).toBeVisible();
+});
+
+test('opens an attached file inside the client rather than handing it to the machine', async ({ page }) => {
+    await openTheFirstMessage(page);
+
+    await page.getByRole('button', { name: 'Open orders.csv' }).click();
+
+    // The file is drawn in the reading column under its own name, which is the whole of what opening one means: the
+    // person reads it where they were reading the message, and nothing was written to their machine to get there.
+    const viewer = page.getByRole('region', { name: 'orders.csv' });
+    await expect(viewer.getByRole('heading', { name: 'orders.csv' })).toBeVisible();
+    await expect(viewer.getByText(/kettle,1/u)).toBeVisible();
+
+    // Only a browser can say the octets the built bundle read were decoded rather than drawn as a download: jsdom has
+    // no download of its own to distinguish it from.
+    await expect(page.getByText('orders.csv was downloaded.')).toHaveCount(0);
+
+    await viewer.getByRole('button', { name: 'Close orders.csv' }).click();
+
+    await expect(page.getByRole('article', messageRegion)).toBeVisible();
 });
 
 test('presents the credential the bundle composed when it fetches an attached file', async ({ page }) => {
