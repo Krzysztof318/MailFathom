@@ -3,7 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { describe, expect, it } from 'vitest';
-import { markMailRead, mostMessagesPerMutation } from './mailMutations';
+import { changeMailFlags, markMailRead, mostMessagesPerMutation, moveMail } from './mailMutations';
 import type { ClientSession } from './session';
 import type { ClientRequest, ClientResponse, MailFathomTransport } from './transport';
 
@@ -138,5 +138,109 @@ describe('markMailRead', () => {
         const answer = await markMailRead(session, answering({ status: 200, body: 'not json' }), [storedEmailId]);
 
         expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unreadable', status: 200 } });
+    });
+});
+
+describe('changeMailFlags', () => {
+    it('states only the flags a change named, so an unstated one is left where it stands', async () => {
+        const { transport, requests } = recording(recorded(storedEmailId));
+
+        await changeMailFlags(session, transport, [{ storedEmailId, flagged: true }]);
+
+        expect(requests[0]?.path).toBe('https://mail.example.invalid/api/client/mutations/flags');
+        expect(JSON.parse(requests[0]?.body ?? '')).toStrictEqual({
+            changes: [{ storedEmailId, flags: { flagged: true } }],
+        });
+    });
+
+    it('carries a whole batch of changes in one submission', async () => {
+        const { transport, requests } = recording(recorded(storedEmailId, 'second'));
+
+        await changeMailFlags(session, transport, [
+            { storedEmailId, seen: false },
+            { storedEmailId: 'second', seen: false },
+        ]);
+
+        expect(requests).toHaveLength(1);
+        expect(JSON.parse(requests[0]?.body ?? '')).toStrictEqual({
+            changes: [
+                { storedEmailId, flags: { seen: false } },
+                { storedEmailId: 'second', flags: { seen: false } },
+            ],
+        });
+    });
+
+    it('names no more messages than one submission may carry', async () => {
+        const asked = Array.from({ length: mostMessagesPerMutation + 5 }, (_, at) => ({
+            storedEmailId: `message-${String(at)}`,
+            flagged: true,
+        }));
+        const { transport, requests } = recording(recorded());
+
+        await changeMailFlags(session, transport, asked);
+
+        const sent = JSON.parse(requests[0]?.body ?? '') as { changes: readonly unknown[] };
+
+        expect(sent.changes).toHaveLength(mostMessagesPerMutation);
+    });
+});
+
+describe('moveMail', () => {
+    it('names the destination folder on the client surface’s move route', async () => {
+        const { transport, requests } = recording(recorded(storedEmailId));
+
+        await moveMail(session, transport, [{ storedEmailId, destinationFolder: 'work-archive' }]);
+
+        expect(requests[0]?.method).toBe('POST');
+        expect(requests[0]?.path).toBe('https://mail.example.invalid/api/client/mutations/moves');
+        expect(JSON.parse(requests[0]?.body ?? '')).toStrictEqual({
+            moves: [{ storedEmailId, destinationFolder: 'work-archive' }],
+        });
+    });
+
+    it('answers what became of each message, including one already filed there', async () => {
+        const answer = await moveMail(
+            session,
+            answering({
+                status: 200,
+                body: JSON.stringify({
+                    results: [
+                        { storedEmailId, outcome: 'recorded', destinationFolder: 'work-archive' },
+                        { storedEmailId: 'second', outcome: 'already-in-destination', destinationFolder: null },
+                    ],
+                }),
+            }),
+            [{ storedEmailId, destinationFolder: 'work-archive' }],
+        );
+
+        expect(answer).toStrictEqual({
+            outcome: 'read',
+            value: [
+                { storedEmailId, outcome: 'recorded' },
+                { storedEmailId: 'second', outcome: 'already-in-destination' },
+            ],
+        });
+    });
+
+    it('names no more messages than one submission may carry', async () => {
+        const asked = Array.from({ length: mostMessagesPerMutation + 5 }, (_, at) => ({
+            storedEmailId: `message-${String(at)}`,
+            destinationFolder: 'work-archive',
+        }));
+        const { transport, requests } = recording(recorded());
+
+        await moveMail(session, transport, asked);
+
+        const sent = JSON.parse(requests[0]?.body ?? '') as { moves: readonly unknown[] };
+
+        expect(sent.moves).toHaveLength(mostMessagesPerMutation);
+    });
+
+    it('says the credential may not move mail where the deployment refused it', async () => {
+        const answer = await moveMail(session, answering({ status: 403, body: '' }), [
+            { storedEmailId, destinationFolder: 'work-archive' },
+        ]);
+
+        expect(answer).toStrictEqual({ outcome: 'failed', failure: { reason: 'unauthorized', status: 403 } });
     });
 });

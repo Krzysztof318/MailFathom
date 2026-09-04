@@ -229,6 +229,50 @@ export const en = {
     'mail.listWidthHint':
         'Drag to change the list width. Double-click, or press Home, to return it to where it started.',
 
+    'select.bar': 'Actions on the messages selected',
+    'select.count.one': '{count} selected',
+    'select.count.few': '{count} selected',
+    'select.count.many': '{count} selected',
+    'select.count.other': '{count} selected',
+    'select.all': 'Select all',
+    'select.clear': 'Clear the selection',
+
+    'act.archived': 'Archived',
+    'act.deleted': 'Moved to the trash',
+    'act.flagged': 'Flagged',
+    'act.markedUnread': 'Marked unread',
+    'act.filed': 'Filed in “{folder}”',
+    'act.messages.one': '{count} message',
+    'act.messages.few': '{count} messages',
+    'act.messages.many': '{count} messages',
+    'act.messages.other': '{count} messages',
+    'act.undo': 'Undo',
+    'act.undone': 'Put back where it was',
+    'act.failed': 'That change was not made: {reason}.',
+    'act.someNotChanged':
+        'Some of those messages were not changed. Your deployment no longer serves them where the list drew them.',
+    'act.archiving': 'Archiving…',
+    'act.deleting': 'Moving to the trash…',
+    'act.flagging': 'Flagging…',
+    'act.markingUnread': 'Marking unread…',
+    'act.filing': 'Filing…',
+    'act.underway': '{control} — this is already on its way to your mail server.',
+    'act.notOffered': '{control} — this credential may not change mail on your mail server.',
+    'act.nothingToActOn': '{control} — nothing is open or selected for this to be about.',
+    'act.noArchiveFolder': '{control} — this account names no archive folder, so there is nowhere to archive to.',
+    'act.noTrashFolder': '{control} — this account names no trash folder, so there is nowhere to delete to.',
+    'act.severalAccounts': '{control} — messages from several accounts cannot be filed into one folder.',
+    'act.noOtherFolder': '{control} — this account has no folder to file into.',
+    'act.cancel': 'Cancel',
+    'act.deleteQuestion.one': 'Delete {count} message?',
+    'act.deleteQuestion.few': 'Delete {count} messages?',
+    'act.deleteQuestion.many': 'Delete {count} messages?',
+    'act.deleteQuestion.other': 'Delete {count} messages?',
+    'act.deleteConsequence': 'Each one is filed in the trash folder of the account it is in.',
+    'act.deleteConfirm': 'Move to the trash',
+    'act.moveTitle': 'File in another folder',
+    'act.moveClose': 'Close',
+
     'compose.titleNew': 'New message',
     'compose.titleReply': 'Reply',
     'compose.titleReplyAll': 'Reply to everyone',
@@ -369,7 +413,6 @@ export const en = {
     'list.onlyWithAttachments': 'Only with attachments',
     'list.includeJunk': 'Include junk',
     'list.selectSeveral': 'Select several',
-    'list.selectedCount': '{count} selected',
 
     'list.unread': 'Unread',
     'list.flagged': 'Flagged',
@@ -449,8 +492,10 @@ export const en = {
         'This credential may not read mail on this deployment, so no mailbox and no message is shown. Whoever runs the deployment can grant that.',
     'grant.askMail':
         'This credential may not ask questions of your mail on this deployment, so asking is not offered. Whoever runs the deployment can grant that.',
-    'grant.markMailRead':
-        'This credential may not change a flag on your mail server, so opening a message leaves it unread there and this client shows what the server last reported. Whoever runs the deployment can grant that.',
+    'grant.writeMailFlags':
+        'This credential may not change a flag on your mail server, so opening a message leaves it unread there, flagging and marking unread are not offered, and this client shows what the server last reported. Whoever runs the deployment can grant that.',
+    'grant.fileMail':
+        'This credential may not file mail in another folder on this deployment, so archiving, deleting and moving are not offered. Whoever runs the deployment can grant that.',
 
     'grant.composeMail':
         'This credential may not write a draft on this deployment, so writing a message is not offered. Whoever runs the deployment can grant that.',

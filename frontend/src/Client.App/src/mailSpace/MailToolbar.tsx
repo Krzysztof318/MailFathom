@@ -9,17 +9,18 @@ import type { IconName } from '../controls/icons';
 import { PlannedControl } from '../controls/PlannedControl';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { MailboxActControls } from '../mailboxActs/MailboxActControls';
+import { actedMessages, useListedMail } from '../messageList/useListedMail';
 import { useWorkspace } from '../workspace/useWorkspace';
 
 // The strip the design project draws across the top of the Mail space: composing, and the eight things a person does
-// to a message. The four that write a message are what this stage builds; the five that change a mailbox are later
-// stages' work, so each of those still stands here as what it is — a control the product will have, drawn so that its
-// absence is not mistaken for a client that forgot it, and inert so that its presence is not mistaken for one that can
-// do it.
+// to a message. Four of them write a message and five change the mailbox it is in, and both halves act here — the
+// mailbox half over the message that is open, which is what the design draws this strip as being about.
 //
 // What is open and whether writing is offered are both read from context rather than handed down. The toolbar is three
 // components below the frame that knows either, and neither is this strip's to own: the mail space already reads the
-// workspace, and the composer is asked for from three unrelated places, which is what `useComposing` exists for.
+// workspace, the composer is asked for from three unrelated places, which is what `useComposing` exists for, and where
+// the open message belongs is the list's, which is what `useListedMail` exists for.
 
 // Answering a message: which of the three answers each control writes, and the symbol and name the design gives it.
 const answers: readonly { readonly answer: MailDraftAnswer; readonly icon: IconName; readonly label: MessageKey }[] = [
@@ -28,19 +29,11 @@ const answers: readonly { readonly answer: MailDraftAnswer; readonly icon: IconN
     { answer: 'forward', icon: 'forward', label: 'mail.forward' },
 ];
 
-// What a message is done with once a mailbox may be written to, which is a later stage in every case.
-const planned: readonly { readonly icon: IconName; readonly label: MessageKey }[] = [
-    { icon: 'archive', label: 'mail.archive' },
-    { icon: 'delete', label: 'mail.delete' },
-    { icon: 'flag', label: 'mail.flag' },
-    { icon: 'mark_email_unread', label: 'mail.markUnread' },
-    { icon: 'drive_file_move', label: 'mail.move' },
-];
-
 export function MailToolbar() {
     const { translate } = useLocalization();
     const { workspace } = useWorkspace();
     const composing = useComposing();
+    const listed = useListedMail();
     const open = workspace.selection;
 
     return (
@@ -88,9 +81,9 @@ export function MailToolbar() {
                 ),
             )}
 
-            {planned.map((action) => (
-                <PlannedControl key={action.icon} label={translate(action.label)} icon={action.icon} shape="symbol" />
-            ))}
+            {/* The five that change the mailbox, over the one message that is open. With nothing open each of them
+                says so rather than being left out, for the reason the three answers above are drawn either way. */}
+            <MailboxActControls messages={open === null ? [] : actedMessages(listed, [open])} shape="symbol" />
         </div>
     );
 }

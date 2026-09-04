@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 import { useId, useRef } from 'react';
+import { mannerDrawn } from '../confirmation/wayOutShapes';
 import { useLocalization } from '../localization/useLocalization';
 
 // The one way out of a blocking overlay, and the question in front of it. The control and the question are one
@@ -83,7 +84,7 @@ export function StopConfirmation({
 
                         <button
                             type="button"
-                            className="rounded-lg bg-error px-4 py-2 text-base font-semibold text-on-accent transition hover:opacity-90"
+                            className={mannerDrawn.destroy}
                             onClick={() => {
                                 asked.current?.close(operationStops);
                             }}

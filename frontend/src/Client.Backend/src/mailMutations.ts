@@ -8,17 +8,24 @@ import { headersFor, routeFor, type ClientSession } from './session';
 import { spanned } from './telemetry';
 import { send, type ClientResponse, type MailFathomTransport } from './transport';
 
-// The one route in this package that changes a mailbox rather than reading one. Nothing here reaches a mail server: a
+// The two routes in this package that change a mailbox rather than read one. Nothing here reaches a mail server: a
 // submission writes a durable record and answers, and the account's own reconciliation pass is what issues the IMAP
 // command — so a screen never waits on somebody else's server, and a change asked for while the account is unreachable
 // is kept rather than lost.
 //
-// What it publishes is marking read, and only that, because that is what the client asks for today. The route carries
-// every flag and tag change a mailbox takes; a second act reaching it arrives as a second exported function named for
-// what it asks, rather than as a general submitter this one is written in terms of.
+// Each act is a function named for what it asks rather than a general submitter the others are written in terms of:
+// marking read, changing the two flags a mail server keeps, and filing a message in another folder. What they share is
+// how an answer is read, because both routes answer one result per message in the vocabulary the surface publishes.
+//
+// Flags and folders are separate routes because they are separate grants: a wrong flag misdescribes mail the owner can
+// still find, and a wrong move puts it somewhere else. A caller holding one grant and not the other therefore meets a
+// refusal on the act it may not perform rather than on every act.
 
 /** The route a batch of flag changes is written down at, relative to the client prefix. */
 export const mailFlagMutationsRoute = '/mutations/flags';
+
+/** The route a batch of folder moves is written down at, relative to the client prefix. */
+export const mailMoveMutationsRoute = '/mutations/moves';
 
 /**
  * The most messages one submission may name, which is the deployment's bound rather than a preference.
@@ -63,6 +70,30 @@ export interface MailMutationResult {
 }
 
 /**
+ * Where a change leaves the two flags the mail server keeps for one message.
+ *
+ * A flag left unstated stays where it stands, which is what makes starring a message and marking it unread two changes
+ * that do not undo each other when they travel in one batch.
+ */
+export interface MailFlagChange {
+    readonly storedEmailId: string;
+
+    /** `true` marks the message read, `false` marks it unread, and absent leaves the flag alone. */
+    readonly seen?: boolean;
+
+    /** `true` stars the message, `false` unstars it, and absent leaves the flag alone. */
+    readonly flagged?: boolean;
+}
+
+/** One message to file elsewhere, and the folder it is going to. */
+export interface MailMove {
+    readonly storedEmailId: string;
+
+    /** MailFathom's own name for the destination folder, exactly as the folders route publishes it. */
+    readonly destinationFolder: string;
+}
+
+/**
  * Writes down that the named messages have been read, as one batch of flag changes their reader's act authored.
  *
  * @param session Who is asking and where.
@@ -75,17 +106,64 @@ export function markMailRead(
     transport: MailFathomTransport,
     storedEmailIds: readonly string[],
 ): Promise<ClientResult<readonly MailMutationResult[]>> {
-    const changes = storedEmailIds
-        .slice(0, mostMessagesPerMutation)
-        .map((storedEmailId) => ({ storedEmailId, flags: { seen: true } }));
+    return changeMailFlags(
+        session,
+        transport,
+        storedEmailIds.map((storedEmailId) => ({ storedEmailId, seen: true })),
+    );
+}
 
-    return spanned(`POST ${mailFlagMutationsRoute}`, async () =>
+/**
+ * Writes down where the named messages' flags are to be left, as one batch their reader's act authored.
+ *
+ * @param session Who is asking and where.
+ * @param transport How a request reaches the deployment.
+ * @param changes The messages to change, at most {@link mostMessagesPerMutation} of them.
+ * @returns One result per message the deployment answered for, or an expected failure as a value.
+ */
+export function changeMailFlags(
+    session: ClientSession,
+    transport: MailFathomTransport,
+    changes: readonly MailFlagChange[],
+): Promise<ClientResult<readonly MailMutationResult[]>> {
+    const asked = changes.slice(0, mostMessagesPerMutation).map((change) => ({
+        storedEmailId: change.storedEmailId,
+        flags: { seen: change.seen, flagged: change.flagged },
+    }));
+
+    return submit(session, transport, mailFlagMutationsRoute, { changes: asked });
+}
+
+/**
+ * Writes down that the named messages are to be filed in another folder, as one batch their reader's act authored.
+ *
+ * @param session Who is asking and where.
+ * @param transport How a request reaches the deployment.
+ * @param moves The messages to file and where each is going, at most {@link mostMessagesPerMutation} of them.
+ * @returns One result per message the deployment answered for, or an expected failure as a value.
+ */
+export function moveMail(
+    session: ClientSession,
+    transport: MailFathomTransport,
+    moves: readonly MailMove[],
+): Promise<ClientResult<readonly MailMutationResult[]>> {
+    return submit(session, transport, mailMoveMutationsRoute, { moves: moves.slice(0, mostMessagesPerMutation) });
+}
+
+/** Puts one batch on the wire and reads what came back, which is the same exchange whichever act asked for it. */
+function submit(
+    session: ClientSession,
+    transport: MailFathomTransport,
+    route: string,
+    body: object,
+): Promise<ClientResult<readonly MailMutationResult[]>> {
+    return spanned(`POST ${route}`, async () =>
         answerOf(
             await send(transport, {
                 method: 'POST',
-                path: routeFor(session, mailFlagMutationsRoute),
+                path: routeFor(session, route),
                 headers: { ...headersFor(session), 'Content-Type': 'application/json' },
-                body: JSON.stringify({ changes }),
+                body: JSON.stringify(body),
                 longestAnswer: longestMutationAnswer,
             }),
         ),

@@ -15,6 +15,7 @@ import { AiFilters } from './AiFilters';
 import { ListWidthGrip } from './ListWidthGrip';
 import { listWidthWithin, readListWidth, storeListWidth } from './listWidth';
 import { MailToolbar } from './MailToolbar';
+import { SelectionBar } from './SelectionBar';
 
 // The Mail space as the design project composes it, out of the three regions a mail client is: the mailboxes, the list
 // of what is in the one that is scoped, and what is open from it. What this component owns is the composition alone —
@@ -174,7 +175,11 @@ export function MailSpace({
     return (
         <div className="flex min-h-0 flex-1 flex-col">
             {wide ? tabs : null}
-            {wide ? <MailToolbar /> : null}
+
+            {/* The bar replaces the toolbar while messages are picked out, which is the design project's composition:
+                one strip saying what the next press is about. It stands at every width because the narrow shape has no
+                toolbar to replace and a selection still needs both a way to act on it and a way out of it. */}
+            {workspace.selected.length > 0 ? <SelectionBar /> : wide ? <MailToolbar /> : null}
 
             <div className="flex min-h-0 flex-1">
                 {wide ? (

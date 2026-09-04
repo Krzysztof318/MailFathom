@@ -30,6 +30,21 @@ describe('PlannedControl', () => {
         expect(screen.getByRole('button', { name: 'Archive — not built yet' }).hasAttribute('disabled')).toBe(false);
     });
 
+    // Two reasons a control cannot act, and a reader needs to be told which: the client has not built it, or this
+    // mailbox cannot do it. The second is the caller's sentence rather than this component's.
+    it('says the caller’s own reason in place of the default one, where the caller gave one', () => {
+        render(
+            <LocalizationProvider>
+                <PlannedControl label="Archive" icon="archive" why="Archive — this account names no archive folder." />
+            </LocalizationProvider>,
+        );
+
+        const control = screen.getByRole('button', { name: 'Archive — this account names no archive folder.' });
+
+        expect(control.getAttribute('title')).toBe('Archive — this account names no archive folder.');
+        expect(control.getAttribute('aria-disabled')).toBe('true');
+    });
+
     it('shows the words on a labelled shape and only the symbol on a symbol shape', () => {
         const { rerender } = render(
             <LocalizationProvider>

@@ -8,11 +8,15 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Composing } from '../composer/useComposing';
 import { ComposingContext } from '../composer/useComposing';
 import { LocalizationProvider } from '../localization/Localization';
+import { MailboxActsContext, nothingActed, type MailboxActs } from '../mailboxActs/useMailboxActs';
+import { ListedMailContext, nothingListed } from '../messageList/useListedMail';
 import { WorkspaceProvider } from '../workspace/Workspace';
 import { useWorkspace } from '../workspace/useWorkspace';
 import { MailToolbar } from './MailToolbar';
 
 const messageId = '00000000-0000-4000-8000-000000000000';
+
+const place = { storedEmailId: messageId, account: 'work', folder: 'work-inbox' };
 
 function Opens({ selection }: { readonly selection: string | null }) {
     const { revise } = useWorkspace();
@@ -24,22 +28,34 @@ function Opens({ selection }: { readonly selection: string | null }) {
     return null;
 }
 
-function drawToolbar(offered: boolean, selection: string | null = null): { composed: ReturnType<typeof vi.fn> } {
+function drawToolbar(
+    offered: boolean,
+    selection: string | null = null,
+    acts: MailboxActs = nothingActed,
+): { composed: ReturnType<typeof vi.fn> } {
     const composed = vi.fn();
     const composing: Composing = { offered, opening: null, compose: composed, close: () => undefined };
 
     render(
         <LocalizationProvider>
             <WorkspaceProvider>
-                <ComposingContext value={composing}>
-                    <Opens selection={selection} />
-                    <MailToolbar />
-                </ComposingContext>
+                <ListedMailContext value={{ ...nothingListed, placeOf: () => place }}>
+                    <MailboxActsContext value={acts}>
+                        <ComposingContext value={composing}>
+                            <Opens selection={selection} />
+                            <MailToolbar />
+                        </ComposingContext>
+                    </MailboxActsContext>
+                </ListedMailContext>
             </WorkspaceProvider>
         </LocalizationProvider>,
     );
 
     return { composed };
+}
+
+function actsOffering(performed: MailboxActs['perform']): MailboxActs {
+    return { ...nothingActed, refusalOf: () => null, perform: performed };
 }
 
 describe('MailToolbar', () => {
@@ -79,11 +95,48 @@ describe('MailToolbar', () => {
         expect(composed).not.toHaveBeenCalled();
     });
 
-    it('draws every action that writes to a mailbox as one that says so in its own name', () => {
+    it('says in each control’s own name why a credential without the grant cannot change a mailbox', () => {
         drawToolbar(true, messageId);
 
         for (const action of ['Archive', 'Delete', 'Flag', 'Mark unread', 'Move']) {
-            expect(screen.getByRole('button', { name: `${action} — not built yet` })).toBeDefined();
+            expect(
+                screen.getByRole('button', {
+                    name: `${action} — this credential may not change mail on your mail server.`,
+                }),
+            ).toBeDefined();
         }
+    });
+
+    it.each([
+        ['Archive', 'archive'],
+        ['Flag', 'flag'],
+        ['Mark unread', 'markUnread'],
+    ])('acts on what is open when %s is pressed', (name, act) => {
+        const performed = vi.fn();
+
+        drawToolbar(true, messageId, actsOffering(performed));
+
+        fireEvent.click(screen.getByRole('button', { name }));
+
+        expect(performed).toHaveBeenCalledWith(act, [place]);
+    });
+
+    it('asks before deleting rather than deleting on the press, which is the one act that is asked about', () => {
+        const performed = vi.fn();
+
+        drawToolbar(true, messageId, actsOffering(performed));
+
+        fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+        expect(performed).not.toHaveBeenCalled();
+        expect(screen.getByRole('heading', { name: 'Delete 1 message?' })).toBeDefined();
+    });
+
+    it('asks about no message at all while nothing is open, rather than about the last one that was', () => {
+        const asked = vi.fn(() => null);
+
+        drawToolbar(true, null, { ...nothingActed, refusalOf: asked });
+
+        expect(asked).toHaveBeenCalledWith('archive', []);
     });
 });

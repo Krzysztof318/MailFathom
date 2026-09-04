@@ -17,7 +17,8 @@ import type { ClientCapability } from './capabilities';
 const capabilityNotices: Readonly<Record<ClientCapability, MessageKey>> = {
     readMail: 'grant.readMail',
     askMail: 'grant.askMail',
-    markMailRead: 'grant.markMailRead',
+    writeMailFlags: 'grant.writeMailFlags',
+    fileMail: 'grant.fileMail',
     composeMail: 'grant.composeMail',
     sendMail: 'grant.sendMail',
 };

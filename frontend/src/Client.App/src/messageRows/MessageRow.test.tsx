@@ -6,6 +6,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { MailTimelineEntry } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
+import { MailboxActsContext, nothingActed, type MailboxAct, type MailboxActs } from '../mailboxActs/useMailboxActs';
 import { ReadMarkingContext, nothingMarkedRead, type MarkedIn, type ReadMarking } from '../readMarking/useReadMarking';
 import { MessageRow } from './MessageRow';
 
@@ -29,29 +30,42 @@ const email: MailTimelineEntry = {
     preview: 'The opening of the message.',
 };
 
-function drawRow(note?: string, unread = false, marking: ReadMarking = nothingMarkedRead): HTMLElement {
+function drawRow(
+    note?: string,
+    unread = false,
+    marking: ReadMarking = nothingMarkedRead,
+    acts: MailboxActs = nothingActed,
+    flagged = false,
+): HTMLElement {
     render(
         <LocalizationProvider>
             <ReadMarkingContext value={marking}>
-                <ul>
-                    <MessageRow
-                        email={{ ...email, unread }}
-                        position={1}
-                        open={false}
-                        selected={false}
-                        focusable
-                        note={note}
-                        onOpen={() => undefined}
-                        onPoint={() => undefined}
-                        onPointerEnter={() => undefined}
-                        onElement={() => undefined}
-                    />
-                </ul>
+                <MailboxActsContext value={acts}>
+                    <ul>
+                        <MessageRow
+                            email={{ ...email, unread, flagged }}
+                            position={1}
+                            open={false}
+                            selected={false}
+                            focusable
+                            note={note}
+                            onOpen={() => undefined}
+                            onPoint={() => undefined}
+                            onPointerEnter={() => undefined}
+                            onElement={() => undefined}
+                        />
+                    </ul>
+                </MailboxActsContext>
             </ReadMarkingContext>
         </LocalizationProvider>,
     );
 
     return screen.getByRole('option');
+}
+
+/** What a client that has asked for this act on exactly this message carries, pending the deployment's own pass. */
+function asking(act: MailboxAct, storedEmailId = email.id): MailboxActs {
+    return { ...nothingActed, asked: new Map([[storedEmailId, act]]) };
 }
 
 /** What a client that has marked exactly this message read carries, which is what a row reads its state through. */
@@ -103,5 +117,43 @@ describe('MessageRow', () => {
         drawRow(undefined, true, marked('another-message'));
 
         expect(screen.getByText('Unread')).toBeDefined();
+    });
+
+    // An act writes a record the account's own pass issues later, so the row says what was asked for from the press
+    // rather than waiting for a mail server nobody may be able to reach.
+    it.each([
+        ['archive', 'Archiving…'],
+        ['delete', 'Moving to the trash…'],
+        ['flag', 'Flagging…'],
+        ['markUnread', 'Marking unread…'],
+        ['move', 'Filing…'],
+    ] as const)('says a message asked to be %sd is being acted on, in the reserved line', (act, said) => {
+        const reserved = drawRow(undefined, false, nothingMarkedRead, asking(act)).lastElementChild;
+
+        expect(reserved?.textContent).toBe(said);
+        expect(reserved?.getAttribute('aria-hidden')).toBeNull();
+    });
+
+    it('draws a message asked to be marked unread as unread, rather than waiting for the server to report it', () => {
+        drawRow(undefined, false, nothingMarkedRead, asking('markUnread'));
+
+        expect(screen.getByText('Unread')).toBeDefined();
+    });
+
+    it('stops saying so once the deployment reports the flag the act asked for, which is what retires it', () => {
+        const reserved = drawRow(undefined, false, nothingMarkedRead, asking('flag'), true).lastElementChild;
+
+        expect(reserved?.textContent).toBe('');
+    });
+
+    it('says nothing of another message’s act, the pending line belonging to the row it is about', () => {
+        const reserved = drawRow(
+            undefined,
+            false,
+            nothingMarkedRead,
+            asking('archive', 'another-message'),
+        ).lastElementChild;
+
+        expect(reserved?.textContent).toBe('');
     });
 });
