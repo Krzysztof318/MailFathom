@@ -2,7 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import type { ReactNode } from 'react';
+import type { PointerEvent, ReactNode } from 'react';
 import { BrandMark } from '../controls/BrandMark';
 import { Icon } from '../controls/Icon';
 import type { IconName } from '../controls/icons';
@@ -43,6 +43,9 @@ export function SpaceNavigation({
     offered,
     current,
     account,
+    notifications,
+    onPointerDown,
+    onClickCapture,
 }: {
     readonly offered: readonly Space[];
 
@@ -51,13 +54,30 @@ export function SpaceNavigation({
 
     /** The control that opens the account menu, which the navigation places rather than draws. */
     readonly account: ReactNode;
+
+    /** The bell, which is the one thing here that is not a place to go and stands beside the account for that reason. */
+    readonly notifications: ReactNode;
+
+    /**
+     * What an upward swipe anywhere on the bar begins, which is the second way into the notification centre on a
+     * phone. It is bound here rather than on the bell because the design project gives the gesture the whole bar.
+     */
+    readonly onPointerDown: (event: PointerEvent) => void;
+
+    /** What keeps the tap ending such a swipe from also following the link it started on. */
+    readonly onClickCapture: (event: { preventDefault: () => void; stopPropagation: () => void }) => void;
 }) {
     const { translate } = useLocalization();
 
     return (
         <nav
             aria-label={translate('shell.spaces')}
-            className="flex shrink-0 justify-around gap-0.75 border-t border-line bg-rail px-1.5 pt-1.5 pb-2 workspace:order-first workspace:w-rail workspace:flex-col workspace:justify-start workspace:gap-0.5 workspace:overflow-y-auto workspace:border-t-0 workspace:border-e workspace:px-0 workspace:pt-4 workspace:pb-3"
+            // The bar is `pan-x` so a finger moving up it is this navigation's rather than the page's, which is what a
+            // gesture that has to be followed one to one needs; the rail above the workspace breakpoint has no such
+            // gesture and is unaffected by it.
+            className="flex shrink-0 touch-pan-x justify-around gap-0.75 border-t border-line bg-rail px-1.5 pt-1.5 pb-2 workspace:order-first workspace:min-h-0 workspace:w-rail workspace:touch-auto workspace:flex-col workspace:justify-start workspace:gap-0.5 workspace:overflow-y-auto workspace:border-t-0 workspace:border-e workspace:px-0 workspace:pt-4 workspace:pb-3 min-h-navigation"
+            onPointerDown={onPointerDown}
+            onClickCapture={onClickCapture}
         >
             {/* The mark stands at the top of the rail and nowhere in the bottom bar: a narrow window gives the row to
                 destinations, and a logo taking one of seven places there would cost a reader a space to reach. */}
@@ -67,7 +87,11 @@ export function SpaceNavigation({
                 <SpaceLink key={space} space={space} current={space === current} />
             ))}
 
-            <div className="flex flex-1 items-center justify-center workspace:mt-auto workspace:flex-none workspace:pt-3">
+            {/* The bell and the account, in that order at both widths: what happened while nobody was looking stands
+                beside who is looking, which is where the design project puts both — last in the bar, and at the foot
+                of the rail with the bell above the account. */}
+            <div className="flex flex-1 items-center justify-center gap-0.75 workspace:mt-auto workspace:flex-none workspace:flex-col workspace:gap-2 workspace:pt-3">
+                {notifications}
                 {account}
             </div>
         </nav>

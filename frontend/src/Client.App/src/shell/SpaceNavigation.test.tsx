@@ -9,11 +9,19 @@ import { spaces, type Space } from '../routing/spaces';
 import { SpaceNavigation } from './SpaceNavigation';
 
 const handedTheAccount = 'The account control this navigation was handed.';
+const handedTheBell = 'The bell this navigation was handed.';
 
 function renderNavigation(offered: readonly Space[] = spaces, current: Space | null = 'mail'): void {
     render(
         <LocalizationProvider>
-            <SpaceNavigation offered={offered} current={current} account={<button>{handedTheAccount}</button>} />
+            <SpaceNavigation
+                offered={offered}
+                current={current}
+                account={<button>{handedTheAccount}</button>}
+                notifications={<button>{handedTheBell}</button>}
+                onPointerDown={() => undefined}
+                onClickCapture={() => undefined}
+            />
         </LocalizationProvider>,
     );
 }
@@ -73,6 +81,17 @@ describe('SpaceNavigation', () => {
 
         expect(navigation.contains(account)).toBe(true);
         expect(lastLink?.compareDocumentPosition(account)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+
+    it('stands the bell beside the account, after every space and before the account itself', () => {
+        renderNavigation();
+
+        const bell = screen.getByRole('button', { name: handedTheBell });
+        const account = screen.getByRole('button', { name: handedTheAccount });
+        const lastLink = screen.getAllByRole('link').at(-1);
+
+        expect(lastLink?.compareDocumentPosition(bell)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+        expect(bell.compareDocumentPosition(account)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     });
 
     it('still places the account control while the deployment has not said which spaces there are', () => {
