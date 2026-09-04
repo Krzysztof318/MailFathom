@@ -434,6 +434,31 @@ describe('Message and the view a reader chose', () => {
         ]);
     });
 
+    // What the wait is reported as belongs to the read that started it. The pictures are the one ask with a surface of
+    // its own — the button, with the wait beneath it — so a read begun by changing the view must not borrow it.
+    it('says the pictures are loading while the ask for them is in flight', async () => {
+        render(readingUnder(false));
+        await screen.findByText('A drawn message.');
+
+        answer = () => new Promise<Answer>(() => undefined);
+        fireEvent.click(screen.getByRole('button', { name: 'Load pictures from the sender' }));
+
+        expect(await screen.findByText('Loading them…')).toBeDefined();
+    });
+
+    it('says nothing about the pictures while the read a changed view started is in flight', async () => {
+        answeringWithMarkupWhenAsked();
+
+        const opened = render(readingUnder(false));
+        await screen.findByText('A drawn message.');
+
+        answer = () => new Promise<Answer>(() => undefined);
+        opened.rerender(readingUnder(true));
+
+        expect(screen.getByRole('button', { name: 'Load pictures from the sender' })).toBeDefined();
+        expect(screen.queryByText('Loading them…')).toBeNull();
+    });
+
     it('draws the reduced tree from the answer it already holds rather than reading the message again', async () => {
         answeringWithMarkupWhenAsked();
 

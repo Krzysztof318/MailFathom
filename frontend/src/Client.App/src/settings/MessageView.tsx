@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+import { ChoiceSegment } from '../controls/ChoiceSegment';
 import { Icon } from '../controls/Icon';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
@@ -11,10 +12,8 @@ import type { ClientPreferencesInForce } from '../preferences/useClientPreferenc
 // carrying the accent, and a line beneath saying what the choice does — which is a different sentence per choice
 // rather than one sentence describing the control.
 //
-// Radio buttons rather than two buttons with a role written onto them, for the reason `shell/Preferences.tsx` gives
-// about the theme: the platform announces the pair as one group of choices, reports which is chosen, moves between
-// them with the arrow keys, and leaves one tab stop where two buttons would leave two. Each input is hidden from sight
-// rather than from the accessibility tree, and the label it names carries the accent and the focus ring.
+// The segments themselves are `controls/ChoiceSegment.tsx`, which is what the theme and the language are drawn from as
+// well; what stands here is the pill around them and the sentence under it.
 //
 // The warning is the design project's and belongs to the HTML choice alone. It says what the reduced view is
 // protecting somebody from, and it is careful about the same distinction the confirmation on the message head is: the
@@ -47,24 +46,18 @@ export function MessageView({ preferences }: { readonly preferences: ClientPrefe
                 <legend className="sr-only">{translate('settings.messageView')}</legend>
 
                 {views.map((offered) => (
-                    <label
+                    <ChoiceSegment
                         key={offered}
-                        className={`flex-1 cursor-pointer rounded-md py-1.5 text-center text-sm transition has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent ${
-                            chosen === offered ? 'bg-accent font-semibold text-on-accent' : 'text-muted hover:bg-hover'
-                        }`}
+                        shape="section"
+                        name="message-view"
+                        value={offered}
+                        chosen={chosen === offered}
+                        onChoose={(picked) => {
+                            preferences.chooseMessageView(picked === 'embeddedHtml');
+                        }}
                     >
-                        <input
-                            type="radio"
-                            name="message-view"
-                            value={offered}
-                            checked={chosen === offered}
-                            className="sr-only"
-                            onChange={() => {
-                                preferences.chooseMessageView(offered === 'embeddedHtml');
-                            }}
-                        />
                         {translate(viewNames[offered])}
-                    </label>
+                    </ChoiceSegment>
                 ))}
             </fieldset>
 

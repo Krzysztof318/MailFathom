@@ -171,6 +171,12 @@ export function Message({
     const held = drawableUnder(answer, read);
     const reading = outstanding !== null;
 
+    // Which read is in flight, rather than whether one is. Only the ask for the sender's pictures has a surface that
+    // reports it — the button somebody pressed, with the wait beneath it — so a read begun by anything else, and
+    // changing the view over an open message is one, would otherwise put "Loading them…" under a button nobody
+    // touched. What separates the two is that the answer being drawn was read without the pictures.
+    const askingForPictures = outstanding !== null && outstanding.remotePictures && !held?.read.remotePictures;
+
     // Which message's words are actually on the screen, which is the whole of what opening one means here — `null`
     // while a read is in flight and for a read that failed, because neither put anything in front of anybody.
     const drawn = held?.result.outcome === 'read' ? held.read.storedEmailId : null;
@@ -229,7 +235,7 @@ export function Message({
     return (
         <MessageBody
             body={held.result.value}
-            asking={reading}
+            asking={askingForPictures}
             /* Both halves rather than the setting alone: the view has to be the one in force *and* the answer on the
                screen has to be one that was read under it, so a message drawn from an earlier answer stays the reduced
                tree until the representation arrives instead of reporting markup nobody fetched. */

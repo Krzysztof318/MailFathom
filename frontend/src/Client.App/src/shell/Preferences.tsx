@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+import { ChoiceSegment } from '../controls/ChoiceSegment';
 import { Icon } from '../controls/Icon';
 import { Switch } from '../controls/Switch';
 import type { MessageKey } from '../localization/en';
@@ -29,13 +30,10 @@ const segmentNames: Readonly<Record<(typeof themeChoices)[number], MessageKey>> 
 
 const settingRow = 'flex items-center gap-2.5 px-3.25 py-2.5 text-base';
 
-// The compact pill the sign-in screen's two pickers stand in, and one segment inside it. Written once here because the
-// two are one shape in the design project and a second arrangement of the same utilities is how a client stops looking
-// like one product.
+// The compact pill the sign-in screen's two pickers stand in. Written once here because the two are one shape in the
+// design project and a second arrangement of the same utilities is how a client stops looking like one product; what
+// stands inside it is `controls/ChoiceSegment.tsx`, which the settings screen's groups draw from as well.
 const compactGroup = 'flex gap-0.75 rounded-lg border border-line bg-sunken p-0.5';
-
-const compactSegment =
-    'cursor-pointer rounded-md px-2 py-1 text-xs transition has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent';
 
 /**
  * The theme as three segments, one of them carrying the accent.
@@ -58,26 +56,20 @@ export function ThemeSegments({ onChoose }: { readonly onChoose: (choice: (typeo
 
             <div className="flex gap-0.75 rounded-xl border border-line bg-rail p-0.5">
                 {themeChoices.map((offered) => (
-                    <label
+                    <ChoiceSegment
                         key={offered}
-                        className={`flex-1 cursor-pointer rounded-lg py-1 text-center text-sm transition has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent ${
-                            choice === offered ? 'bg-accent font-semibold text-on-accent' : 'text-muted hover:bg-hover'
-                        }`}
+                        shape="row"
+                        name="theme"
+                        value={offered}
+                        chosen={choice === offered}
+                        onChoose={(chosen) => {
+                            if (isThemeChoice(chosen)) {
+                                onChoose(chosen);
+                            }
+                        }}
                     >
-                        <input
-                            type="radio"
-                            name="theme"
-                            value={offered}
-                            checked={choice === offered}
-                            className="sr-only"
-                            onChange={(event) => {
-                                if (isThemeChoice(event.target.value)) {
-                                    onChoose(event.target.value);
-                                }
-                            }}
-                        />
                         {translate(segmentNames[offered])}
-                    </label>
+                    </ChoiceSegment>
                 ))}
             </div>
         </fieldset>
@@ -126,26 +118,20 @@ export function ThemeChoice() {
 
             <div className={compactGroup}>
                 {themeChoices.map((offered) => (
-                    <label
+                    <ChoiceSegment
                         key={offered}
-                        className={`${compactSegment} ${
-                            choice === offered ? 'bg-accent font-semibold text-on-accent' : 'text-muted hover:bg-hover'
-                        }`}
+                        shape="compact"
+                        name="theme-choice"
+                        value={offered}
+                        chosen={choice === offered}
+                        onChoose={(chosen) => {
+                            if (isThemeChoice(chosen)) {
+                                setThemeChoice(chosen);
+                            }
+                        }}
                     >
-                        <input
-                            type="radio"
-                            name="theme-choice"
-                            value={offered}
-                            checked={choice === offered}
-                            className="sr-only"
-                            onChange={(event) => {
-                                if (isThemeChoice(event.target.value)) {
-                                    setThemeChoice(event.target.value);
-                                }
-                            }}
-                        />
                         {translate(segmentNames[offered])}
-                    </label>
+                    </ChoiceSegment>
                 ))}
             </div>
         </fieldset>
@@ -170,28 +156,20 @@ export function LanguageSegments() {
             <legend className="sr-only">{translate('shell.language')}</legend>
 
             {locales.map((offered) => (
-                <label
+                <ChoiceSegment
                     key={offered}
-                    className={`cursor-pointer rounded-lg px-3.25 py-1.5 text-sm transition has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent ${
-                        locale === offered
-                            ? 'bg-accent font-semibold text-on-accent'
-                            : 'border border-line bg-sunken text-text-soft hover:bg-hover'
-                    }`}
+                    shape="chip"
+                    name="language"
+                    value={offered}
+                    chosen={locale === offered}
+                    onChoose={(chosen) => {
+                        if (isOfferedLocale(chosen)) {
+                            setLocale(chosen);
+                        }
+                    }}
                 >
-                    <input
-                        type="radio"
-                        name="language"
-                        value={offered}
-                        checked={locale === offered}
-                        className="sr-only"
-                        onChange={(event) => {
-                            if (isOfferedLocale(event.target.value)) {
-                                setLocale(event.target.value);
-                            }
-                        }}
-                    />
                     {localeNames[offered]}
-                </label>
+                </ChoiceSegment>
             ))}
         </fieldset>
     );
@@ -208,26 +186,20 @@ export function LanguageChoice() {
 
             <div className={compactGroup}>
                 {locales.map((offered) => (
-                    <label
+                    <ChoiceSegment
                         key={offered}
-                        className={`${compactSegment} ${
-                            locale === offered ? 'bg-accent font-semibold text-on-accent' : 'text-muted hover:bg-hover'
-                        }`}
+                        shape="compact"
+                        name="language-choice"
+                        value={offered}
+                        chosen={locale === offered}
+                        onChoose={(chosen) => {
+                            if (isOfferedLocale(chosen)) {
+                                setLocale(chosen);
+                            }
+                        }}
                     >
-                        <input
-                            type="radio"
-                            name="language-choice"
-                            value={offered}
-                            checked={locale === offered}
-                            className="sr-only"
-                            onChange={(event) => {
-                                if (isOfferedLocale(event.target.value)) {
-                                    setLocale(event.target.value);
-                                }
-                            }}
-                        />
                         {localeNames[offered]}
-                    </label>
+                    </ChoiceSegment>
                 ))}
             </div>
         </fieldset>

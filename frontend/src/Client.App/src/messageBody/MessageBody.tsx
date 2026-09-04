@@ -48,17 +48,20 @@ const markupCutShort: Readonly<Record<Exclude<MailBodyTruncation, 'None'>, Messa
 };
 
 // What the embedded view draws for this message: the representation where there is a whole one, and otherwise the
-// reason it is not being drawn, with the reduced tree underneath it.
-function markupOrWhyNot(body: MailBody): { readonly markup: string } | { readonly insteadBecause: MessageKey } {
+// reason it is not being drawn, with the reduced tree underneath it. Exactly one of the two is ever present.
+function markupOrWhyNot(body: MailBody): {
+    readonly markup: string | null;
+    readonly insteadBecause: MessageKey | null;
+} {
     const representation = body.selfContainedHtml;
 
     if (representation === null || representation.text === '') {
-        return { insteadBecause: 'body.markupAbsent' };
+        return { markup: null, insteadBecause: 'body.markupAbsent' };
     }
 
     return representation.truncation === 'None'
-        ? { markup: representation.text }
-        : { insteadBecause: markupCutShort[representation.truncation] };
+        ? { markup: representation.text, insteadBecause: null }
+        : { markup: null, insteadBecause: markupCutShort[representation.truncation] };
 }
 
 export function MessageBody({
@@ -101,14 +104,16 @@ export function MessageBody({
     }
 
     const embedded = embeddedHtml ? markupOrWhyNot(body) : null;
+    const markup = embedded?.markup ?? null;
+    const insteadBecause = embedded?.insteadBecause ?? null;
 
-    if (embedded !== null && 'markup' in embedded) {
-        return <EmbeddedMessageMarkup markup={embedded.markup} />;
-    }
-
+    // What the message asked to load from somebody else's server stands above either rendering rather than only above
+    // the reduced one. The ask is part of the read, so it reaches the representation exactly as it reaches the tree —
+    // and this is the only place in the client it can be made, which is what would have made a message opened in the
+    // embedded view one whose blocked pictures nobody could ever ask for.
     return (
         <div className="flex flex-col gap-4">
-            {embedded === null ? null : <p className="text-sm text-muted">{translate(embedded.insteadBecause)}</p>}
+            {insteadBecause === null ? null : <p className="text-sm text-muted">{translate(insteadBecause)}</p>}
 
             {body.document === null ? null : (
                 <RemoteContent
@@ -119,7 +124,9 @@ export function MessageBody({
                 />
             )}
 
-            {drawn === null ? (
+            {markup !== null ? (
+                <EmbeddedMessageMarkup markup={markup} />
+            ) : drawn === null ? (
                 <ReadAsWords body={body} />
             ) : (
                 <article className="flex flex-col gap-3">

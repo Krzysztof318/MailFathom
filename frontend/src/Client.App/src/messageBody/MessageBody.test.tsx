@@ -87,11 +87,11 @@ const markup: MailBodyText = {
 const withMarkup: MailBody = { ...readable, selfContainedHtml: markup };
 
 /** The same body drawn for a reader whose messages are the sender's own markup rather than the reduced text. */
-function inTheEmbeddedView(body: MailBody) {
+function inTheEmbeddedView(body: MailBody, onShowRemotePictures: () => void = () => undefined) {
     return (
         <LocalizationProvider>
             <LinkOpenerContext value={() => Promise.resolve()}>
-                <MessageBody body={body} asking={false} embeddedHtml onShowRemotePictures={() => undefined} />
+                <MessageBody body={body} asking={false} embeddedHtml onShowRemotePictures={onShowRemotePictures} />
             </LinkOpenerContext>
         </LocalizationProvider>
     );
@@ -332,6 +332,23 @@ describe('MessageBody', () => {
 
             expect(screen.getByText(/longer than one read returns/u)).toBeDefined();
             expect(screen.getByText('A drawn message.')).toBeDefined();
+        });
+
+        it('offers the ask for the sender’s pictures here too, this being the only place it can be made', () => {
+            let asked = 0;
+            render(
+                inTheEmbeddedView(
+                    { ...withMarkup, document: { ...drawnDocument, removedRemoteReferenceCount: 2 } },
+                    () => {
+                        asked += 1;
+                    },
+                ),
+            );
+
+            expect(screen.getByTitle("The sender's own markup, drawn in isolation")).toBeDefined();
+            fireEvent.click(screen.getByRole('button', { name: 'Load pictures from the sender' }));
+
+            expect(asked).toBe(1);
         });
 
         it('names the pictures rather than the length where that is the bound the markup met', () => {
