@@ -71,6 +71,18 @@ describe('showStaticFailure', () => {
         });
     });
 
+    // What it puts there reads in one language, so the document says so — a session that had been switched to another
+    // one leaves the declaration behind otherwise, and a screen reader pronounces English under it.
+    it('declares the language of what it put there, whichever one the client was being read in', () => {
+        document.documentElement.lang = 'pl';
+        documentWithARoot();
+        documentCarryingTheSurface();
+
+        showStaticFailure();
+
+        expect(document.documentElement.lang).toBe('en');
+    });
+
     it('leaves a document carrying no such surface as it found it', () => {
         documentWithARoot();
 

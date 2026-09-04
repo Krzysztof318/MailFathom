@@ -20,6 +20,11 @@ export function showStaticFailure(): void {
         return;
     }
 
+    // The client declares the language it is being read in on the document itself, and what is about to stand there
+    // reads in one language whatever that said — so the declaration is put back with it, rather than leaving a screen
+    // reader to pronounce English under whichever locale the session was in.
+    document.documentElement.lang = 'en';
+
     const shown = carried.content.cloneNode(true);
 
     // Read out of the fragment before it is inserted, because appending a fragment empties it: what is put in the

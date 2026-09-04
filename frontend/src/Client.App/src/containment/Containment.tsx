@@ -51,7 +51,9 @@ interface ContainmentState {
 
 export class Containment extends Component<ContainmentProps, ContainmentState> {
     // Where focus goes when a retry succeeds. It wraps what is contained rather than replacing anything the region
-    // draws, and `display: contents` is what keeps a wrapper that exists for the keyboard out of the layout.
+    // draws, and it draws a box of its own rather than `display: contents`, which would have kept it out of the layout
+    // entirely: an element drawing no box is one a browser refuses focus, whatever `tabIndex` it carries, and jsdom
+    // does not model that — so this is a wrapper the browser suite proves and the unit suite cannot.
     private readonly recovered = createRef<HTMLDivElement>();
 
     override state: ContainmentState = { failed: false, failures: 0, drawn: this.props.drawing };
@@ -82,6 +84,10 @@ export class Containment extends Component<ContainmentProps, ContainmentState> {
         this.setState((before) => ({ failures: before.failures + 1 }));
     }
 
+    // The region is back and the control that brought it back has gone with the surface it stood on, so the keyboard
+    // goes to the start of what replaced it rather than being left on nothing. On the region rather than on the first
+    // thing inside it, because a region that has just been asked to draw again is often still reading: what is inside
+    // it a moment after a retry may be nothing at all.
     override componentDidUpdate(_: ContainmentProps, before: ContainmentState): void {
         if (before.failed && !this.state.failed) {
             this.recovered.current?.focus();
@@ -102,7 +108,7 @@ export class Containment extends Component<ContainmentProps, ContainmentState> {
         }
 
         return (
-            <div className="contents" ref={this.recovered} tabIndex={-1}>
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col" ref={this.recovered} tabIndex={-1}>
                 {this.props.children}
             </div>
         );

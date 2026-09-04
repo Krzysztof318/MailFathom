@@ -1210,6 +1210,10 @@ const refuseTheElementAMessageIsDrawnAs = `
     (() => {
         const create = document.createElement.bind(document);
 
+        window.drawEverythingAgain = () => {
+            document.createElement = create;
+        };
+
         document.createElement = (name, options) => {
             if (name === 'article') {
                 throw new TypeError('This message cannot be drawn.');
@@ -1235,6 +1239,33 @@ test('keeps the frame usable when the reading pane throws while it is being draw
     await page.getByRole('link', { name: 'Discover' }).click();
 
     await expect(page.getByRole('heading', { name: 'Discover', level: 1 })).toBeVisible();
+});
+
+// The way out the pane offers, taken after whatever made it fail has stopped: the region is drawn again, and the
+// keyboard goes into it rather than being left on a control that has gone with the surface it stood on. It is here
+// rather than in the unit suite because jsdom answers the question wrongly — the wrapper the boundary holds draws no
+// box, which is a browser's reason for refusing it focus and not something jsdom models.
+test('draws the region again when it is retried, and hands the keyboard into it', async ({ page }) => {
+    await openTheFirstMessage(page);
+    await page.evaluate(refuseTheElementAMessageIsDrawnAs);
+    await page.getByRole('listbox', { name: 'Messages' }).getByRole('option').nth(1).click();
+    await expect(page.getByRole('alert')).toBeVisible();
+
+    await page.evaluate('window.drawEverythingAgain()');
+    await page.getByRole('button', { name: 'Try again' }).click();
+
+    const message = page.getByRole('article', messageRegion);
+
+    await expect(message).toBeVisible();
+    await expect(page.getByRole('alert')).toHaveCount(0);
+    // Somebody rather than nobody holds the keyboard, and the next tab stop says where they are: the first control
+    // the region draws. Both are asked in a browser rather than in jsdom, which draws no boxes and so does not model
+    // the element a browser refuses focus to — the wrapper this lands on was one until this change.
+    expect(await page.evaluate('document.activeElement !== document.body')).toBe(true);
+
+    await page.keyboard.press('Tab');
+
+    await expect(page.getByRole('button', { name: 'Reply — not built yet' })).toBeFocused();
 });
 
 // The failure no boundary is left to contain, induced by refusing the element every surface in this client is built
