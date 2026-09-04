@@ -127,8 +127,7 @@ What belongs here is the rule that follows from that, because no tool enforces i
   it printed into that closure's row: nothing recomputes a census, exactly as with the two above. **The hand-written
   decisions include Kotlin this repository wrote**, not only edits to template files: `app/src/main/java/…/CredentialStorePlugin.kt`
   is the Android half of the credential store, the template writes nothing like it, and a regeneration that deletes the
-  directory takes it with it. It is source under a generated project's roof, so it carries the licensing header every
-  other module this repository writes carries.
+  directory takes it with it.
 - **The head is exempt from no rule and gated by nothing at all.** No verification gate and no pull request check
   reaches it; the one thing that builds it is the nightly job ADR 0027 describes, `Build the Android client`, and that
   job gates nothing either. A change that breaks the Android toolchain alone therefore merges green and fails a

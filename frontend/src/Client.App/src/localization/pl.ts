@@ -98,7 +98,7 @@ export const pl: Catalogue = {
     'signIn.notKeptStorageUnreachable':
         'Twoje hasło nie zostanie zapamiętane i zapytamy o nie ponownie przy następnym uruchomieniu MailFathom — nie udało się sięgnąć do chronionego magazynu tego urządzenia, a MailFathom nie zostawi hasła w mniej bezpiecznym miejscu.',
     'signIn.notKeptKeyInvalidated':
-        'Twoje hasło nie zostanie zapamiętane i zapytamy o nie ponownie przy następnym uruchomieniu MailFathom — to urządzenie usunęło klucz, pod którym MailFathom je przechowywał, co robi zmiana blokady ekranu.',
+        'Twoje hasło nie zostanie zapamiętane i zapytamy o nie ponownie przy następnym uruchomieniu MailFathom — to urządzenie nie potrafi już zwrócić klucza, pod którym MailFathom je przechowywał, więc to, co zapisano wcześniej, zostało usunięte.',
 
     'connect.address': 'Serwer',
     'connect.addressConfigured':

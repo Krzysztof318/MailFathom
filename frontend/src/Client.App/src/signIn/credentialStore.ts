@@ -120,8 +120,13 @@ function keptForTheRun(lifetime: 'untilTheTabCloses' | 'untilTheClientCloses'): 
  * The credential kept nowhere at all, on a head whose shell has protected storage it could not reach.
  *
  * `keep` answers `false` because nothing was stored and the screen has to say so at the moment somebody signs in, and
- * `forget` answers `true` because nothing is kept under that name for anything to remove — the same reading the page's
- * own storage gives when it refuses every write.
+ * `read` answers nothing because nothing this run wrote can be read back.
+ *
+ * `forget` still asks the shell, which is the half that is not symmetrical with the other two. This arrangement says
+ * the store could not be reached *this run*, never that it holds nothing: a run whose store opened normally may have
+ * written a credential that is still there, and removing it needs no key on any head — so answering `true` here would
+ * report a sign-out that removed nothing and leave the password to be read back by the next run that can open the
+ * store.
  */
 function keptNowhere(lifetime: 'notKeptStorageUnreachable' | 'notKeptKeyInvalidated'): CredentialStore {
     return {
@@ -131,7 +136,8 @@ function keptNowhere(lifetime: 'notKeptStorageUnreachable' | 'notKeptKeyInvalida
 
         keep: () => Promise.resolve(false),
 
-        forget: () => Promise.resolve(true),
+        forget: async (deployment) =>
+            (await shellAnswers('forget_credential', { deployment: deployment.baseAddress })) === true,
     };
 }
 

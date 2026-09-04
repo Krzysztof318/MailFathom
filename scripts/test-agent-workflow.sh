@@ -8415,8 +8415,9 @@ every_hash_commented_file_carries_the_license_header() {
 }
 
 # The documentation site's template and the client stack are the fourth place the analyzer cannot reach,
-# and they carry three more forms of the same three lines. A module — JavaScript, TypeScript, or the
-# desktop shell's Rust — opens a comment with `//`; a stylesheet has no line-comment syntax at all, so
+# and they carry three more forms of the same three lines. A module — JavaScript, TypeScript, the desktop
+# shell's Rust, or the Kotlin the Android head's own plugin is written in — opens a comment with `//`; a
+# stylesheet has no line-comment syntax at all, so
 # CSS's one block form is what carries it there; and the client's one page is markup, where a comment is
 # delimited rather than per-line. The client's `.json` manifests carry none, because JSON has no comment
 # syntax to put one in.
@@ -8451,8 +8452,15 @@ every_browser_asset_carries_the_license_header() {
       printf '%s does not open with the license header\n' "$file" >&2
       failures=$(( failures + 1 ))
     fi
+    # The Android head's generated project is the one place a covered extension appears in a file this repository did
+    # not write: `pnpm android:init` writes `MainActivity.kt` and the whole of `buildSrc/`, which are template output in
+    # the same sense a resolved lock file is, and a header typed into one would be lost at the next regeneration.
+    # Everything else under that roof is ours and is covered, so a regeneration that starts writing a fourth template
+    # file fails here — which is where the answer to whose file it is belongs.
   done < <(git -C "$source_repository_root" ls-files -- \
-    '*.js' '*.mjs' '*.cjs' '*.ts' '*.tsx' '*.rs' '*.css' '*.html')
+    '*.js' '*.mjs' '*.cjs' '*.ts' '*.tsx' '*.rs' '*.kt' '*.css' '*.html' \
+    ':(exclude)frontend/src-tauri/gen/android/buildSrc/*' \
+    ':(exclude)frontend/src-tauri/gen/android/app/src/main/java/io/github/krzysztof318/mailfathom/MainActivity.kt')
 
   (( failures == 0 ))
 }

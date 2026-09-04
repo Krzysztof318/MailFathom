@@ -583,7 +583,7 @@ describe('SignIn', () => {
         ],
         [
             'notKeptKeyInvalidated' as const,
-            'Your password will not be kept, and you will be asked for it again the next time MailFathom starts — this device discarded the key MailFathom kept it under, which is what changing the screen lock does.',
+            'Your password will not be kept, and you will be asked for it again the next time MailFathom starts — this device can no longer give back the key MailFathom stored it under, so anything kept earlier has been removed.',
         ],
     ])('says nothing will be kept, and why, where the store reports %s', (lifetime, sentence) => {
         renderScreen(signedIn, servingDeployment, lifetime);

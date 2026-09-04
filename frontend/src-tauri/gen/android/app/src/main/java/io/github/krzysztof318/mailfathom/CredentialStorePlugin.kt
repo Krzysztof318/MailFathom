@@ -16,7 +16,6 @@ import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.Plugin
-import java.security.GeneralSecurityException
 import java.security.KeyStore
 import java.security.UnrecoverableKeyException
 import javax.crypto.Cipher
@@ -114,9 +113,12 @@ class CredentialStorePlugin(private val activity: Activity) : Plugin(activity) {
      * A key is generated when a credential is first kept rather than when somebody is only being asked a question, for
      * the reason the desktop reads its store's initialization instead of writing a probe entry: nothing is left behind
      * on a device where nobody signed in. So what is checked is the Keystore itself, and the existing key where there
-     * is one — a key the operating system discarded, which is what removing or changing the device lock can do, is the
-     * one failure whose sentence differs, and what was written under it is unreadable and removed here rather than
-     * left to fail on the next read.
+     * is one — a key the operating system will no longer give back is the one failure whose sentence differs, and what
+     * was written under it is unreadable and removed here rather than left to fail on the next read.
+     *
+     * The screen lock is deliberately not named as the cause of that, here or on the screen: the platform invalidates a
+     * key on a lock-screen change only where the key required user authentication, and `credentialKey` below sets no
+     * such requirement. What reaches this branch is an entry the platform cannot return at all.
      */
     private fun arrangement(): String {
         return try {
@@ -172,7 +174,13 @@ class CredentialStorePlugin(private val activity: Activity) : Plugin(activity) {
         try {
             val sealed = preferences().getString(deployment, null)?.let { Base64.decode(it, Base64.NO_WRAP) }
 
-            if (sealed == null || sealed.size <= NONCE_LENGTH) {
+            if (sealed == null) {
+                null
+            } else if (sealed.size <= NONCE_LENGTH) {
+                // Too short to be a nonce and a tag, so it is the same unusable entry the catch below removes rather
+                // than a value a later start could open — and leaving it would decode it again on every one of them.
+                forget(deployment)
+
                 null
             } else {
                 val cipher = Cipher.getInstance(TRANSFORMATION)
@@ -240,8 +248,11 @@ class CredentialStorePlugin(private val activity: Activity) : Plugin(activity) {
     private fun discardEverything() {
         try {
             KeyStore.getInstance(KEYSTORE_PROVIDER).apply { load(null) }.deleteEntry(KEY_ALIAS)
-        } catch (refused: GeneralSecurityException) {
-            // A key that cannot be deleted is a key nothing can read either, and the entries below go regardless.
+        } catch (refused: Exception) {
+            // A key that cannot be deleted is a key nothing can read either, and the entries below go regardless. Every
+            // exception is caught rather than the security ones alone, because `KeyStore.load` also throws `IOException`
+            // and two of this method's callers are themselves inside a catch block, where nothing above would hold it —
+            // it would skip the removal below and escape a command this file promises never rejects.
         }
 
         try {

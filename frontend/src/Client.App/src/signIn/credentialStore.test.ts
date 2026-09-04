@@ -109,20 +109,35 @@ describe('a credential kept nowhere', () => {
         },
     );
 
-    it('reports the credential as gone, because nothing was ever kept under that name', async () => {
-        shellAnswering({ credential_arrangement: 'notKeptStorageUnreachable' });
+    // A store that could not be reached this run is not a store that holds nothing: an earlier run whose store opened
+    // normally may have written a credential that is still on the device, and removing it needs no key.
+    it('asks the shell to remove what an earlier run may have kept, rather than assuming there is nothing there', async () => {
+        const asked = shellAnswering({
+            credential_arrangement: 'notKeptStorageUnreachable',
+            forget_credential: true,
+        });
         const store = await credentialStore();
 
         expect(await store.forget(deployment)).toBe(true);
+        expect(asked).toContainEqual({
+            command: 'forget_credential',
+            argument: { deployment: deployment.baseAddress },
+        });
     });
 
-    it('asks the shell for nothing beyond the arrangement it already answered', async () => {
+    it('reports the credential as still there where the shell would not remove it', async () => {
+        shellAnswering({ credential_arrangement: 'notKeptKeyInvalidated', forget_credential: false });
+        const store = await credentialStore();
+
+        expect(await store.forget(deployment)).toBe(false);
+    });
+
+    it('asks the shell for nothing beyond the arrangement when it keeps or reads', async () => {
         const asked = shellAnswering({ credential_arrangement: 'notKeptKeyInvalidated' });
         const store = await credentialStore();
 
         await store.keep(deployment, authorization);
         await store.read(deployment);
-        await store.forget(deployment);
 
         expect(asked).toEqual([{ command: 'credential_arrangement', argument: undefined }]);
     });
