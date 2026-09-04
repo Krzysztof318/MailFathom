@@ -76,14 +76,17 @@ Four things may never cross, in either direction:
   the next machine; what they set **before signing in is kept on the device**, because the sign-in screen has no session
   to ask with. A setting offered on both sides of signing in is placed by the earlier of the two, which is why the
   language stays on the device although the settings screen offers it as well. An exception exists only where the issue
-  asking for the setting asked for one explicitly and said why, and three stand today: the theme is held in **both**
-  stores — the device answers first so that something is painted above the sign-in screen, and the deployment's answer
-  replaces it once a session exists; whether telemetry may be recorded is held in both for a stronger reason, that a
-  client which has not yet been told anything has to honour a refusal rather than record until an answer arrives, so the
-  device's copy is keyed per person and read only until the deployment answers; and the list/pane split is kept on the
-  device alone, because a pane width says how much room this screen has rather than how somebody wants to work. Those
-  two are the only settings held in both, and a setting that belongs to neither store is session state rather than a
-  third place to keep one.
+  asking for the setting asked for one explicitly and said why, and four stand today: whether this machine raises a
+  system notification of its own is set after signing in and kept **on the device**, because what it decides is whether
+  one operating system is spoken to — somebody wanting them on a laptop and not on a shared machine is describing two
+  machines rather than changing their mind, and a setting that followed them would be wrong on arrival; the theme is
+  held in **both** stores — the device answers first so that something is painted above the sign-in screen, and the
+  deployment's answer replaces it once a session exists; whether telemetry may be recorded is held in both for a
+  stronger reason, that a client which has not yet been told anything has to honour a refusal rather than record until
+  an answer arrives, so the device's copy is keyed per person and read only until the deployment answers; and the
+  list/pane split is kept on the device alone, because a pane width says how much room this screen has rather than how
+  somebody wants to work. Those two are the only settings held in both, and a setting that belongs to neither store is
+  session state rather than a third place to keep one.
 - **No store keeps mail, and none of them keeps a write for later.**
   [ADR 0028](../../docs/decisions/0028-no-mail-on-the-device-and-an-honest-client-with-no-route-to-its-deployment.md)
   is the record and holds the reasoning: nothing about mail — a message, a header, a sender, a count, an attachment, a
@@ -176,13 +179,22 @@ underneath asks where it came from.
 
 **The other exception is a shell operation, and it is resolved the same way.** Where the application genuinely depends
 on something only a shell can do — opening a followed link outside the application, under
-[ADR 0024](../../docs/decisions/0024-rendering-mail-in-the-client-as-a-closed-document-tree.md), and keeping the
-credential, under [ADR 0023](../../docs/decisions/0023-where-the-client-keeps-the-credential-it-signs-in-with.md) — the
-application declares the operation it needs, and which implementation satisfies it is decided in one module at the
-composition root by whether a shell offered the command. `Client.App/src/shellOperations/linkOpener.ts` is that shape: one
-function resolves it, `main.tsx` calls that function once, and every component below receives the operation through
-context. It is the first module of that shape and `shellOperations/` is where the next one goes, rather than beside the
-screen that happens to need it first, because what such a module answers is the application's and not one screen's.
+[ADR 0024](../../docs/decisions/0024-rendering-mail-in-the-client-as-a-closed-document-tree.md), keeping the
+credential, under [ADR 0023](../../docs/decisions/0023-where-the-client-keeps-the-credential-it-signs-in-with.md), and
+raising a system notification while nobody is looking at the window — the application declares the operation it needs,
+and which implementation satisfies it is decided in one module at the composition root by whether a shell offered the
+command. `Client.App/src/shellOperations/linkOpener.ts` is that shape: one function resolves it, `main.tsx` calls that
+function once, and every component below receives the operation through context. It is the first module of that shape
+and `shellOperations/` is where the next one goes, rather than beside the screen that happens to need it first, because
+what such a module answers is the application's and not one screen's.
+`configuredConnection.ts` and `systemNotifier.ts` beside it are the two written since, and the second states a rule the
+first two did not need: **an operation a head does not offer is a question the application asks rather than a failure it
+meets.** A notifier says whether it can raise one at all, so the settings row that would decide it is not drawn on a head
+that would decide nothing — which is how a surface adapts to an absent operation without ever asking which head it is on.
+**An operation backed by a plugin asks after that plugin rather than after the shell**, which is the part the first two
+did not need: a shell announcing itself says nothing about a plugin only some targets link, so the question is whether
+the binding that plugin installs is there. And an operation a head does not carry is an answer of its own rather than a
+refusal — a refusal was given by somebody and is kept, an absent operation was decided by nobody and is kept nowhere.
 `Client.App/src/signIn/credentialStore.ts` is the other one today and predates the directory, so it still sits beside
 the sign-in screen; moving it is a change of its own rather than a side effect of adding the second. What is refused
 above is a component, a hook, or a screen asking the question itself, and that refusal is unchanged by either

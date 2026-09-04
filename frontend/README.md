@@ -80,22 +80,24 @@ property ADR 0021 chose Tauri for; a platform difference that genuinely exists b
 `src/lib.rs` is the whole of it, and `src/main.rs` beside it is the three lines the desktop binary needs. The split is
 Android's and only Android's: an application there is started by the platform through a JNI entry point in a shared
 object rather than by running an executable, so `run` carries `#[cfg_attr(mobile, tauri::mobile_entry_point)]` and both
-heads start from the same function. What the file holds beyond the window is four commands of this repository's own and
-one upstream plugin.
+heads start from the same function. What the file holds beyond the window is five commands of this repository's own and
+two upstream plugins.
 
-The commands exist for one reason: [ADR 0023](../docs/decisions/0023-where-the-client-keeps-the-credential-it-signs-in-with.md)
+Four of the commands exist for one reason: [ADR 0023](../docs/decisions/0023-where-the-client-keeps-the-credential-it-signs-in-with.md)
 keeps the credential this head signs in with in the operating system's own store, which a webview cannot reach and a
 shell can. `credential_arrangement` says where the credential will live this run, and `keep_credential`,
 `read_credential`, and `forget_credential` are the three operations on it. Two of them answer whether they succeeded,
 which is what lets the client say that a store refused to delete rather than report a sign-out that did not happen;
 none of them answers _why_ one failed, because everything a failure could name is about a password. No capability file
 names them, and writing one would be a mistake rather than an omission: Tauri gates its own plugin commands through an
-access-control
-list and never an application's, so a `capabilities/` entry naming these four would grant the webview reach into
-plugins nothing here pins. What the webview reaches them through is `app.withGlobalTauri` in `tauri.conf.json`, which
-puts `invoke` on `window.__TAURI__`, and that is what lets this shell pin no JavaScript binding of its own: the four
-commands are this repository's, so nothing upstream publishes a package for them and writing one would be a package of
-ours to keep in step with them.
+access-control list and never an application's, so a `capabilities/` entry naming these four would grant the webview
+reach into plugins nothing here pins. The fifth, `client_configuration`, is what the shell was started with rather than
+anything about a password: it answers with what each of the three places an operator configures this head from stated,
+unvalidated and unpreferred, and `Client.App/src/shellOperations/configuredConnection.ts` is what reads it. What the
+webview reaches all five through is `app.withGlobalTauri` in `tauri.conf.json`, which puts `invoke` on
+`window.__TAURI__`, and that is what lets this shell pin no JavaScript binding of its own: the five commands are this
+repository's, so nothing upstream publishes a package for them and writing one would be a package of ours to keep in
+step with them.
 
 What answers those four is `src/credentials.rs`, in two implementations selected by target: the desktop reaches the
 machine's keychain through the `keyring` crate, and the Android head reaches the Android Keystore through a Kotlin
@@ -108,12 +110,22 @@ keep anything at all on a phone, and only the shell knows which head it is on. T
 directly, with AES-GCM, rather than through `androidx.security:security-crypto`, whose every API is deprecated with no
 further release planned — so the head carries no dependency for it and the APK's closure is the one it already had.
 
-The plugin is `tauri-plugin-opener`, and it is there because opening a followed link outside the application is the one
-thing the desktop head cannot do from the page. Its commands are a plugin's rather than this repository's, so they are
-gated where the four above are not: `capabilities/open-a-link.json` grants the webview that one operation over `http`,
-`https`, and `mailto` rather than the plugin's own default permission set — a capability is reach handed to whatever
-runs in the page, so it names the operation the application actually makes and nothing beside it. A second permission
-is added the same way, by the change that needs it.
+The plugins are `tauri-plugin-opener` and `tauri-plugin-notification`, and they are there because opening a followed
+link outside the application and raising a system notification while nobody is looking at the window are the two things
+the desktop head cannot do from the page. Their commands are a plugin's rather than this repository's, so they are gated
+where the commands above are not: `capabilities/open-a-link.json` grants the webview the first over `http`, `https`, and
+`mailto`, and `capabilities/raise-a-notification.json` grants the second as the three commands the application calls —
+asking whether permission stands, asking for it, and raising one — rather than either plugin's own default permission
+set. A capability is reach handed to whatever runs in the page, so it names the operation the application actually makes
+and nothing beside it, and a third permission is added the same way, by the change that needs it.
+
+The notification plugin is also the one pin this crate states **per target**, and the target list is what keeps it off
+the phone. A Tauri plugin with an Android side is a Gradle subproject the CLI adds to the generated settings file at
+build time, so linking it would change what `gen/android/app/gradle.lockfile` fixes — and no pull request runs the build
+that verifies that file. The phone's own notification is
+[#1616](https://github.com/Krzysztof318/MailFathom/issues/1616), which grants the capability, declares the runtime
+permission, and rewrites the lock file together; until then the Android head meets an operation that reports itself
+unoffered, exactly as the web head does.
 
 | What                                                                | Where it is decided                                                                                                                                                                                    |
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -589,9 +601,9 @@ deployment shape: the container image builds this in a stage of its own and copi
 what a deployment gains is files and a setting rather than a second service.
 
 `src/Client.App/public/` is copied into that directory verbatim, and it holds one file:
-`THIRD-PARTY-NOTICES.txt`, the notices of everything the bundle actually redistributes — the MIT text of the five
+`THIRD-PARTY-NOTICES.txt`, the notices of everything the bundle actually redistributes — the MIT text of the seven
 packages, the SIL Open Font License the typeface is under, and the Apache-2.0 grant the icon outlines are under. The
-build minifies every module into one chunk and none of the five carries a banner of its own, and a `woff2` file and an
+build minifies every module into one chunk and none of the seven carries a banner of its own, and a `woff2` file and an
 inlined path carry nothing at all, so the notices travel as text beside the code rather than inside it. [The third-party register](../THIRD_PARTY_LICENSES.md) is where the review behind it
 lives, and it is what says which packages that file has to name.
 

@@ -2,13 +2,16 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { largestPortraitOctets } from '@mailfathom/client-backend';
 import type { TelemetryForwarding } from '../deployment/telemetryForwarding';
 import { LocalizationProvider } from '../localization/Localization';
+import { chooseSystemNotifications } from '../preferences/systemNotifications';
 import type { ClientPreferencesInForce } from '../preferences/useClientPreferences';
 import type { OwnProfileInForce } from '../profile/useOwnProfile';
+import { deviceKeys } from '../device/deviceStore';
+import { SystemNotifierContext, type SystemNotifier } from '../shellOperations/systemNotifier';
 import { Settings } from './Settings';
 
 const settings: ClientPreferencesInForce = {
@@ -46,25 +49,37 @@ function renderSettings({
     telemetryForwarding = forwardedTo,
     deploymentVersion = '0.9.0',
     onClose = () => undefined,
+    head = raisesNothing,
 }: {
     readonly profile?: OwnProfileInForce;
     readonly preferences?: ClientPreferencesInForce;
     readonly telemetryForwarding?: TelemetryForwarding;
     readonly deploymentVersion?: string | null;
     readonly onClose?: () => void;
+
+    /** The head this surface is drawn in, which decides whether it offers a system notification at all. */
+    readonly head?: SystemNotifier;
 } = {}): void {
     render(
         <LocalizationProvider>
-            <Settings
-                profile={profile}
-                preferences={preferences}
-                telemetryForwarding={telemetryForwarding}
-                deploymentVersion={deploymentVersion}
-                onClose={onClose}
-            />
+            <SystemNotifierContext value={head}>
+                <Settings
+                    profile={profile}
+                    preferences={preferences}
+                    telemetryForwarding={telemetryForwarding}
+                    deploymentVersion={deploymentVersion}
+                    onClose={onClose}
+                />
+            </SystemNotifierContext>
         </LocalizationProvider>,
     );
 }
+
+/** The web head, where nothing offered the operation and the row therefore has nothing to decide. */
+const raisesNothing: SystemNotifier = { offered: false, raise: () => Promise.resolve('unavailable') };
+
+/** A head that offered it, which is the desktop one. */
+const raisesThem: SystemNotifier = { offered: true, raise: () => Promise.resolve('raised') };
 
 /** The second tab opened, which is where everything about the client rather than about the person is. */
 function openApplication(): void {
@@ -79,6 +94,12 @@ function file(name: string, type: string, octets: number): File {
 function choose(picture: File): void {
     fireEvent.change(screen.getByLabelText('Picture'), { target: { files: [picture] } });
 }
+
+// The one value this surface writes outside React is the machine's own answer about system notifications, so it is
+// taken back between tests rather than carried into the next one as a decision somebody made.
+afterEach(() => {
+    window.localStorage.removeItem(deviceKeys.systemNotifications);
+});
 
 describe('Settings', () => {
     it('is a dialog named for what it holds', () => {
@@ -366,6 +387,41 @@ describe('Settings', () => {
         openApplication();
 
         expect(screen.getByRole('switch', { name: /Expand the whole thread/u })).toHaveProperty('checked', true);
+    });
+
+    it('offers no system-notification switch where the head offered no such operation', () => {
+        renderSettings();
+        openApplication();
+
+        expect(screen.queryByRole('switch', { name: /Notify me on this machine/u })).toBeNull();
+    });
+
+    it('draws the system-notification switch as on where the machine has been left raising them', () => {
+        renderSettings({ head: raisesThem });
+        openApplication();
+
+        expect(screen.getByRole('switch', { name: /Notify me on this machine/u })).toHaveProperty('checked', true);
+    });
+
+    it('keeps a refusal on the device, which is where the answer belongs and what the next start reads', () => {
+        renderSettings({ head: raisesThem });
+        openApplication();
+
+        fireEvent.click(screen.getByRole('switch', { name: /Notify me on this machine/u }));
+
+        expect(window.localStorage.getItem(deviceKeys.systemNotifications)).toBe('false');
+        expect(screen.getByRole('switch', { name: /Notify me on this machine/u })).toHaveProperty('checked', false);
+    });
+
+    it('follows a refusal written while it is open, since the operating system is the other writer', () => {
+        renderSettings({ head: raisesThem });
+        openApplication();
+
+        act(() => {
+            chooseSystemNotifications(false);
+        });
+
+        expect(screen.getByRole('switch', { name: /Notify me on this machine/u })).toHaveProperty('checked', false);
     });
 
     it('closes from its own control, which is the way out that does not need a keyboard', () => {

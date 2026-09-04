@@ -16,6 +16,7 @@ import { sendToDeployment } from './deployment/sendToDeployment';
 import { LocalizationProvider } from './localization/Localization';
 import { configuredConnection } from './shellOperations/configuredConnection';
 import { LinkOpenerContext, linkOpenerForThisApplication } from './shellOperations/linkOpener';
+import { SystemNotifierContext, systemNotifierForThisApplication } from './shellOperations/systemNotifier';
 import { credentialStore } from './signIn/credentialStore';
 import { browserSchedule, openSignalChannel } from './signals/signalChannel';
 import { clientTelemetryForThisApplication, TelemetryContext } from './telemetry/clientTelemetry';
@@ -24,9 +25,10 @@ import { ToastsProvider } from './toasts/Toasts';
 import { WorkspaceProvider } from './workspace/Workspace';
 import './styles.css';
 
-// The one place a head is asked about. Everything below receives the operation rather than the answer to that
+// The two places a head is asked about. Everything below receives the operation rather than the answer to that
 // question, which is what keeps one client one client across both heads.
 const openLink = linkOpenerForThisApplication();
+const systemNotifier = systemNotifierForThisApplication();
 
 // The one place the client's traces, metrics, and logs are composed. It is here rather than beside a screen for the
 // reason the link opener is: what this client reports about itself is the application's decision and not one screen's,
@@ -59,9 +61,10 @@ if (container === null) {
  * this machine is filed under, so a client that read the store before it knew where it was pointed would read back the
  * credential of whichever deployment it was pointed at last.
  *
- * The five things that outlive every screen stand above it: the language it reads in, the theme it is painted in, what
- * the person is carrying between the spaces, how a link they follow leaves the application, and the surface the client
- * says back on. Each is above the frame because nothing below the frame may be what decides it, and each is above the
+ * The six things that outlive every screen stand above it: the language it reads in, the theme it is painted in, what
+ * the person is carrying between the spaces, how a link they follow leaves the application, how this machine says
+ * something while nobody is looking at the window, and the surface the client says back on. Each is above the frame
+ * because nothing below the frame may be what decides it, and each is above the
  * sign-in screen for the same reason — somebody who has not signed in yet reads in a language, is painted in a theme,
  * and is told what just happened exactly as somebody who has.
  */
@@ -96,27 +99,29 @@ async function open(root: HTMLElement): Promise<void> {
                     <ThemeProvider>
                         <WorkspaceProvider>
                             <LinkOpenerContext value={openLink}>
-                                <AttachmentExchangeContext value={attachmentExchange}>
-                                    <AttachmentUploadContext value={uploadAttachment}>
-                                        <TelemetryContext value={telemetry}>
-                                            {/* The last resort, standing inside everything that outlives a screen so
+                                <SystemNotifierContext value={systemNotifier}>
+                                    <AttachmentExchangeContext value={attachmentExchange}>
+                                        <AttachmentUploadContext value={uploadAttachment}>
+                                            <TelemetryContext value={telemetry}>
+                                                {/* The last resort, standing inside everything that outlives a screen so
                                                 that what it draws is read in the reader's own language and painted in
                                                 their own theme. Every narrower boundary is placed beside the region
                                                 it stands around; this one is what catches whatever none of them did. */}
-                                            <Containment region="application">
-                                                <App
-                                                    credentials={credentials}
-                                                    deployment={deployment}
-                                                    openSignals={openSignalChannel}
-                                                    portraits={portraitExchange}
-                                                    send={sendToDeployment}
-                                                    signalSchedule={browserSchedule}
-                                                    signedInWith={signedInWith}
-                                                />
-                                            </Containment>
-                                        </TelemetryContext>
-                                    </AttachmentUploadContext>
-                                </AttachmentExchangeContext>
+                                                <Containment region="application">
+                                                    <App
+                                                        credentials={credentials}
+                                                        deployment={deployment}
+                                                        openSignals={openSignalChannel}
+                                                        portraits={portraitExchange}
+                                                        send={sendToDeployment}
+                                                        signalSchedule={browserSchedule}
+                                                        signedInWith={signedInWith}
+                                                    />
+                                                </Containment>
+                                            </TelemetryContext>
+                                        </AttachmentUploadContext>
+                                    </AttachmentExchangeContext>
+                                </SystemNotifierContext>
                             </LinkOpenerContext>
                         </WorkspaceProvider>
                     </ThemeProvider>

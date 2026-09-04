@@ -15,8 +15,11 @@ import {
     type NotificationTarget,
 } from '@mailfathom/client-backend';
 import { useLocalization } from '../localization/useLocalization';
+import { chooseSystemNotifications, systemNotificationsChosen } from '../preferences/systemNotifications';
+import { useSystemNotifier } from '../shellOperations/systemNotifier';
 import { useSignalledChanges } from '../signals/signalledChanges';
-import { notificationToastKinds } from './notificationKinds';
+import { arrivalCounts } from './arrivalCounts';
+import { notificationToastKinds, systemNotificationCounts } from './notificationKinds';
 import { useToasts } from '../toasts/useToasts';
 
 // What the client knows about the person's notification centre, and everything that changes it. It is one hook rather
@@ -101,9 +104,10 @@ export function useNotificationCentre(
     online: boolean,
     onFollow: (target: NotificationTarget) => void,
 ): NotificationCentre {
-    const { translate } = useLocalization();
+    const { locale, translate } = useLocalization();
     const toasts = useToasts();
     const signalledChanges = useSignalledChanges();
+    const notifier = useSystemNotifier();
     const [unreadCount, setUnreadCount] = useState(0);
     const [shown, setShown] = useState(false);
     const [notifications, setNotifications] = useState<readonly ClientNotification[]>([]);
@@ -242,10 +246,52 @@ export function useNotificationCentre(
         [session, transport, onFollow],
     );
 
+    // What the operating system is told, which is the whole of the desktop head's half of an arrival. Three things
+    // decide whether anything is said at all, and each of them is a different question: whether a shell offered the
+    // operation, whether this machine was left raising them, and whether somebody is already looking at the window —
+    // a notification raised over a window somebody is reading is the client interrupting itself.
+    //
+    // `document.hasFocus()` rather than `visibilityState`, and the difference is the case this exists for: a desktop
+    // window standing behind another is visible and unfocused, which is exactly when nobody is looking at it.
+    //
+    // What is said is one sentence carrying how many arrived and of what kind, and never anything a message held —
+    // `arrivalCounts.ts` is where that is enforced and where it is proven. `Intl.ListFormat` is what joins two kinds
+    // into one sentence, so a language decides the conjunction rather than this line.
+    const raiseWithTheSystem = useCallback(
+        (arrived: readonly ClientNotification[]): void => {
+            if (!notifier.offered || arrived.length === 0 || document.hasFocus() || !systemNotificationsChosen()) {
+                return;
+            }
+
+            const counted = new Intl.PluralRules(locale);
+            const said = arrivalCounts(arrived).map(({ kind, count }) =>
+                translate(systemNotificationCounts[kind][counted.select(count)], {
+                    count: new Intl.NumberFormat(locale).format(count),
+                }),
+            );
+
+            void notifier.raise(new Intl.ListFormat(locale, { type: 'conjunction' }).format(said)).then((raised) => {
+                // A refusal is permanent rather than something to ask about again: the operating system has answered,
+                // and a client that kept asking would put its dialog in front of somebody once per arrival. Written on
+                // the device, so the switch reads what the machine decided and the next start honours it.
+                //
+                // Only a refusal. An operation this head does not carry answers `unavailable`, which nobody decided —
+                // writing *off* for that would leave somebody a switch they have to find and undo on a machine that
+                // never asked them anything.
+                if (raised === 'refused') {
+                    chooseSystemNotifications(false);
+                }
+            });
+        },
+        [notifier, locale, translate],
+    );
+
     // Held steady so the page effect below does not restart on every render, and so the toast an arrival raises can
     // open the notification it is about.
     const announce = useCallback(
         (arrived: readonly ClientNotification[]): void => {
+            raiseWithTheSystem(arrived);
+
             for (const notification of arrived.slice(0, mostArrivalsAnnounced).reverse()) {
                 toasts.raise({
                     kind: notificationToastKinds[notification.kind],
@@ -260,7 +306,7 @@ export function useNotificationCentre(
                 });
             }
         },
-        [toasts, translate, follow],
+        [toasts, translate, follow, raiseWithTheSystem],
     );
 
     // What an arrival is said with is held rather than depended on. The read below must be decided by the credential,

@@ -13,7 +13,9 @@ import type {
     MailFathomTransport,
     NotificationTarget,
 } from '@mailfathom/client-backend';
+import { deviceKeys } from '../device/deviceStore';
 import { LocalizationProvider } from '../localization/Localization';
+import { SystemNotifierContext, type NotificationRaised, type SystemNotifier } from '../shellOperations/systemNotifier';
 import {
     SignalledChangesContext,
     nothingSignalled,
@@ -109,6 +111,37 @@ function answer(body: string): Promise<Answer> {
 /** Where the last notification followed led, which is the frame's answer rather than the hook's. */
 let led: NotificationTarget | null = null;
 
+/** Every sentence the head this run is in was asked to raise, and what that head answered when it was asked. */
+interface Head {
+    readonly said: string[];
+    offered: boolean;
+
+    /** What this head answers when it is asked to raise one, which is three answers rather than two. */
+    answers: NotificationRaised;
+}
+
+const head: Head = { said: [], offered: true, answers: 'raised' };
+
+const shell: SystemNotifier = {
+    get offered() {
+        return head.offered;
+    },
+    raise: (said) => {
+        if (head.answers !== 'raised') {
+            return Promise.resolve(head.answers);
+        }
+
+        head.said.push(said);
+
+        return Promise.resolve('raised');
+    },
+};
+
+/** Whether somebody is looking at the window, which is the one thing the raising rule turns on. */
+function looking(at: boolean): void {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(at);
+}
+
 /** Who the tree is signed in as, read while the wrapper renders so one mounted tree can be handed a second credential. */
 let signedInAs: ClientSession | null = session;
 
@@ -150,7 +183,9 @@ function centreOf(
             wrapper: ({ children }: { readonly children: ReactNode }) => (
                 <LocalizationProvider>
                     <ToastsProvider>
-                        <SignalledChangesContext value={changes}>{children}</SignalledChangesContext>
+                        <SignalledChangesContext value={changes}>
+                            <SystemNotifierContext value={shell}>{children}</SystemNotifierContext>
+                        </SignalledChangesContext>
                     </ToastsProvider>
                 </LocalizationProvider>
             ),
@@ -172,6 +207,23 @@ async function settled(): Promise<void> {
     await act(async () => {
         await vi.advanceTimersByTimeAsync(0);
     });
+}
+
+/**
+ * Two messages and a calendar reminder arriving at a client nobody has opened the panel on.
+ *
+ * Two polls rather than one, because the first read a client makes is what it holds rather than what just happened and
+ * announces nothing — so the arrival being tested is the second, which is also what the desktop head actually meets.
+ */
+async function threeArrive(): Promise<void> {
+    const { transport, hold } = deployment({ unreadCount: 0, notifications: [] });
+
+    centreOf(transport);
+    await settled();
+    hold(1, [mail]);
+    await polled();
+    hold(4, [{ ...mail, id: 'n-second' }, { ...mail, id: 'n-third' }, { ...meeting, read: false }, mail]);
+    await polled();
 }
 
 /** Waits out one poll, which is what makes a count that moved reach the bell. */
@@ -200,10 +252,18 @@ beforeEach(() => {
     vi.useFakeTimers();
     led = null;
     signedInAs = session;
+    head.said.length = 0;
+    head.offered = true;
+    head.answers = 'raised';
+
+    // Nobody is looking at the window unless a test says they are, which is the state a system notification exists for.
+    looking(false);
 });
 
 afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
+    window.localStorage.removeItem(deviceKeys.systemNotifications);
 });
 
 describe('useNotificationCentre', () => {
@@ -280,6 +340,54 @@ describe('useNotificationCentre', () => {
         expect(screen.getByText('Ada Lovelace wrote')).toBeDefined();
         expect(screen.getByText('About the engine')).toBeDefined();
         expect(screen.getByRole('button', { name: 'Show' })).toBeDefined();
+    });
+
+    it('tells the operating system how many arrived and of what kind, and nothing a message carried', async () => {
+        await threeArrive();
+
+        expect(head.said).toEqual(['2 new messages and 1 calendar reminder']);
+    });
+
+    it('raises nothing while somebody is looking at the window, the client having said it on the screen already', async () => {
+        looking(true);
+
+        await threeArrive();
+
+        expect(head.said).toEqual([]);
+    });
+
+    it('raises nothing where the head offered no such operation, which is the web head unchanged', async () => {
+        head.offered = false;
+
+        await threeArrive();
+
+        expect(head.said).toEqual([]);
+    });
+
+    it('raises nothing on a machine that was left not raising them', async () => {
+        window.localStorage.setItem(deviceKeys.systemNotifications, 'false');
+
+        await threeArrive();
+
+        expect(head.said).toEqual([]);
+    });
+
+    it('leaves this machine not raising them once the operating system has refused one', async () => {
+        head.answers = 'refused';
+
+        await threeArrive();
+        await settled();
+
+        expect(window.localStorage.getItem(deviceKeys.systemNotifications)).toBe('false');
+    });
+
+    it('decides nothing on this machine where the head carries no such operation, nobody having been asked', async () => {
+        head.answers = 'unavailable';
+
+        await threeArrive();
+        await settled();
+
+        expect(window.localStorage.getItem(deviceKeys.systemNotifications)).toBeNull();
     });
 
     it('announces nothing on the first read, a client opening being told what it has rather than what happened', async () => {

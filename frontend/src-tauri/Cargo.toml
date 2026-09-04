@@ -45,3 +45,21 @@ tauri = { version = "=2.11.5", features = [] }
 # with it. Nothing in the bundle branches on the head — it asks for a link to be opened, and this is what answers on
 # the desktop. What the webview may ask for is narrowed in `capabilities/` rather than by the plugin's own default set.
 tauri-plugin-opener = { version = "=2.5.5", features = [] }
+
+# The second operation the application asks of this shell: raising a system notification while nobody is looking at the
+# window. What it carries is a count and a kind and never a line of mail, because a notification lands in the operating
+# system's own action centre and on its lock screen — storage this repository cannot retain, redact, or erase. Nothing
+# in the bundle branches on the head here either: it asks whether the operation is offered at all, and this is what
+# answers on the desktop. `capabilities/raise-a-notification.json` narrows what the webview may ask of it to the three
+# commands the application calls, and to the desktop targets alone.
+#
+# It is the one dependency this manifest states per target, and the target list is what keeps it off the phone rather
+# than a preference about where it is useful. A Tauri plugin with an Android side is a Gradle subproject the CLI adds to
+# the generated settings file at build time, so linking it here would change what `gen/android/app/gradle.lockfile`
+# fixes — and that lock file is verified by a build no pull request runs, which is exactly the shape of breakage
+# `frontend/AGENTS.md` § *The Android head* says merges green. The phone's own notification is #1616, which grants the
+# capability, declares the runtime permission, and rewrites that lock file in one change; until then the Android head
+# meets an operation reporting itself unoffered, as the web head does. iOS is named beside it because no head is built
+# for it at all.
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-notification = { version = "=2.4.0", features = [] }

@@ -3,7 +3,8 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 // Where the client keeps what belongs to this machine rather than to the person reading on it: the theme it is painted
-// in, the language it reads in, and how the Mail space divides its width. One module, so the handling that storage a
+// in, the language it reads in, whether this machine may raise a notification of its own, and how the Mail space
+// divides its width. One module, so the handling that storage a
 // browser or a WebView refuses needs is written once instead of once per caller, and so the names those values are
 // written under are declared together rather than as strings spread across the screens that read them.
 //
@@ -21,6 +22,7 @@
 export const deviceKeys = {
     themeChoice: 'mailfathom.theme',
     locale: 'mailfathom.locale',
+    systemNotifications: 'mailfathom.systemNotifications',
 } as const;
 
 /** Reading a value the device holds, writing one, and removing one. */

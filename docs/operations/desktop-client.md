@@ -78,6 +78,16 @@ head is, in full, is that record; how one is built is
 - **A link in a message opens in your own browser**, not in the application's window. The shell asks the desktop for
   `http`, `https`, and `mailto` addresses and for nothing else, which is the whole of what the window may ask the
   opener for; a window that navigated to a sender's page would have replaced the client with it.
+- **It tells you when something arrives and the window is not in front of you**, through the operating system's own
+  notification rather than through anything of its own. What it says is how many arrived and of what kind — *2 new
+  messages*, *1 calendar reminder* — and never a sender, a subject, a fragment of a body, an attachment name, or an
+  address: a notification lands in the action centre and on the lock screen, which is storage MailFathom cannot retain,
+  redact, or erase, so the substance stays inside the application. Nothing is raised while the window has focus, the
+  client having already said it on the screen. Whether this machine raises them at all is a switch in *Settings →
+  Application*, kept on this machine rather than carried between them — a notification is one operating system's, so
+  wanting them on a laptop and not on a shared machine is two answers rather than a change of mind. It is on until
+  something says otherwise, and an operating system that refuses permission turns it off here rather than being asked
+  again.
 - **It never updates itself.** No update channel exists and the shell links no updater, so a new version is a new
   download from a release page.
 - **It is not signed.** No bundle published here carries an Authenticode signature or a Linux package signature, so
