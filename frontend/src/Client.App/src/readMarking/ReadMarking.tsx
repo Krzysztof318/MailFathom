@@ -2,13 +2,14 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
     markMailRead,
     mostMessagesPerMutation,
     type ClientSession,
     type MailFathomTransport,
 } from '@mailfathom/client-backend';
+import { usePendingChanges } from '../pendingChanges/usePendingChanges';
 import {
     ReadMarkingContext,
     nothingMarkedRead,
@@ -54,6 +55,7 @@ export function ReadMarkingProvider({
 
     readonly children: ReactNode;
 }) {
+    const pending = usePendingChanges();
     const [drawn, setDrawn] = useState<HeldMarkings>({ session: null, marked: new Map() });
     const submitted = useRef<HeldMarkings>({ session: null, marked: new Map() });
 
@@ -68,6 +70,16 @@ export function ReadMarkingProvider({
     // next person's mail. The session the markings were made under travels beside them for that comparison; the ref
     // below holds the same pair and is emptied in the handler, where a session change is somebody's act.
     const inForce = drawn.session === session ? drawn.marked : emptyMarkings;
+
+    // Who is signed in now, for the callbacks the queue holds on to after the render that made them has gone. It is
+    // the one thing here a render cannot answer: a question raised under one credential is answered from a toast that
+    // outlives the render it was raised in, and every closure in that render captured a credential rather than a way
+    // to ask. Nothing reads it while rendering, so it drives nothing on the screen.
+    const signedIn = useRef(session);
+
+    useEffect(() => {
+        signedIn.current = session;
+    }, [session]);
 
     function keep(): void {
         setDrawn({ session: submitted.current.session, marked: new Map(submitted.current.marked) });
@@ -99,25 +111,56 @@ export function ReadMarkingProvider({
         }
     }
 
-    function submit(asking: ClientSession, batch: readonly string[]): void {
-        void markMailRead(asking, transport, batch).then((answer) => {
-            // A marking the deployment did not write down is one the row must stop claiming. Both cases arrive here:
-            // a submission that never reached it, and a message it answered about with anything but `recorded` — mail
-            // that has moved on since the list drew it, or an account it no longer serves.
-            const recorded =
-                answer.outcome === 'read'
-                    ? new Set(
-                          answer.value
-                              .filter((result) => result.outcome === 'recorded')
-                              .map((result) => result.storedEmailId),
-                      )
-                    : new Set<string>();
+    function remark(storedEmailIds: readonly string[], markedIn: ReadonlyMap<string, MarkedIn>): void {
+        for (const storedEmailId of storedEmailIds) {
+            const at = markedIn.get(storedEmailId);
 
-            const refused = batch.filter((storedEmailId) => !recorded.has(storedEmailId));
-
-            if (refused.length > 0 && submitted.current.session === asking) {
-                forget(refused);
+            if (at !== undefined) {
+                submitted.current.marked.set(storedEmailId, at);
             }
+        }
+
+        keep();
+    }
+
+    function submit(asking: ClientSession, batch: readonly string[]): void {
+        // Where each of these was counted as unread, captured before anything can drop it, so that asking again after
+        // a refusal restores exactly what letting go took away. It lives as long as some change from this batch is
+        // still being followed and no longer, because that is what holds the two callbacks below.
+        const markedIn = new Map(
+            batch.flatMap((storedEmailId) => {
+                const at = submitted.current.marked.get(storedEmailId);
+
+                return at === undefined ? [] : ([[storedEmailId, at]] as const);
+            }),
+        );
+
+        void markMailRead(asking, transport, batch).then((answer) => {
+            if (submitted.current.session !== asking) {
+                return;
+            }
+
+            // What became of the batch is not this component's to interpret. Which refusals are said out loud, which
+            // records are followed until the mailbox agrees, and which of those turn into a question are one rule
+            // stated in `pendingChanges/`, and what marking read owes it is only what its own two answers mean.
+            pending.follow({
+                act: 'markRead',
+                asked: batch,
+                results: answer.outcome === 'read' ? answer.value : null,
+                askAgain: (storedEmailIds) => {
+                    // The question outlives the answer that raised it — a toast stands on the screen for seconds and
+                    // knows nothing about who is signed in — so who is asking is read at the moment somebody answers
+                    // rather than at the moment the question was put. Asking again under a credential that has since
+                    // left would be a write the person now signed in never asked for and cannot see.
+                    if (signedIn.current !== asking) {
+                        return;
+                    }
+
+                    remark(storedEmailIds, markedIn);
+                    submit(asking, storedEmailIds);
+                },
+                letGo: forget,
+            });
         });
     }
 

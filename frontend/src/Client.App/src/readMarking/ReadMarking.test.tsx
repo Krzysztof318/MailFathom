@@ -2,9 +2,12 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { act, fireEvent, renderHook, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { ClientRequest, ClientSession, MailFathomTransport } from '@mailfathom/client-backend';
+import { LocalizationProvider } from '../localization/Localization';
+import { PendingChangesProvider } from '../pendingChanges/PendingChanges';
+import { ToastsProvider } from '../toasts/Toasts';
 import { ReadMarkingProvider } from './ReadMarking';
 import { drawnUnread, useReadMarking, type MessageOpened } from './useReadMarking';
 
@@ -54,11 +57,20 @@ function marking(
 ) {
     const signedIn = asked === undefined ? session : asked;
 
+    // What became of a submission is read by the queue that follows changes, and what that queue says is said on the
+    // toast surface. Both are above this provider wherever the client actually runs, so both are above it here: a
+    // marking proven against a tree that follows nothing would be proven against an arrangement nobody ships.
     return renderHook(() => useReadMarking(), {
         wrapper: ({ children }) => (
-            <ReadMarkingProvider session={signedIn} transport={transport} marking={marking}>
-                {children}
-            </ReadMarkingProvider>
+            <LocalizationProvider>
+                <ToastsProvider>
+                    <PendingChangesProvider session={signedIn} transport={transport}>
+                        <ReadMarkingProvider session={signedIn} transport={transport} marking={marking}>
+                            {children}
+                        </ReadMarkingProvider>
+                    </PendingChangesProvider>
+                </ToastsProvider>
+            </LocalizationProvider>
         ),
     });
 }
@@ -187,6 +199,70 @@ describe('ReadMarkingProvider', () => {
         await waitFor(() => {
             expect(drawnUnread(result.current, 'first', true)).toBe(true);
         });
+    });
+
+    // Asking again is the queue handing the change back to whoever submitted it, and what this component owes that is
+    // the marking exactly as it was — the same account and the same folder — before the request goes out a second
+    // time. A restore that lost where the message was counted would leave a folder's unread count answering for a
+    // message it no longer holds.
+    it('restores where a message was counted when the person asks for the change again', async () => {
+        const { result } = marking(() => Promise.reject(new Error('the connection was refused')));
+
+        act(() => {
+            result.current.markRead(opened('first', { account: 'personal', folder: 'ARCHIVE' }));
+        });
+
+        await waitFor(() => {
+            expect(drawnUnread(result.current, 'first', true)).toBe(true);
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+        expect(result.current.marked.get('first')).toStrictEqual({ account: 'personal', folder: 'ARCHIVE' });
+        expect(drawnUnread(result.current, 'first', true)).toBe(false);
+    });
+
+    // The question outlives the answer that raised it: the toast offering it is on the screen for seconds and knows
+    // nothing about who is signed in, so a person arriving in that window must not find themselves submitting a write
+    // under the credential that left.
+    it('submits nothing for the person who signed out when the change is asked for again', async () => {
+        const requests: ClientRequest[] = [];
+        const refused: MailFathomTransport = (request) => {
+            requests.push(request);
+
+            return Promise.reject(new Error('the connection was refused'));
+        };
+
+        let signedIn: ClientSession = session;
+
+        const { result, rerender } = renderHook(() => useReadMarking(), {
+            wrapper: ({ children }) => (
+                <LocalizationProvider>
+                    <ToastsProvider>
+                        <PendingChangesProvider session={signedIn} transport={refused}>
+                            <ReadMarkingProvider session={signedIn} transport={refused} marking>
+                                {children}
+                            </ReadMarkingProvider>
+                        </PendingChangesProvider>
+                    </ToastsProvider>
+                </LocalizationProvider>
+            ),
+        });
+
+        act(() => {
+            result.current.markRead(opened('first'));
+        });
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
+        });
+
+        signedIn = somebodyElse;
+        rerender();
+
+        fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+        expect(requests).toHaveLength(1);
     });
 
     it('says where each marked message was counted, so a folder’s count can answer for it', async () => {

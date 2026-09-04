@@ -7,6 +7,7 @@ import type { ClientFailureReason, MailAccountDirectory } from '@mailfathom/clie
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { PendingChangeLines } from '../pendingChanges/PendingChangeLines';
 import { needsAttention } from '../synchronization/synchronizationState';
 import { AccountLine } from './AccountLine';
 import { offers } from './capabilities';
@@ -77,7 +78,19 @@ function oldestSynchronization(directory: MailAccountDirectory): string | null {
     }, null);
 }
 
+// What this client has asked its mailbox for stands above what the deployment last answered, and outside every branch
+// below it: a change waiting on a person is true whether or not the accounts were readable, and it would otherwise be
+// invisible in exactly the states — offline, unreachable — that produced it.
 export function ConnectionSummary({ connection }: { readonly connection: Connection }) {
+    return (
+        <div className="flex flex-col gap-2">
+            <PendingChangeLines />
+            <Freshness connection={connection} />
+        </div>
+    );
+}
+
+function Freshness({ connection }: { readonly connection: Connection }) {
     const { locale, translate } = useLocalization();
     const { session, accounts, readAt, online, attempts, reread } = connection;
 

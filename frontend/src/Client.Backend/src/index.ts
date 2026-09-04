@@ -119,12 +119,18 @@ export {
     changeMailFlags,
     mailFlagMutationsRoute,
     mailMoveMutationsRoute,
+    mailMutationRecordsRoute,
     markMailRead,
     moveMail,
     mostMessagesPerMutation,
+    mostRecordsPerRead,
+    readMailMutationRecords,
     type MailFlagChange,
     type MailMove,
+    type MailMutationChange,
     type MailMutationOutcome,
+    type MailMutationRecord,
+    type MailMutationRecordState,
     type MailMutationResult,
 } from './mailMutations';
 export {
