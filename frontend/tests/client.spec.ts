@@ -576,10 +576,11 @@ test('opens in Discover, under the version it was built from and the one the dep
     await expect(page.getByRole('heading', { name: 'Discover', level: 1 })).toBeVisible();
 
     // The client's own is substituted into the bundle at build time, which is the half only a built bundle proves; the
-    // deployment's arrives over the wire beside it. Both are read in the account menu, which is where they live.
-    await openAccountMenu(page);
-    await expect(page.getByText(`Client ${declaredVersion}, deployment ${declaredVersion}`)).toBeVisible();
-    await page.keyboard.press('Escape');
+    // deployment's arrives over the wire beside it. Both are read at the foot of the settings screen, which is where
+    // the design project draws them.
+    await openSettings(page);
+    await expect(page.getByText(`MailFathom Client ${declaredVersion}, deployment ${declaredVersion}`)).toBeVisible();
+    await page.getByRole('button', { name: 'Close settings' }).click();
 
     // A first load at the root is written back to the address the space is actually reached at, which is what makes
     // the next assertion — reloading it — mean anything.

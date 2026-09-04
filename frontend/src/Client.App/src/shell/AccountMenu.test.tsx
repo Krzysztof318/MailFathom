@@ -10,6 +10,9 @@ import { LocalizationProvider } from '../localization/Localization';
 import type { ClientPreferencesInForce } from '../preferences/useClientPreferences';
 import type { OwnProfileInForce } from '../profile/useOwnProfile';
 import { ThemeProvider } from '../theme/Theme';
+import { WorkspaceProvider } from '../workspace/Workspace';
+import type { MailScope } from '../workspace/mailScope';
+import { useWorkspace } from '../workspace/useWorkspace';
 import { AccountMenu } from './AccountMenu';
 
 function mailbox(id: string, displayName: string): MailAccount {
@@ -63,41 +66,81 @@ function atTabWidth(wideEnough: boolean): void {
 /** What the deployment answered about forwarding, which this menu only passes to the screen behind its own row. */
 const forwardedTo: TelemetryForwarding = { answered: true, destination: 'https://mail.example' };
 
+// What the menu wrote, read back the way every other screen will read it: out of the workspace rather than out of the
+// component that wrote it. The scope is the only part of it these tests are about.
+function ScopeProbe() {
+    const { workspace } = useWorkspace();
+
+    return <output>{JSON.stringify(workspace.scope)}</output>;
+}
+
+const scopeStartsAt = 'Scope the client the way the folder tree would.';
+
+// Stands in for the folder tree, which is the other place a scope is written: a test about the two agreeing needs
+// something outside the menu to write one, and the tree itself is a whole screen away from this component.
+function ScopeAs({ scope }: { readonly scope: MailScope }) {
+    const { revise } = useWorkspace();
+
+    return (
+        <button
+            type="button"
+            onClick={() => {
+                revise({ scope });
+            }}
+        >
+            {scopeStartsAt}
+        </button>
+    );
+}
+
+function scopeAsTheTreeWould(): void {
+    fireEvent.click(screen.getByRole('button', { name: scopeStartsAt }));
+}
+
+/** The scope the workspace holds, as the probe wrote it out. */
+function scopeInForce(): MailScope {
+    return JSON.parse(screen.getByRole('status').textContent) as MailScope;
+}
+
 function renderMenu({
     accounts = [],
     deploymentVersion = '0.9.0',
-    readingFrom = null,
     telemetryForwarding = forwardedTo,
     preferences = settings,
     profile = nobody,
-    onPointSomewhereElse = () => undefined,
     onSignOut = () => undefined,
+    scope = null,
 }: {
     readonly accounts?: readonly MailAccount[];
     readonly deploymentVersion?: string | null;
-    readonly readingFrom?: string | null;
     readonly telemetryForwarding?: TelemetryForwarding;
     readonly preferences?: ClientPreferencesInForce;
     readonly profile?: OwnProfileInForce;
-    readonly onPointSomewhereElse?: () => void;
     readonly onSignOut?: () => void;
+    readonly scope?: MailScope | null;
 } = {}): void {
     render(
         <LocalizationProvider>
             <ThemeProvider>
-                <AccountMenu
-                    accounts={accounts}
-                    deploymentVersion={deploymentVersion}
-                    readingFrom={readingFrom}
-                    telemetryForwarding={telemetryForwarding}
-                    preferences={preferences}
-                    profile={profile}
-                    onPointSomewhereElse={onPointSomewhereElse}
-                    onSignOut={onSignOut}
-                />
+                <WorkspaceProvider>
+                    <AccountMenu
+                        accounts={accounts}
+                        deploymentVersion={deploymentVersion}
+                        telemetryForwarding={telemetryForwarding}
+                        preferences={preferences}
+                        profile={profile}
+                        onSignOut={onSignOut}
+                    />
+                    <ScopeProbe />
+                    {scope === null ? null : <ScopeAs scope={scope} />}
+                </WorkspaceProvider>
             </ThemeProvider>
         </LocalizationProvider>,
     );
+
+    if (scope !== null) {
+        scopeAsTheTreeWould();
+    }
 }
 
 // jsdom draws a popover closed and never opens one — it implements neither the invoker nor `showPopover` — so what is
@@ -107,6 +150,10 @@ describe('AccountMenu', () => {
     afterEach(() => {
         atTabWidth(false);
         window.localStorage.clear();
+
+        // The workspace outlives a render in the browser store the provider synchronizes with, so a test that scoped
+        // the client would otherwise hand its scope to the next one.
+        window.sessionStorage.clear();
     });
 
     it('is opened by a control named for what it holds, which is the platform’s own popover', () => {
@@ -189,33 +236,62 @@ describe('AccountMenu', () => {
         expect(screen.getByRole('button', { name: 'Sign out', hidden: true })).toBeDefined();
     });
 
-    it('says what the client and the deployment are running, beside each other', () => {
+    it('draws each mailbox as something to press rather than as a line to read', () => {
+        renderMenu({ accounts: [mailbox('work', 'Work'), mailbox('board', 'Board')] });
+
+        expect(screen.getByRole('button', { name: 'Work', hidden: true })).toBeDefined();
+        expect(screen.getByRole('button', { name: 'Board', hidden: true })).toBeDefined();
+    });
+
+    it('puts the mailbox somebody presses in scope, in the workspace every other screen reads', () => {
+        renderMenu({ accounts: [mailbox('work', 'Work'), mailbox('board', 'Board')] });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Board', hidden: true }));
+
+        expect(scopeInForce()).toStrictEqual({ kind: 'account', accountId: 'board' });
+    });
+
+    it('marks the mailbox in scope and no other', () => {
+        renderMenu({
+            accounts: [mailbox('work', 'Work'), mailbox('board', 'Board')],
+            scope: { kind: 'account', accountId: 'board' },
+        });
+
+        expect(screen.getByRole('button', { name: 'Board', hidden: true }).getAttribute('aria-current')).toBe('true');
+        expect(screen.getByRole('button', { name: 'Work', hidden: true }).getAttribute('aria-current')).toBeNull();
+    });
+
+    it('marks the mailbox a folder in scope belongs to, which is what the folder tree marks too', () => {
+        renderMenu({
+            accounts: [mailbox('work', 'Work'), mailbox('board', 'Board')],
+            scope: { kind: 'folder', accountId: 'work', alias: 'INBOX' },
+        });
+
+        expect(screen.getByRole('button', { name: 'Work', hidden: true }).getAttribute('aria-current')).toBe('true');
+        expect(screen.getByRole('button', { name: 'Board', hidden: true }).getAttribute('aria-current')).toBeNull();
+    });
+
+    it('marks no mailbox where the scope is every one of them at once, or a role spanning them', () => {
+        renderMenu({
+            accounts: [mailbox('work', 'Work'), mailbox('board', 'Board')],
+            scope: { kind: 'role', role: 'Inbox' },
+        });
+
+        expect(screen.getByRole('button', { name: 'Work', hidden: true }).getAttribute('aria-current')).toBeNull();
+        expect(screen.getByRole('button', { name: 'Board', hidden: true }).getAttribute('aria-current')).toBeNull();
+    });
+
+    it('says nothing here about what is running, that being drawn on the screen behind its own row', () => {
         renderMenu({ deploymentVersion: '0.9.0' });
 
-        expect(screen.getByText(/deployment 0\.9\.0/u)).toBeDefined();
+        expect(screen.queryByText(/deployment 0\.9\.0/u)).toBeNull();
+        expect(screen.queryByText(/^MailFathom Client /u)).toBeNull();
     });
 
-    it('says what the client alone is running while the deployment has not answered', () => {
-        renderMenu({ deploymentVersion: null });
-
-        expect(screen.queryByText(/, deployment /u)).toBeNull();
-        expect(screen.getByText(/^Client /u)).toBeDefined();
-    });
-
-    it('offers to be pointed elsewhere only where somebody named the deployment themselves', () => {
-        renderMenu({ readingFrom: null });
+    it('offers no way out of the deployment, that being the sign-in screen’s once a session ends', () => {
+        renderMenu();
 
         expect(screen.queryByRole('button', { name: 'Point somewhere else', hidden: true })).toBeNull();
-    });
-
-    it('names the deployment it is reading from, and hands pointing elsewhere to the frame', () => {
-        const onPointSomewhereElse = vi.fn();
-        renderMenu({ readingFrom: 'https://mail.example.invalid', onPointSomewhereElse });
-
-        expect(screen.getByText(/https:\/\/mail\.example\.invalid/u)).toBeDefined();
-        fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else', hidden: true }));
-
-        expect(onPointSomewhereElse).toHaveBeenCalledOnce();
     });
 
     it('hands signing out to the frame rather than doing anything itself', () => {

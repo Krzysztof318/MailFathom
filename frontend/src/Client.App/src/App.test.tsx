@@ -1091,11 +1091,18 @@ describe('App session', () => {
         expect(within(screen.getByRole('navigation', { name: 'Spaces' })).queryAllByRole('link')).toEqual([]);
     });
 
-    it('reports the deployment it is reading from beside the client it is running', async () => {
+    it('reports the deployment it is reading from beside the client it is running, on the settings screen', async () => {
         renderApp();
         await framed();
+        fireEvent.click(screen.getByRole('button', { name: 'Settings', hidden: true }));
 
-        expect(screen.getByText(`Client ${__MAILFATHOM_VERSION__}, deployment 0.8.7`)).toBeDefined();
+        expect(screen.getByText(`MailFathom Client ${__MAILFATHOM_VERSION__}, deployment 0.8.7`)).toBeDefined();
+    });
+
+    it('names the client it is running on the sign-in screen, no deployment having answered yet', () => {
+        renderApp(nothingAdopted, null);
+
+        expect(screen.getByText(`MailFathom Client ${__MAILFATHOM_VERSION__}`)).toBeDefined();
     });
 
     it('names each account and what its last attempt did, behind the line that summarizes them', async () => {
@@ -1471,9 +1478,15 @@ describe('App deployment', () => {
         });
     });
 
-    it('offers to be pointed elsewhere once somebody named the deployment themselves', async () => {
+    // The menu inside the frame does not carry this and the design project draws it nowhere there. Pointing the client
+    // elsewhere ends the session anyway, so the screen that offers it is the one signing out lands on.
+    it('offers to be pointed elsewhere once the session ends, where somebody named the deployment themselves', async () => {
         renderApp(chose('https://mail.example.invalid'));
         await framed();
+
+        expect(screen.queryByRole('button', { name: 'Point somewhere else', hidden: true })).toBeNull();
+
+        signOut();
 
         expect(screen.getByRole('button', { name: 'Point somewhere else', hidden: true })).toBeDefined();
     });
@@ -1505,6 +1518,7 @@ describe('App deployment', () => {
         renderApp(chose('https://mail.example.invalid'));
         await framed();
 
+        signOut();
         fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else', hidden: true }));
 
         expect(screen.getByRole('textbox', { name: 'Server' })).toBeDefined();
@@ -1563,8 +1577,9 @@ describe('App deployment', () => {
         // proving what its name says the moment either literal moved.
         await credentials.keep(pointedAt, heldCredential);
 
-        renderApp(chosen, heldCredential, deploymentAnswering(), credentials);
-        await framed();
+        // Read on the sign-in screen rather than inside the frame, which is where the control now is — and where the
+        // assertion is about pointing elsewhere alone, signing out having its own reason to clear the same store.
+        renderApp(chosen, null, deploymentAnswering(), credentials);
 
         fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else', hidden: true }));
 
@@ -1584,6 +1599,7 @@ describe('App deployment', () => {
         renderApp(chose('https://mail.example.invalid'));
         await framed();
 
+        signOut();
         fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else', hidden: true }));
 
         expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Server' }));
@@ -1616,6 +1632,7 @@ describe('App deployment', () => {
         renderApp(chose('https://first.example.invalid'));
         await framed();
 
+        signOut();
         fireEvent.click(screen.getByRole('button', { name: 'Point somewhere else', hidden: true }));
         typeAddress('second.example.invalid');
         signIn();
@@ -1635,6 +1652,12 @@ describe('App deployment', () => {
         });
     });
 });
+
+// The way out of the frame, taken the way a person takes it: the row in the account menu. It is what a test reaches
+// the sign-in screen through, that screen being where a chosen deployment is pointed somewhere else.
+function signOut(): void {
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out', hidden: true }));
+}
 
 // Inside the frame the language and the telemetry decision are made on the settings screen rather than in the menu
 // that leads to it, which is where the design project puts them — so a test about either opens that screen the way a
