@@ -19,11 +19,14 @@ import {
     type MailAccount,
     type MailFathomTransport,
 } from '@mailfathom/client-backend';
-import { CheckControl } from '../controls/CheckControl';
+import type { MenuPoint } from '../contextMenu/menuPlacement';
 import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { ActQuestions } from '../mailboxActs/ActQuestions';
+import type { ActedMessage } from '../mailboxActs/useMailboxActs';
 import { MessageRow } from '../messageRows/MessageRow';
+import { MessageRowMenu, type ActAsked } from '../messageRows/MessageRowMenu';
 import { estimatedRowHeight, leadingRow, offsetOfRow, windowOf } from '../messageRows/rowWindow';
 import { needsAttention } from '../synchronization/synchronizationState';
 import { accountInScope, type MailScope } from '../workspace/mailScope';
@@ -45,7 +48,7 @@ import { ListSettings } from './ListSettings';
 import { narrowed, queryFor, type MailListing } from './listing';
 import { extendedTo, inReadingOrder, onlySelected, withToggled } from './messageSelection';
 import { rememberedListing, rememberListing } from './rememberedListings';
-import { useListedMail } from './useListedMail';
+import { actedMessages, useListedMail } from './useListedMail';
 
 // The client's message list, which is where a mail client is judged: it stays smooth at message forty thousand, it puts
 // a returning reader back where they were, and it lets somebody pick out four messages for the question they are about
@@ -113,9 +116,16 @@ export function MessageList({
 
     const [focusedRow, setFocusedRow] = useState(0);
     const [anchor, setAnchor] = useState<string | null>(null);
-    const [selecting, setSelecting] = useState(false);
+
+    // The row whose menu is open and where it was asked for, and — separately — the messages a question raised from
+    // that menu is about. The two are apart because the question outlives the menu: choosing *delete* closes the menu
+    // and leaves the question standing, and a state holding both would take the question down with it.
+    const [pressed, setPressed] = useState<{ readonly row: number; readonly at: MenuPoint } | null>(null);
+    const [questioned, setQuestioned] = useState<readonly ActedMessage[]>([]);
 
     const scroller = useRef<HTMLDivElement>(null);
+    const deleting = useRef<HTMLDialogElement>(null);
+    const filing = useRef<HTMLDialogElement>(null);
     const elements = useRef(new Map<number, HTMLLIElement>());
     const dragging = useRef(false);
     const restored = useRef(false);
@@ -125,6 +135,10 @@ export function MessageList({
     const drawn = windowOf(rowCount, rowHeight, scrollTop, viewport);
     const lastDrawn = drawn.first + drawn.count - 1;
     const rows = heldRows(held);
+
+    // The message the open menu is about, worked out during render rather than held beside which row was pressed: a
+    // page dropped under a menu that is still open would otherwise leave a menu naming mail this list no longer holds.
+    const pressedRow = pressed === null ? null : rowAt(held, pressed.row);
 
     // Whether the row the keyboard is on is a row rather than the space one is arriving into. The effect below waits on
     // it: a keyboard that reached a dropped page has nothing to put focus on until that page answers, and refilling one
@@ -407,10 +421,11 @@ export function MessageList({
 
         setFocusedRow(row);
 
-        // Adding one at a time, which is what the modifier key does under a pointer and what the selection mode does
-        // under a finger. The mode exists because a touch screen has no modifier, and it is a control rather than a
-        // gesture so that its state is something a reader can see and a screen reader can say.
-        if (selecting || event.ctrlKey || event.metaKey) {
+        // Adding one at a time, which is what the modifier key does under a pointer. A finger has no modifier and
+        // reaches the same thing through the row's own menu, whose first item puts that row into the selection — which
+        // is the design project's answer to picking several out, and why no *select several* control stands over this
+        // column any more.
+        if (event.ctrlKey || event.metaKey) {
             setAnchor(email.id);
             select(withToggled(workspace.selected, email.id));
 
@@ -427,6 +442,31 @@ export function MessageList({
         setAnchor(email.id);
         select(onlySelected(email.id));
         onOpen(email.id, email.subject);
+    }
+
+    // Closing the menu puts focus back on the row it was opened from, because that is where the reader was: a menu
+    // that left focus behind on an element it has just taken out of the document is where keyboard use silently stops.
+    function closeMenu(): void {
+        elements.current.get(pressed?.row ?? focusedRow)?.focus();
+        setPressed(null);
+    }
+
+    // Opening it from the keyboard anchors it on the focused row rather than on a pointer that is not there. The row's
+    // own start corner, so the menu reads as belonging to it exactly as one opened by a gesture over it does.
+    function menuOnFocusedRow(): void {
+        const row = elements.current.get(focusedRow);
+
+        if (row !== undefined) {
+            const bounds = row.getBoundingClientRect();
+
+            setPressed({ row: focusedRow, at: { x: bounds.left, y: bounds.top } });
+        }
+    }
+
+    function ask(act: ActAsked, messages: readonly ActedMessage[]): void {
+        setQuestioned(messages);
+        closeMenu();
+        (act === 'delete' ? deleting : filing).current?.showModal();
     }
 
     function dragOver(row: number): void {
@@ -462,6 +502,18 @@ export function MessageList({
             }
             case 'Enter':
                 open(focusedRow);
+                break;
+            // The two the platform itself offers for a row's menu, so nothing here is reachable only by gesture: the
+            // dedicated key where a keyboard has one, and the chord where it does not.
+            case 'ContextMenu':
+                menuOnFocusedRow();
+                break;
+            case 'F10':
+                if (!event.shiftKey) {
+                    return;
+                }
+
+                menuOnFocusedRow();
                 break;
             default:
                 return;
@@ -507,17 +559,6 @@ export function MessageList({
                 />
 
                 <div className="flex flex-wrap items-center gap-1.5">
-                    {/* Under a finger there is no modifier key, so picking out several messages is a mode rather than a
-                        chord. It is offered at every width and to every pointer, because a mode a reader can see is easier
-                        than a chord they have to know — and because nothing in this tree asks which head it runs on. */}
-                    <CheckControl
-                        label={translate('list.selectSeveral')}
-                        on={selecting}
-                        onChange={(on) => {
-                            setSelecting(on);
-                        }}
-                    />
-
                     {/* How many messages are picked out is said once, on the selection bar above this column, which is
                         where the acts over them are too. A second count here would be the same sentence in two places
                         and the two would be read as being about different things. */}
@@ -582,6 +623,10 @@ export function MessageList({
                                     onPoint={(event) => {
                                         point(event, row);
                                     }}
+                                    onPress={(pointedAt) => {
+                                        setFocusedRow(row);
+                                        setPressed({ row, at: pointedAt });
+                                    }}
                                     onPointerEnter={() => {
                                         dragOver(row);
                                     }}
@@ -610,6 +655,27 @@ export function MessageList({
                     ) : null}
                 </div>
             )}
+
+            {/* The row's own menu, over whichever row was pressed. It stands outside the scroller because it is placed
+                against the window rather than against the column, and it is drawn last so nothing in the list is over
+                it. */}
+            {pressed === null || pressedRow === null ? null : (
+                <MessageRowMenu
+                    email={pressedRow}
+                    messages={actedMessages(listed, [pressedRow.id])}
+                    at={pressed.at}
+                    onSelect={() => {
+                        setAnchor(pressedRow.id);
+                        select(withToggled(workspace.selected, pressedRow.id));
+                    }}
+                    onAsk={ask}
+                    onClose={closeMenu}
+                />
+            )}
+
+            {/* The two questions an act from that menu stands behind. Here rather than in the menu, because the menu is
+                gone the moment an item is chosen and the question is what is left standing. */}
+            <ActQuestions messages={questioned} deleting={deleting} filing={filing} />
         </div>
     );
 }

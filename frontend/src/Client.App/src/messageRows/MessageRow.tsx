@@ -4,6 +4,8 @@
 
 import type { PointerEvent, ReactNode } from 'react';
 import type { MailTimelineEntry } from '@mailfathom/client-backend';
+import type { MenuPoint } from '../contextMenu/menuPlacement';
+import { pressedByFinger, useRowPress } from '../contextMenu/rowPress';
 import { MessageMarkers } from '../controls/MessageMarkers';
 import { Organisation } from '../controls/Organisation';
 import { ReceivedAt } from '../controls/ReceivedAt';
@@ -48,6 +50,7 @@ export function MessageRow({
     note,
     onOpen,
     onPoint,
+    onPress,
     onPointerEnter,
     onElement,
 }: {
@@ -60,13 +63,33 @@ export function MessageRow({
     /** What the row has to say about the message beyond what it draws, in the line the height already reserves. */
     readonly note?: ReactNode;
     readonly onOpen: () => void;
+
+    /**
+     * What pointing at this row means: a mouse pressed on it, or a finger lifted off it having only tapped.
+     *
+     * The two arrive at different moments and that is the whole of what a press costs the row. A mouse acts as it goes
+     * down, because the same press may go on to sweep a run of rows; a finger's press is not decided until it is
+     * lifted, since the same touch may become the long press that opens this row's menu — and a row that had already
+     * opened its message would put that menu over something nobody asked to see.
+     */
     readonly onPoint: (event: PointerEvent<HTMLLIElement>) => void;
+
+    /**
+     * Opens this row's menu at the point the gesture happened, or absent for a list that offers none.
+     *
+     * A row without it keeps the browser's own menu under a pointer and answers a held finger with nothing, which is
+     * what the search results are: a result is opened rather than acted on, and a menu of acts over a selection that
+     * list does not model would offer what it cannot do.
+     */
+    readonly onPress?: (at: MenuPoint) => void;
+
     readonly onPointerEnter: () => void;
     readonly onElement: (element: HTMLLIElement | null) => void;
 }) {
     const { translate } = useLocalization();
     const marking = useReadMarking();
     const acts = useMailboxActs();
+    const press = useRowPress(onPress);
 
     // The act this row is still waiting on. It is what the reserved line says while it stands, ahead of whatever the
     // screen would otherwise put there: a message on its way out of the folder is the more urgent fact about the row
@@ -98,7 +121,30 @@ export function MessageRow({
             aria-setsize={-1}
             aria-current={open ? 'true' : undefined}
             tabIndex={focusable ? 0 : -1}
-            onPointerDown={onPoint}
+            onContextMenu={press.onContextMenu}
+            onPointerDown={(event) => {
+                press.onPointerDown(event);
+
+                // The primary button alone acts. The second one is what asks the row what it offers, and a row that
+                // also selected the message and opened it under the menu would be answering a question with an act.
+                if (!pressedByFinger(event.pointerType) && event.button === 0) {
+                    onPoint(event);
+                }
+            }}
+            onPointerMove={press.onPointerMove}
+            onPointerUp={(event) => {
+                // The tap this lift amounts to, read before the press is cleared so that a lift ending a press that
+                // has already opened the menu acts on nothing: the design project's own window is what says which of
+                // the two happened.
+                const tapped = pressedByFinger(event.pointerType) && !press.tapSuppressed();
+
+                press.onPointerUp();
+
+                if (tapped) {
+                    onPoint(event);
+                }
+            }}
+            onPointerCancel={press.onPointerCancel}
             onPointerEnter={onPointerEnter}
             onDoubleClick={onOpen}
             // Flush and square rather than a card: the rows are one continuous list, each separated from the next by

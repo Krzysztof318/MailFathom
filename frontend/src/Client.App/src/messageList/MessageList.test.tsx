@@ -6,6 +6,7 @@ import type { ReactElement } from 'react';
 import { act, fireEvent, render, screen, within, type RenderResult } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ClientRequest, ClientSession, MailAccount, MailFathomTransport } from '@mailfathom/client-backend';
+import { ComposingContext, type Composing } from '../composer/useComposing';
 import { LocalizationProvider } from '../localization/Localization';
 import { everything, type MailScope } from '../workspace/mailScope';
 import { WorkspaceProvider } from '../workspace/Workspace';
@@ -112,22 +113,28 @@ function ListOpeningIntoTheWorkspace(drawn: {
     );
 }
 
+// Writing a message is offered from the row's own menu, so the list is drawn under something that answers for it. It
+// records rather than composes: what a menu item does is ask, and what the composer does with the ask is its own test.
+const composing: Composing = { offered: true, opening: null, compose: vi.fn(), close: vi.fn() };
+
 function listUnder(
     transport: MailFathomTransport,
     { scope = everything, accounts = [work], online = true }: Partial<Drawn> = {},
 ): ReactElement {
     return (
         <LocalizationProvider>
-            <WorkspaceProvider>
-                <ListOpeningIntoTheWorkspace
-                    session={session}
-                    transport={transport}
-                    scope={scope}
-                    accounts={accounts}
-                    online={online}
-                />
-                <SelectionProbe />
-            </WorkspaceProvider>
+            <ComposingContext value={composing}>
+                <WorkspaceProvider>
+                    <ListOpeningIntoTheWorkspace
+                        session={session}
+                        transport={transport}
+                        scope={scope}
+                        accounts={accounts}
+                        online={online}
+                    />
+                    <SelectionProbe />
+                </WorkspaceProvider>
+            </ComposingContext>
         </LocalizationProvider>
     );
 }
@@ -140,6 +147,13 @@ interface Drawn {
 
 function renderList(transport: MailFathomTransport, drawn: Partial<Drawn> = {}): RenderResult {
     return render(listUnder(transport, drawn));
+}
+
+// The menu is the way into a selection now that no control stands over the column, so a test that picks a message out
+// goes through it exactly as a reader does.
+function chooseFromMenu(pressed: HTMLElement, item: string): void {
+    fireEvent.contextMenu(pressed);
+    fireEvent.click(screen.getByRole('menuitem', { name: item }));
 }
 
 // Inside the list rather than in the document, because the list's own rows are the only options on the screen and a
@@ -399,13 +413,21 @@ describe('MessageList', () => {
         expect(carried().selected).toStrictEqual(['message-1']);
     });
 
-    it('picks messages out one at a time under a finger, once the selection mode is on', async () => {
+    it('answers a right-click on a row with its menu, headed by what the row is about', async () => {
         renderList(answering(wholeFolder));
 
         await rows();
-        fireEvent.click(screen.getByLabelText('Select several'));
-        fireEvent.pointerDown(row(1));
-        fireEvent.pointerDown(row(3));
+        fireEvent.contextMenu(row(1));
+
+        expect(screen.getByRole('menu', { name: 'Message 1' })).toBeTruthy();
+    });
+
+    it('picks messages out one at a time from their own menus, which is how a finger reaches a selection', async () => {
+        renderList(answering(wholeFolder));
+
+        await rows();
+        chooseFromMenu(row(1), 'Select messages');
+        chooseFromMenu(row(3), 'Select messages');
 
         expect(carried().selected).toStrictEqual(['message-1', 'message-3']);
     });
@@ -414,10 +436,29 @@ describe('MessageList', () => {
         renderList(answering(wholeFolder));
 
         await rows();
-        fireEvent.click(screen.getByLabelText('Select several'));
-        fireEvent.pointerDown(row(1));
+        chooseFromMenu(row(1), 'Select messages');
 
         expect(carried().selection).toBeNull();
+    });
+
+    it('opens that menu from the keyboard, on the row focus is on', async () => {
+        renderList(answering(wholeFolder));
+
+        const listed = await screen.findByRole('listbox', { name: 'Messages' });
+
+        fireEvent.keyDown(listed, { key: 'ArrowDown' });
+        fireEvent.keyDown(listed, { key: 'ContextMenu' });
+
+        expect(screen.getByRole('menu', { name: 'Message 1' })).toBeTruthy();
+    });
+
+    it('takes the menu off the screen once an item has been chosen', async () => {
+        renderList(answering(wholeFolder));
+
+        await rows();
+        chooseFromMenu(row(1), 'Select messages');
+
+        expect(screen.queryByRole('menu')).toBeNull();
     });
 
     it('says where the mail it drew belongs, which is what an act on a selection needs and the workspace never keeps', async () => {

@@ -232,6 +232,7 @@ export const pl: Catalogue = {
     'mail.flag': 'Flaga',
     'mail.markUnread': 'Nieprzeczytana',
     'mail.move': 'Przenieś',
+    'mail.selectMessages': 'Zaznacz wiadomości',
     'mail.backToList': 'Wróć do listy',
     'mail.listColumn': 'Lista wiadomości',
     'mail.readingColumn': 'To, co otwarte',
@@ -429,7 +430,6 @@ export const pl: Catalogue = {
     'list.onlyFlagged': 'Tylko oznaczone',
     'list.onlyWithAttachments': 'Tylko z załącznikami',
     'list.includeJunk': 'Uwzględnij spam',
-    'list.selectSeveral': 'Zaznacz wiele',
 
     'list.unread': 'Nieprzeczytana',
     'list.flagged': 'Oznaczona',
