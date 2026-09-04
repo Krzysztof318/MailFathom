@@ -535,6 +535,7 @@ function telemetryRecording(): {
             happened: (event) => {
                 events.push(event);
             },
+            renderFailed: () => undefined,
         },
         exportedFor,
         permitted,

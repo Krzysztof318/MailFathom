@@ -1,6 +1,6 @@
 # Telemetry and the Aspire dashboard
 
-<!-- describes: backend/src/Application/Observability/**, backend/src/Common/Observability/**, backend/src/Host/Observability/**, backend/src/Host/ServiceDefaultsExtensions.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Hosting/Workers/**, backend/src/Infrastructure/Observability/**, backend/src/Infrastructure/Mail/MailServerConnectionBudget.cs, backend/src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, backend/src/Infrastructure/HostApplicationBuilderExtensions.cs, backend/src/Mcp/Observability/**, backend/src/Cli/Diagnostics/**, backend/src/AppHost/**, backend/src/AI/ProviderAdapters/OpenAiCompatibleClientFactory.cs, frontend/src/Client.App/src/telemetry/**, frontend/src/Client.Backend/src/telemetry.ts, frontend/src/Client.Backend/src/mailAttachment.ts, frontend/src/Client.Backend/src/ownDisplayName.ts, frontend/src/Client.Backend/src/ownPortrait.ts -->
+<!-- describes: backend/src/Application/Observability/**, backend/src/Common/Observability/**, backend/src/Host/Observability/**, backend/src/Host/ServiceDefaultsExtensions.cs, backend/src/Host/Api/ClientTelemetryEndpoint.cs, backend/src/Host/Hosting/Workers/**, backend/src/Infrastructure/Observability/**, backend/src/Infrastructure/Mail/MailServerConnectionBudget.cs, backend/src/Infrastructure/Mail/MailKit/MailKitImapClientFactory.cs, backend/src/Infrastructure/HostApplicationBuilderExtensions.cs, backend/src/Mcp/Observability/**, backend/src/Cli/Diagnostics/**, backend/src/AppHost/**, backend/src/AI/ProviderAdapters/OpenAiCompatibleClientFactory.cs, frontend/src/Client.App/src/containment/**, frontend/src/Client.App/src/telemetry/**, frontend/src/Client.App/src/App.tsx, frontend/src/Client.App/src/main.tsx, frontend/src/Client.Backend/src/telemetry.ts, frontend/src/Client.Backend/src/mailAttachment.ts, frontend/src/Client.Backend/src/ownDisplayName.ts, frontend/src/Client.Backend/src/ownPortrait.ts -->
 
 The host instruments itself with OpenTelemetry throughout — logs, metrics, and traces — and exports none of it unless
 the environment names a destination. Today exactly one environment does that out of the box: a local run under the
@@ -1310,11 +1310,22 @@ than against the client population as a whole. Nothing in the client branches on
 asked is whether the document's own origin is the deployment the session is signed in to, which a shell serving the
 bundle over `http://tauri.localhost` answers exactly as one serving from a scheme of its own does.
 
-**Two log records, and no others.** `session_started` at `INFO` when a signed-in session begins, and
-`credential_no_longer_accepted` at `WARN` when the deployment stops taking the credential a session held. Each carries
-`mailfathom.client.event` naming which it is. There is no record per request and none per screen: a client open on
-somebody's desk would make a deployment's log unreadable within a day, which is the same reasoning the relay above
-applies to itself.
+**Three log records, and no others.** `session_started` at `INFO` when a signed-in session begins,
+`credential_no_longer_accepted` at `WARN` when the deployment stops taking the credential a session held, and
+`render_failed` at `ERROR` when a part of the client throws while it is being drawn and the boundary around it contains
+the failure. Each carries `mailfathom.client.event` naming which it is. There is no record per request and none per
+screen: a client open on somebody's desk would make a deployment's log unreadable within a day, which is the same
+reasoning the relay above applies to itself.
+
+**`render_failed` carries two attributes beside that one, and both are bounded.** `mailfathom.client.region` names
+which part of the client the failure was contained in — `reading_pane` for the surface that draws a document assembled
+out of mail somebody else sent, and `application` for the last resort around everything, including a failure raised
+before there was anything to draw into. `mailfathom.client.error` names the class of what was thrown, refused back to
+`unknown` where that is not an ordinary class name. What is deliberately absent is everything unbounded: the
+exception's message, its stack, the component stack, and the address the client was on. An exception message can be
+assembled out of the mail that could not be drawn, which is why the class alone is reported and the message is not read
+at all. So the record says that a region failed and which one, and reading *why* is a defect report against the client
+rather than something a log line answers.
 
 **Nothing the client sends carries what was on the screen.** No address, no subject, no correspondent, no search text,
 no message identifier, no folder name, and no part of the credential reaches a span name, an attribute, a measurement,

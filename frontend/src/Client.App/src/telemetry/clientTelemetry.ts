@@ -30,7 +30,17 @@ import type { ClientPipeline } from './exporting';
 // measurement, or a log record.
 
 /** Something that happened to this client's session, which is an occurrence rather than a quantity to measure. */
-export type ClientEvent = 'session_started' | 'credential_no_longer_accepted';
+export type ClientEvent = 'session_started' | 'credential_no_longer_accepted' | 'render_failed';
+
+/**
+ * A part of the client a failure can be contained in, which is what a contained one is reported under.
+ *
+ * It is a closed set rather than a name a caller composes, for the reason a space is: an attribute value is a dimension
+ * an operator groups by, so what may appear in one is decided here rather than wherever a boundary happens to be
+ * placed. `application` is the last resort around everything, and every other member is a region the screen around it
+ * is still worth using without.
+ */
+export type ClientRegion = 'application' | 'reading_pane';
 
 /** What a move is reported as where the address named something this client does not publish as a space. */
 export const unnamedSpace = 'other';
@@ -72,12 +82,23 @@ export interface ClientTelemetry {
 
     /** Records that something happened to the session, with no measurement attached to it. */
     readonly happened: (event: ClientEvent) => void;
+
+    /**
+     * A region failed while it was being drawn and the boundary around it contained the failure.
+     *
+     * The thrown value is passed rather than anything read off it, because what may be said about one is decided here:
+     * the region, and the class of what was thrown. An exception's message, its stack, and the component stack React
+     * hands over with it are unbounded by construction — a message assembled from mail somebody else sent is exactly
+     * the case this exists to refuse — so none of them is read at all.
+     */
+    readonly renderFailed: (region: ClientRegion, error: unknown) => void;
 }
 
 export const noTelemetry: ClientTelemetry = {
     exportFor: () => () => undefined,
     navigated: () => undefined,
     happened: () => undefined,
+    renderFailed: () => undefined,
 };
 
 export const TelemetryContext = createContext<ClientTelemetry>(noTelemetry);
@@ -137,6 +158,23 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
         }
 
         next(write);
+    }
+
+    // One log record, written the same way whatever occasioned it. The instant is read where the thing happened rather
+    // than where the record is written, for the reason a move above is: the queue may be waiting on an export the
+    // deployment is slow to answer, and a record timestamped then would say a session began at the moment the client
+    // next got a word in.
+    function report(event: ClientEvent, attributes: Readonly<Record<string, string>>): void {
+        const at = performance.timeOrigin + performance.now();
+
+        record(() => {
+            logs.getLogger(telemetryName).emit({
+                timestamp: at,
+                severityNumber: severities[event],
+                body: bodies[event],
+                attributes: { 'mailfathom.client.event': event, ...attributes },
+            });
+        });
     }
 
     return {
@@ -201,26 +239,42 @@ export function clientTelemetryForThisApplication(): ClientTelemetry {
         },
 
         happened(event) {
-            // Read where it happened rather than where it was written, for the reason a move above is: the queue may
-            // be waiting on an export the deployment is slow to answer, and a record timestamped then would say the
-            // session began at the moment the client next got a word in.
-            const at = performance.timeOrigin + performance.now();
+            report(event, {});
+        },
 
-            record(() => {
-                logs.getLogger(telemetryName).emit({
-                    timestamp: at,
-                    severityNumber: severities[event],
-                    body: bodies[event],
-                    attributes: { 'mailfathom.client.event': event },
-                });
+        renderFailed(region, error) {
+            report('render_failed', {
+                'mailfathom.client.region': region,
+                'mailfathom.client.error': classOf(error),
             });
         },
     };
 }
 
+// What a plain class name looks like, which is the whole of what may be said about a thrown value. A constructor name
+// is bounded in practice and not by anything, and a thrown value need not be an `Error` at all — so anything that is
+// not an ordinary identifier of ordinary length is reported as having been unreadable rather than as itself.
+const plainClassName = /^[A-Za-z][A-Za-z0-9]{0,39}$/;
+
+function classOf(error: unknown): string {
+    // Read as a value rather than reached through, and read inside a guard, because this runs where React is already
+    // handling a failure and a thrown value carries whatever the throwing code left on it — no constructor at all, or
+    // an accessor that throws in its turn. Telemetry is never the reason a screen fails, and that has to hold on the
+    // path a screen fails on, so anything unreadable is reported as exactly that.
+    try {
+        const constructor: unknown = error instanceof Error ? error.constructor : undefined;
+        const named = typeof constructor === 'function' ? constructor.name : typeof error;
+
+        return plainClassName.test(named) ? named : 'unknown';
+    } catch {
+        return 'unknown';
+    }
+}
+
 const severities: Readonly<Record<ClientEvent, SeverityNumber>> = {
     session_started: SeverityNumber.INFO,
     credential_no_longer_accepted: SeverityNumber.WARN,
+    render_failed: SeverityNumber.ERROR,
 };
 
 // Written for whoever reads a collector rather than for anybody on a screen, which is why these are not catalogue
@@ -228,6 +282,7 @@ const severities: Readonly<Record<ClientEvent, SeverityNumber>> = {
 const bodies: Readonly<Record<ClientEvent, string>> = {
     session_started: 'A client session began.',
     credential_no_longer_accepted: 'The deployment stopped accepting the credential this session held.',
+    render_failed: 'A region of the client failed while it was being drawn, and the boundary around it contained it.',
 };
 
 /**

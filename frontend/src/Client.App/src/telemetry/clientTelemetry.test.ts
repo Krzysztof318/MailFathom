@@ -67,6 +67,7 @@ describe('noTelemetry', () => {
         expect(() => {
             noTelemetry.navigated('mail', performance.timeOrigin);
             noTelemetry.happened('session_started');
+            noTelemetry.renderFailed('application', new Error('Nothing composed a pipeline yet.'));
             stop();
         }).not.toThrow();
     });
@@ -191,6 +192,81 @@ describe('clientTelemetryForThisApplication', () => {
         expect(record?.attributes).toEqual({ 'mailfathom.client.event': 'credential_no_longer_accepted' });
     });
 
+    it('records a failure a boundary contained as an error, naming the region and what was thrown', async () => {
+        const telemetry = clientTelemetryForThisApplication();
+
+        telemetry.renderFailed('reading_pane', new TypeError('Cannot read properties of undefined.'));
+
+        const [record] = await written(() => records.getFinishedLogRecords());
+
+        expect(record?.severityNumber).toBe(SeverityNumber.ERROR);
+        expect(record?.attributes).toEqual({
+            'mailfathom.client.event': 'render_failed',
+            'mailfathom.client.region': 'reading_pane',
+            'mailfathom.client.error': 'TypeError',
+        });
+    });
+
+    // An exception's message is unbounded by construction and a message assembled from mail is what this is about, so
+    // the record says which region and which class and nothing else — not the message, and not the stack behind it.
+    it('carries neither the message of what was thrown nor its stack into what it records', async () => {
+        const telemetry = clientTelemetryForThisApplication();
+
+        telemetry.renderFailed('reading_pane', new Error('Salary review from anna@mail.example could not be drawn.'));
+
+        const [record] = await written(() => records.getFinishedLogRecords());
+        const recorded = JSON.stringify([record?.body, record?.attributes]);
+
+        expect(recorded).not.toContain('Salary review');
+        expect(recorded).not.toContain('mail.example');
+        expect(recorded).not.toContain('clientTelemetry.test');
+    });
+
+    it('reports a thrown value that is not an error at all as the kind of value it was', async () => {
+        const telemetry = clientTelemetryForThisApplication();
+
+        telemetry.renderFailed('application', 'something a library threw instead of an error');
+
+        const [record] = await written(() => records.getFinishedLogRecords());
+
+        expect(record?.attributes['mailfathom.client.error']).toBe('string');
+    });
+
+    it('refuses a class name that is not an ordinary one, rather than reporting whatever it was called', async () => {
+        class Unbounded extends Error {}
+        Object.defineProperty(Unbounded, 'name', { value: 'x'.repeat(4_096) });
+
+        const telemetry = clientTelemetryForThisApplication();
+
+        telemetry.renderFailed('application', new Unbounded());
+
+        const [record] = await written(() => records.getFinishedLogRecords());
+
+        expect(record?.attributes['mailfathom.client.error']).toBe('unknown');
+    });
+
+    // A value thrown while React is unwinding carries whatever the throwing code left on it, and reading it is not
+    // safe: a proxy or a defined accessor answers a read with a throw of its own. Telemetry is never the reason a
+    // screen fails, least of all on the path a screen fails on.
+    it('reports a thrown value it cannot read the class of as unreadable, rather than failing in its turn', async () => {
+        const unreadable = new Error('A value whose own class refuses to be read.');
+        Object.defineProperty(unreadable, 'constructor', {
+            get: () => {
+                throw new TypeError('This value refuses to say what it is.');
+            },
+        });
+
+        const telemetry = clientTelemetryForThisApplication();
+
+        expect(() => {
+            telemetry.renderFailed('reading_pane', unreadable);
+        }).not.toThrow();
+
+        const [record] = await written(() => records.getFinishedLogRecords());
+
+        expect(record?.attributes['mailfathom.client.error']).toBe('unknown');
+    });
+
     it('carries no part of the credential or the address into anything it records', async () => {
         const telemetry = clientTelemetryForThisApplication();
 
@@ -215,6 +291,7 @@ describe('clientTelemetryForThisApplication', () => {
             telemetry.exportFor(session, false);
             telemetry.navigated('mail', performance.timeOrigin + performance.now());
             telemetry.happened('session_started');
+            telemetry.renderFailed('reading_pane', new TypeError('A message this pane cannot draw.'));
 
             // Nothing arrives to wait for, so what is waited on is the pipeline having been asked to throw away what
             // it held — everything above was queued before that and would be in front of it had it been recorded.

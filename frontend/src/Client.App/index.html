@@ -18,6 +18,21 @@ Project repository: https://github.com/Krzysztof318/MailFathom
     </head>
     <body>
         <div id="root"></div>
+        <!-- What stands in the document when the client cannot draw anything at all: a failure thrown while the
+             last-resort boundary itself renders, which unmounts the root, or one raised before there is a root to
+             render into. `src/containment/staticFailure.ts` is what puts it in front of somebody, and it is carried
+             here rather than rendered because the tree that would render it is the thing that failed. Unstyled on
+             purpose — the token layer arrives with the bundle, and this has to be legible without it. It reads in the
+             document's own language alone, for the same reason: the catalogue is a module of that bundle. -->
+        <template id="client-failed">
+            <div role="alert" tabindex="-1">
+                <h1>MailFathom stopped</h1>
+                <p>
+                    Something in this client failed while it was being drawn, and it could not recover on its own. Open
+                    this page again to start it afresh. Nothing in your mailbox has been changed by this.
+                </p>
+            </div>
+        </template>
         <script type="module" src="/src/main.tsx"></script>
     </body>
 </html>

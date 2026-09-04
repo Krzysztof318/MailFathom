@@ -498,6 +498,9 @@ export const en = {
     'connection.unreadable': 'Your deployment answered, but this client could not act on the answer: {reason}.',
     'connection.offline': 'This machine is offline. The client reconnects on its own when the network comes back.',
 
+    'containment.failed': 'This part of MailFathom stopped working. Everything around it is unaffected.',
+    'containment.failedAgain': 'This part of MailFathom stopped working again. Everything around it is unaffected.',
+
     'grant.heading': 'What this credential may not do here',
     'grant.readMail':
         'This credential may not read mail on this deployment, so no mailbox and no message is shown. Whoever runs the deployment can grant that.',

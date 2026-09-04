@@ -5,6 +5,9 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { Containment } from './containment/Containment';
+import { regionOf } from './containment/caughtRegion';
+import { showStaticFailure } from './containment/staticFailure';
 import { adoptedDeployment } from './deployment/adoptedDeployment';
 import { attachmentExchange, AttachmentExchangeContext } from './deployment/attachmentExchange';
 import { AttachmentUploadContext, uploadAttachment } from './deployment/attachmentUpload';
@@ -31,11 +34,18 @@ const telemetry = clientTelemetryForThisApplication();
 
 const container = document.getElementById('root');
 
+// A document with nothing to mount into, and a resolution that rejected before anything was rendered, are the two
+// failures that happen before there is a client to contain one. Both used to end in a blank document with the reason
+// visible in a console nobody opens; both now say so where somebody is looking, and both are reported.
 if (container === null) {
-    throw new Error('index.html carries no #root element for the client to mount into.');
+    telemetry.renderFailed('application', new Error('index.html carries no #root element for the client to mount.'));
+    showStaticFailure();
+} else {
+    open(container).catch((reason: unknown) => {
+        telemetry.renderFailed('application', reason);
+        showStaticFailure();
+    });
 }
-
-void open(container);
 
 /**
  * The edge of the application, and the one place the deployment this run belongs to and the credential it holds are
@@ -60,7 +70,25 @@ async function open(root: HTMLElement): Promise<void> {
     const credentials = await credentialStore();
     const signedInWith = adopted === null ? null : await credentials.read(adopted.deployment);
 
-    createRoot(root).render(
+    // The root is where what the deployment is told about a failed render is composed, which is why the boundaries
+    // below report nothing themselves: one more region is one more boundary rather than one more reporter. React
+    // names the boundary that caught, so which region contained it is read from that; a failure no boundary caught
+    // has taken the whole application with it, and what is left of the document is the surface it carries itself.
+    //
+    // Both still write what was thrown to the console, which is what React's own handlers do and what stating a
+    // handler would otherwise take away: the record that leaves for the deployment says which region and which class
+    // and deliberately no more, so whoever is in front of the browser would be left with less than they had.
+    createRoot(root, {
+        onCaughtError: (error, at) => {
+            console.error(error);
+            telemetry.renderFailed(regionOf(at.errorBoundary), error);
+        },
+        onUncaughtError: (error) => {
+            console.error(error);
+            telemetry.renderFailed('application', error);
+            showStaticFailure();
+        },
+    }).render(
         <StrictMode>
             <LocalizationProvider>
                 <ToastsProvider>
@@ -70,13 +98,19 @@ async function open(root: HTMLElement): Promise<void> {
                                 <AttachmentExchangeContext value={attachmentExchange}>
                                     <AttachmentUploadContext value={uploadAttachment}>
                                         <TelemetryContext value={telemetry}>
-                                            <App
-                                                credentials={credentials}
-                                                deployment={deployment}
-                                                portraits={portraitExchange}
-                                                send={sendToDeployment}
-                                                signedInWith={signedInWith}
-                                            />
+                                            {/* The last resort, standing inside everything that outlives a screen so
+                                                that what it draws is read in the reader's own language and painted in
+                                                their own theme. Every narrower boundary is placed beside the region
+                                                it stands around; this one is what catches whatever none of them did. */}
+                                            <Containment region="application">
+                                                <App
+                                                    credentials={credentials}
+                                                    deployment={deployment}
+                                                    portraits={portraitExchange}
+                                                    send={sendToDeployment}
+                                                    signedInWith={signedInWith}
+                                                />
+                                            </Containment>
                                         </TelemetryContext>
                                     </AttachmentUploadContext>
                                 </AttachmentExchangeContext>

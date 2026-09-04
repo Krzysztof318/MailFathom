@@ -503,6 +503,9 @@ export const pl: Catalogue = {
     'connection.unreadable': 'Twoje wdrożenie odpowiedziało, ale klient nie mógł wykorzystać tej odpowiedzi: {reason}.',
     'connection.offline': 'Ta maszyna nie ma połączenia z siecią. Klient połączy się ponownie sam, gdy sieć wróci.',
 
+    'containment.failed': 'Ta część MailFathom przestała działać. Nie ma to wpływu na resztę ekranu.',
+    'containment.failedAgain': 'Ta część MailFathom znów przestała działać. Nie ma to wpływu na resztę ekranu.',
+
     'grant.heading': 'Czego to poświadczenie nie może tutaj zrobić',
     'grant.readMail':
         'To poświadczenie nie może odczytywać poczty w tym wdrożeniu, więc nie pokazujemy żadnej skrzynki ani wiadomości. Osoba prowadząca wdrożenie może nadać takie uprawnienie.',
