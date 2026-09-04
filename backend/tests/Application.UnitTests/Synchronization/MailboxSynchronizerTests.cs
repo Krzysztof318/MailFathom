@@ -444,7 +444,9 @@ public sealed class MailboxSynchronizerTests
     /// A copy leaves the email where it was, so nothing is carried across and the second live occurrence is a second
     /// local email, which is what
     /// <see href="https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0008-copied-message-local-identity.md">ADR 0008</see>
-    /// decided. What it must not do is set a rule off, which is a question about provenance rather than about rows.
+    /// decided. What it must not do is set a rule off or be reported to the person as mail that arrived, both of which
+    /// are questions about provenance rather than about rows: an IMAP copy carries the source's flags, so a copy of an
+    /// unread message is itself unread and would otherwise announce the message it was copied from.
     /// </remarks>
     [Fact]
     public async Task SynchronizeAsync_DiscoversTheOccurrenceACopyPlaced_StoresItAndWithholdsTheArrival()
@@ -493,6 +495,7 @@ public sealed class MailboxSynchronizerTests
 
         // Assert
         Assert.Equal(1, result.StoredEmailCount);
+        Assert.Equal(0, result.ArrivedEmailCount);
         Assert.Equal(0, result.RelocatedEmailCount);
         await metadataRepository.DidNotReceiveWithAnyArgs().TryCarryToOccurrenceAsync(
             Arg.Any<IPersistenceSession>(),

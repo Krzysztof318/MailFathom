@@ -135,8 +135,8 @@ The last step of that sequence belongs to no arrival either, and is drawn nowher
 passes have finished, the run tells the account's owner what happened to it — mail arrived, a credential was refused,
 some folders did not finish. It is stated per run rather than per message, which is why it cannot sit on this page's
 graph: what it reports is the run's own outcome, and the count it carries is how much of what the passes above stored
-was mail arriving for the person — the inbox, unread on the server, and not a copy of the owner's own outgoing message
-— rather than anything derived from one message. It is the weakest link in the sequence exactly as the drain is, and for
+was mail arriving for the person — the inbox, unread on the server, and nothing MailFathom itself placed there —
+rather than anything derived from one message. It is the weakest link in the sequence exactly as the drain is, and for
 a stronger reason — a run whose whole point was to fetch mail must not be failed by the record saying it did.
 [What a run tells the person whose mailbox it is](../features/imap-synchronization.md#what-a-run-tells-the-person-whose-mailbox-it-is)
 describes it; nothing else on this page concerns it either.

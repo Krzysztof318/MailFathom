@@ -347,9 +347,13 @@ public sealed class MailboxSynchronizer
                         case StoredEmailContentAvailability.Available:
                             storedCount++;
 
-                            // A copy MailFathom filed of the owner's own outgoing message is never arrival, whatever
-                            // folder it landed in: the person wrote it, so nothing about it reached them.
-                            if (storesArrivingMail && !metadata.IsRemotelySeen && filing is null)
+                            // Nothing MailFathom itself put here is arrival, whichever of the two acts put it there:
+                            // a copy filed of the owner's own outgoing message, which the person wrote, and a copy a
+                            // rule made into a folder mapped as the inbox, which carries the source's flags and would
+                            // otherwise announce as new mail the message it was copied from. Both are already
+                            // recognized as this deployment's own act, and the run suppresses the appearance each of
+                            // them raises for the same reason.
+                            if (storesArrivingMail && !metadata.IsRemotelySeen && filing is null && copy is null)
                             {
                                 arrivedCount++;
                             }
@@ -1196,7 +1200,8 @@ public enum MailboxSynchronizationOutcome
 /// <param name="StoredEmailCount">How many occurrences were stored with their content.</param>
 /// <param name="ArrivedEmailCount">
 /// How many of the stored occurrences were mail arriving for the person: stored in the inbox, unread on the server when
-/// the run stored them, and not a copy MailFathom filed of the owner's own outgoing message. It is a subset of
+/// the run stored them, and placed there by neither of MailFathom's own two acts — filing a copy of the owner's
+/// outgoing message, and a rule copying a message into a folder mapped as the inbox. It is a subset of
 /// <paramref name="StoredEmailCount" /> and is what a run reports as arrived mail, so no consumer has to rebuild the
 /// rule from a count that means something wider.
 /// </param>
@@ -1239,7 +1244,7 @@ public sealed record MailboxSynchronizationResult(
     /// <summary>Reports a run that reached its folder.</summary>
     /// <param name="folder">The binding the run worked under.</param>
     /// <param name="storedEmailCount">How many occurrences were stored with their content.</param>
-    /// <param name="arrivedEmailCount">How many of those were unread inbox mail the owner did not send themselves.</param>
+    /// <param name="arrivedEmailCount">How many of those were unread inbox mail that MailFathom did not place there itself.</param>
     /// <param name="skippedOversizedEmailCount">How many occurrences were stored as metadata only.</param>
     /// <param name="unreadableMimeEmailCount">How many stored occurrences carried unreadable MIME.</param>
     /// <param name="relocatedEmailCount">How many discovered occurrences carried an existing local email across.</param>

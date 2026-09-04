@@ -188,7 +188,7 @@ fails:
 | --- | --- |
 | in a folder whose role is the inbox | Mail the run brought into an archive, a sent folder, or a junk folder is mail it fetched rather than mail waiting for somebody. A server-side rule delivering into a custom folder is real mail arriving, and whether MailFathom says so is a question left open rather than answered here |
 | while the server had not marked it `\Seen` | The person read it somewhere else, so it is news to nobody. The flag is the one the server reported when it described the message, which rides the discovery fetch and costs no second round trip and no write |
-| and no filing record says MailFathom put it there | A copy MailFathom filed of the owner's own outgoing message arrives on the same path as anything else and can carry any flags at all, so the filing record rather than the folder or the flag is what keeps it out |
+| and MailFathom did not put it there itself | Two of its own acts land a message in a folder like any other arrival: a copy it filed of the owner's own outgoing message, which the person wrote, and a copy a rule made into a folder mapped as the inbox, which carries the source's flags and would otherwise announce the message it was copied from. Each is recognized by the record of the act rather than by the folder or the flag, and the run already suppresses the appearance each of them raises |
 
 Everything else a run stores is still stored, still indexed, and still searchable; it is only the sentence about
 arrival that it is left out of. A mailbox's first runs therefore backfill years of history without announcing it, which
