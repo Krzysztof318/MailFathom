@@ -788,6 +788,7 @@ test('states the whole preferences document to the deployment when one of them i
         openMailInTabs: false,
         markReadOnOpen: true,
         expandWholeThread: false,
+        embeddedHtmlMessages: false,
     });
 });
 
