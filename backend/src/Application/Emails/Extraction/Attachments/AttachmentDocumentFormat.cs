@@ -33,4 +33,13 @@ public enum AttachmentDocumentFormat
 
     /// <summary>The legacy binary PowerPoint presentation a <c>.ppt</c> file carries.</summary>
     LegacyPresentation = 6,
+
+    /// <summary>An OpenDocument text document, the format an <c>.odt</c> file carries.</summary>
+    OpenDocumentText = 7,
+
+    /// <summary>An OpenDocument spreadsheet, the format an <c>.ods</c> file carries.</summary>
+    OpenDocumentSpreadsheet = 8,
+
+    /// <summary>An OpenDocument presentation, the format an <c>.odp</c> file carries.</summary>
+    OpenDocumentPresentation = 9,
 }

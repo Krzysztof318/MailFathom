@@ -77,7 +77,7 @@ public sealed class AttachmentTextExtractionOptions
     /// <remarks>
     /// The second half of the same guard, and the half that catches a small archive: a part whose inflation runs far
     /// past what its compressed length can honestly explain is abandoned before <see cref="MaxDecompressedOctets" />
-    /// would have been reached. Ordinary Office Open XML markup compresses somewhere below twenty to one.
+    /// would have been reached. Ordinary office markup compresses somewhere below twenty to one.
     /// </remarks>
     public int MaxDecompressionRatio { get; set; } = DefaultMaxDecompressionRatio;
 

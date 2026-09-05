@@ -141,6 +141,132 @@ public sealed class BoundedAttachmentTextExtractorTests
         Assert.Equal([2], result.Text?.PagesWithoutText);
     }
 
+    /// <summary>An OpenDocument text document reads back its paragraphs, and counts as one page like its Office equivalent.</summary>
+    [Fact]
+    public async Task ExtractTextAsync_AnOpenDocumentTextDocument_ReadsItsParagraphsAsOnePage()
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/vnd.oasis.opendocument.text",
+            "terms.odt",
+            DocumentFixtures.OpenDocumentText("Clause one", "Clause two"));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Extracted, result.Outcome);
+        Assert.Equal("Clause one\nClause two", result.Text?.Text);
+        Assert.Equal(1, result.Text?.PageCount);
+        Assert.Empty(result.Text?.PagesWithoutText ?? []);
+    }
+
+    /// <summary>An OpenDocument spreadsheet is read one page per sheet, each cell on a line of its own.</summary>
+    [Fact]
+    public async Task ExtractTextAsync_AnOpenDocumentSpreadsheet_ReadsOnePagePerSheetAndNamesTheEmptyOne()
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/vnd.oasis.opendocument.spreadsheet",
+            "ledger.ods",
+            DocumentFixtures.OpenDocumentSpreadsheet(["Invoice", "Roof repair"], []));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Extracted, result.Outcome);
+        Assert.Equal("Invoice\nRoof repair", result.Text?.Text);
+        Assert.Equal(2, result.Text?.PageCount);
+        Assert.Equal([2], result.Text?.PagesWithoutText);
+    }
+
+    /// <summary>An OpenDocument presentation is read one page per drawing page, and an empty one is named like an empty slide.</summary>
+    [Fact]
+    public async Task ExtractTextAsync_AnOpenDocumentPresentation_ReadsOnePagePerPageAndNamesTheEmptyOne()
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/vnd.oasis.opendocument.presentation",
+            "deck.odp",
+            DocumentFixtures.OpenDocumentPresentation("Opening", string.Empty, "Closing"));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Extracted, result.Outcome);
+        Assert.Equal("Opening\nClosing", result.Text?.Text);
+        Assert.Equal(3, result.Text?.PageCount);
+        Assert.Equal([2], result.Text?.PagesWithoutText);
+    }
+
+    /// <summary>
+    /// The format writes a run of spaces, a tab, and a line break as elements rather than as characters, so a reader
+    /// gathering only text nodes would join the words on either side of one into a word nobody wrote.
+    /// </summary>
+    [Fact]
+    public async Task ExtractTextAsync_AnOpenDocumentParagraphSpacedByElements_KeepsTheWordsApart()
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/vnd.oasis.opendocument.text",
+            "spaced.odt",
+            DocumentFixtures.OpenDocumentContentPart("""
+                <?xml version="1.0" encoding="UTF-8"?>
+                <office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+                  <office:body><office:text><text:p>Roof<text:s />repair<text:line-break />invoice<text:tab />paid</text:p></office:text></office:body>
+                </office:document-content>
+                """));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Extracted, result.Outcome);
+        Assert.Equal("Roof repair\ninvoice paid", result.Text?.Text);
+    }
+
+    /// <summary>An OpenDocument package is a zip archive, so the entity refusal has to hold in its content part too.</summary>
+    [Fact]
+    public async Task ExtractTextAsync_AnOpenDocumentPartDeclaringAnExternalEntity_ReportsMalformed()
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/vnd.oasis.opendocument.text",
+            "hostile.odt",
+            DocumentFixtures.OpenDocumentContentPart("""
+                <?xml version="1.0" encoding="UTF-8"?>
+                <!DOCTYPE office:document-content [<!ENTITY stolen SYSTEM "file:///etc/passwd">]>
+                <office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+                  <office:body><office:text><text:p>&stolen;</text:p></office:text></office:body>
+                </office:document-content>
+                """));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Malformed, result.Outcome);
+    }
+
+    /// <summary>An archive carrying no content part is a package this reader cannot read rather than an empty document.</summary>
+    [Fact]
+    public async Task ExtractTextAsync_AnOpenDocumentPackageWithNoContentPart_ReportsMalformed()
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/vnd.oasis.opendocument.text",
+            "empty.odt",
+            DocumentFixtures.Package(("mimetype", "application/vnd.oasis.opendocument.text")));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Malformed, result.Outcome);
+    }
+
     /// <summary>An attachment that is not a document is refused before any parser is offered its bytes.</summary>
     [Fact]
     public async Task ExtractTextAsync_AnAttachmentNamingNoDocumentFormat_ReportsThatNothingRecognizedIt()

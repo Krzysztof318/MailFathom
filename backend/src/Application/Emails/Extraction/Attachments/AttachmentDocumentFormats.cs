@@ -31,6 +31,9 @@ public static class AttachmentDocumentFormats
             ["application/msword"] = AttachmentDocumentFormat.LegacyWord,
             ["application/vnd.ms-excel"] = AttachmentDocumentFormat.LegacySpreadsheet,
             ["application/vnd.ms-powerpoint"] = AttachmentDocumentFormat.LegacyPresentation,
+            ["application/vnd.oasis.opendocument.text"] = AttachmentDocumentFormat.OpenDocumentText,
+            ["application/vnd.oasis.opendocument.spreadsheet"] = AttachmentDocumentFormat.OpenDocumentSpreadsheet,
+            ["application/vnd.oasis.opendocument.presentation"] = AttachmentDocumentFormat.OpenDocumentPresentation,
         };
 
     private static readonly Dictionary<string, AttachmentDocumentFormat> FormatsByExtension =
@@ -43,6 +46,9 @@ public static class AttachmentDocumentFormats
             [".doc"] = AttachmentDocumentFormat.LegacyWord,
             [".xls"] = AttachmentDocumentFormat.LegacySpreadsheet,
             [".ppt"] = AttachmentDocumentFormat.LegacyPresentation,
+            [".odt"] = AttachmentDocumentFormat.OpenDocumentText,
+            [".ods"] = AttachmentDocumentFormat.OpenDocumentSpreadsheet,
+            [".odp"] = AttachmentDocumentFormat.OpenDocumentPresentation,
         };
 
     /// <summary>Gets the formats text is extracted from, as opposed to those recognition only names.</summary>
@@ -52,6 +58,9 @@ public static class AttachmentDocumentFormats
         AttachmentDocumentFormat.WordOpenXml,
         AttachmentDocumentFormat.SpreadsheetOpenXml,
         AttachmentDocumentFormat.PresentationOpenXml,
+        AttachmentDocumentFormat.OpenDocumentText,
+        AttachmentDocumentFormat.OpenDocumentSpreadsheet,
+        AttachmentDocumentFormat.OpenDocumentPresentation,
     ];
 
     /// <summary>Recognizes what an attachment declares itself to be.</summary>

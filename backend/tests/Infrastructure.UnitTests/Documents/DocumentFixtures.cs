@@ -24,6 +24,11 @@ internal static class DocumentFixtures
     private const string SpreadsheetNamespace = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
     private const string DrawingNamespace = "http://schemas.openxmlformats.org/drawingml/2006/main";
 
+    private const string OfficeNamespace = "urn:oasis:names:tc:opendocument:xmlns:office:1.0";
+    private const string OpenDocumentTextNamespace = "urn:oasis:names:tc:opendocument:xmlns:text:1.0";
+    private const string OpenDocumentTableNamespace = "urn:oasis:names:tc:opendocument:xmlns:table:1.0";
+    private const string OpenDocumentDrawingNamespace = "urn:oasis:names:tc:opendocument:xmlns:drawing:1.0";
+
     /// <summary>Builds a PDF whose pages carry the lines given for each of them.</summary>
     /// <param name="pages">One entry per page, each the line that page carries, or empty for a page with no text at all.</param>
     /// <returns>The document's octets.</returns>
@@ -99,6 +104,39 @@ internal static class DocumentFixtures
 
         return Package([("xl/sharedStrings.xml", table), .. parts]);
     }
+
+    /// <summary>Builds an OpenDocument text package whose body carries the paragraphs given.</summary>
+    /// <param name="paragraphs">The paragraphs, in order.</param>
+    /// <returns>The package's octets.</returns>
+    public static byte[] OpenDocumentText(params string[] paragraphs) => OpenDocumentContent(
+        "text",
+        string.Concat(paragraphs.Select(paragraph => $"<text:p>{Escaped(paragraph)}</text:p>")));
+
+    /// <summary>Builds an OpenDocument spreadsheet whose sheets hold the cells given for each of them.</summary>
+    /// <param name="sheets">One entry per sheet, each the cell values that sheet holds in order.</param>
+    /// <returns>The package's octets.</returns>
+    public static byte[] OpenDocumentSpreadsheet(params string[][] sheets) => OpenDocumentContent(
+        "spreadsheet",
+        string.Concat(sheets.Select(sheet => $"""
+            <table:table><table:table-row>{string.Concat(sheet.Select(value =>
+                $"<table:table-cell><text:p>{Escaped(value)}</text:p></table:table-cell>"))}</table:table-row></table:table>
+            """)));
+
+    /// <summary>Builds an OpenDocument presentation whose pages carry the lines given for each of them.</summary>
+    /// <param name="pages">One entry per page, each the line that page carries, or empty for a page with no text.</param>
+    /// <returns>The package's octets.</returns>
+    public static byte[] OpenDocumentPresentation(params string[] pages) => OpenDocumentContent(
+        "presentation",
+        string.Concat(pages.Select(line => $"""
+            <draw:page>{(line.Length == 0
+                ? string.Empty
+                : $"<draw:frame><draw:text-box><text:p>{Escaped(line)}</text:p></draw:text-box></draw:frame>")}</draw:page>
+            """)));
+
+    /// <summary>Builds an OpenDocument package whose one content part holds the markup given verbatim.</summary>
+    /// <param name="contentXml">The markup <c>content.xml</c> carries.</param>
+    /// <returns>The package's octets.</returns>
+    public static byte[] OpenDocumentContentPart(string contentXml) => Package(("content.xml", contentXml));
 
     /// <summary>Builds an archive of the named parts, each holding the text given for it.</summary>
     /// <param name="parts">The parts, named as they are inside the package.</param>
@@ -195,6 +233,14 @@ internal static class DocumentFixtures
 
         return Encoding.ASCII.GetBytes(document.ToString());
     }
+
+    /// <summary>Wraps a body in the one content part an OpenDocument package holds everything in.</summary>
+    private static byte[] OpenDocumentContent(string bodyElement, string body) => OpenDocumentContentPart($"""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <office:document-content xmlns:office="{OfficeNamespace}" xmlns:text="{OpenDocumentTextNamespace}" xmlns:table="{OpenDocumentTableNamespace}" xmlns:draw="{OpenDocumentDrawingNamespace}">
+          <office:body><office:{bodyElement}>{body}</office:{bodyElement}></office:body>
+        </office:document-content>
+        """);
 
     private static string Escaped(string value) => value
         .Replace("&", "&amp;", StringComparison.Ordinal)
