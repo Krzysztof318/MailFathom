@@ -15,6 +15,11 @@
 // Two more are the same pairing again for the width a strip has: the design draws the toolbar's controls as words
 // beside their symbols only where there is a mailbox column beside them, and as symbols alone at every narrower
 // composition. So `symbol` is what `labelled` narrows to, and `primarySymbol` is what `primary` narrows to.
+//
+// What is deliberately absent is the size a finger needs. Every shape below is drawn at the measure the design project
+// gives it, and the floor a control grows to under a coarse pointer is stated once for the whole client in
+// `styles.css` — a bar met in seven shapes and forty hand-written controls is a bar most of them eventually stop
+// meeting.
 
 export type ControlShape =
     'labelled' | 'symbol' | 'primary' | 'primarySymbol' | 'floating' | 'onAccent' | 'onAccentSymbol';

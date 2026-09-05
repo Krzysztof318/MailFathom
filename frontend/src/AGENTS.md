@@ -293,6 +293,14 @@ so this is written to be mechanically visible in a diff rather than remembered.
   one shape is how a client stops looking like one product, and it is invisible in review because each diff is fine.
 - **Density and motion are decided once**, in the theme, and a screen does not opt out of either. A duration or an easing
   written into a component is the same drift as a hexadecimal colour.
+- **How small a control may be under a finger is decided once too**, in a base rule in `Client.App/src/styles.css`
+  beside the focus ring, and for the same reason: a floor met by seven control shapes and forty hand-written buttons is
+  a floor most of them eventually stop meeting, and the one that stops is invisible in the diff that stopped it. So a
+  screen writes no `pointer-coarse:` size of its own — what it writes is the measurement the design project gives the
+  control, and the rule lifts whatever falls below the floor. It is stated as a `min-*`, so a control the design already
+  draws large keeps its own size. This is the one place where the two questions § _The two heads_ separates are visible
+  side by side: what a screen composes as follows the width it was given, and how big a target is follows what is
+  driving it.
 - **`prefers-reduced-motion` is honoured**, and that is an accessibility obligation rather than a nicety: motion is
   removed under it, not merely shortened, and any transition conveying meaning still conveys it without the movement.
 - **Everything a screen draws comes out of the bundle, and no screen reaches an external origin for it.** The typeface

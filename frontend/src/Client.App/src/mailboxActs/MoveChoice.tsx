@@ -4,6 +4,7 @@
 
 import { useId, type RefObject } from 'react';
 import { Icon } from '../controls/Icon';
+import { SurfaceControl } from '../controls/SurfaceControl';
 import { useLocalization } from '../localization/useLocalization';
 import type { MoveDestination } from './mailboxDestinations';
 
@@ -61,17 +62,13 @@ export function MoveChoice({
                     {translate('act.moveTitle')}
                 </h2>
 
-                <button
-                    type="button"
-                    aria-label={translate('act.moveClose')}
-                    title={translate('act.moveClose')}
-                    className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-hover hover:text-text"
-                    onClick={() => {
+                <SurfaceControl
+                    label={translate('act.moveClose')}
+                    icon="close"
+                    onActivate={() => {
                         asked.current?.close();
                     }}
-                >
-                    <Icon name="close" className="size-5" />
-                </button>
+                />
             </div>
 
             <ul className="flex max-h-96 flex-col overflow-y-auto py-1.5">

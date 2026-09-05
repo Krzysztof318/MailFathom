@@ -7,6 +7,7 @@ import { useComposing } from '../composer/useComposing';
 import { Control } from '../controls/Control';
 import { Icon } from '../controls/Icon';
 import { PlannedControl } from '../controls/PlannedControl';
+import { SurfaceControl } from '../controls/SurfaceControl';
 import { useLocalization } from '../localization/useLocalization';
 import { useScreenLayer } from '../shell/screenLayers';
 import { useDesktopComposition, useTwoPanes, useWideWorkspace } from '../shell/useWideWorkspace';
@@ -225,7 +226,7 @@ export function MailSpace({
                             status={status}
                             folded={folded}
                             control={
-                                <ColumnControl
+                                <SurfaceControl
                                     label={translate(folded ? 'mailboxes.unfold' : 'mailboxes.fold')}
                                     icon={folded ? 'chevron_right' : 'chevron_left'}
                                     onActivate={() => {
@@ -252,7 +253,7 @@ export function MailSpace({
                                 status={status}
                                 folded={false}
                                 control={
-                                    <ColumnControl
+                                    <SurfaceControl
                                         label={translate('mailboxes.close')}
                                         icon="close"
                                         onActivate={() => {
@@ -282,7 +283,7 @@ export function MailSpace({
                     >
                         {desktop ? null : (
                             <div className="flex items-center px-2 pt-2">
-                                <ColumnControl
+                                <SurfaceControl
                                     label={translate('mailboxes.open')}
                                     icon="menu"
                                     onActivate={() => {
@@ -293,7 +294,34 @@ export function MailSpace({
                             </div>
                         )}
 
-                        {list}
+                        {/* The list and, in the narrow shape, the control that writes a message standing over its
+                            bottom corner. Over the *list* rather than over the window, because the window's own
+                            bottom corner is where the question field and the navigation are: a control placed against
+                            the viewport would sit on top of both, and it would move whenever either changed height.
+                            Positioned against this box instead, it keeps the corner a thumb reaches whatever stands
+                            under it. */}
+                        <div className="relative flex min-h-0 flex-1 flex-col">
+                            {list}
+
+                            {twoPanes || readingInFront ? null : composing.offered ? (
+                                <Control
+                                    label={translate('mail.compose')}
+                                    icon="edit_square"
+                                    shape="floating"
+                                    className="absolute right-4.5 bottom-4.5"
+                                    onPress={() => {
+                                        composing.compose({ kind: 'new' });
+                                    }}
+                                />
+                            ) : (
+                                <PlannedControl
+                                    label={translate('mail.compose')}
+                                    icon="edit_square"
+                                    shape="floating"
+                                    className="absolute right-4.5 bottom-4.5"
+                                />
+                            )}
+                        </div>
 
                         {twoPanes ? null : intent}
                     </section>
@@ -346,27 +374,6 @@ export function MailSpace({
                     </section>
                 ) : null}
             </div>
-
-            {/* Composing stands on the list in the narrow shape, where the toolbar carrying it is not drawn: the one
-                thing a phone-width reader reaches for from the list, at the corner a thumb reaches. */}
-            {twoPanes || readingInFront ? null : composing.offered ? (
-                <Control
-                    label={translate('mail.compose')}
-                    icon="edit_square"
-                    shape="floating"
-                    className="fixed right-4.5 bottom-22"
-                    onPress={() => {
-                        composing.compose({ kind: 'new' });
-                    }}
-                />
-            ) : (
-                <PlannedControl
-                    label={translate('mail.compose')}
-                    icon="edit_square"
-                    shape="floating"
-                    className="fixed right-4.5 bottom-22"
-                />
-            )}
         </div>
     );
 }
@@ -410,28 +417,5 @@ function Mailboxes({
 
             {folded ? null : <div className="border-t border-line px-3.5 py-2.5">{status}</div>}
         </>
-    );
-}
-
-// The one control shape the columns draw: a symbol that folds, opens, or closes a column, named by what it does.
-function ColumnControl({
-    label,
-    icon,
-    onActivate,
-}: {
-    readonly label: string;
-    readonly icon: 'chevron_left' | 'chevron_right' | 'close' | 'menu';
-    readonly onActivate: () => void;
-}) {
-    return (
-        <button
-            type="button"
-            aria-label={label}
-            title={label}
-            className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-hover hover:text-text"
-            onClick={onActivate}
-        >
-            <Icon name={icon} className="size-5" />
-        </button>
     );
 }

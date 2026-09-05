@@ -20,6 +20,11 @@ const declaredVersion = execFileSync(resolve(import.meta.dirname, '../../scripts
 const wideWindow = { width: 1280, height: 720 };
 const narrowWindow = { width: 380, height: 720 };
 
+// The design project's phone frame, which is the composition where the list is the whole screen and the one width at
+// which the row and the head are drawn differently. It is the project's own number rather than a rounding of the
+// breakpoint, so what is measured against it is what the artboard shows.
+const phoneWindow = { width: 390, height: 844 };
+
 // What the deployment the preview server stands in for answers. It accepts any credential presented to it, because
 // what this suite proves about signing in is the composing, the sending, and the keeping — which of two passwords a
 // service accepts is the service's own decision and is proven where that decision is made.
@@ -1394,6 +1399,72 @@ test('draws every row of the list at one height, which is what the window is ari
     // measures rows, which this list deliberately does not carry.
     expect(new Set(heights).size).toBe(1);
     expect(heights[0]).toBeGreaterThan(0);
+});
+
+test('draws the mail screens at the phone composition, with its own row height and nothing over the question', async ({
+    page,
+}) => {
+    // The design project's own phone frame, and the only composition in which the list is the whole screen. Everything
+    // asked below is geometry, which is what puts it here: how tall a row is, what stands over what, and whether the
+    // document has grown wider than the window are three things jsdom answers for nothing.
+    await page.setViewportSize(phoneWindow);
+    await openSignedIn(page, '/#/mail');
+
+    const list = page.getByRole('listbox', { name: 'Messages' });
+    await expect(list.getByRole('option').first()).toBeVisible();
+
+    const phoneRow = await boxOf(list.getByRole('option').first());
+
+    // The control that writes a message stands over the list rather than over the window, so it clears the question
+    // field at the foot of the column whatever that field comes to measure. Placed against the viewport it sat on the
+    // scope beneath the question instead, which put a press meant for the mailbox onto the control that composes.
+    const compose = await boxOf(page.getByRole('button', { name: /^New message/u }));
+    const question = await boxOf(page.getByRole('searchbox', { name: 'Ask your mail' }));
+
+    expect(compose.y + compose.height).toBeLessThanOrEqual(question.y);
+
+    // Nothing has laid out past the window, which is the bar `frontend/src/AGENTS.md` sets at every width. Asked as an
+    // expression for the reason the same question is asked that way at the three-column width above: this suite is
+    // compiled without a DOM declaration, so a closure naming `document` is the one thing that would change that.
+    const overflowing = await page.evaluate<boolean>(
+        'document.documentElement.scrollWidth > document.documentElement.clientWidth',
+    );
+
+    expect(overflowing).toBe(false);
+
+    // The one measurement a composition changes rather than merely rearranges: the design draws a taller row where the
+    // list is the whole screen and one height everywhere above that, so the same row is read at both widths.
+    await page.setViewportSize(wideWindow);
+    await expect(list.getByRole('option').first()).toBeVisible();
+
+    expect(phoneRow.height).toBeGreaterThan((await boxOf(list.getByRole('option').first())).height);
+});
+
+test.describe('driven by a finger', () => {
+    test.use({ hasTouch: true });
+
+    test('draws every control on the mail screens at a size a fingertip can hit', async ({ page }) => {
+        await page.setViewportSize(phoneWindow);
+        await openSignedIn(page, '/#/mail');
+
+        await expect(page.getByRole('listbox', { name: 'Messages' }).getByRole('option').first()).toBeVisible();
+
+        // The floor is asked of the pointer rather than of the width, and `styles.css` is the one place it is stated —
+        // so what this proves is that the statement reaches the whole screen rather than the shapes that remembered it.
+        // Only a browser answers it twice over: the query is the real one, and the size is a measured box.
+        for (const control of await page.getByRole('main').getByRole('button').all()) {
+            const box = await control.boundingBox();
+
+            if (box === null) {
+                continue;
+            }
+
+            expect(
+                Math.min(box.width, box.height),
+                `a control on the Mail space is ${String(box.height)} tall`,
+            ).toBeGreaterThanOrEqual(44);
+        }
+    });
 });
 
 test('draws the three columns of the Mail space without the page scrolling sideways', async ({ page }) => {

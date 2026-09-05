@@ -4,6 +4,7 @@
 
 import { useRef } from 'react';
 import { Icon } from '../controls/Icon';
+import { SurfaceControl } from '../controls/SurfaceControl';
 import { useLocalization } from '../localization/useLocalization';
 
 // The control the design project puts on a message's head, and the question it asks before anything is shown. Pressing
@@ -32,17 +33,13 @@ export function ShowFullHtml({ onShow }: { readonly onShow: () => void }) {
 
     return (
         <>
-            <button
-                type="button"
-                aria-label={translate('fullHtml.show')}
-                title={translate('fullHtml.show')}
-                className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-hover hover:text-text"
-                onClick={() => {
+            <SurfaceControl
+                label={translate('fullHtml.show')}
+                icon="code"
+                onActivate={() => {
                     asked.current?.showModal();
                 }}
-            >
-                <Icon name="code" className="size-5" />
-            </button>
+            />
 
             <dialog
                 ref={asked}
