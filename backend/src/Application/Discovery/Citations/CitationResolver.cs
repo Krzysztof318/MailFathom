@@ -261,6 +261,7 @@ public sealed class CitationResolver
             ? new CitedAttachment(
                 position,
                 message.Attachments[position].Description.FileName?.Value,
+                message.Attachments[position].Description.FileName?.WasNormalized ?? false,
                 message.Attachments[position].Description.MediaType,
                 message.Attachments[position].Description.DecodedSizeOctets)
             : null;

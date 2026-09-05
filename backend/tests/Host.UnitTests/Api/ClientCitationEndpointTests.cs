@@ -160,20 +160,29 @@ public sealed class ClientCitationEndpointTests
         Assert.Null(citation.Fragment);
     }
 
-    /// <summary>A cited file is described at the position its own download route is asked with, and carries none of what it holds.</summary>
+    /// <summary>
+    /// A cited file is described at the position its own download route is asked with, carries none of what it holds,
+    /// and says whether normalization rewrote the name a reader is shown — which is what the message route says about
+    /// the same file.
+    /// </summary>
     [Fact]
     public void For_AResolvedAttachment_DescribesTheFileAtThePositionItsDownloadIsAskedWith()
     {
         // Act
         var response = ClientCitationResolutionResponse.For(
-            [ResolvedCitation.Resolved(CitedMessageOf(), new CitedAttachment(1, "terms.pdf", "application/pdf", 8192))]);
+        [
+            ResolvedCitation.Resolved(
+                CitedMessageOf(),
+                new CitedAttachment(1, "terms.pdf", WasFileNameNormalized: true, "application/pdf", 8192)),
+        ]);
 
         // Assert
         var citation = Assert.Single(response.Citations);
         Assert.Equal(
-            (1, "terms.pdf", "application/pdf", 8192L),
+            (1, "terms.pdf", true, "application/pdf", 8192L),
             (citation.Attachment!.Position,
                 citation.Attachment.FileName,
+                citation.Attachment.WasFileNameNormalized,
                 citation.Attachment.MediaType,
                 citation.Attachment.SizeOctets));
     }

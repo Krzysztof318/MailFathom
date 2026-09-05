@@ -169,11 +169,37 @@ public sealed class CitationResolverTests
         var citation = Assert.Single(resolved);
         Assert.Equal(CitationResolutionOutcome.Resolved, citation.Outcome);
         Assert.Equal(
-            (1, "terms.pdf", "application/pdf", 8192L),
+            (1, "terms.pdf", false, "application/pdf", 8192L),
             (citation.Attachment!.Position,
                 citation.Attachment.FileName,
+                citation.Attachment.WasFileNameNormalized,
                 citation.Attachment.MediaType,
                 citation.Attachment.SizeOctets));
+    }
+
+    /// <summary>
+    /// A sender's own file name may be a path or carry a control character, and normalization rewrites it. A reader is
+    /// shown the rewritten name, so the resolution says so — the same warning the message route gives about the same
+    /// file.
+    /// </summary>
+    [Fact]
+    public async Task ResolveAsync_AttachmentWhoseNameNormalizationRewrote_SaysTheNameWasRewritten()
+    {
+        // Arrange
+        var summary = SyntheticEmailSummaries.Create(attachmentCount: 1);
+        var resolver = ResolverOver(
+            [summary],
+            attachments: [AttachmentOf("../../invoice.pdf", "application/pdf", 4096)]);
+
+        // Act
+        var resolved = await resolver.ResolveAsync(
+            [new AttachmentCitationTarget(summary.StoredEmailId, attachmentPosition: 0)],
+            TestContext.Current.CancellationToken);
+
+        // Assert
+        var citation = Assert.Single(resolved);
+        Assert.True(citation.Attachment!.WasFileNameNormalized);
+        Assert.Equal("invoice.pdf", citation.Attachment.FileName);
     }
 
     [Fact]

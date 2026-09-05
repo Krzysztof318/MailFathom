@@ -268,11 +268,18 @@ internal sealed record ClientCitedFragmentResponse(
 /// <summary>The file one resolved citation points at, described and carrying none of what it holds.</summary>
 /// <param name="Position">The zero-based place the file holds, which is what the attachment route is asked with.</param>
 /// <param name="FileName">The normalized file name, or <see langword="null" /> where the part carried no usable name.</param>
+/// <param name="WasFileNameNormalized">Whether normalization had to rewrite what the message wrote.</param>
 /// <param name="MediaType">What the part declares itself to be, which is what the sender wrote rather than a reading of the content.</param>
 /// <param name="SizeOctets">How many octets the file holds once its transfer encoding is decoded.</param>
+/// <remarks>
+/// The members are the message route's own, so a client draws a cited file with the component it already draws the
+/// attachment strip with rather than with a second one — which is why the rewritten-name flag travels here as well: the
+/// name a reader is shown is the same name, and it is worth drawing carefully in both places.
+/// </remarks>
 internal sealed record ClientCitedAttachmentResponse(
     int Position,
     string? FileName,
+    bool WasFileNameNormalized,
     string MediaType,
     long SizeOctets)
 {
@@ -282,6 +289,7 @@ internal sealed record ClientCitedAttachmentResponse(
     internal static ClientCitedAttachmentResponse For(CitedAttachment attachment) => new(
         attachment.Position,
         attachment.FileName,
+        attachment.WasFileNameNormalized,
         attachment.MediaType,
         attachment.SizeOctets);
 }

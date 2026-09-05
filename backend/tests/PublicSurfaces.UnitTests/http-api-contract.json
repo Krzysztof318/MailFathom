@@ -121,11 +121,15 @@
               "integer",
               "string"
             ]
+          },
+          "wasFileNameNormalized": {
+            "type": "boolean"
           }
         },
         "required": [
           "position",
           "fileName",
+          "wasFileNameNormalized",
           "mediaType",
           "sizeOctets"
         ],
