@@ -34,29 +34,14 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
     private const string WordDocumentPart = "word/document.xml";
     private const string SharedStringsPart = "xl/sharedStrings.xml";
 
-    /// <summary>Builds the settings every XML part in this adapter is read under.</summary>
-    /// <returns>Settings that resolve no entity and fetch nothing.</returns>
-    /// <remarks>
-    /// The two properties are the whole of the external-entity answer and they are set explicitly rather than left to a
-    /// framework default, because a default is a decision somebody else may revise. <c>Prohibit</c> refuses a document
-    /// type declaration outright, which is where an entity would have to be declared, and a null resolver leaves
-    /// nothing able to fetch a resource even if one were.
-    /// </remarks>
-    internal static XmlReaderSettings PartReaderSettings() => new()
-    {
-        DtdProcessing = DtdProcessing.Prohibit,
-        XmlResolver = null,
-        IgnoreComments = true,
-        IgnoreProcessingInstructions = true,
-        CloseInput = false,
-    };
+    private readonly BoundedArchivePartReader parts = new(options);
 
     /// <summary>Reads one Office Open XML attachment.</summary>
     /// <param name="content">The attachment's octets, positioned at the start.</param>
     /// <param name="format">Which of the three Office Open XML formats it is.</param>
     /// <param name="cancellationToken">Cancels the read between parts and between elements.</param>
     /// <returns>What the document yielded.</returns>
-    /// <exception cref="AttachmentTextExtractionBoundException">Thrown when a configured ceiling is crossed.</exception>
+    /// <exception cref="AttachmentTextExtractionStoppedException">Thrown when a configured ceiling is crossed.</exception>
     /// <exception cref="InvalidDataException">Thrown when the octets are not a readable archive.</exception>
     /// <exception cref="XmlException">Thrown when a part is not readable XML.</exception>
     public ExtractedAttachmentText Read(
@@ -68,10 +53,10 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
 
         if (archive.Entries.Count > options.MaxContainerParts)
         {
-            throw new AttachmentTextExtractionBoundException(AttachmentTextExtractionOutcome.ContainerBoundExceeded);
+            throw new AttachmentTextExtractionStoppedException(AttachmentTextExtractionOutcome.ContainerBoundExceeded);
         }
 
-        var budget = new DecompressionBudget(options.MaxDecompressedOctets);
+        var budget = new DecompressionBudget(options.MaxDecompressedOctets, content.Length);
         var text = new BoundedTextAccumulator(options.MaxExtractedTextCharacters);
 
         return format switch
@@ -89,30 +74,6 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
     [GeneratedRegex(@"^xl/worksheets/sheet(\d+)\.xml$", RegexOptions.IgnoreCase)]
     private static partial Regex WorksheetPartPattern();
 
-    /// <summary>Advances a reader one node, refusing an element tree nested past the configured depth.</summary>
-    private bool ReadNode(XmlReader reader, CancellationToken cancellationToken)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        if (!reader.Read())
-        {
-            return false;
-        }
-
-        if (reader.Depth > options.MaxElementDepth)
-        {
-            throw new AttachmentTextExtractionBoundException(AttachmentTextExtractionOutcome.ContainerBoundExceeded);
-        }
-
-        return true;
-    }
-
-    /// <summary>Opens one archive part under the container's shared inflation budget.</summary>
-    private XmlReader OpenPart(ZipArchiveEntry entry, DecompressionBudget budget) =>
-        XmlReader.Create(
-            new BoundedInflationStream(entry.Open(), entry.CompressedLength, budget, options.MaxDecompressionRatio),
-            PartReaderSettings());
-
     /// <summary>Reads a word-processing document, whose body is one page because the format records no pagination.</summary>
     private ExtractedAttachmentText ReadDocument(
         ZipArchive archive,
@@ -125,7 +86,7 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
 
         bool carriedText;
 
-        using (var reader = this.OpenPart(document, budget))
+        using (var reader = this.parts.OpenPart(document, budget))
         {
             carriedText = this.ReadRunsInto(reader, WordprocessingNamespace, text, cancellationToken);
         }
@@ -133,7 +94,13 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
         return new ExtractedAttachmentText(text.ToText(), PageCount: 1, carriedText ? [] : [1]);
     }
 
-    /// <summary>Reads a presentation, one page per slide in slide order.</summary>
+    /// <summary>Reads a presentation, one page per slide in the order the slide parts are named.</summary>
+    /// <remarks>
+    /// Part-name order rather than the order the deck presents in. A presentation records that in <c>sldIdLst</c>,
+    /// resolved through the package's relationships, and reordering or deleting a slide leaves the part names where
+    /// they were — so a reordered deck reads back in the wrong order and the pages named as carrying no text are named
+    /// by their part number. Resolving the declared order is issue #1682.
+    /// </remarks>
     private ExtractedAttachmentText ReadPresentation(
         ZipArchive archive,
         DecompressionBudget budget,
@@ -147,7 +114,7 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
         {
             bool carriedText;
 
-            using (var reader = this.OpenPart(slide, budget))
+            using (var reader = this.parts.OpenPart(slide, budget))
             {
                 carriedText = this.ReadRunsInto(reader, DrawingNamespace, text, cancellationToken);
             }
@@ -163,11 +130,18 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
         return new ExtractedAttachmentText(text.ToText(), slides.Count, slidesWithoutText);
     }
 
-    /// <summary>Reads a workbook, one page per worksheet, resolving the shared string table each cell indexes into.</summary>
+    /// <summary>Reads a workbook, one page per worksheet in part-name order, resolving the table each cell indexes into.</summary>
     /// <remarks>
+    /// <para>
+    /// The order is the part names' rather than the workbook's own, which it records in the <c>sheets</c> element of
+    /// <c>xl/workbook.xml</c>; a reordered or partly deleted workbook therefore reads back in the wrong order, and
+    /// resolving the declared one is issue #1682.
+    /// </para>
+    /// <para>
     /// The string table is resolved rather than emitted whole. Emitting it would produce every word in the workbook
     /// attached to no sheet, which reads as text and says nothing about where the text is — and a sheet holding only a
     /// picture would be indistinguishable from one whose words are in the table.
+    /// </para>
     /// </remarks>
     private ExtractedAttachmentText ReadWorkbook(
         ZipArchive archive,
@@ -183,7 +157,7 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
         {
             bool carriedText;
 
-            using (var reader = this.OpenPart(sheet, budget))
+            using (var reader = this.parts.OpenPart(sheet, budget))
             {
                 carriedText = this.ReadCellsInto(reader, sharedStrings, text, cancellationToken);
             }
@@ -216,7 +190,7 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
         var insideRun = false;
         var carriedText = false;
 
-        while (this.ReadNode(reader, cancellationToken))
+        while (this.parts.ReadNode(reader, cancellationToken))
         {
             switch (reader.NodeType)
             {
@@ -273,9 +247,9 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
         var item = new StringBuilder();
         var insideRun = false;
 
-        using var reader = this.OpenPart(entry, budget);
+        using var reader = this.parts.OpenPart(entry, budget);
 
-        while (this.ReadNode(reader, cancellationToken))
+        while (this.parts.ReadNode(reader, cancellationToken))
         {
             switch (reader.NodeType)
             {
@@ -283,6 +257,13 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
                     if (reader.LocalName == "si")
                     {
                         item.Clear();
+
+                        // A self-closed entry raises no end element, so recording it here is what keeps every later
+                        // index in the table pointing at its own words rather than at the next entry's.
+                        if (reader.IsEmptyElement)
+                        {
+                            strings.Add(string.Empty);
+                        }
                     }
 
                     insideRun = reader.LocalName == "t" && !reader.IsEmptyElement;
@@ -327,7 +308,7 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
     {
         var carriedText = false;
 
-        while (this.ReadNode(reader, cancellationToken))
+        while (this.parts.ReadNode(reader, cancellationToken))
         {
             if (reader.NodeType != XmlNodeType.Element
                 || reader.NamespaceURI != SpreadsheetNamespace
@@ -370,7 +351,7 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
         var insideValue = false;
         var insideInlineRun = false;
 
-        while (this.ReadNode(cell, cancellationToken))
+        while (this.parts.ReadNode(cell, cancellationToken))
         {
             switch (cell.NodeType)
             {

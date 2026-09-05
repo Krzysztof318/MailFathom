@@ -12,7 +12,9 @@ namespace MailFathom.Infrastructure.Documents;
 /// Both bounds are checked on every read rather than once at the end, which is the whole point: an archive whose
 /// declared uncompressed size is enormous has already won if the check happens after the inflation. Nothing here reads
 /// the declared size at all — that number is the sender's, and a decompression bomb is exactly a file that lies about
-/// it. What is read instead is the part's compressed length, which is a fact about the octets that actually arrived.
+/// it. What is measured against instead is the part's compressed length, already clamped by
+/// <see cref="DecompressionBudget.HonestCompressedLength" /> to something the archive can actually back, because that
+/// field is the sender's too and only the containing file's own length bounds it.
 /// </para>
 /// <para>
 /// The ratio catches the small archive and the total catches the large one. A part inflating far past what its
@@ -104,7 +106,7 @@ internal sealed class BoundedInflationStream(
         // octets refuses ordinary markup.
         if (compressedOctets > 0 && this.inflatedOctets > compressedOctets * maxRatio)
         {
-            throw new AttachmentTextExtractionBoundException(AttachmentTextExtractionOutcome.ContainerBoundExceeded);
+            throw new AttachmentTextExtractionStoppedException(AttachmentTextExtractionOutcome.ContainerBoundExceeded);
         }
     }
 }

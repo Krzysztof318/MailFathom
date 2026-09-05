@@ -72,6 +72,19 @@ page with no text layer is the exact target an optical-character-recognition pas
 are reported as a list rather than as a flag on the document — a scanned page bound into an otherwise textual report is
 the ordinary case. No optical character recognition happens here; that is a decision of its own and this is not it.
 
+**One kind of document answers that way without being a scan, and there is currently no telling the two apart.** Only
+the ISO 29500 **Transitional** namespaces are read, which is what an office suite writes unless somebody explicitly
+chooses otherwise. A **Strict** `.docx`, `.xlsx`, or `.pptx` uses different namespaces, so it walks to completion with
+no run recognized and comes back as `Extracted` with empty text and every page listed as carrying none — the answer this
+page has just called a scan. It is rare and it is a defect rather than a design: #1681 is where it is tracked, and until
+it closes, a document reported as carrying no text may be one whose words were never looked for. The three OpenDocument
+formats have no such split and are unaffected.
+
+The order pages are reported in has its own limit. A presentation's slides and a workbook's sheets are read in the order
+their parts are *named*, and neither format records order there — a deck or a workbook somebody reordered before sending
+therefore reads back in the order it was first built in, and the pages named as carrying no text are named by their part
+number. #1682 is where that is tracked. An OpenDocument file holds one content part in document order and is unaffected.
+
 A "page" is what the format has one of: a PDF page, a presentation slide, an OpenDocument drawing page, and a sheet of
 either spreadsheet format each count as one. A word-processing document counts as one page whatever it prints as,
 because neither office format records pagination and reading one would mean laying the document out.
@@ -84,7 +97,7 @@ somebody keeps.
 
 - **Nothing is executed.** No macro, embedded script, open action, embedded object, form submission, or other active
   content is run, evaluated, followed, or handed to anything that would run it. Extraction reads structure and text.
-- **Nothing is written to the file system.** Neither parser needs a path, so the question of a location a later step
+- **Nothing is written to the file system.** No parser here needs a path, so the question of a location a later step
   could execute never arises. An attachment is buffered in memory for the length of one extraction and released.
 - **No external entity is resolved and no external resource is fetched.** Every XML part is read with document type
   declarations prohibited and no resolver, so an entity cannot even be declared, let alone dereferenced. That is
@@ -102,7 +115,15 @@ somebody keeps.
 
 The timeout is honest about its own limit: it is observed between units of work — a page, an archive part, an element —
 because no parser here accepts a cancellation token and .NET cannot abort a thread. A parser that never returns from a
-single unit is bounded by the size, ratio, and depth ceilings instead, which is why none of those is optional.
+single unit is bounded by whatever else bounds its path, which is why none of those ceilings is optional.
+
+**The two package families and the PDF are not bounded to the same depth, and the difference is worth knowing before
+raising a ceiling.** An archive is read by this repository's own code, so the decompression total, the per-part ratio,
+and the element depth all apply to it while it inflates. A PDF is read by a library that inflates a page's content
+streams itself, with no ceiling MailFathom can set and no way to see the text before it is built — so on that path the
+input ceiling on the octets that arrive and the between-pages timeout are the whole of it, and a single page whose
+content stream inflates enormously is bounded by neither. Nothing here treats that as acceptable; it is recorded as a
+gap rather than described as a guard.
 
 An attachment an antivirus pass has judged infected is not excluded, because no such pass exists yet. When one lands,
 this port is where it gates: an infected attachment is skipped before a parser is offered its bytes.
