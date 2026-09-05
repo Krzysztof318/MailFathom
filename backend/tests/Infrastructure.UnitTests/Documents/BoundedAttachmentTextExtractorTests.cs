@@ -423,6 +423,34 @@ public sealed class BoundedAttachmentTextExtractorTests
         Assert.Equal(AttachmentTextExtractionOutcome.ContainerBoundExceeded, result.Outcome);
     }
 
+    /// <summary>
+    /// One content part holds every page of an OpenDocument file, so no archive ceiling reaches the page count the way
+    /// it does for the other family — a run of self-closed page elements would otherwise grow two lists to whatever
+    /// the inflation budget allows, for a document carrying no text at all.
+    /// </summary>
+    [Fact]
+    public async Task ExtractTextAsync_AnOpenDocumentPartDeclaringMorePagesThanAllowed_ReportsTheContainerBound()
+    {
+        // Arrange
+        var bounds = new AttachmentTextExtractionOptions { MaxContainerParts = 8 };
+
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/vnd.oasis.opendocument.spreadsheet",
+            "sheets.ods",
+            DocumentFixtures.OpenDocumentContentPart($"""
+                <?xml version="1.0" encoding="UTF-8"?>
+                <office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0">
+                  <office:body><office:spreadsheet>{string.Concat(Enumerable.Repeat("<table:table />", 64))}</office:spreadsheet></office:body>
+                </office:document-content>
+                """));
+
+        // Act
+        var result = await ExtractAsync(attachment, bounds);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.ContainerBoundExceeded, result.Outcome);
+    }
+
     /// <summary>An OpenDocument package is a zip archive, so the entity refusal has to hold in its content part too.</summary>
     [Fact]
     public async Task ExtractTextAsync_AnOpenDocumentPartDeclaringAnExternalEntity_ReportsMalformed()

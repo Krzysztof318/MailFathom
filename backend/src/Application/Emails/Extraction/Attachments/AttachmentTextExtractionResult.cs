@@ -28,7 +28,14 @@ public enum AttachmentTextExtractionOutcome
     /// <summary>The attachment yielded more characters than the configured output ceiling, so it was abandoned.</summary>
     ExtractedTextTooLarge = 4,
 
-    /// <summary>A container format exceeded a decompression, ratio, part-count, or nesting ceiling while it was being read.</summary>
+    /// <summary>A container format exceeded a decompression, ratio, part-count, nesting, or string-table ceiling while it was being read.</summary>
+    /// <remarks>
+    /// The string-table one is the odd member of that list, because the number it is measured against is the output
+    /// ceiling rather than a container ceiling of its own: a workbook's shared strings cost a list slot each whether or
+    /// not they carry a character, so the count is bounded even where the characters are not. It is reported here
+    /// rather than as <see cref="ExtractedTextTooLarge" /> because what was passed is a count of entries held in
+    /// memory rather than characters an owner would get back.
+    /// </remarks>
     ContainerBoundExceeded = 5,
 
     /// <summary>The document is encrypted and no password to it exists anywhere in this system.</summary>

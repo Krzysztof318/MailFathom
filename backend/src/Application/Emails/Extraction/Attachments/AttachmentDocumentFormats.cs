@@ -9,14 +9,16 @@ namespace MailFathom.Application.Emails.Extraction.Attachments;
 /// <summary>Recognizes the document format an attachment declares, and says which of them are parsed.</summary>
 /// <remarks>
 /// <para>
-/// Recognition reads the declared media type first and the file name's extension only where the media type says
-/// nothing. Both are the sender's to write, so neither is evidence about the bytes — what recognition decides is which
-/// parser is offered the content, and every parser treats what it is handed as hostile regardless.
+/// Recognition reads the declared media type first and the file name's extension whenever that media type names no
+/// format it recognizes — so for every media type outside the table below, the file name alone decides. Both are the
+/// sender's to write, so neither is evidence about the bytes: what recognition decides is which parser is offered the
+/// content, and every parser treats what it is handed as hostile regardless.
 /// </para>
 /// <para>
 /// The extension fallback exists because a generic <c>application/octet-stream</c> over a correctly named file is the
-/// ordinary shape of a mail-borne document rather than an edge case. It is a fallback and never an override: a part
-/// declaring a recognized media type is that format whatever it is called.
+/// ordinary shape of a mail-borne document rather than an edge case. A recognized media type is never overridden by
+/// the extension — a part declaring one is that format whatever it is called — but a mismatched media type keeps
+/// nothing out, because a sender is as free to write one of those as to write none.
 /// </para>
 /// </remarks>
 public static class AttachmentDocumentFormats

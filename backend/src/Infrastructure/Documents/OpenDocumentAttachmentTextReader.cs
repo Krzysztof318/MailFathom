@@ -155,6 +155,15 @@ internal sealed class OpenDocumentAttachmentTextReader(AttachmentTextExtractionO
                     pageCount++;
                     pageCarriedText = false;
 
+                    // One content part holds every page of the document, so nothing else here counts them: the archive
+                    // part ceiling bounds the other family's pages because each of those is a part of its own. A run of
+                    // self-closed page elements would otherwise grow two lists to whatever the inflation budget allows.
+                    if (pageCount > options.MaxContainerParts)
+                    {
+                        throw new AttachmentTextExtractionStoppedException(
+                            AttachmentTextExtractionOutcome.ContainerBoundExceeded);
+                    }
+
                     if (reader.IsEmptyElement)
                     {
                         pagesWithoutText.Add(pageCount);

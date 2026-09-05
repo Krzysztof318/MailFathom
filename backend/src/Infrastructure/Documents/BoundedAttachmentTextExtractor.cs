@@ -124,14 +124,16 @@ internal sealed class BoundedAttachmentTextExtractor(
     /// <summary>States whether octets a package format was expected in are an OLE compound file instead.</summary>
     /// <remarks>
     /// <para>
-    /// A password-protected <c>.docx</c>, <c>.xlsx</c>, <c>.pptx</c>, or OpenDocument file is not an archive at all:
-    /// the package is encrypted whole and wrapped in an OLE compound file, which opens with the eight octets this
-    /// reads. Without the check the archive reader refuses those octets and the answer is <c>Malformed</c>, which tells
-    /// an owner their document is broken when what it is is locked — different facts with different remedies.
+    /// A password-protected <c>.docx</c>, <c>.xlsx</c>, or <c>.pptx</c> is not an archive at all: the package is
+    /// encrypted whole and wrapped in an OLE compound file, which opens with the eight octets this reads. Without the
+    /// check the archive reader refuses those octets and the answer is <c>Malformed</c>, which tells an owner their
+    /// document is broken when what it is is locked — different facts with different remedies. A protected
+    /// OpenDocument package is the other shape and is not reached from here: it stays an ordinary zip and declares the
+    /// fact in its manifest, which <see cref="OpenDocumentAttachmentTextReader" /> is what reads.
     /// </para>
     /// <para>
     /// What the signature cannot tell apart is a legacy binary document that arrived under a package format's name,
-    /// which recognition admits because it falls back to the file name where the media type says nothing: a renamed
+    /// which recognition admits because it falls back to the file name for every media type it does not know: a renamed
     /// <c>.doc</c> is a compound file too and is reported here as <c>Encrypted</c>. Both answers already mean the text
     /// was not read, so the cost is the reason an owner is given rather than the outcome, and separating them needs
     /// the compound file's own directory walked for the stream an encrypted package stores its payload in. That is
