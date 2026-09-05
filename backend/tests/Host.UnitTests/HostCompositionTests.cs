@@ -181,6 +181,12 @@ public sealed class HostCompositionTests
                 .. ChatEndpoint,
                 new("Chat:RelevanceFilter:Enabled", "true"),
             ],
+            ["images described in words"] =
+            [
+                .. EmbeddingChain,
+                .. ChatEndpoint,
+                new("Embeddings:ImageDescription:Enabled", "true"),
+            ],
             ["content stored in a bucket"] = ObjectStorageBackend,
             ["secret scanning"] =
             [
@@ -218,6 +224,7 @@ public sealed class HostCompositionTests
                 .. EmbeddingChain,
                 .. ChatEndpoint,
                 new("Chat:RelevanceFilter:Enabled", "true"),
+                new("Embeddings:ImageDescription:Enabled", "true"),
                 new("SensitiveContent:Secrets:Enabled", "true"),
                 new("SensitiveContent:Pii:Enabled", "true"),
                 new("SensitiveContent:PersonalDataAnalyzer:Endpoint", "http://analyzer.example.test:5001"),
@@ -465,6 +472,55 @@ public sealed class HostCompositionTests
             setting => Assert.Contains(
                 validationFailure.Failures,
                 failure => failure.StartsWith(setting, StringComparison.Ordinal)));
+    }
+
+    /// <summary>
+    /// A grid ceiling outside the documented range is refused while the services are being registered, with the section
+    /// named. Composition reads the value to decide which describer it registers, so a rule left to
+    /// <c>ValidateOnStart</c> would run strictly afterwards and the deployment would meet an argument guard instead.
+    /// </summary>
+    [Theory]
+    [InlineData("0")]
+    [InlineData("-1")]
+    [InlineData("1000000001")]
+    public void Compose_WithAnImageGridCeilingOutsideTheDocumentedRange_RefusesTheDeployment(string maxPixels)
+    {
+        // Arrange
+        var builder = ConfiguredBuilder(
+            "images described in words",
+            [new("Embeddings:ImageDescription:MaxPixels", maxPixels)]);
+
+        // Act
+        var refusal = Record.Exception(() => HostComposition.Compose(builder));
+
+        // Assert
+        var validationFailure = Assert.IsType<OptionsValidationException>(refusal);
+        Assert.Contains(
+            validationFailure.Failures,
+            failure => failure.StartsWith("Embeddings:ImageDescription:MaxPixels", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A chat endpoint declared to carry no image cannot be the one describing image attachments. Without this the
+    /// describer is registered against a ceiling of zero and answers every picture in the mailbox with
+    /// <c>ImageTooLarge</c>, which reads as a property of the pictures rather than as the declaration it is.
+    /// </summary>
+    [Fact]
+    public void Compose_WithImageDescriptionOnAndAChatEndpointCarryingNoImage_RefusesTheDeployment()
+    {
+        // Arrange
+        var builder = ConfiguredBuilder(
+            "images described in words",
+            [new("Chat:MaxRequestImageOctets", "0")]);
+
+        // Act
+        var refusal = Record.Exception(() => HostComposition.Compose(builder));
+
+        // Assert
+        var validationFailure = Assert.IsType<OptionsValidationException>(refusal);
+        Assert.Contains(
+            validationFailure.Failures,
+            failure => failure.StartsWith("Chat:MaxRequestImageOctets", StringComparison.Ordinal));
     }
 
     /// <summary>

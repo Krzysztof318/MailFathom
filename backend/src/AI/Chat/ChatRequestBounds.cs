@@ -18,12 +18,14 @@ internal static class ChatRequestBounds
     /// <param name="conversation">The turns the caller asked to send.</param>
     /// <param name="maximumMessages">The greatest number of turns one request carries.</param>
     /// <param name="maximumCharacters">The greatest number of characters those turns may add up to.</param>
+    /// <param name="maximumImageOctets">The greatest number of octets the images of those turns may add up to, which zero states as no image at all.</param>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="conversation" /> is <see langword="null" />.</exception>
-    /// <exception cref="ArgumentException">Thrown when the conversation is empty, holds a blank turn, or exceeds either bound.</exception>
+    /// <exception cref="ArgumentException">Thrown when the conversation is empty, holds a blank turn, or exceeds any bound.</exception>
     public static void Require(
         IReadOnlyList<ChatMessage> conversation,
         int maximumMessages,
-        int maximumCharacters)
+        int maximumCharacters,
+        int maximumImageOctets)
     {
         ArgumentNullException.ThrowIfNull(conversation);
 
@@ -44,6 +46,25 @@ internal static class ChatRequestBounds
         if (conversation.Any(turn => string.IsNullOrWhiteSpace(turn.Text)))
         {
             throw new ArgumentException("A turn to send is not blank.", nameof(conversation));
+        }
+
+        // Refused rather than dropped, and named apart from the octet ceiling below, because an endpoint declaring no
+        // image budget is a text-only model: sending it a picture is a request it rejects, and silently sending the
+        // turn without its picture would ask the model about something it was never shown.
+        if (maximumImageOctets == 0 && conversation.Any(turn => turn.Image is not null))
+        {
+            throw new ArgumentException("This endpoint is declared to carry no image.", nameof(conversation));
+        }
+
+        var imageOctetCount = conversation.Sum(turn => (long)(turn.Image?.Content.Length ?? 0));
+
+        if (imageOctetCount > maximumImageOctets)
+        {
+            // A size, exactly as the character count below is, and safe to name for the same reason: it says how much
+            // was carried without saying any of what was in it.
+            throw new ArgumentException(
+                $"A call sends at most {maximumImageOctets} image octets, and this one carries {imageOctetCount}.",
+                nameof(conversation));
         }
 
         var characterCount = conversation.Sum(turn => (long)turn.Text.Length);

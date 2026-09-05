@@ -64,6 +64,7 @@ internal static class ChatProviderContractSettings
             Environment.GetEnvironmentVariable(ReasoningEffortVariable) is { Length: > 0 } effort ? effort : null,
             maximumMessagesPerRequest: 8,
             maximumRequestCharacters: 8000,
+            maximumRequestImageOctets: 4 * 1024 * 1024,
             requestTimeout: TimeSpan.FromSeconds(60));
     }
 

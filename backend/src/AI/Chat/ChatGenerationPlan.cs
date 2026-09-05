@@ -40,6 +40,7 @@ public sealed partial class ChatGenerationPlan
         string? reasoningEffort,
         int maximumMessagesPerRequest,
         int maximumRequestCharacters,
+        int maximumRequestImageOctets,
         TimeSpan requestTimeout)
     {
         this.Endpoint = endpoint;
@@ -49,6 +50,7 @@ public sealed partial class ChatGenerationPlan
         this.ReasoningEffort = reasoningEffort;
         this.MaximumMessagesPerRequest = maximumMessagesPerRequest;
         this.MaximumRequestCharacters = maximumRequestCharacters;
+        this.MaximumRequestImageOctets = maximumRequestImageOctets;
         this.RequestTimeout = requestTimeout;
     }
 
@@ -101,6 +103,22 @@ public sealed partial class ChatGenerationPlan
     /// </remarks>
     public int MaximumRequestCharacters { get; }
 
+    /// <summary>Gets the greatest number of octets the images of one request may add up to.</summary>
+    /// <remarks>
+    /// <para>
+    /// The second bound on what leaves the deployment, in the unit a picture is measured in. Characters do not bound an
+    /// image at all — a photograph is one turn of a few words and several megabytes — so a conversation carrying one
+    /// would pass a character ceiling and then be refused by the provider after this deployment had built the request,
+    /// encoded the octets, and sent them.
+    /// </para>
+    /// <para>
+    /// Stated as the octets the image occupies rather than as what the request body ends up being. Every provider this
+    /// adapter reaches carries an image base64-encoded, which is a third larger again, so the figure a provider
+    /// publishes as its own limit is the one to set this below rather than to match.
+    /// </para>
+    /// </remarks>
+    public int MaximumRequestImageOctets { get; }
+
     /// <summary>Gets the time one request may take before it is abandoned.</summary>
     public TimeSpan RequestTimeout { get; }
 
@@ -112,11 +130,12 @@ public sealed partial class ChatGenerationPlan
     /// <param name="reasoningEffort">The reasoning effort every call states, or <see langword="null" /> to send none.</param>
     /// <param name="maximumMessagesPerRequest">The greatest number of turns one request carries.</param>
     /// <param name="maximumRequestCharacters">The greatest number of characters those turns may add up to.</param>
+    /// <param name="maximumRequestImageOctets">The greatest number of octets the images of those turns may add up to, which zero states as an endpoint sent no image at all.</param>
     /// <param name="requestTimeout">The time one request may take.</param>
     /// <returns>The plan.</returns>
     /// <exception cref="ArgumentNullException">Thrown when <paramref name="endpoint" /> is <see langword="null" />.</exception>
     /// <exception cref="ArgumentException">Thrown when the endpoint declares a blank alias or a blank routed model name.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when a bound is not positive, a sampling parameter is outside the range every provider accepts, or the endpoint's API or the reasoning effort names no declared value.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when a bound other than <paramref name="maximumRequestImageOctets" /> is not positive, when that one is negative, when a sampling parameter is outside the range every provider accepts, or when the endpoint's API or the reasoning effort names no declared value.</exception>
     public static ChatGenerationPlan Create(
         ChatEndpoint endpoint,
         int maximumOutputTokens,
@@ -125,6 +144,7 @@ public sealed partial class ChatGenerationPlan
         string? reasoningEffort,
         int maximumMessagesPerRequest,
         int maximumRequestCharacters,
+        int maximumRequestImageOctets,
         TimeSpan requestTimeout)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
@@ -133,6 +153,10 @@ public sealed partial class ChatGenerationPlan
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumOutputTokens);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumMessagesPerRequest);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maximumRequestCharacters);
+
+        // Zero is a declaration rather than an omission: it says this endpoint is sent no image at all, which is the
+        // right state for a text-only model and is why this bound alone admits it.
+        ArgumentOutOfRangeException.ThrowIfNegative(maximumRequestImageOctets);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(requestTimeout, TimeSpan.Zero);
 
         RequireSamplingParameterInRange(temperature, nameof(temperature), greatest: 2f);
@@ -162,6 +186,7 @@ public sealed partial class ChatGenerationPlan
             reasoningEffort,
             maximumMessagesPerRequest,
             maximumRequestCharacters,
+            maximumRequestImageOctets,
             requestTimeout);
     }
 

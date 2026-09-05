@@ -247,11 +247,24 @@ classifies this group as reloadable for new operations and states the rules a re
 
 ## Bounds every call carries
 
+A turn is text, and it may carry one picture beside that text. What decides whether a format may be sent, how large a
+grid it may declare, and what the model is being asked about it belongs to whoever composed the turn; what this boundary
+owns is the ceiling below on how many octets one request carries. An audio clip and a tool result are capabilities
+rather than shapes this port is missing, and each waits for the caller that needs it.
+
 - **A conversation bound.** `MaxMessagesPerRequest` and `MaxRequestCharacters` are checked before anything is sent. Both
   are refusals rather than truncations: cutting a conversation down to fit would send the model a different question
   from the one it was given and return an answer to that, which no caller could detect. The character ceiling is stated
   in characters rather than tokens because counting tokens would mean carrying the model's own tokenizer; set it below
   what the model's context window allows.
+- **An image bound.** `MaxRequestImageOctets` bounds the octets the pictures of one request add up to, and is a
+  refusal like the two above. Characters bound an image not at all — a photograph is a turn of a few words and several
+  megabytes — so a conversation carrying one would pass a character ceiling and then be refused by the provider after
+  this deployment had built the request, encoded the octets, and sent them. It is counted as the octets the image
+  occupies rather than as what the request body becomes: every provider this reaches carries an image base64-encoded,
+  which is a third larger again, so the figure a provider publishes for itself is the one to set this below. Writing `0`
+  declares an endpoint that is sent no image at all, which is the right declaration for a model that cannot read one and
+  is a refusal rather than a turn quietly sent without its picture.
 - **An explicit timeout.** `RequestTimeout` bounds one request, applied by MailFathom rather than left to whatever the
   provider library defaults to. A deadline that expires is reported as a timeout rather than as a cancellation, because
   a cancellation would tell the pipeline that this system stopped the work. Its default is longer than an embedding
@@ -269,7 +282,10 @@ classifies this group as reloadable for new operations and states the rules a re
   sent, above the retry layer, so one call costs one scan whatever the pipeline does and a scanner that cannot answer
   refuses the call as itself rather than arriving as a fault of the provider's. Both switches are off by default, and
   nothing is scanned then. [Sensitive-content scanning § the guarded egress
-  points](sensitive-content-scanning.md#the-guarded-egress-points) holds the contract.
+  points](sensitive-content-scanning.md#the-guarded-egress-points) holds the contract. **A picture passes through unscanned**, and that is
+  the honest position rather than an omission: the guard detects regions in a string, there is no such operation for a
+  photograph, and running the octets through a scan that would return them unchanged would claim a protection nobody
+  has. What decides whether an image leaves at all is the deployment's own activation of whatever composed the turn.
 
 ## An answer that was cut short is still an answer
 

@@ -3,6 +3,7 @@
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
 using System.ComponentModel.DataAnnotations;
+using MailFathom.AI.Descriptions;
 using MailFathom.Host.Configuration.Answering;
 using MailFathom.Host.Configuration.Embeddings;
 using MailFathom.Host.Configuration.Providers;
@@ -18,9 +19,10 @@ namespace MailFathom.Host.Configuration.Chat;
 /// nothing proved.
 /// </para>
 /// <para>
-/// Two of the rules span sections and neither options type can see both sides, which is why they are reached from here
-/// rather than from <see cref="ChatModelOptions.Validate" />: the alias must not repeat one an embedding endpoint
-/// declares, and the relevance filter must not name more candidates than a retrieval hands over.
+/// Several of the rules span sections and neither options type can see both sides, which is why they are reached from
+/// here rather than from <see cref="ChatModelOptions.Validate" />: the alias must not repeat one an embedding endpoint
+/// declares, the relevance filter must not name more candidates than a retrieval hands over, and a deployment
+/// describing image attachments must declare an endpoint that can carry the conversation one description composes.
 /// </para>
 /// </remarks>
 internal static class ChatDeclarationRules
@@ -61,7 +63,46 @@ internal static class ChatDeclarationRules
             errors.Add(ProviderEndpointAliases.DescribeReusedAlias(reusedAlias));
         }
 
+        // Three bounds are legal declarations on their own and mistakes only beside the one feature whose whole request
+        // is fixed and known. Refused here rather than left to the describer, because what an operator would otherwise
+        // meet is a start that succeeds and a background run that faults, or ImageTooLarge stamped on every picture in
+        // the mailbox — both of which read as properties of the mail rather than as the declaration they are.
+        if (embeddings?.ImageDescription.Enabled is true)
+        {
+            errors.AddRange(FindImageDescriptionErrors(candidate));
+        }
+
         return errors;
+    }
+
+    /// <summary>Reports what this declaration would refuse about the conversation an image description composes.</summary>
+    /// <remarks>
+    /// The conversation is two turns and a fixed instruction whatever the picture is, so every one of these is decidable
+    /// at startup. The alternative is a deployment that starts cleanly and then raises an <c>ArgumentException</c> out
+    /// of the chat boundary on every attachment it admitted, against a contract that promises one of nine reasons.
+    /// </remarks>
+    private static IEnumerable<string> FindImageDescriptionErrors(ChatModelOptions candidate)
+    {
+        var turnOff =
+            $"turn {EmbeddingOptions.SectionName}:{nameof(EmbeddingOptions.ImageDescription)}:{nameof(EmbeddingImageDescriptionOptions.Enabled)} off";
+
+        if (candidate.MaxRequestImageOctets == 0)
+        {
+            yield return
+                $"{ChatModelOptions.SectionName}:{nameof(ChatModelOptions.MaxRequestImageOctets)} — a chat endpoint declared to carry no image cannot be the one describing image attachments. Either raise this above zero, or {turnOff}.";
+        }
+
+        if (candidate.MaxMessagesPerRequest < ImageDescriptionInstructions.TurnsPerRequest)
+        {
+            yield return
+                $"{ChatModelOptions.SectionName}:{nameof(ChatModelOptions.MaxMessagesPerRequest)} — describing an image sends {ImageDescriptionInstructions.TurnsPerRequest} turns, the instruction and the picture. Either raise this to {ImageDescriptionInstructions.TurnsPerRequest}, or {turnOff}.";
+        }
+
+        if (candidate.MaxRequestCharacters < ImageDescriptionInstructions.SmallestRequestCharacters)
+        {
+            yield return
+                $"{ChatModelOptions.SectionName}:{nameof(ChatModelOptions.MaxRequestCharacters)} — the instruction an image description carries is {ImageDescriptionInstructions.SmallestRequestCharacters} characters before any picture. Either raise this to at least that, or {turnOff}.";
+        }
     }
 
     /// <summary>Reports what a reloaded declaration changed that composition already acted on.</summary>

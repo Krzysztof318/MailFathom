@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.AI.Descriptions;
 using MailFathom.Host.Configuration.Answering;
 using MailFathom.Host.Configuration.Chat;
 using MailFathom.Host.Configuration.Embeddings;
@@ -34,6 +35,83 @@ public sealed class ChatDeclarationRulesTests
     {
         // Act
         var errors = ChatDeclarationRules.FindDeclarationErrors(null, null, new MailAnsweringOptions());
+
+        // Assert
+        Assert.Empty(errors);
+    }
+
+    /// <summary>A chat endpoint declared to carry no image is refused beside the one feature whose whole request is a picture.</summary>
+    /// <remarks>
+    /// Zero is a supported declaration on its own — a text-only model carries it — so the rule spans the two sections
+    /// rather than sitting on either. Without it the describer answers every picture in the mailbox with
+    /// <c>ImageTooLarge</c>, which names the pictures rather than the declaration.
+    /// </remarks>
+    [Fact]
+    public void FindDeclarationErrors_ImageDescriptionOnBesideAZeroImageBudget_NamesTheKeyAnOperatorEdits()
+    {
+        // Arrange
+        var candidate = Declared();
+        candidate.MaxRequestImageOctets = 0;
+        var embeddings = new EmbeddingOptions { ImageDescription = { Enabled = true } };
+
+        // Act
+        var errors = ChatDeclarationRules.FindDeclarationErrors(candidate, embeddings, new MailAnsweringOptions());
+
+        // Assert
+        Assert.Contains(
+            errors,
+            error => error.StartsWith("Chat:MaxRequestImageOctets", StringComparison.Ordinal));
+    }
+
+    /// <summary>A description sends two turns whatever the picture is, so an endpoint admitting one cannot carry it.</summary>
+    [Fact]
+    public void FindDeclarationErrors_ImageDescriptionOnBesideAOneTurnEndpoint_NamesTheKeyAnOperatorEdits()
+    {
+        // Arrange
+        var candidate = Declared();
+        candidate.MaxMessagesPerRequest = 1;
+        var embeddings = new EmbeddingOptions { ImageDescription = { Enabled = true } };
+
+        // Act
+        var errors = ChatDeclarationRules.FindDeclarationErrors(candidate, embeddings, new MailAnsweringOptions());
+
+        // Assert
+        Assert.Contains(
+            errors,
+            error => error.StartsWith("Chat:MaxMessagesPerRequest", StringComparison.Ordinal));
+    }
+
+    /// <summary>The instruction is fixed, so an endpoint admitting fewer characters than it occupies refuses every description.</summary>
+    [Fact]
+    public void FindDeclarationErrors_ImageDescriptionOnBesideAnEndpointTooNarrowForTheInstruction_NamesTheKeyAnOperatorEdits()
+    {
+        // Arrange
+        var candidate = Declared();
+        candidate.MaxRequestCharacters = ImageDescriptionInstructions.SmallestRequestCharacters - 1;
+        var embeddings = new EmbeddingOptions { ImageDescription = { Enabled = true } };
+
+        // Act
+        var errors = ChatDeclarationRules.FindDeclarationErrors(candidate, embeddings, new MailAnsweringOptions());
+
+        // Assert
+        Assert.Contains(
+            errors,
+            error => error.StartsWith("Chat:MaxRequestCharacters", StringComparison.Ordinal));
+    }
+
+    /// <summary>Each of the three bounds is a legal declaration on its own — a text-only endpoint carries all three — so nothing refuses one where description is off.</summary>
+    [Fact]
+    public void FindDeclarationErrors_TheImageDescriptionBoundsWithThatFeatureOff_ReportsNothing()
+    {
+        // Arrange
+        var candidate = Declared();
+        candidate.MaxRequestImageOctets = 0;
+        candidate.MaxMessagesPerRequest = 1;
+        candidate.MaxRequestCharacters = 1;
+        var embeddings = new EmbeddingOptions { ImageDescription = { Enabled = false } };
+
+        // Act
+        var errors = ChatDeclarationRules.FindDeclarationErrors(candidate, embeddings, new MailAnsweringOptions());
 
         // Assert
         Assert.Empty(errors);

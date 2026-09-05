@@ -123,6 +123,25 @@ internal sealed class ChatModelOptions : IValidatableObject, IProviderEndpointRe
     [Range(1, 4_000_000)]
     public int MaxRequestCharacters { get; set; } = 120_000;
 
+    /// <summary>Gets or sets the greatest number of octets the images of one request may add up to, or zero for a model that is sent none.</summary>
+    /// <remarks>
+    /// <para>
+    /// The second bound on what leaves the deployment, in the unit a picture is measured in: characters bound an image
+    /// not at all, because a photograph is a turn of a few words and several megabytes. Four mebibytes admits every
+    /// photograph a phone or a scanner attaches, and is set below the figure the providers this reaches publish for
+    /// themselves — each of them carries an image base64-encoded, which is a third larger again than what is counted
+    /// here.
+    /// </para>
+    /// <para>
+    /// Zero says this endpoint is sent no image, which is the right declaration for a model that cannot read one, and
+    /// is a refusal at the boundary rather than a turn quietly sent without its picture. It is not the setting that
+    /// turns image description off — that is <c>Embeddings:ImageDescription:Enabled</c>, and this one bounds what any
+    /// caller carrying a picture may send.
+    /// </para>
+    /// </remarks>
+    [Range(0, 64 * 1024 * 1024)]
+    public int MaxRequestImageOctets { get; set; } = 4 * 1024 * 1024;
+
     /// <summary>Gets or sets the time one request may take before it is abandoned.</summary>
     /// <remarks>Longer than an embedding request's by default, because generating an answer takes as long as the answer is and an embedding call returns a fixed block of numbers.</remarks>
     public TimeSpan RequestTimeout { get; set; } = TimeSpan.FromSeconds(120);

@@ -861,6 +861,15 @@ internal static class HostComposition
             builder.Services.AddHealthChecks()
                 .Add(AiProviderHealthCheck.RegistrationFor(AiProviderRole.Chat));
         }
+
+        // Outside both blocks and always registered, because the port answers with a reason rather than by being
+        // absent. Describing needs both decisions to have been taken — an endpoint that can be shown a picture, and an
+        // operator who said pictures may leave — so an instance missing either describes nothing and says which.
+        builder.Services.AddImageAttachmentDescription(
+            declaredChat?.IsConfigured is true && declaredEmbeddings?.ImageDescription.Enabled is true
+                ? declaredEmbeddings.ImageDescription.MaxPixels
+                : null);
+
         builder.Services.AddInfrastructure(
             provider => provider.GetRequiredService<DatabaseConnectionSettingsMapper>()
                 .Map(provider.GetRequiredService<ISettingsSnapshot<PersistenceOptions>>().Current),

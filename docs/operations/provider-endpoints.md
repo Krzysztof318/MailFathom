@@ -45,6 +45,13 @@ decision this page exists to inform rather than one it makes. [What leaves your 
 ask](../users/usage.md#what-leaves-your-instance-when-you-ask) states it from the reader's side, and a server the
 operator runs themselves is the entry that answers it differently.
 
+**A chat endpoint may also be sent an image attachment whole, and only if the operator turned that on separately.**
+`Embeddings:ImageDescription:Enabled` is off by default and is the whole of the control, because the sensitive-content
+guard every outbound turn's text passes through detects regions in a string and there is no such operation for a
+photograph — so the octets of a picture leave unscanned, and a photograph of a document discloses the document. Nothing
+here turns it on for a deployment, and an operator choosing a chat endpoint for `ask_mail` has not thereby chosen to
+send it pictures. [AI configuration](configuration-ai.md#embeddings) records what is sent, what is refused, and what the ceilings bound.
+
 ## What "checked" means here
 
 Each entry says which of two kinds of evidence it rests on, because they are not the same claim:

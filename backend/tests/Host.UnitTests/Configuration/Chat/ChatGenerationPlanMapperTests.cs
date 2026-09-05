@@ -28,6 +28,7 @@ public sealed class ChatGenerationPlanMapperTests
             ReasoningEffort = "high",
             MaxMessagesPerRequest = 12,
             MaxRequestCharacters = 60_000,
+            MaxRequestImageOctets = 2_000_000,
             RequestTimeout = TimeSpan.FromSeconds(90),
             ApiKey = new ConfiguredSecret { SecretReference = "env:CHAT_KEY" },
         };
@@ -46,6 +47,7 @@ public sealed class ChatGenerationPlanMapperTests
         Assert.Equal("high", plan.ReasoningEffort);
         Assert.Equal(12, plan.MaximumMessagesPerRequest);
         Assert.Equal(60_000, plan.MaximumRequestCharacters);
+        Assert.Equal(2_000_000, plan.MaximumRequestImageOctets);
         Assert.Equal(TimeSpan.FromSeconds(90), plan.RequestTimeout);
     }
 

@@ -140,7 +140,8 @@ internal sealed class MailAnsweringAgent : IMailQuestionAnswerer
         ChatRequestBounds.Require(
             [new ChatMessage(ChatRole.User, question.Text.Value)],
             this.plan.MaximumMessagesPerRequest,
-            this.plan.MaximumRequestCharacters);
+            this.plan.MaximumRequestCharacters,
+            this.plan.MaximumRequestImageOctets);
 
         var runLedger = new MailAnsweringRunLedger(this.runBounds);
         var retrieval = new ScopedMailKnowledgeRetrieval(
