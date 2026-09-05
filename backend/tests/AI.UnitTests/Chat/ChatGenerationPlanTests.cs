@@ -140,6 +140,7 @@ public sealed class ChatGenerationPlanTests
             reasoningEffort: null,
             maximumMessagesPerRequest: 8,
             maximumRequestCharacters: 4000,
+            maximumRequestImageOctets: 1024,
             requestTimeout: TimeSpan.FromSeconds(5)));
     }
 
@@ -202,6 +203,7 @@ public sealed class ChatGenerationPlanTests
             reasoningEffort: null,
             maximumMessagesPerRequest: 8,
             maximumRequestCharacters: 4000,
+            maximumRequestImageOctets: 1024,
             requestTimeout: TimeSpan.Zero));
     }
 }

@@ -181,6 +181,12 @@ public sealed class HostCompositionTests
                 .. ChatEndpoint,
                 new("Chat:RelevanceFilter:Enabled", "true"),
             ],
+            ["images described in words"] =
+            [
+                .. EmbeddingChain,
+                .. ChatEndpoint,
+                new("Embeddings:ImageDescription:Enabled", "true"),
+            ],
             ["content stored in a bucket"] = ObjectStorageBackend,
             ["secret scanning"] =
             [
@@ -218,6 +224,7 @@ public sealed class HostCompositionTests
                 .. EmbeddingChain,
                 .. ChatEndpoint,
                 new("Chat:RelevanceFilter:Enabled", "true"),
+                new("Embeddings:ImageDescription:Enabled", "true"),
                 new("SensitiveContent:Secrets:Enabled", "true"),
                 new("SensitiveContent:Pii:Enabled", "true"),
                 new("SensitiveContent:PersonalDataAnalyzer:Endpoint", "http://analyzer.example.test:5001"),

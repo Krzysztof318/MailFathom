@@ -15,6 +15,11 @@ namespace MailFathom.AI.ProviderAdapters;
 /// The mapping is total in one direction only. Every role this system publishes has a provider counterpart, and the
 /// provider's own extra roles have none here — a tool turn in particular, which this boundary neither sends nor accepts.
 /// </para>
+/// <para>
+/// A turn carrying a picture becomes two content parts rather than one, text first, because that is the order the model
+/// reads them in: the instruction is what the picture is being shown for, and a provider given the octets first is
+/// given them before it has been told what to do with them.
+/// </para>
 /// </remarks>
 internal static class ChatConversationMapping
 {
@@ -28,9 +33,26 @@ internal static class ChatConversationMapping
     {
         ArgumentNullException.ThrowIfNull(conversation);
 
-        return [.. conversation.Select(static turn => new Microsoft.Extensions.AI.ChatMessage(
-            ToProviderRole(turn.Role),
-            turn.Text))];
+        return [.. conversation.Select(static turn => ToProviderMessage(turn))];
+    }
+
+    private static Microsoft.Extensions.AI.ChatMessage ToProviderMessage(Application.Chat.ChatMessage turn)
+    {
+        var role = ToProviderRole(turn.Role);
+
+        if (turn.Image is not { } image)
+        {
+            return new Microsoft.Extensions.AI.ChatMessage(role, turn.Text);
+        }
+
+        // The media type is the one read from the octets by whoever composed the turn, never the one an attachment
+        // declared, so the provider is told what it is actually about to decode.
+        return new Microsoft.Extensions.AI.ChatMessage(
+            role,
+            [
+                new Microsoft.Extensions.AI.TextContent(turn.Text),
+                new Microsoft.Extensions.AI.DataContent(image.Content, image.MediaType),
+            ]);
     }
 
     private static Microsoft.Extensions.AI.ChatRole ToProviderRole(Application.Chat.ChatRole role) => role switch

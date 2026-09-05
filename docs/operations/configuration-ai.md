@@ -1,6 +1,6 @@
 # AI configuration
 
-<!-- describes: backend/src/Host/Configuration/Embeddings/**, backend/src/Host/Configuration/Chat/**, backend/src/Host/Configuration/Answering/**, backend/src/Host/Configuration/Spam/**, backend/src/Host/Configuration/SensitiveContent/**, backend/src/Host/Configuration/Providers/** -->
+<!-- describes: backend/src/Host/Configuration/Embeddings/**, backend/src/Host/Configuration/Chat/**, backend/src/Host/Configuration/Answering/**, backend/src/Host/Configuration/Spam/**, backend/src/Host/Configuration/SensitiveContent/**, backend/src/Host/Configuration/Providers/**, backend/src/AI/Descriptions/**, backend/src/Application/Emails/Extraction/Images/** -->
 
 Every key deciding what leaves this process for a model provider and what it may cost: what is scanned before it goes,
 which endpoint and model each capability reaches, what one question and one period may spend, what classification does
@@ -338,6 +338,58 @@ the number.
 resilience](../architecture/outbound-resilience.md) holds it, and a second limiter beside it would make two keys answer
 for one behaviour.
 
+### Describing an image attachment — `Embeddings:ImageDescription`
+
+**Off, and off is what a deployment that has not read this gets.** With it on, an image attachment may be sent whole to
+the declared chat endpoint, which writes down what the picture shows in ordinary text. A photograph of a document
+discloses the document, so this is a disclosure at least as large as sending message text for embedding — and it is the
+one egress in this system that **no content scan covers**, because the sensitive-content guard detects regions in a
+string and there is no such operation for a picture. The operator's decision here is the whole of the control, which is
+why nothing turns it on for you.
+
+It needs a chat endpoint as well as this key. An instance that declared none describes nothing whatever this says, and
+reports that as the reason rather than as a failure.
+
+**A picture carrying words is transcribed rather than described.** Most image attachments in mail are scans,
+photographed pages, screenshots, and receipts, and what somebody searching for one of those types is a number, a date,
+or a name printed on it — never "a scanned invoice". So the instruction asks for the text itself, read out in full and
+in order with its numbers and identifiers unchanged, and leaves the description to whatever the text does not already
+say. That is the model reading what it was shown; nothing here rasterizes a page or reaches a recognition engine, so a
+model that cannot read the page writes what it can see instead, and a dedicated OCR step for documents nothing else
+reads stays worth having.
+
+**What has landed is the mechanism and its bounds**: the port that turns one image attachment into text or into a
+recorded reason, the allow-list, the size and grid ceilings, and this switch. Nothing offers an attachment to it yet, so
+turning it on changes no behaviour today and sends nothing; what a description becomes once it is produced — a passage,
+an embedding, a place in a ranked result —
+is [ADR 0030](https://github.com/Krzysztof318/MailFathom/blob/main/docs/decisions/0030-describing-an-image-attachment-in-words-and-ranking-a-depicted-match-below-a-written-one.md)
+and is not delivered.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `Embeddings:ImageDescription:Enabled` | bool | `false` | with it off nothing is read and nothing is sent; with it on, and a chat endpoint declared, an image attachment's octets leave the deployment | restart |
+| `Embeddings:ImageDescription:MaxPixels` | long | `40000000` | 1 – 1000000000; the largest pixel grid an image may **declare** and still be sent | restart |
+
+**What is sent and what is refused.** The allow-list is deliberately short — PNG, JPEG, WebP, and GIF — and membership
+is decided from the octets rather than from the media type the sender wrote, so a part naming one format and carrying
+another is judged on what it carries. Everything else is refused with a reason recorded against the attachment: a
+format outside the list, a file larger than `Chat:MaxRequestImageOctets`, a grid larger than `MaxPixels`, a header that
+does not hold the format it claims, and a provider that timed out, was unavailable, or refused.
+
+**SVG is excluded by name rather than left unsupported.** It is XML a renderer executes as a document, with script and
+external references available to whoever composed it, and nothing here is a renderer with a security team behind it. A
+part declaring `image/svg+xml` is refused before its octets are read; a part declaring anything else and carrying
+markup is refused when they are.
+
+**`MaxPixels` is the decompression-bomb bound, and it is stated in pixels because a file's size does not bound one.** A
+compressed image of a few kilobytes may declare a grid of billions, and what a decoder then allocates follows the grid.
+MailFathom never decodes an image — it reads the header and forwards the octets — so what this protects is the provider
+that does, and a grid this deployment would not have decoded is not one to make somebody else decode either. Forty
+megapixels is well past any camera a person attaches a photograph from.
+
+Describing runs in the background, after a message is stored, and never on a read path: a tool call and a client
+request never wait on a provider describing a picture.
+
 ### One endpoint — `Embeddings:Endpoints:<n>`
 
 An ordered chain. Every entry declares the same geometry and reaches the same vector space, so a failing endpoint
@@ -429,6 +481,7 @@ was found to serve.
 | `Chat:ReasoningEffort` | string | *(unset)* | the level the model documents, written as the provider spells it — `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, or whatever a later model adds. Unset sends no reasoning parameter at all, which a model that does not reason requires. `none` is not the same as unset — it states an effort of none and sends it, which is what a provider refusing tools beside an unstated effort asks for. Startup checks the shape and not the vocabulary, because which levels exist belongs to the model; a level this deployment's model does not accept refuses the request rather than falling back | reload |
 | `Chat:MaxMessagesPerRequest` | int | `64` | 1 – 512; the turns one request carries, refused rather than truncated | reload |
 | `Chat:MaxRequestCharacters` | int | `120000` | 1 – 4000000; what those turns may add up to. Stated in characters rather than tokens because counting tokens would mean carrying the model's own tokenizer; set it below what the model's context window allows | reload |
+| `Chat:MaxRequestImageOctets` | int | `4194304` | 0 – 67108864; the octets the images of one request may add up to. `0` declares an endpoint that is sent no image at all, which is right for a model that cannot read one. Providers carry an image base64-encoded, a third larger again, so set this below the figure a provider publishes for itself | reload |
 | `Chat:RequestTimeout` | TimeSpan | `00:02:00` | positive; one request. Longer than an embedding request's by default, because generating an answer takes as long as the answer is | reload |
 | `Chat:ApiKey` | secret block | *(absent)* | the provider key. Exactly one of this, `EntraCredential`, and `Unauthenticated` is declared | reload, value read per request |
 | `Chat:Unauthenticated` | bool | `false` | that this endpoint asks for no credential, so a request presents none — the shape of a model server you run yourself. Written rather than inferred from the other two being absent, because that is what a forgotten key reference looks like | reload |

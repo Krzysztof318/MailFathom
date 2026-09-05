@@ -98,7 +98,8 @@ internal sealed class ProviderChatModelClient : IChatModelClient
         ChatRequestBounds.Require(
             conversation,
             this.plan.MaximumMessagesPerRequest,
-            this.plan.MaximumRequestCharacters);
+            this.plan.MaximumRequestCharacters,
+            this.plan.MaximumRequestImageOctets);
 
         var guarded = await this.GuardedAsync(conversation, cancellationToken);
 
@@ -138,6 +139,12 @@ internal sealed class ProviderChatModelClient : IChatModelClient
     /// longer — a placeholder is wider than most of what it replaces — so a conversation admitted at the boundary may
     /// be sent slightly wider than the boundary allows; cutting it afterwards would drop text a scan had just made
     /// safe, which is the wrong thing to lose.
+    /// </para>
+    /// <para>
+    /// A turn's picture passes through untouched, and that is the honest position rather than an omission. The guard
+    /// detects regions in a string; there is no such operation for a photograph, and running the octets through a scan
+    /// that would return them unchanged would claim a protection nobody has. What decides whether an image leaves at
+    /// all is the deployment's activation of whatever composed the turn.
     /// </para>
     /// </remarks>
     private async Task<IReadOnlyList<ChatMessage>> GuardedAsync(

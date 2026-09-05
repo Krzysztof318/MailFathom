@@ -565,6 +565,49 @@ public sealed class EmbeddingOptionsTests
         Assert.Contains(errors, error => error.MemberNames.Contains(nameof(EmbeddingOptions.SpendPeriod)));
     }
 
+    /// <summary>An instance that has not read the section describes nothing, which is what makes the operator's decision the whole of the control over an egress nothing scans.</summary>
+    [Fact]
+    public void ImageDescription_ADeploymentThatDeclaredNothing_DescribesNoImage()
+    {
+        // Arrange
+        var settings = new EmbeddingOptions();
+
+        // Act, Assert
+        Assert.False(settings.ImageDescription.Enabled);
+        Assert.Equal(EmbeddingImageDescriptionOptions.DefaultMaxPixels, settings.ImageDescription.MaxPixels);
+    }
+
+    /// <summary>A grid ceiling of zero or less would refuse every image while reading as a bound somebody chose, so it is refused at startup rather than met on the first photograph.</summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void Validate_AnImageGridCeilingThatIsNotPositive_IsRefused(long maxPixels)
+    {
+        // Arrange
+        var settings = new EmbeddingOptions { ImageDescription = { Enabled = true, MaxPixels = maxPixels } };
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.Contains(errors, error => error.MemberNames.Contains(nameof(EmbeddingOptions.ImageDescription)));
+    }
+
+    /// <summary>The grid ceiling is checked whether or not a chain was declared, for the reason the spend ceilings are.</summary>
+    [Fact]
+    public void Validate_AnImageGridCeilingOnAnInstanceWithNoChain_IsStillChecked()
+    {
+        // Arrange
+        var settings = new EmbeddingOptions { ImageDescription = { MaxPixels = 0 } };
+
+        // Act
+        var errors = Validate(settings);
+
+        // Assert
+        Assert.False(settings.IsConfigured);
+        Assert.Contains(errors, error => error.MemberNames.Contains(nameof(EmbeddingOptions.ImageDescription)));
+    }
+
     private static IReadOnlyList<ValidationResult> Validate(EmbeddingOptions settings) =>
         [.. settings.Validate(new ValidationContext(settings))];
 

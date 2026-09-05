@@ -8,11 +8,12 @@ using Xunit;
 
 namespace MailFathom.AI.UnitTests.Chat;
 
-/// <summary>Covers the bound on what leaves the deployment, which is checked before anything is sent.</summary>
+/// <summary>Covers the bounds on what leaves the deployment, both of which are checked before anything is sent.</summary>
 public sealed class ChatRequestBoundsTests
 {
     private const int MaximumMessages = 4;
     private const int MaximumCharacters = 100;
+    private const int MaximumImageOctets = 64;
 
     [Fact]
     public void Require_AConversationInsideBothBounds_IsAccepted()
@@ -26,7 +27,7 @@ public sealed class ChatRequestBoundsTests
 
         // Act
         var refusal = Record.Exception(
-            () => ChatRequestBounds.Require(conversation, MaximumMessages, MaximumCharacters));
+            () => ChatRequestBounds.Require(conversation, MaximumMessages, MaximumCharacters, MaximumImageOctets));
 
         // Assert
         Assert.Null(refusal);
@@ -37,7 +38,7 @@ public sealed class ChatRequestBoundsTests
     {
         // Act, Assert
         Assert.Throws<ArgumentException>(
-            () => ChatRequestBounds.Require([], MaximumMessages, MaximumCharacters));
+            () => ChatRequestBounds.Require([], MaximumMessages, MaximumCharacters, MaximumImageOctets));
     }
 
     [Fact]
@@ -45,7 +46,7 @@ public sealed class ChatRequestBoundsTests
     {
         // Act, Assert
         Assert.Throws<ArgumentNullException>(
-            () => ChatRequestBounds.Require(null!, MaximumMessages, MaximumCharacters));
+            () => ChatRequestBounds.Require(null!, MaximumMessages, MaximumCharacters, MaximumImageOctets));
     }
 
     [Fact]
@@ -61,7 +62,7 @@ public sealed class ChatRequestBoundsTests
 
         // Act, Assert
         Assert.Throws<ArgumentException>(
-            () => ChatRequestBounds.Require(conversation, MaximumMessages, MaximumCharacters));
+            () => ChatRequestBounds.Require(conversation, MaximumMessages, MaximumCharacters, MaximumImageOctets));
     }
 
     /// <summary>A provider bills for the tokens around a blank turn and the model is left guessing what it meant.</summary>
@@ -75,7 +76,7 @@ public sealed class ChatRequestBoundsTests
 
         // Act, Assert
         Assert.Throws<ArgumentException>(
-            () => ChatRequestBounds.Require(conversation, MaximumMessages, MaximumCharacters));
+            () => ChatRequestBounds.Require(conversation, MaximumMessages, MaximumCharacters, MaximumImageOctets));
     }
 
     /// <summary>The ceiling is on the whole conversation rather than on any one turn, so several small turns reach it too.</summary>
@@ -92,7 +93,7 @@ public sealed class ChatRequestBoundsTests
 
         // Act, Assert
         Assert.Throws<ArgumentException>(
-            () => ChatRequestBounds.Require(conversation, MaximumMessages, MaximumCharacters));
+            () => ChatRequestBounds.Require(conversation, MaximumMessages, MaximumCharacters, MaximumImageOctets));
     }
 
     /// <summary>The refusal reaches a log, so it carries the size of the conversation and none of its text.</summary>
@@ -108,10 +109,55 @@ public sealed class ChatRequestBoundsTests
 
         // Act
         var refusal = Assert.Throws<ArgumentException>(
-            () => ChatRequestBounds.Require(conversation, MaximumMessages, MaximumCharacters));
+            () => ChatRequestBounds.Require(conversation, MaximumMessages, MaximumCharacters, MaximumImageOctets));
 
         // Assert
         Assert.DoesNotContain(secret, refusal.Message, StringComparison.Ordinal);
         Assert.Contains(MaximumCharacters.ToString(System.Globalization.CultureInfo.InvariantCulture), refusal.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Require_AnImageInsideTheOctetCeiling_IsAccepted()
+    {
+        // Arrange
+        IReadOnlyList<ChatMessage> conversation =
+        [
+            new(ChatRole.User, "describe this", new ChatImage("image/png", new byte[MaximumImageOctets])),
+        ];
+
+        // Act
+        var refusal = Record.Exception(
+            () => ChatRequestBounds.Require(conversation, MaximumMessages, MaximumCharacters, MaximumImageOctets));
+
+        // Assert
+        Assert.Null(refusal);
+    }
+
+    [Fact]
+    public void Require_MoreImageOctetsThanOneCallSends_IsRefused()
+    {
+        // Arrange
+        IReadOnlyList<ChatMessage> conversation =
+        [
+            new(ChatRole.User, "describe this", new ChatImage("image/png", new byte[MaximumImageOctets + 1])),
+        ];
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>(
+            () => ChatRequestBounds.Require(conversation, MaximumMessages, MaximumCharacters, MaximumImageOctets));
+    }
+
+    [Fact]
+    public void Require_AnImageWhereTheEndpointCarriesNone_IsRefused()
+    {
+        // Arrange
+        IReadOnlyList<ChatMessage> conversation =
+        [
+            new(ChatRole.User, "describe this", new ChatImage("image/png", new byte[1])),
+        ];
+
+        // Act, Assert
+        Assert.Throws<ArgumentException>(
+            () => ChatRequestBounds.Require(conversation, MaximumMessages, MaximumCharacters, maximumImageOctets: 0));
     }
 }

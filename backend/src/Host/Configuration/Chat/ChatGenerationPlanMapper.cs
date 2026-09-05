@@ -36,6 +36,7 @@ internal static class ChatGenerationPlanMapper
                 settings.ReasoningEffort,
                 settings.MaxMessagesPerRequest,
                 settings.MaxRequestCharacters,
+                settings.MaxRequestImageOctets,
                 settings.RequestTimeout)
             : null;
     }

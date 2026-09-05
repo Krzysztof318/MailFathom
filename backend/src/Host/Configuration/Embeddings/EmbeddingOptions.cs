@@ -138,6 +138,13 @@ internal sealed class EmbeddingOptions : IValidatableObject
     /// <remarks>A fixed window anchored at the Unix epoch, so every restart agrees on where a period begins without anything being stored to say so.</remarks>
     public TimeSpan SpendPeriod { get; set; } = TimeSpan.FromDays(1);
 
+    /// <summary>Gets or sets whether and how an image attachment is described in words a provider writes.</summary>
+    /// <remarks>
+    /// Its own group rather than two properties here, because what it declares is an egress an operator turns on
+    /// deliberately, and a group is what makes that visible to a chart, a review, and a diff.
+    /// </remarks>
+    public EmbeddingImageDescriptionOptions ImageDescription { get; set; } = new();
+
     /// <summary>Gets whether the deployment declared an embedding provider at all.</summary>
     public bool IsConfigured => this.Endpoints.Count > 0;
 
@@ -150,6 +157,16 @@ internal sealed class EmbeddingOptions : IValidatableObject
         foreach (var error in this.FindSpendCeilingErrors())
         {
             yield return error;
+        }
+
+        // Checked whether or not a chain was declared, for the reason the ceilings above are: an operator who turned
+        // description on and wrote a grid no image has is told at startup rather than at the first photograph.
+        if (this.ImageDescription.MaxPixels <= 0)
+        {
+            yield return new ValidationResult(
+                "Embeddings ImageDescription MaxPixels is positive, because a ceiling of zero or less would refuse "
+                + "every image while reading as a bound somebody chose.",
+                [nameof(this.ImageDescription)]);
         }
 
         if (!this.IsConfigured)
