@@ -7,8 +7,8 @@ a question about people wants people. The presentation plan is the contract that
 answer is, in a form a client draws with ordinary typed UI and never evaluates.
 
 This page describes the contract as it stands: what a plan holds, what its parts mean, how a client that is behind the
-service reads one, and what is deliberately not in it. Producing a plan and rendering one are not described here,
-because neither exists yet.
+service reads one, how a citation in it is followed to the mail behind it, and what is deliberately not in it.
+Producing a plan and rendering one are not described here, because neither exists yet.
 
 ## Two properties the contract is built around
 
@@ -106,6 +106,27 @@ A citation resolves to one of exactly three things, and each of them is somewher
 
 Each names the email by its local identity rather than by its remote occurrence, because a citation is followed inside
 this deployment and an occurrence moves when a folder is renamed or a mailbox is rebuilt.
+
+## How a citation is followed
+
+One route follows all three, [`POST /api/client/citations/resolution`](../operations/client-endpoint.md#the-citation-route),
+and it takes the citation target the plan published unchanged. Three things about it are properties of the contract
+rather than of that route:
+
+- **Resolution is scoped to what the caller may read**, because a plan is a thing to be shown to somebody. Every
+  message is read through the use case the reading pane reads one with, so a citation composed to name mail outside the
+  caller's scope reads nothing and is reported as a **private source** — which is a state a client draws rather than an
+  error, and the same answer mail this deployment does not hold receives. Separating the two would take a read outside
+  that scope, whose answer would say whether somebody else's message exists.
+- **A citation outlives a re-cut of the mail it points at.** Chunking derives a message's passages again whenever its
+  stored reading changes, so a passage identifier can go while the message it was cut from stays. That is why a
+  fragment target carries both: the resolution of a passage that is no longer there is the message with the place
+  reported **unresolvable**, never the nearest remaining passage, which would be evidence for a fact it was not drawn
+  from.
+- **A resolution carries enough to draw the source in place** — the passage with the offsets it was cut from, the
+  message it belongs to, and its dates — so checking a fact is reading a sentence rather than opening a document and
+  searching it. The offsets are what make the reference verifiable: the same span of the same extracted text returns
+  exactly that passage.
 
 ## How a plan cannot become code
 

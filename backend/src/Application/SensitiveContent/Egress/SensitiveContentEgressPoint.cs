@@ -91,4 +91,13 @@ public enum SensitiveContentEgressPoint
     /// which is the other thing a tag on this register is read for.
     /// </remarks>
     ClientMailSearch = 6,
+
+    /// <summary>The passage the client API answers a citation with: the text of the one fragment a fact was drawn from, published so a reader can check the fact where it stands.</summary>
+    /// <remarks>
+    /// Apart from the two client points above because what crosses here is chosen by neither a folder nor a query but
+    /// by a claim a model already made: the passage is the evidence behind one sentence of an answer, so a scan that
+    /// replaces something in it is replacing part of what somebody is being asked to check. That is worth reading on
+    /// its own instrument rather than averaged into a listing's rows.
+    /// </remarks>
+    ClientCitationResolution = 7,
 }

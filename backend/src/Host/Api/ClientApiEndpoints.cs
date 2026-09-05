@@ -59,6 +59,12 @@ namespace MailFathom.Host.Api;
 /// person whose mail accounts an administrator maintains still has to be able to clear their own bell.
 /// </para>
 /// <para>
+/// The citation route, which <see cref="ClientCitationEndpoint" /> describes, is where an answer stops being something
+/// to be believed: it follows the citations a presentation plan declared to the mail behind them. It sits among the
+/// mail routes rather than beside a run, because what it does is read the acting owner's own mail under the reading
+/// grant — the plan it follows was composed somewhere else, and may have been composed for somebody else.
+/// </para>
+/// <para>
 /// The signal ticket route, which <see cref="ClientSignalEndpoints" /> describes, is how a client obtains the
 /// short-lived value it opens the live channel against. It is the one route here whose answer is a credential, and it
 /// is the only part of that channel served in this group: the hub itself is mapped outside it, for the reasons that
@@ -123,6 +129,7 @@ internal static class ClientApiEndpoints
         api.MapClientMailBody();
         api.MapClientMailAttachment();
         api.MapClientMailMutations();
+        api.MapClientCitations();
         api.MapClientDrafts();
         api.MapClientOutbox();
         api.MapClientNotifications();

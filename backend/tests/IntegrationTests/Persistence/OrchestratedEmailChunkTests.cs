@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.Application.Discovery.Citations;
 using MailFathom.Application.Emails.Chunking;
 using MailFathom.Application.Persistence;
 using MailFathom.Application.Synchronization;
@@ -221,6 +222,68 @@ public sealed class OrchestratedEmailChunkTests(MailFathomOrchestrationFixture o
         Assert.Equal(passages, await ReadPassagesAsync(services, occurrenceId, cancellationToken));
         Assert.Equal(longer.Length, await ReadTruncatedFromAsync(services, occurrenceId, cancellationToken));
     }
+
+    /// <summary>
+    /// A citation is followed to the passage it names and to no other message's, which is the predicate the read is
+    /// safe by rather than a check made after the rows have already been read.
+    /// </summary>
+    /// <remarks>
+    /// Only a real server settles it: what the port claims is that the message is part of the query, so a passage of a
+    /// second message is not in the result set at all. A substitute would be asserting the arrangement rather than the
+    /// predicate. The second message is the control the absence needs — its passage exists and is readable under its
+    /// own message.
+    /// </remarks>
+    [Fact]
+    public async Task ReadFragmentsAsync_APassageOfAnotherMessage_ReadsNothingWhileItsOwnMessageReadsIt()
+    {
+        // Arrange
+        var cancellationToken = TestContext.Current.CancellationToken;
+        await using var services = await OrchestratedMailFathomServices.StartAsync(orchestration, cancellationToken);
+        var binding = await OrchestratedFolderBinding.CommitAsync(services, FolderAlias, cancellationToken);
+        var citedOccurrenceId = SyntheticEmail.OccurrenceIn(binding, uid: 9006);
+        var otherOccurrenceId = SyntheticEmail.OccurrenceIn(binding, uid: 9007);
+
+        await StoreAsync(services, citedOccurrenceId, "chunks-cited", BodyOfSeveralPassages("cited"), cancellationToken);
+        await StoreAsync(services, otherOccurrenceId, "chunks-other", BodyOfSeveralPassages("other"), cancellationToken);
+
+        var cited = await FindStoredEmailIdAsync(services, citedOccurrenceId, cancellationToken);
+        var other = await FindStoredEmailIdAsync(services, otherOccurrenceId, cancellationToken);
+        var citedPassages = await ReadPassagesAsync(services, citedOccurrenceId, cancellationToken);
+        var otherPassage = EmailChunkId.Create(
+            (await ReadPassagesAsync(services, otherOccurrenceId, cancellationToken))[0].Id);
+        var citedPassage = EmailChunkId.Create(citedPassages[1].Id);
+
+        // Act
+        var readUnderItsOwnMessage = await ReadCitedFragmentsAsync(
+            services,
+            cited,
+            [citedPassage, otherPassage],
+            cancellationToken);
+        var readUnderTheOtherMessage = await ReadCitedFragmentsAsync(
+            services,
+            other,
+            [otherPassage],
+            cancellationToken);
+
+        // Assert
+        var passage = Assert.Single(readUnderItsOwnMessage).Value;
+        Assert.Equal(citedPassage, passage.Fragment);
+        Assert.Equal(citedPassages[1].Ordinal, passage.Ordinal);
+        Assert.Equal(citedPassages[1].StartOffset, passage.StartOffset);
+        Assert.Equal(passage.StartOffset + passage.Text.Length, passage.EndOffset);
+        Assert.Equal(otherPassage, Assert.Single(readUnderTheOtherMessage).Key);
+    }
+
+    private static Task<IReadOnlyDictionary<EmailChunkId, CitedFragment>> ReadCitedFragmentsAsync(
+        OrchestratedMailFathomServices services,
+        StoredEmailId storedEmailId,
+        IReadOnlyCollection<EmailChunkId> fragments,
+        CancellationToken cancellationToken) => services.InScopeAsync(
+            (scope, token) => scope.GetRequiredService<ICitedFragmentReader>().ReadFragmentsAsync(
+                storedEmailId,
+                fragments,
+                token),
+            cancellationToken);
 
     /// <summary>Builds a body long enough to be cut into several passages, distinct per term so no two chunks match.</summary>
     private static string BodyOfSeveralPassages(string term, int paragraphs = 8) => string.Join(

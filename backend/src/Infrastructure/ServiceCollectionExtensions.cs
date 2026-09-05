@@ -8,6 +8,7 @@ using MailFathom.Application.Accounts;
 using MailFathom.Application.AiProviders;
 using MailFathom.Application.Contacts;
 using MailFathom.Application.Contacts.Collection;
+using MailFathom.Application.Discovery.Citations;
 using MailFathom.Application.EmailContent.Attachments;
 using MailFathom.Application.EmailContent.Move;
 using MailFathom.Application.EmailContent.Release;
@@ -385,6 +386,10 @@ public static class ServiceCollectionExtensions
         // The port a verdict that turned out to be junk discards a message's passages through. It carries the discarding
         // half alone, because nothing outside the arrival pipeline decides when passages are cut.
         services.AddScoped<IEmailChunkStore, EmailChunkStore>();
+        // The read half, and it is a port of its own rather than a member of the one above because it answers a
+        // different question for a different caller: following a citation reads named passages of one message the
+        // caller has already been admitted to, while discarding belongs to the arrival pipeline alone.
+        services.AddScoped<ICitedFragmentReader, CitedFragmentReader>();
         // The port the pipeline's own cut reaches the writer through, and the pass that performs it. Cutting is a call
         // the account run makes after classification and the rules have finished with a message rather than something
         // the metadata write does on its way past, because both of those stages may still change what a message is.
@@ -832,6 +837,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MailTimelineBrowser>();
         services.AddScoped<MailThreadBrowser>();
         services.AddScoped<EmailContentReader>();
+        // Beside the content read rather than with the answering run that produces the citations, because what it does
+        // is read mail under the caller's own scope: a plan is followed by whoever was shown it, which is not always
+        // whoever asked the question.
+        services.AddScoped<CitationResolver>();
         services.AddScoped<EmailAttachmentDownloadReader>();
         services.AddScoped<MailboxSearchReader>();
         services.AddScoped<MailSearchBrowser>();

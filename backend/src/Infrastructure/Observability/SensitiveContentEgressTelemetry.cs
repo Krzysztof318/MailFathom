@@ -209,6 +209,7 @@ public sealed class SensitiveContentEgressTelemetry : ISensitiveContentEgressTel
         SensitiveContentEgressPoint.OutgoingMail => "outgoing_mail",
         SensitiveContentEgressPoint.ClientMailListing => "client_mail_listing",
         SensitiveContentEgressPoint.ClientMailSearch => "client_mail_search",
+        SensitiveContentEgressPoint.ClientCitationResolution => "client_citation_resolution",
         _ => "unknown",
     };
 
