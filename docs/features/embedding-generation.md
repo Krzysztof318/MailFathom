@@ -389,6 +389,11 @@ one leaves every stored vector exactly as comparable as it was.
   before anybody else's arriving mail is embedded. What each owner has spent is recorded on its own row, so the ledger
   answers both questions from one key without a second count.
 
+A fifth block sits beside those four in the same section and counts something else. `Embeddings:AttachmentText` bounds
+what reading a document attachment costs to *parse* rather than what its text costs to send: a per-attachment cost over
+octets a stranger composed, which no character count predicts. [Attachment text
+extraction](attachment-text-extraction.md) holds it, and nothing in this release invokes it yet.
+
 Reaching the aggregate ceiling pauses embedding until the period rolls over, and nothing is lost by the pause: a
 passage with no vector is exactly the condition the [backfill](embedding-backfill.md) selects on. The wait is the
 roll-over rather than an interval, so work resumes without anybody acting. [Automatic

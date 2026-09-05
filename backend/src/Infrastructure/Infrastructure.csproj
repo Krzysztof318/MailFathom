@@ -58,6 +58,12 @@
          see a compiled condition through their own port and never an expression. -->
     <PackageReference Include="NCalc" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <!-- The PDF reader behind the attachment text extractor. Referenced by this project alone, so PdfDocument and every
+         other PdfPig type stays inside the adapter under Documents/ and no application port, use case, or domain type
+         ever sees one. The three Office Open XML formats need no package: they are zip archives of XML, which the base
+         class library reads — and reading them here is what lets a decompression bomb be refused while it inflates
+         rather than after a document model has already expanded it. -->
+    <PackageReference Include="PdfPig" />
     <PackageReference Include="Pgvector.EntityFrameworkCore" />
     <PackageReference Include="Polly.Core" />
     <PackageReference Include="Polly.Extensions" />

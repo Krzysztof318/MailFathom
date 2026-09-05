@@ -338,6 +338,45 @@ the number.
 resilience](../architecture/outbound-resilience.md) holds it, and a second limiter beside it would make two keys answer
 for one behaviour.
 
+### Reading a document attachment — `Embeddings:AttachmentText`
+
+What a document attachment may cost to read, and which formats are offered to a parser at all. It sits under this
+section rather than beside the synchronization bounds because parsing an attachment is a different cost from embedding
+a passage: it is charged per attachment, over octets a stranger composed, in formats with their own parser
+vulnerabilities, and no character count predicts it. [ADR
+0029](https://krzysztof318.github.io/MailFathom/decisions/0029-what-an-embedding-is-derived-from-and-whether-attachment-text-joins-it.html)
+records that split.
+
+Every key below bounds **one** extraction, and each of them is a deliberate ceiling rather than a value nobody chose.
+Crossing one abandons that attachment and records which ceiling stopped it — nothing is truncated into a partial
+extract, because a document cut off at a limit and stored as its text reads exactly like a document that said only that
+much.
+
+| Key | Type | Default | Constraint | Change |
+| --- | --- | --- | --- | --- |
+| `Embeddings:AttachmentText:Formats:<index>` | enum | every format read | `Pdf`, `WordOpenXml`, `SpreadsheetOpenXml`, `PresentationOpenXml`; writing nothing reads all four and naming any narrows to exactly those. Naming `LegacyWord`, `LegacySpreadsheet`, or `LegacyPresentation` is refused at startup, because MailFathom recognizes those three and reads none of them | restart |
+| `Embeddings:AttachmentText:MaxInputOctets` | long | `16777216` | 1 KiB – 512 MiB; the octets one attachment may hold before it is read at all. Both parsers seek, so an attachment is held in memory for the length of one extraction | restart |
+| `Embeddings:AttachmentText:MaxExtractedTextCharacters` | int | `200000` | 1000 – 10000000; the characters one attachment may contribute. Input and output are not proportional: a compressed page expands at a ratio the sender chooses | restart |
+| `Embeddings:AttachmentText:MaxDecompressedOctets` | long | `67108864` | 1 KiB – 2 GiB; the total a `.docx`, `.xlsx`, or `.pptx` archive may inflate to across every part read, counted while it inflates rather than after | restart |
+| `Embeddings:AttachmentText:MaxDecompressionRatio` | int | `200` | 2 – 10000; the greatest ratio of inflated to compressed octets one archive part may reach. It is what catches a small archive, before the total above would have been met | restart |
+| `Embeddings:AttachmentText:MaxContainerParts` | int | `2000` | 1 – 100000; the parts one archive may declare. Very many tiny parts cost per part, which neither size ceiling measures | restart |
+| `Embeddings:AttachmentText:MaxElementDepth` | int | `100` | 2 – 10000; the depth an element tree inside an archive part may nest to. Deep nesting is what turns a small part into a walk that consumes stack | restart |
+| `Embeddings:AttachmentText:Timeout` | TimeSpan | `00:00:30` | positive; the time one extraction may take. It is observed between units of work — a page, a part, an element — because no parser here accepts a cancellation token, which is why the size, ratio, and depth ceilings above are the ones that bound a parser stuck inside one unit | restart |
+
+**No key here turns extraction on, and none is needed to.** Nothing in this release reads an attachment yet: the port
+these keys bound is what the pipeline that will chunk and embed attachment text calls, and the switch deciding whether
+it is called arrives with that pipeline. So an operator writing this block today is deciding what an extraction will be
+allowed to cost, never starting one.
+
+**The three legacy binary formats are recognized and not read.** A `.doc`, `.xls`, or `.ppt` attachment is reported as a
+format MailFathom does not extract, which is a different and more useful fact than not recognizing it at all — the
+mailbox owner is told the file was skipped rather than left believing it was searched. Those three are OLE compound
+files, and no permissively licensed .NET parser reads all of them; MailFathom's own licence register admits no
+dependency it could not review, so the honest answer is a stated refusal rather than a parser nobody vetted.
+
+[Attachment text extraction](../features/attachment-text-extraction.md) records what each reason means and what an
+operator does about it.
+
 ### One endpoint — `Embeddings:Endpoints:<n>`
 
 An ordered chain. Every entry declares the same geometry and reaches the same vector space, so a failing endpoint

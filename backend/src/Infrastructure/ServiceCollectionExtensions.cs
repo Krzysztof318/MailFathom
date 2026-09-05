@@ -27,6 +27,7 @@ using MailFathom.Application.Emails.Embeddings.Generations;
 using MailFathom.Application.Emails.Embeddings.Limits;
 using MailFathom.Application.Emails.Embeddings.Vectorization;
 using MailFathom.Application.Emails.Extraction;
+using MailFathom.Application.Emails.Extraction.Attachments;
 using MailFathom.Application.Emails.GetEmailContent;
 using MailFathom.Application.Emails.ListEmails;
 using MailFathom.Application.Emails.Mailboxes;
@@ -91,6 +92,7 @@ using MailFathom.CodeCoverage;
 using MailFathom.Domain.Emails.Authorship;
 using MailFathom.Infrastructure.Certificates;
 using MailFathom.Infrastructure.DataEncryption;
+using MailFathom.Infrastructure.Documents;
 using MailFathom.Infrastructure.Embeddings;
 using MailFathom.Infrastructure.Folders;
 using MailFathom.Infrastructure.Mail;
@@ -758,6 +760,12 @@ public static class ServiceCollectionExtensions
         // streams it, which is two steps a rendering has no use for.
         services.AddScoped<IEmailAttachmentContentReader>(provider => new MimeKitEmailAttachmentContentReader(
             provider.GetRequiredService<EmailMimeExtractionOptions>()));
+        // Behind that reader rather than beside it: it is handed an attachment somebody already opened and turns its
+        // octets into characters. Scoped like the readers it follows, and holding nothing between calls — the bounds are
+        // a value read once and the two parsers it composes carry no state of their own.
+        services.AddScoped<IAttachmentTextExtractor>(provider => new BoundedAttachmentTextExtractor(
+            provider.GetRequiredService<AttachmentTextExtractionOptions>(),
+            provider.GetRequiredService<TimeProvider>()));
         // Both halves of the attachment capability, registered as singletons because neither holds anything a scope
         // owns: the key behind a signature is resolved per operation and erased with it, exactly as the encryptor's is.
         // The settings arrive as a value because where this deployment publishes itself is a restart-level fact.
