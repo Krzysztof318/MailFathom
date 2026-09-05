@@ -130,6 +130,7 @@ public sealed class ClientApiEndpointsTests
         Assert.Equal(
             [
                 $"{ClientEndpointOptions.RoutePrefix}{ClientMailAccountsEndpoint.MailAccountsRoute}",
+                $"{ClientEndpointOptions.RoutePrefix}{ClientCitationEndpoint.CitationResolutionRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientDisplayNameEndpoint.DisplayNameRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientDisplayNameEndpoint.DisplayNameRoute}",
                 $"{ClientEndpointOptions.RoutePrefix}{ClientDraftEndpoints.DraftsRoute}",
@@ -239,6 +240,7 @@ public sealed class ClientApiEndpointsTests
                 $"GET {prefix}{ClientOwnerRecordEndpoint.RecordRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"GET {prefix}{ClientApiEndpoints.SessionRoute} -> none",
                 $"GET {prefix}{ClientMailThreadEndpoint.MailThreadRoute} -> {MailFathomPermission.MailRead.Name}",
+                $"POST {prefix}{ClientCitationEndpoint.CitationResolutionRoute} -> {MailFathomPermission.MailRead.Name}",
                 $"POST {prefix}{ClientDisplayNameEndpoint.DisplayNameRoute} -> {MailFathomPermission.MailAccountsWrite.Name}",
                 $"POST {prefix}{ClientDraftEndpoints.DraftsRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
                 $"POST {prefix}{ClientDraftEndpoints.DraftAttachmentsRoute} -> {MailFathomPermission.MailDraftsWrite.Name}",
@@ -326,6 +328,7 @@ public sealed class ClientApiEndpointsTests
                         || WritesTheCallersOwnPortrait(endpoint)
                         || MarksTheCallersOwnNotificationsRead(endpoint)
                         || MintsTheCallersOwnSignalTicket(endpoint)
+                        || FollowsTheCallersOwnCitations(endpoint)
                         || HandsOverTheClientsOwnTelemetry(endpoint),
                         $"{method} {endpoint} changes something under a grant that does not say so."));
             });
@@ -393,6 +396,20 @@ public sealed class ClientApiEndpointsTests
         endpoint is RouteEndpoint route
         && $"/{route.RoutePattern.RawText?.TrimStart('/')}"
             == $"{ClientEndpointOptions.RoutePrefix}{ClientSignalEndpoints.TicketRoute}";
+
+    /// <summary>Reports whether a route follows the caller's own citations, by the route it is served at.</summary>
+    /// <remarks>
+    /// The one <c>POST</c> here that changes nothing at all, and it is the route rather than the grant for the reason
+    /// the writes above are: it reads mail the reading grant already admits and publishes less of a message than the
+    /// message route does. It is a <c>POST</c> because what it takes is a list of small documents — three kinds each
+    /// carrying different members — which a request line would carry as an encoding of the plan's own JSON, under a
+    /// length Kestrel refuses before a handler is reached. Naming the one route keeps the claim narrow: a second
+    /// reading <c>POST</c> fails this rather than joining it.
+    /// </remarks>
+    private static bool FollowsTheCallersOwnCitations(Endpoint endpoint) =>
+        endpoint is RouteEndpoint route
+        && $"/{route.RoutePattern.RawText?.TrimStart('/')}"
+            == $"{ClientEndpointOptions.RoutePrefix}{ClientCitationEndpoint.CitationResolutionRoute}";
 
     /// <summary>Reports whether a route is the client posting its own telemetry, which changes nothing this deployment holds.</summary>
     /// <remarks>The path rather than the grant here, because these are published under none by design — the caller is handing over what it recorded about itself, and no permission in the mailbox half names that act.</remarks>

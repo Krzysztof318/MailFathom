@@ -104,7 +104,7 @@ switching a scanner on leaves everybody else's rows exactly where they were.
 ## The guarded egress points
 
 Every place text leaves this deployment goes through one guard, and the guard is told which place it is. There are
-seven, and the register is closed: an eighth is a code change rather than a configuration one, which is what makes the
+eight, and the register is closed: a ninth is a code change rather than a configuration one, which is what makes the
 list below answerable by reading it.
 
 | Egress point | What crosses it |
@@ -116,6 +116,14 @@ list below answerable by reading it.
 | `outgoing_mail` | The message a caller asks to send or to hold as a draft: its subject and both body representations, read back out of the MIME it would be transmitted as |
 | `client_mail_listing` | The mail text the client API answers a message list with: the subject and sender display name of every row, and the preview of the message's own text beside them. A conversation crosses here too, for its messages and for the display names its participant list names |
 | `client_mail_search` | The mail text the client API answers a search with: the subject, sender display name and preview of every result, and every highlighted extract cut around what matched |
+| `client_citation_resolution` | The passage the client API answers a citation with: the text of the one fragment a fact was drawn from, published so a reader can check the fact where it stands |
+
+`client_citation_resolution` is apart from both of the client points above because what crosses it is chosen by neither
+a folder nor a query but by a claim a model already made: the passage is the evidence behind one sentence of an answer,
+so a replacement made there is a replacement inside what somebody is being asked to check. The message's own values —
+its subject and its dates — cross under `mcp_email_content` instead, because
+[following a citation](../operations/client-endpoint.md#the-citation-route) reads the message through the same use case
+`get_email_content` does.
 
 `client_mail_listing` is apart from `mcp_snippet` rather than folded into it because the two publish different amounts
 of a message. A list row carries the opening of the body and a tool listing carries none, so what a scanner finds here

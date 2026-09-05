@@ -68,6 +68,7 @@ AppHost provisions its synthetic credential after the service reports ready;
 | `GET /api/client/messages/{storedEmailId}` | `mailfathom.mail.read` |
 | `GET /api/client/messages/{storedEmailId}/body` | `mailfathom.mail.read` |
 | `GET /api/client/messages/{storedEmailId}/attachments/{position}` | `mailfathom.mail.read` |
+| `POST /api/client/citations/resolution` | `mailfathom.mail.read` |
 | `GET /api/client/mutations` | `mailfathom.mail.read` |
 | `POST /api/client/mutations/flags` | `mailfathom.mail.flags.write` |
 | `POST /api/client/mutations/flags/withdrawals` | `mailfathom.mail.flags.write` |
@@ -995,6 +996,85 @@ is answered `403`, as everywhere else on this surface.
 
 **It is served from the local copy.** Nothing here contacts a mail server, so downloading a file cannot fetch a message
 and cannot set the remote `\Seen` flag.
+
+### The citation route
+
+```http
+POST /api/client/citations/resolution
+Content-Type: application/json
+
+{
+  "citations": [
+    { "kind": "fragment", "email": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90", "fragment": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a91" },
+    { "kind": "attachment", "email": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90", "attachmentPosition": 1 },
+    { "kind": "email", "email": "0198f4c2-7d8e-7b2f-a041-52c637d8e9fa" }
+  ]
+}
+```
+
+It answers with one resolution per citation, in the order the request named them:
+
+```json
+{
+  "citations": [
+    {
+      "storedEmailId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90",
+      "outcome": "Resolved",
+      "message": {
+        "storedEmailId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a90",
+        "account": "primary",
+        "folder": "INBOX",
+        "subject": "Renewal terms",
+        "sentAt": "2026-03-04T09:00:00+00:00",
+        "receivedAt": "2026-03-04T09:01:12+00:00"
+      },
+      "fragment": {
+        "fragmentId": "0198f4a1-2b6c-7a1d-9f3e-4c5d6e7f8a91",
+        "ordinal": 2,
+        "startOffset": 400,
+        "endOffset": 423,
+        "text": "the agreed rate is 4.5%"
+      },
+      "attachment": null
+    }
+  ]
+}
+```
+
+**A citation is what turns an answer into something checkable.** Every material fact a Discover run states carries one,
+and a citation resolves through this route and no other — so a client draws one evidence affordance whatever block the
+fact was rendered in.
+
+**What it takes is the citation target the plan published, unchanged.** The three kinds are `email`, `fragment`, and
+`attachment`; each names the message it belongs to as `email`, a fragment citation names its passage as `fragment`, and
+an attachment citation names `attachmentPosition` — the same position [the attachment route](#the-attachment-route) is
+asked with. A body naming a kind whose members it does not carry, or a kind that is none of the three, is answered
+`400`: it is a document no plan ever declared rather than a citation that failed to resolve.
+
+**`outcome` is one of three, and two of them are states rather than errors.** `Resolved` means the citation was followed
+to the place it names. `Unresolvable` means the place is no longer there — the message re-chunked since the plan was
+composed, or its parts changed — and the resolution still carries the message, so a reader is taken to the
+correspondence rather than told the fact has no source. `PrivateSource` means the caller may not read it, and carries
+nothing but the identity the caller already sent.
+
+**Mail this owner does not hold and mail belonging to somebody else are both `PrivateSource`**, and nothing in the
+answer separates them: telling them apart would take a read outside the caller's own scope, and its answer would say
+whether somebody else's message exists. A local copy that is stored and damaged is `Unresolvable` instead, carrying no
+message, which is this deployment's own defect rather than a statement about anyone's mail.
+
+**A resolution carries enough to draw the source in place and no more**: the passage with the offsets it was cut from,
+the message it belongs to, and its dates. Reading the rest of the message is [the message route](#the-message-route),
+which is a request the reader chose to make, and no octet of a cited file is here — the file is described exactly as the
+message route describes it.
+
+**One request follows at most ten citations**, which is also what bounds the messages read, and a passage is bounded
+before it is ever cited because chunking cuts it to a fixed length. A larger batch is answered `400`, as is a body over
+16 KiB, and a credential whose grant does not carry `mailfathom.mail.read` is answered `403`.
+
+**It is a `POST` that changes nothing.** What it takes is a list of small documents rather than a value, and a request
+line of them would be the plan's own JSON encoded into a URL under a length Kestrel refuses before a handler is reached.
+It is served from the local copy, so following a citation contacts no mail server and cannot set the remote `\Seen`
+flag.
 
 ### The mutation routes
 

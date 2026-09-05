@@ -27,6 +27,196 @@
         ],
         "type": "object"
       },
+      "ClientCitationRequest": {
+        "properties": {
+          "attachmentPosition": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ]
+          },
+          "email": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "fragment": {
+            "format": "uuid",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "kind": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "email",
+          "fragment",
+          "attachmentPosition"
+        ],
+        "type": "object"
+      },
+      "ClientCitationResolutionRequest": {
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/ClientCitationRequest"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "citations"
+        ],
+        "type": "object"
+      },
+      "ClientCitationResolutionResponse": {
+        "properties": {
+          "citations": {
+            "items": {
+              "$ref": "#/components/schemas/ClientResolvedCitationResponse"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "citations"
+        ],
+        "type": "object"
+      },
+      "ClientCitedAttachmentResponse": {
+        "properties": {
+          "fileName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "mediaType": {
+            "type": "string"
+          },
+          "position": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "sizeOctets": {
+            "format": "int64",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "position",
+          "fileName",
+          "mediaType",
+          "sizeOctets"
+        ],
+        "type": "object"
+      },
+      "ClientCitedFragmentResponse": {
+        "properties": {
+          "endOffset": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "fragmentId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "ordinal": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "startOffset": {
+            "format": "int32",
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "fragmentId",
+          "ordinal",
+          "startOffset",
+          "endOffset",
+          "text"
+        ],
+        "type": "object"
+      },
+      "ClientCitedMessageResponse": {
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "folder": {
+            "type": "string"
+          },
+          "receivedAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sentAt": {
+            "format": "date-time",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "storedEmailId": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "subject": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "storedEmailId",
+          "account",
+          "folder",
+          "subject",
+          "sentAt",
+          "receivedAt"
+        ],
+        "type": "object"
+      },
       "ClientDisplayNameRequest": {
         "additionalProperties": false,
         "properties": {
@@ -1873,6 +2063,55 @@
           "markReadOnOpen",
           "expandWholeThread",
           "embeddedHtmlMessages"
+        ],
+        "type": "object"
+      },
+      "ClientResolvedCitationResponse": {
+        "properties": {
+          "attachment": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ClientCitedAttachmentResponse"
+              }
+            ]
+          },
+          "fragment": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ClientCitedFragmentResponse"
+              }
+            ]
+          },
+          "message": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ClientCitedMessageResponse"
+              }
+            ]
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "storedEmailId": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "storedEmailId",
+          "outcome",
+          "message",
+          "fragment",
+          "attachment"
         ],
         "type": "object"
       },
@@ -8496,6 +8735,46 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ClientMailAccountsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "Bearer": []
+          }
+        ],
+        "tags": [
+          "Client"
+        ]
+      }
+    },
+    "/api/client/citations/resolution": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ClientCitationResolutionRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientCitationResolutionResponse"
                 }
               }
             },
