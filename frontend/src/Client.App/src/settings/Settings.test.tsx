@@ -506,7 +506,7 @@ describe('Settings', () => {
         expect(window.localStorage.getItem(deviceKeys.systemNotifications)).toBe('true');
     });
 
-    it('says so in the row where the answer to that question was no, and stops offering the switch', async () => {
+    it('says so in the row where the answer to that question was no, and leaves the switch off', async () => {
         renderSettings({ head: asksFirst('refused') });
         openApplication();
 
@@ -516,7 +516,7 @@ describe('Settings', () => {
         });
 
         expect(screen.getByText(/told to block notifications/u)).toBeTruthy();
-        expect(screen.getByRole('switch', { name: /Notify me on this machine/u })).toHaveProperty('disabled', true);
+        expect(screen.getByRole('switch', { name: /Notify me on this machine/u })).toHaveProperty('checked', false);
         expect(window.localStorage.getItem(deviceKeys.systemNotifications)).toBe('false');
     });
 
@@ -553,7 +553,27 @@ describe('Settings', () => {
         });
 
         expect(screen.getByText(/told to block notifications/u)).toBeTruthy();
-        expect(screen.getByRole('switch', { name: /Notify me on this machine/u })).toHaveProperty('disabled', true);
+        expect(screen.getByRole('switch', { name: /Notify me on this machine/u })).toHaveProperty('checked', false);
+    });
+
+    it('recovers on the gesture once the browser has been told to allow them after all', async () => {
+        const browser = asksFirst('permitted');
+        browser.toldToBlockThem();
+        renderSettings({ head: browser });
+        openApplication();
+
+        expect(screen.getByText(/told to block notifications/u)).toBeTruthy();
+
+        // What the row promises in words is that this switch works again once the browser has been told, and the
+        // gesture is what reads that: nothing announces a permission granted from the browser's own site settings, so a
+        // row that disabled itself here would be the one state on this screen nothing on this screen could leave.
+        await act(async () => {
+            fireEvent.click(screen.getByRole('switch', { name: /Notify me on this machine/u }));
+            await Promise.resolve();
+        });
+
+        expect(screen.getByRole('switch', { name: /Notify me on this machine/u })).toHaveProperty('checked', true);
+        expect(screen.queryByText(/told to block notifications/u)).toBeNull();
     });
 
     it('reports a browser already told to block them without putting the question to it again', () => {
@@ -561,7 +581,7 @@ describe('Settings', () => {
         openApplication();
 
         expect(screen.getByText(/told to block notifications/u)).toBeTruthy();
-        expect(screen.getByRole('switch', { name: /Notify me on this machine/u })).toHaveProperty('disabled', true);
+        expect(screen.getByRole('switch', { name: /Notify me on this machine/u })).toHaveProperty('checked', false);
     });
 
     it('closes from its own control, which is the way out that does not need a keyboard', () => {

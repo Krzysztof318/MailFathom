@@ -315,7 +315,13 @@ function Application({
 // The switch says what this machine will actually do, which is the choice *and* the permission: a head nobody has been
 // asked in yet draws off however the device store reads, because a control saying *on* over a machine that will raise
 // nothing is the one state worse than an absent row. Only a refusal is explained in words, because it is the only one
-// of the three the switch cannot undo — the browser has to be told from its own address bar.
+// of the three that cannot be undone from this row — the browser has to be told first, from its own site settings.
+//
+// It is explained rather than disabled, and the switch stays live under the explanation, because the row promises in
+// words that it will work again once the browser has been told. The gesture is what re-reads the answer: `permit()`
+// asks the head where it stands before it asks anybody anything, so moving the switch on a browser still refusing puts
+// no dialog in front of anyone and moving it on one told to allow them since is what notices. Disabling it would leave
+// the one state the row's own sentence says is recoverable as the one state nothing on the screen can recover from.
 function SystemNotifications() {
     const { translate } = useLocalization();
     const notifier = useSystemNotifier();
@@ -372,7 +378,7 @@ function SystemNotifications() {
                     </span>
                 </span>
 
-                <Switch on={raising && standing === 'permitted'} disabled={standing === 'refused'} onChange={choose} />
+                <Switch on={raising && standing === 'permitted'} onChange={choose} />
             </label>
         </>
     );
