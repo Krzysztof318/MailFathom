@@ -79,7 +79,9 @@ internal static class SyntheticImages
     /// <summary>Builds a lossy WebP, whose grid sits in the VP8 key-frame header behind the start code.</summary>
     public static byte[] LossyWebp(int width, int height)
     {
-        RequireFourteenBits(width, height);
+        // The two bitstreams do not share a ceiling: this one states the dimension itself in fourteen bits, while
+        // lossless below states it one less than it is and so reaches one higher.
+        RequireDimensions(width, height, greatest: 0x3FFF);
 
         var file = WebpContainer("VP8 "u8, contentLength: 18);
 
@@ -125,7 +127,7 @@ internal static class SyntheticImages
     private static void RequireSixteenBits(int width, int height) =>
         RequireDimensions(width, height, ushort.MaxValue);
 
-    /// <summary>Refuses a grid a fourteen-bit field cannot state, which is what both WebP bitstreams pack their dimensions into.</summary>
+    /// <summary>Refuses a grid the lossless WebP bitstream cannot state, which packs each dimension one less than it is into fourteen bits.</summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when either dimension is not between 1 and 16384.</exception>
     private static void RequireFourteenBits(int width, int height) =>
         RequireDimensions(width, height, 1 << 14);

@@ -80,6 +80,8 @@ public sealed class ImageAttachmentDescriberTests
 
         var conversation = Assert.Single(provider.Conversations);
 
+        // Two turns and nothing else: no subject, no sender, no body, nothing of the message the attachment arrived on.
+        Assert.Equal(2, conversation.Count);
         Assert.Equal(ChatRole.System, conversation[0].Role);
         Assert.Equal(ImageDescriptionInstructions.Text, conversation[0].Text);
         Assert.Null(conversation[0].Image);
@@ -173,23 +175,6 @@ public sealed class ImageAttachmentDescriberTests
         // Assert
         Assert.Null(description.Text);
         Assert.Equal(expected, description.Refusal);
-    }
-
-    /// <summary>An answer of nothing but whitespace is a provider that produced no description rather than a description that is blank.</summary>
-    [Fact]
-    public async Task DescribeAsync_AProviderAnsweringNothingButWhitespace_IsRefusedRatherThanDescribed()
-    {
-        // Arrange
-        var provider = new ScriptedChatModelClient().Answering(RequestMarker, "   ");
-        var describer = Describer(provider);
-        using var content = new MemoryStream(Png(width: 8, height: 8));
-
-        // Act
-        var description = await describer.DescribeAsync("image/png", content, TestContext.Current.CancellationToken);
-
-        // Assert
-        Assert.Null(description.Text);
-        Assert.Equal(ImageDescriptionRefusal.ProviderRefused, description.Refusal);
     }
 
     /// <summary>A generation the provider's filter withheld is a refusal, because what survives it is a fragment rather than a short description.</summary>

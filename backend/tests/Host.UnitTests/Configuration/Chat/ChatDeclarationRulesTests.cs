@@ -2,6 +2,7 @@
 // Licensed under the GNU Affero General Public License, Version 3. See LICENSE in the project root for license information.
 // Project repository: https://github.com/Krzysztof318/MailFathom
 
+using MailFathom.AI.Descriptions;
 using MailFathom.Host.Configuration.Answering;
 using MailFathom.Host.Configuration.Chat;
 using MailFathom.Host.Configuration.Embeddings;
@@ -62,13 +63,51 @@ public sealed class ChatDeclarationRulesTests
             error => error.StartsWith("Chat:MaxRequestImageOctets", StringComparison.Ordinal));
     }
 
-    /// <summary>Zero on its own is the right declaration for a model that cannot read a picture, so nothing refuses it.</summary>
+    /// <summary>A description sends two turns whatever the picture is, so an endpoint admitting one cannot carry it.</summary>
     [Fact]
-    public void FindDeclarationErrors_AZeroImageBudgetWithImageDescriptionOff_ReportsNothing()
+    public void FindDeclarationErrors_ImageDescriptionOnBesideAOneTurnEndpoint_NamesTheKeyAnOperatorEdits()
+    {
+        // Arrange
+        var candidate = Declared();
+        candidate.MaxMessagesPerRequest = 1;
+        var embeddings = new EmbeddingOptions { ImageDescription = { Enabled = true } };
+
+        // Act
+        var errors = ChatDeclarationRules.FindDeclarationErrors(candidate, embeddings, new MailAnsweringOptions());
+
+        // Assert
+        Assert.Contains(
+            errors,
+            error => error.StartsWith("Chat:MaxMessagesPerRequest", StringComparison.Ordinal));
+    }
+
+    /// <summary>The instruction is fixed, so an endpoint admitting fewer characters than it occupies refuses every description.</summary>
+    [Fact]
+    public void FindDeclarationErrors_ImageDescriptionOnBesideAnEndpointTooNarrowForTheInstruction_NamesTheKeyAnOperatorEdits()
+    {
+        // Arrange
+        var candidate = Declared();
+        candidate.MaxRequestCharacters = ImageDescriptionInstructions.SmallestRequestCharacters - 1;
+        var embeddings = new EmbeddingOptions { ImageDescription = { Enabled = true } };
+
+        // Act
+        var errors = ChatDeclarationRules.FindDeclarationErrors(candidate, embeddings, new MailAnsweringOptions());
+
+        // Assert
+        Assert.Contains(
+            errors,
+            error => error.StartsWith("Chat:MaxRequestCharacters", StringComparison.Ordinal));
+    }
+
+    /// <summary>Each of the three bounds is a legal declaration on its own — a text-only endpoint carries all three — so nothing refuses one where description is off.</summary>
+    [Fact]
+    public void FindDeclarationErrors_TheImageDescriptionBoundsWithThatFeatureOff_ReportsNothing()
     {
         // Arrange
         var candidate = Declared();
         candidate.MaxRequestImageOctets = 0;
+        candidate.MaxMessagesPerRequest = 1;
+        candidate.MaxRequestCharacters = 1;
         var embeddings = new EmbeddingOptions { ImageDescription = { Enabled = false } };
 
         // Act

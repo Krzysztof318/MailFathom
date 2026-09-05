@@ -48,11 +48,19 @@ internal sealed class ScriptedChatModelClient : IChatModelClient
     /// <param name="answerText">What the model answers.</param>
     /// <param name="stop">Why the model stopped, which a caller distinguishing a truncated or withheld answer from a finished one reads.</param>
     /// <returns>This client, so arrangement reads as one statement.</returns>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="answerText" /> is blank, which this port does not produce.</exception>
+    /// <remarks>
+    /// The blank guard is what keeps the fake honest: <see cref="ChatAnswer.Text" /> is never empty, because the real
+    /// adapter turns a call that produced none into <see cref="ChatGenerationFailure.AnswerEmpty" /> rather than an
+    /// answer. Arranging one here would drive a caller's empty-answer branch through a state production cannot reach.
+    /// </remarks>
     public ScriptedChatModelClient Answering(
         string marker,
         string answerText,
         ChatGenerationStop stop = ChatGenerationStop.Completed)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(answerText);
+
         this.answerByMarker[marker] = (answerText, stop);
         this.scriptByMarker[marker] = null;
 

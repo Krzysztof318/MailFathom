@@ -376,10 +376,12 @@ another is judged on what it carries. Everything else is refused with a reason r
 format outside the list, a file larger than `Chat:MaxRequestImageOctets`, a grid larger than `MaxPixels`, a header that
 does not hold the format it claims, and a provider that timed out, was unavailable, or refused.
 
-**A chat endpoint carrying no image cannot be the one describing them.** `Chat:MaxRequestImageOctets: 0` is a
-supported declaration on its own — it is the right one for a model that cannot read a picture — but writing it beside
-this switch stops the start naming that key, because the alternative is every picture in the mailbox being refused as
-too large, which reads as a property of the pictures rather than of the endpoint.
+**A chat endpoint has to be able to carry a description, and three of its own bounds decide that.** Each is a supported
+declaration on its own and a mistake only beside this switch, so writing one here stops the start naming the key rather
+than faulting the background run on every picture: `Chat:MaxRequestImageOctets: 0` declares an endpoint sent no image at
+all, which is right for a model that cannot read one; `Chat:MaxMessagesPerRequest` below two cannot carry the two turns
+a description sends, the instruction and the picture; and `Chat:MaxRequestCharacters` below what the fixed instruction
+occupies refuses the conversation before the picture is even weighed.
 
 **SVG is excluded by name rather than left unsupported.** It is XML a renderer executes as a document, with script and
 external references available to whoever composed it, and nothing here is a renderer with a security team behind it. A

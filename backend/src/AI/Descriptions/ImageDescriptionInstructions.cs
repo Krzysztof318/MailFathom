@@ -34,10 +34,10 @@ namespace MailFathom.AI.Descriptions;
 /// account of a picture rather than as anything a person wrote.
 /// </para>
 /// </remarks>
-internal static class ImageDescriptionInstructions
+public static class ImageDescriptionInstructions
 {
     /// <summary>What the model is told its task is.</summary>
-    internal const string Text = """
+    public const string Text = """
         You are shown one image that arrived as an attachment to an email message. Write down what it shows, as plain
         prose, so that somebody searching their mail could find this message by what the picture contains.
 
@@ -62,5 +62,17 @@ internal static class ImageDescriptionInstructions
 
     /// <summary>What the turn carrying the picture says.</summary>
     /// <remarks>The turn is a picture and a line, rather than a picture alone, because a blank turn is refused at the chat boundary and a model given octets with nothing said about them is being asked nothing.</remarks>
-    internal const string DescriptionRequest = "Describe this attached image.";
+    public const string DescriptionRequest = "Describe this attached image.";
+
+    /// <summary>How many turns one description sends, which a chat declaration must admit for the port to work at all.</summary>
+    public const int TurnsPerRequest = 2;
+
+    /// <summary>Gets the fewest request characters a chat declaration must admit before a description can be sent.</summary>
+    /// <remarks>
+    /// The instruction and the request line are both fixed, so this is a floor a declaration is judged against at
+    /// startup rather than a bound anything applies per attachment. Without it a deployment starts cleanly and then
+    /// faults its background work on every admitted picture, because the chat boundary refuses the conversation this
+    /// port composes rather than the picture it was given.
+    /// </remarks>
+    public static int SmallestRequestCharacters => Text.Length + DescriptionRequest.Length;
 }

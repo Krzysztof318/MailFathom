@@ -31,9 +31,11 @@ namespace MailFathom.AI.Descriptions;
 /// which is what makes the activation the last remaining question about egress rather than one check among several.
 /// </para>
 /// <para>
-/// The octets are read into a pooled buffer and the buffer is returned once the call has completed. It is held across
-/// the whole provider call rather than copied, because the resilience pipeline may send it more than once and a
-/// per-attempt copy of a photograph is the one allocation on this path worth avoiding.
+/// The octets are read into a rented buffer, cleared and returned once the call has completed. It is held across the
+/// whole provider call rather than copied, because the resilience pipeline may send it more than once and a per-attempt
+/// copy of a photograph is the one allocation on this path worth avoiding. At the default ceiling the rent is larger
+/// than anything <see cref="ArrayPool{T}" /> pools, so it is an ordinary allocation the pool neither keeps nor clears —
+/// which is why the clearing is done here rather than asked of the return.
 /// </para>
 /// </remarks>
 internal sealed class ImageAttachmentDescriber : IEmailAttachmentImageDescriber
@@ -128,9 +130,12 @@ internal sealed class ImageAttachmentDescriber : IEmailAttachmentImageDescriber
         }
         finally
         {
-            // Cleared on the way back, because what the buffer held is somebody's mail and the pool is shared with
-            // everything else in the process.
-            ArrayPool<byte>.Shared.Return(buffer, clearArray: true);
+            // Cleared here rather than by the pool. What the buffer held is somebody's mail and the pool is shared with
+            // everything else in the process, and `Return`'s own clearing runs only for an array small enough to be
+            // pooled: a rent past the greatest bucket allocates outside the pool and is dropped uncleared, which the
+            // four-mebibyte default ceiling reaches on every call.
+            Array.Clear(buffer);
+            ArrayPool<byte>.Shared.Return(buffer);
         }
     }
 
