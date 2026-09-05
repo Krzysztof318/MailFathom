@@ -100,22 +100,35 @@ const raisesThem: SystemNotifier = {
 /**
  * A head that offered it and has to ask somebody first, which is what a browser is.
  *
+ * Its standing is read rather than fixed, exactly as the real one reads `Notification.permission` on every ask: what a
+ * browser will do is decided in the browser, so the answer moves when the question is put to it and `toldToBlockThem`
+ * moves it the way an address bar does, with nothing announcing either.
+ *
  * @param answered What the person says to the browser's own dialog when the switch puts it in front of them.
  */
-function asksFirst(answered: NotificationStanding): SystemNotifier & { asked: () => number } {
+function asksFirst(
+    answered: NotificationStanding,
+): SystemNotifier & { asked: () => number; toldToBlockThem: () => void } {
     let asked = 0;
+    let stands: NotificationStanding = 'unasked';
 
     return {
         offered: true,
-        standing: 'unasked',
+        get standing() {
+            return stands;
+        },
         permit: () => {
             asked += 1;
+            stands = answered;
 
             return Promise.resolve(answered);
         },
         raise: () => Promise.resolve(answered === 'permitted' ? 'raised' : 'unavailable'),
         whenActedOn: () => () => undefined,
         asked: () => asked,
+        toldToBlockThem: () => {
+            stands = 'refused';
+        },
     };
 }
 
@@ -517,6 +530,30 @@ describe('Settings', () => {
         });
 
         expect(window.localStorage.getItem(deviceKeys.systemNotifications)).toBeNull();
+    });
+
+    it('follows the head where a permission is taken back underneath an open dialog', async () => {
+        const browser = asksFirst('permitted');
+        renderSettings({ head: browser });
+        openApplication();
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('switch', { name: /Notify me on this machine/u }));
+            await Promise.resolve();
+        });
+
+        expect(screen.getByRole('switch', { name: /Notify me on this machine/u })).toHaveProperty('checked', true);
+
+        // Nobody tells this screen either of these two things: the browser is told to block them from its own address
+        // bar, and the next arrival it refuses is what turns the choice off from `useNotificationCentre.ts`. A standing
+        // copied at mount would leave the ordinary explanation and a switch to move over a machine that raises nothing.
+        browser.toldToBlockThem();
+        act(() => {
+            chooseSystemNotifications(false);
+        });
+
+        expect(screen.getByText(/told to block notifications/u)).toBeTruthy();
+        expect(screen.getByRole('switch', { name: /Notify me on this machine/u })).toHaveProperty('disabled', true);
     });
 
     it('reports a browser already told to block them without putting the question to it again', () => {

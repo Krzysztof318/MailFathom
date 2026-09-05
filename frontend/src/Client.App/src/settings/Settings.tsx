@@ -321,9 +321,15 @@ function SystemNotifications() {
     const notifier = useSystemNotifier();
     const raising = useSystemNotificationsChosen();
 
-    // Seeded from what the head already stood at and moved by what it answers, because the operation resolves once at
-    // the composition root and cannot redraw a screen when somebody answers its dialog.
-    const [standing, setStanding] = useState(notifier.standing);
+    // Read on every render rather than copied, for the same reason the switch above it is: this screen is not the only
+    // writer. An arrival the head refuses turns the choice off from `useNotificationCentre.ts`, and a permission taken
+    // back from the browser's own address bar is written by nobody at all — a value seeded at mount would go on
+    // explaining a machine that will now raise nothing as one the switch can still turn back on.
+    const standing = notifier.standing;
+
+    // Nothing announces that answer, so the one moment this screen knows a redraw is owed is the moment it asked: the
+    // head resolves its own dialog long after the gesture, and only a state change puts the answer on the screen.
+    const [, redrawOnceTheHeadAnswers] = useState(0);
 
     if (!notifier.offered) {
         return null;
@@ -337,7 +343,7 @@ function SystemNotifications() {
         }
 
         void notifier.permit().then((answered) => {
-            setStanding(answered);
+            redrawOnceTheHeadAnswers((asked) => asked + 1);
 
             // Only an answer somebody gave is written. `unasked` is a question that reached nobody — a prompt the
             // browser dismissed without deciding, or a shell command that threw — and writing *off* for it would leave
