@@ -6,14 +6,18 @@ import type { PointerEvent, ReactNode } from 'react';
 import type { MailTimelineEntry } from '@mailfathom/client-backend';
 import type { MenuPoint } from '../contextMenu/menuPlacement';
 import { pressedByFinger, useRowPress } from '../contextMenu/rowPress';
+import { Icon } from '../controls/Icon';
+import type { IconName } from '../controls/icons';
 import { MessageMarkers } from '../controls/MessageMarkers';
 import { Organisation } from '../controls/Organisation';
 import { ReceivedAt } from '../controls/ReceivedAt';
 import { SenderAvatar } from '../controls/SenderAvatar';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
+import { actsDrawn } from '../mailboxActs/drawnActs';
 import { actPending, useMailboxActs, type MailboxAct } from '../mailboxActs/useMailboxActs';
 import { drawnUnread, useReadMarking } from '../readMarking/useReadMarking';
+import { useRowSwipe, type RowSwipeAct } from './rowSwipe';
 
 // One row of mail, which is its own component for the reason a tree's row is: it is what carries state, a keyboard
 // path, and a test. What it draws is what the page answered with — nothing here reads anything of its own, so a row
@@ -41,6 +45,21 @@ const actPendingSaid: Readonly<Record<MailboxAct, MessageKey>> = {
     move: 'act.filing',
 };
 
+// What each direction of a swipe shows behind the row it is carrying, which is the design project's own: the act the
+// finger has asked for, named and drawn, against the edge it is uncovering. Filing takes its name and its symbol from
+// `mailboxActs/drawnActs.ts` rather than from a second table here, so a swipe says what the row's menu and the toolbar
+// say; answering is not one of the five acts and names its own.
+const swipeDrawn: Readonly<
+    Record<RowSwipeAct, { readonly icon: IconName; readonly said: MessageKey; readonly tint: string }>
+> = {
+    answer: { icon: 'reply', said: 'mail.reply', tint: 'justify-end pe-5.5 bg-accent-soft text-accent-strong' },
+    archive: {
+        icon: actsDrawn.archive.icon,
+        said: actsDrawn.archive.label,
+        tint: 'justify-start ps-5.5 bg-healthy-soft text-healthy-text',
+    },
+};
+
 export function MessageRow({
     email,
     position,
@@ -51,6 +70,8 @@ export function MessageRow({
     onOpen,
     onPoint,
     onPress,
+    onAnswer,
+    onArchive,
     onPointerEnter,
     onElement,
 }: {
@@ -83,6 +104,17 @@ export function MessageRow({
      */
     readonly onPress?: (at: MenuPoint) => void;
 
+    /**
+     * Opens the message and starts an answer to it, which is what a finger swiped left across the row asks for.
+     *
+     * Absent where this list cannot answer — a deployment that refuses a draft, or the search's results — and the row
+     * then springs back from a leftward swipe rather than following the finger toward an act nobody would see happen.
+     */
+    readonly onAnswer?: (() => void) | undefined;
+
+    /** Files the message away, which is what a finger swiped right asks for. Absent on the same terms as `onAnswer`. */
+    readonly onArchive?: (() => void) | undefined;
+
     readonly onPointerEnter: () => void;
     readonly onElement: (element: HTMLLIElement | null) => void;
 }) {
@@ -90,6 +122,7 @@ export function MessageRow({
     const marking = useReadMarking();
     const acts = useMailboxActs();
     const press = useRowPress(onPress);
+    const swipe = useRowSwipe(press, { answer: onAnswer, archive: onArchive });
 
     // The act this row is still waiting on. It is what the reserved line says while it stands, ahead of whatever the
     // screen would otherwise put there: a message on its way out of the folder is the more urgent fact about the row
@@ -110,6 +143,11 @@ export function MessageRow({
     // them was asked for last.
     const unread = acting === 'markUnread' || drawnUnread(marking, email.id, email.unread);
 
+    // What is showing behind the row while a finger carries it, or nothing for a row standing where the list drew it.
+    // Which of the two it is is the direction alone: what the threshold decides is how firmly it is drawn rather than
+    // which act it names, so somebody who has begun a swipe can read what it is for before they have finished it.
+    const carrying = swipe.carried === 0 ? undefined : swipeDrawn[swipe.carried < 0 ? 'answer' : 'archive'];
+
     return (
         <li
             ref={onElement}
@@ -124,6 +162,7 @@ export function MessageRow({
             onContextMenu={press.onContextMenu}
             onPointerDown={(event) => {
                 press.onPointerDown(event);
+                swipe.onPointerDown(event);
 
                 // The primary button alone acts. The second one is what asks the row what it offers, and a row that
                 // also selected the message and opened it under the menu would be answering a question with an act.
@@ -131,70 +170,116 @@ export function MessageRow({
                     onPoint(event);
                 }
             }}
-            onPointerMove={press.onPointerMove}
+            onPointerMove={(event) => {
+                // The press first, because it is the one that gives way: it is off at a shorter travel than the swipe
+                // needs to engage, so a finger that has begun to carry the row has already stopped arming a menu.
+                press.onPointerMove(event);
+                swipe.onPointerMove(event);
+            }}
             onPointerUp={(event) => {
-                // The tap this lift amounts to, read before the press is cleared so that a lift ending a press that
-                // has already opened the menu acts on nothing: the design project's own window is what says which of
-                // the two happened.
+                // The tap this lift amounts to, read before the press is cleared so that a lift ending a press which
+                // has opened the menu acts on nothing. The swipe is asked afterwards rather than before, because the
+                // lift is what finishes one — and a lift that has just filed the message away is not also a tap on it.
                 const tapped = pressedByFinger(event.pointerType) && !press.tapSuppressed();
 
                 press.onPointerUp();
+                swipe.onPointerUp(event);
 
-                if (tapped) {
+                if (tapped && !swipe.tapSuppressed()) {
                     onPoint(event);
                 }
             }}
-            onPointerCancel={press.onPointerCancel}
+            onPointerCancel={() => {
+                press.onPointerCancel();
+                swipe.onPointerCancel();
+            }}
             onPointerEnter={onPointerEnter}
             onDoubleClick={onOpen}
             // Flush and square rather than a card: the rows are one continuous list, each separated from the next by
-            // the line it carries, which is what the window's arithmetic needs them to be as well. The row that is
-            // open, and the rows picked out for a question, are marked at the edge rather than by a ring around them,
-            // which is the design project's mark and keeps the row's own lines where they were.
-            className={`flex h-message-row cursor-pointer flex-col justify-center gap-0.75 overflow-hidden border-b border-s-4 border-b-sunken ps-2.5 pe-3.5 transition ${
-                selected
-                    ? 'border-s-accent bg-accent-soft'
-                    : open
-                      ? 'border-s-accent-line bg-accent-soft'
-                      : 'border-s-transparent hover:bg-hover'
-            }`}
+            // the line it carries, which is what the window's arithmetic needs them to be as well. The line and the
+            // height are the outer element's rather than the carried one's, so a row travelling under a finger keeps
+            // the space the window drew for it and is clipped at the column's edges rather than crossing them.
+            //
+            // Vertical panning stays the scroller's and everything sideways is the row's, which is what stops a browser
+            // from taking the gesture over as a scroll before it has been read.
+            className="relative h-message-row touch-pan-y overflow-hidden border-b border-b-sunken"
         >
-            <div className="flex items-center gap-2">
-                {/* Unread is drawn as weight and colour, which is how the design project draws it, and said in as many
-                    words for a reader who is not looking at either. Nothing marks the row visually beside that: a dot
-                    ahead of the avatar would inset every unread row a little further than every read one, which is the
-                    one thing a list of rows that have to scan as a column cannot afford. */}
-                {unread ? <span className="sr-only">{translate('list.unread')}</span> : null}
-
-                <SenderAvatar displayName={email.senderDisplayName} address={email.senderAddress} place="row" />
-
-                {/* Who wrote is read before where they wrote from, so the name keeps up to half the line and the host
-                    is what gives way. Half rather than more because the marks and the time hold their own width: a
-                    name allowed past it would push the time out of a row that clips rather than wraps. */}
+            {carrying === undefined ? null : (
+                // What the row is being carried off is showing: the act, named and drawn, against the edge the finger
+                // has uncovered. Hidden from the accessibility tree because it says what a gesture is about to do, and
+                // nothing here is reachable by a gesture alone — the same two acts are on the row's own menu and in
+                // the toolbar, which is where a keyboard and a screen reader meet them.
+                //
+                // Faint until the threshold is crossed and full once it is, which is how the design project says the
+                // finger has gone far enough. It draws that partly by thickening the symbol's stroke, which a set of
+                // committed outlines has no equivalent for, so both the symbol and the word answer to the one signal
+                // this client can draw.
                 <span
-                    className={`max-w-1/2 shrink-0 truncate text-md font-semibold ${unread ? 'text-text' : 'text-text-soft'}`}
+                    aria-hidden="true"
+                    className={`absolute inset-0 flex items-center ${carrying.tint} ${
+                        swipe.commits === null ? 'opacity-55' : 'opacity-100'
+                    }`}
                 >
-                    {correspondent(email) ?? translate('list.senderUnknown')}
+                    <Icon name={carrying.icon} className="me-2 size-5.25" />
+
+                    <span className="text-base font-semibold">{translate(carrying.said)}</span>
                 </span>
+            )}
 
-                <Organisation address={email.senderAddress} />
-
-                <MessageMarkers email={email} />
-
-                <ReceivedAt at={email.receivedAt} />
-            </div>
-
-            <div className={`truncate text-md ${unread ? 'text-text' : 'text-text-soft'}`}>
-                {email.subject ?? translate('list.noSubject')}
-            </div>
-
-            {/* The reserved line. Hidden from the accessibility tree where it holds nothing, so a row with nothing
-                to say about itself is not announced as one with an empty line in it. */}
             <div
-                aria-hidden={acting === null && note === undefined ? 'true' : undefined}
-                className="h-4 overflow-hidden text-xs text-muted"
+                // The row that is open, and the rows picked out for a question, are marked at the edge rather than by
+                // a ring around them, which is the design project's mark and keeps the row's own lines where they
+                // were.
+                className={`flex h-full cursor-pointer flex-col justify-center gap-0.75 overflow-hidden border-s-4 ps-2.5 pe-3.5 ${
+                    swipe.carried === 0 ? 'transition' : ''
+                } ${
+                    selected
+                        ? 'border-s-accent bg-accent-soft'
+                        : open
+                          ? 'border-s-accent-line bg-accent-soft'
+                          : 'border-s-transparent bg-panel hover:bg-hover'
+                }`}
+                // The one value here a token cannot hold: how far this row has been carried is a distance a finger
+                // decided rather than a decision the theme took.
+                style={swipe.carried === 0 ? undefined : { transform: `translateX(${String(swipe.carried)}px)` }}
             >
-                {acting === null ? note : translate(actPendingSaid[acting])}
+                <div className="flex items-center gap-2">
+                    {/* Unread is drawn as weight and colour, which is how the design project draws it, and said in as
+                        many words for a reader who is not looking at either. Nothing marks the row visually beside
+                        that: a dot ahead of the avatar would inset every unread row a little further than every read
+                        one, which is the one thing a list of rows that have to scan as a column cannot afford. */}
+                    {unread ? <span className="sr-only">{translate('list.unread')}</span> : null}
+
+                    <SenderAvatar displayName={email.senderDisplayName} address={email.senderAddress} place="row" />
+
+                    {/* Who wrote is read before where they wrote from, so the name keeps up to half the line and the
+                        host is what gives way. Half rather than more because the marks and the time hold their own
+                        width: a name allowed past it would push the time out of a row that clips rather than wraps. */}
+                    <span
+                        className={`max-w-1/2 shrink-0 truncate text-md font-semibold ${unread ? 'text-text' : 'text-text-soft'}`}
+                    >
+                        {correspondent(email) ?? translate('list.senderUnknown')}
+                    </span>
+
+                    <Organisation address={email.senderAddress} />
+
+                    <MessageMarkers email={email} />
+
+                    <ReceivedAt at={email.receivedAt} />
+                </div>
+
+                <div className={`truncate text-md ${unread ? 'text-text' : 'text-text-soft'}`}>
+                    {email.subject ?? translate('list.noSubject')}
+                </div>
+
+                {/* The reserved line. Hidden from the accessibility tree where it holds nothing, so a row with nothing
+                    to say about itself is not announced as one with an empty line in it. */}
+                <div
+                    aria-hidden={acting === null && note === undefined ? 'true' : undefined}
+                    className="h-4 overflow-hidden text-xs text-muted"
+                >
+                    {acting === null ? note : translate(actPendingSaid[acting])}
+                </div>
             </div>
         </li>
     );

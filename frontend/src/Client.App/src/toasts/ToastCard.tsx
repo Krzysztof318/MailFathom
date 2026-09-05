@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { Confirmation } from '../confirmation/Confirmation';
 import { Icon } from '../controls/Icon';
 import type { IconName } from '../controls/icons';
-import { swipeSoFar } from '../controls/swipeDismissal';
+import { swipeSoFar } from '../controls/swipeAcross';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { toastLeaving, toastLifetime, type StandingToast, type ToastAction, type ToastKind } from './useToasts';
@@ -18,7 +18,7 @@ import { toastLeaving, toastLifetime, type StandingToast, type ToastAction, type
 // Two ways to get rid of one, and both are here because both have to be. The close control is the design project's and
 // it never gives way to the gesture: a card whose only dismissal is a swipe is a card a mouse and a keyboard cannot
 // reach. The swipe is beside it where a finger is what is being used, and it is the same threshold and the same
-// vertical cancellation the rest of the client's swipes answer to, stated once in `controls/swipeDismissal.ts`.
+// vertical cancellation the rest of the client's swipes answer to, stated once in `controls/swipeAcross.ts`.
 //
 // Neither way is quieter than the other. Where the card is following an operation, both ask the same question and stop
 // it only on the same answer — a gesture that aborted something a button would have asked about would be the fastest
@@ -147,7 +147,7 @@ export function ToastCard({
 
         swiping.current = null;
 
-        if (verdict === 'dismissing') {
+        if (verdict === 'committed') {
             close();
         }
     }

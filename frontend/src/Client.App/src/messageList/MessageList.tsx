@@ -24,7 +24,8 @@ import { SecondaryButton } from '../controls/SecondaryButton';
 import type { MessageKey } from '../localization/en';
 import { useLocalization } from '../localization/useLocalization';
 import { ActQuestions } from '../mailboxActs/ActQuestions';
-import type { ActedMessage } from '../mailboxActs/useMailboxActs';
+import { useMailboxActs, type ActedMessage } from '../mailboxActs/useMailboxActs';
+import { useComposing } from '../composer/useComposing';
 import { MessageRow } from '../messageRows/MessageRow';
 import { MessageRowMenu, type ActAsked } from '../messageRows/MessageRowMenu';
 import { estimatedRowHeight, leadingRow, offsetOfRow, windowOf } from '../messageRows/rowWindow';
@@ -104,6 +105,8 @@ export function MessageList({
     const { translate } = useLocalization();
     const { workspace, revise } = useWorkspace();
     const listed = useListedMail();
+    const acts = useMailboxActs();
+    const composing = useComposing();
     const signalledChanges = useSignalledChanges();
     // Where this list opens: how the folder was last read and where in it the reader was. State rather than a value
     // computed each render, because it is read back once the first page has arrived and because changing the order or
@@ -505,6 +508,43 @@ export function MessageList({
         }
     }
 
+    // The two acts a finger reaches by carrying a row aside, which are the same two calls the row's own menu makes:
+    // answering routes through the composer this screen already opens, and filing through the acts every surface
+    // performs. Absent where the client cannot do it — a deployment that refuses a draft, or an account whose archive
+    // folder is not known — so the row springs back rather than promising an act nobody would see happen.
+    function answering(row: number): (() => void) | undefined {
+        const email = rowAt(held, row);
+
+        if (email === null || !composing.offered) {
+            return undefined;
+        }
+
+        return () => {
+            // The message is opened as well as answered, which is the design project's own: an answer written over a
+            // list nobody chose a message from would be a composition with no message behind it on the screen.
+            open(row);
+            composing.compose({ kind: 'answer', answers: 'senderOnly', storedEmailId: email.id });
+        };
+    }
+
+    function filingAway(row: number): (() => void) | undefined {
+        const email = rowAt(held, row);
+
+        if (email === null) {
+            return undefined;
+        }
+
+        const messages = actedMessages(listed, [email.id]);
+
+        if (acts.refusalOf('archive', messages) !== null) {
+            return undefined;
+        }
+
+        return () => {
+            acts.perform('archive', messages);
+        };
+    }
+
     function ask(act: ActAsked, messages: readonly ActedMessage[]): void {
         setQuestioned(messages);
         closeMenu();
@@ -669,6 +709,8 @@ export function MessageList({
                                         setFocusedRow(row);
                                         setPressed({ row, at: pointedAt });
                                     }}
+                                    onAnswer={answering(row)}
+                                    onArchive={filingAway(row)}
                                     onPointerEnter={() => {
                                         dragOver(row);
                                     }}

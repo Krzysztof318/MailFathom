@@ -8,6 +8,7 @@ import type { MailTimelineEntry } from '@mailfathom/client-backend';
 import { LocalizationProvider } from '../localization/Localization';
 import type { MenuPoint } from '../contextMenu/menuPlacement';
 import { pressDrift, pressOpensAfter } from '../contextMenu/rowPress';
+import { swipeCarriesTo, swipeDistance, swipeDrift, swipeEngages } from '../controls/swipeAcross';
 import { MailboxActsContext, nothingActed, type MailboxAct, type MailboxActs } from '../mailboxActs/useMailboxActs';
 import { ReadMarkingContext, nothingMarkedRead, type MarkedIn, type ReadMarking } from '../readMarking/useReadMarking';
 import { MessageRow } from './MessageRow';
@@ -70,9 +71,13 @@ function drawRow(
 function pointedRow({
     onPoint = vi.fn(),
     onPress = vi.fn(),
+    onAnswer,
+    onArchive,
 }: {
     onPoint?: (event: unknown) => void;
     onPress?: (at: MenuPoint) => void;
+    onAnswer?: (() => void) | undefined;
+    onArchive?: (() => void) | undefined;
 } = {}): HTMLElement {
     vi.useFakeTimers();
 
@@ -88,6 +93,8 @@ function pointedRow({
                     onOpen={() => undefined}
                     onPoint={onPoint}
                     onPress={onPress}
+                    onAnswer={onAnswer}
+                    onArchive={onArchive}
                     onPointerEnter={() => undefined}
                     onElement={() => undefined}
                 />
@@ -98,9 +105,34 @@ function pointedRow({
     return screen.getByRole('option');
 }
 
+/** A finger landing on the row, travelling to where it is left, and lifting there. */
+function swipe(row: HTMLElement, across: number, down = 0): void {
+    const landed = { pointerId: 1, pointerType: 'touch', clientX: 0, clientY: 0 };
+    const travelled = { pointerId: 1, pointerType: 'touch', clientX: across, clientY: down };
+
+    fireEvent.pointerDown(row, landed);
+    fireEvent.pointerMove(row, travelled);
+    fireEvent.pointerUp(row, travelled);
+}
+
+/** How far the row itself has been carried from where the list drew it, in CSS pixels. */
+function carriedTo(row: HTMLElement): string {
+    return (row.lastElementChild as HTMLElement | null)?.style.transform ?? '';
+}
+
 afterEach(() => {
     vi.useRealTimers();
 });
+
+/**
+ * The line the row's height reserves, which is the last of what the carried row draws.
+ *
+ * Two elements down rather than one, because the row a finger carries aside is inside the element the list positions:
+ * what a swipe uncovers stands behind that, and the height and the line between rows belong to the outer one.
+ */
+function reservedLine(row: HTMLElement): Element | null {
+    return row.lastElementChild?.lastElementChild ?? null;
+}
 
 /** What a client that has asked for this act on exactly this message carries, pending the deployment's own pass. */
 function asking(act: MailboxAct, storedEmailId = email.id): MailboxActs {
@@ -117,14 +149,14 @@ function marked(storedEmailId: string, place: MarkedIn = { account: 'work', fold
 // sees says which happened — so the attribute is what is asserted here.
 describe('MessageRow', () => {
     it('announces the reserved line when the row has something to say about the message', () => {
-        const reserved = drawRow('Found by what it means.').lastElementChild;
+        const reserved = reservedLine(drawRow('Found by what it means.'));
 
         expect(reserved?.textContent).toBe('Found by what it means.');
         expect(reserved?.getAttribute('aria-hidden')).toBeNull();
     });
 
     it('keeps the reserved line out of the accessibility tree when the row has nothing to say', () => {
-        const reserved = drawRow().lastElementChild;
+        const reserved = reservedLine(drawRow());
 
         expect(reserved?.textContent).toBe('');
         expect(reserved?.getAttribute('aria-hidden')).toBe('true');
@@ -167,7 +199,7 @@ describe('MessageRow', () => {
         ['markUnread', 'Marking unread…'],
         ['move', 'Filing…'],
     ] as const)('says a message asked to be %sd is being acted on, in the reserved line', (act, said) => {
-        const reserved = drawRow(undefined, false, nothingMarkedRead, asking(act)).lastElementChild;
+        const reserved = reservedLine(drawRow(undefined, false, nothingMarkedRead, asking(act)));
 
         expect(reserved?.textContent).toBe(said);
         expect(reserved?.getAttribute('aria-hidden')).toBeNull();
@@ -180,18 +212,15 @@ describe('MessageRow', () => {
     });
 
     it('stops saying so once the deployment reports the flag the act asked for, which is what retires it', () => {
-        const reserved = drawRow(undefined, false, nothingMarkedRead, asking('flag'), true).lastElementChild;
+        const reserved = reservedLine(drawRow(undefined, false, nothingMarkedRead, asking('flag'), true));
 
         expect(reserved?.textContent).toBe('');
     });
 
     it('says nothing of another message’s act, the pending line belonging to the row it is about', () => {
-        const reserved = drawRow(
-            undefined,
-            false,
-            nothingMarkedRead,
-            asking('archive', 'another-message'),
-        ).lastElementChild;
+        const reserved = reservedLine(
+            drawRow(undefined, false, nothingMarkedRead, asking('archive', 'another-message')),
+        );
 
         expect(reserved?.textContent).toBe('');
     });
@@ -258,5 +287,156 @@ describe('MessageRow, under a pointer', () => {
         fireEvent.contextMenu(row, { clientX: 33, clientY: 44 });
 
         expect(pressed).toHaveBeenCalledWith({ x: 33, y: 44 });
+    });
+});
+
+// The other thing one finger on a row can mean. The two directions are the design project's own — left to answer the
+// message, right to file it away — and everything below is a rule about when the row acts on neither.
+describe('MessageRow, under a finger carried across it', () => {
+    it('answers the message when the finger goes left past the threshold, and opens it as it does', () => {
+        const answered = vi.fn();
+        const archived = vi.fn();
+        const row = pointedRow({ onAnswer: answered, onArchive: archived });
+
+        swipe(row, -swipeDistance);
+
+        expect(answered).toHaveBeenCalledOnce();
+        expect(archived).not.toHaveBeenCalled();
+    });
+
+    it('files the message away when it goes right past the threshold', () => {
+        const answered = vi.fn();
+        const archived = vi.fn();
+        const row = pointedRow({ onAnswer: answered, onArchive: archived });
+
+        swipe(row, swipeDistance);
+
+        expect(archived).toHaveBeenCalledOnce();
+        expect(answered).not.toHaveBeenCalled();
+    });
+
+    it('springs back and does nothing where the finger stopped short of it', () => {
+        const archived = vi.fn();
+        const row = pointedRow({ onArchive: archived });
+
+        swipe(row, swipeDistance - 1);
+
+        expect(archived).not.toHaveBeenCalled();
+        expect(carriedTo(row)).toBe('');
+    });
+
+    // A person scrolling a list is scrolling, and a row that filed mail at the end of it would be the fastest way in
+    // the client to lose a message by accident.
+    it('is off once the finger has gone further up or down than it has gone sideways', () => {
+        const archived = vi.fn();
+        const row = pointedRow({ onArchive: archived });
+
+        fireEvent.pointerDown(row, { pointerId: 1, pointerType: 'touch', clientX: 0, clientY: 0 });
+        fireEvent.pointerMove(row, { pointerId: 1, pointerType: 'touch', clientX: 10, clientY: swipeDrift + 1 });
+        fireEvent.pointerMove(row, { pointerId: 1, pointerType: 'touch', clientX: swipeDistance, clientY: 0 });
+        fireEvent.pointerUp(row, { pointerId: 1, pointerType: 'touch', clientX: swipeDistance, clientY: 0 });
+
+        expect(archived).not.toHaveBeenCalled();
+    });
+
+    it('carries the row under the finger once the gesture has engaged, and no further than the design draws it', () => {
+        const row = pointedRow({ onArchive: vi.fn() });
+
+        fireEvent.pointerDown(row, { pointerId: 1, pointerType: 'touch', clientX: 0, clientY: 0 });
+        fireEvent.pointerMove(row, { pointerId: 1, pointerType: 'touch', clientX: swipeEngages - 1, clientY: 0 });
+
+        expect(carriedTo(row)).toBe('');
+
+        fireEvent.pointerMove(row, { pointerId: 1, pointerType: 'touch', clientX: swipeCarriesTo + 200, clientY: 0 });
+
+        expect(carriedTo(row)).toBe(`translateX(${String(swipeCarriesTo)}px)`);
+    });
+
+    it('draws what it is about to do, faintly until the finger has gone far enough', () => {
+        const row = pointedRow({ onArchive: vi.fn() });
+
+        fireEvent.pointerDown(row, { pointerId: 1, pointerType: 'touch', clientX: 0, clientY: 0 });
+        fireEvent.pointerMove(row, { pointerId: 1, pointerType: 'touch', clientX: swipeDistance - 1, clientY: 0 });
+
+        expect(screen.getByText('Archive').parentElement?.className).toContain('opacity-55');
+
+        fireEvent.pointerMove(row, { pointerId: 1, pointerType: 'touch', clientX: swipeDistance, clientY: 0 });
+
+        expect(screen.getByText('Archive').parentElement?.className).toContain('opacity-100');
+    });
+
+    it('shows nothing and acts on nothing in a direction this list does not offer', () => {
+        const row = pointedRow({ onArchive: vi.fn() });
+
+        fireEvent.pointerDown(row, { pointerId: 1, pointerType: 'touch', clientX: 0, clientY: 0 });
+        fireEvent.pointerMove(row, { pointerId: 1, pointerType: 'touch', clientX: -swipeDistance, clientY: 0 });
+
+        expect(screen.queryByText('Reply')).toBeNull();
+        expect(carriedTo(row)).toBe('');
+    });
+
+    // The lift that finished the swipe is also a tap, and a row that acted on both would open what it just filed.
+    it('suppresses the tap behind a swipe that acted', () => {
+        const pointed = vi.fn();
+        const row = pointedRow({ onPoint: pointed, onArchive: vi.fn() });
+
+        swipe(row, swipeDistance);
+
+        expect(pointed).not.toHaveBeenCalled();
+    });
+
+    it('leaves the tap alone where the swipe sprang back, that lift being an ordinary tap', () => {
+        const pointed = vi.fn();
+        const row = pointedRow({ onPoint: pointed, onArchive: vi.fn() });
+
+        swipe(row, swipeEngages);
+
+        expect(pointed).toHaveBeenCalledOnce();
+    });
+
+    // A mouse drag would file mail on a slipped button, and both acts are on the row's own menu and in the toolbar for
+    // a pointer that has one.
+    it('does nothing at all under a mouse, however far it is dragged', () => {
+        const archived = vi.fn();
+        const row = pointedRow({ onArchive: archived });
+
+        fireEvent.pointerDown(row, { pointerId: 1, pointerType: 'mouse', button: 0, clientX: 0, clientY: 0 });
+        fireEvent.pointerMove(row, { pointerId: 1, pointerType: 'mouse', clientX: swipeDistance, clientY: 0 });
+        fireEvent.pointerUp(row, { pointerId: 1, pointerType: 'mouse', clientX: swipeDistance, clientY: 0 });
+
+        expect(archived).not.toHaveBeenCalled();
+        expect(carriedTo(row)).toBe('');
+    });
+
+    // One finger, and never both gestures: a menu already open is what the finger still on the row belongs to.
+    it('carries nothing and acts on nothing once the press has opened the row’s menu', () => {
+        const archived = vi.fn();
+        const row = pointedRow({ onPress: vi.fn(), onArchive: archived });
+
+        fireEvent.pointerDown(row, { pointerId: 1, pointerType: 'touch', clientX: 0, clientY: 0 });
+
+        act(() => {
+            vi.advanceTimersByTime(pressOpensAfter);
+        });
+
+        fireEvent.pointerMove(row, { pointerId: 1, pointerType: 'touch', clientX: swipeDistance, clientY: 0 });
+        fireEvent.pointerUp(row, { pointerId: 1, pointerType: 'touch', clientX: swipeDistance, clientY: 0 });
+
+        expect(archived).not.toHaveBeenCalled();
+        expect(carriedTo(row)).toBe('');
+    });
+
+    it('has already stopped arming the menu by the time the row is being carried', () => {
+        const pressed = vi.fn();
+        const row = pointedRow({ onPress: pressed, onArchive: vi.fn() });
+
+        fireEvent.pointerDown(row, { pointerId: 1, pointerType: 'touch', clientX: 0, clientY: 0 });
+        fireEvent.pointerMove(row, { pointerId: 1, pointerType: 'touch', clientX: swipeEngages, clientY: 0 });
+
+        act(() => {
+            vi.advanceTimersByTime(pressOpensAfter);
+        });
+
+        expect(pressed).not.toHaveBeenCalled();
     });
 });

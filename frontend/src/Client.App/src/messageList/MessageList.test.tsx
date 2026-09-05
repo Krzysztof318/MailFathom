@@ -13,6 +13,8 @@ import type {
     MailFathomTransport,
 } from '@mailfathom/client-backend';
 import { ComposingContext, type Composing } from '../composer/useComposing';
+import { swipeDistance } from '../controls/swipeAcross';
+import { MailboxActsContext, nothingActed, type MailboxActs } from '../mailboxActs/useMailboxActs';
 import { LocalizationProvider } from '../localization/Localization';
 import {
     SignalledChangesContext,
@@ -131,23 +133,32 @@ const composing: Composing = { offered: true, opening: null, compose: vi.fn(), c
 
 function listUnder(
     transport: MailFathomTransport,
-    { scope = everything, accounts = [work], online = true, changes = nothingSignalled }: Partial<Drawn> = {},
+    {
+        scope = everything,
+        accounts = [work],
+        online = true,
+        changes = nothingSignalled,
+        acts = nothingActed,
+    }: Partial<Drawn> = {},
 ): ReactElement {
     return (
         <LocalizationProvider>
             <ComposingContext value={composing}>
-                <WorkspaceProvider>
-                    <SignalledChangesContext value={changes}>
-                        <ListOpeningIntoTheWorkspace
-                            session={session}
-                            transport={transport}
-                            scope={scope}
-                            accounts={accounts}
-                            online={online}
-                        />
-                    </SignalledChangesContext>
-                    <SelectionProbe />
-                </WorkspaceProvider>
+                <MailboxActsContext value={acts}>
+                    <WorkspaceProvider>
+                        <SignalledChangesContext value={changes}>
+                            <ListOpeningIntoTheWorkspace
+                                session={session}
+                                transport={transport}
+                                scope={scope}
+                                accounts={accounts}
+                                online={online}
+                            />
+                        </SignalledChangesContext>
+
+                        <SelectionProbe />
+                    </WorkspaceProvider>
+                </MailboxActsContext>
             </ComposingContext>
         </LocalizationProvider>
     );
@@ -158,6 +169,7 @@ interface Drawn {
     readonly accounts: readonly MailAccount[];
     readonly online: boolean;
     readonly changes: SignalledChanges;
+    readonly acts: MailboxActs;
 }
 
 /** A deployment a test speaks for, so what a signal does to the list is asserted rather than waited for. */
@@ -788,5 +800,69 @@ describe('MessageList', () => {
 
         await rows();
         expect(asked.requests.length).toBe(before);
+    });
+});
+
+// What a finger carrying a row aside reaches. The gesture itself — the threshold, the cancellation, the suppression —
+// belongs to the row and is proven there; what is proven here is that the list hands the row the two acts it already
+// performs from the same row's menu, rather than a second way of archiving mail.
+describe('MessageList, under a finger carried across a row', () => {
+    // The places the list has drawn, which is what every act names and which a list under no provider holds none of.
+    const listed = {
+        ...nothingListed,
+        placeOf: (id: string) => ({ storedEmailId: id, account: 'work', folder: 'INBOX' }),
+    };
+
+    function listWithPlaces(drawn: Partial<Drawn> = {}): RenderResult {
+        return render(<ListedMailContext value={listed}>{listUnder(answering(wholeFolder), drawn)}</ListedMailContext>);
+    }
+
+    /** A finger landing on the row, travelling far enough to have asked, and lifting there. */
+    function carry(swiped: HTMLElement, across: number): void {
+        const landed = { pointerId: 1, pointerType: 'touch', clientX: 0, clientY: 0 };
+        const travelled = { pointerId: 1, pointerType: 'touch', clientX: across, clientY: 0 };
+
+        fireEvent.pointerDown(swiped, landed);
+        fireEvent.pointerMove(swiped, travelled);
+        fireEvent.pointerUp(swiped, travelled);
+    }
+
+    it('files the message away when the finger goes right, through the act every other surface performs', async () => {
+        const performed = vi.fn();
+
+        listWithPlaces({ acts: { ...nothingActed, refusalOf: () => null, perform: performed } });
+        await rows();
+
+        carry(row(0), swipeDistance);
+
+        expect(performed).toHaveBeenCalledWith('archive', [
+            { storedEmailId: 'message-0', account: 'work', folder: 'INBOX' },
+        ]);
+    });
+
+    it('opens the message and starts an answer to it when the finger goes left', async () => {
+        listWithPlaces();
+        await rows();
+
+        carry(row(0), -swipeDistance);
+
+        expect(composing.compose).toHaveBeenCalledWith({
+            kind: 'answer',
+            answers: 'senderOnly',
+            storedEmailId: 'message-0',
+        });
+
+        expect(carried().selection).toBe('message-0');
+    });
+
+    it('files nothing away where the deployment refuses to, the row springing back instead', async () => {
+        const performed = vi.fn();
+
+        listWithPlaces({ acts: { ...nothingActed, refusalOf: () => 'noArchiveFolder', perform: performed } });
+        await rows();
+
+        carry(row(0), swipeDistance);
+
+        expect(performed).not.toHaveBeenCalled();
     });
 });
