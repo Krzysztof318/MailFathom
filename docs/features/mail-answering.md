@@ -13,11 +13,16 @@ below; [`MailAnswering`](../operations/configuration-ai.md#mailanswering) holds 
 
 ## Every AI operation is one agent, composed one way
 
-`ask_mail` is a Microsoft Agent Framework agent built over a provider-neutral chat client, and every other thing this
-product does with a model is built the same way, by the same composition. An operation supplies three things and no
-others: the name a run reports itself as, its own instruction, and its tool set. Everything else — where the instruction
-is carried, the generation parameters each turn runs with, the instruction envelope described below — is decided once,
-for all of them.
+`ask_mail` is a Microsoft Agent Framework agent built over a provider-neutral chat client, and it is composed by the one
+expression every agent this product runs is composed by. An operation supplies three things and no others: the name a
+run reports itself as, its own instruction, and its tool set. Everything else — where the instruction is carried, the
+generation parameters each turn runs with, the instruction envelope described below — is decided once, for all of them.
+
+**Not every model call is an agent, and the ones that are not do not come through here.** The second pass below sends a
+single relevance judgement through the chat client directly: it carries its own instruction, offers no tool, and runs no
+loop, so there is no agent to compose — [§ An optional second pass: the model decides what
+answers](#an-optional-second-pass-the-model-decides-what-answers) is what governs it. `ask_mail` is the one agent this
+build composes; the operations that will join it are the model-invoking work still to be built.
 
 One composition rather than a chat call written beside each feature, because what makes an operation safe is a property
 of that shape rather than of its prose. An instruction cannot be reached from a tool result because of where each is

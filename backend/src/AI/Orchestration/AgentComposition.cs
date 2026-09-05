@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging;
 
 namespace MailFathom.AI.Orchestration;
 
-/// <summary>Composes every AI operation this product runs as one Agent Framework agent.</summary>
+/// <summary>Composes an AI operation as an Agent Framework agent, and is the one place any agent here is composed.</summary>
 /// <remarks>
 /// <para>
 /// One composition rather than a chat call written beside each feature, because what makes an operation safe is a
@@ -30,6 +30,11 @@ namespace MailFathom.AI.Orchestration;
 /// <para>
 /// The envelope is asked at composition rather than read once at start, so an implementation whose answer varies per
 /// person or per request changes what a run sends without any operation changing.
+/// </para>
+/// <para>
+/// What comes here is an operation composed as an agent, which is not the same set as every call this product makes to
+/// a model. A single judgement carrying its own instruction, offering no tool, and running no loop composes no agent at
+/// all and reaches the chat client directly — <see cref="Retrieval.ModelJudgedKnowledgeSearch" /> is that shape today.
 /// </para>
 /// <para>
 /// What the envelope adds rides inside the same instruction every turn carries, so it is sent through the client the
