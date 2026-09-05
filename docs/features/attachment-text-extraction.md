@@ -15,10 +15,10 @@ behind it, and every ceiling around them.
 
 ## What is read, and what is only recognized
 
-Recognition reads the declared media type first and falls back to the file name's extension where the media type says
-nothing — a generic `application/octet-stream` over a correctly named file is the ordinary shape of a mail-borne
-document rather than an edge case. The extension is a fallback and never an override, so renaming a file does not
-decide which parser reads it.
+Recognition reads the declared media type first and falls back to the file name's extension whenever that media type
+names no format it recognizes — a generic `application/octet-stream` over a correctly named file is the ordinary shape
+of a mail-borne document rather than an edge case. A recognized media type is never overridden by the extension, but
+for every other media type the file name alone decides which parser is offered the bytes.
 
 | Recognized as | Extracted | Read by |
 | --- | --- | --- |
@@ -43,6 +43,12 @@ only the smaller dependency: a document model inflates a part before handing it 
 decompression bomb has already won. Only the parts carrying text are opened — a macro project, a Basic library, an
 embedded object, an OLE package, and every image in the package are never read, never decoded, and never handed to
 anything.
+
+Text is not only in the body. A `.docx` keeps a letterhead's invoice number in a header part, a page number in a footer
+part, and a contract's terms in a footnote or endnote part, so all of those are read after the body and in that fixed
+order — the format records where a header *prints* rather than where its words belong in a reading, so a fixed order is
+the honest arrangement available. An OpenDocument text document keeps the same material in its single content part and
+needs nothing extra.
 
 Where the two families differ is the shape inside, and it is the only place they are read differently. Office Open XML
 puts each page in a part of its own, so its reader selects parts by name and by number. OpenDocument puts a whole

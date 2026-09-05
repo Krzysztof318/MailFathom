@@ -20,9 +20,10 @@ namespace MailFathom.Infrastructure.Documents;
 /// Reading the archive here is what makes <see cref="BoundedInflationStream" /> possible at all.
 /// </para>
 /// <para>
-/// Only the parts that carry text are opened. A macro project, an embedded object, an OLE package, an image, and every
-/// other part of the package are never read, never decoded, and never handed to anything — extraction reads structure
-/// and text and evaluates nothing.
+/// Only the parts that carry text are opened — for a word-processing document that is the body, its headers, its
+/// footers, and its two note parts; for a deck and a workbook, the numbered page parts and the string table. A macro
+/// project, an embedded object, an OLE package, an image, and every other part of the package are never read, never
+/// decoded, and never handed to anything — extraction reads structure and text and evaluates nothing.
 /// </para>
 /// </remarks>
 internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtractionOptions options)
@@ -33,6 +34,9 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
 
     private const string WordDocumentPart = "word/document.xml";
     private const string SharedStringsPart = "xl/sharedStrings.xml";
+
+    /// <summary>The parts a word-processing document keeps its notes in, read after the body and in this order.</summary>
+    private static readonly string[] WordNoteParts = ["word/footnotes.xml", "word/endnotes.xml"];
 
     private readonly BoundedArchivePartReader parts = new(options);
 
@@ -71,10 +75,22 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
     [GeneratedRegex(@"^ppt/slides/slide(\d+)\.xml$", RegexOptions.IgnoreCase)]
     private static partial Regex SlidePartPattern();
 
+    [GeneratedRegex(@"^word/header(\d+)\.xml$", RegexOptions.IgnoreCase)]
+    private static partial Regex HeaderPartPattern();
+
+    [GeneratedRegex(@"^word/footer(\d+)\.xml$", RegexOptions.IgnoreCase)]
+    private static partial Regex FooterPartPattern();
+
     [GeneratedRegex(@"^xl/worksheets/sheet(\d+)\.xml$", RegexOptions.IgnoreCase)]
     private static partial Regex WorksheetPartPattern();
 
     /// <summary>Reads a word-processing document, whose body is one page because the format records no pagination.</summary>
+    /// <remarks>
+    /// The body is not the whole of what somebody wrote. A letterhead's invoice number lives in a header part, a
+    /// contract's terms often in footnotes, and each of those is a part of its own — so they are read after the body
+    /// and in a fixed order, which is the honest arrangement available when the format records where a header prints
+    /// rather than where its words belong in a reading. Everything else in the package stays unopened.
+    /// </remarks>
     private ExtractedAttachmentText ReadDocument(
         ZipArchive archive,
         DecompressionBudget budget,
@@ -91,8 +107,25 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
             carriedText = this.ReadRunsInto(reader, WordprocessingNamespace, text, cancellationToken);
         }
 
+        foreach (var part in SurroundingWordParts(archive))
+        {
+            text.EndLine();
+
+            using var reader = this.parts.OpenPart(part, budget);
+
+            carriedText |= this.ReadRunsInto(reader, WordprocessingNamespace, text, cancellationToken);
+        }
+
         return new ExtractedAttachmentText(text.ToText(), PageCount: 1, carriedText ? [] : [1]);
     }
+
+    /// <summary>Selects the header, footer, and note parts of a word-processing package, in the order they are read.</summary>
+    private static List<ZipArchiveEntry> SurroundingWordParts(ZipArchive archive) =>
+    [
+        .. OrderedParts(archive, HeaderPartPattern()),
+        .. OrderedParts(archive, FooterPartPattern()),
+        .. WordNoteParts.Select(archive.GetEntry).OfType<ZipArchiveEntry>(),
+    ];
 
     /// <summary>Reads a presentation, one page per slide in the order the slide parts are named.</summary>
     /// <remarks>
@@ -311,7 +344,10 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
         }
 
         // The table is held in memory, so it is bounded by the same ceiling the output is: a workbook whose strings
-        // alone pass what one attachment may contribute could not have produced a smaller answer anyway.
+        // alone pass what one attachment may contribute could not have produced a smaller answer anyway. The entry
+        // count is bounded against that number too, because an entry costs a list slot whether or not it carries a
+        // character — a table of self-closed entries would otherwise inflate to the container budget while the
+        // character ceiling never fired, and no entry past that many could contribute a character the ceiling admits.
         var table = new BoundedTextAccumulator(options.MaxExtractedTextCharacters);
         var item = new StringBuilder();
         var insideRun = false;
@@ -331,7 +367,7 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
                         // index in the table pointing at its own words rather than at the next entry's.
                         if (reader.IsEmptyElement)
                         {
-                            strings.Add(string.Empty);
+                            AddBounded(strings, string.Empty, options.MaxExtractedTextCharacters);
                         }
                     }
 
@@ -354,7 +390,7 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
                     }
                     else if (reader.LocalName == "si")
                     {
-                        strings.Add(item.ToString());
+                        AddBounded(strings, item.ToString(), options.MaxExtractedTextCharacters);
                     }
 
                     break;
@@ -478,6 +514,18 @@ internal sealed partial class OpenXmlAttachmentTextReader(AttachmentTextExtracti
         }
 
         target.Append(value);
+    }
+
+    /// <summary>Records one string-table entry, refusing the table that holds more than the output ceiling allows.</summary>
+    /// <exception cref="AttachmentTextExtractionStoppedException">Thrown when the table passes that many entries.</exception>
+    private static void AddBounded(List<string> strings, string entry, int maxEntries)
+    {
+        if (strings.Count >= maxEntries)
+        {
+            throw new AttachmentTextExtractionStoppedException(AttachmentTextExtractionOutcome.ContainerBoundExceeded);
+        }
+
+        strings.Add(entry);
     }
 
     /// <summary>Resolves the string-table index a cell holds, or nothing when the index names no entry.</summary>

@@ -359,6 +359,70 @@ public sealed class BoundedAttachmentTextExtractorTests
         Assert.Equal(AttachmentTextExtractionOutcome.ExtractedTextTooLarge, result.Outcome);
     }
 
+    /// <summary>
+    /// A letterhead's invoice number and a contract's terms are the ordinary case for text somebody wrote outside the
+    /// body, and each of those parts is its own — so a reader opening the body alone answers <c>Extracted</c> with the
+    /// number silently absent, which is the "searched and empty" answer this port exists to replace with a reason.
+    /// </summary>
+    [Fact]
+    public async Task ExtractTextAsync_AWordDocumentWritingOutsideItsBody_ReadsTheSurroundingPartsToo()
+    {
+        // Arrange
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "letterhead.docx",
+            DocumentFixtures.Package(
+                ("word/document.xml", WordPart("Roof repair as agreed")),
+                ("word/header1.xml", WordPart("Invoice 4471")),
+                ("word/footer1.xml", WordPart("Page one of one")),
+                ("word/footnotes.xml", WordPart("Payable within thirty days")),
+                ("word/endnotes.xml", WordPart("Materials at cost")),
+                ("word/media/logo.png", "not an XML part and never opened")));
+
+        // Act
+        var result = await ExtractAsync(attachment);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.Extracted, result.Outcome);
+        Assert.Equal(
+            "Roof repair as agreed\nInvoice 4471\nPage one of one\nPayable within thirty days\nMaterials at cost",
+            result.Text?.Text);
+    }
+
+    /// <summary>
+    /// An entry costs a list slot whether or not it carries a character, so a table of self-closed entries would
+    /// inflate to whatever the container budget allows while the character ceiling never fired once.
+    /// </summary>
+    [Fact]
+    public async Task ExtractTextAsync_AStringTableOfEmptyEntries_RefusesItOnTheEntryCount()
+    {
+        // Arrange
+        var bounds = new AttachmentTextExtractionOptions { MaxExtractedTextCharacters = 8 };
+
+        await using var attachment = new FakeOpenedEmailAttachment(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "budget.xlsx",
+            DocumentFixtures.Package(
+                (
+                    "xl/sharedStrings.xml",
+                    $"""
+                     <?xml version="1.0" encoding="UTF-8"?>
+                     <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">{string.Concat(Enumerable.Repeat("<si />", 64))}</sst>
+                     """),
+                (
+                    "xl/worksheets/sheet1.xml",
+                    """
+                    <?xml version="1.0" encoding="UTF-8"?>
+                    <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData /></worksheet>
+                    """)));
+
+        // Act
+        var result = await ExtractAsync(attachment, bounds);
+
+        // Assert
+        Assert.Equal(AttachmentTextExtractionOutcome.ContainerBoundExceeded, result.Outcome);
+    }
+
     /// <summary>An OpenDocument package is a zip archive, so the entity refusal has to hold in its content part too.</summary>
     [Fact]
     public async Task ExtractTextAsync_AnOpenDocumentPartDeclaringAnExternalEntity_ReportsMalformed()
@@ -924,6 +988,14 @@ public sealed class BoundedAttachmentTextExtractorTests
             DocumentFixtures.WordDocument("Roof repair invoice"),
         _ => DocumentFixtures.OpenDocumentText("Roof repair invoice"),
     };
+
+    /// <summary>Builds one word-processing part carrying a single paragraph.</summary>
+    private static string WordPart(string paragraph) => $"""
+        <?xml version="1.0" encoding="UTF-8"?>
+        <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>
+          <w:p><w:r><w:t>{paragraph}</w:t></w:r></w:p>
+        </w:body></w:document>
+        """;
 
     private static AttachmentTextExtractionOptions Bounds() => new();
 
