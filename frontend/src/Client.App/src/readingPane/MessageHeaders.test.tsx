@@ -44,7 +44,8 @@ function drawing(written: Partial<MailMessageHeaders> = {}, onShowFullHtml: () =
 }
 
 // The width the head composes at is the one thing about it jsdom cannot answer, so a test about either shape states
-// which it is about. A runtime with no `matchMedia` at all reads as wide, which is what the rest of this file inherits.
+// which it is about. Every test that states neither inherits the narrow reading: `vitest.setup.ts` puts a `matchMedia`
+// over jsdom's missing one that answers `false` to every query, so the head composes as it does at the phone.
 const declaredMatchMedia = Object.getOwnPropertyDescriptor(window, 'matchMedia');
 
 function atWorkspaceWidth(wideEnough: boolean): void {
